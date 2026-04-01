@@ -227,14 +227,12 @@ export const StoreStructuredRequestSchema = z.object({
   original_filename: z.string().optional(),
 });
 
-/** REST store/unstructured: file_content (base64) + mime_type, optional interpret and idempotency_key. */
+/** REST store/unstructured: file_content (base64) + mime_type, raw storage only. */
 export const StoreUnstructuredRequestSchema = z.object({
   file_content: z.string(),
   mime_type: z.string().min(1),
   idempotency_key: z.string().min(1).optional(),
   original_filename: z.string().optional(),
-  interpret: z.boolean().optional().default(true),
-  interpretation_config: z.record(z.unknown()).optional(),
   user_id: z.string().optional(),
 });
 
@@ -258,8 +256,6 @@ export const StoreRequestSchema = z
     file_path: z.string().optional(),
     mime_type: z.string().min(1).optional(),
     original_filename: z.string().optional(),
-    interpret: z.boolean().optional().default(true),
-    interpretation_config: z.record(z.unknown()).optional(),
   })
   .refine(
     (data) => {
@@ -318,21 +314,6 @@ export const CorrectEntityRequestSchema = z.object({
   value: z.unknown(),
   idempotency_key: z.string().min(1),
   user_id: z.string().optional(),
-});
-
-export const ReinterpretRequestSchema = z.object({
-  source_id: z.string().optional(),
-  interpretation_id: z.string().optional(),
-  interpretation_config: z.record(z.unknown()).optional(),
-}).refine((data) => data.source_id || data.interpretation_id, {
-  message: "Either source_id or interpretation_id is required",
-});
-
-export const InterpretUninterpretedRequestSchema = z.object({
-  limit: z.number().int().positive().max(100).optional().default(50),
-  dry_run: z.boolean().optional().default(false),
-  user_id: z.string().optional(),
-  interpretation_config: z.record(z.unknown()).optional(),
 });
 
 export const ListEntityTypesRequestSchema = z.object({

@@ -27,6 +27,13 @@ export function ChatGptConnectRemoteMcpPage() {
         {" · "}
         Connect ChatGPT via remote MCP tunnel, developer mode, and Neotoma MCP server URL.
       </p>
+      <p className="text-[14px] leading-6 text-muted-foreground mb-4">
+        Looking for custom GPT with OpenAPI instead? See{" "}
+        <Link to="/neotoma-with-chatgpt-connect-custom-gpt" className={extLink}>
+          Connect via custom GPT with OpenAPI
+        </Link>
+        .
+      </p>
 
       <IntegrationSection title="Setup" sectionKey="setup" dividerBefore={false}>
         <p className="text-[15px] leading-7 text-muted-foreground mb-4">

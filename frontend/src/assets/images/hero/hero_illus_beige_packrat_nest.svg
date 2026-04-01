@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" role="img" aria-hidden="true">
+  <!-- Abstract nest: woven arcs + inner cache; transparent, beige only -->
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Outer weave (twig-like arcs) -->
+    <g stroke="#a0907a" stroke-width="2">
+      <path d="M48 120 Q160 48 272 120"/>
+      <path d="M40 108 Q160 36 280 108"/>
+      <path d="M56 132 Q160 72 264 132"/>
+      <path d="M72 144 Q160 88 248 144"/>
+    </g>
+    <!-- Crossing strands -->
+    <g stroke="#c9baa8" stroke-width="1.5" opacity="0.95">
+      <path d="M100 56 Q200 140 220 168"/>
+      <path d="M220 56 Q120 140 100 168"/>
+      <path d="M60 96 Q160 156 260 96"/>
+    </g>
+    <!-- Bowl lip -->
+    <path d="M88 124 Q160 152 232 124" stroke="#8a7d6c" stroke-width="2"/>
+    <!-- Inner cache: subtle enclosure -->
+    <ellipse cx="160" cy="118" rx="52" ry="22" stroke="#b5a690" stroke-width="1.5" opacity="0.9"/>
+    <!-- Tiny abstract "stashed records" -->
+    <g stroke="#8a7d6c" stroke-width="1.5">
+      <rect x="138" y="108" width="14" height="10" rx="2" opacity="0.85"/>
+      <rect x="156" y="112" width="14" height="10" rx="2" opacity="0.75"/>
+      <rect x="174" y="108" width="14" height="10" rx="2" opacity="0.85"/>
+    </g>
+  </g>
+</svg>

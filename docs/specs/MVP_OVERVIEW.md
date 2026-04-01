@@ -123,7 +123,7 @@ These features are valuable but not defensible alone (competitors are developing
 **vs Provider Memory:** They offer conversation-only memory (platform-locked, provider-controlled, ML-based probabilistic). Neotoma provides structured personal data memory (cross-platform, privacy-first user-controlled, deterministic) with entity resolution and timelines.
 **Strategic Positioning:** Neotoma combines defensible architectural choices (privacy-first, deterministic, cross-platform) with feature capabilities (entity resolution, timelines, dual-path ingestion). Competitors can replicate features but cannot pursue the same architectural choices due to structural constraints. See [`docs/private/competitive/defensible_differentiation_framework.md`](../../private/competitive/defensible_differentiation_framework.md) for detailed analysis.
 ## 6. Target Users
-Neotoma's target users are organized into priority tiers. See [`docs/specs/ICP_PRIORITY_TIERS.md`](./ICP_PRIORITY_TIERS.md) for the complete tiered ICP strategy.
+Neotoma's target users are organized into priority tiers. See [`docs/icp/primary_icp.md`](../icp/primary_icp.md) for the primary ICP strategy.
 **MVP Target Users (Tier 1):**
 - **AI-native individual operators** (heavy ChatGPT/Claude users) — single-user, immediate activation
 - **High-context knowledge workers** (researchers, analysts, consultants, lawyers) — single-user, high document load
@@ -131,7 +131,7 @@ Neotoma's target users are organized into priority tiers. See [`docs/specs/ICP_P
 **Pain Point:** Documents scattered across email, downloads, screenshots, cloud drives.
 **Neotoma Solution:** Unified, structured, AI-queryable memory with team support for small teams.
 **Multi-User Support:** MVP includes authentication and row-level security (RLS) to support Tier 1 small teams. Founders initially adopt individually, then expand to team usage organically. This enables bottom-up B2B expansion.
-**Future Expansion:** Tier 2 (B2B teams), Tier 3 (B2C power users), Tier 4 (Agentic Portfolio users), Tier 5 (Agentic Wallet users), Tier 6 (Enterprise deployments). See [`docs/specs/ICP_PRIORITY_TIERS.md`](./ICP_PRIORITY_TIERS.md) for details.
+**Future Expansion:** Tier 2 (B2B teams), Tier 3 (B2C power users), Tier 4 (Agentic Portfolio users), Tier 5 (Agentic Wallet users), Tier 6 (Enterprise deployments). See [`docs/icp/future_icps.md`](../icp/future_icps.md) for details.
 ## 7. Success Criteria
 ### Product
 - 60% first-upload activation rate

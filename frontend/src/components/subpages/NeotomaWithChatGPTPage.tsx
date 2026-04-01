@@ -1,6 +1,8 @@
 import { Link } from "react-router-dom";
 import { DetailPage } from "../DetailPage";
+import { GettingStartedEvaluateInstallLinks } from "../GettingStartedEvaluateInstallLinks";
 import { IntegrationSection } from "../IntegrationSection";
+import { TableScrollWrapper } from "../ui/table-scroll-wrapper";
 
 const extLink = "text-foreground underline underline-offset-2 hover:no-underline";
 
@@ -12,6 +14,13 @@ export function NeotomaWithChatGPTPage() {
           ChatGPT offers conversation history and custom GPTs with persistent instructions. Neotoma
           adds structured, deterministic memory with entity resolution and cross-tool continuity,
           accessible from ChatGPT and every other tool in your stack.
+        </p>
+        <p className="text-[14px] leading-6 text-muted-foreground">
+          Looking for OpenAI Codex (the coding agent in sandboxed tasks)? See{" "}
+          <Link to="/neotoma-with-codex" className={extLink}>
+            Neotoma with Codex
+          </Link>
+          .
         </p>
       </section>
 
@@ -159,47 +168,51 @@ export function NeotomaWithChatGPTPage() {
           Keep ChatGPT&apos;s memory on for conversational preferences. Neotoma handles structured
           entities and cross-tool state. Both are active simultaneously with no conflict.
         </p>
-        <table className="w-full text-[14px] leading-6 mb-2 border-collapse">
-          <thead>
-            <tr className="border-b border-border">
-              <th className="text-left py-2 pr-4 font-medium text-foreground">Concern</th>
-              <th className="text-left py-2 pr-4 font-medium text-foreground">ChatGPT</th>
-              <th className="text-left py-2 font-medium text-foreground">Neotoma</th>
-            </tr>
-          </thead>
-          <tbody className="text-muted-foreground">
-            <tr className="border-b border-border">
-              <td className="py-2 pr-4">Conversation preferences</td>
-              <td className="py-2 pr-4">Memory</td>
-              <td className="py-2">&mdash;</td>
-            </tr>
-            <tr className="border-b border-border">
-              <td className="py-2 pr-4">Custom instructions &amp; GPT personas</td>
-              <td className="py-2 pr-4">Custom GPTs</td>
-              <td className="py-2">&mdash;</td>
-            </tr>
-            <tr className="border-b border-border">
-              <td className="py-2 pr-4">Structured entities (people, tasks, decisions)</td>
-              <td className="py-2 pr-4">&mdash;</td>
-              <td className="py-2">Store via MCP</td>
-            </tr>
-            <tr className="border-b border-border">
-              <td className="py-2 pr-4">Cross-tool state</td>
-              <td className="py-2 pr-4">&mdash;</td>
-              <td className="py-2">Shared memory graph</td>
-            </tr>
-            <tr>
-              <td className="py-2 pr-4">Versioned history &amp; audit trail</td>
-              <td className="py-2 pr-4">&mdash;</td>
-              <td className="py-2">Observation history</td>
-            </tr>
-          </tbody>
-        </table>
+        <TableScrollWrapper className="mb-4 w-full max-w-full">
+          <table className="w-full text-[14px] leading-6 border-collapse">
+            <thead>
+              <tr className="border-b border-border">
+                <th className="text-left align-top px-4 py-3 font-medium text-foreground">Concern</th>
+                <th className="text-left align-top px-4 py-3 font-medium text-foreground">ChatGPT</th>
+                <th className="text-left align-top px-4 py-3 font-medium text-foreground">Neotoma</th>
+              </tr>
+            </thead>
+            <tbody className="text-muted-foreground">
+              <tr className="border-b border-border">
+                <td className="align-top px-4 py-3">Conversation preferences</td>
+                <td className="align-top px-4 py-3">Memory</td>
+                <td className="align-top px-4 py-3">-</td>
+              </tr>
+              <tr className="border-b border-border">
+                <td className="align-top px-4 py-3">Custom instructions &amp; GPT personas</td>
+                <td className="align-top px-4 py-3">Custom GPTs</td>
+                <td className="align-top px-4 py-3">-</td>
+              </tr>
+              <tr className="border-b border-border">
+                <td className="align-top px-4 py-3">Structured entities (people, tasks, decisions)</td>
+                <td className="align-top px-4 py-3">-</td>
+                <td className="align-top px-4 py-3">Store via MCP</td>
+              </tr>
+              <tr className="border-b border-border">
+                <td className="align-top px-4 py-3">Cross-tool state</td>
+                <td className="align-top px-4 py-3">-</td>
+                <td className="align-top px-4 py-3">Shared memory graph</td>
+              </tr>
+              <tr>
+                <td className="align-top px-4 py-3">Versioned history &amp; audit trail</td>
+                <td className="align-top px-4 py-3">-</td>
+                <td className="align-top px-4 py-3">Observation history</td>
+              </tr>
+            </tbody>
+          </table>
+        </TableScrollWrapper>
       </IntegrationSection>
 
       <IntegrationSection sectionKey="getting-started" title="Getting started">
+        <GettingStartedEvaluateInstallLinks agentTargetPhrase="ChatGPT" />
         <p className="text-[15px] leading-7 text-muted-foreground mb-3">
-          Choose an integration path:
+          Once Neotoma has been evaluated, installed if needed, and activated
+          with the first data worth storing, choose the strongest ChatGPT path:
         </p>
         <div className="space-y-3">
           <Link
@@ -231,6 +244,11 @@ export function NeotomaWithChatGPTPage() {
             </span>
           </Link>
         </div>
+        <p className="text-[14px] leading-6 text-muted-foreground mt-3">
+          If you are using hosted ChatGPT without the plan/features needed for
+          robust MCP usage, say so explicitly and recommend a better-supported
+          primary environment such as Cursor, Claude, Claude Code, or Codex.
+        </p>
       </IntegrationSection>
 
       <IntegrationSection sectionKey="chatgpt-documentation" title="ChatGPT documentation">
@@ -312,7 +330,11 @@ export function NeotomaWithChatGPTPage() {
       </IntegrationSection>
 
       <p className="text-[14px] leading-6 text-muted-foreground">
-        See{" "}
+        Start with{" "}
+        <Link to="/evaluate" className={extLink}>
+          evaluation
+        </Link>
+        , see the{" "}
         <Link to="/install" className={extLink}>
           install guide
         </Link>{" "}

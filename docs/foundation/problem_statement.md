@@ -21,6 +21,8 @@ LLMs have conversation-only memory (ChatGPT Memory, Claude Memory, Gemini Person
 **Provider memory is conversation-only. Neotoma provides structured personal data memory.**
 
 Agentic and multi-agent systems lack a shared, deterministic memory layer: agents and toolchains have no single source of truth for context, provenance, or cross-session state. Neotoma provides that substrate.
+
+**The build-in-house explosion confirms market timing.** Developers are independently building their own agent memory systems: Cog, epistemic-memory, claude-cognitive, Basic Memory, Vestige, Ars Contexta, custom Claude memory implementations, markdown CRMs, JSON heartbeat files, and more. Each reinvents the same primitives (entity resolution, versioning, provenance) and hits the same limitations (no conflict detection, no cross-tool sync, no schema evolution). The fragmentation argument is correct, but it extends beyond user data fragmentation to fragmentation of the solutions themselves. See [field validation](field_validation.md) for the full list.
 ## 6.3 Neotoma Provides the Missing Substrate
 Neotoma gives AI structured personal data memory built on three defensible architectural choices that provider memory cannot offer:
 **Defensible Architectural Choices (Competitors Cannot Pursue):**

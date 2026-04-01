@@ -1,71 +1,71 @@
+import { Fragment } from "react";
 import {
+  Activity,
   AlertTriangle,
   ArrowRight,
   Check,
-  CheckCircle2,
   Clock,
-  Code2,
-  Database,
+  FileDown,
+  GitBranch,
   GitMerge,
-  Hammer,
-  KeyRound,
   Layers,
   Network,
+  Rss,
   Scale,
+  ScrollText,
   Shield,
-  Wrench,
   X,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { SeoHead } from "../SeoHead";
-import { sendCtaClick, type CtaName } from "@/utils/analytics";
+import { sendCtaClick } from "@/utils/analytics";
 
-interface ComplexityRow {
+interface GapRow {
   capability: string;
-  buildDesc: string;
-  neotomaDesc: string;
+  observabilityDesc: string;
+  stateIntegrityDesc: string;
   Icon: typeof Clock;
 }
 
-const COMPLEXITY_ROWS: ComplexityRow[] = [
+const GAP_ROWS: GapRow[] = [
   {
-    capability: "Temporal state reconstruction",
-    buildDesc:
-      "Query logs by timestamp, correlate across tables, hope the join covers every relevant mutation. Correctness depends on schema discipline you maintain yourself.",
-    neotomaDesc:
-      "Temporal snapshot query: what was the state of this entity at time T? Returns the exact fields, provenance, and version in one call.",
+    capability: "Knowing historical state",
+    observabilityDesc:
+      "Query event logs by entity and timestamp. See what happened: which agents wrote, what payloads they sent, when. Reconstruct a timeline from individual events.",
+    stateIntegrityDesc:
+      "Reconstruct the composed entity state at any point in time: all fields, all writers merged, conflicts resolved deterministically. Not what happened, but what was true.",
     Icon: Clock,
   },
   {
-    capability: "Multi-writer conflict detection",
-    buildDesc:
-      "Add optimistic locking or conflict columns per table. Handle edge cases when two agents update overlapping fields in the same window. Scale conflict logic as agent count grows.",
-    neotomaDesc:
-      "Append-only observations from any number of writers. Deterministic reducer merges by priority, recency, or custom policy. Conflicts are visible, not silent.",
+    capability: "Multi-writer consistency",
+    observabilityDesc:
+      "Log writes from each agent independently. See that two agents updated the same entity in the same window. Alert on conflicts after they happen.",
+    stateIntegrityDesc:
+      "Deterministic reducer merges observations by priority, recency, or custom policy. The composed snapshot is the same regardless of query order. Conflicts are resolved, not just detected.",
     Icon: GitMerge,
   },
   {
-    capability: "Delegation and provenance chains",
-    buildDesc:
-      "Model delegation as foreign keys across session, agent, and decision tables. Write custom traversal queries for each hop. Maintain referential integrity as the schema evolves.",
-    neotomaDesc:
-      "Delegation chain is a first-class entity with observations per hop. Traverse from acting agent back to human origin via relationship queries.",
+    capability: "Provenance across hops",
+    observabilityDesc:
+      "Trace requests across services with correlation IDs. See the path a decision took through your system. Build dashboards showing delegation and approval patterns.",
+    stateIntegrityDesc:
+      "Traverse from any outcome back to its origin through a chain of delegations, approvals, or handoffs. Bind each hop to the entity state and policy version at that moment. Prove the chain is complete.",
     Icon: Network,
   },
   {
-    capability: "Policy version binding",
-    buildDesc:
-      "Store policy version ID alongside each decision. When policies change, manually correlate old decisions to old versions. Build rebase logic if auditors need counterfactual analysis.",
-    neotomaDesc:
-      "Each observation records the policy version, role bindings, and scope that produced it. Historical queries return the decision bound to the policy that governed it.",
+    capability: "Version-bound decisions",
+    observabilityDesc:
+      "Log which policy or rule version was active when a decision ran. Query by policy ID to find affected decisions. Build reports on policy coverage.",
+    stateIntegrityDesc:
+      "Each observation records the policy version, role bindings, and constraints that produced it. Historical queries return the decision bound to the exact context that governed it. Counterfactual queries are supported.",
     Icon: Shield,
   },
   {
-    capability: "Cross-system entity correlation",
-    buildDesc:
-      "Map entity IDs across systems with custom sync pipelines. Deduplicate on ingest. Rebuild if upstream schemas change. Handle divergent update frequencies between sources.",
-    neotomaDesc:
-      "Schema-first extraction with hash-based entity IDs. Multiple sources create observations on the same entity. Reducer produces one canonical snapshot with full provenance.",
+    capability: "Cross-system entity identity",
+    observabilityDesc:
+      "Track entity IDs per system. Build sync pipelines to correlate records across sources. Deduplicate on ingest. Monitor for drift between systems.",
+    stateIntegrityDesc:
+      "Hash-based entity IDs resolve the same entity across systems. Multiple sources produce observations on one entity. Reducer composes one canonical snapshot with provenance from every source.",
     Icon: Layers,
   },
 ];
@@ -77,87 +77,95 @@ interface AssessmentItem {
 
 const ASSESSMENT_ITEMS: AssessmentItem[] = [
   {
-    question: "Multiple agents write to the same entities",
+    question: "Multiple sources write to the same entities",
     detail:
-      "Two or more agents update the same vendor, contract, case, or authorization record. That means changing state the business depends on, not just appending logs.",
+      "Chat agents, cron jobs, CLI scripts, or services all touch the same contact, task, or ledger row. Logging each write is not the same as a single deterministic snapshot everyone reads-especially when tools disagree.",
   },
   {
-    question: 'You need to answer "what was known at time T?"',
+    question: "You need the composed state at a specific point in time",
     detail:
-      "Regulators, auditors, or incident responders ask what the system believed about an entity on a specific date: not the current state, but what it was then.",
+      "Not only which events fired, but what was true: the full derived state from every observation up to that moment. That is how you answer “what did the stack believe last Tuesday?”-for yourself, an auditor, or a postmortem-not just “what got logged.”",
   },
   {
-    question: "Policies or rules change while agents hold active sessions",
+    question: "Rules or context change while entities have active state",
     detail:
-      "Authorization policies, scoring models, or business rules update mid-flight. Agents started under one version may now be operating under different constraints.",
+      "Prompt packs, merge policies, scoring rules, authorization gates, or contract terms change while records stay live. You need which version governed which outcome, and what the answer would have been under the prior version.",
   },
   {
-    question: "Authority passes through more than one delegation hop",
+    question: "Actions flow through multiple systems, tools, or delegation hops",
     detail:
-      "A user grants scope to an orchestrator, which delegates to a downstream agent, which acts. Reconstructing the chain from action back to human origin requires traversing multiple relationships.",
+      "An orchestrator, IDE agent, and background worker each contribute. Reconstructing the full chain-and proving it is complete-means traversing provenance on entities, not only correlating traces.",
   },
   {
-    question: "Decisions need post-hoc explanation with full inputs",
+    question: "Explanation requires the full input context, not a summary",
     detail:
-      "When asked why a decision was made, the answer must include the specific data, policy version, agent context, and conflicting inputs at the time. A summary or current-state lookup is not enough.",
+      "Debugging drift, contradictions, or non-reproducible runs requires the exact entity fields, schema or policy version, writer context, and conflict resolution at that moment-not a terse log line or today’s live row.",
   },
 ];
 
-interface VerticalExample {
+interface EntityTypeExample {
   href: string;
-  label: string;
-  entity: string;
-  easyBuild: string;
-  hardBuild: string;
+  guideLabel: string;
+  observabilityCovers: string;
+  stateIntegrityGap: string;
   accent: string;
-  accentBorder: string;
-  accentBg: string;
 }
 
-const VERTICAL_EXAMPLES: VerticalExample[] = [
+/** Examples aligned with primary ICP data priorities and schema-first entity types (see docs/subsystems/record_types.md). */
+const ENTITY_TYPE_EXAMPLES: EntityTypeExample[] = [
   {
-    href: "/agent-auth",
-    label: "Agent Authorization",
-    entity: "auth_decision",
-    easyBuild: "Log allow/deny per request with timestamp and agent ID",
-    hardBuild:
-      "Reconstruct the policy version, delegation chain, consent grants, and scope constraints that produced a decision on March 12",
-    accent: "text-blue-600 dark:text-blue-400",
-    accentBorder: "border-blue-500/20",
-    accentBg: "bg-blue-500/5",
+    href: "/types/contacts",
+    guideLabel: "Contacts",
+    observabilityCovers:
+      "Log each upsert from chat, CRM import, or script with timestamps and source labels",
+    stateIntegrityGap:
+      "One canonical person or company record across tools, with deterministic merge when two agents update the same identity on the same day",
+    accent: "text-emerald-600 dark:text-emerald-400",
   },
   {
-    href: "/compliance",
-    label: "Vendor Risk",
-    entity: "vendor_risk_profile",
-    easyBuild: "Store current risk score with updated_at timestamp",
-    hardBuild:
-      "Explain to a regulator what the system believed about a vendor when it approved them, including which agent assessed what and how conflicting signals were resolved",
-    accent: "text-amber-600 dark:text-amber-400",
-    accentBorder: "border-amber-500/20",
-    accentBg: "bg-amber-500/5",
+    href: "/types/tasks",
+    guideLabel: "Tasks",
+    observabilityCovers:
+      "Append status changes to an activity feed: opened, reassigned, completed, with agent IDs",
+    stateIntegrityGap:
+      "Composed task state (owner, status, due date) after concurrent edits from scheduled jobs and interactive agents-same answer on every read",
+    accent: "text-sky-600 dark:text-sky-400",
   },
   {
-    href: "/contracts",
-    label: "Contract Lifecycle",
-    entity: "contract",
-    easyBuild: "Track current terms with a version number column",
-    hardBuild:
-      "Diff any two points in a contract's history, trace which agent introduced which clause change, and reconstruct the obligations that were active on the signing date",
-    accent: "text-indigo-600 dark:text-indigo-400",
-    accentBorder: "border-indigo-500/20",
-    accentBg: "bg-indigo-500/5",
-  },
-  {
-    href: "/financial-ops",
-    label: "Financial Ops",
-    entity: "reconciliation",
-    easyBuild: "Append ledger entries with transaction IDs",
-    hardBuild:
-      "Prove that a specific liability existed in the books on the audit date, trace every mutation that touched it, and show the reconciliation state at close",
+    href: "/types/transactions",
+    guideLabel: "Transactions",
+    observabilityCovers:
+      "Record ingest events, file uploads, and reconciliation checks with correlation IDs",
+    stateIntegrityGap:
+      "What your agents treated as settled financial truth on a given date, with every observation that fed the snapshot traceable",
     accent: "text-teal-600 dark:text-teal-400",
-    accentBorder: "border-teal-500/20",
-    accentBg: "bg-teal-500/5",
+  },
+  {
+    href: "/types/contracts",
+    guideLabel: "Contracts",
+    observabilityCovers:
+      "Log clause edits, reviews, and signatures with versions and timestamps",
+    stateIntegrityGap:
+      "Reconstruct obligations and terms as they existed on signing day, including which change came from which writer and how conflicts were reduced",
+    accent: "text-indigo-600 dark:text-indigo-400",
+  },
+  {
+    href: "/types/decisions",
+    guideLabel: "Decisions",
+    observabilityCovers:
+      "Store decision logs and rationale snippets as unstructured events or documents",
+    stateIntegrityGap:
+      "Bind rationale to versioned entity state so “why we chose X” replays with the same facts the agent had then-not the notebook file as it reads today",
+    accent: "text-violet-600 dark:text-violet-400",
+  },
+  {
+    href: "/types/events",
+    guideLabel: "Events",
+    observabilityCovers:
+      "Track calendar syncs, invites, and reschedule notifications in order",
+    stateIntegrityGap:
+      "Composed meeting or milestone state when agents and calendars both mutate attendees, time, or status-without last-write-wins ambiguity",
+    accent: "text-amber-600 dark:text-amber-400",
   },
 ];
 
@@ -177,55 +185,59 @@ export function BuildVsBuyPage() {
               </span>
             </div>
             <h1 className="text-[32px] md:text-[40px] font-medium tracking-[-0.02em] leading-tight max-w-3xl">
-              When to build your own state layer{" "}
-              <span className="text-muted-foreground">(and when not to)</span>
+              When to add a state integrity layer{" "}
+              <span className="text-muted-foreground">
+                (and when observability is enough)
+              </span>
             </h1>
             <p className="text-[17px] leading-8 text-muted-foreground max-w-2xl">
-              Building an audit trail is straightforward. Building a temporal state
-              system that composes versioned entities, multi-writer conflict
-              detection, and provenance chains into queryable state, then maintaining
-              that system, is a different problem. This page helps you figure out
-              which problem you have.
+              If you run agents across sessions and tools-IDE, chat, cron, CLI-you
+              already pay the tax of re-prompting, manual sync, and homegrown
+              markdown or JSON workarounds. Logging what ran is a solved
+              problem. Knowing the{" "}
+              <span className="text-foreground/90">composed, replayable state</span>{" "}
+              of each entity (contacts, tasks, money facts, decisions) across
+              those writers is a different problem. This page separates the two.
             </p>
           </section>
 
-          {/* ── What's easy ── */}
+          {/* ── What's solved ── */}
           <section className="py-20 border-b border-border space-y-8">
             <div className="space-y-2">
               <p className="text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
-                What&apos;s straightforward
+                Already solved
               </p>
               <h2 className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
-                The part you should build yourself
+                What existing tools cover well
               </h2>
             </div>
             <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl">
-              If your requirements stop here, build it. A Postgres table, some
-              append-only writes, and good indexing will serve you well. Neotoma
-              is not the right tool for problems that don&apos;t need temporal state
-              guarantees.
+              Audit and observability have mature solutions. If your
+              requirements stop at knowing what happened (who did what, when,
+              and in what order) you do not need Neotoma. These are real,
+              valuable capabilities, and they are handled.
             </p>
             <div className="grid gap-4 md:grid-cols-2">
               {[
                 {
-                  title: "Decision logs",
-                  desc: "Record allow/deny, agent ID, timestamp, and basic metadata for each decision your system makes.",
-                  Icon: Database,
+                  title: "Event logging",
+                  desc: "Append-only event streams with structured payloads. Datadog, Splunk, ELK, or a Postgres table: recording what happened is a solved problem.",
+                  Icon: ScrollText,
                 },
                 {
-                  title: "Append-only event tables",
-                  desc: "INSERT INTO events with structured payload. Immutable rows, auto-incrementing IDs, created_at timestamps.",
-                  Icon: Code2,
+                  title: "Observability and alerting",
+                  desc: "Real-time visibility into agent behavior: metrics, traces, anomaly detection. Mature tooling covers this across every stack.",
+                  Icon: Activity,
                 },
                 {
-                  title: "Basic provenance",
-                  desc: "Store who did what and when. Agent name, action type, target entity, timestamp. Standard schema.",
-                  Icon: CheckCircle2,
+                  title: "Activity feeds",
+                  desc: "Show users or operators what's happening in their systems. Chronological, filterable, exportable. Standard product feature with standard solutions.",
+                  Icon: Rss,
                 },
                 {
-                  title: "Single-system audit trails",
-                  desc: "One auth service, one policy engine, one writer. Query by entity and time range. Export for auditors.",
-                  Icon: Hammer,
+                  title: "Compliance exports",
+                  desc: "On-demand or scheduled data exports for auditors. Query by entity and time range, package as CSV or PDF. Straightforward with any data store.",
+                  Icon: FileDown,
                 },
               ].map(({ title, desc, Icon }) => (
                 <div
@@ -246,81 +258,83 @@ export function BuildVsBuyPage() {
             </div>
           </section>
 
-          {/* ── Five capabilities ── */}
+          {/* ── The gap ── */}
           <section className="py-20 border-b border-border space-y-8">
             <div className="space-y-2">
               <p className="text-[11px] font-mono uppercase tracking-widest text-amber-600 dark:text-amber-400">
-                Where complexity compounds
+                The gap
               </p>
               <h2 className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
-                The devil is in the details
+                Where observability ends and state integrity begins
               </h2>
             </div>
             <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl">
-              On a whiteboard, the shape of the problem looks obvious: record each
-              decision, who made it, and when. Storing one auth decision is a
-              database insert. Temporal query correctness across policy versions,
-              consent lifecycle reconstruction, delegation chain traversal, and
-              multi-writer merge semantics are each simple in isolation. Combined
-              under production load with evolving schemas, these are the details
-              that consume engineering quarters.
+              Observability shows you what happened. State integrity tells you
+              what was true: the composed entity state at any moment, with
+              deterministic reconstruction guarantees-what you need when agents
+              must not contradict themselves across sessions and tools without
+              you re-typing context every time. The second problem does not reduce
+              to the first.
             </p>
             <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.03] p-5">
               <div className="flex items-start gap-3">
-                <KeyRound
+                <GitBranch
                   className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5"
                   aria-hidden
                 />
                 <p className="text-[14px] leading-6 text-muted-foreground min-w-0 flex-1">
                   <span className="font-medium text-foreground">
-                    A familiar pattern:
+                    An analogy:
                   </span>{" "}
-                  OAuth looks like &ldquo;redirect and get a token.&rdquo; The real
-                  work is refresh flows, PKCE, token revocation, multi-tenant
-                  consent, and scope narrowing. Identity providers exist because
-                  those details are hard enough to justify a purpose-built system.
-                  The same logic applies to versioned state for agent decisions.
+                  Saving files is trivial. Git exists because knowing the
+                  composed state of a codebase at any commit, with blame, merge
+                  history, and conflict resolution, is a qualitatively different
+                  problem from saving files. The same gap exists between logging
+                  what your agents did and knowing the composed state of your
+                  entities at any point in time.
                 </p>
               </div>
             </div>
             <div className="space-y-4">
-              {COMPLEXITY_ROWS.map(({ capability, buildDesc, neotomaDesc, Icon }) => (
-                <div
-                  key={capability}
-                  className="rounded-lg border border-border bg-card overflow-hidden"
-                >
-                  <div className="flex items-center gap-2.5 border-b border-border px-5 py-3">
-                    <Icon className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
-                    <span className="text-[15px] font-medium text-foreground">
-                      {capability}
-                    </span>
-                  </div>
-                  <div className="grid md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-border">
-                    <div className="p-5 space-y-2">
-                      <div className="flex items-center gap-1.5">
-                        <Wrench className="h-3 w-3 text-muted-foreground" />
-                        <span className="text-[11px] font-mono uppercase tracking-wide text-muted-foreground">
-                          Build it
-                        </span>
-                      </div>
-                      <p className="text-[13px] leading-6 text-muted-foreground">
-                        {buildDesc}
-                      </p>
+              {GAP_ROWS.map(
+                ({ capability, observabilityDesc, stateIntegrityDesc, Icon }) => (
+                  <div
+                    key={capability}
+                    className="rounded-lg border border-border bg-card overflow-hidden"
+                  >
+                    <div className="flex items-center gap-2.5 border-b border-border px-5 py-3">
+                      <Icon className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                      <span className="text-[15px] font-medium text-foreground">
+                        {capability}
+                      </span>
                     </div>
-                    <div className="p-5 space-y-2">
-                      <div className="flex items-center gap-1.5">
-                        <Layers className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
-                        <span className="text-[11px] font-mono uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
-                          Neotoma
-                        </span>
+                    <div className="grid md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-border">
+                      <div className="p-5 space-y-2">
+                        <div className="flex items-center gap-1.5">
+                          <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                          <span className="text-[11px] font-mono uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
+                            Observability covers
+                          </span>
+                        </div>
+                        <p className="text-[13px] leading-6 text-muted-foreground">
+                          {observabilityDesc}
+                        </p>
                       </div>
-                      <p className="text-[13px] leading-6 text-muted-foreground">
-                        {neotomaDesc}
-                      </p>
+                      <div className="p-5 space-y-2">
+                        <div className="flex items-center gap-1.5">
+                          <Layers className="h-3 w-3 text-amber-600 dark:text-amber-400" />
+                          <span className="text-[11px] font-mono uppercase tracking-wide text-amber-600 dark:text-amber-400">
+                            State integrity adds
+                          </span>
+                        </div>
+                        <p className="text-[13px] leading-6 text-muted-foreground">
+                          {stateIntegrityDesc}
+                        </p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ),
+              )}
             </div>
           </section>
 
@@ -333,6 +347,11 @@ export function BuildVsBuyPage() {
               <h2 className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
                 How many of these describe your system?
               </h2>
+              <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl">
+                A useful diagnostic: what are you doing today to compensate for
+                unreliable or missing agent state? Each item below is a structural
+                signal-not a vendor checklist.
+              </p>
             </div>
             <div className="space-y-3">
               {ASSESSMENT_ITEMS.map(({ question, detail }, idx) => (
@@ -365,9 +384,9 @@ export function BuildVsBuyPage() {
                   </span>
                 </div>
                 <p className="text-[13px] leading-6 text-muted-foreground">
-                  Build it. A well-designed event table and query layer will
-                  serve your current needs. Revisit when your agent surface area
-                  grows.
+                  Observability is enough. Invest in good event logging and
+                  dashboards. Revisit if agents gain autonomy, you add tools, or
+                  you need stronger audit and replay.
                 </p>
               </div>
               <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.03] p-5 space-y-2">
@@ -378,9 +397,9 @@ export function BuildVsBuyPage() {
                   </span>
                 </div>
                 <p className="text-[13px] leading-6 text-muted-foreground">
-                  You&apos;re approaching the threshold. What you build now will
-                  need rearchitecting as complexity grows. Evaluate whether the
-                  maintenance cost is worth carrying.
+                  You&apos;re at the boundary. You can approximate state
+                  integrity on top of observability tools, but the gap widens
+                  as writers, policies, and entity types multiply.
                 </p>
               </div>
               <div className="rounded-lg border border-rose-500/20 bg-rose-500/[0.03] p-5 space-y-2">
@@ -391,79 +410,69 @@ export function BuildVsBuyPage() {
                   </span>
                 </div>
                 <p className="text-[13px] leading-6 text-muted-foreground">
-                  You need a purpose-built state integrity layer. The
-                  engineering cost of building and maintaining temporal state,
-                  conflict detection, and provenance at this complexity level is
-                  significant, and it&apos;s not your core product.
+                  You need a state integrity layer. The gap between what
+                  observability shows you and what you need to know is
+                  structural, not incremental.
                 </p>
               </div>
             </div>
           </section>
 
-          {/* ── Vertical examples ── */}
+          {/* ── Entity type examples ── */}
           <section className="py-20 border-b border-border space-y-8">
             <div className="space-y-2">
               <p className="text-[11px] font-mono uppercase tracking-widest text-muted-foreground">
-                By domain
+                By entity type
               </p>
               <h2 className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
-                Where the line falls across verticals
+                Where the line shows up in typed state
               </h2>
               <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl">
-                The pattern is consistent: logging individual events is
-                straightforward. Composing them into queryable temporal state is
-                where the complexity lives.
+                Neotoma is schema-first: each{" "}
+                <span className="text-foreground/90">entity type</span> carries
+                observations that reduce to a deterministic snapshot. The same
+                observability-vs-integrity split appears whether the record is a
+                contact, a task, or a transaction-see the guides for store and
+                retrieval patterns.
               </p>
             </div>
             <div className="grid gap-4 md:grid-cols-2">
-              {VERTICAL_EXAMPLES.map(
+              {ENTITY_TYPE_EXAMPLES.map(
                 ({
                   href,
-                  label,
-                  entity,
-                  easyBuild,
-                  hardBuild,
+                  guideLabel,
+                  observabilityCovers,
+                  stateIntegrityGap,
                   accent,
-                  accentBorder,
-                  accentBg,
                 }) => (
                   <Link
                     key={href}
                     to={href}
                     className="group rounded-lg border border-border bg-card p-5 space-y-4 no-underline transition-all hover:border-border/80 hover:shadow-lg hover:shadow-black/5 dark:hover:shadow-black/20"
                   >
-                    <div className="flex items-center justify-between">
-                      <div
-                        className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 ${accentBorder} ${accentBg}`}
-                      >
-                        <span
-                          className={`text-[10px] font-mono ${accent}`}
-                        >
-                          {entity}
-                        </span>
-                      </div>
-                      <ArrowRight className="h-4 w-4 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5 group-hover:text-muted-foreground" />
+                    <div className="flex items-center justify-between gap-2">
+                      <p className={`text-[14px] font-medium ${accent}`}>
+                        {guideLabel}
+                      </p>
+                      <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5 group-hover:text-muted-foreground" />
                     </div>
-                    <p className={`text-[14px] font-medium ${accent}`}>
-                      {label}
-                    </p>
                     <div className="space-y-2">
                       <div className="flex items-start gap-2">
                         <Check className="h-3.5 w-3.5 mt-0.5 shrink-0 text-emerald-500" />
                         <p className="text-[13px] leading-5 text-muted-foreground">
                           <span className="font-medium text-foreground/80">
-                            Easy to build:
+                            Observability covers:
                           </span>{" "}
-                          {easyBuild}
+                          {observabilityCovers}
                         </p>
                       </div>
                       <div className="flex items-start gap-2">
                         <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0 text-amber-500" />
                         <p className="text-[13px] leading-5 text-muted-foreground">
                           <span className="font-medium text-foreground/80">
-                            Hard to maintain:
+                            State integrity gap:
                           </span>{" "}
-                          {hardBuild}
+                          {stateIntegrityGap}
                         </p>
                       </div>
                     </div>
@@ -471,15 +480,29 @@ export function BuildVsBuyPage() {
                 ),
               )}
             </div>
-            <div className="flex justify-center">
-              <Link
-                to="/verticals"
-                className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-4 py-2 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
-              >
-                See all verticals
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </div>
+            <nav
+              className="flex flex-wrap items-baseline justify-center gap-x-2 gap-y-2 text-[13px] text-muted-foreground"
+              aria-label="Record types"
+            >
+              <span className="text-[11px] font-mono uppercase tracking-widest shrink-0">
+                Guides
+              </span>
+              {ENTITY_TYPE_EXAMPLES.map(({ href, guideLabel }, i) => (
+                <Fragment key={href}>
+                  {i > 0 ? (
+                    <span className="select-none text-border" aria-hidden>
+                      ·
+                    </span>
+                  ) : null}
+                  <Link
+                    to={href}
+                    className="text-foreground underline underline-offset-2 hover:no-underline"
+                  >
+                    {guideLabel}
+                  </Link>
+                </Fragment>
+              ))}
+            </nav>
           </section>
 
           {/* ── The real question ── */}
@@ -489,23 +512,23 @@ export function BuildVsBuyPage() {
                 The real question
               </p>
               <h2 className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
-                Building V1 is easy.{" "}
+                Observability tells you what happened.{" "}
                 <span className="text-muted-foreground">
-                  Living with the details is the cost.
+                  State integrity proves what was true.
                 </span>
               </h2>
             </div>
             <div className="grid gap-6 md:grid-cols-2">
               <div className="rounded-lg border border-border bg-card p-6 space-y-4">
                 <p className="text-[15px] font-medium text-foreground">
-                  Building V1 is easy
+                  What observability gives you
                 </p>
                 <ul className="list-none pl-0 space-y-2.5">
                   {[
-                    "A decisions table with timestamp, agent, and outcome columns",
-                    "An events table with append-only inserts",
-                    "A query that filters by entity and time range",
-                    "A nightly export for auditors",
+                    "A complete record of every event, decision, and action in your system",
+                    "Real-time dashboards and alerting on agent behavior",
+                    "Searchable logs by entity, agent, time range, and event type",
+                    "Exportable audit trails for compliance and incident response",
                   ].map((item) => (
                     <li
                       key={item}
@@ -517,21 +540,21 @@ export function BuildVsBuyPage() {
                   ))}
                 </ul>
                 <p className="text-[13px] leading-6 text-muted-foreground pt-2 border-t border-border">
-                  This takes a few days. It solves the immediate need. If this is
-                  all you need, genuinely, build it.
+                  If this is all you need, you&apos;re set. Existing tools and
+                  straightforward engineering cover these requirements well.
                 </p>
               </div>
               <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.03] p-6 space-y-4">
                 <p className="text-[15px] font-medium text-foreground">
-                  Maintaining it is the cost
+                  What state integrity adds
                 </p>
                 <ul className="list-none pl-0 space-y-2.5">
                   {[
-                    "Schema migrations as entity types evolve and new fields appear",
-                    "Conflict handling as the second and third writer agents come online",
-                    "Temporal query correctness as policy versions stack up",
-                    "Cross-system correlation as data flows from multiple sources",
-                    "Reducer logic when auditors want deterministic reconstruction",
+                    "Deterministic reconstruction of entity state at any historical point",
+                    "Multi-writer conflict resolution with guaranteed consistency",
+                    "Every decision bound to the exact policy version and context that produced it",
+                    "Provenance chains traversable from outcome back to origin",
+                    "Cross-system entity correlation into one canonical snapshot",
                   ].map((item) => (
                     <li
                       key={item}
@@ -543,9 +566,8 @@ export function BuildVsBuyPage() {
                   ))}
                 </ul>
                 <p className="text-[13px] leading-6 text-muted-foreground pt-2 border-t border-border">
-                  This is ongoing engineering alongside your core product. The
-                  question is whether temporal state infrastructure is where your
-                  team should spend its maintenance budget.
+                  This is the gap: not a harder version of observability, but a
+                  different requirement that existing tools do not address.
                 </p>
               </div>
             </div>
@@ -558,19 +580,18 @@ export function BuildVsBuyPage() {
                 Past the threshold?
               </h2>
               <p className="text-[15px] md:text-[17px] leading-7 text-muted-foreground">
-                Neotoma is an open-source, deterministic state layer designed for
-                exactly the complexity described above. Install it in five
-                minutes and see what versioned entity state looks like for your
-                domain.
+                Neotoma is an open-source state integrity layer: deterministic
+                temporal reconstruction, multi-writer consistency, and
+                version-bound provenance. Install it in five minutes and see
+                composed entity state for the types you already store-contacts,
+                tasks, money movement, and the rest of your agent OS.
               </p>
             </div>
             <div className="flex flex-col sm:flex-row justify-center gap-3">
               <Link
                 to="/install"
                 className="inline-flex justify-center items-center gap-1.5 rounded-md border border-foreground bg-foreground px-6 py-2.5 text-[14px] font-medium text-background no-underline hover:opacity-90 transition-opacity"
-                onClick={() =>
-                  sendCtaClick("build_vs_buy_install_neotoma" as CtaName)
-                }
+                onClick={() => sendCtaClick("install")}
               >
                 Install Neotoma
               </Link>
@@ -581,21 +602,24 @@ export function BuildVsBuyPage() {
                 Read the architecture
               </Link>
               <Link
-                to="/verticals"
+                to="/types/contacts"
                 className="inline-flex justify-center items-center gap-1.5 rounded-md border border-border bg-card px-6 py-2.5 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
               >
-                Explore verticals
+                Record types
               </Link>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-4 text-[12px] text-muted-foreground">
-              {["Open-source", "MIT-licensed", "5-minute install", "Fully reversible"].map(
-                (label) => (
-                  <div key={label} className="flex items-center gap-1.5">
-                    <Check className="h-3.5 w-3.5 text-emerald-500" />
-                    <span>{label}</span>
-                  </div>
-                ),
-              )}
+              {[
+                "Open-source",
+                "MIT-licensed",
+                "5-minute install",
+                "Fully reversible",
+              ].map((label) => (
+                <div key={label} className="flex items-center gap-1.5">
+                  <Check className="h-3.5 w-3.5 text-emerald-500" />
+                  <span>{label}</span>
+                </div>
+              ))}
             </div>
           </section>
         </div>

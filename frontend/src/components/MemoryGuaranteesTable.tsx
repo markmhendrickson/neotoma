@@ -7,6 +7,7 @@ import {
 } from "../site/site_data";
 import { useLocale } from "@/i18n/LocaleContext";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
+import { TableScrollWrapper } from "./ui/table-scroll-wrapper";
 
 const GUARANTEE_LEVEL_META: Record<
   GuaranteeLevel,
@@ -78,17 +79,19 @@ export function GuaranteeCell({ level }: { level: GuaranteeLevel }) {
 export function MemoryGuaranteesTable() {
   const { pack } = useLocale();
   const memory = pack.memory;
-  const memoryModelKeys = ["platform", "retrieval", "file", "neotoma"] as const;
+  const memoryModelKeys = ["platform", "retrieval", "file", "database", "neotoma"] as const;
 
   return (
     <TooltipProvider delayDuration={200}>
-      <table className="w-full table-fixed text-[14px] leading-6 border-collapse">
+      <TableScrollWrapper className="w-full max-w-full">
+        <table className="min-w-[620px] table-fixed text-[14px] leading-6 border-collapse">
         <colgroup>
-          <col className="w-[28%]" />
-          <col className="w-[18%]" />
-          <col className="w-[18%]" />
-          <col className="w-[18%]" />
-          <col className="w-[18%]" />
+          <col style={{ width: "30%" }} />
+          <col style={{ width: "14%" }} />
+          <col style={{ width: "14%" }} />
+          <col style={{ width: "14%" }} />
+          <col style={{ width: "14%" }} />
+          <col style={{ width: "14%" }} />
         </colgroup>
         <thead>
           <tr className="border-b border-border">
@@ -160,6 +163,28 @@ export function MemoryGuaranteesTable() {
                   </TooltipTrigger>
                   <TooltipContent className="w-max min-w-[18rem] max-w-[min(36rem,calc(100vw-1.5rem))] text-[13px] leading-5 whitespace-normal">
                     <p>Memory stored in files or artifacts outside a structured memory system.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </span>
+            </th>
+            <th
+              scope="col"
+              className="text-center px-3 py-2.5 font-medium text-foreground bg-muted/50 min-w-0 overflow-hidden"
+            >
+              <span className="inline-flex items-center justify-center gap-1 min-w-0 max-w-full">
+                <span className="truncate">{memory.database}</span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Link
+                      to="/database-memory"
+                      className="inline-flex shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                      aria-label="More info about Database memory"
+                    >
+                      <Info className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                    </Link>
+                  </TooltipTrigger>
+                  <TooltipContent className="w-max min-w-[18rem] max-w-[min(36rem,calc(100vw-1.5rem))] text-[13px] leading-5 whitespace-normal">
+                    <p>Memory stored in a relational database (SQLite, Postgres) with standard CRUD operations.</p>
                   </TooltipContent>
                 </Tooltip>
               </span>
@@ -275,12 +300,16 @@ export function MemoryGuaranteesTable() {
                 <GuaranteeCell level={row.file} />
               </td>
               <td className="px-0 py-0 align-middle text-center min-w-0 overflow-hidden">
+                <GuaranteeCell level={row.database} />
+              </td>
+              <td className="px-0 py-0 align-middle text-center min-w-0 overflow-hidden">
                 <GuaranteeCell level={row.neotoma} />
               </td>
             </tr>
           ))}
         </tbody>
       </table>
+      </TableScrollWrapper>
     </TooltipProvider>
   );
 }

@@ -776,8 +776,8 @@ Load when:
 - Making go/no-go decisions
 ### Required Co-Loaded Documents
 - `foundation/development/release_workflow.md` — Release workflow integration
-- `docs/specs/ICP_PRIORITY_TIERS.md` — ICP segments for interviews
-- `docs/specs/ICP_PROFILES.md` — Detailed ICP profiles
+- `docs/icp/primary_icp.md` — Primary ICP and segments for interviews
+- `docs/icp/profiles.md` — Detailed ICP profiles
 ### Constraints Agents Must Enforce
 1. **ALWAYS define discovery plan during Release planning**
 2. **ALWAYS conduct discovery before building (Step 0.5)**

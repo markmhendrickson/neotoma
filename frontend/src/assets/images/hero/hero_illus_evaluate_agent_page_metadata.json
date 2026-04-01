@@ -1,0 +1,8 @@
+[
+  {
+    "file": "frontend/src/assets/images/hero/hero_illus_evaluate_agent_page.png",
+    "prompt": "Robot imagery: stylized minimal robot head/bust left; beam/flow to document+checkmark right; deep warm brown #3c2f2f + tan/sand accents; transparent PNG; square 1:1; no text or logos.",
+    "model": "image-generation",
+    "size": "1024x1024"
+  }
+]

@@ -9,6 +9,8 @@ import {
   Code,
   Cpu,
   Database,
+  FileText,
+  GitCompare,
   Github,
   Globe,
   History,
@@ -20,10 +22,12 @@ import {
   PanelRight,
   Rocket,
   SatelliteDish,
+  Search,
   Server,
   ShieldCheck,
   Sparkles,
   Terminal,
+  Waypoints,
   Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -32,6 +36,7 @@ import { DetailPage } from "../DetailPage";
 import { useLocale } from "@/i18n/LocaleContext";
 import { localizePath } from "@/i18n/routing";
 import { Card, CardContent } from "@/components/ui/card";
+import { CodexIcon } from "@/components/icons/CodexIcon";
 import { CursorIcon } from "@/components/icons/CursorIcon";
 import { OpenClawIcon } from "@/components/icons/OpenClawIcon";
 import { DOC_NAV_CATEGORIES } from "@/site/site_data";
@@ -44,7 +49,7 @@ const INTEGRATION_BRAND_ICONS: Record<
   "/neotoma-with-claude-code": SiClaude,
   "/neotoma-with-claude": SiClaude,
   "/neotoma-with-chatgpt": SiOpenai,
-  "/neotoma-with-codex": SiOpenai,
+  "/neotoma-with-codex": CodexIcon,
   "/neotoma-with-cursor": CursorIcon,
   "/neotoma-with-openclaw": OpenClawIcon,
 };
@@ -59,6 +64,8 @@ const DOC_NAV_ICONS: Record<string, LucideIcon> = {
   Code,
   Cpu,
   Database,
+  FileText,
+  GitCompare,
   Github,
   Globe,
   History,
@@ -70,10 +77,12 @@ const DOC_NAV_ICONS: Record<string, LucideIcon> = {
   PanelRight,
   Rocket,
   SatelliteDish,
+  Search,
   Server,
   ShieldCheck,
   Sparkles,
   Terminal,
+  Waypoints,
   Zap,
 };
 
@@ -94,11 +103,16 @@ const DOC_CATEGORIES = [
   {
     title: "Getting started",
     items: [
+      {
+        label: "Evaluate",
+        href: "/evaluate",
+        desc: "Have your agent read this page to decide whether Neotoma fits your workflow",
+      },
       { label: "Install", href: "/install", desc: "Install and initialize Neotoma locally" },
       {
-        label: "Developer walkthrough",
+        label: "Walkthrough",
         href: "/developer-walkthrough",
-        desc: "Hands-on setup and implementation guide for engineers",
+        desc: "End-to-end example across operating, building, and debugging",
       },
     ],
   },
@@ -171,11 +185,6 @@ const DOC_CATEGORIES = [
       },
       { label: "Terminology", href: "/terminology", desc: "Glossary of key concepts" },
       {
-        label: "Data model walkthrough",
-        href: "/data-model",
-        desc: "How sources, observations, entities, snapshots, and relationships connect",
-      },
-      {
         label: "Schema management",
         href: "/schema-management",
         desc: "Define, inspect, and evolve schema constraints safely",
@@ -198,22 +207,62 @@ const DOC_CATEGORIES = [
     ],
   },
   {
-    title: "Use cases",
+    title: "Operational modes",
     items: [
       {
-        label: "AI-native operators",
-        href: "/ai-native-operators",
-        desc: "Memory across every tool and session",
+        label: "Operating across tools",
+        href: "/operating",
+        desc: "Memory that survives session resets and follows you between tools",
       },
       {
-        label: "AI infrastructure engineers",
-        href: "/ai-infrastructure-engineers",
-        desc: "Deterministic state for runtimes and orchestration",
+        label: "Building pipelines",
+        href: "/building-pipelines",
+        desc: "Persistent memory and provenance for agent pipelines",
       },
       {
-        label: "Agentic systems builders",
-        href: "/agentic-systems-builders",
-        desc: "Deterministic memory and provenance layer for agents and toolchains",
+        label: "Debugging infrastructure",
+        href: "/debugging-infrastructure",
+        desc: "Replayable state for debugging agent runs",
+      },
+    ],
+  },
+  {
+    title: "Compare",
+    items: [
+      {
+        label: "Build vs buy",
+        href: "/build-vs-buy",
+        desc: "When to adopt a state-integrity layer instead of building around observability alone",
+      },
+      {
+        label: "Neotoma vs platform memory",
+        href: "/neotoma-vs-platform-memory",
+        desc: "Convenience inside one AI product versus portable, auditable state across tools",
+      },
+      {
+        label: "Neotoma vs Mem0",
+        href: "/neotoma-vs-mem0",
+        desc: "Retrieval memory for prompt augmentation versus deterministic entity state",
+      },
+      {
+        label: "Neotoma vs Zep",
+        href: "/neotoma-vs-zep",
+        desc: "Knowledge-graph retrieval versus versioned, schema-bound state",
+      },
+      {
+        label: "Neotoma vs RAG",
+        href: "/neotoma-vs-rag",
+        desc: "Relevant chunk retrieval versus exact state reconstruction",
+      },
+      {
+        label: "Neotoma vs file-based memory",
+        href: "/neotoma-vs-files",
+        desc: "Markdown and JSON portability versus structured guarantees and provenance",
+      },
+      {
+        label: "Neotoma vs database memory",
+        href: "/neotoma-vs-database",
+        desc: "CRUD rows versus append-only observations and deterministic reducers",
       },
     ],
   },
@@ -247,6 +296,8 @@ export function DocsIndexPage() {
     if (title === "Integration guides" || title === "Integrations")
       return dict.categoryIntegrationGuides;
     if (title === "External") return dict.categoryExternal;
+    if (title === "Compare") return dict.categoryCompare;
+    if (title === "Verticals") return dict.categoryVerticals;
     return title;
   };
 
@@ -261,9 +312,7 @@ export function DocsIndexPage() {
               <h2 className="text-[18px] font-medium tracking-[-0.01em] mb-4">
                 {translateCategoryTitle(cat.title)}
               </h2>
-              <ul
-                className="list-none pl-0 grid grid-cols-1 sm:grid-cols-2 auto-rows-fr gap-3"
-              >
+              <ul className="list-none pl-0 grid grid-cols-1 sm:grid-cols-2 auto-rows-fr gap-3">
                 {cat.items.map((item) => {
                   const isExternal = item.href.startsWith("http");
                   const linkProps = isExternal

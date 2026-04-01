@@ -31,7 +31,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Validate route parity
+        run: npm run validate:routes
+
+      # Optional: map dev Umami UUID into VITE_UMAMI_WEBSITE_ID (production build); e.g. secret VITE_UMAMI_WEBSITE_ID_DEV.
       - name: Build UI (for compiled Tailwind CSS)
+        env:
+          VITE_UMAMI_URL: ${{ secrets.VITE_UMAMI_URL }}
+          VITE_UMAMI_WEBSITE_ID: ${{ secrets.VITE_UMAMI_WEBSITE_ID_DEV }}
+          VITE_GA_MEASUREMENT_ID: ${{ secrets.VITE_GA_MEASUREMENT_ID }}
         run: npm run build:ui
 
       - name: Install Playwright browser (Chromium)
@@ -44,6 +52,9 @@ jobs:
 
       - name: Validate locale parity
         run: npm run validate:locales
+
+      - name: Validate site export
+        run: npm run validate:site-export
 
       - name: Set custom domain for dev Pages site
         run: echo "dev.neotoma.io" > site_pages/CNAME

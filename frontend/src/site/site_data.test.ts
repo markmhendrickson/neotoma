@@ -15,14 +15,10 @@ describe("site_data", () => {
     expect(SITE_SECTIONS.map((section) => section.id)).toEqual([
       "intro",
       "outcomes",
+      "who",
       "memory-guarantees",
+      "record-types",
       "evaluate",
-      "install",
-      "inspect",
-      "architecture",
-      "use-cases",
-      "interfaces",
-      "learn-more",
     ]);
   });
 

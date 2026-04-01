@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import {
   Activity,
   AlertTriangle,
+  ArrowRight,
   BookmarkX,
   Calendar,
   Check,
@@ -38,6 +39,7 @@ import type { LucideIcon } from "lucide-react";
 import { SeoHead } from "../SeoHead";
 import { SectionDivider } from "../ui/section_divider";
 import { getDocPageIcon } from "../../site/doc_icons";
+import { ICP_PROFILES } from "../../site/site_data";
 import type { FailureModeItem, IcpProfile } from "../../site/site_data";
 
 const FAILURE_MODE_ICONS: Record<string, LucideIcon> = {
@@ -120,7 +122,7 @@ interface IcpDetailPageProps {
   aiNeeds: AiNeedItem[];
   keyDifferences?: {
     comparedTo: string;
-    /** Optional path to link the compared-to ICP name (e.g. "/ai-infrastructure-engineers"). */
+    /** Optional path to link the compared-to mode name (e.g. "/building-pipelines"). */
     comparedToHref?: string;
     points: string[];
   };
@@ -238,18 +240,26 @@ export function IcpDetailPage({
   closingStatement,
 }: IcpDetailPageProps) {
   const TitleIcon = getDocPageIcon(`/${profile.slug}`);
+  const otherModes = ICP_PROFILES.filter((p) => p.slug !== profile.slug);
   return (
     <>
       <SeoHead routePath={`/${profile.slug}`} />
-      <div className="min-h-screen bg-background text-foreground">
+      <div className="min-h-0 bg-background text-foreground">
         <div className="max-w-[52em] mx-auto px-4 py-10 md:py-16">
+          {/* Mode badge */}
+          <div className="mb-4">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-500/25 bg-indigo-500/10 px-3 py-1 text-[11px] font-medium uppercase tracking-wide text-indigo-700 dark:text-indigo-300">
+              {profile.modeLabel} mode
+            </span>
+          </div>
+
           <h1 className="text-[28px] font-medium tracking-[-0.02em] mb-2 flex items-start gap-3">
             {TitleIcon ? (
               <TitleIcon className="mt-1 size-7 shrink-0 text-muted-foreground" aria-hidden />
             ) : null}
             {profile.name}
           </h1>
-          <p className="text-[17px] leading-7 text-muted-foreground mb-6">
+          <p className="text-[17px] leading-7 text-muted-foreground mb-3">
             {profile.tagline}
           </p>
 
@@ -261,6 +271,34 @@ export function IcpDetailPage({
           )}
 
           {!openingHook && <div className="mb-4" />}
+
+          {/* Role transformation + tax */}
+          <section className="mb-10 rounded-lg border border-border bg-muted/20 px-5 py-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+              <div>
+                <p className="text-[11px] font-medium uppercase tracking-wide text-rose-500 mb-1">Escaping</p>
+                <p className="text-[14px] leading-6 text-foreground">{profile.escaping}</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-medium uppercase tracking-wide text-emerald-500 mb-1">Into</p>
+                <p className="text-[14px] leading-6 text-foreground">{profile.into}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 text-[13px] text-muted-foreground mb-3">
+              <ArrowRight className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              <span className="italic">{profile.interactionShift}</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-border/60">
+              <div>
+                <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70 mb-1">Tax you pay</p>
+                <p className="text-[13px] leading-5 text-foreground/80">{profile.taxPaid}</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70 mb-1">What you get back</p>
+                <p className="text-[13px] leading-5 text-foreground/80">{profile.taxRecovered}</p>
+              </div>
+            </div>
+          </section>
 
           {/* Outcomes: before/after illustrations (moved up as primary proof) */}
           {outcomes && outcomes.length > 0 && (
@@ -567,6 +605,37 @@ export function IcpDetailPage({
               <SectionDivider />
             </>
           )}
+
+          {/* Other modes */}
+          <section className="mb-12">
+            <h2 className="text-[20px] font-medium tracking-[-0.01em] mb-4 flex items-center gap-2">
+              <Network className="h-4.5 w-4.5 text-muted-foreground" aria-hidden />
+              Other modes
+            </h2>
+            <p className="text-[13px] leading-6 text-muted-foreground mb-4">
+              The same person operates in multiple modes. The tax differs; the architecture that
+              removes it is the same.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {otherModes.map((m) => (
+                <Link
+                  key={m.slug}
+                  to={`/${m.slug}`}
+                  className="flex items-start gap-3 rounded-lg border border-border bg-card px-4 py-3 text-foreground no-underline hover:bg-muted transition-colors"
+                >
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-indigo-600 dark:text-indigo-400 mb-0.5">
+                      {m.modeLabel} mode
+                    </p>
+                    <p className="text-[14px] font-medium leading-5 mb-1">{m.shortName}</p>
+                    <p className="text-[12px] leading-5 text-muted-foreground">{m.tagline}</p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </section>
+
+          <SectionDivider />
 
           {/* Closing */}
           <section className="mb-8 rounded-lg border border-border bg-muted/30 px-6 py-5">

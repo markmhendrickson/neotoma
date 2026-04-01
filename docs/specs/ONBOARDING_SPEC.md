@@ -1,9 +1,10 @@
 # Neotoma Onboarding Specification
 ## Scope
 This document covers:
-- First-run experience flow (signup → first upload → first extraction)
+- First-run experience flow for both agent-driven (CLI/MCP) and web UI paths
+- Agent-driven discovery, ingestion, and timeline reconstruction (the Installation Aha)
+- Web UI onboarding (signup → first upload → first extraction) as a complementary path
 - Activation milestones and success criteria
-- Screen-by-screen flow with wireframes (text descriptions)
 - Messaging and tone
 - Error and fail states
 - Accessibility and internationalization requirements
@@ -11,7 +12,56 @@ This document does NOT cover:
 - Implementation details (see UI pattern docs)
 - Long-term user education (help docs, tooltips)
 - Advanced features (multi-user, integrations setup)
-## 1. Onboarding Philosophy
+
+## 0. Agent-Driven Onboarding (Primary Path)
+
+The primary onboarding path is agent-driven and evaluation-led. The outer funnel is:
+
+**evaluation → installation → activation → tooling config**
+
+The activation phase follows:
+
+**discover → propose → preview → ingest → reconstruct → query → correct**
+
+This produces the Installation Aha within 3-5 minutes.
+
+**Not:**
+- install first without checking fit or tool constraints
+- scan everything → ingest everything → hope value appears
+- configure every integration before the user has seen first value
+
+See [`docs/developer/agent_onboarding_confirmation.md`](../developer/agent_onboarding_confirmation.md) for the full activation specification. Key stages:
+
+1. **Evaluation** — Assess fit, determine current tool constraints, and identify likely first data to store
+2. **Install and init** — `npm install -g neotoma` + `neotoma init` when needed; otherwise verify existing install
+3. **Preference selection** — User chooses data types and onboarding mode (quick win / guided / power user)
+4. **Discovery** — Agent scans shallowly, ranks files by entity density, temporal signals, and recency per [`docs/foundation/file_ranking_heuristic.md`](../foundation/file_ranking_heuristic.md)
+5. **Explain and propose** — For each recommendation: why selected, what state it may contain, what timeline value it could unlock
+6. **Scoped confirmation** — Granular per-folder/per-file consent with expected reconstruction preview
+7. **Ingest and reconstruct** — Store confirmed files, run entity extraction and timeline reconstruction
+8. **Installation Aha** — Show reconstructed timeline with provenance (each event traced to a source file), offer one entity-specific follow-up query, suggest 2-4 leveraged next actions
+9. **Correction and tooling config** — Demonstrate correction, then configure the current tool for robust ongoing usage
+
+**Installation Aha output format:**
+```
+[Entity name] — Timeline reconstructed from [N] sources
+
+[Date] — [Event description]
+  Source: [filename], [location]
+
+[N] entities detected | [N] events | [N] linked sources
+```
+
+**Target outcome:** 5-15 files ingested, 1-3 entities formed, 1 timeline with provenance, 1 query answered, 1 correction demonstrated. Total: 3-5 minutes.
+
+**Tooling config after activation:** configure the current tool only after the user has seen value. Examples: Custom GPT or remote MCP for ChatGPT where supported, Projects plus connector setup for Claude, and local MCP wiring first for Cursor / Claude Code / Codex / OpenClaw.
+
+**Activation mechanisms (post-aha):** time-travel queries, decision extraction, cross-source synthesis, missing-context alerts, automatic project dossier. All maintain provenance in output.
+
+## 1. Web UI Onboarding Philosophy (Complementary Path)
+
+The web UI flow below is a complementary path for users who interact with Neotoma through a browser rather than via agent install. It follows the same principles as the agent-driven path.
+
 ### 1.1 Core Principles
 **Minimal Over Magical:**
 - Show, don't tell (user uploads → sees extraction → understands)
@@ -237,7 +287,22 @@ Quick Stats
 - Full navigation visible
 - All features unlocked
 ## 4. Activation Milestones
-### 4.1 Milestone Definitions
+### 4.0 Agent-Driven Activation (Primary Path)
+| Milestone | Definition | Metric | Target |
+| --- | --- | --- | --- |
+| **Evaluated** | Agent assessed fit, tool constraints, and likely first data to store | `agent_evaluation_total` | N/A |
+| **Installed** | User completed `npm install -g neotoma` + `neotoma init`, or existing install was verified | `agent_install_total` | N/A |
+| **Discovery Complete** | Agent presented ranked domain proposals to user | `agent_discovery_rate` | >80% |
+| **First Ingest** | User confirmed and ingested at least 1 file cluster | `agent_first_ingest_rate` | >60% |
+| **Timeline Reconstructed** | Agent showed reconstructed timeline with provenance | `agent_timeline_reconstruction_rate` | >50% |
+| **First Follow-up Query** | User asked or accepted a follow-up query on the timeline | `agent_first_query_rate` | >40% |
+| **Correction Demonstrated** | User saw correction mechanism on reconstructed timeline | `agent_correction_demo_rate` | >30% |
+| **Tool Configured** | The current tool was configured for robust ongoing Neotoma usage | `agent_tooling_config_rate` | >30% |
+| **Activated (Agent)** | Completed first ingest + timeline reconstruction + query or correction, with the current tool ready for continued use | `agent_activation_rate` | >50% |
+
+Key activation metric: number of timeline queries in first session and number of follow-up questions after first insight.
+
+### 4.1 Web UI Milestone Definitions
 | Milestone               | Definition                                                 | Metric                                | Target |
 | ----------------------- | ---------------------------------------------------------- | ------------------------------------- | ------ |
 | **Signed Up**           | User created account                                       | `users_signed_up_total`               | N/A    |

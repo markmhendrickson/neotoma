@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<!DOCTYPE html><html lang="ru" dir="ltr"><head>
+    <meta charset="UTF-8">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='1' x2='1' y2='0'%3E%3Cstop offset='0' stop-color='%23000'/%3E%3Cstop offset='1' stop-color='%234c1d95'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='16' height='16' rx='3' fill='url(%23g)'/%3E%3Ctext x='8' y='11' text-anchor='middle' font-family='Arial' font-size='9' fill='white'%3EN%3C/text%3E%3C/svg%3E">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Markdown export of the rendered /install page. Install Neotoma in 5 minutes. Agent-assisted and manual install, Docker setup, API server startup, and MCP configuration.">
+    <meta name="author" content="Neotoma">
+    <meta name="robots" content="noindex,nofollow">
+    <link rel="canonical" href="https://neotoma.io/ru/markdown/install">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Neotoma">
+    <meta property="og:locale" content="ru_RU">
+    <meta property="og:title" content="Install (Markdown) | Neotoma">
+    <meta property="og:description" content="Markdown export of the rendered /install page. Install Neotoma in 5 minutes. Agent-assisted and manual install, Docker setup, API server startup, and MCP configuration.">
+    <meta property="og:url" content="https://neotoma.io/ru/markdown/install">
+    <meta property="og:image" content="https://neotoma.io/neotoma-og-1200x630.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Install (Markdown) | Neotoma. Markdown export of the rendered /install page. Install Neotoma in 5 minutes. Agent-assisted and manual install, Docker setup, API server...">
+    <meta name="keywords" content="Install (Markdown), Neotoma, MCP, Model Context Protocol, AI agents, agent memory, deterministic state">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:site" content="@markmhendrickson">
+    <meta name="twitter:title" content="Install (Markdown) | Neotoma">
+    <meta name="twitter:description" content="Markdown export of the rendered /install page. Install Neotoma in 5 minutes. Agent-assisted and manual install, Docker setup, API server startup, and MCP configuration.">
+    <meta name="twitter:image" content="https://neotoma.io/neotoma-og-1200x630.png">
+    <meta name="twitter:image:width" content="1200">
+    <meta name="twitter:image:height" content="630">
+    <meta name="twitter:image:alt" content="Install (Markdown) | Neotoma. Markdown export of the rendered /install page. Install Neotoma in 5 minutes. Agent-assisted and manual install, Docker setup, API server...">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"Install (Markdown) | Neotoma","description":"Markdown export of the rendered /install page. Install Neotoma in 5 minutes. Agent-assisted and manual install, Docker setup, API server startup, and MCP configuration.","url":"https://neotoma.io/ru/markdown/install","publisher":{"@type":"Organization","name":"Neotoma"},"image":{"@type":"ImageObject","url":"https://neotoma.io/neotoma-og-1200x630.png","width":1200,"height":630,"caption":"Install (Markdown) | Neotoma. Markdown export of the rendered /install page. Install Neotoma in 5 minutes. Agent-assisted and manual install, Docker setup, API server..."}}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://neotoma.io/"},{"@type":"ListItem","position":2,"name":"Install","item":"https://neotoma.io/install"}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"HowTo","name":"How to install Neotoma","step":[{"@type":"HowToStep","position":1,"name":"Install the package","text":"Run 'npm install -g neotoma' to install the Neotoma CLI globally."},{"@type":"HowToStep","position":2,"name":"Initialize configuration","text":"Run 'neotoma init', choose your AI client (Cursor, Claude Code, Codex, etc.), and restart your tool."},{"@type":"HowToStep","position":3,"name":"Start the API server","text":"Run 'neotoma api start' to launch the local API server."},{"@type":"HowToStep","position":4,"name":"Connect via MCP","text":"Configure your AI tool's MCP settings to connect to the Neotoma server. The init step handles this automatically for supported clients."}]}</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
+    <title>Install (Markdown) | Neotoma</title>
+    <script type="module" crossorigin="" src="../../../assets/main-DmE0kf3o.js"></script>
+    <link rel="stylesheet" crossorigin="" href="../../../assets/main-BluIWsBd.css">
+  
+    <!-- build: local-1774967236156 -->
+      <link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/install">
+    <link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/install">
+    <link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/install">
+    <link rel="alternate" hreflang="ca" href="https://neotoma.io/ca/markdown/install">
+    <link rel="alternate" hreflang="zh" href="https://neotoma.io/zh/markdown/install">
+    <link rel="alternate" hreflang="hi" href="https://neotoma.io/hi/markdown/install">
+    <link rel="alternate" hreflang="ar" href="https://neotoma.io/ar/markdown/install">
+    <link rel="alternate" hreflang="fr" href="https://neotoma.io/fr/markdown/install">
+    <link rel="alternate" hreflang="pt" href="https://neotoma.io/pt/markdown/install">
+    <link rel="alternate" hreflang="ru" href="https://neotoma.io/ru/markdown/install">
+    <link rel="alternate" hreflang="bn" href="https://neotoma.io/bn/markdown/install">
+    <link rel="alternate" hreflang="ur" href="https://neotoma.io/ur/markdown/install">
+    <link rel="alternate" hreflang="id" href="https://neotoma.io/id/markdown/install">
+    <link rel="alternate" hreflang="de" href="https://neotoma.io/de/markdown/install">
+  <link rel="canonical" href="https://neotoma.io/ru/markdown/install" data-rh="true"><link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/install" data-rh="true"><link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/install" data-rh="true"><link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/install" data-rh="true"><link rel="alternate" hreflang="ca" href="https://neotoma.io/ca/markdown/install" data-rh="true"><link rel="alternate" hreflang="zh" href="https://neotoma.io/zh/markdown/install" data-rh="true"><link rel="alternate" hreflang="hi" href="https://neotoma.io/hi/markdown/install" data-rh="true"><link rel="alternate" hreflang="ar" href="https://neotoma.io/ar/markdown/install" data-rh="true"><link rel="alternate" hreflang="fr" href="https://neotoma.io/fr/markdown/install" data-rh="true"><link rel="alternate" hreflang="pt" href="https://neotoma.io/pt/markdown/install" data-rh="true"><link rel="alternate" hreflang="ru" href="https://neotoma.io/ru/markdown/install" data-rh="true"><link rel="alternate" hreflang="bn" href="https://neotoma.io/bn/markdown/install" data-rh="true"><link rel="alternate" hreflang="ur" href="https://neotoma.io/ur/markdown/install" data-rh="true"><link rel="alternate" hreflang="id" href="https://neotoma.io/id/markdown/install" data-rh="true"><link rel="alternate" hreflang="de" href="https://neotoma.io/de/markdown/install" data-rh="true"><meta name="description" content="Markdown export of the rendered /install page. Install Neotoma in 5 minutes. Agent-assisted and manual install, Docker setup, API server startup, and MCP configuration." data-rh="true"><meta name="author" content="Neotoma" data-rh="true"><meta name="robots" content="noindex,nofollow" data-rh="true"><meta property="og:type" content="website" data-rh="true"><meta property="og:site_name" content="Neotoma" data-rh="true"><meta property="og:locale" content="ru_RU" data-rh="true"><meta property="og:title" content="Install (Markdown) | Neotoma" data-rh="true"><meta property="og:description" content="Markdown export of the rendered /install page. Install Neotoma in 5 minutes. Agent-assisted and manual install, Docker setup, API server startup, and MCP configuration." data-rh="true"><meta property="og:url" content="https://neotoma.io/ru/markdown/install" data-rh="true"><meta property="og:image" content="https://neotoma.io/neotoma-og-1200x630.png" data-rh="true"><meta property="og:image:width" content="1200" data-rh="true"><meta property="og:image:height" content="630" data-rh="true"><meta property="og:image:alt" content="Install (Markdown) | Neotoma. Markdown export of the rendered /install page. Install Neotoma in 5 minutes. Agent-assisted and manual install, Docker setup, API server..." data-rh="true"><meta name="keywords" content="Install (Markdown), Neotoma, MCP, Model Context Protocol, AI agents, agent memory, deterministic state" data-rh="true"><meta name="twitter:card" content="summary_large_image" data-rh="true"><meta name="twitter:site" content="@markmhendrickson" data-rh="true"><meta name="twitter:title" content="Install (Markdown) | Neotoma" data-rh="true"><meta name="twitter:description" content="Markdown export of the rendered /install page. Install Neotoma in 5 minutes. Agent-assisted and manual install, Docker setup, API server startup, and MCP configuration." data-rh="true"><meta name="twitter:image" content="https://neotoma.io/neotoma-og-1200x630.png" data-rh="true"><meta name="twitter:image:width" content="1200" data-rh="true"><meta name="twitter:image:height" content="630" data-rh="true"><meta name="twitter:image:alt" content="Install (Markdown) | Neotoma. Markdown export of the rendered /install page. Install Neotoma in 5 minutes. Agent-assisted and manual install, Docker setup, API server..." data-rh="true"><script type="application/ld+json" data-rh="true">{"@context":"https://schema.org","@type":"WebPage","name":"Install (Markdown) | Neotoma","description":"Markdown export of the rendered /install page. Install Neotoma in 5 minutes. Agent-assisted and manual install, Docker setup, API server startup, and MCP configuration.","url":"https://neotoma.io/ru/markdown/install","publisher":{"@type":"Organization","name":"Neotoma"},"image":{"@type":"ImageObject","url":"https://neotoma.io/neotoma-og-1200x630.png","width":1200,"height":630,"caption":"Install (Markdown) | Neotoma. Markdown export of the rendered /install page. Install Neotoma in 5 minutes. Agent-assisted and manual install, Docker setup, API server..."}}</script><script type="application/ld+json" data-rh="true">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://neotoma.io/"},{"@type":"ListItem","position":2,"name":"Install","item":"https://neotoma.io/install"}]}</script><script type="application/ld+json" data-rh="true">{"@context":"https://schema.org","@type":"HowTo","name":"How to install Neotoma","step":[{"@type":"HowToStep","position":1,"name":"Install the package","text":"Run 'npm install -g neotoma' to install the Neotoma CLI globally."},{"@type":"HowToStep","position":2,"name":"Initialize configuration","text":"Run 'neotoma init', choose your AI client (Cursor, Claude Code, Codex, etc.), and restart your tool."},{"@type":"HowToStep","position":3,"name":"Start the API server","text":"Run 'neotoma api start' to launch the local API server."},{"@type":"HowToStep","position":4,"name":"Connect via MCP","text":"Configure your AI tool's MCP settings to connect to the Neotoma server. The init step handles this automatically for supported clients."}]}</script></head>
+  <body>
+    <div id="root"><iframe title="Markdown capture" aria-hidden="true" width="1280" height="900" class="pointer-events-none fixed left-[-9999px] top-0 z-[-1] border-0 opacity-0" sandbox="allow-same-origin allow-scripts allow-forms"></iframe><div class="min-h-screen bg-background text-foreground"><div class="sticky top-0 z-10 flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border bg-background/95 px-3 py-2 text-[13px] backdrop-blur supports-[backdrop-filter]:bg-background/80"><span class="min-w-0"><a class="text-foreground underline underline-offset-2 hover:no-underline" href="/ru/install" data-discover="true">← HTML page</a> · <a class="text-foreground underline underline-offset-2 hover:no-underline" href="/ru/site-markdown" data-discover="true">All pages</a></span><span class="inline-flex rounded-md border border-border bg-muted/40 p-0.5" role="group" aria-label="Markdown view"><button type="button" class="rounded px-2.5 py-1 text-[12px] font-medium transition-colors bg-background text-foreground shadow-sm">Preview</button><button type="button" class="rounded px-2.5 py-1 text-[12px] font-medium transition-colors text-muted-foreground hover:text-foreground">Source</button></span></div><article class="max-w-4xl px-4 py-6 text-foreground"><h1 class="mb-4 mt-8 text-2xl font-semibold tracking-tight first:mt-0">Install</h1>
+<p class="mb-4 text-[15px] leading-7 last:mb-0">Install Neotoma in under 5 minutes with npm. Run <code class="rounded bg-muted px-1 py-0.5 font-mono text-[12px]" node="[object Object]">npm install -g neotoma</code>, initialize with <code class="rounded bg-muted px-1 py-0.5 font-mono text-[12px]" node="[object Object]">neotoma init</code>, start the API server, and connect your AI tool via MCP.</p>
+<p class="mb-4 text-[15px] leading-7 last:mb-0">5-minute integrationFully reversible</p>
+<h2 class="mb-3 mt-10 text-xl font-semibold tracking-tight">Agent-assisted install</h2>
+<p class="mb-4 text-[15px] leading-7 last:mb-0">Paste this prompt into Claude, Codex, or Cursor. The agent handles npm install, init, and MCP configuration.</p>
+<p class="mb-4 text-[15px] leading-7 last:mb-0"><code class="rounded bg-muted px-1 py-0.5 font-mono text-[12px]" node="[object Object]">Follow the canonical Neotoma onboarding sequence:  1. Start at https://neotoma.io/evaluate and assess whether Neotoma fits my workflow. 2. Determine what data would be highest value to store first and whether I am already installed. 3. If Neotoma is a fit and I am not installed, run npm install -g neotoma and neotoma init. Report what changed. 4. If I am already installed, skip re-installation unless something is broken. 5. Activate Neotoma: ask which data types matter most to me (project files, chat transcripts, meeting notes, notes/journals, code context, email, financial docs, or custom paths). Offer three modes: quick win, guided, or power user. 6. Discover high-value local files: scan shallowly based on my preferences. Rank by entity density, temporal signals, and recency. Group results into domains, not file counts. Also gather candidate data from available context and platform memory. 7. Explain why each recommendation was selected and what timeline/entity value it could unlock. 8. Present one preview with provenance. Let me confirm per-folder or per-file. Show expected reconstruction before ingesting. Pause and wait for my approval. 9. Ingest confirmed files. Reconstruct the strongest timeline with provenance: each event traced to a specific source file. Show the timeline immediately -- not a file count. 10. Offer one follow-up query specific to the reconstructed timeline. Then suggest 2-4 next actions based on my data. Ask if the reconstruction is accurate and support corrections. 11. After activation, configure the tool I am using for the most robust ongoing Neotoma workflow (for example: Custom GPT or remote MCP for ChatGPT when supported, Projects plus connector setup for Claude, local MCP wiring first for Cursor / Claude Code / Codex / OpenClaw).  Canonical source: https://github.com/markmhendrickson/neotoma/blob/main/install.md</code></p>
+<p class="mb-4 text-[15px] leading-7 last:mb-0">More options: <a href="https://github.com/markmhendrickson/neotoma?tab=readme-ov-file#install" class="text-foreground underline underline-offset-2 decoration-muted-foreground hover:decoration-foreground">Manual install</a> · <a href="/install#docker" class="text-foreground underline underline-offset-2 decoration-muted-foreground hover:decoration-foreground">Docker</a> · <a href="/cli" class="text-foreground underline underline-offset-2 decoration-muted-foreground hover:decoration-foreground">CLI reference</a></p>
+<p class="mb-4 text-[15px] leading-7 last:mb-0">Common questions</p>
+<p class="mb-4 text-[15px] leading-7 last:mb-0">“Platform memory is good enough”</p>
+<p class="mb-4 text-[15px] leading-7 last:mb-0">Platform memory is ephemeral and vendor-locked. Neotoma persists versioned state you own across every tool.</p>
+<p class="mb-4 text-[15px] leading-7 last:mb-0">“Another tool to manage”</p>
+<p class="mb-4 text-[15px] leading-7 last:mb-0">Neotoma runs behind your existing tools via MCP. No new workflow — your agents use it automatically.</p>
+<p class="mb-4 text-[15px] leading-7 last:mb-0">“How is this different from RAG?”</p>
+<p class="mb-4 text-[15px] leading-7 last:mb-0">RAG re-derives structure every session. Neotoma persists it — versioned, schema-bound, and deterministic. <a href="/faq" class="text-foreground underline underline-offset-2 decoration-muted-foreground hover:decoration-foreground">More in FAQ</a></p>
+<p class="mb-4 text-[15px] leading-7 last:mb-0">◆</p>
+<h2 class="mb-3 mt-10 text-xl font-semibold tracking-tight">Integrations</h2>
+<ul class="mb-4 list-disc space-y-1 pl-6 text-[15px] leading-7">
+<li class="marker:text-muted-foreground">
+<p class="mb-4 text-[15px] leading-7 last:mb-0">[</p>
+<p class="mb-4 text-[15px] leading-7 last:mb-0">Claude CodePersistent memory for Claude Code's local CLI agent</p>
+<p class="mb-4 text-[15px] leading-7 last:mb-0">](/neotoma-with-claude-code)</p>
+</li>
+<li class="marker:text-muted-foreground">
+<p class="mb-4 text-[15px] leading-7 last:mb-0">[</p>
+<p class="mb-4 text-[15px] leading-7 last:mb-0">ClaudeStructured state alongside Claude platform memory</p>
+<p class="mb-4 text-[15px] leading-7 last:mb-0">](/neotoma-with-claude)</p>
+</li>
+<li class="marker:text-muted-foreground">
+<p class="mb-4 text-[15px] leading-7 last:mb-0">[</p>
+<p class="mb-4 text-[15px] leading-7 last:mb-0">ChatGPTDeterministic memory for ChatGPT conversations</p>
+<p class="mb-4 text-[15px] leading-7 last:mb-0">](/neotoma-with-chatgpt)</p>
+</li>
+<li class="marker:text-muted-foreground">
+<p class="mb-4 text-[15px] leading-7 last:mb-0">[</p>
+<p class="mb-4 text-[15px] leading-7 last:mb-0">CodexCross-task memory and CLI fallback</p>
+<p class="mb-4 text-[15px] leading-7 last:mb-0">](/neotoma-with-codex)</p>
+</li>
+<li class="marker:text-muted-foreground">
+<p class="mb-4 text-[15px] leading-7 last:mb-0">[</p>
+<p class="mb-4 text-[15px] leading-7 last:mb-0">CursorPersistent memory alongside Cursor context</p>
+<p class="mb-4 text-[15px] leading-7 last:mb-0">](/neotoma-with-cursor)</p>
+</li>
+<li class="marker:text-muted-foreground">
+<p class="mb-4 text-[15px] leading-7 last:mb-0">[</p>
+<p class="mb-4 text-[15px] leading-7 last:mb-0">OpenClawUser-owned memory for OpenClaw agents</p>
+<p class="mb-4 text-[15px] leading-7 last:mb-0">](/neotoma-with-openclaw)</p>
+</li>
+</ul>
+<p class="mb-4 text-[15px] leading-7 last:mb-0">◆</p>
+<h2 class="mb-3 mt-10 text-xl font-semibold tracking-tight">Manual install</h2>
+<p class="mb-4 text-[15px] leading-7 last:mb-0">If you prefer to run the commands yourself:</p>
+<p class="mb-4 text-[15px] leading-7 last:mb-0"><code class="rounded bg-muted px-1 py-0.5 font-mono text-[12px]" node="[object Object]"># Global install npm install -g neotoma  # Initialize neotoma init</code></p>
+<h3 class="mb-2 mt-8 text-lg font-medium tracking-tight">After installation</h3>
+<p class="mb-4 text-[15px] leading-7 last:mb-0">Run <code class="rounded bg-muted px-1 py-0.5 font-mono text-[12px]" node="[object Object]">neotoma init</code>, choose your MCP client, and restart your tool. The agent then walks you through: <strong>discover → propose → preview → ingest → reconstruct → query → correct</strong>.</p>
+<ol class="mb-4 list-decimal space-y-1 pl-6 text-[15px] leading-7">
+<li class="marker:text-muted-foreground"><strong>Preference selection</strong> — choose which data types matter most (project files, chat transcripts, meeting notes, financial docs, code context, custom paths) and pick an onboarding mode: quick win, guided, or power user.</li>
+<li class="marker:text-muted-foreground"><strong>Discovery</strong> — the agent scans shallowly based on your preferences, groups results into domains (not file counts), and checks for chat transcript exports and platform memory.</li>
+<li class="marker:text-muted-foreground"><strong>Propose and confirm</strong> — for each domain the agent explains why it was selected, what entities it likely contains, and what timeline value it could unlock. You confirm per-folder or per-file before anything is stored.</li>
+<li class="marker:text-muted-foreground"><strong>Ingest and reconstruct</strong> — confirmed files are ingested and the agent reconstructs the strongest timeline with provenance — every event traced to a specific source file.</li>
+<li class="marker:text-muted-foreground"><strong>Query and correct</strong> — the agent surfaces a follow-up query against the reconstructed timeline and offers next actions, then asks whether the timeline is accurate and supports corrections (wrong merge, wrong date, source exclusion).</li>
+</ol>
+<p class="mb-4 text-[15px] leading-7 last:mb-0">◆</p>
+<h2 class="mb-3 mt-10 text-xl font-semibold tracking-tight">Start the API server</h2>
+<p class="mb-4 text-[15px] leading-7 last:mb-0">The API server provides the HTTP interface that MCP and the CLI communicate through.</p>
+<p class="mb-4 text-[15px] leading-7 last:mb-0"><code class="rounded bg-muted px-1 py-0.5 font-mono text-[12px]" node="[object Object]"># Run API server (development) neotoma api start --env dev  # Run API server (production) neotoma api start --env production</code></p>
+<p class="mb-4 text-[15px] leading-7 last:mb-0">◆</p>
+<h2 class="mb-3 mt-10 text-xl font-semibold tracking-tight">Connect MCP</h2>
+<p class="mb-4 text-[15px] leading-7 last:mb-0">Add Neotoma to your MCP client configuration (Cursor, Claude, or Codex):</p>
+<p class="mb-4 text-[15px] leading-7 last:mb-0"><code class="rounded bg-muted px-1 py-0.5 font-mono text-[12px]" node="[object Object]">{   "mcpServers": {     "neotoma-dev": {       "command": "/absolute/path/to/neotoma/scripts/run_neotoma_mcp_stdio.sh"     },     "neotoma": {       "command": "/absolute/path/to/neotoma/scripts/run_neotoma_mcp_stdio_prod.sh"     }   } }</code></p>
+<p class="mb-4 text-[15px] leading-7 last:mb-0">◆</p>
+<h2 class="mb-3 mt-10 text-xl font-semibold tracking-tight">Docker</h2>
+<p class="mb-4 text-[15px] leading-7 last:mb-0">AgentHuman</p>
+<p class="mb-4 text-[15px] leading-7 last:mb-0">If you want your assistant to handle Docker setup, use a prompt like this:</p>
+<p class="mb-4 text-[15px] leading-7 last:mb-0"><code class="rounded bg-muted px-1 py-0.5 font-mono text-[12px]" node="[object Object]">Follow the instructions at: https://github.com/markmhendrickson/neotoma/blob/main/docs/developer/agent_docker_instructions.md</code></p>
+<p class="mb-4 text-[15px] leading-7 last:mb-0"><a href="/cli" class="text-foreground underline underline-offset-2 decoration-muted-foreground hover:decoration-foreground">CLI reference →</a><a href="https://github.com/markmhendrickson/neotoma?tab=readme-ov-file#install" class="text-foreground underline underline-offset-2 decoration-muted-foreground hover:decoration-foreground">Full README →</a></p></article></div><div role="region" aria-label="Notifications (F8)" tabindex="-1" style="pointer-events: none;"><ol tabindex="-1" class="fixed top-0 z-[100] flex w-full flex-col-reverse p-4 sm:bottom-4 sm:right-4 sm:top-auto sm:flex-col sm:max-h-[calc(100vh-1rem)] sm:overflow-y-auto md:max-w-[420px]"></ol></div></div>
+  
+
+
+</body></html>

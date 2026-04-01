@@ -1,36 +1,202 @@
 # Agent Installation Instructions
 
-This file is the canonical source for agent installation and post-install workflow. Short stable URL for site snippets: `install.md` at repo root.
+This file is the canonical source for the full agent-driven onboarding sequence: evaluation, installation, activation, and tooling configuration. Short stable URL for site snippets: `install.md` at repo root.
+
+## Design principle
+
+The canonical onboarding sequence is:
+
+**evaluation → installation → activation → tooling config**
+
+The activation phase follows:
+
+**discover → propose → preview → ingest → reconstruct → query → correct**
+
+Not:
+- install first without checking fit or tool constraints
+- scan everything → ingest everything → hope value appears
+- configure every integration before the user has seen first value
+
+The agent optimizes for reaching the Installation Aha: a reconstructed timeline from the user's own files, with every event traced to a specific source. The first visible post-ingest output is never a file count -- it is a timeline with provenance.
 
 ## Workflow
 
+### Phase 1: Evaluation
+
+Start by deciding whether Neotoma is a fit and what the first successful path should be.
+
+1. Assess fit from available context before asking broad questions.
+2. Determine the user's current tool and environment constraints:
+   - local agent environment vs hosted chat product
+   - MCP support level
+   - whether the current tool can support robust Neotoma usage
+3. Identify the likely first data to store if the user proceeds.
+4. Determine whether the user is already installed:
+   - if no, proceed to installation after confirmation
+   - if yes, skip directly to activation
+5. If the current tool is constrained, say so explicitly and recommend the best-supported path.
+
+**Tooling guidance during evaluation:**
+- **ChatGPT hosted**: If the user lacks the plan/features for strong MCP support, recommend more robust options such as Cursor, Claude, Claude Code, or Codex for primary Neotoma usage.
+- **ChatGPT with suitable support**: Plan for either remote MCP or a Custom GPT, depending on the user's account and preference.
+- **Claude**: Plan for Project-based usage plus connector configuration and project instructions.
+- **Local tools** (Cursor, Claude Code, Codex, OpenClaw): prioritize local install and activation first; after activation, offer help configuring additional remote access points if useful.
+
+Data evaluation can happen here before installation if the user already has enough context available in the current tool. If not, perform that evaluation during activation after installation. Do not ingest anything before explicit confirmation.
+
+### Phase 2: Installation
+
+If the user is not already installed:
+
 1. Install Neotoma with `npm install -g neotoma`.
 2. Initialize Neotoma with `neotoma init`.
-3. Report what changed after install/init.
-4. If the user asks for agent/client integration setup after init, link the matching setup guide in `docs/developer/` (for example `mcp_cursor_setup.md`, `mcp_claude_code_setup.md`, `mcp_openclaw_setup.md`).
-5. Gather candidate data from existing context and available sources. Store any structured fact that benefits from versioning, provenance, and reproducibility — not limited to personal data. See [`docs/foundation/what_to_store.md`](docs/foundation/what_to_store.md) for the full definition and decision heuristic.
-   - **Migrate from platform memory:** If you are running inside a tool with native memory (Claude, ChatGPT, Gemini, Copilot), surface what that platform remembers about the user — preferences, facts, prior commitments, key entities. Structure each as a candidate entity. See [Migration from existing tools](#migration-from-existing-tools) below.
-   - **Migrate from Claude Memory tool:** If the user has a directory used as the [Claude Memory tool](https://platform.claude.com/docs/en/agents-and-tools/tool-use/memory-tool) backend (e.g. `/memories` or a path they provide), list and read files from it; extract entities or ingest files with provenance "from Claude Memory tool". See [Claude Memory tool](#claude-memory-tool-memories) below.
-   - **Harvest current context:** current conversation, prior in-session messages, user identity hints, explicit commitments, and directly related file/message context (e.g. receipts, invoices, contacts, profile)
-   - **Other data from the same context:** any additional entities already in context — e.g. third-party contacts (LinkedIn/export CSVs), saved chats or shares (ChatGPT, etc.), tweets or posts, imported documents or notes, project metadata, codebase context — so the user can choose to store those too
-   - **Check active sources** if needed: git metadata (`git config`, `git log`, `git remote -v`), project metadata (`README`, `package.json`, selected config files, env var names only), configured MCP/tool outputs already available in-session
-   - **Check existing Neotoma memory** (`retrieve_entities` or CLI list/search) to separate already-stored facts from new candidates
-6. Map candidates to supported schema/entity types:
-   - use canonical types where possible (for example: `contact`, `person`, `company`, `task`, `event`, `transaction`, `receipt`, `note`, `location`, `property`, `place`)
-   - if type mapping is unclear, discover the closest match with schema search/list (`schemas list`, `schemas get`, or MCP equivalents) before inventing a type
-   - if no close match exists, use a descriptive `entity_type` and include fields implied by the source data
-7. Present a single preview list of all candidates with provenance:
-   - one flat list, each row showing entity type, key fields, and source (for example: "from Claude memory", "from git config", "from package.json", "from current message", "from LinkedIn Connections.csv")
-   - mark items already stored vs new candidates
-   - where useful, indicate whether each candidate refers to the user or is other data (e.g. "third-party contact", "saved chat", "imported document") so the user can approve selectively
-8. Ask for explicit confirmation (approve all / approve selected / edit / reject).
-9. After asking for confirmation, pause and wait for the user response. Do not store data, run follow-up discovery, or proceed to additional actions until the user explicitly confirms.
-10. Save only approved items.
-11. Mark onboarding complete and continue with normal Neotoma behavior.
+3. Report what changed after install/init (data directory, env, MCP config, CLI instructions).
+
+If the user is already installed:
+
+1. Verify that Neotoma is available in the current environment.
+2. Confirm whether install/init needs to be repaired or updated.
+3. Skip reinstallation unless needed.
+
+### Phase 3: Activation
+
+Activation is the first successful Neotoma-backed workflow: the user sees value from their own data and can continue with structure, provenance, and correction. If data evaluation was not completed during Phase 1, begin by determining what should be stored first.
+
+#### Activation step 1: Preference selection
+
+Ask the user which data types matter most. This shapes all subsequent discovery.
+
+**Preference categories:**
+- Project files (contracts, proposals, briefs, specs)
+- Chat transcripts (AI conversations, Slack, Discord, messaging exports)
+- Meeting notes and transcripts
+- Notes and journals (Obsidian, markdown, dated files)
+- Code and development context (git history, READMEs, configs)
+- Email exports
+- Financial documents (invoices, receipts, statements)
+- Custom paths (user-specified folders)
+
+**Offer three onboarding modes:**
+
+| Mode | Behavior | Best for |
+| --- | --- | --- |
+| Quick win | Scan recent/high-signal work folders, suggest 5-20 files, aim for one timeline | First-time users, low commitment |
+| Guided | User points at one folder or project, deeper analysis there | Users with a specific project in mind |
+| Power user | Rule-based ingestion from multiple folders, full scoring output | Technical users who want control |
+
+Store selected preferences as a `user_preference` entity in Neotoma.
+
+#### Activation step 2: Discovery
+
+Scan shallowly based on preferences and mode. Apply the file ranking heuristic from [`docs/foundation/file_ranking_heuristic.md`](docs/foundation/file_ranking_heuristic.md).
+
+**Scan approach:**
+- Read top-level folders, recent files, filenames, and metadata
+- Use small content excerpts only when needed to confirm entity density
+- Group results into domain clusters by folder structure and entity co-occurrence
+- Check for chat transcript exports (ChatGPT JSON, Slack exports, Claude history, meeting transcripts)
+
+**Output in terms of domains, not file counts:**
+
+```
+Detected 3 likely high-value domains:
+1. Acme project (~/Documents/Clients/Acme/) -- 4 files
+2. Zurich insurance (~/Notes/Insurance/) -- 3 files
+3. Neotoma docs (~/repos/neotoma/docs/) -- 6 files
+```
+
+Also gather candidate data from existing context and available sources per the original migration strategy (see [Migration from existing tools](#migration-from-existing-tools) below).
+
+#### Activation step 3: Explain and propose
+
+For each recommendation, show:
+- **Why it was selected** -- which signals triggered (repeated entities, version markers, recent modification)
+- **What state it may contain** -- types of entities likely present
+- **What entity/timeline value it could unlock** -- reconstruction potential
+
+Example:
+```
+Acme project (~/Documents/Clients/Acme/)
+Why selected: Contains repeated references to "Acme Corp" across 4 files,
+multiple dated revisions (proposal_v1.md, proposal_v2.md), and a meeting note.
+Likely state: 1 client entity, 1-2 contract entities, 3-4 dated events.
+Timeline potential: Can reconstruct proposal evolution and client relationship.
+```
+
+#### Activation step 4: Scoped confirmation
+
+Let the user confirm at a granular level:
+- Ingest entire folder
+- Ingest selected files only
+- Skip this cluster
+- Inspect more (show additional file details)
+
+**Before ingestion, show the expected reconstruction preview:**
+```
+Expected output: 1 client entity, 1 contract entity, 4 dated events, 3 linked sources
+```
+
+Also present migration candidates from platform memory and other context sources (see below) in the same preview, with provenance marking stored vs new.
+
+Ask for explicit confirmation. After asking, pause and wait for user response. Do not store data or proceed until the user explicitly confirms.
+
+#### Activation step 5: Ingest and reconstruct
+
+Ingest confirmed files and store approved migration candidates. The first ingest aims at one compelling timeline -- one client relationship, one contract evolution, or one project history.
+
+Save only approved items. Mark onboarding complete after storage.
+
+#### Activation step 6: Installation aha -- timeline and provenance reconstruction
+
+After ingestion, automatically reconstruct the strongest timeline from the ingested entities. Select the entity with the richest temporal depth and render the timeline with provenance inline.
+
+**Required output format:**
+```
+[Entity name] -- Timeline reconstructed from [N] sources
+
+[Date] -- [Event description]
+  Source: [filename], [location]
+
+[N] entities detected | [N] events | [N] linked sources
+```
+
+Immediately after the timeline, offer one strong follow-up query specific to the reconstructed entity:
+- "What commitments appear in the [Entity] relationship?"
+- "How did the terms evolve between versions?"
+- "What changed with [Entity] over the last 90 days?"
+
+Then surface 2-4 leveraged next actions personalized to the user's data:
+1. Deeper queries against the timeline
+2. Track how the entity evolves as new sources appear
+3. Expand the timeline by adding suggested source types
+4. Watch a folder for new revisions
+
+See [`docs/developer/agent_onboarding_confirmation.md`](docs/developer/agent_onboarding_confirmation.md) for the complete aha specification with examples and anti-patterns.
+
+#### Activation step 7: Correction
+
+Demonstrate correction immediately after the aha timeline:
+- "Is this timeline accurate? Should any events be adjusted or sources excluded?"
+- Support: wrong entity merge, wrong date, wrong source linkage, file exclusion
+- The correction prompt must reference the specific reconstruction just shown
+
+### Phase 4: Tooling config
+
+After the user has reached activation, configure the current tool for the most robust ongoing Neotoma usage.
+
+1. Configure the integration that matches the tool the user is currently in.
+2. Prefer the strongest persistent instruction/configuration surface available in that tool.
+3. If the user started in a local environment, offer to help configure additional remote or hosted access points after activation.
+4. If the user started in a constrained hosted tool, recommend a better-supported primary environment if that will materially improve Neotoma usage.
+
+**Examples:**
+- **ChatGPT**: prefer a Custom GPT or remote MCP path when supported.
+- **Claude**: create or use a Project, connect Neotoma, and add routing instructions.
+- **Cursor / Claude Code / Codex / OpenClaw**: complete local MCP wiring first, then offer additional remote access points where relevant.
 
 ## Migration from existing tools
 
-The installing agent is itself the migration tool. Because it runs inside the user's current platform, it has access to whatever that platform exposes. The strategy differs by system type:
+The installing agent is itself the migration tool. Because it runs inside the user's current platform, it has access to whatever that platform exposes. Migration candidates are gathered during Stage 3 (Discovery) and presented alongside file discovery results in Stage 5 (Scoped confirmation).
 
 ### Platform memory (Claude, ChatGPT, Gemini, Copilot)
 
@@ -48,20 +214,31 @@ When the user has been using the [Claude Memory tool](https://platform.claude.co
 - **Provenance:** Tag each candidate with source e.g. "from Claude Memory tool (/memories/notes.txt)" so the user can approve selectively.
 - **Format:** The Memory tool uses view/create/str_replace/insert/delete/rename on files under `/memories`; your migration path is read-only (list + read file contents, then structure and preview).
 
-### Conversation history (ChatGPT exports, shared links)
+### Chat transcripts and conversation history
+
+Chat transcripts are one of the highest-value ingestion sources. See [`docs/developer/transcript_ingestion.md`](docs/developer/transcript_ingestion.md) for the full guide.
 
 If the user has exported conversation history or shares a link:
 
 - **ChatGPT shared links:** Use the ChatGPT scraper MCP if available (`scrape_chatgpt_conversation`). It extracts structured conversation data from share URLs.
 - **ChatGPT JSON export:** If the user has a data export (Settings > Data controls > Export), parse the conversations JSON. Extract entities (people, tasks, decisions, commitments) from message content.
+- **Slack/Discord exports:** Parse channel export directories. Extract messages with timestamps, authors, entity references.
+- **Meeting transcripts:** Parse VTT, SRT, TXT, or markdown transcripts with speaker labels and timestamps.
 - **Other conversation exports:** Accept any JSON, Markdown, or text transcript. Extract entities from content and map to schema types.
+
+When suggesting transcript import, explain the benefit:
+```
+Chat transcripts encode decisions, commitments, and project discussions with
+timestamps. Importing them allows Neotoma to reconstruct project evolution,
+client commitments, and design decisions.
+```
 
 ### Project configuration (`.cursor/`, `.claude/`, `.codex/`)
 
 Project config directories reveal stable context about the user's tools and workflows:
 
-- **`.cursor/memory/`** — Codebase metadata. Parse and map to `codebase_entity` or equivalent types. A migration path already exists (see `docs/releases/v0.2.3/schema_extensions/codebase_entity.md`).
-- **`.cursor/rules/`, `.claude/rules/`** — Agent instructions. These encode user preferences and conventions — potentially worth storing as `preference` or `convention` entities.
+- **`.cursor/memory/`** — Codebase metadata. Parse and map to `codebase_entity` or equivalent types.
+- **`.cursor/rules/`, `.claude/rules/`** — Agent instructions. These encode user preferences and conventions.
 - **`git config`** — User identity (name, email). Store as a `contact` entity for the user.
 
 ### File-based memory (Markdown, JSON, Obsidian, notes)
@@ -89,23 +266,29 @@ When Neotoma is already configured in one tool and the user is adding another:
 
 ## Guardrails
 
-- Do not run background scanning outside current context/tool outputs.
+- Do not run full-disk scans or deep directory crawls by default. Discovery is always shallow-first, user-scoped.
+- Do not ingest files silently. Every file requires preview and explicit consent.
+- Do not output file counts as the primary result. Output domains, entities, and timelines.
 - Do not save any previewed data before explicit user confirmation.
 - After presenting the preview, do not proceed with additional actions until the user explicitly confirms what to save.
 - Keep confirmation-first behavior scoped to first-run onboarding only.
 - Migration from platform memory is best-effort. Platform memory is opaque and may be incomplete — make this clear in the preview.
+- Provenance must be shown for every stored entity. Every fact traces back to its source.
 
 ## Standing instruction handoff
 
-The "bootstrap from existing context" and "data discovery preview" guidance should also live in standing agent instructions so agents can use it in any context, not only first-run onboarding:
+The bootstrap, discovery, and reconstruction guidance should also live in standing agent instructions so agents can use it in any context, not only first-run onboarding:
 
 - `docs/developer/cli_agent_instructions.md`
 - `docs/developer/mcp/instructions.md`
 
 ## Related
 
-- [`docs/foundation/what_to_store.md`](docs/foundation/what_to_store.md) — canonical definition of what data is worth storing in Neotoma
+- [`docs/foundation/what_to_store.md`](docs/foundation/what_to_store.md) — canonical definition of what data is worth storing
+- [`docs/foundation/file_ranking_heuristic.md`](docs/foundation/file_ranking_heuristic.md) — file scoring model for discovery
+- [`docs/developer/agent_onboarding_confirmation.md`](docs/developer/agent_onboarding_confirmation.md) — detailed stage-by-stage onboarding with aha specification
+- [`docs/developer/transcript_ingestion.md`](docs/developer/transcript_ingestion.md) — chat transcript import guide
 
 ## Scope
 
-- This document is the first-run onboarding flow (install, init, preview-before-save, guardrails). It is agent-facing and intended for direct linking from site snippets.
+- This document is the first-run onboarding flow (evaluation, installation, activation, tooling config). It is agent-facing and intended for direct linking from site snippets.

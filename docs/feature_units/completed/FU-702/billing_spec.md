@@ -94,7 +94,7 @@ Enables Neotoma to collect revenue from Tier 1 users (individuals and small team
 **Documentation to Load:**
 - `docs/NEOTOMA_MANIFEST.md`
 - `docs/private/strategy_governance/revenue_timeline.md`
-- `docs/specs/ICP_PROFILES.md` (for pricing context)
+- `docs/icp/profiles.md` (for pricing context)
 ## Schema Changes
 **Tables Affected:**
 1. **`subscriptions` table:**

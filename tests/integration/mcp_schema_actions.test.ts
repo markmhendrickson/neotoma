@@ -387,6 +387,136 @@ describe("MCP Schema Actions - Integration", () => {
     // Note: user_id validation is MCP handler responsibility, not service layer
     // MCP handler validation is tested in MCP action integration tests
     // Service layer allows null user_id for system-level operations
+
+    it("should remove fields from schema", async () => {
+      const baseSchema = await registryService.register({
+        entity_type: `${testEntityType}_remove`,
+        schema_version: "1.0",
+        schema_definition: {
+          fields: {
+            keep_field: { type: "string", required: true },
+            noise_field: { type: "string", required: false },
+            another_noise: { type: "number", required: false },
+          },
+        },
+        reducer_config: {
+          merge_policies: {
+            keep_field: { strategy: "last_write" },
+            noise_field: { strategy: "last_write" },
+            another_noise: { strategy: "last_write" },
+          },
+        },
+        activate: true,
+      });
+
+      createdSchemaIds.push(baseSchema.id);
+
+      const updated = await registryService.updateSchemaIncremental({
+        entity_type: `${testEntityType}_remove`,
+        fields_to_remove: ["noise_field", "another_noise"],
+      });
+
+      expect(updated).toBeDefined();
+
+      const activeSchema = await registryService.loadActiveSchema(`${testEntityType}_remove`);
+      expect(activeSchema).toBeDefined();
+      expect(activeSchema?.schema_definition.fields.keep_field).toBeDefined();
+      expect(activeSchema?.schema_definition.fields.noise_field).toBeUndefined();
+      expect(activeSchema?.schema_definition.fields.another_noise).toBeUndefined();
+      expect(activeSchema?.reducer_config.merge_policies.noise_field).toBeUndefined();
+      expect(activeSchema?.reducer_config.merge_policies.another_noise).toBeUndefined();
+    });
+
+    it("should trigger major version bump on field removal", async () => {
+      const baseSchema = await registryService.register({
+        entity_type: `${testEntityType}_major`,
+        schema_version: "1.2.0",
+        schema_definition: {
+          fields: {
+            field_a: { type: "string" },
+            field_b: { type: "string" },
+          },
+        },
+        reducer_config: {
+          merge_policies: {
+            field_a: { strategy: "last_write" },
+            field_b: { strategy: "last_write" },
+          },
+        },
+        activate: true,
+      });
+
+      createdSchemaIds.push(baseSchema.id);
+
+      const updated = await registryService.updateSchemaIncremental({
+        entity_type: `${testEntityType}_major`,
+        fields_to_remove: ["field_b"],
+      });
+
+      expect(updated.schema_version).toBe("2.0.0");
+    });
+
+    it("should add and remove fields in the same call", async () => {
+      const baseSchema = await registryService.register({
+        entity_type: `${testEntityType}_combo`,
+        schema_version: "1.0",
+        schema_definition: {
+          fields: {
+            stable: { type: "string" },
+            obsolete: { type: "string" },
+          },
+        },
+        reducer_config: {
+          merge_policies: {
+            stable: { strategy: "last_write" },
+            obsolete: { strategy: "last_write" },
+          },
+        },
+        activate: true,
+      });
+
+      createdSchemaIds.push(baseSchema.id);
+
+      const updated = await registryService.updateSchemaIncremental({
+        entity_type: `${testEntityType}_combo`,
+        fields_to_add: [
+          { field_name: "replacement", field_type: "number" },
+        ],
+        fields_to_remove: ["obsolete"],
+      });
+
+      const activeSchema = await registryService.loadActiveSchema(`${testEntityType}_combo`);
+      expect(activeSchema?.schema_definition.fields.stable).toBeDefined();
+      expect(activeSchema?.schema_definition.fields.replacement).toBeDefined();
+      expect(activeSchema?.schema_definition.fields.obsolete).toBeUndefined();
+    });
+
+    it("should reject removal of all fields", async () => {
+      const baseSchema = await registryService.register({
+        entity_type: `${testEntityType}_rejectall`,
+        schema_version: "1.0",
+        schema_definition: {
+          fields: {
+            only_field: { type: "string" },
+          },
+        },
+        reducer_config: {
+          merge_policies: {
+            only_field: { strategy: "last_write" },
+          },
+        },
+        activate: true,
+      });
+
+      createdSchemaIds.push(baseSchema.id);
+
+      await expect(
+        registryService.updateSchemaIncremental({
+          entity_type: `${testEntityType}_rejectall`,
+          fields_to_remove: ["only_field"],
+        }),
+      ).rejects.toThrow("Cannot remove all fields");
+    });
   });
 
   describe("register_schema", () => {

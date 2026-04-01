@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
@@ -9,49 +9,61 @@ import {
   Briefcase,
   Building2,
   Bug,
+  ClipboardCheck,
+  HelpCircle,
   Code,
   Container,
   Cpu,
   Database,
+  DollarSign,
   FileText,
+  Fingerprint,
   FlaskConical,
+  Gavel,
+  GitCompare,
   Github,
   Globe,
+  Headphones,
+  Heart,
   History,
   Home,
+  Landmark,
   Layers,
+  LayoutGrid,
   Menu,
   MessageCircle,
   MessageSquare,
   Monitor,
-  Moon,
   Package,
   PanelRight,
   PanelRightClose,
   Play,
   Rocket,
   SatelliteDish,
+  Scale,
   Search,
   Server,
+  Shield,
   ShieldCheck,
   Sparkles,
-  Sun,
   Terminal,
+  TrendingUp,
+  Truck,
   Users,
+  Waypoints,
   Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { SiClaude, SiGithub, SiNpm, SiOpenai } from "react-icons/si";
-import { useTheme } from "@/hooks/useTheme";
 import { useLocale } from "@/i18n/LocaleContext";
-import { LOCALE_LANGUAGE_NAME, SUPPORTED_LOCALES, type SupportedLocale } from "@/i18n/config";
+import type { SupportedLocale } from "@/i18n/config";
 import {
   localizeHashHref,
   localizePath,
   normalizeToDefaultRoute,
-  saveLocale,
   stripLocaleFromPath,
 } from "@/i18n/routing";
+import { useEffectiveRoutePath } from "@/hooks/useEffectiveRoutePath";
 import { isMarketingFullPageRoute } from "@/site/full_page_paths";
 import {
   NavigationMenu,
@@ -62,21 +74,16 @@ import {
   NavigationMenuTrigger,
   navigationMenuTriggerStyle,
 } from "@/components/ui/navigation-menu";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Input } from "@/components/ui/input";
+import { CodexIcon } from "@/components/icons/CodexIcon";
 import { CursorIcon } from "@/components/icons/CursorIcon";
 import { OpenClawIcon } from "@/components/icons/OpenClawIcon";
 import { getLocalizedDocNavCategories } from "@/site/site_data_localized";
-import { useIndexableMarkdownSourcePath } from "@/hooks/useIndexableMarkdownSourcePath";
-import { rawMarkdownTo } from "@/site/site_page_markdown";
+import { VERTICAL_LANDING_PATHS } from "@/site/site_data";
 import { sendOutboundClick, sendDocsNavClick } from "@/utils/analytics";
+import { useSiteAppNavBarVisibleSetter } from "@/context/SiteAppNavContext";
 
 const sidebarNavItemClass =
   "!bg-transparent text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus:bg-sidebar-accent focus:text-sidebar-accent-foreground data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground";
@@ -101,10 +108,18 @@ const INTEGRATION_BRAND_ICONS: Record<
 > = {
   "/neotoma-with-claude-code": SiClaude,
   "/neotoma-with-claude": SiClaude,
+  "/neotoma-with-claude-connect-desktop": SiClaude,
+  "/neotoma-with-claude-connect-remote-mcp": SiClaude,
   "/neotoma-with-chatgpt": SiOpenai,
-  "/neotoma-with-codex": SiOpenai,
+  "/neotoma-with-chatgpt-connect-remote-mcp": SiOpenai,
+  "/neotoma-with-chatgpt-connect-custom-gpt": SiOpenai,
+  "/neotoma-with-codex": CodexIcon,
+  "/neotoma-with-codex-connect-local-stdio": CodexIcon,
+  "/neotoma-with-codex-connect-remote-http-oauth": CodexIcon,
   "/neotoma-with-cursor": CursorIcon,
   "/neotoma-with-openclaw": OpenClawIcon,
+  "/neotoma-with-openclaw-connect-local-stdio": OpenClawIcon,
+  "/neotoma-with-openclaw-connect-remote-http": OpenClawIcon,
 };
 
 const DOC_NAV_ICONS: Record<string, LucideIcon> = {
@@ -115,15 +130,24 @@ const DOC_NAV_ICONS: Record<string, LucideIcon> = {
   Briefcase,
   Building2,
   Bug,
+  ClipboardCheck,
+  HelpCircle,
   Code,
   Container,
   Cpu,
   Database,
+  DollarSign,
+  FileText,
+  Fingerprint,
   Github,
   Globe,
+  Headphones,
+  Heart,
   History,
   Home,
+  Landmark,
   Layers,
+  LayoutGrid,
   MessageCircle,
   MessageSquare,
   Monitor,
@@ -132,16 +156,80 @@ const DOC_NAV_ICONS: Record<string, LucideIcon> = {
   Play,
   Rocket,
   SatelliteDish,
+  Scale,
+  Search,
   Server,
+  Shield,
   ShieldCheck,
   Sparkles,
   Terminal,
+  TrendingUp,
+  Truck,
   Users,
+  Waypoints,
   Zap,
+  Gavel,
+  GitCompare,
 };
 
 function isModifiedClick(event: React.MouseEvent<HTMLElement>) {
   return event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0;
+}
+
+const SITE_HEADER_SCROLL_ROOT_SELECTOR = "[data-site-header-scroll-root]";
+/** ~h-12; show bar whenever scroll position is in this band from the top */
+const SITE_HEADER_TOP_REVEAL_PX = 56;
+const SITE_HEADER_SCROLL_DELTA_PX = 8;
+
+/** Prefer the designated scroll root when it actually overflows; otherwise use window (e.g. docs shell inset not constrained). */
+function getEffectiveScrollY(root: HTMLElement | null): number {
+  if (root && root.scrollHeight > root.clientHeight + 1) return root.scrollTop;
+  return window.scrollY;
+}
+
+function useSiteHeaderScrollVisibility(pathname: string, forceVisible: boolean) {
+  const [headerVisible, setHeaderVisible] = useState(true);
+  const lastScrollYRef = useRef(0);
+
+  useEffect(() => {
+    setHeaderVisible(true);
+  }, [pathname]);
+
+  useLayoutEffect(() => {
+    if (forceVisible) {
+      setHeaderVisible(true);
+      return;
+    }
+
+    const root = document.querySelector<HTMLElement>(SITE_HEADER_SCROLL_ROOT_SELECTOR);
+
+    lastScrollYRef.current = getEffectiveScrollY(root);
+
+    const onScroll = () => {
+      const current = getEffectiveScrollY(root);
+      const delta = current - lastScrollYRef.current;
+      lastScrollYRef.current = current;
+
+      if (current < SITE_HEADER_TOP_REVEAL_PX) {
+        setHeaderVisible(true);
+        return;
+      }
+      if (delta > SITE_HEADER_SCROLL_DELTA_PX) {
+        setHeaderVisible(false);
+      } else if (delta < -SITE_HEADER_SCROLL_DELTA_PX) {
+        setHeaderVisible(true);
+      }
+    };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    root?.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      root?.removeEventListener("scroll", onScroll);
+    };
+  }, [pathname, forceVisible]);
+
+  return headerVisible;
 }
 
 /** True when the app is served under a product path (e.g. /neotoma-with-claude-code). */
@@ -163,7 +251,9 @@ function NavLink({
   external?: boolean;
 }) {
   const navigate = useNavigate();
-  const { pathname, hash } = useLocation();
+  const effectivePath = useEffectiveRoutePath();
+  const isMarketingHomeForHash =
+    effectivePath === "/" && !isProductBasePath();
   const localizedHref = href.startsWith("#")
     ? localizeHashHref(href, locale)
     : href.startsWith("/")
@@ -200,8 +290,7 @@ function NavLink({
             e.preventDefault();
             const targetId = href.slice(1);
             const target = document.getElementById(targetId);
-            const isHomePath = stripLocaleFromPath(pathname) === "/";
-            if (isHomePath && target) {
+            if (isMarketingHomeForHash && target) {
               target.scrollIntoView({ behavior: "smooth" });
               return;
             }
@@ -223,114 +312,6 @@ function NavLink({
   );
 }
 
-function ThemeToggleNavButton({
-  mobile = false,
-  onToggle,
-}: {
-  mobile?: boolean;
-  onToggle?: () => void;
-} = {}) {
-  const { theme, cycleTheme } = useTheme();
-  const { dict } = useLocale();
-  const label =
-    theme === "system" ? dict.themeSystem : theme === "dark" ? dict.themeDark : dict.themeLight;
-  const Icon = theme === "system" ? Monitor : theme === "dark" ? Moon : Sun;
-  return mobile ? (
-    <button
-      type="button"
-      onClick={() => {
-        cycleTheme();
-        onToggle?.();
-      }}
-      aria-label={label}
-      title={label}
-      className="inline-flex w-full items-center gap-2 rounded-md px-3 py-2 text-[14px] text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-    >
-      <Icon className="h-4 w-4 shrink-0" aria-hidden />
-      <span>{label}</span>
-    </button>
-  ) : (
-    <NavigationMenuLink
-      asChild
-      className={`${navigationMenuTriggerStyle()} ${sidebarNavItemClass}`}
-    >
-      <button
-        type="button"
-        onClick={cycleTheme}
-        aria-label={label}
-        title={label}
-        className="inline-flex h-9 w-9 items-center justify-center rounded-md"
-      >
-        <Icon className="h-4 w-4" aria-hidden />
-      </button>
-    </NavigationMenuLink>
-  );
-}
-
-function LanguageNavButton({
-  mobile = false,
-  onSelect,
-}: {
-  mobile?: boolean;
-  onSelect?: () => void;
-} = {}) {
-  const navigate = useNavigate();
-  const { pathname, hash } = useLocation();
-  const { locale, languageName, dict } = useLocale();
-
-  const handleSelect = (newLocale: SupportedLocale) => {
-    if (newLocale === locale) return;
-    saveLocale(newLocale);
-    onSelect?.();
-    const targetPath = localizePath(pathname, newLocale);
-    const target = `${targetPath}${hash || ""}`;
-    if (typeof window !== "undefined") {
-      window.location.assign(target);
-      return;
-    }
-    navigate(target);
-  };
-
-  const trigger = mobile ? (
-    <button
-      type="button"
-      className="inline-flex w-full items-center gap-2 rounded-md px-3 py-2 text-[14px] text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-      aria-label={dict.language}
-      title={dict.language}
-    >
-      <Globe className="h-4 w-4 shrink-0" aria-hidden />
-      <span>{languageName}</span>
-    </button>
-  ) : (
-    <button
-      type="button"
-      aria-label={dict.language}
-      title={dict.language}
-      className={`inline-flex h-9 w-9 items-center justify-center rounded-md ${sidebarNavItemClass}`}
-    >
-      <Globe className="h-4 w-4" aria-hidden />
-    </button>
-  );
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="min-w-[10rem] bg-popover" translate="no">
-        {SUPPORTED_LOCALES.map((loc) => (
-          <DropdownMenuItem
-            key={loc}
-            onClick={() => handleSelect(loc)}
-            className="cursor-pointer"
-          >
-            {LOCALE_LANGUAGE_NAME[loc]}
-            {loc === locale ? " ✓" : ""}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
 interface SearchablePageItem {
   label: string;
   href: string;
@@ -339,7 +320,9 @@ interface SearchablePageItem {
 
 const SITE_SEARCH_TOP_PAGE_HREFS = [
   "/docs",
+  "/evaluate",
   "/install",
+  "/faq",
   "/memory-guarantees",
   "/neotoma-with-cursor",
   "/api",
@@ -370,16 +353,19 @@ function SiteNavSearch({
 
   const localizedDocCategories = useMemo(() => getLocalizedDocNavCategories(dict), [dict]);
 
+  const verticalPathSet = useMemo(() => new Set(VERTICAL_LANDING_PATHS), []);
+
   const pages = useMemo(() => {
     const byHref = new Map<string, SearchablePageItem>();
     for (const category of localizedDocCategories) {
       for (const item of category.items) {
         if (!item.href.startsWith("/") || byHref.has(item.href)) continue;
+        if (verticalPathSet.has(item.href)) continue;
         byHref.set(item.href, { label: item.label, href: item.href, category: category.title });
       }
     }
     return [...byHref.values()];
-  }, [localizedDocCategories]);
+  }, [localizedDocCategories, verticalPathSet]);
 
   const topPages = useMemo(() => {
     const byHref = new Map(pages.map((p) => [p.href, p]));
@@ -545,10 +531,17 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
   const { showSidebarTrigger } = props;
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const routeBase = normalizeToDefaultRoute(pathname);
+  const effectivePath = useEffectiveRoutePath();
+  const routeBase = normalizeToDefaultRoute(effectivePath);
+  const isMarketingHomeChrome =
+    effectivePath === "/" && !isProductBasePath();
   const { locale, dict } = useLocale();
-  const markdownSourcePath = useIndexableMarkdownSourcePath();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const headerScrollVisible = useSiteHeaderScrollVisibility(pathname, mobileMenuOpen);
+  const setAppNavBarVisible = useSiteAppNavBarVisibleSetter();
+  useEffect(() => {
+    setAppNavBarVisible(headerScrollVisible);
+  }, [headerScrollVisible, setAppNavBarVisible]);
   const localizedDocCategories = useMemo(() => getLocalizedDocNavCategories(dict), [dict]);
 
   const featuredDocCategories = useMemo(() => {
@@ -566,7 +559,7 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
       pick((hrefs) => hrefs.includes("/docs")),
       pick((hrefs) => hrefs.some((href) => href.startsWith("/neotoma-with-"))),
       pick((hrefs) => hrefs.includes("/api")),
-      pick((hrefs) => hrefs.includes("/ai-infrastructure-engineers")),
+      pick((hrefs) => hrefs.includes("/debugging-infrastructure")),
       pick((hrefs) => hrefs.some((href) => href.startsWith("https://"))),
     ].filter((category): category is NonNullable<typeof category> => !!category);
 
@@ -574,7 +567,11 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
   }, [localizedDocCategories]);
 
   return (
-    <header className="fixed top-0 inset-x-0 z-50 flex items-center justify-between h-12 pl-2 pr-4 md:pr-6 bg-sidebar/90 text-sidebar-foreground backdrop-blur-sm shadow-[inset_0_-10px_20px_-10px_rgba(0,0,0,0.05)]">
+    <header
+      className={`fixed top-0 inset-x-0 z-50 flex h-12 items-center justify-between pl-2 pr-4 transition-transform duration-300 ease-out md:pr-6 ${
+        headerScrollVisible ? "translate-y-0" : "-translate-y-full pointer-events-none"
+      } bg-sidebar/90 text-sidebar-foreground backdrop-blur-sm shadow-[inset_0_-10px_20px_-10px_rgba(0,0,0,0.05)]`}
+    >
       <div className="flex items-center gap-3">
         {showSidebarTrigger && <SidebarTrigger className="shrink-0" aria-label="Toggle sidebar" />}
         <a
@@ -582,11 +579,7 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
           className={`text-[15px] font-semibold text-sidebar-foreground no-underline hover:text-sidebar-accent-foreground transition-colors ${!showSidebarTrigger ? "pl-3" : ""}`}
           aria-label="Neotoma home"
           onClick={(e) => {
-            if (
-              !isProductBasePath() &&
-              stripLocaleFromPath(pathname) === "/" &&
-              !isModifiedClick(e)
-            ) {
+            if (isMarketingHomeChrome && !isModifiedClick(e)) {
               e.preventDefault();
               document.getElementById("intro")?.scrollIntoView({ behavior: "smooth" });
             }
@@ -615,40 +608,33 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
         )}
       </div>
 
-      {/* Mobile: Install + Architecture in header */}
-      <nav className="md:hidden flex items-center gap-1" aria-label="Install and Architecture">
-        {stripLocaleFromPath(pathname) === "/" ? (
+      {/* Mobile: Evaluate + Architecture in header */}
+      <nav
+        className="md:hidden flex items-center gap-1"
+        aria-label={`${dict.evaluate} and ${dict.install}`}
+      >
+        {isMarketingHomeChrome ? (
           <>
-            <a
-              href={localizeHashHref("#install", locale)}
+            <Link
+              to={localizePath("/evaluate", locale)}
               className="rounded-md px-2 py-1.5 text-[13px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-              onClick={(e) => {
-                if (isModifiedClick(e)) return;
-                e.preventDefault();
-                document.getElementById("install")?.scrollIntoView({ behavior: "smooth" });
-              }}
             >
-              {dict.install}
-            </a>
-            <a
-              href={localizeHashHref("#architecture", locale)}
-              className="rounded-md px-2 py-1.5 text-[13px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-              onClick={(e) => {
-                if (isModifiedClick(e)) return;
-                e.preventDefault();
-                document.getElementById("architecture")?.scrollIntoView({ behavior: "smooth" });
-              }}
-            >
-              {dict.architecture}
-            </a>
-          </>
-        ) : (
-          <>
+              {dict.evaluate}
+            </Link>
             <Link
               to={localizePath("/install", locale)}
               className="rounded-md px-2 py-1.5 text-[13px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
             >
               {dict.install}
+            </Link>
+          </>
+        ) : (
+          <>
+            <Link
+              to={localizePath("/evaluate", locale)}
+              className="rounded-md px-2 py-1.5 text-[13px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            >
+              {dict.evaluate}
             </Link>
             <Link
               to={localizePath("/architecture", locale)}
@@ -663,11 +649,17 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
       <NavigationMenu className="hidden md:block">
         <NavigationMenuList>
           <NavigationMenuItem>
-            {stripLocaleFromPath(pathname) === "/" ? (
-              <NavLink href="#install" locale={locale}>
-                {dict.install}
-              </NavLink>
-            ) : (
+            <NavigationMenuLink asChild>
+              <Link
+                to={localizePath("/evaluate", locale)}
+                className={`${navigationMenuTriggerStyle()} ${sidebarNavItemClass}`}
+              >
+                {dict.evaluate}
+              </Link>
+            </NavigationMenuLink>
+          </NavigationMenuItem>
+          <NavigationMenuItem className="hidden md:flex">
+            {isMarketingHomeChrome ? (
               <NavigationMenuLink asChild>
                 <Link
                   to={localizePath("/install", locale)}
@@ -676,13 +668,6 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
                   {dict.install}
                 </Link>
               </NavigationMenuLink>
-            )}
-          </NavigationMenuItem>
-          <NavigationMenuItem className="hidden md:flex">
-            {stripLocaleFromPath(pathname) === "/" ? (
-              <NavLink href="#architecture" locale={locale}>
-                {dict.architecture}
-              </NavLink>
             ) : (
               <NavigationMenuLink asChild>
                 <Link
@@ -759,7 +744,7 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
               </ul>
             </NavigationMenuContent>
           </NavigationMenuItem>
-          <NavigationMenuItem className="hidden lg:flex px-1">
+          <NavigationMenuItem className="hidden md:flex px-1">
             <SiteNavSearch
               locale={locale}
               searchLabel={dict.search}
@@ -777,30 +762,6 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
               <SiNpm className="h-4 w-4" aria-hidden />
               <span className="sr-only">npm</span>
             </NavLink>
-          </NavigationMenuItem>
-          {markdownSourcePath ? (
-            <NavigationMenuItem>
-              <NavigationMenuLink
-                asChild
-                className={`${navigationMenuTriggerStyle()} ${sidebarNavItemClass}`}
-              >
-                <Link
-                  to={rawMarkdownTo(markdownSourcePath, locale)}
-                  title={dict.viewPageMarkdown}
-                  aria-label={dict.viewPageMarkdown}
-                  className="inline-flex h-9 max-w-[11rem] items-center gap-1.5 rounded-md px-2 lg:px-2.5"
-                >
-                  <FileText className="h-4 w-4 shrink-0" aria-hidden />
-                  <span className="hidden truncate text-[13px] lg:inline">{dict.viewPageMarkdown}</span>
-                </Link>
-              </NavigationMenuLink>
-            </NavigationMenuItem>
-          ) : null}
-          <NavigationMenuItem>
-            <LanguageNavButton />
-          </NavigationMenuItem>
-          <NavigationMenuItem>
-            <ThemeToggleNavButton />
           </NavigationMenuItem>
         </NavigationMenuList>
       </NavigationMenu>
@@ -834,11 +795,7 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
                 className="text-[15px] font-semibold text-sidebar-foreground no-underline hover:text-sidebar-accent-foreground transition-colors"
                 onClick={(e) => {
                   setMobileMenuOpen(false);
-                  if (
-                    !isProductBasePath() &&
-                    stripLocaleFromPath(pathname) === "/" &&
-                    !isModifiedClick(e)
-                  ) {
+                  if (isMarketingHomeChrome && !isModifiedClick(e)) {
                     e.preventDefault();
                     document.getElementById("intro")?.scrollIntoView({ behavior: "smooth" });
                   }
@@ -851,62 +808,32 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
               className="mt-auto border-t border-sidebar-border p-2 flex flex-col gap-1"
               style={{ paddingBottom: "max(5.75rem, 1.5rem, env(safe-area-inset-bottom, 0px))" }}
             >
-              {markdownSourcePath ? (
-                <div className="border-b border-sidebar-border pb-2">
-                  <Link
-                    to={rawMarkdownTo(markdownSourcePath, locale)}
-                    className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-[14px] text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    <FileText className="h-4 w-4 shrink-0" aria-hidden />
-                    {dict.viewPageMarkdown}
-                  </Link>
-                </div>
-              ) : null}
-              <div className="border-b border-sidebar-border pb-2 flex flex-col gap-1">
-                <LanguageNavButton mobile onSelect={() => setMobileMenuOpen(false)} />
-                <ThemeToggleNavButton mobile />
-              </div>
               <nav className="flex flex-col gap-1">
-                {stripLocaleFromPath(pathname) === "/" ? (
+                {isMarketingHomeChrome ? (
                   <>
-                    <a
-                      href={localizeHashHref("#install", locale)}
+                    <Link
+                      to={localizePath("/evaluate", locale)}
                       className="rounded-md px-3 py-2 text-[14px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                      onClick={(e) => {
-                        if (isModifiedClick(e)) return;
-                        e.preventDefault();
-                        setMobileMenuOpen(false);
-                        const target = document.getElementById("install");
-                        if (target) target.scrollIntoView({ behavior: "smooth" });
-                        else navigate(localizeHashHref("#install", locale));
-                      }}
+                      onClick={() => setMobileMenuOpen(false)}
                     >
-                      {dict.install}
-                    </a>
-                    <a
-                      href={localizeHashHref("#architecture", locale)}
-                      className="rounded-md px-3 py-2 text-[14px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                      onClick={(e) => {
-                        if (isModifiedClick(e)) return;
-                        e.preventDefault();
-                        setMobileMenuOpen(false);
-                        const target = document.getElementById("architecture");
-                        if (target) target.scrollIntoView({ behavior: "smooth" });
-                        else navigate(localizeHashHref("#architecture", locale));
-                      }}
-                    >
-                      {dict.architecture}
-                    </a>
-                  </>
-                ) : (
-                  <>
+                      {dict.evaluate}
+                    </Link>
                     <Link
                       to={localizePath("/install", locale)}
                       className="rounded-md px-3 py-2 text-[14px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                       onClick={() => setMobileMenuOpen(false)}
                     >
                       {dict.install}
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <Link
+                      to={localizePath("/evaluate", locale)}
+                      className="rounded-md px-3 py-2 text-[14px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      {dict.evaluate}
                     </Link>
                     <Link
                       to={localizePath("/architecture", locale)}
@@ -923,6 +850,13 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
                   onClick={() => setMobileMenuOpen(false)}
                 >
                   {dict.docs}
+                </Link>
+                <Link
+                  to={localizePath("/faq", locale)}
+                  className="rounded-md px-3 py-2 text-[14px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  FAQ
                 </Link>
                 <a
                   href="https://github.com/markmhendrickson/neotoma"

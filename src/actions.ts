@@ -19,7 +19,8 @@ import {
 import { verifyRequest, parseAuthHeader } from "./crypto/auth.js";
 import { encryptResponseMiddleware } from "./middleware/encrypt_response.js";
 import { initServerKeys } from "./services/encryption_service.js";
-import { storeRawContent } from "./services/raw_storage.js";
+import { storeRawContent, downloadRawContent, SourceFileNotFoundError } from "./services/raw_storage.js";
+import { attachSourceLabelsToObservations } from "./services/observation_source_label.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { NeotomaServer } from "./server.js";
@@ -49,8 +50,6 @@ import {
   ObservationsQueryRequestSchema,
   RegisterSchemaRequestSchema,
   RelationshipSnapshotRequestSchema,
-  ReinterpretRequestSchema,
-  InterpretUninterpretedRequestSchema,
   RestoreEntityRequestSchema,
   RestoreRelationshipRequestSchema,
   RetrieveEntityByIdentifierSchema,
@@ -262,7 +261,7 @@ const mcpTransports = new Map<string, StreamableHTTPServerTransport>();
 const mcpServerInstances = new Map<string, NeotomaServer>();
 
 /** True when request is to localhost/127.0.0.1 (local access). Tunnel requests have a non-local Host. */
-function isLocalRequest(req: express.Request): boolean {
+export function isLocalRequest(req: express.Request): boolean {
   const host = (((req.headers["host"] || req.headers["Host"]) as string) || "")
     .split(":")[0]
     .toLowerCase();
@@ -874,6 +873,15 @@ app.post("/mcp/oauth/initiate", oauthInitiateLimit, async (req, res) => {
     }
 
     const { initiateOAuthFlow } = await import("./services/mcp_oauth.js");
+
+    // Tunnel preflight: warn when apiBase is localhost but request arrives via tunnel
+    if (!isLocalRequest(req) && /^https?:\/\/(localhost|127\.0\.0\.1)/i.test(config.apiBase)) {
+      logger.warn(
+        `[MCP OAuth] Tunnel request detected but config.apiBase is ${config.apiBase}. ` +
+        `OAuth callbacks may fail. Set NEOTOMA_HOST_URL to the tunnel URL or restart the server after the tunnel starts.`
+      );
+    }
+
     const frontendBase =
       process.env.NEOTOMA_FRONTEND_URL || process.env.FRONTEND_URL || "http://localhost:5195";
     const finalRedirectUri =
@@ -1644,7 +1652,7 @@ app.use(async (req, res, next) => {
         return next();
       }
     }
-    if (process.env.NEOTOMA_BEARER_TOKEN) {
+    if (headerAuth.startsWith("Bearer ") && process.env.NEOTOMA_BEARER_TOKEN) {
       const token = headerAuth.slice(7).trim();
       if (token === process.env.NEOTOMA_BEARER_TOKEN) {
         const devUser = ensureLocalDevUser();
@@ -1907,7 +1915,7 @@ app.get("/entities/:id", async (req, res) => {
       return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
     }
 
-    return res.json(entityWithProvenance);
+    return res.json({ entity: entityWithProvenance });
   } catch (error) {
     if (error instanceof Error && error.message.includes("Not authenticated")) {
       return sendError(res, 401, "AUTH_REQUIRED", error.message);
@@ -1953,8 +1961,11 @@ app.get("/entities/:id/observations", async (req, res) => {
 
     if (error) throw error;
 
+    const rows = (data || []) as Record<string, unknown>[];
+    const enriched = await attachSourceLabelsToObservations(userId, rows);
+
     return res.json({
-      observations: data || [],
+      observations: enriched,
       total: count || 0,
       limit,
       offset,
@@ -2015,10 +2026,52 @@ app.get("/entities/:id/relationships", async (req, res) => {
         id: rel.relationship_key,
       }));
 
-    return res.json({
-      outgoing: formatRelationships(outgoing),
-      incoming: formatRelationships(incoming),
-    });
+    const formattedOutgoing = formatRelationships(outgoing);
+    const formattedIncoming = formatRelationships(incoming);
+
+    const expandEntities = req.query.expand_entities === "true";
+    let relatedEntities: Record<string, any> | undefined;
+
+    if (expandEntities) {
+      const relatedIds = new Set<string>();
+      for (const rel of [...(outgoing || []), ...(incoming || [])]) {
+        if (rel.source_entity_id && rel.source_entity_id !== entityId) relatedIds.add(rel.source_entity_id);
+        if (rel.target_entity_id && rel.target_entity_id !== entityId) relatedIds.add(rel.target_entity_id);
+      }
+      if (relatedIds.size > 0) {
+        const idsArr = Array.from(relatedIds);
+        const [snapshotsResult, entitiesResult] = await Promise.all([
+          db.from("entity_snapshots").select("*").in("entity_id", idsArr).eq("user_id", userId),
+          db.from("entities").select("id, canonical_name").in("id", idsArr).eq("user_id", userId),
+        ]);
+        if (!snapshotsResult.error && snapshotsResult.data) {
+          const canonicalNames = new Map<string, string>();
+          if (!entitiesResult.error && entitiesResult.data) {
+            for (const ent of entitiesResult.data) {
+              if (ent.canonical_name) canonicalNames.set(ent.id, ent.canonical_name);
+            }
+          }
+          relatedEntities = {};
+          for (const e of snapshotsResult.data) {
+            if (!e.canonical_name && canonicalNames.has(e.entity_id)) {
+              e.canonical_name = canonicalNames.get(e.entity_id);
+            }
+            relatedEntities[e.entity_id] = e;
+          }
+        }
+      }
+    }
+
+    const responseBody: Record<string, any> = {
+      outgoing: formattedOutgoing,
+      incoming: formattedIncoming,
+      relationships: [...formattedOutgoing, ...formattedIncoming],
+    };
+    if (relatedEntities) {
+      responseBody.related_entities = relatedEntities;
+    }
+
+    return res.json(responseBody);
   } catch (error) {
     logError("APIError:entity_relationships", req, error);
     const message = error instanceof Error ? error.message : "Failed to get relationships";
@@ -2642,6 +2695,79 @@ app.get("/sources/:id", async (req, res) => {
   }
 });
 
+// GET /api/sources/:id/content - Download raw source file content
+// REQUIRES AUTHENTICATION - verifies source belongs to authenticated user
+app.get("/sources/:id/content", async (req, res) => {
+  try {
+    const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+    const sourceId = req.params.id;
+
+    const { data: source, error } = await db
+      .from("sources")
+      .select("*")
+      .eq("id", sourceId)
+      .eq("user_id", userId)
+      .single();
+
+    if (error) {
+      if (error.code === "PGRST116") {
+        return sendError(res, 404, "RESOURCE_NOT_FOUND", "Source not found");
+      }
+      throw error;
+    }
+    if (!source) {
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", "Source not found");
+    }
+    let sourceToServe = source;
+
+    // Some observations point to a structured JSON source row, while the actual
+    // file (PDF/CSV/etc.) exists as a sibling source with the same filename.
+    if (
+      (source.mime_type || "").toLowerCase() === "application/json" &&
+      typeof source.original_filename === "string" &&
+      source.original_filename.trim()
+    ) {
+      const { data: siblingSource, error: siblingError } = await db
+        .from("sources")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("original_filename", source.original_filename)
+        .not("id", "eq", source.id)
+        .not("mime_type", "eq", "application/json")
+        .order("file_size", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (siblingError) throw siblingError;
+      if (siblingSource?.storage_url) {
+        sourceToServe = siblingSource;
+      }
+    }
+
+    if (!sourceToServe.storage_url) {
+      return sendError(res, 404, "NO_CONTENT", "Source has no stored file content");
+    }
+
+    const buffer = await downloadRawContent(sourceToServe.storage_url);
+    const mimeType = sourceToServe.mime_type || "application/octet-stream";
+    const filename = sourceToServe.original_filename || `source-${sourceId}`;
+    const inline = /^(application\/pdf|text\/|image\/)/.test(mimeType);
+
+    res.setHeader("Content-Type", mimeType);
+    res.setHeader("Content-Length", buffer.length);
+    res.setHeader(
+      "Content-Disposition",
+      `${inline ? "inline" : "attachment"}; filename="${filename.replace(/"/g, '\\"')}"`
+    );
+    return res.send(buffer);
+  } catch (error) {
+    if (error instanceof SourceFileNotFoundError) {
+      return sendError(res, 404, "SOURCE_FILE_NOT_FOUND", error.message);
+    }
+    return handleApiError(req, res, error, "Failed to download source content", "DOWNLOAD_FAILED", "APIError:source_content");
+  }
+});
+
 // GET /api/interpretations - Get interpretations with filters (FU-302)
 // REQUIRES AUTHENTICATION - all queries filtered by authenticated user_id
 app.get("/interpretations", async (req, res) => {
@@ -2710,8 +2836,11 @@ app.get("/observations", async (req, res) => {
 
     if (error) throw error;
 
+    const rows = (data || []) as Record<string, unknown>[];
+    const enriched = await attachSourceLabelsToObservations(userId, rows);
+
     return res.json({
-      observations: data || [],
+      observations: enriched,
       total: count || 0,
       limit,
       offset,
@@ -2785,7 +2914,7 @@ app.post("/observations/create", async (req, res) => {
 
     const { resolveEntity } = await import("./services/entity_resolution.js");
     const { createObservation } = await import("./services/observation_storage.js");
-    const { getSnapshot } = await import("./services/snapshot_computation.js");
+    const { getSnapshot, recomputeSnapshot } = await import("./services/snapshot_computation.js");
 
     const entity_id = await resolveEntity({
       entityType: entity_type,
@@ -2806,6 +2935,7 @@ app.post("/observations/create", async (req, res) => {
       user_id,
     });
 
+    await recomputeSnapshot(entity_id, user_id);
     const snapshot = await getSnapshot(entity_id, user_id);
 
     return res.json({
@@ -2911,6 +3041,13 @@ async function storeStructuredForApi(params: {
       user_id: userId,
     });
 
+    try {
+      const { recomputeSnapshot } = await import("./services/snapshot_computation.js");
+      await recomputeSnapshot(entity_id, userId);
+    } catch (snapshotErr) {
+      logger.warn(`Snapshot recompute failed for ${entity_id}: ${snapshotErr}`);
+    }
+
     createdEntities.push({
       entity_id,
       entity_type,
@@ -2933,18 +3070,13 @@ async function storeUnstructuredForApi(params: {
   mimeType: string;
   idempotencyKey?: string;
   originalFilename?: string;
-  interpret: boolean;
-  interpretationConfig?: Record<string, unknown>;
 }) {
-  const { runInterpretation } = await import("./services/interpretation.js");
   const {
     fileContent,
     mimeType,
     idempotencyKey,
     originalFilename,
-    interpret,
     userId,
-    interpretationConfig,
   } = params;
   const fileBuffer = Buffer.from(fileContent, "base64");
   const resolvedIdempotencyKey =
@@ -2960,18 +3092,7 @@ async function storeUnstructuredForApi(params: {
     provenance: { upload_method: "api_store_unstructured", client: "api" },
   });
 
-  const response: {
-    source_id: string;
-    content_hash: string;
-    file_size: number;
-    deduplicated?: boolean;
-    entities_created?: number;
-    observations_created?: number;
-    interpretation_run_id?: string;
-    interpretation?: unknown;
-    interpretation_debug?: Record<string, unknown>;
-    entity_ids?: string[];
-  } = {
+  return {
     source_id: storageResult.sourceId,
     content_hash: storageResult.contentHash,
     file_size: storageResult.fileSize,
@@ -2979,168 +3100,6 @@ async function storeUnstructuredForApi(params: {
     entities_created: 0,
     observations_created: 0,
   };
-
-  if (interpret && storageResult.sourceId) {
-    const { extractTextFromBuffer, getPdfFirstPageImageDataUrl, getPdfWorkerDebug } =
-      await import("./services/file_text_extraction.js");
-    const {
-      extractWithLLM,
-      extractWithLLMFromImage,
-      extractFromCSVWithChunking: _extractFromCSVWithChunking,
-      isLLMExtractionAvailable,
-    } = await import("./services/llm_extraction.js");
-
-    const rawText = await extractTextFromBuffer(fileBuffer, mimeType, originalFilename || "file");
-
-    const isCsv = mimeType?.toLowerCase() === "text/csv";
-
-    if (!isCsv && !isLLMExtractionAvailable()) {
-      response.interpretation = {
-        skipped: true,
-        reason: "openai_not_configured",
-        message: "Set OPENAI_API_KEY in .env to enable AI interpretation",
-      };
-      return response;
-    }
-
-    const isPdf =
-      (mimeType || "").toLowerCase().includes("pdf") ||
-      (originalFilename || "").toLowerCase().endsWith(".pdf");
-    const rawTextLength = typeof rawText === "string" ? rawText.length : 0;
-
-    // Avoid nondeterministic LLM errors for empty non-PDF files; store the source and skip interpretation.
-    if (rawTextLength === 0 && !isPdf && !isCsv) {
-      response.interpretation = {
-        skipped: true,
-        reason: "empty_content",
-        message: "No extractable text found; interpretation skipped",
-      };
-      response.interpretation_debug = {
-        raw_text_length: 0,
-      };
-      return response;
-    }
-
-    let extractionResult:
-      | Awaited<ReturnType<typeof extractWithLLM>>
-      | Awaited<ReturnType<typeof _extractFromCSVWithChunking>>
-      | undefined = undefined;
-    let extractedData: Array<Record<string, unknown>> = [];
-    const pdfDebug = getPdfWorkerDebug();
-    const interpretationDebug: Record<string, unknown> = {
-      raw_text_length: rawTextLength,
-      pdf_worker_wrapper_used: pdfDebug.configured,
-      pdf_worker_wrapper_path_tried: pdfDebug.wrapper_path_tried,
-      pdf_worker_set_worker_error: pdfDebug.set_worker_error,
-    };
-    if (rawTextLength === 0 && isPdf) {
-      interpretationDebug.vision_fallback_attempted = true;
-      const imageResult = await getPdfFirstPageImageDataUrl(
-        fileBuffer,
-        mimeType,
-        originalFilename || "file",
-        {
-          returnError: true,
-        }
-      );
-      const imageDataUrl = typeof imageResult === "object" ? imageResult.dataUrl : imageResult;
-      if (typeof imageResult === "object" && imageResult.error) {
-        interpretationDebug.vision_fallback_image_error = imageResult.error;
-      }
-      interpretationDebug.vision_fallback_image_got = Boolean(imageDataUrl);
-      if (imageDataUrl) {
-        try {
-          extractionResult = await extractWithLLMFromImage(
-            imageDataUrl,
-            originalFilename || "file",
-            mimeType,
-            "gpt-4o"
-          );
-          interpretationDebug.used_vision_fallback = true;
-        } catch (visionErr) {
-          interpretationDebug.vision_fallback_error =
-            visionErr instanceof Error ? visionErr.message : String(visionErr);
-          extractionResult = await extractWithLLM(
-            rawText,
-            originalFilename || "file",
-            mimeType,
-            "gpt-4o"
-          );
-        }
-      } else {
-        extractionResult = await extractWithLLM(
-          rawText,
-          originalFilename || "file",
-          mimeType,
-          "gpt-4o"
-        );
-      }
-    } else if (isCsv) {
-      const { extractEntitiesFromCsvRows } = await import("./services/csv_row_extraction.js");
-      extractedData = extractEntitiesFromCsvRows(fileBuffer, originalFilename || "file");
-    } else {
-      extractionResult = await extractWithLLM(
-        rawText,
-        originalFilename || "file",
-        mimeType,
-        "gpt-4o"
-      );
-    }
-
-    if (extractedData.length === 0 && extractionResult) {
-      if ("entities" in extractionResult) {
-        const multiResult = extractionResult as {
-          entities: Array<{ entity_type: string; fields: Record<string, unknown> }>;
-        };
-        extractedData = multiResult.entities.map((e) => ({
-          entity_type: e.entity_type,
-          ...e.fields,
-        }));
-      } else {
-        const { entity_type, fields } = extractionResult;
-        extractedData = [{ entity_type, ...fields }];
-      }
-    }
-
-    const defaultConfig = {
-      provider: "openai",
-      model_id: "gpt-4o",
-      temperature: 0,
-      prompt_hash: "llm_extraction_v2_idempotent",
-      code_version: "v0.2.0",
-    };
-    interpretationDebug.extraction_field_keys = extractedData.flatMap((d) =>
-      Object.keys(d).filter((k) => k !== "entity_type" && k !== "type")
-    );
-    response.interpretation_debug = interpretationDebug;
-    try {
-      const interpretationResult = await runInterpretation({
-        userId,
-        sourceId: storageResult.sourceId,
-        extractedData,
-        config: {
-          ...defaultConfig,
-          ...(interpretationConfig ?? {}),
-        },
-      });
-      response.interpretation = interpretationResult;
-      if (interpretationResult.entities?.length) {
-        response.entity_ids = interpretationResult.entities.map((e) => e.entityId);
-        response.entities_created = interpretationResult.entities.length;
-        response.observations_created = interpretationResult.entities.length;
-      }
-      if (interpretationResult.interpretationId) {
-        response.interpretation_run_id = interpretationResult.interpretationId;
-      }
-    } catch (interpretError) {
-      response.interpretation = {
-        error: interpretError instanceof Error ? interpretError.message : String(interpretError),
-        skipped: true,
-      };
-    }
-  }
-
-  return response;
 }
 
 // POST /api/store - Unified store for structured, unstructured, or combined payloads
@@ -3221,8 +3180,6 @@ app.post("/store", async (req, res) => {
         mimeType,
         idempotencyKey: parsed.data.file_idempotency_key,
         originalFilename,
-        interpret: parsed.data.interpret ?? true,
-        interpretationConfig: parsed.data.interpretation_config,
       });
     }
 
@@ -3262,8 +3219,6 @@ app.post("/store/unstructured", async (req, res) => {
       mimeType: parsed.data.mime_type,
       idempotencyKey: parsed.data.idempotency_key,
       originalFilename: parsed.data.original_filename,
-      interpret: parsed.data.interpret ?? true,
-      interpretationConfig: parsed.data.interpretation_config,
     });
     return res.status(200).json(response);
   } catch (error) {
@@ -4391,242 +4346,6 @@ app.post("/register_schema", async (req, res) => {
   }
 });
 
-async function runReinterpretForSource(
-  sourceId: string,
-  interpretationConfig: Record<string, unknown> | undefined,
-  userId?: string
-): Promise<{ interpretationId: string; observationsCreated: number; userId: string }> {
-  // Get source
-  let sourceQuery = db.from("sources").select("*").eq("id", sourceId);
-  if (userId) {
-    sourceQuery = sourceQuery.eq("user_id", userId);
-  }
-  const { data: source, error: srcError } = await sourceQuery.single();
-
-  if (srcError || !source) {
-    throw new Error("Source not found");
-  }
-
-  // Re-extract from source.raw_text based on mime_type
-  let extractedData: Array<Record<string, unknown>> = [];
-  if (typeof source.raw_text === "string" && source.raw_text.trim().length > 0) {
-    const mimeType = source.mime_type || "text/plain";
-    const fileName = source.original_filename;
-
-    // Import extraction functions
-    const { extractWithLLM } = await import("./services/llm_extraction.js");
-
-    // Get model ID from config or use default
-    const modelId =
-      interpretationConfig && typeof interpretationConfig.model_id === "string"
-        ? interpretationConfig.model_id
-        : "gpt-4o";
-
-    // Handle CSV files with chunking support
-    if (mimeType === "text/csv" || fileName?.toLowerCase().endsWith(".csv")) {
-      const { extractEntitiesFromCsvRows } = await import("./services/csv_row_extraction.js");
-      extractedData = extractEntitiesFromCsvRows(Buffer.from(source.raw_text, "utf8"), fileName);
-    } else {
-      // Non-CSV files - use standard extraction
-      const extractionResult = await extractWithLLM(source.raw_text, fileName, mimeType, modelId);
-      const { entity_type, fields } = extractionResult;
-      extractedData = [
-        {
-          entity_type,
-          ...fields,
-        },
-      ];
-    }
-  }
-
-  const { runInterpretation } = await import("./services/interpretation.js");
-  const result = await runInterpretation({
-    userId: source.user_id,
-    sourceId,
-    extractedData,
-    config: (interpretationConfig || {}) as any,
-  });
-
-  return {
-    interpretationId: result.interpretationId,
-    observationsCreated: result.observationsCreated,
-    userId: source.user_id,
-  };
-}
-
-async function listUninterpretedSourceIds(userId: string, limit: number): Promise<string[]> {
-  const interpretedSet = new Set<string>();
-  const { data: interpretedData, error: interpretedError } = await db
-    .from("interpretations")
-    .select("source_id")
-    .eq("user_id", userId);
-  if (interpretedError) {
-    throw interpretedError;
-  }
-  for (const row of interpretedData || []) {
-    if (row.source_id) interpretedSet.add(row.source_id);
-  }
-
-  const pageSize = Math.max(100, limit * 3);
-  const sourceIds: string[] = [];
-  let offset = 0;
-
-  while (sourceIds.length < limit) {
-    const { data: sourcePage, error: sourceError } = await db
-      .from("sources")
-      .select("id")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: true })
-      .range(offset, offset + pageSize - 1);
-
-    if (sourceError) {
-      throw sourceError;
-    }
-    if (!sourcePage || sourcePage.length === 0) {
-      break;
-    }
-
-    for (const source of sourcePage) {
-      if (sourceIds.length >= limit) break;
-      if (interpretedSet.has(source.id)) continue;
-      sourceIds.push(source.id);
-    }
-
-    if (sourcePage.length < pageSize) {
-      break;
-    }
-    offset += sourcePage.length;
-  }
-
-  return sourceIds;
-}
-
-// POST /reinterpret - Re-run AI interpretation on existing source
-app.post("/reinterpret", async (req, res) => {
-  const parsed = ReinterpretRequestSchema.safeParse(req.body);
-  if (!parsed.success) {
-    logWarn("ValidationError:reinterpret", req, {
-      issues: parsed.error.issues,
-    });
-    return sendValidationError(res, parsed.error.issues);
-  }
-
-  try {
-    let { source_id } = parsed.data;
-    const { interpretation_config, interpretation_id } = parsed.data;
-
-    // Look up source_id from interpretation if not provided directly
-    if (!source_id && interpretation_id) {
-      const { data: interp, error: interpError } = await db
-        .from("interpretations")
-        .select("source_id")
-        .eq("id", interpretation_id)
-        .maybeSingle();
-      if (interpError || !interp) {
-        return sendError(res, 404, "RESOURCE_NOT_FOUND", "Interpretation not found");
-      }
-      source_id = interp.source_id;
-    }
-
-    if (!source_id) {
-      return sendError(res, 400, "VALIDATION_ERROR", "source_id is required");
-    }
-
-    const result = await runReinterpretForSource(source_id, interpretation_config);
-    logDebug("Success:reinterpret", req, { source_id });
-    return res.json({
-      success: true,
-      interpretation_id: result.interpretationId,
-      observations_created: result.observationsCreated,
-    });
-  } catch (error) {
-    if (error instanceof Error && error.message === "Source not found") {
-      return sendError(res, 404, "RESOURCE_NOT_FOUND", "Source not found");
-    }
-    return handleApiError(
-      req,
-      res,
-      error,
-      "Failed to reinterpret source",
-      "DB_QUERY_FAILED",
-      "APIError:reinterpret"
-    );
-  }
-});
-
-// POST /interpret-uninterpreted - Re-run interpretation for sources without prior interpretations
-app.post("/interpret-uninterpreted", async (req, res) => {
-  const parsed = InterpretUninterpretedRequestSchema.safeParse(req.body);
-  if (!parsed.success) {
-    logWarn("ValidationError:interpret_uninterpreted", req, {
-      issues: parsed.error.issues,
-    });
-    return sendValidationError(res, parsed.error.issues);
-  }
-
-  try {
-    const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
-    const limit = parsed.data.limit ?? 50;
-    const dryRun = parsed.data.dry_run ?? false;
-    const interpretationConfig = parsed.data.interpretation_config;
-    const sourceIds = await listUninterpretedSourceIds(userId, limit);
-
-    if (dryRun) {
-      return res.json({
-        dry_run: true,
-        count: sourceIds.length,
-        would_interpret: sourceIds,
-      });
-    }
-
-    const interpreted: Array<{
-      source_id: string;
-      interpretation_id: string;
-      observations_created: number;
-    }> = [];
-    const errors: Array<{ source_id: string; error: string }> = [];
-
-    for (const sourceId of sourceIds) {
-      try {
-        const result = await runReinterpretForSource(sourceId, interpretationConfig, userId);
-        interpreted.push({
-          source_id: sourceId,
-          interpretation_id: result.interpretationId,
-          observations_created: result.observationsCreated,
-        });
-      } catch (error) {
-        const message =
-          error instanceof Error && error.message.trim().length > 0
-            ? error.message
-            : "Failed to reinterpret source";
-        errors.push({ source_id: sourceId, error: message });
-      }
-    }
-
-    logDebug("Success:interpret_uninterpreted", req, {
-      user_id: userId,
-      processed: interpreted.length,
-      errors: errors.length,
-      limit,
-    });
-    return res.json({
-      dry_run: false,
-      count: interpreted.length,
-      interpreted,
-      errors,
-    });
-  } catch (error) {
-    return handleApiError(
-      req,
-      res,
-      error,
-      "Failed to interpret uninterpreted sources",
-      "DB_QUERY_FAILED",
-      "APIError:interpret_uninterpreted"
-    );
-  }
-});
-
 // POST /correct - Create correction observation to override field value
 app.post("/correct", async (req, res) => {
   const parsed = CorrectEntityRequestSchema.safeParse(req.body);
@@ -4806,6 +4525,115 @@ app.post("/health_check_snapshots", async (req, res) => {
       "Failed to check snapshot health",
       "DB_QUERY_FAILED",
       "APIError:health_check_snapshots"
+    );
+  }
+});
+
+// POST /recompute_snapshots_by_type - Batch recompute all snapshots for an entity type
+app.post("/recompute_snapshots_by_type", async (req, res) => {
+  const schema = z.object({
+    entity_type: z.string(),
+    dry_run: z.boolean().optional().default(false),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn("ValidationError:recompute_snapshots_by_type", req, {
+      issues: parsed.error.issues,
+    });
+    return sendValidationError(res, parsed.error.issues);
+  }
+
+  try {
+    const userId = await getAuthenticatedUserId(req);
+    const { entity_type, dry_run } = parsed.data;
+
+    const { data: snapshots, error: snapError } = await db
+      .from("entity_snapshots")
+      .select("entity_id")
+      .eq("entity_type", entity_type)
+      .eq("user_id", userId);
+
+    if (snapError) {
+      logError("DbError:recompute_snapshots_by_type", req, snapError);
+      return sendError(res, 500, "DB_QUERY_FAILED", snapError.message);
+    }
+
+    const entityIds = (snapshots || []).map((s: { entity_id: string }) => s.entity_id);
+
+    if (dry_run) {
+      return res.json({
+        entity_type,
+        dry_run: true,
+        entities_to_recompute: entityIds.length,
+        entity_ids: entityIds,
+      });
+    }
+
+    const { observationReducer } = await import("./reducers/observation_reducer.js");
+    let recomputed = 0;
+    let errors = 0;
+    const errorDetails: Array<{ entity_id: string; error: string }> = [];
+
+    for (const entityId of entityIds) {
+      try {
+        const { data: observations } = await db
+          .from("observations")
+          .select("*")
+          .eq("entity_id", entityId)
+          .order("observed_at", { ascending: false });
+
+        if (!observations || observations.length === 0) continue;
+
+        const newSnapshot = await observationReducer.computeSnapshot(
+          entityId,
+          observations as any,
+        );
+        if (!newSnapshot) continue;
+
+        const rowWithEmbedding = await prepareEntitySnapshotWithEmbedding({
+          entity_id: newSnapshot.entity_id,
+          entity_type: newSnapshot.entity_type,
+          schema_version: newSnapshot.schema_version,
+          snapshot: newSnapshot.snapshot,
+          computed_at: newSnapshot.computed_at,
+          observation_count: newSnapshot.observation_count,
+          last_observation_at: newSnapshot.last_observation_at,
+          provenance: newSnapshot.provenance,
+          user_id: newSnapshot.user_id,
+        });
+        await upsertEntitySnapshotWithEmbedding(rowWithEmbedding);
+        recomputed++;
+      } catch (err) {
+        errors++;
+        errorDetails.push({
+          entity_id: entityId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    logDebug("Success:recompute_snapshots_by_type", req, {
+      entity_type,
+      total: entityIds.length,
+      recomputed,
+      errors,
+    });
+
+    return res.json({
+      entity_type,
+      total: entityIds.length,
+      recomputed,
+      errors,
+      error_details: errorDetails.length > 0 ? errorDetails : undefined,
+    });
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to recompute snapshots",
+      "DB_QUERY_FAILED",
+      "APIError:recompute_snapshots_by_type"
     );
   }
 });

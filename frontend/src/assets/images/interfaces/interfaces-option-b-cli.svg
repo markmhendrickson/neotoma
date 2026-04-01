@@ -1,63 +1,49 @@
-<svg width="280" height="280" viewBox="0 0 280 280" fill="none" xmlns="http://www.w3.org/2000/svg">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" role="img" aria-label="CLI: terminal window with command prompt">
   <defs>
-    <radialGradient id="cliBg" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(140 140) rotate(90) scale(140)">
-      <stop offset="0" stop-color="#FFF8F2"/>
-      <stop offset="1" stop-color="#FFECDC"/>
+    <radialGradient id="bg_cli" cx="50%" cy="50%" r="65%">
+      <stop offset="0%" stop-color="#c8860a"/>
+      <stop offset="55%" stop-color="#7a4f08"/>
+      <stop offset="100%" stop-color="#2e1800"/>
     </radialGradient>
-    <linearGradient id="cliTerm" x1="32" y1="62" x2="130" y2="214" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#FFFFFF"/>
-      <stop offset="1" stop-color="#FFF6EE"/>
-    </linearGradient>
-    <linearGradient id="cliFlow" x1="116" y1="98" x2="250" y2="186" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#F0A668"/>
-      <stop offset="1" stop-color="#CC7A36"/>
-    </linearGradient>
-    <filter id="cliShadow" x="0" y="0" width="280" height="280" filterUnits="userSpaceOnUse">
-      <feGaussianBlur stdDeviation="7"/>
-    </filter>
+    <radialGradient id="glow_cli" cx="50%" cy="50%" r="42%">
+      <stop offset="0%" stop-color="#ffe8a0" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#c8860a" stop-opacity="0"/>
+    </radialGradient>
   </defs>
+  <rect width="400" height="400" fill="url(#bg_cli)"/>
+  <rect width="400" height="400" fill="url(#glow_cli)"/>
 
-  <rect x="10" y="10" width="260" height="260" rx="20" fill="url(#cliBg)"/>
-  <circle cx="214" cy="66" r="26" fill="#FFDDBF" opacity="0.7"/>
-  <circle cx="70" cy="224" r="30" fill="#FFE2C7" opacity="0.65"/>
+  <!-- Terminal window body -->
+  <rect x="64" y="96" width="272" height="208" rx="12" fill="#f4e8c1" stroke="#4a3510" stroke-width="3"/>
 
-  <g filter="url(#cliShadow)" opacity="0.3">
-    <rect x="26" y="44" width="112" height="188" rx="16" fill="#EFAF7B"/>
-  </g>
-  <rect x="26" y="42" width="112" height="188" rx="16" fill="url(#cliTerm)" stroke="#F0BC8D"/>
-  <rect x="26" y="42" width="112" height="28" rx="16" fill="#FFE5D0"/>
-  <circle cx="42" cy="56" r="3.5" fill="#F58A8A"/>
-  <circle cx="54" cy="56" r="3.5" fill="#F2BE67"/>
-  <circle cx="66" cy="56" r="3.5" fill="#78C89B"/>
+  <!-- Title bar -->
+  <rect x="64" y="96" width="272" height="34" rx="12" fill="#e0cc99" stroke="#4a3510" stroke-width="3"/>
+  <rect x="64" y="117" width="272" height="13" fill="#e0cc99"/>
+  <!-- Window control dots -->
+  <circle cx="90" cy="113" r="6" fill="#c8a45a" stroke="#4a3510" stroke-width="1.5"/>
+  <circle cx="110" cy="113" r="6" fill="#c8a45a" stroke="#4a3510" stroke-width="1.5"/>
+  <circle cx="130" cy="113" r="6" fill="#c8a45a" stroke="#4a3510" stroke-width="1.5"/>
 
-  <g fill="#CF8343">
-    <path d="M40 92L50 98L40 104V92Z"/>
-    <path d="M40 128L50 134L40 140V128Z"/>
-    <path d="M40 164L50 170L40 176V164Z"/>
-  </g>
-  <g fill="#E4A26D">
-    <rect x="56" y="96" width="54" height="5" rx="2.5"/>
-    <rect x="56" y="132" width="44" height="5" rx="2.5"/>
-    <rect x="56" y="168" width="58" height="5" rx="2.5"/>
-  </g>
+  <!-- Prompt line 1: > neotoma store -->
+  <polygon points="82,152 92,158 82,164" fill="#4a3510"/>
+  <line x1="98" y1="158" x2="186" y2="158" stroke="#4a3510" stroke-width="2.2" stroke-linecap="round"/>
 
-  <path d="M126 98C152 104 165 113 178 127C192 142 208 150 236 156" stroke="url(#cliFlow)" stroke-width="4" stroke-linecap="round"/>
-  <path d="M126 132C151 138 165 146 178 160C191 174 207 182 236 188" stroke="url(#cliFlow)" stroke-width="4" stroke-linecap="round" opacity="0.85"/>
-  <path d="M126 166C149 171 163 179 176 192C190 206 206 214 234 220" stroke="url(#cliFlow)" stroke-width="4" stroke-linecap="round" opacity="0.7"/>
+  <!-- Prompt line 2: > neotoma entities list -->
+  <polygon points="82,186 92,192 82,198" fill="#4a3510"/>
+  <line x1="98" y1="192" x2="210" y2="192" stroke="#4a3510" stroke-width="2.2" stroke-linecap="round"/>
 
-  <g>
-    <circle cx="190" cy="136" r="8" fill="#FFD9B8" stroke="#DD9458"/>
-    <circle cx="210" cy="168" r="8" fill="#FFD9B8" stroke="#DD9458"/>
-    <circle cx="228" cy="200" r="8" fill="#FFD9B8" stroke="#DD9458"/>
-  </g>
+  <!-- Output line (indented, lighter) -->
+  <line x1="98" y1="212" x2="288" y2="212" stroke="#6b4e1f" stroke-width="1.8" stroke-linecap="round" opacity="0.7"/>
+  <line x1="98" y1="226" x2="254" y2="226" stroke="#6b4e1f" stroke-width="1.8" stroke-linecap="round" opacity="0.7"/>
 
-  <rect x="172" y="118" width="78" height="118" rx="12" fill="#FFFFFF" stroke="#F0BC8D"/>
-  <circle cx="188" cy="140" r="5" fill="#F7C79D"/>
-  <rect x="198" y="137" width="40" height="6" rx="3" fill="#F4D2B2"/>
-  <circle cx="188" cy="166" r="5" fill="#F7C79D"/>
-  <rect x="198" y="163" width="40" height="6" rx="3" fill="#F4D2B2"/>
-  <circle cx="188" cy="192" r="5" fill="#F7C79D"/>
-  <rect x="198" y="189" width="40" height="6" rx="3" fill="#F4D2B2"/>
-  <circle cx="188" cy="218" r="5" fill="#F7C79D"/>
-  <rect x="198" y="215" width="40" height="6" rx="3" fill="#F4D2B2"/>
+  <!-- Prompt line 3: > neotoma correct -->
+  <polygon points="82,252 92,258 82,264" fill="#4a3510"/>
+  <line x1="98" y1="258" x2="168" y2="258" stroke="#4a3510" stroke-width="2.2" stroke-linecap="round"/>
+
+  <!-- Blinking cursor block -->
+  <rect x="174" y="249" width="12" height="18" rx="2" fill="#4a3510" opacity="0.85"/>
+
+  <!-- Terminal stand -->
+  <rect x="178" y="304" width="44" height="14" rx="4" fill="#e0cc99" stroke="#4a3510" stroke-width="2.2"/>
+  <rect x="158" y="316" width="84" height="10" rx="5" fill="#f4e8c1" stroke="#4a3510" stroke-width="2.2"/>
 </svg>

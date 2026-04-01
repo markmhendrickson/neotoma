@@ -2,6 +2,8 @@
 
 Every **version tag** published to GitHub MUST have a matching **[GitHub Release](https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository)** with human-readable notes. Tags alone are not enough for subscribers and npm users scanning changes.
 
+**Agent workflow:** When the user asks to **prepare a release** (or equivalent), follow `.cursor/skills/create-release/SKILL.md` → **Prepare a release (comprehensive GitHub and npm notes)** and `foundation/development/release_workflow.md` Step 5 — do not use commit lists alone as the narrative.
+
 ## Template layout
 
 1. **Wrap (fixed structure):** [`.github/release_notes_wrap.md`](../../.github/release_notes_wrap.md) — install commands, npm/compare table, commit list, compare link. Do not duplicate this by hand each time.
@@ -27,6 +29,12 @@ Optional custom supplement path:
 npm run -s release-notes:render -- --tag v0.3.11 --supplement path/to/extra.md
 ```
 
+**Skipped npm version:** If a git tag exists but that version was **never published to npm** (registry still on an older semver), set **`--compare-base`** to the **last published npm tag** so the GitHub compare link and commit list match what registry users actually upgrade from:
+
+```bash
+npm run -s release-notes:render -- --tag v0.3.12 --compare-base v0.3.10
+```
+
 ## Create or update the GitHub Release
 
 After the tag exists on `origin`:
@@ -37,6 +45,14 @@ npm run -s release-notes:render -- --tag "$TAG" > /tmp/gh-release-"$TAG".md
 gh release create "$TAG" --title "$TAG" --notes-file /tmp/gh-release-"$TAG".md
 # or if the release already exists:
 gh release edit "$TAG" --notes-file /tmp/gh-release-"$TAG".md
+```
+
+If the **last npm publish** is older than the previous git tag (example: **`v0.3.12`** after **`v0.3.11`** was never on npm):
+
+```bash
+TAG=v0.3.12
+npm run -s release-notes:render -- --tag "$TAG" --compare-base v0.3.10 > /tmp/gh-release-"$TAG".md
+gh release create "$TAG" --title "$TAG" --notes-file /tmp/gh-release-"$TAG".md
 ```
 
 Agent skills [`.cursor/skills/publish/SKILL.md`](../../.cursor/skills/publish/SKILL.md) and [`.cursor/skills/create-release/SKILL.md`](../../.cursor/skills/create-release/SKILL.md) require this flow for all future releases.

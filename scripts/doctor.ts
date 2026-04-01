@@ -57,11 +57,12 @@ function run(): void {
       : "N/A (no .env)",
   });
 
-  // Database / Tables / RLS / Migrations / MCP: placeholder for full implementation
+  // Database: local SQLite; schema applied on open (see sqlite_client)
   results.push({
     name: "Database",
     status: "warn",
-    message: "Run migrations and check:advisors for full verification",
+    message:
+      "Local SQLite: run npm run migrate (no-op) and tests for full verification",
   });
   results.push({
     name: "MCP",

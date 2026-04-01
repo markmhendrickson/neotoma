@@ -10,8 +10,8 @@ test.describe("sitePage coverage", () => {
     expect(title).toContain("Neotoma");
 
     await expect(page.locator("#intro")).toBeVisible();
-    await expect(page.locator("#architecture")).toBeAttached();
-    await expect(page.locator("#install")).toBeAttached();
+    await expect(page.locator("#outcomes")).toBeAttached();
+    await expect(page.locator("#memory-guarantees")).toBeAttached();
   });
 
   test("section controls render on desktop viewport", async ({ page}, testInfo) => {
@@ -22,7 +22,7 @@ test.describe("sitePage coverage", () => {
 
     const pageSections = page.getByRole("navigation", { name: /page sections/i });
     await expect(pageSections).toBeVisible();
-    await expect(pageSections.getByRole("button")).toHaveCount(10);
+    await expect(pageSections.getByRole("button")).toHaveCount(6);
   });
 
   test("renders learn more links", async ({ page }) => {
@@ -34,26 +34,26 @@ test.describe("sitePage coverage", () => {
   });
 
   test("loads hashed section into view on initial page load", async ({ page }) => {
-    await page.goto("/#install");
+    await page.goto("/#evaluate");
     await page.waitForLoadState("networkidle");
 
-    await expect.poll(() => page.url()).toContain("#install");
+    await expect.poll(() => page.url()).toContain("#evaluate");
 
-    const installSectionInView = await page.locator("#install").evaluate((el) => {
+    const evaluateSectionInView = await page.locator("#evaluate").evaluate((el) => {
       const rect = el.getBoundingClientRect();
       const probeY = window.innerHeight * 0.35;
       return rect.top <= probeY && rect.bottom >= probeY;
     });
-    expect(installSectionInView).toBe(true);
+    expect(evaluateSectionInView).toBe(true);
   });
 
   test("updates URL hash as active section changes", async ({ page }) => {
     await page.goto("/");
     await page.waitForLoadState("networkidle");
 
-    await page.locator("#use-cases").scrollIntoViewIfNeeded();
+    await page.locator("#record-types").scrollIntoViewIfNeeded();
 
-    await expect.poll(() => page.url()).toContain("#use-cases");
+    await expect.poll(() => page.url()).toContain("#record-types");
   });
 
   test("subpage routes render with back-to-home link", async ({ page }) => {
@@ -64,6 +64,8 @@ test.describe("sitePage coverage", () => {
       { path: "/mcp" },
       { path: "/cli" },
       { path: "/docs" },
+      { path: "/evaluate" },
+      { path: "/install" },
     ];
 
     for (const sp of subpages) {
@@ -73,6 +75,31 @@ test.describe("sitePage coverage", () => {
       await expect
         .poll(() => page.url())
         .toContain(sp.path);
+    }
+  });
+
+  test("evaluate page documents the canonical onboarding sequence", async ({ page }) => {
+    await page.goto("/evaluate");
+    await page.waitForLoadState("networkidle");
+
+    await expect(
+      page.getByText(/evaluation -> installation -> activation -> tooling config/i).first(),
+    ).toBeVisible();
+    await expect(page.getByText(/If it is already installed, skip straight to activation/i)).toBeVisible();
+    await expect(page.getByRole("link", { name: /installation guide/i }).first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: /agent resource map/i })).toBeVisible();
+    await expect(page.getByRole("link", { name: "ChatGPT" }).first()).toBeVisible();
+    await expect(page.locator('a[href="/neotoma-with-claude"]').first()).toBeVisible();
+    await expect(page.locator('a[href="/neotoma-with-cursor"]').first()).toBeVisible();
+  });
+
+  test("install and integration pages funnel users to evaluation first", async ({ page }) => {
+    const routes = ["/install", "/neotoma-with-chatgpt", "/neotoma-with-claude", "/neotoma-with-cursor"];
+
+    for (const path of routes) {
+      await page.goto(path);
+      await page.waitForLoadState("networkidle");
+      await expect(page.getByText(/Start with evaluation/i).first()).toBeVisible();
     }
   });
 

@@ -86,15 +86,13 @@ describe("Cross-layer: CLI store commands → Database", () => {
       });
     });
 
-    it("should not create interpretation when --interpret false", async () => {
+    it("should not create interpretation records for raw file store", async () => {
       const filePath = await files.createText(
         "store-no-interp.txt",
         "Plain text content without interpretation"
       );
 
-      const result = await execCliJson(
-        `store --file-path "${filePath}" --user-id "${TEST_USER_ID}" --interpret false`
-      );
+      const result = await execCliJson(`store --file-path "${filePath}" --user-id "${TEST_USER_ID}"`);
 
       const sourceId = extractSourceId(result);
       tracker.trackSource(sourceId);

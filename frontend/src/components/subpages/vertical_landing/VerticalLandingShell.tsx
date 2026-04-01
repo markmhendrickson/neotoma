@@ -16,9 +16,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { SiClaude, SiOpenai } from "react-icons/si";
 import { SeoHead } from "../../SeoHead";
+import { CodexIcon } from "../../icons/CodexIcon";
 import { CursorIcon } from "../../icons/CursorIcon";
 import { OpenClawIcon } from "../../icons/OpenClawIcon";
-import { sendCtaClick, sendOutboundClick, type CtaName } from "@/utils/analytics";
+import { SiteFooterUtilities } from "@/components/SiteTailpiece";
+import { sendCtaClick, type CtaName } from "@/utils/analytics";
 import { VerticalIconTile } from "./VerticalIconTile";
 
 /** Readable label for hero chips: `auth_decision` → "Auth Decision", preserves acronyms like LP in "LP commitment". */
@@ -76,19 +78,15 @@ export interface VerticalArchConfig {
 }
 
 export interface VerticalCaseStudy {
-  companyName: string;
-  companyUrl: string;
-  companyDesc: string;
+  headline: string;
+  desc: string;
+  featuresHeading: string;
   features: string[];
   guarantees: string[];
   generalizesTitle: string;
   generalizesDesc: string;
-  /** When set, replaces the default "How {companyName} uses Neotoma…" heading. */
-  headline?: string;
   /** Optional note under the heading (e.g. illustrative scenario disclaimer). */
   disclaimer?: string;
-  /** When set, replaces "What {companyName} does" for the features column title. */
-  whatTheyDoHeading?: string;
 }
 
 export interface VerticalConfig {
@@ -408,7 +406,7 @@ const T: Record<AccentColor, VTheme> = {
 /* ------------------------------------------------------------------ */
 
 const SLIDE_CLASS = "min-h-[100svh] md:snap-start flex items-center justify-center relative";
-const SLIDE_INNER = "w-full max-w-6xl mx-auto px-6 md:px-12 lg:px-16 py-20 md:py-12";
+const SLIDE_INNER = "w-full max-w-6xl mx-auto px-6 md:px-12 lg:px-16 py-12";
 
 const LANDING_SECTIONS = [
   { id: "hero", label: "Overview" },
@@ -1006,6 +1004,7 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
       <SeoHead />
       <div
         ref={scrollContainerRef}
+        data-site-header-scroll-root
         className="h-screen overflow-y-auto scroll-smooth md:snap-y md:snap-mandatory"
       >
         {/* Dot nav */}
@@ -1119,7 +1118,7 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
                         to="/neotoma-with-codex"
                         className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[12px] text-foreground/90 no-underline transition-colors hover:bg-muted hover:border-border"
                       >
-                        <SiOpenai className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                        <CodexIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
                         Codex
                       </Link>
                       <Link
@@ -1411,8 +1410,7 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
                   In practice
                 </p>
                 <h2 className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
-                  {config.caseStudy.headline ??
-                    `How ${config.caseStudy.companyName} uses Neotoma as its integrity layer`}
+                  {config.caseStudy.headline}
                 </h2>
                 {config.caseStudy.disclaimer ? (
                   <p className="max-w-2xl rounded-md border border-border bg-muted/40 px-3 py-2 text-[13px] leading-5 text-muted-foreground">
@@ -1420,21 +1418,7 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
                   </p>
                 ) : null}
                 <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl">
-                  <a
-                    href={config.caseStudy.companyUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-medium text-foreground underline underline-offset-2 hover:no-underline"
-                    onClick={() =>
-                      sendOutboundClick(
-                        config.caseStudy.companyUrl,
-                        `${config.caseStudy.companyName} case study`
-                      )
-                    }
-                  >
-                    {config.caseStudy.companyName}
-                  </a>{" "}
-                  {config.caseStudy.companyDesc}
+                  {config.caseStudy.desc}
                 </p>
               </div>
               <div className="grid gap-6 md:grid-cols-2">
@@ -1442,8 +1426,7 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
                   <div className="flex items-center gap-2">
                     <Building2 className="h-4 w-4 text-sky-500" />
                     <span className="text-[14px] font-medium text-foreground">
-                      {config.caseStudy.whatTheyDoHeading ??
-                        `What ${config.caseStudy.companyName} does`}
+                      {config.caseStudy.featuresHeading}
                     </span>
                   </div>
                   <ul className="list-none pl-0 space-y-2.5">
@@ -1494,21 +1477,15 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
                 </div>
               </div>
               <div className="flex flex-wrap gap-3">
-                <a
-                  href={config.caseStudy.companyUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-4 py-2 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
+                <Link
+                  to="/install"
+                  className={`inline-flex items-center gap-1.5 rounded-md border px-4 py-2 text-[14px] font-medium text-white no-underline shadow-sm transition-colors ${t.cta}`}
                   onClick={() =>
-                    sendOutboundClick(
-                      config.caseStudy.companyUrl,
-                      `${config.caseStudy.companyName} visit`
-                    )
+                    sendCtaClick(`${config.analyticsPrefix}_case_study_install` as CtaName)
                   }
                 >
-                  Visit {config.caseStudy.companyName}
-                  <ArrowRight className="h-4 w-4" />
-                </a>
+                  Install Neotoma
+                </Link>
                 <Link
                   to="/memory-guarantees"
                   className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-4 py-2 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
@@ -1583,6 +1560,11 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
             </div>
           </div>
         </section>
+        <div className="shrink-0 border-t border-border bg-background md:snap-start md:snap-always">
+          <div className="mx-auto max-w-6xl px-6 py-5 md:px-10">
+            <SiteFooterUtilities />
+          </div>
+        </div>
       </div>
     </>
   );

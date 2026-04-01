@@ -4,6 +4,7 @@ import { GLOSSARY_ROWS } from "../../site/site_data";
 import { DetailPage } from "../DetailPage";
 import { StateFlowDiagram } from "../illustrations/StateFlowDiagram";
 import { SectionDivider } from "../ui/section_divider";
+import { DOC_TABLE_SCROLL_OUTER_CLASS, TableScrollWrapper } from "../ui/table-scroll-wrapper";
 
 const FOUNDATIONS = [
   {
@@ -27,7 +28,7 @@ const PROBLEMS_SOLVED = [
   {
     problem: "Personal data is fragmented",
     solution:
-      "Dual-path storing from file uploads and agent interactions into one source of truth.",
+      "Structured agent-authored data consolidated into one provenance-backed source of truth.",
   },
   {
     problem: "Provider memory is conversation-only",
@@ -66,7 +67,7 @@ const GUARANTEES = [
   {
     name: "Full provenance",
     detail:
-      'Every field traces to a source, timestamp, and interpretation. You can always answer "where did this value come from?"',
+      'Every field traces to a source, timestamp, and store operation. You can always answer "where did this value come from?"',
   },
   {
     name: "Immutable history",
@@ -123,12 +124,15 @@ const CORE_PRINCIPLES = [
     detail: "User-controlled. Never used for training. Encryption at rest.",
   },
   { name: "Immutable", detail: "Observations are append-only. History is never rewritten." },
-  { name: "Provenance", detail: "Every fact links to its source, timestamp, and interpretation." },
+  { name: "Provenance", detail: "Every fact links to its source, timestamp, and ingestion operation." },
   {
     name: "Explicit control",
     detail: "Nothing updates memory implicitly. The user decides what goes in.",
   },
-  { name: "Four-layer model", detail: "Source → Interpretation → Observation → Entity Snapshot." },
+  {
+    name: "Four-layer model",
+    detail: "Structured payloads → Observations → Entity snapshots → Memory graph.",
+  },
 ];
 
 const RESPONSIVE_TABLE_CLASS =
@@ -152,6 +156,9 @@ function SectionHeading({ id, children }: { id: string; children: string }) {
 export function ArchitecturePage() {
   return (
     <DetailPage title="Architecture">
+      <p className="text-[16px] leading-7 font-medium text-foreground mb-6">
+        Neotoma's architecture is built on three foundations: append-only observation logs for immutability, deterministic reducers for consistent state composition, and schema-bound entity types for structural guarantees.
+      </p>
       {/* The invariant */}
       <section className="mb-6">
         <p className="text-[15px] leading-7 font-medium text-foreground mb-4">
@@ -173,8 +180,8 @@ export function ArchitecturePage() {
         <StateFlowDiagram />
       </div>
       <div className="rounded-lg border code-block-palette p-4 md:p-5 font-mono text-[13px] leading-6 overflow-x-auto mb-6">
-        <p className="mb-1">Source (file, text, structured JSON)</p>
-        <p className="mb-1 text-muted-foreground pl-4">&darr; interpret</p>
+        <p className="mb-1">Structured payloads (entities JSON via MCP / CLI / REST)</p>
+        <p className="mb-1 text-muted-foreground pl-4">&darr; record observations</p>
         <p className="mb-1">Observations (granular facts with provenance)</p>
         <p className="mb-1 text-muted-foreground pl-4">&darr; reduce (deterministic)</p>
         <p className="mb-1">Entity snapshots (current truth, versioned)</p>
@@ -187,50 +194,30 @@ export function ArchitecturePage() {
       {/* How data enters */}
       <SectionHeading id="how-data-enters">How data enters Neotoma</SectionHeading>
       <p className="text-[15px] leading-7 mb-4">
-        Data enters through two paths. Which path runs depends on what the caller sends.
+        Data enters through <code className="bg-muted px-1 py-0.5 rounded text-[13px]">store</code>{" "}
+        with a structured <code className="bg-muted px-1 py-0.5 rounded text-[13px]">entities</code>{" "}
+        array (MCP, CLI, or REST). Observations are created from that payload; there is no
+        server-side file interpretation or LLM extraction pipeline.
       </p>
 
-      <div className="grid gap-4 md:grid-cols-2 mb-6">
-        <div className="rounded-lg border border-border bg-card p-4 md:p-5 space-y-3">
-          <p className="text-[14px] font-medium text-foreground">Structured path</p>
-          <p className="text-[13px] leading-5 text-muted-foreground">
-            Agent calls <code className="bg-muted px-1 py-0.5 rounded text-[12px]">store</code> with
-            an <code className="bg-muted px-1 py-0.5 rounded text-[12px]">entities</code> array
-            (typed JSON). Observations are created directly. No LLM calls. No interpretation pipeline.
-          </p>
-          <p className="text-[13px] leading-5 text-muted-foreground">
-            The agent&apos;s own reasoning produces the structured data. Neotoma validates against schema,
-            deduplicates, and records with full provenance.
-          </p>
-          <p className="text-[12px] font-mono text-emerald-600 dark:text-emerald-400">
-            Chat, tool output, agent-extracted facts &rarr; this path.
-          </p>
-        </div>
-        <div className="rounded-lg border border-border bg-card p-4 md:p-5 space-y-3">
-          <p className="text-[14px] font-medium text-foreground">Unstructured path</p>
-          <p className="text-[13px] leading-5 text-muted-foreground">
-            Caller sends a file (PDF, image, CSV, text). Neotoma stores the raw content
-            (content-addressed, immutable), then runs interpretation: text extraction followed by
-            schema-first entity extraction.
-          </p>
-          <p className="text-[13px] leading-5 text-muted-foreground">
-            CSV files use deterministic row mapping (no LLM). Other files use LLM extraction
-            with <code className="bg-muted px-1 py-0.5 rounded text-[12px]">temperature:&nbsp;0</code> and
-            a fixed seed for reproducibility. Interpretation creates new observations without modifying the source.
-          </p>
-          <p className="text-[12px] font-mono text-emerald-600 dark:text-emerald-400">
-            File uploads, document ingestion &rarr; this path.
-          </p>
-        </div>
+      <div className="rounded-lg border border-border bg-card p-4 md:p-5 space-y-3 mb-6">
+        <p className="text-[14px] font-medium text-foreground">Structured ingestion</p>
+        <p className="text-[13px] leading-5 text-muted-foreground">
+          Callers pass typed JSON entities. Neotoma validates against schema, deduplicates, and
+          records observations with full provenance. No LLM runs inside the store path.
+        </p>
+        <p className="text-[13px] leading-5 text-muted-foreground">
+          The agent&apos;s own reasoning (or your app) produces the structured data. Chat, tool
+          output, and agent-extracted facts all land here.
+        </p>
       </div>
 
       <p className="text-[15px] leading-7 font-medium text-foreground mb-2">
         The agent is the author; Neotoma is the ledger.
       </p>
       <p className="text-[14px] leading-6 text-muted-foreground mb-2">
-        Most agent interactions use the structured path. The agent decides what to store; Neotoma
-        ensures it is schema-valid, deduplicated, and provenance-tracked. There is no hidden LLM
-        between the agent and the data layer.
+        The agent decides what to store; Neotoma ensures it is schema-valid, deduplicated, and
+        provenance-tracked. There is no hidden LLM between the caller and the data layer.
       </p>
 
       <SectionDivider />
@@ -254,30 +241,32 @@ export function ArchitecturePage() {
 
       {/* Three foundations */}
       <SectionHeading id="foundations">Three foundations</SectionHeading>
-      <table className={RESPONSIVE_TABLE_CLASS}>
-        <thead>
-          <tr>
-            <th className="min-w-[14ch]">Foundation</th>
-            <th className="min-w-[36ch]">What it means</th>
-          </tr>
-        </thead>
-        <tbody>
-          {FOUNDATIONS.map((f) => (
-            <tr key={f.name}>
-              <td data-label="Foundation" className="font-medium">
-                {f.name}
-              </td>
-              <td data-label={f.name} className="align-top">
-                {f.detail}
-              </td>
+      <TableScrollWrapper className={DOC_TABLE_SCROLL_OUTER_CLASS}>
+        <table className={RESPONSIVE_TABLE_CLASS}>
+          <thead>
+            <tr>
+              <th className="min-w-[14ch]">Foundation</th>
+              <th className="min-w-[36ch]">What it means</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {FOUNDATIONS.map((f) => (
+              <tr key={f.name}>
+                <td data-label="Foundation" className="font-medium">
+                  {f.name}
+                </td>
+                <td data-label={f.name} className="align-top">
+                  {f.detail}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </TableScrollWrapper>
       <p className="text-[14px] leading-6 text-muted-foreground mt-4">
         These enable: immutable audit trail and time-travel queries, cryptographic integrity,
         event-sourced history, entity resolution across documents and agent data, timeline
-        generation, dual-path storing (files + agent interactions), and persistent memory without
+        generation, structured ingestion via MCP/CLI/API, and persistent memory without
         context-window limits.
       </p>
 
@@ -344,51 +333,55 @@ export function ArchitecturePage() {
 
       {/* Problems solved */}
       <SectionHeading id="problems-solved">Problems solved</SectionHeading>
-      <table className={RESPONSIVE_TABLE_CLASS}>
-        <thead>
-          <tr>
-            <th className="min-w-[18ch]">Problem</th>
-            <th className="min-w-[36ch]">How Neotoma addresses it</th>
-          </tr>
-        </thead>
-        <tbody>
-          {PROBLEMS_SOLVED.map((row) => (
-            <tr key={row.problem}>
-              <td data-label="Problem" className="font-medium">
-                {row.problem}
-              </td>
-              <td data-label={row.problem} className="align-top">
-                {row.solution}
-              </td>
+      <TableScrollWrapper className={DOC_TABLE_SCROLL_OUTER_CLASS}>
+        <table className={RESPONSIVE_TABLE_CLASS}>
+          <thead>
+            <tr>
+              <th className="min-w-[18ch]">Problem</th>
+              <th className="min-w-[36ch]">How Neotoma addresses it</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {PROBLEMS_SOLVED.map((row) => (
+              <tr key={row.problem}>
+                <td data-label="Problem" className="font-medium">
+                  {row.problem}
+                </td>
+                <td data-label={row.problem} className="align-top">
+                  {row.solution}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </TableScrollWrapper>
 
       <SectionDivider />
 
       {/* Terminology */}
       <SectionHeading id="terminology">Core terminology</SectionHeading>
-      <table className={RESPONSIVE_TABLE_CLASS}>
-        <thead>
-          <tr>
-            <th className="min-w-[14ch]">Term</th>
-            <th className="min-w-[36ch]">Definition</th>
-          </tr>
-        </thead>
-        <tbody>
-          {GLOSSARY_ROWS.map((row) => (
-            <tr key={row.term}>
-              <td data-label="Term" className="font-medium">
-                {row.term}
-              </td>
-              <td data-label={row.term} className="align-top">
-                {row.definition}
-              </td>
+      <TableScrollWrapper className={DOC_TABLE_SCROLL_OUTER_CLASS}>
+        <table className={RESPONSIVE_TABLE_CLASS}>
+          <thead>
+            <tr>
+              <th className="min-w-[14ch]">Term</th>
+              <th className="min-w-[36ch]">Definition</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {GLOSSARY_ROWS.map((row) => (
+              <tr key={row.term}>
+                <td data-label="Term" className="font-medium">
+                  {row.term}
+                </td>
+                <td data-label={row.term} className="align-top">
+                  {row.definition}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </TableScrollWrapper>
 
       <SectionDivider />
 

@@ -4,6 +4,7 @@
  */
 
 import { describe, it, expect, beforeAll } from "vitest";
+import semver from "semver";
 import { NeotomaServer } from "../../src/server.js";
 
 describe("MCP npm_check_update tool", () => {
@@ -50,5 +51,58 @@ describe("MCP npm_check_update tool", () => {
     const data = JSON.parse(result.content[0].text);
     expect(data.updateAvailable).toBe(false);
     expect(typeof data.message).toBe("string");
+  });
+
+  it("adds an initialize notice for stdio sessions when a newer package version is cached", async () => {
+    const metadata = (server as any).getInstalledPackageMetadata() as {
+      packageName: string;
+      currentVersion: string;
+    };
+    const newerVersion = semver.inc(metadata.currentVersion, "patch") ?? "999.999.999";
+
+    (server as any).registryCache.set(`${metadata.packageName}:latest`, {
+      version: newerVersion,
+      until: Date.now() + 60_000,
+    });
+
+    const notice = await (server as any).getInitializeUpdateNotice(false);
+
+    expect(notice).toContain(metadata.packageName);
+    expect(notice).toContain(metadata.currentVersion);
+    expect(notice).toContain(newerVersion);
+    expect(notice).toContain(`npm i -g ${metadata.packageName}@latest`);
+  });
+
+  it("skips the initialize notice for HTTP transport sessions", async () => {
+    const notice = await (server as any).getInitializeUpdateNotice(true);
+    expect(notice).toBeNull();
+  });
+
+  it("emits a runtime notice once for a newly detected update", async () => {
+    const metadata = (server as any).getInstalledPackageMetadata() as {
+      packageName: string;
+      currentVersion: string;
+    };
+    const newerVersion = semver.inc(metadata.currentVersion, "patch") ?? "999.999.999";
+
+    (server as any).isHTTPTransportSession = false;
+    (server as any).nextRuntimeUpdateCheckAt = 0;
+    (server as any).lastNotifiedUpdateVersion = null;
+    (server as any).registryCache.set(`${metadata.packageName}:latest`, {
+      version: newerVersion,
+      until: Date.now() + 60_000,
+    });
+
+    const first = await (server as any).consumeRuntimeUpdateNotice();
+    const second = await (server as any).consumeRuntimeUpdateNotice();
+
+    expect(first).toContain(newerVersion);
+    expect(second).toBeNull();
+  });
+
+  it("suppresses runtime checks until the throttle window expires", async () => {
+    (server as any).nextRuntimeUpdateCheckAt = Date.now() + 60_000;
+    const notice = await (server as any).consumeRuntimeUpdateNotice();
+    expect(notice).toBeNull();
   });
 });

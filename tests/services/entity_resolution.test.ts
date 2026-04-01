@@ -7,6 +7,7 @@
 import { describe, it, expect } from "vitest";
 import {
   deriveCanonicalNameFromFields,
+  formatCanonicalNameForStorage,
   generateEntityId,
   normalizeEntityValue,
 } from "../../src/services/entity_resolution.js";
@@ -134,9 +135,21 @@ describe("Entity Resolution Service", () => {
       });
     });
 
+    describe("Person/contact normalization", () => {
+      it("should remove honorifics for person type", () => {
+        expect(normalizeEntityValue("person", "Dr. John Doe")).toBe("john doe");
+        expect(normalizeEntityValue("person", "Mr. Smith")).toBe("smith");
+        expect(normalizeEntityValue("contact", "Mrs. Jane Doe")).toBe("jane doe");
+      });
+
+      it("should remove generational suffixes for person type", () => {
+        expect(normalizeEntityValue("person", "John Doe Jr.")).toBe("john doe");
+        expect(normalizeEntityValue("person", "John Doe III")).toBe("john doe");
+      });
+    });
+
     describe("Non-company normalization", () => {
-      it("should not remove suffixes for non-company types", () => {
-        expect(normalizeEntityValue("person", "John Inc")).toBe("john inc");
+      it("should not remove company suffixes for non-company types", () => {
         expect(normalizeEntityValue("product", "Widget Corp")).toBe("widget corp");
       });
 
@@ -159,7 +172,6 @@ describe("Entity Resolution Service", () => {
       });
 
       it("should handle special characters", () => {
-        // "Co." is treated as company suffix and removed
         expect(normalizeEntityValue("company", "Acme & Co.")).toBe("acme &");
         expect(normalizeEntityValue("company", "AT&T Inc")).toBe("at&t");
       });
@@ -180,9 +192,15 @@ describe("Entity Resolution Service", () => {
       });
 
       it("should handle company with suffix in middle", () => {
-        // Should NOT remove suffix if it's not at the end
         expect(normalizeEntityValue("company", "Inc Acme")).toBe("inc acme");
         expect(normalizeEntityValue("company", "Corp Acme Corp")).toBe("corp acme");
+      });
+
+      it("should strip punctuation for consistent matching", () => {
+        expect(normalizeEntityValue("company", "Acme, Inc.")).toBe("acme");
+        expect(normalizeEntityValue("person", "John-Paul Doe")).toBe("john paul doe");
+        expect(normalizeEntityValue("task", "Follow up (urgent)")).toBe("follow up urgent");
+        expect(normalizeEntityValue("company", "O'Reilly")).toBe("o reilly");
       });
     });
 
@@ -216,6 +234,47 @@ describe("Entity Resolution Service", () => {
     });
   });
 
+  describe("formatCanonicalNameForStorage", () => {
+    it("preserves email shape for contact identifiers (no hyphen stripping)", () => {
+      expect(normalizeEntityValue("contact", "shared-user@example.com")).toBe(
+        "shared-user@example.com",
+      );
+      expect(formatCanonicalNameForStorage("contact", "Shared-User@Example.com")).toBe(
+        "shared-user@example.com",
+      );
+    });
+
+    it("preserves casing while matching normalizeEntityValue for hashing", () => {
+      const raw = "Acme Corp";
+      const stored = formatCanonicalNameForStorage("company", raw);
+      expect(stored).toBe("Acme");
+      expect(normalizeEntityValue("company", stored)).toBe(
+        normalizeEntityValue("company", raw),
+      );
+      expect(generateEntityId("company", stored)).toBe(
+        generateEntityId("company", raw),
+      );
+    });
+
+    it("preserves mixed case for non-company types", () => {
+      const raw = "Quarterly OKR Review";
+      const stored = formatCanonicalNameForStorage("task", raw);
+      expect(stored).toBe("Quarterly OKR Review");
+      expect(normalizeEntityValue("task", stored)).toBe(
+        normalizeEntityValue("task", raw),
+      );
+    });
+
+    it("strips honorifics without lowercasing person names", () => {
+      expect(formatCanonicalNameForStorage("person", "Dr. Jane Doe")).toBe(
+        "Jane Doe",
+      );
+      expect(normalizeEntityValue("person", "Dr. Jane Doe")).toBe(
+        normalizeEntityValue("person", "Jane Doe"),
+      );
+    });
+  });
+
   describe("deriveCanonicalNameFromFields", () => {
     it("should prefer stable IDs over metadata fields (email_message)", () => {
       const canonical = deriveCanonicalNameFromFields("email_message", {
@@ -242,6 +301,42 @@ describe("Entity Resolution Service", () => {
       });
 
       expect(generateEntityId("email_message", c1)).not.toBe(generateEntityId("email_message", c2));
+    });
+
+    it("should prioritize turn_key for agent_message identity", () => {
+      const canonical = deriveCanonicalNameFromFields("agent_message", {
+        role: "user",
+        content: "",
+        turn_key: "cursor:chat:turn-7",
+      });
+
+      expect(canonical).toContain("turn_key");
+      expect(canonical).toContain("cursor:chat:turn-7");
+    });
+
+    it("should generate different IDs for empty-content agent messages with different turn_key", () => {
+      const c1 = deriveCanonicalNameFromFields("agent_message", {
+        role: "user",
+        content: "",
+        turn_key: "cursor:chat:turn-1",
+      });
+      const c2 = deriveCanonicalNameFromFields("agent_message", {
+        role: "user",
+        content: "",
+        turn_key: "cursor:chat:turn-2",
+      });
+
+      expect(generateEntityId("agent_message", c1)).not.toBe(generateEntityId("agent_message", c2));
+    });
+
+    it("preserves source casing for name-based entities", () => {
+      const canonical = deriveCanonicalNameFromFields("company", {
+        name: "Acme Corporation",
+      });
+      expect(canonical).toBe("Acme");
+      expect(generateEntityId("company", canonical)).toBe(
+        generateEntityId("company", "acme corp"),
+      );
     });
   });
 

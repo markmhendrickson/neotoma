@@ -231,10 +231,10 @@ const CONFIG: VerticalConfig = {
     },
   ],
   caseStudy: {
-    companyName: "LedgerAI",
-    companyUrl: "https://ledgerai.example.com",
-    companyDesc:
-      "is a fictional AI-native financial close and reconciliation platform that automates bank tie-outs, exception routing, and GL posting for mid-market and enterprise finance teams.",
+    headline: "How financial operations teams use Neotoma as their integrity layer",
+    desc:
+      "AI-native financial close and reconciliation platforms automate bank tie-outs, exception routing, and GL posting for mid-market and enterprise finance teams. Neotoma versions every match decision, journal proposal, and recon entry so you can reconstruct close state at any audit date.",
+    featuresHeading: "What financial operations teams build",
     features: [
       "Continuous bank-to-ledger matching with agent-proposed categorization across thousands of daily transactions",
       "Close calendars that orchestrate recon sign-offs and material account certifications",
@@ -248,7 +248,7 @@ const CONFIG: VerticalConfig = {
     ],
     generalizesTitle: "If you run agent-assisted close and recon, you share the same risk surface",
     generalizesDesc:
-      "Any team blending bank feeds, ERP, and autonomous matching or categorization needs the same guarantees: no silent recon overwrites, no orphan adjustments, and no guessing which snapshot was live on Dec 31. Neotoma generalizes the LedgerAI pattern to your stack.",
+      "Any team blending bank feeds, ERP, and autonomous matching or categorization needs the same guarantees: no silent recon overwrites, no orphan adjustments, and no guessing which snapshot was live on Dec 31. Neotoma generalizes the pattern to your stack.",
   },
   ctaHeadline: "Ship finance agents that can defend",
   ctaHighlight: "every balance they explain",

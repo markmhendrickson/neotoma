@@ -158,7 +158,7 @@ With API running (e.g. `npm run dev:server` on port 3080):
 - [ ] `GET /api/timeline` returns timeline events with optional filters
 - [ ] `GET /api/schemas`, `GET /api/schemas/{entity_type}` return schema info
 - [ ] `POST /api/observations/create` (or equivalent) creates observation when supported
-- [ ] OAuth: `GET /api/mcp/oauth/authorize` and callback/token flow work for MCP Connect
+- [ ] OAuth: `GET /mcp/oauth/authorize` and callback/token flow work for MCP Connect
 
 ---
 

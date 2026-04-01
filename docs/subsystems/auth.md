@@ -24,14 +24,14 @@ MCP clients MUST authenticate using OAuth 2.0 Authorization Code flow with PKCE 
 
 **Authentication Flow:**
 
-1. MCP client initiates OAuth via `POST /api/mcp/oauth/initiate` with `connection_id`
+1. MCP client initiates OAuth via `POST /mcp/oauth/initiate` with `connection_id`
 2. Backend generates PKCE challenge and returns authorization URL
 3. User opens authorization URL in browser and signs in
 4. User approves connection
 5. Auth provider redirects to callback URL with authorization code
 6. Backend exchanges code for access token and refresh token
 7. Backend stores encrypted refresh token in database
-8. MCP client polls `GET /api/mcp/oauth/status` until status is "active"
+8. MCP client polls `GET /mcp/oauth/status` until status is "active"
 9. MCP client passes `connection_id` in environment variable during initialization
 10. MCP server retrieves refresh token, obtains access token, extracts `user_id`
 11. All subsequent MCP actions use authenticated `user_id`
@@ -50,11 +50,11 @@ MCP clients MUST authenticate using OAuth 2.0 Authorization Code flow with PKCE 
 
 **OAuth Endpoints:**
 
-- `POST /api/mcp/oauth/initiate` - Start OAuth flow, get authorization URL
-- `GET /api/mcp/oauth/callback` - OAuth callback, exchange code for tokens
-- `GET /api/mcp/oauth/status` - Check connection status
-- `GET /api/mcp/oauth/connections` - List user's connections (authenticated)
-- `DELETE /api/mcp/oauth/connections/:connection_id` - Revoke connection (authenticated)
+- `POST /mcp/oauth/initiate` - Start OAuth flow, get authorization URL
+- `GET /mcp/oauth/callback` - OAuth callback, exchange code for tokens
+- `GET /mcp/oauth/status` - Check connection status
+- `GET /mcp/oauth/connections` - List user's connections (authenticated)
+- `DELETE /mcp/oauth/connections/:connection_id` - Revoke connection (authenticated)
 
 **Security:**
 
@@ -71,11 +71,11 @@ Local mode uses a built-in auth provider. OAuth endpoints remain the same, but t
 
 **Local flow summary (key-gated OAuth):**
 
-1. Client opens `GET /api/mcp/oauth/authorize` with PKCE parameters.
+1. Client opens `GET /mcp/oauth/authorize` with PKCE parameters.
 2. If the browser session has not been key-authenticated, Neotoma redirects to `/mcp/oauth/key-auth`.
 3. User provides private key hex or mnemonic (plus optional passphrase); Neotoma validates against configured key source and caches a short-lived session.
 4. Neotoma continues to local-login and creates OAuth connection for the local dev user, then redirects with `code` and `state`.
-5. Client exchanges `code` at `POST /api/mcp/oauth/token` and uses the returned access token.
+5. Client exchanges `code` at `POST /mcp/oauth/token` and uses the returned access token.
 
 **OAuth with local backend (encryption off):**
 
@@ -90,7 +90,7 @@ The redirect to the local login page uses `NEOTOMA_HOST_URL` (or the default `ht
 
 **Deployment with multiple instances (local backend):**
 
-OAuth state for the local login flow is stored in SQLite. If more than one API instance is running (e.g. multiple pods or processes behind a load balancer), the instance that serves `/api/mcp/oauth/authorize` may not be the one that serves `/api/mcp/oauth/local-login`. The second instance has no record of the state, so the user sees "authorization link expired or already used" even on first use. Fix: run a single API instance for the local backend, or configure sticky sessions so that all requests under `/api/mcp/oauth` are routed to the same instance for the duration of the flow.
+OAuth state for the local login flow is stored in SQLite. If more than one API instance is running (e.g. multiple pods or processes behind a load balancer), the instance that serves `/mcp/oauth/authorize` may not be the one that serves `/mcp/oauth/local-login`. The second instance has no record of the state, so the user sees "authorization link expired or already used" even on first use. Fix: run a single API instance for the local backend, or configure sticky sessions so that all requests under `/mcp/oauth` are routed to the same instance for the duration of the flow.
 
 ### Key-Based Auth and Encryption (Local Backend)
 

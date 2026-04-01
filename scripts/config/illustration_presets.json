@@ -1,0 +1,124 @@
+{
+  "presets": [
+    {
+      "id": "beige_hero",
+      "description": "Editorial beige line-art for hero overlays (default).",
+      "prompt": "Transparent background. Editorial-quality abstract line illustration for a serious developer product (Stripe/Linear restraint, not clipart). Palette: warm beige and tan only — use 2–4 closely related tones (#e8dcc8 through #7d6f5f), no other hues, no black, no gradients, no fills except optional whisper-light beige shapes at very low opacity. Composition: strong negative space (roughly half the frame empty), one focal cluster, subtle asymmetry, crisp geometry. Line work: two deliberate weights only — hairline for structure, slightly heavier for emphasis; perfectly clean joins, no sketchy texture, no drop shadow, no 3D, no isometric boxes, no emoji shapes, no stock-icon look. No text, no logos, no mascots, no photorealism.",
+      "output_dir": "frontend/src/assets/images/hero",
+      "model": "gpt-image-1",
+      "size": "1024x1024",
+      "quality": "high",
+      "background": "transparent",
+      "output_format": "png",
+      "count": 3
+    },
+    {
+      "id": "beige_hero_editorial",
+      "description": "Strongest art direction for hero / key visuals; regenerate when output feels generic.",
+      "prompt": "Transparent background. Museum-poster restraint: a single abstract diagram suggesting systems memory — woven arcs, shallow bowl, or converging paths — drawn like a refined architectural axonometric sketch but strictly 2D line-only. Warm beige palette only (cream #f4ebe0, sand #d9cbb8, taupe #a0907a, deep tan #6e6254). No black ink; use deep tan for emphasis lines only. Absolutely no clipart, no cute icons, no thick uniform cartoon strokes, no symmetry mandala, no mandala patterns, no tech clichés (no cloud shape, no brain, no chip). Generous breathing room; one hero motif occupying ~35–45% of the canvas, anchored slightly off-center. Lines: razor-sharp vector precision, variable stroke weight used sparingly for hierarchy. No text, no logos, no gradients, no noise texture.",
+      "output_dir": "frontend/src/assets/images/hero",
+      "model": "gpt-image-1",
+      "size": "1024x1024",
+      "quality": "high",
+      "background": "transparent",
+      "output_format": "png",
+      "count": 1
+    },
+    {
+      "id": "beige_guarantee_hero",
+      "description": "Same art direction as beige_hero; output defaults to guarantees/ when using scripts/generate_guarantee_pngs.ts.",
+      "prompt": "Transparent background. Editorial-quality abstract line illustration for a serious developer product (Stripe/Linear restraint, not clipart). Palette: warm beige and tan only — use 2–4 closely related tones (#e8dcc8 through #7d6f5f), no other hues, no black, no gradients, no fills except optional whisper-light beige shapes at very low opacity. Composition: strong negative space (roughly half the frame empty), one focal cluster, subtle asymmetry, crisp geometry. Line work: two deliberate weights only — hairline for structure, slightly heavier for emphasis; perfectly clean joins, no sketchy texture, no drop shadow, no 3D, no isometric boxes, no emoji shapes, no stock-icon look. No text, no logos, no mascots, no photorealism.",
+      "output_dir": "frontend/src/assets/images/guarantees",
+      "model": "gpt-image-1",
+      "size": "1024x1024",
+      "quality": "high",
+      "background": "transparent",
+      "output_format": "png",
+      "count": 1
+    },
+    {
+      "id": "beige_guarantee_concept",
+      "description": "Conceptual (non-diagram) card art matching intro hero packrat line-art style.",
+      "prompt": "Transparent background. Stylized editorial line illustration in the same visual language as a refined product hero: warm beige and tan palette only (cream #f4ebe0, sand #d9cbb8, taupe #a0907a, deep tan #6e6254). No pure black, no gradients, no shading blocks, no photorealism. Two stroke weights for hierarchy; clean joins; generous negative space; subject slightly off-center. CONCEPTUAL METAPHOR ONLY — suggest the idea through organic or abstract forms (braided strands, stacked layers, folded leaves, a small nest, woven threads, a gentle spiral). STRICTLY FORBIDDEN: flowcharts, arrows, boxes, rectangles, circles used as nodes, graphs, charts, connectors, schematic UI, isometric blocks, circuit motifs, or anything that reads as a diagram or infographic. No text, no logos, no emoji, no icons. No cute mascots unless the prompt explicitly asks for a small animal in the same restrained style as a minimal packrat silhouette. Square 1:1 composition.",
+      "output_dir": "frontend/src/assets/images/guarantees",
+      "model": "gpt-image-1",
+      "size": "1024x1024",
+      "quality": "high",
+      "background": "transparent",
+      "output_format": "png",
+      "count": 1
+    },
+    {
+      "id": "hero_matched_opaque",
+      "description": "Opaque amber gradient background with radial glow — matches the hero packrat image exactly. Use for all homepage section images.",
+      "prompt": "Square illustration with an opaque warm amber-to-dark-gold gradient background: rich amber (#c8860a) at the center glowing outward to deep dark gold-brown (#3d2800) at the corners, with a soft radial warm glow emanating from the center. The illustration sits on this background (not transparent). Subject drawn in the same style as the hero packrat: flat cream (#f4e8c1) filled shapes with clean dark tan (#4a3510) outline strokes, two stroke weights (hairline detail, slightly heavier for silhouette), minimal shading via slightly darker cream tones only. Strong composition — subject centered with breathing room. The subject must be a TANGIBLE, RECOGNIZABLE object or scene that physically represents the concept — not an abstract diagram, not a flowchart, not arrows or boxes. Depicted in the same flat editorial illustration style as a refined product mascot. No text, no logos, no gradients on the subject itself, no photorealism.",
+      "output_dir": "frontend/src/assets/images/guarantees",
+      "model": "gpt-image-1",
+      "size": "1024x1024",
+      "quality": "high",
+      "background": "opaque",
+      "output_format": "png",
+      "count": 1
+    },
+    {
+      "id": "hero_matched_interface",
+      "description": "Opaque amber gradient background — same hero style — for interface/who-card section images.",
+      "prompt": "Square illustration with an opaque warm amber-to-dark-gold gradient background: rich amber (#c8860a) at the center glowing outward to deep dark gold-brown (#3d2800) at the corners, with a soft radial warm glow emanating from the center. The illustration sits on this background (not transparent). Subject drawn in the same style as the hero packrat: flat cream (#f4e8c1) filled shapes with clean dark tan (#4a3510) outline strokes, two stroke weights (hairline detail, slightly heavier for silhouette), minimal shading via slightly darker cream tones only. Strong composition — subject centered with breathing room. The subject must be a TANGIBLE, RECOGNIZABLE scene that physically represents the concept — not an abstract diagram, not a flowchart. Depicted in the same flat editorial illustration style as a refined product mascot. No text, no logos, no gradients on the subject itself, no photorealism.",
+      "output_dir": "frontend/src/assets/images/interfaces",
+      "model": "gpt-image-1",
+      "size": "1024x1024",
+      "quality": "high",
+      "background": "opaque",
+      "output_format": "png",
+      "count": 1
+    },
+    {
+      "id": "ui_card_illustration",
+      "description": "Simple abstract card illustration for docs/interface cards.",
+      "prompt": "Transparent background. Flat abstract product illustration in muted tones. No text. No logos. Balanced composition in center, clear silhouette, low visual noise, suitable for documentation cards.",
+      "output_dir": "frontend/src/assets/images/generated",
+      "model": "gpt-image-1",
+      "size": "1024x1024",
+      "quality": "medium",
+      "background": "transparent",
+      "output_format": "png",
+      "count": 2
+    },
+    {
+      "id": "who_icp_square_flat",
+      "description": "Who-this-is-for ICP cards — same flat diagram language as guarantee squares; transparent; one accent hue per image plus beige neutrals.",
+      "prompt": "Square 1:1 composition, TRANSPARENT background (full alpha outside shapes — no backdrop, no gradient panel).\n\nSTYLE: Flat minimal product-diagram illustration — heavily rounded rectangles, circles, pills; medium-bold organic strokes in warm taupe/beige (#4a3d32 through #6b5845) for neutral structure; soft sand / pale beige fills (#e8ddd0, #d4c4b0) where needed; subtle fine paper grain on filled areas.\n\nACCENT COLOR: The next paragraph names exactly ONE accent family. Use ONLY that family (soft pastel, not neon) for highlighted shapes: hubs, connector paths, key node fills, emphasis rings. All non-accent lines and fills stay beige/taupe neutrals. Do not introduce a second accent hue.\n\nGeometry: dashed curved connectors OK; centered layout; generous margin at edges.\n\nFORBIDDEN: text, letters, numbers, logos, watermarks, photorealism, scratchboard hatching, labeled flowchart boxes, isometric 3D with dimension text.",
+      "output_dir": "frontend/src/assets/images/who",
+      "model": "gpt-image-1",
+      "size": "1024x1024",
+      "quality": "high",
+      "background": "transparent",
+      "output_format": "png",
+      "count": 1
+    },
+    {
+      "id": "guarantee_sym_square_flat",
+      "description": "Square 1:1 Neotoma guarantee thumbnails — flat rounded minimal diagram style (transparent, dark beige palette).",
+      "prompt": "Square 1:1 composition, TRANSPARENT background (full alpha outside shapes — no backdrop color, no gradient panel).\n\nSTYLE (match technical blog / product diagram illustration): flat minimal shapes with heavily rounded corners and ends; friendly modern SaaS aesthetic. Outlines are medium-to-bold rounded strokes in dark warm beige / taupe (#4a3d32 through #6b5845) — soft organic stroke feel, not hairline technical pen. Interior fills where used: soft muted beige, sand, or pale warm gray-beige (#d4c4b0 through #e8ddd0) at moderate opacity or flat pastel-beige; keep palette strictly warm neutrals (beige family only — no mint, no blue, no teal, no saturated greens).\n\nTexture: subtle fine paper grain or film grain across filled areas so colors feel tactile, not clinical flat RGB.\n\nGeometry: simple rounded rectangles, circles, pills, arcs; dashed beige connector lines allowed when showing relationships (straight or gentle curves). Symmetrical or centered layout with generous breathing room at edges.\n\nABSOLUTELY FORBIDDEN: photorealism, scratchboard cross-hatching, engraved etching, 3D isometric boxes, flowchart nodes with arrows and labels, text, letters, numbers, logos, watermarks, robots unless the brief explicitly asks for agent glyphs.\n\nNOT the black-and-white blog hero style — this is soft flat color + rounded diagram illustration.",
+      "output_dir": "frontend/src/assets/images/guarantees",
+      "model": "gpt-image-1",
+      "size": "1024x1024",
+      "quality": "high",
+      "background": "transparent",
+      "output_format": "png",
+      "count": 1
+    },
+    {
+      "id": "markmhendrickson_blog_hero_guarantee_sym",
+      "description": "Homepage guarantee card thumbnails — transparent PNG, dark beige editorial linework only (Neotoma card grid).",
+      "prompt": "TRANSPARENT background: alpha must be fully transparent everywhere except the drawn subject — no black fill, no white fill, no gray backdrop, no vignette panel behind the art. The canvas is see-through except for the illustration itself.\n\nArtwork color: ONLY dark beige and deep tan linework — use a tight range like #3d2f24 through #5c4a38 and #6b5844 (warm brown-taupe). No pure white, no pure black ink, no cyan, no blue, no red accent. Fine art-directed strokes with subtle weight variation; parallel hatching and cross-hatching for volume (etched / scratchboard editorial feel — NOT flat uniform-stroke icons, NOT geometric schematics).\n\nABSOLUTELY FORBIDDEN: flowcharts, node-and-edge diagrams, connector arrows between boxes, equals signs, math symbols, circuit glyphs, isometric grid cubes, Figma-wireframe UI, pie charts, graphs, or anything that reads as engineering diagram.\n\nCOMPOSITION: one tangible still-life scene occupying roughly the LOWER ~55% of the frame; the UPPER ~45% should be completely transparent (empty). Light perspective OK. No text, letters, numbers, logos, watermarks, or labels.",
+      "output_dir": "frontend/src/assets/images/guarantees",
+      "model": "gpt-image-1",
+      "size": "1536x1024",
+      "quality": "high",
+      "background": "transparent",
+      "output_format": "png",
+      "count": 1
+    }
+  ]
+}

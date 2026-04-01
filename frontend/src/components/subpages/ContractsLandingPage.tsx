@@ -226,10 +226,10 @@ const CONFIG: VerticalConfig = {
     },
   ],
   caseStudy: {
-    companyName: "ClauseAI",
-    companyUrl: "https://clauseai.example.com",
-    companyDesc:
-      "is a fictional AI-native contract intelligence platform that automates review, redlining, and obligation tracking for global procurement teams.",
+    headline: "How contract intelligence teams use Neotoma as their integrity layer",
+    desc:
+      "AI-native contract platforms automate review, redlining, and obligation tracking for global procurement teams. Neotoma versions every clause change, amendment, and approval so you can reconstruct contract state at any close date or audit point.",
+    featuresHeading: "What contract intelligence teams build",
     features: [
       "Parallel drafting and risk agents that propose clause edits across hundreds of active MSAs",
       "Continuous obligation extraction from amendments and order forms",
@@ -243,7 +243,7 @@ const CONFIG: VerticalConfig = {
     ],
     generalizesTitle: "If you run multi-agent contract workflows, you share the same risk surface",
     generalizesDesc:
-      "Any team blending generative drafting, policy bots, and human counsel needs the same guarantees: no silent overwrites, no orphan approvals, and no guessing which amendment moved a payment term. Neotoma generalizes the ClauseAI pattern to your stack.",
+      "Any team blending generative drafting, policy bots, and human counsel needs the same guarantees: no silent overwrites, no orphan approvals, and no guessing which amendment moved a payment term. Neotoma generalizes the pattern to your stack.",
   },
   ctaHeadline: "Ship contract agents that can defend",
   ctaHighlight: "every answer they give",

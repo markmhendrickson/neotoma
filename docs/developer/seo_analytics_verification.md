@@ -34,6 +34,11 @@ Quick checklist for verifying SEO metadata and analytics instrumentation after d
    - `docs_nav_click` fires from the header docs dropdown.
 2. **Realtime report:** Navigate through the site and confirm events appear in the GA4 Realtime overview.
 3. **Event parameters:** In DebugView, verify each event includes expected parameters (`cta_name`, `link_url`, `destination`, `page_path`).
+4. **Umami:** Set env vars only (no in-app defaults). For **`vite build` / deployed sites:** `VITE_UMAMI_URL` and `VITE_UMAMI_WEBSITE_ID`. For **local `vite` dev:** `VITE_UMAMI_WEBSITE_ID_DEV` plus `VITE_UMAMI_URL` (shared) or `VITE_UMAMI_URL_DEV`. Use `neotoma site configure` or edit `.env` / `.env.development.local`, rebuild, then in Umami confirm:
+   - Page views update on each SPA route (same paths as the in-app router).
+   - Custom events: `cta_click`, `outbound_click`, `docs_nav_click` with the same parameter names as GA4 helpers.
+5. **Self-hosted Umami:** See `deploy/umami/docker-compose.yml` for Postgres + Umami. After first login, add a website for your production origin, copy the website ID into `VITE_UMAMI_WEBSITE_ID`, and set `VITE_UMAMI_URL` to the public URL of the Umami app.
+6. **Dev vs prod:** Two Umami websites in the dashboard; wire them with `VITE_UMAMI_WEBSITE_ID_DEV` (dev) vs `VITE_UMAMI_WEBSITE_ID` (prod). GitHub Actions: set secrets `VITE_UMAMI_URL` and `VITE_UMAMI_WEBSITE_ID` for the main Pages build; for the dev Pages workflow the build still receives `VITE_UMAMI_WEBSITE_ID` but map your **dev** site UUID from a secret such as `VITE_UMAMI_WEBSITE_ID_DEV` (see workflow). See `.env.development.example` and `.env.production.example`.
 
 ## Route Registry Maintenance
 
@@ -51,7 +56,8 @@ When adding a new public route:
 | `frontend/src/site/seo_metadata.ts` | Route metadata registry, sitemap/robots builders |
 | `frontend/src/components/SeoHead.tsx` | Helmet-based per-route `<head>` tags |
 | `frontend/src/components/DetailPage.tsx` | Wrapper that derives route path for SeoHead |
-| `frontend/src/utils/analytics.ts` | GA4 init, pageview, and typed event helpers |
+| `frontend/src/utils/analytics.ts` | GA4 and Umami init, pageviews, typed event helpers |
+| `deploy/umami/docker-compose.yml` | Optional self-hosted Umami + PostgreSQL |
 | `scripts/build_github_pages_site.tsx` | Build script that generates per-route HTML, sitemap.xml, robots.txt, and 404.html |
 | `tests/unit/seo_metadata.test.ts` | Unit tests for SEO completeness |
 | `playwright/tests/site-page.spec.ts` | E2E tests including meta tag verification |

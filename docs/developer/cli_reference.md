@@ -148,8 +148,7 @@ Scripts that start servers use the port(s) above when free; if a port is in use,
 | `type-check`             | `tsc --noEmit`                                   |
 | `validate:coverage`      | Validate coverage map                            |
 | `validate:doc-deps`      | Validate doc dependencies                        |
-| `doctor`                 | Project health check                             |
-| `check:advisors`         | Database advisors (RLS, etc.)                    |
+| `doctor`                 | Project health check (env, local SQLite hints)   |
 
 ### Database and schema
 

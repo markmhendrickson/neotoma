@@ -1,4 +1,5 @@
-import { SITE_METADATA } from "./site_data";
+import { GLOSSARY_ROWS, REPO_VERSION, SITE_METADATA } from "./site_data";
+import { FAQ_ITEMS } from "@/components/subpages/FaqPage";
 import {
   DEFAULT_LOCALE,
   LOCALE_TO_OG,
@@ -24,6 +25,31 @@ export interface SeoRouteMetadata {
   keywords?: string[];
   /** Twitter card layout (default summary_large_image). */
   twitterCard?: "summary" | "summary_large_image";
+  /** FAQ items rendered as FAQPage JSON-LD schema. */
+  faqItems?: { question: string; answer: string }[];
+  /** HowTo schema: the name/title of the procedure. */
+  howToName?: string;
+  /** HowTo schema: ordered steps. */
+  howToSteps?: { name: string; text: string }[];
+  /** DefinedTermSet schema: glossary terms. */
+  definedTerms?: { term: string; definition: string }[];
+  /** SoftwareApplication schema fields for the homepage. */
+  softwareApp?: {
+    version: string;
+    operatingSystem: string;
+    applicationCategory: string;
+    offers: { price: string; priceCurrency: string };
+    license: string;
+    codeRepository: string;
+    featureList?: string[];
+    installUrl?: string;
+  };
+  /** Organization schema with founder and sameAs links. */
+  organization?: {
+    founderName: string;
+    founderUrl?: string;
+    sameAs: string[];
+  };
 }
 
 export const SEO_DEFAULTS = {
@@ -40,12 +66,42 @@ export const SEO_DEFAULTS = {
 
 const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/": {
-    title: "Neotoma | Deterministic state layer for long-running agents",
+    title: "Your agents forget. Neotoma makes them remember.",
     description:
-      "Deterministic agent state layer for long-running agents: deterministic state evolution, versioned, schema-bound, replayable, auditable. No silent mutation. Agents install Neotoma themselves.",
+      "Versioned records - contacts, tasks, decisions, finances - that persist across Claude, Cursor, ChatGPT, and every agent you run. Store once, query everywhere, stop re-prompting. Open-source and deterministic.",
     robots: "index,follow",
     ogType: "website",
     jsonLdType: "WebSite",
+    softwareApp: {
+      version: REPO_VERSION,
+      operatingSystem: "macOS, Linux, Windows (WSL)",
+      applicationCategory: "DeveloperApplication",
+      offers: { price: "0", priceCurrency: "USD" },
+      license: "https://opensource.org/licenses/MIT",
+      codeRepository: "https://github.com/markmhendrickson/neotoma",
+      installUrl: "https://neotoma.io/install",
+      featureList: [
+        "Deterministic state evolution",
+        "Versioned entity history",
+        "Append-only observation log",
+        "Schema-bound entity validation",
+        "Field-level provenance tracking",
+        "Cross-tool access via MCP",
+        "Entity resolution with canonical IDs",
+        "Temporal state queries",
+        "Privacy-first local storage",
+        "CLI, REST API, and MCP interfaces",
+      ],
+    },
+    organization: {
+      founderName: "Mark Hendrickson",
+      founderUrl: "https://markmhendrickson.com",
+      sameAs: [
+        "https://github.com/markmhendrickson/neotoma",
+        "https://www.npmjs.com/package/neotoma",
+        "https://x.com/markmhendrickson",
+      ],
+    },
   },
   "/install": {
     title: "Install | Neotoma",
@@ -56,6 +112,13 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     breadcrumb: [
       { name: "Home", path: "/" },
       { name: "Install", path: "/install" },
+    ],
+    howToName: "How to install Neotoma",
+    howToSteps: [
+      { name: "Install the package", text: "Run 'npm install -g neotoma' to install the Neotoma CLI globally." },
+      { name: "Initialize configuration", text: "Run 'neotoma init', choose your AI client (Cursor, Claude Code, Codex, etc.), and restart your tool." },
+      { name: "Start the API server", text: "Run 'neotoma api start' to launch the local API server." },
+      { name: "Connect via MCP", text: "Configure your AI tool's MCP settings to connect to the Neotoma server. The init step handles this automatically for supported clients." },
     ],
   },
   "/docs": {
@@ -81,6 +144,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Docs", path: "/docs" },
       { name: "Terminology", path: "/terminology" },
     ],
+    definedTerms: GLOSSARY_ROWS.map((row) => ({ term: row.term, definition: row.definition })),
   },
   "/agent-instructions": {
     title: "Agent Instructions | Neotoma",
@@ -142,37 +206,37 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Architecture", path: "/architecture" },
     ],
   },
-  "/ai-infrastructure-engineers": {
-    title: "For AI infrastructure engineers | Neotoma",
+  "/operating": {
+    title: "Operating across tools | Neotoma",
     description:
-      "Two runs, same inputs, different state. Neotoma provides deterministic state evolution, replayable timelines, and full provenance for AI infrastructure teams.",
+      "Every session starts from zero. Neotoma removes the re-prompting tax with persistent, cross-tool memory that survives session resets and makes corrections stick.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
-      { name: "AI infrastructure engineers", path: "/ai-infrastructure-engineers" },
+      { name: "Operating across tools", path: "/operating" },
     ],
   },
-  "/ai-native-operators": {
-    title: "For AI-native operators | Neotoma",
+  "/building-pipelines": {
+    title: "Building pipelines | Neotoma",
     description:
-      "Your agent infers; it doesn't guarantee. Neotoma provides persistent, cross-tool memory that survives session resets and makes corrections stick.",
+      "Your agent guesses entities every session. Neotoma gives pipelines persistent memory, entity resolution, and provenance so new features compound instead of regressing.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
-      { name: "AI-native operators", path: "/ai-native-operators" },
+      { name: "Building pipelines", path: "/building-pipelines" },
     ],
   },
-  "/agentic-systems-builders": {
-    title: "For builders of agentic systems | Neotoma",
+  "/debugging-infrastructure": {
+    title: "Debugging infrastructure | Neotoma",
     description:
-      "Your agent resolves entities by inference, so every session it guesses again. Neotoma provides deterministic memory, entity resolution, and provenance for shipped agents.",
+      "Two runs, same inputs, different state. Neotoma replaces log archaeology with replayable timelines, state diffs, and full provenance.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
-      { name: "Builders of agentic systems", path: "/agentic-systems-builders" },
+      { name: "Debugging infrastructure", path: "/debugging-infrastructure" },
     ],
   },
   "/neotoma-with-cursor": {
@@ -211,6 +275,13 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Claude", path: "/neotoma-with-claude" },
       { name: "Claude Desktop local setup", path: "/neotoma-with-claude-connect-desktop" },
     ],
+    howToName: "How to connect Neotoma to Claude Desktop",
+    howToSteps: [
+      { name: "Install Neotoma", text: "Run 'npm install -g neotoma' to install the CLI globally." },
+      { name: "Start the API server", text: "Run 'neotoma api start' to launch the local Neotoma server." },
+      { name: "Configure Claude Desktop", text: "Add the Neotoma MCP server entry to your Claude Desktop configuration file (claude_desktop_config.json) with stdio transport." },
+      { name: "Restart Claude Desktop", text: "Restart Claude Desktop to load the new MCP server configuration." },
+    ],
   },
   "/neotoma-with-claude-connect-remote-mcp": {
     title: "claude.ai remote MCP setup | Neotoma",
@@ -223,6 +294,13 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Docs", path: "/docs" },
       { name: "Claude", path: "/neotoma-with-claude" },
       { name: "claude.ai remote MCP setup", path: "/neotoma-with-claude-connect-remote-mcp" },
+    ],
+    howToName: "How to connect claude.ai to Neotoma via remote MCP",
+    howToSteps: [
+      { name: "Start the Neotoma API", text: "Run 'neotoma api start' to launch the local server." },
+      { name: "Create a tunnel", text: "Use a tunneling tool to expose your local Neotoma API over HTTPS." },
+      { name: "Add MCP server in claude.ai", text: "Go to claude.ai settings, add a new MCP server, and paste your tunnel URL." },
+      { name: "Verify connection", text: "Start a new chat and confirm Neotoma tools appear in the available tools list." },
     ],
   },
   "/neotoma-with-claude-code": {
@@ -298,6 +376,12 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Docs", path: "/docs" },
       { name: "Codex", path: "/neotoma-with-codex" },
       { name: "Local setup", path: "/neotoma-with-codex-connect-local-stdio" },
+    ],
+    howToName: "How to connect Codex to Neotoma locally via stdio",
+    howToSteps: [
+      { name: "Install Neotoma", text: "Run 'npm install -g neotoma' to install the CLI globally." },
+      { name: "Configure Codex", text: "Add the Neotoma MCP server to your .codex/config.toml file with stdio transport settings." },
+      { name: "Verify", text: "Start a new Codex session and confirm Neotoma tools are available." },
     ],
   },
   "/neotoma-with-codex-connect-remote-http-oauth": {
@@ -531,6 +615,18 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "File-Based Memory", path: "/file-based-memory" },
     ],
   },
+  "/database-memory": {
+    title: "Database Memory | Neotoma",
+    description:
+      "How database memory (SQLite, Postgres, MySQL) works for AI agents: strong consistency and column types, but standard CRUD lacks versioning, audit trails, and conflict detection.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Memory Models", path: "/#memory-guarantees" },
+      { name: "Database Memory", path: "/database-memory" },
+    ],
+  },
   "/deterministic-memory": {
     title: "Deterministic Memory | Neotoma",
     description:
@@ -547,7 +643,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     title: "Neotoma for CRM | State Layer for Next-Generation CRM Platforms",
     description:
       "Build next-generation AI-native CRM on a deterministic state layer. Neotoma provides versioned, schema-bound, auditable state for contacts, deals, and relationships, so every AI feature is grounded in truth.",
-    robots: "index,follow",
+    robots: "noindex,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
@@ -558,11 +654,10 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     title: "Neotoma for Compliance | State Integrity for AI-Driven Vendor Risk",
     description:
       "Version control for vendor risk profiles. Neotoma ensures every AI-driven risk assessment is versioned, every conflict between agents is surfaced, and every decision is explainable to regulators, with team deployment, enterprise auth, and API compatibility guarantees.",
-    robots: "index,follow",
+    robots: "noindex,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
-      { name: "Verticals", path: "/verticals" },
       { name: "Compliance", path: "/compliance" },
     ],
   },
@@ -570,11 +665,10 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     title: "Neotoma for Contracts | State Integrity for Contract Lifecycle Management",
     description:
       "Version control for every clause, amendment, and obligation. Neotoma ensures contract state is versioned, conflicts between review agents are surfaced, and every approval traces to specific evidence.",
-    robots: "index,follow",
+    robots: "noindex,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
-      { name: "Verticals", path: "/verticals" },
       { name: "Contracts", path: "/contracts" },
     ],
   },
@@ -582,11 +676,10 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     title: "Neotoma for Due Diligence | State Integrity for M&A and Investment Diligence",
     description:
       "Know exactly what was known when the decision was made. Neotoma provides versioned findings, conflict detection between diligence agents, and temporal state queries for investment committees and regulators.",
-    robots: "index,follow",
+    robots: "noindex,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
-      { name: "Verticals", path: "/verticals" },
       { name: "Due Diligence", path: "/diligence" },
     ],
   },
@@ -594,11 +687,10 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     title: "Neotoma for Portfolio Monitoring | State Integrity for VC/PE Portfolio Intelligence",
     description:
       "Versioned state for every portfolio company, valuation, and LP commitment. Neotoma provides temporal snapshots for fund audits, LP reporting, and follow-on investment decisions.",
-    robots: "index,follow",
+    robots: "noindex,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
-      { name: "Verticals", path: "/verticals" },
       { name: "Portfolio", path: "/portfolio" },
     ],
   },
@@ -606,11 +698,10 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     title: "Neotoma for Case Management | State Integrity for Legal and Investigation Cases",
     description:
       "Reconstruct what was known at any point in a case timeline. Neotoma provides versioned evidence, temporal state queries for litigation, and auditable provenance for every filing and assessment.",
-    robots: "index,follow",
+    robots: "noindex,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
-      { name: "Verticals", path: "/verticals" },
       { name: "Case Management", path: "/cases" },
     ],
   },
@@ -618,11 +709,10 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     title: "Neotoma for Financial Ops | State Integrity for Reconciliation and Audit",
     description:
       "Deterministic state for every ledger entry, reconciliation, and month-end close. Neotoma provides point-in-time snapshots for SOX compliance, audit verification, and transaction provenance.",
-    robots: "index,follow",
+    robots: "noindex,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
-      { name: "Verticals", path: "/verticals" },
       { name: "Financial Ops", path: "/financial-ops" },
     ],
   },
@@ -630,11 +720,10 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     title: "Neotoma for Procurement | State Integrity for Sourcing and Supplier Management",
     description:
       "Full audit trail for bids, approvals, and supplier decisions. Neotoma provides versioned supplier profiles, bid comparison history, and approval chain provenance for enterprise procurement.",
-    robots: "index,follow",
+    robots: "noindex,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
-      { name: "Verticals", path: "/verticals" },
       { name: "Procurement", path: "/procurement" },
     ],
   },
@@ -642,11 +731,10 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     title: "Neotoma for Healthcare | Versioned Clinical State and Decision Provenance",
     description:
       "Reconstruct what was known about a patient at any point in their care timeline. Neotoma provides versioned clinical decisions, authorization lifecycles, and care plan lineage for healthcare operations.",
-    robots: "index,follow",
+    robots: "noindex,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
-      { name: "Verticals", path: "/verticals" },
       { name: "Healthcare", path: "/healthcare" },
     ],
   },
@@ -654,11 +742,10 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     title: "Neotoma for Public Sector | Versioned Policy State and Determination Provenance",
     description:
       "Reconstruct which policy version and evidence governed a government decision on any date. Neotoma provides versioned eligibility determinations, inter-agency data provenance, and rule-bound decision state.",
-    robots: "index,follow",
+    robots: "noindex,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
-      { name: "Verticals", path: "/verticals" },
       { name: "Government", path: "/government" },
     ],
   },
@@ -666,11 +753,10 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     title: "Neotoma for Customer Ops | Versioned Support State and Routing Provenance",
     description:
       "Reconstruct why a ticket was routed, escalated, or resolved the way it was. Neotoma provides versioned routing decisions, escalation chains, and interaction-level provenance for customer operations.",
-    robots: "index,follow",
+    robots: "noindex,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
-      { name: "Verticals", path: "/verticals" },
       { name: "Customer Ops", path: "/customer-ops" },
     ],
   },
@@ -678,11 +764,10 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     title: "Neotoma for Logistics | Versioned Routing State and Constraint Provenance",
     description:
       "Reconstruct what the system knew when a routing or fulfillment decision was made. Neotoma provides versioned routing decisions, inventory position timelines, and carrier constraint snapshots for supply chain operations.",
-    robots: "index,follow",
+    robots: "noindex,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
-      { name: "Verticals", path: "/verticals" },
       { name: "Logistics", path: "/logistics" },
     ],
   },
@@ -690,11 +775,10 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     title: "Neotoma for Personal Data | Versioned Memory for Health, Finance, and Life Data",
     description:
       "Give your personal AI agents versioned, queryable memory across health, finance, habits, and goals. Neotoma provides entity resolution, temporal queries, and cross-domain correlations for your personal data, with the same state integrity guarantees used in enterprise systems.",
-    robots: "index,follow",
+    robots: "noindex,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
-      { name: "Verticals", path: "/verticals" },
       { name: "Personal Data", path: "/personal-data" },
     ],
   },
@@ -702,11 +786,10 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     title: "Neotoma for Agent Authorization | Versioned Policy State and Delegation Provenance",
     description:
       "Reconstruct who authorized what, when, and under which policy state. Neotoma provides versioned authorization decisions, consent timelines, and delegation chain provenance for production agent systems.",
-    robots: "index,follow",
+    robots: "noindex,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
-      { name: "Verticals", path: "/verticals" },
       { name: "Agent Authorization", path: "/agent-auth" },
     ],
   },
@@ -714,7 +797,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     title: "Use Cases | State Integrity for AI-Driven Verticals | Neotoma",
     description:
       "Neotoma fits any workflow where 'what did the agent know then?' matters. Explore vertical use cases: compliance, CRM, contracts, due diligence, portfolio monitoring, case management, financial ops, procurement, agent authorization, healthcare, government, customer ops, and logistics.",
-    robots: "index,follow",
+    robots: "noindex,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
@@ -722,14 +805,369 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     ],
   },
   "/build-vs-buy": {
-    title: "Build vs Buy | When to Build Your Own State Layer | Neotoma",
+    title: "Build vs Buy | When to Add a State Integrity Layer | Neotoma",
     description:
-      "Honest assessment of when to build your own audit trail and state layer versus using Neotoma. Self-qualification scorecard for teams deploying AI agents in production with multi-writer entities, temporal queries, and provenance requirements.",
+      "For builders running agents across sessions and tools: logging is solved. This page separates observability from state integrity-deterministic reconstruction, multi-writer merges, and version-bound provenance-with examples by entity type (contacts, tasks, transactions, and more).",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
       { name: "Build vs Buy", path: "/build-vs-buy" },
+    ],
+    faqItems: [
+      {
+        question: "When do I need a state integrity layer instead of observability?",
+        answer:
+          "When multiple writers update the same entities, you need the composed state at a point in time, rules change while entities have active state, actions flow through delegation hops, or explanation requires full input context.",
+      },
+      {
+        question: "What is the difference between observability and state integrity?",
+        answer:
+          "Observability shows what happened: events, logs, traces. State integrity proves what was true: the deterministic composed entity state at any moment, with multi-writer conflict resolution and version-bound provenance.",
+      },
+      {
+        question: "Is observability enough for my agent system?",
+        answer:
+          "If 0-1 of these conditions apply: multiple entity writers, temporal state queries, changing rules, delegation chains, full-context explanations. At 4-5 conditions, you need a state integrity layer.",
+      },
+    ],
+  },
+  "/troubleshooting": {
+    title: "Troubleshooting and FAQ | Neotoma",
+    description:
+      "Common issues and fixes for Neotoma: agent storage failures, empty query results, conflicting state, CLI-API differences, and safe state resets.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Troubleshooting", path: "/troubleshooting" },
+    ],
+    faqItems: [
+      {
+        question: "Agent is not storing memory entries",
+        answer:
+          "Confirm the MCP server is configured and running, then verify tool calls include store actions. Recheck client config (.cursor/mcp.json, .mcp.json, or .codex/config.toml) and restart the client.",
+      },
+      {
+        question: "Entity query returns empty results",
+        answer:
+          "Verify the entity type and filters used by your query. Run 'neotoma entities list --type <entity_type>' without search first, then narrow filters.",
+      },
+      {
+        question: "Unexpected or conflicting state values",
+        answer:
+          "Inspect observations and provenance for that entity and field. Use correction flows (correct, reinterpret) and confirm deterministic merge rules in schema/reducer logic.",
+      },
+      {
+        question: "CLI command behavior differs from API",
+        answer:
+          "Check transport mode (--offline, --api-only, base URL) and environment selection. Pin the mode explicitly for reproducible debugging, then compare with API endpoint responses.",
+      },
+      {
+        question: "Need to reset local state safely",
+        answer:
+          "Export data first for auditability. Back up the data directory, then reinitialize. Avoid deleting data until exports are verified.",
+      },
+    ],
+  },
+  "/evaluate": {
+    title: "Ask Your Agent to Evaluate Neotoma for You | Neotoma",
+    description:
+      "Ask your AI agent to read this page and assess whether Neotoma fits your workflow. Structured for both human and agent evaluation of deterministic agent memory.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Evaluate", path: "/evaluate" },
+    ],
+  },
+  "/faq": {
+    title: "Frequently Asked Questions | Neotoma",
+    description:
+      "Answers to common questions about Neotoma: what it is, how it compares to SQLite/Mem0/Zep/RAG, how it works alongside Claude Code memory, what your agent should remember, and how to install it.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "FAQ", path: "/faq" },
+    ],
+    faqItems: FAQ_ITEMS.map((item) => ({ question: item.question, answer: item.answer })),
+  },
+  "/neotoma-vs-platform-memory": {
+    title: "Neotoma vs Platform Memory | Claude, ChatGPT, Gemini vs Deterministic State",
+    description:
+      "How does Neotoma compare to platform memory? Built-in AI product memory is convenient but opaque and vendor-bound. Neotoma provides deterministic state, versioned history, and auditable provenance across tools.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Memory Models", path: "/memory-models" },
+      { name: "Neotoma vs Platform Memory", path: "/neotoma-vs-platform-memory" },
+    ],
+    faqItems: [
+      {
+        question: "How does Neotoma compare to platform memory?",
+        answer:
+          "Platform memory is built into products like Claude and ChatGPT and prioritizes convenience inside one vendor surface. Neotoma stores append-only structured observations with deterministic reducers, versioned history, and provenance across tools.",
+      },
+      {
+        question: "Can I use platform memory and Neotoma together?",
+        answer:
+          "Yes. Platform memory can hold lightweight in-product context, while Neotoma stores durable structured state that must persist across tools, sessions, and audits.",
+      },
+    ],
+  },
+  "/neotoma-vs-mem0": {
+    title: "Neotoma vs Mem0 | Memory System Comparison",
+    description:
+      "How does Neotoma compare to Mem0? Mem0 uses retrieval memory with vector search. Neotoma provides deterministic state with versioned history, schema constraints, and auditable provenance.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Memory Models", path: "/memory-models" },
+      { name: "Neotoma vs Mem0", path: "/neotoma-vs-mem0" },
+    ],
+    faqItems: [
+      {
+        question: "How does Neotoma compare to Mem0?",
+        answer:
+          "Mem0 stores text chunks and retrieves them by semantic similarity for prompt augmentation. Neotoma stores structured observations and composes entity state via deterministic reducers for state integrity.",
+      },
+      {
+        question: "Can I use Mem0 and Neotoma together?",
+        answer:
+          "Yes. Mem0 handles semantic retrieval for prompt augmentation while Neotoma handles structured state integrity. They address different layers of the memory problem.",
+      },
+    ],
+  },
+  "/neotoma-vs-zep": {
+    title: "Neotoma vs Zep | Memory System Comparison",
+    description:
+      "How does Neotoma compare to Zep? Zep combines vector search with knowledge graphs. Neotoma provides deterministic state with formal integrity guarantees, versioned history, and auditable provenance.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Memory Models", path: "/memory-models" },
+      { name: "Neotoma vs Zep", path: "/neotoma-vs-zep" },
+    ],
+    faqItems: [
+      {
+        question: "How does Neotoma compare to Zep?",
+        answer:
+          "Zep combines vector similarity search with auto-extracted knowledge graphs. Neotoma stores append-only observations and composes them into versioned entity snapshots via deterministic reducers.",
+      },
+      {
+        question: "Does Zep provide deterministic state reconstruction?",
+        answer:
+          "No. Zep's knowledge graph is built via extraction and summarization, which are non-deterministic. The same inputs may produce different graph states across runs.",
+      },
+    ],
+  },
+  "/neotoma-vs-rag": {
+    title: "Neotoma vs RAG Memory | Deterministic vs Retrieval Memory",
+    description:
+      "What's the difference between RAG memory and deterministic memory? RAG retrieves relevant text chunks by similarity. Neotoma provides deterministic entity state with versioned history and auditable provenance.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Memory Models", path: "/memory-models" },
+      { name: "Neotoma vs RAG", path: "/neotoma-vs-rag" },
+    ],
+    faqItems: [
+      {
+        question: "What's the difference between RAG memory and deterministic memory?",
+        answer:
+          "RAG stores text as vector embeddings and retrieves relevant chunks by similarity. Deterministic memory stores structured observations and composes entity state via reducers, guaranteeing the same inputs always produce the same state.",
+      },
+      {
+        question: "Is Neotoma a RAG system?",
+        answer:
+          "No. Neotoma provides semantic search over structured entity snapshots, but it does not chunk documents or inject retrieved text into prompts. It provides deterministic state composition with formal guarantees.",
+      },
+    ],
+  },
+  "/neotoma-vs-files": {
+    title: "Neotoma vs File-Based Memory | Markdown, JSON vs Deterministic State",
+    description:
+      "Why not just use markdown files for agent memory? File-based memory is portable and editable but lacks schema enforcement, conflict detection, and auditable provenance. Neotoma provides deterministic state guarantees.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Memory Models", path: "/memory-models" },
+      { name: "Neotoma vs Files", path: "/neotoma-vs-files" },
+    ],
+    faqItems: [
+      {
+        question: "Why can't I just use markdown files for agent memory?",
+        answer:
+          "Markdown files conflate observations with snapshots. When two agents write conflicting values, both edits land silently. There is no schema validation, no conflict detection, and no way to reconstruct entity state at a past moment without building significant application logic on top.",
+      },
+      {
+        question: "Can git replace versioned history?",
+        answer:
+          "Git versions file snapshots, not entity observations. It can tell you what a file looked like at a commit, but not which observation changed which field or how conflicting writes were resolved.",
+      },
+    ],
+  },
+  "/neotoma-vs-database": {
+    title: "Neotoma vs Database Memory | SQLite, Postgres vs Deterministic State",
+    description:
+      "Why not just use SQLite or Postgres for agent memory? Standard CRUD overwrites state on every UPDATE. Neotoma adds observation logs, deterministic reducers, and provenance tracking on top of a database backend.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Memory Models", path: "/memory-models" },
+      { name: "Neotoma vs Database", path: "/neotoma-vs-database" },
+    ],
+    faqItems: [
+      {
+        question: "Why not just use SQLite or Postgres for agent memory?",
+        answer:
+          "A relational database provides strong consistency, but standard CRUD usage overwrites previous state on every UPDATE. Without an observation log, reducers, and provenance tracking, you get last-write-wins with no audit trail or conflict detection.",
+      },
+      {
+        question: "Doesn't Neotoma use a database internally?",
+        answer:
+          "Yes. Neotoma uses SQLite locally and Postgres when configured. The guarantees come from the architectural pattern on top - immutable observation log, deterministic reducers, schema validation, and field-level provenance - not from the storage engine itself.",
+      },
+    ],
+  },
+  "/types/contacts": {
+    title: "Contacts Guide | Store & Retrieve People, Companies, Roles | Neotoma",
+    description:
+      "How to store and retrieve contacts in Neotoma. CLI, MCP, and API examples for people, companies, accounts, and relationships - with versioned history and provenance.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Contacts guide", path: "/types/contacts" },
+    ],
+    keywords: ["contacts", "CRM", "people", "companies", "entity type", "store contacts"],
+  },
+  "/types/tasks": {
+    title: "Tasks Guide | Store & Retrieve Obligations, Deadlines, Goals | Neotoma",
+    description:
+      "How to store and retrieve tasks in Neotoma. CLI, MCP, and API examples for tasks, habits, goals - versioned status changes, assignments, and deadlines.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Tasks guide", path: "/types/tasks" },
+    ],
+    keywords: ["tasks", "to-do", "goals", "habits", "entity type", "store tasks"],
+  },
+  "/types/transactions": {
+    title: "Transactions Guide | Store & Retrieve Payments, Receipts, Invoices | Neotoma",
+    description:
+      "How to store and retrieve transactions in Neotoma. CLI, MCP, and API examples for payments, receipts, invoices - versioned corrections and reconciliation history.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Transactions guide", path: "/types/transactions" },
+    ],
+    keywords: ["transactions", "payments", "receipts", "invoices", "financial", "entity type"],
+  },
+  "/types/contracts": {
+    title: "Contracts Guide | Store & Retrieve Agreements, Clauses, Amendments | Neotoma",
+    description:
+      "How to store and retrieve contracts in Neotoma. CLI, MCP, and API examples for agreements, clauses, amendments - reconstructable terms on any date.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Contracts guide", path: "/types/contracts" },
+    ],
+    keywords: ["contracts", "agreements", "clauses", "amendments", "entity type"],
+  },
+  "/types/decisions": {
+    title: "Decisions Guide | Store & Retrieve Choices, Rationale, Audit Trails | Neotoma",
+    description:
+      "How to store and retrieve decisions in Neotoma. CLI, MCP, and API examples for decisions, assessments, reviews - with linked rationale and provenance.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Decisions guide", path: "/types/decisions" },
+    ],
+    keywords: ["decisions", "rationale", "audit trail", "assessments", "entity type"],
+  },
+  "/types/events": {
+    title: "Events Guide | Store & Retrieve Meetings, Milestones, Outcomes | Neotoma",
+    description:
+      "How to store and retrieve events in Neotoma. CLI, MCP, and API examples for meetings, milestones, and outcomes - with participants, follow-ups, and versioned notes.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Events guide", path: "/types/events" },
+    ],
+    keywords: ["events", "meetings", "milestones", "calendar", "entity type"],
+  },
+  "/data-model": {
+    title: "Developer Walkthrough | Neotoma",
+    description:
+      "See how contacts, tasks, and decisions persist across Cursor, Claude, and ChatGPT with versioned history and full provenance.",
+    robots: "noindex,follow",
+    jsonLdType: "WebPage",
+  },
+  "/developer-walkthrough": {
+    title: "Developer Walkthrough | Neotoma",
+    description:
+      "See how contacts, tasks, and decisions persist across Cursor, Claude, and ChatGPT with versioned history and full provenance.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Developer Walkthrough", path: "/developer-walkthrough" },
+    ],
+  },
+  "/schema-management": {
+    title: "Schema Management | Neotoma",
+    description:
+      "Practical schema workflows for Neotoma: list and inspect types, store with validation, evolve schemas incrementally, and handle migration.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Schema Management", path: "/schema-management" },
+    ],
+  },
+  "/changelog": {
+    title: "Changelog and Release Notes | Neotoma",
+    description:
+      "Release history, migration notes, and compatibility changes for Neotoma. Links to GitHub releases, npm versions, and in-repo release documentation.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Changelog", path: "/changelog" },
+    ],
+  },
+  "/memory-models": {
+    title: "Memory Models | Neotoma",
+    description:
+      "Compare AI agent memory models: platform memory, retrieval memory, file-based memory, and deterministic memory. Evaluate guarantees and failure modes across categories.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Memory Models", path: "/memory-models" },
     ],
   },
   "/memory-guarantees": {
@@ -858,8 +1296,7 @@ export function buildCanonicalUrl(pathname: string): string {
   return `${base}${normalizedPath}`;
 }
 
-export function getSeoMetadataForPath(pathname: string): SeoRouteMetadata {
-  const normalizedPath = normalizePath(stripLocaleFromPath(pathname));
+function resolveBaseRouteMetadata(normalizedPath: string): SeoRouteMetadata {
   if (ROUTE_METADATA[normalizedPath]) {
     return ROUTE_METADATA[normalizedPath];
   }
@@ -867,6 +1304,29 @@ export function getSeoMetadataForPath(pathname: string): SeoRouteMetadata {
     return ROUTE_METADATA["/docs"];
   }
   return ROUTE_METADATA["/404"];
+}
+
+export function getSeoMetadataForPath(pathname: string): SeoRouteMetadata {
+  const normalizedPath = normalizePath(stripLocaleFromPath(pathname));
+
+  if (normalizedPath === "/markdown" || normalizedPath.startsWith("/markdown/")) {
+    const rawRemainder =
+      normalizedPath === "/markdown" ? "" : normalizedPath.slice("/markdown".length);
+    const sourcePath =
+      rawRemainder === "" || rawRemainder === "/"
+        ? "/"
+        : normalizePath(rawRemainder.startsWith("/") ? rawRemainder : `/${rawRemainder}`);
+    const baseMeta = resolveBaseRouteMetadata(sourcePath);
+    const shortTitle = baseMeta.title.replace(/\s*\|\s*Neotoma\s*$/, "").trim();
+    return {
+      ...baseMeta,
+      title: `${shortTitle} (Markdown) | Neotoma`,
+      robots: "noindex,nofollow",
+      description: `Markdown export of the rendered ${sourcePath} page. ${baseMeta.description}`,
+    };
+  }
+
+  return resolveBaseRouteMetadata(normalizedPath);
 }
 
 const DEFAULT_SEO_KEYWORDS = [
@@ -949,6 +1409,92 @@ function buildJsonLd(
         name: crumb.name,
         item: buildCanonicalUrl(crumb.path),
       })),
+    });
+  }
+
+  if (metadata.faqItems && metadata.faqItems.length > 0) {
+    items.push({
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      mainEntity: metadata.faqItems.map((item) => ({
+        "@type": "Question",
+        name: item.question,
+        acceptedAnswer: {
+          "@type": "Answer",
+          text: item.answer,
+        },
+      })),
+    });
+  }
+
+  if (metadata.howToName && metadata.howToSteps && metadata.howToSteps.length > 0) {
+    items.push({
+      "@context": "https://schema.org",
+      "@type": "HowTo",
+      name: metadata.howToName,
+      step: metadata.howToSteps.map((step, idx) => ({
+        "@type": "HowToStep",
+        position: idx + 1,
+        name: step.name,
+        text: step.text,
+      })),
+    });
+  }
+
+  if (metadata.definedTerms && metadata.definedTerms.length > 0) {
+    items.push({
+      "@context": "https://schema.org",
+      "@type": "DefinedTermSet",
+      name: metadata.title,
+      hasDefinedTerm: metadata.definedTerms.map((dt) => ({
+        "@type": "DefinedTerm",
+        name: dt.term,
+        description: dt.definition,
+      })),
+    });
+  }
+
+  if (metadata.softwareApp) {
+    const app = metadata.softwareApp;
+    const softwareAppEntry: Record<string, unknown> = {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      name: SEO_DEFAULTS.siteName,
+      description: metadata.description,
+      url: canonicalUrl,
+      applicationCategory: app.applicationCategory,
+      operatingSystem: app.operatingSystem,
+      softwareVersion: app.version,
+      license: app.license,
+      codeRepository: app.codeRepository,
+      offers: {
+        "@type": "Offer",
+        price: app.offers.price,
+        priceCurrency: app.offers.priceCurrency,
+      },
+    };
+    if (app.installUrl) {
+      softwareAppEntry.installUrl = app.installUrl;
+    }
+    if (app.featureList && app.featureList.length > 0) {
+      softwareAppEntry.featureList = app.featureList;
+    }
+    items.push(softwareAppEntry);
+  }
+
+  if (metadata.organization) {
+    const org = metadata.organization;
+    items.push({
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      name: SEO_DEFAULTS.siteName,
+      url: SEO_DEFAULTS.baseUrl,
+      founder: {
+        "@type": "Person",
+        name: org.founderName,
+        ...(org.founderUrl ? { url: org.founderUrl } : {}),
+      },
+      sameAs: org.sameAs,
     });
   }
 

@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" role="img" aria-label="Tools to state layer: multiple AI tools writing through a single structured state layer">
+  <defs>
+    <radialGradient id="bg_ttl" cx="50%" cy="50%" r="70%">
+      <stop offset="0%" stop-color="#c8860a"/>
+      <stop offset="55%" stop-color="#7a4f08"/>
+      <stop offset="100%" stop-color="#2e1800"/>
+    </radialGradient>
+    <radialGradient id="glow_ttl" cx="50%" cy="50%" r="45%">
+      <stop offset="0%" stop-color="#ffe8a0" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#c8860a" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="320" height="200" fill="url(#bg_ttl)"/>
+  <rect width="320" height="200" fill="url(#glow_ttl)"/>
+
+  <!-- Three tool boxes across the top -->
+  <!-- Tool 1 -->
+  <rect x="18" y="18" width="60" height="52" rx="7" fill="#f4e8c1" stroke="#4a3510" stroke-width="2.2"/>
+  <line x1="28" y1="36" x2="68" y2="36" stroke="#6b4e1f" stroke-width="1.8"/>
+  <line x1="28" y1="48" x2="60" y2="48" stroke="#6b4e1f" stroke-width="1.8"/>
+  <line x1="28" y1="60" x2="68" y2="60" stroke="#6b4e1f" stroke-width="1.8"/>
+
+  <!-- Tool 2 (center) -->
+  <rect x="130" y="18" width="60" height="52" rx="7" fill="#f4e8c1" stroke="#4a3510" stroke-width="2.2"/>
+  <line x1="140" y1="36" x2="180" y2="36" stroke="#6b4e1f" stroke-width="1.8"/>
+  <line x1="140" y1="48" x2="174" y2="48" stroke="#6b4e1f" stroke-width="1.8"/>
+  <line x1="140" y1="60" x2="180" y2="60" stroke="#6b4e1f" stroke-width="1.8"/>
+
+  <!-- Tool 3 -->
+  <rect x="242" y="18" width="60" height="52" rx="7" fill="#f4e8c1" stroke="#4a3510" stroke-width="2.2"/>
+  <line x1="252" y1="36" x2="292" y2="36" stroke="#6b4e1f" stroke-width="1.8"/>
+  <line x1="252" y1="48" x2="284" y2="48" stroke="#6b4e1f" stroke-width="1.8"/>
+  <line x1="252" y1="60" x2="292" y2="60" stroke="#6b4e1f" stroke-width="1.8"/>
+
+  <!-- Vertical drop arrows to layer -->
+  <line x1="48" y1="72" x2="48" y2="112" stroke="#f4e8c1" stroke-width="1.8" stroke-linecap="round" opacity="0.7"/>
+  <polygon points="43,110 48,120 53,110" fill="#f4e8c1" opacity="0.7"/>
+  <line x1="160" y1="72" x2="160" y2="112" stroke="#f4e8c1" stroke-width="1.8" stroke-linecap="round" opacity="0.7"/>
+  <polygon points="155,110 160,120 165,110" fill="#f4e8c1" opacity="0.7"/>
+  <line x1="272" y1="72" x2="272" y2="112" stroke="#f4e8c1" stroke-width="1.8" stroke-linecap="round" opacity="0.7"/>
+  <polygon points="267,110 272,120 277,110" fill="#f4e8c1" opacity="0.7"/>
+
+  <!-- State layer — wide horizontal bar spanning all three -->
+  <rect x="18" y="122" width="284" height="56" rx="10" fill="#f4e8c1" stroke="#4a3510" stroke-width="3"/>
+  <!-- Layer internal rows suggesting structured storage -->
+  <line x1="34" y1="142" x2="286" y2="142" stroke="#6b4e1f" stroke-width="1.8"/>
+  <line x1="34" y1="158" x2="286" y2="158" stroke="#6b4e1f" stroke-width="1.8"/>
+  <!-- Column dividers -->
+  <line x1="124" y1="126" x2="124" y2="174" stroke="#6b4e1f" stroke-width="1.2" opacity="0.4"/>
+  <line x1="196" y1="126" x2="196" y2="174" stroke="#6b4e1f" stroke-width="1.2" opacity="0.4"/>
+</svg>

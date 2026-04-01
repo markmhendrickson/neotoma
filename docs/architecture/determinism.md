@@ -71,6 +71,54 @@ AI interpretation is **auditable but not replay-deterministic**:
 
 **Policy:** Neotoma prioritizes system-level idempotence over model-level determinism. The LLM is stochastic (not deterministic). The system enforces idempotence through canonicalization, hashing, and deduplication.
 
+### 1.6 Agent-Layer Nondeterminism and Bounded Convergence
+
+**Problem:** Sections 1.2–1.4 address nondeterminism in the *interpretation* layer (LLM extracting fields from a source). A distinct and broader source of nondeterminism exists at the *agent tool-selection* layer: the LLM deciding **which** MCP tools to call, **when**, and **with what payloads**.
+
+**Why this matters:**
+- Given the same user message, an LLM may choose different tools, different entity types, different field sets, or different relationship structures across runs.
+- Agent instructions (MCP instructions, rules, conventions) constrain behavior probabilistically, not deterministically. Instruction adherence is high but not guaranteed.
+- Each stochastic decision compounds: if run A stores `entity_type: "purchase"` and run B stores `entity_type: "transaction"` for the same real-world event, the deterministic core faithfully processes both — producing divergent entity graphs from identical inputs.
+
+**Explicit Classification:**
+
+| Component | Deterministic? | Notes |
+|-----------|----------------|-------|
+| Agent tool selection | **No** | LLM chooses which MCP action to call |
+| Agent payload construction | **No** | LLM constructs entity_type, fields, values |
+| Agent entity type selection | **No** | May vary: "purchase" vs "transaction" |
+| Agent relationship creation | **No** | May create REFERS_TO or skip it |
+| Agent retrieval-before-store | **No** | Soft instruction, may be skipped |
+
+**Bounded Convergence:**
+
+Neotoma does not (and cannot) make the agent layer deterministic. Instead, the architecture targets **bounded convergence**: given reasonable LLM behavior, the entity graph converges toward a consistent state over time, with the deterministic core ensuring convergence is monotonic.
+
+Properties of bounded convergence:
+1. **Immutability prevents corruption:** Stochastic variance accumulates as new observations, never overwrites existing truth
+2. **Canonicalization narrows variance:** Normalization + hashing collapses semantically equivalent but syntactically different LLM outputs to the same observation
+3. **Reducers arbitrate conflicts:** Merge policies resolve multi-observation conflicts deterministically regardless of observation order
+4. **Entity merge repairs divergence:** `merge_entities()` deterministically repairs duplicate entities created by variant tool-selection paths
+5. **Schema validation constrains payloads:** Write-time validation rejects structurally invalid observations before they enter the log
+
+**Convergence improvements** (see [`docs/architecture/bounded_convergence.md`](./bounded_convergence.md)):
+- Write-time entity suggestion (fuzzy-match on store)
+- Entity type normalization via taxonomy with aliases
+- Field alias mapping in schema definitions
+- Retrieval-augmented storing (auto-inject existing entities)
+- Post-store convergence diagnostics
+- Structured action templates
+- Agent action replay and convergence testing
+- Observation confidence scoring
+- Fixed-point convergence for critical stores
+
+**Policy:** Neotoma's determinism guarantee is a property of the **data layer**, not the **agent layer**. The system is deterministic in the way a database is deterministic (same queries, same results), not in the way a compiler is deterministic (same source, same binary). The agent layer is more like a user — unpredictable in what it writes, but the system faithfully and deterministically processes whatever it receives.
+
+**Related Documents:**
+- [`docs/architecture/bounded_convergence.md`](./bounded_convergence.md) — Bounded convergence architecture and improvement roadmap
+- [`docs/architecture/idempotence_pattern.md`](./idempotence_pattern.md) — Idempotence pattern for LLM interpretation
+- [`docs/specs/MCP_SPEC.md`](../specs/MCP_SPEC.md) — MCP action catalog and agent instructions
+
 ### 1.5 What is Determinism? (Continued)
 **Inputs include:**
 - Function arguments
@@ -727,6 +775,7 @@ Load `docs/architecture/determinism.md` when:
 - `docs/NEOTOMA_MANIFEST.md` (determinism as core principle)
 - `docs/architecture/architecture.md` (layer boundaries)
 - `docs/architecture/consistency.md` (eventual vs strong consistency)
+- `docs/architecture/bounded_convergence.md` (agent-layer convergence improvements)
 - `docs/subsystems/schema.md` (schema-based extraction)
 - `docs/testing/testing_standard.md` (deterministic test patterns)
 ### Constraints Agents Must Enforce

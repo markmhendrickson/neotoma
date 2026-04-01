@@ -4,6 +4,8 @@ import repoInfo from "./repo_info.json";
 export const REPO_VERSION: string = repoInfo.version;
 /** Published GitHub releases count (updated by scripts/repo_info.ts). */
 export const REPO_RELEASES_COUNT: number = repoInfo.releasesCount;
+/** GitHub stargazers count (build-time fallback, refreshed client-side). */
+export const REPO_STARS_COUNT: number = repoInfo.starsCount;
 
 export interface SiteSection {
   id: string;
@@ -67,6 +69,7 @@ export interface MemoryGuaranteeRow {
   platform: GuaranteeLevel;
   retrieval: GuaranteeLevel;
   file: GuaranteeLevel;
+  database: GuaranteeLevel;
   neotoma: GuaranteeLevel;
 }
 
@@ -79,6 +82,7 @@ export const MEMORY_GUARANTEE_ROWS: MemoryGuaranteeRow[] = [
     platform: "not-provided",
     retrieval: "not-provided",
     file: "not-provided",
+    database: "not-provided",
     neotoma: "guaranteed",
   },
   {
@@ -89,6 +93,7 @@ export const MEMORY_GUARANTEE_ROWS: MemoryGuaranteeRow[] = [
     platform: "not-provided",
     retrieval: "not-provided",
     file: "manual",
+    database: "not-provided",
     neotoma: "guaranteed",
   },
   {
@@ -99,6 +104,7 @@ export const MEMORY_GUARANTEE_ROWS: MemoryGuaranteeRow[] = [
     platform: "not-provided",
     retrieval: "not-provided",
     file: "not-provided",
+    database: "not-provided",
     neotoma: "guaranteed",
   },
   {
@@ -109,6 +115,7 @@ export const MEMORY_GUARANTEE_ROWS: MemoryGuaranteeRow[] = [
     platform: "not-provided",
     retrieval: "not-provided",
     file: "partial",
+    database: "not-provided",
     neotoma: "guaranteed",
   },
   {
@@ -119,6 +126,7 @@ export const MEMORY_GUARANTEE_ROWS: MemoryGuaranteeRow[] = [
     platform: "not-provided",
     retrieval: "not-provided",
     file: "not-provided",
+    database: "partial",
     neotoma: "guaranteed",
   },
   {
@@ -129,6 +137,7 @@ export const MEMORY_GUARANTEE_ROWS: MemoryGuaranteeRow[] = [
     platform: "common",
     retrieval: "common",
     file: "common",
+    database: "common",
     neotoma: "prevented",
   },
   {
@@ -139,6 +148,7 @@ export const MEMORY_GUARANTEE_ROWS: MemoryGuaranteeRow[] = [
     platform: "common",
     retrieval: "common",
     file: "possible",
+    database: "common",
     neotoma: "prevented",
   },
   {
@@ -149,6 +159,7 @@ export const MEMORY_GUARANTEE_ROWS: MemoryGuaranteeRow[] = [
     platform: "not-provided",
     retrieval: "not-provided",
     file: "not-provided",
+    database: "not-provided",
     neotoma: "guaranteed",
   },
   {
@@ -159,6 +170,7 @@ export const MEMORY_GUARANTEE_ROWS: MemoryGuaranteeRow[] = [
     platform: "partial",
     retrieval: "partial",
     file: "partial",
+    database: "partial",
     neotoma: "guaranteed",
   },
   {
@@ -169,6 +181,7 @@ export const MEMORY_GUARANTEE_ROWS: MemoryGuaranteeRow[] = [
     platform: "guaranteed",
     retrieval: "not-provided",
     file: "not-provided",
+    database: "not-provided",
     neotoma: "not-provided",
   },
   {
@@ -179,6 +192,7 @@ export const MEMORY_GUARANTEE_ROWS: MemoryGuaranteeRow[] = [
     platform: "not-provided",
     retrieval: "guaranteed",
     file: "not-provided",
+    database: "not-provided",
     neotoma: "guaranteed",
   },
   {
@@ -189,6 +203,7 @@ export const MEMORY_GUARANTEE_ROWS: MemoryGuaranteeRow[] = [
     platform: "not-provided",
     retrieval: "not-provided",
     file: "guaranteed",
+    database: "not-provided",
     neotoma: "not-provided",
   },
 ];
@@ -197,6 +212,7 @@ export const MEMORY_MODEL_VENDORS: Record<string, string> = {
   platform: "Claude, ChatGPT, Gemini, Copilot",
   retrieval: "Mem0, Zep, LangChain Memory",
   file: "Markdown files, JSON stores, CRDT docs",
+  database: "SQLite, Postgres, MySQL",
   neotoma: "Neotoma",
 };
 
@@ -204,6 +220,7 @@ export const MEMORY_TYPE_SLUGS: Record<string, string> = {
   platform: "memory-models#platform-memory",
   retrieval: "memory-models#retrieval-memory",
   file: "memory-models#file-based-memory",
+  database: "memory-models#database-memory",
   neotoma: "memory-models#deterministic-memory",
 };
 
@@ -250,14 +267,10 @@ export const THREE_FOUNDATIONS: FoundationCard[] = [
 export const SITE_SECTIONS: SiteSection[] = [
   { id: "intro", label: "Intro", shortLabel: "Intro", icon: "Zap" },
   { id: "outcomes", label: "Before / After", shortLabel: "Before / After", icon: "AlertTriangle" },
+  { id: "who", label: "Who", shortLabel: "Who", icon: "Users" },
   { id: "memory-guarantees", label: "Guarantees", shortLabel: "Guarantees", icon: "ShieldCheck" },
-  { id: "evaluate", label: "Evaluate", shortLabel: "Evaluate", icon: "MessageSquare" },
-  { id: "install", label: "Install", shortLabel: "Install", icon: "Rocket" },
-  { id: "inspect", label: "Inspect", shortLabel: "Inspect", icon: "Search" },
-  { id: "architecture", label: "Architecture", shortLabel: "Architecture", icon: "Layers" },
-  { id: "use-cases", label: "Use cases", shortLabel: "Use cases", icon: "Network" },
-  { id: "interfaces", label: "Interfaces", shortLabel: "Interfaces", icon: "SatelliteDish" },
-  { id: "learn-more", label: "Learn more", shortLabel: "Resources", icon: "GraduationCap" },
+  { id: "record-types", label: "Record types", shortLabel: "Types", icon: "BookOpen" },
+  { id: "evaluate", label: "Evaluate", shortLabel: "Evaluate", icon: "ClipboardCheck" },
 ];
 
 export interface DocNavItem {
@@ -272,13 +285,36 @@ export interface DocNavCategory {
   items: DocNavItem[];
 }
 
+/**
+ * Industry vertical marketing routes. Excluded from doc sidebar, header search, and sitemap (noindex in SEO).
+ * Routes remain reachable via direct URL and in-page links (e.g. Build vs buy, verticals index).
+ */
+export const VERTICAL_LANDING_PATHS: readonly string[] = [
+  "/verticals",
+  "/compliance",
+  "/crm",
+  "/contracts",
+  "/diligence",
+  "/portfolio",
+  "/cases",
+  "/financial-ops",
+  "/procurement",
+  "/agent-auth",
+  "/healthcare",
+  "/government",
+  "/customer-ops",
+  "/logistics",
+  "/personal-data",
+];
+
 export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
   {
     title: "Getting started",
     items: [
       { label: "Documentation", href: "/docs", icon: "Home" },
+      { label: "Evaluate", href: "/evaluate", icon: "ClipboardCheck" },
       { label: "Install", href: "/install", icon: "Rocket" },
-      { label: "Developer walkthrough", href: "/developer-walkthrough", icon: "Code" },
+      { label: "Walkthrough", href: "/developer-walkthrough", icon: "Waypoints" },
     ],
   },
   {
@@ -293,6 +329,17 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
     ],
   },
   {
+    title: "Record types",
+    items: [
+      { label: "Contacts", href: "/types/contacts", icon: "Users" },
+      { label: "Tasks", href: "/types/tasks", icon: "ListChecks" },
+      { label: "Transactions", href: "/types/transactions", icon: "Receipt" },
+      { label: "Contracts", href: "/types/contracts", icon: "Scale" },
+      { label: "Decisions", href: "/types/decisions", icon: "Waypoints" },
+      { label: "Events", href: "/types/events", icon: "CalendarClock" },
+    ],
+  },
+  {
     title: "Reference",
     items: [
       { label: "REST API", href: "/api", icon: "Globe" },
@@ -304,9 +351,9 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
       { label: "Agent instructions", href: "/agent-instructions", icon: "Bot" },
       { label: "Architecture", href: "/architecture", icon: "Building2" },
       { label: "Terminology", href: "/terminology", icon: "Bookmark" },
-      { label: "Data model walkthrough", href: "/data-model", icon: "Boxes" },
       { label: "Schema management", href: "/schema-management", icon: "Database" },
       { label: "Troubleshooting", href: "/troubleshooting", icon: "Bug" },
+      { label: "FAQ", href: "/faq", icon: "HelpCircle" },
       { label: "Changelog", href: "/changelog", icon: "History" },
       {
         label: "All pages (Markdown)",
@@ -316,30 +363,23 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
     ],
   },
   {
-    title: "Use cases",
+    title: "Operational modes",
     items: [
-      { label: "AI infrastructure engineers", href: "/ai-infrastructure-engineers", icon: "Cpu" },
-      { label: "Agent system builders", href: "/agentic-systems-builders", icon: "Zap" },
-      { label: "AI-native operators", href: "/ai-native-operators", icon: "SatelliteDish" },
+      { label: "Operating across tools", href: "/operating", icon: "SatelliteDish" },
+      { label: "Building pipelines", href: "/building-pipelines", icon: "Zap" },
+      { label: "Debugging infrastructure", href: "/debugging-infrastructure", icon: "Cpu" },
     ],
   },
   {
-    title: "Verticals",
+    title: "Compare",
     items: [
-      { label: "All verticals", href: "/verticals", icon: "LayoutGrid" },
-      { label: "Compliance", href: "/compliance", icon: "ShieldCheck" },
-      { label: "CRM", href: "/crm", icon: "Building2" },
-      { label: "Contracts", href: "/contracts", icon: "FileText" },
-      { label: "Due Diligence", href: "/diligence", icon: "Search" },
-      { label: "Portfolio", href: "/portfolio", icon: "TrendingUp" },
-      { label: "Case Management", href: "/cases", icon: "Gavel" },
-      { label: "Financial Ops", href: "/financial-ops", icon: "DollarSign" },
-      { label: "Procurement", href: "/procurement", icon: "Briefcase" },
-      { label: "Agent Auth", href: "/agent-auth", icon: "Shield" },
-      { label: "Healthcare", href: "/healthcare", icon: "Heart" },
-      { label: "Government", href: "/government", icon: "Landmark" },
-      { label: "Customer Ops", href: "/customer-ops", icon: "Headphones" },
-      { label: "Logistics", href: "/logistics", icon: "Truck" },
+      { label: "Build vs buy", href: "/build-vs-buy", icon: "Scale" },
+      { label: "Neotoma vs platform memory", href: "/neotoma-vs-platform-memory", icon: "Globe" },
+      { label: "Neotoma vs Mem0", href: "/neotoma-vs-mem0", icon: "Boxes" },
+      { label: "Neotoma vs Zep", href: "/neotoma-vs-zep", icon: "History" },
+      { label: "Neotoma vs RAG", href: "/neotoma-vs-rag", icon: "Search" },
+      { label: "Neotoma vs file-based memory", href: "/neotoma-vs-files", icon: "FileText" },
+      { label: "Neotoma vs database memory", href: "/neotoma-vs-database", icon: "Database" },
     ],
   },
   {
@@ -352,23 +392,14 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
 ];
 
 export const SITE_CODE_SNIPPETS = {
+  onboardingSequence: "evaluation -> installation -> activation -> tooling config",
+  activationSequence: "discover -> propose -> preview -> ingest -> reconstruct -> query -> correct",
   installCommands: `# Global install
 npm install -g neotoma
 
 # Initialize
 neotoma init`,
-  agentInstallPrompt: `Follow this workflow to set up Neotoma:
-
-1. Install Neotoma with npm install -g neotoma.
-2. Initialize Neotoma with neotoma init.
-3. Report what changed after install/init.
-4. If I ask for integration setup after init, link the matching setup guide in docs/developer/ (for example mcp_cursor_setup.md, mcp_claude_code_setup.md, mcp_openclaw_setup.md).
-5. Gather candidate data from available context, including facts this tool already remembers about me.
-6. Present one preview list with provenance, mark already-stored vs new, and ask for explicit confirmation.
-7. Save only what I explicitly confirm.
-8. Pause after asking for confirmation. Do not save or continue until I approve.
-
-Canonical source: https://github.com/markmhendrickson/neotoma/blob/main/install.md`,
+  agentInstallPrompt: `Read https://neotoma.io/install and carry me through the install-first Neotoma flow. Install, activate it with my data, and configure my current tool for robust ongoing use.`,
   postInstallCommands: `# Run API server (development)
 neotoma api start --env dev
 
@@ -406,8 +437,10 @@ docker build -t neotoma .`,
     }
   }
 }`,
-  agentEvaluationPrompt: `Review https://neotoma.io and tell me whether it would solve a real problem for me. Based on what you know about my workflow, what data would I benefit from persisting across our sessions? Give me a specific, honest assessment — not a generic summary of the product.`,
-  agentEvaluationShareEmail: "mark@neotoma.io",
+  /** Short prompt — home evaluate section + integration “Getting started” blocks. */
+  homeEvaluatePrompt: `Read neotoma.io/evaluate and assess whether Neotoma fits my workflow based on what you know about me.`,
+  agentEvaluationPrompt: `Read https://neotoma.io/evaluate. Tell me whether Neotoma is a real fit for my workflow, what data would be highest value to persist, and what I should do next.`,
+  agentEvaluationShareEmail: "contact@neotoma.io",
   agentEvaluationShareSubject: "Agent evaluation of Neotoma",
   dockerCliExample: `# Store an entity
 docker exec neotoma neotoma store \\
@@ -813,8 +846,8 @@ export const FUNCTIONALITY_MATRIX: FunctionalityRow[] = [
     endpointParameters: ["body: entity_id, field, value", "body: source_id"],
     cli: "corrections create, interpretations reinterpret",
     cliParameters: ["—", "<source_id>"],
-    mcp: "correct, reinterpret",
-    mcpParameters: ["entity_id, field, value", "source_id"],
+    mcp: "correct",
+    mcpParameters: ["entity_id, field, value"],
     testCoverage: "cli_correction_commands, mcp_correction_variations, interpretation (service)",
   },
   {
@@ -848,6 +881,184 @@ export const FUNCTIONALITY_MATRIX: FunctionalityRow[] = [
     mcp: "retrieve_file_url",
     mcpParameters: ["path"],
     testCoverage: "mcp_resources, contract_mapping",
+  },
+  {
+    functionality: "Parse a file into agent-readable text without storing.",
+    openapi: "—",
+    endpointDescriptions: [],
+    endpointParameters: [],
+    cli: "analyze <filePath>",
+    cliParameters: ["<filePath>"],
+    mcp: "parse_file",
+    mcpParameters: ["file_path or file_content+mime_type"],
+    testCoverage: "mcp_store_variations",
+  },
+  {
+    functionality: "Check for a newer npm package version.",
+    openapi: "—",
+    endpointDescriptions: [],
+    endpointParameters: [],
+    cli: "—",
+    cliParameters: [],
+    mcp: "npm_check_update",
+    mcpParameters: ["packageName?"],
+    testCoverage: "—",
+  },
+  {
+    functionality: "Health check.",
+    openapi: "GET /health",
+    endpointDescriptions: ["Check if server is running."],
+    endpointParameters: ["—"],
+    cli: "api status",
+    cliParameters: ["--env dev|prod"],
+    mcp: "—",
+    testCoverage: "api_health",
+  },
+  {
+    functionality: "OpenAPI specification.",
+    openapi: "GET /openapi.yaml",
+    endpointDescriptions: ["Get OpenAPI spec for API documentation."],
+    endpointParameters: ["—"],
+    cli: "—",
+    cliParameters: [],
+    mcp: "—",
+    testCoverage: "—",
+  },
+  {
+    functionality: "Initialize Neotoma (data dirs, DB, encryption, .env).",
+    openapi: "—",
+    endpointDescriptions: [],
+    endpointParameters: [],
+    cli: "init",
+    cliParameters: ["--data-dir, --force, --skip-db, --skip-env"],
+    mcp: "—",
+    testCoverage: "cli_init",
+  },
+  {
+    functionality: "Reset local Neotoma state to clean slate.",
+    openapi: "—",
+    endpointDescriptions: [],
+    endpointParameters: [],
+    cli: "reset",
+    cliParameters: ["--yes"],
+    mcp: "—",
+    testCoverage: "—",
+  },
+  {
+    functionality: "Start, stop, or manage the API server.",
+    openapi: "—",
+    endpointDescriptions: [],
+    endpointParameters: [],
+    cli: "api start, api stop, api status, api logs, api processes",
+    cliParameters: [
+      "--env, --background, --tunnel, --tunnel-provider",
+      "--env",
+      "--env",
+      "--env",
+      "—",
+    ],
+    mcp: "—",
+    testCoverage: "—",
+  },
+  {
+    functionality: "Configure or check MCP server entries in IDE configs.",
+    openapi: "—",
+    endpointDescriptions: [],
+    endpointParameters: [],
+    cli: "mcp config, mcp check",
+    cliParameters: ["--no-check", "--user-level"],
+    mcp: "—",
+    testCoverage: "—",
+  },
+  {
+    functionality: "Check or install CLI agent instructions for IDEs.",
+    openapi: "—",
+    endpointDescriptions: [],
+    endpointParameters: [],
+    cli: "cli-instructions config, cli-instructions check",
+    cliParameters: ["—", "--user-level, --yes"],
+    mcp: "—",
+    testCoverage: "—",
+  },
+  {
+    functionality: "Stream record changes in real time.",
+    openapi: "—",
+    endpointDescriptions: [],
+    endpointParameters: [],
+    cli: "watch",
+    cliParameters: ["--interval, --json, --human, --tail"],
+    mcp: "—",
+    testCoverage: "cli_watch",
+  },
+  {
+    functionality: "Show or change storage paths and merge databases.",
+    openapi: "—",
+    endpointDescriptions: [],
+    endpointParameters: [],
+    cli: "storage info, storage set-data-dir, storage merge-db",
+    cliParameters: ["—", "--move-db-files, --on-conflict, --yes", "--source, --target, --mode, --dry-run"],
+    mcp: "—",
+    testCoverage: "—",
+  },
+  {
+    functionality: "Create or restore a backup.",
+    openapi: "—",
+    endpointDescriptions: [],
+    endpointParameters: [],
+    cli: "backup create, backup restore",
+    cliParameters: ["--output", "--from, --target"],
+    mcp: "—",
+    testCoverage: "—",
+  },
+  {
+    functionality: "Read persistent log files.",
+    openapi: "—",
+    endpointDescriptions: [],
+    endpointParameters: [],
+    cli: "logs tail",
+    cliParameters: ["--decrypt, --lines, --file"],
+    mcp: "—",
+    testCoverage: "—",
+  },
+  {
+    functionality: "Interactive session with persistent prompt.",
+    openapi: "—",
+    endpointDescriptions: [],
+    endpointParameters: [],
+    cli: "session",
+    cliParameters: ["--servers"],
+    mcp: "—",
+    testCoverage: "cli_session_startup_ux",
+  },
+  {
+    functionality: "Run npm scripts from the repo.",
+    openapi: "—",
+    endpointDescriptions: [],
+    endpointParameters: [],
+    cli: "dev list, dev <script>",
+    cliParameters: ["—", "-- <args>"],
+    mcp: "—",
+    testCoverage: "—",
+  },
+  {
+    functionality: "Interpret uninterpreted sources (backfill).",
+    openapi: "—",
+    endpointDescriptions: [],
+    endpointParameters: [],
+    cli: "interpretations interpret-uninterpreted",
+    cliParameters: ["--limit, --dry-run, --interpretation-config"],
+    mcp: "—",
+    testCoverage: "—",
+  },
+  {
+    functionality: "Log out or get MCP auth token.",
+    openapi: "—",
+    endpointDescriptions: [],
+    endpointParameters: [],
+    cli: "auth logout, auth mcp-token",
+    cliParameters: ["—", "—"],
+    mcp: "—",
+    testCoverage: "cli_auth_commands",
   },
 ];
 
@@ -990,6 +1201,20 @@ export interface IcpProfile {
   name: string;
   shortName: string;
   tagline: string;
+  /** Operational mode label (e.g. "Operating", "Building", "Debugging"). */
+  modeLabel: string;
+  /** Lucide icon name rendered on the homepage card (e.g. "Server"). */
+  iconName: string;
+  /** Role the ICP is escaping in this mode (e.g. "Context janitor"). */
+  escaping: string;
+  /** Role the ICP transforms into (e.g. "Operator with continuity"). */
+  into: string;
+  /** Interaction pattern shift summary (e.g. "Turn-by-turn prompting → review-and-steer"). */
+  interactionShift: string;
+  /** Tax the ICP pays in this mode without Neotoma. */
+  taxPaid: string;
+  /** What the ICP recovers when the tax is removed. */
+  taxRecovered: string;
   painPoints: string[];
   failureModes: FailureModeItem[];
   dataTypes: string[];
@@ -999,71 +1224,73 @@ export interface IcpProfile {
 
 export const ICP_PROFILES: IcpProfile[] = [
   {
-    slug: "ai-infrastructure-engineers",
-    name: "AI infrastructure engineers",
-    shortName: "AI infrastructure engineers",
-    tagline: "Two runs. Same inputs. Different state.",
+    slug: "operating",
+    name: "When you're operating across tools",
+    shortName: "Operating across tools",
+    tagline: "Every session starts from zero. You re-explain context, re-prompt corrections, re-establish what your agent already knew.",
+    modeLabel: "Operating",
+    iconName: "ArrowLeftRight",
+    escaping: "Context janitor — human sync layer between tools",
+    into: "Operator with continuity — steering, not driving",
+    interactionShift: "Turn-by-turn prompting → review-and-steer",
+    taxPaid: "Re-prompting, context re-establishment, manual cross-tool sync",
+    taxRecovered: "Attention, continuity, trust in your tools",
     painPoints: [
-      "Cannot reproduce agent runs: same inputs yield different state",
-      "State mutations invisible to debugging and observability tooling",
-      "Debugging production failures requires manual log archaeology",
-      "No provenance trail for state changes across pipeline steps",
-      "No portable state layer; agent memory locked to one vendor's runtime",
-      "Agent state routed through third-party services with no data residency or compliance guarantees",
+      "Every session starts from zero; nothing your agent learns carries over",
+      "Context scattered across email, drives, screenshots, and chat histories",
+      "You re-explain the same project, preferences, and constraints in every conversation",
+      "Commitments and action items vanish between sessions and tools",
+      "Your personal data lives in provider memory you don't control",
     ],
     failureModes: [
-      { label: "Non-reproducible agent runs in production", icon: "Repeat" },
-      { label: "Invisible state mutation across sessions", icon: "EyeOff" },
-      { label: "No provenance linking outputs to source data", icon: "LinkOff" },
-      { label: "Ordering-sensitive state drift across orchestration steps", icon: "GitBranch" },
-      { label: "No proof of data residency or access control for compliance", icon: "ShieldAlert" },
-      { label: "State layer locked to one vendor; no portability across runtimes", icon: "Lock" },
+      { label: "Commitments lost between tools", icon: "BookmarkX" },
+      { label: "Context breaks when you switch tools", icon: "Unlink" },
+      { label: "Facts silently drift over time", icon: "Activity" },
+      { label: "Corrections don't stick", icon: "RefreshCw" },
+      { label: "Personal data in provider memory with no deletion control", icon: "ShieldAlert" },
+      { label: "Memory locked to one vendor", icon: "Lock" },
     ],
     dataTypes: [
-      "session state",
-      "agent actions",
-      "pipelines",
-      "evaluations",
-      "audit trails",
-      "run state",
-      "orchestration logs",
-      "tool configs",
-      "runbooks",
-      "entity graphs",
+      "tasks",
+      "preferences",
+      "contacts",
+      "deadlines",
+      "notes",
+      "conversations",
+      "receipts",
+      "travel docs",
+      "meeting notes",
     ],
-    schemaHotSpots: [
-      "agent_session",
-      "action",
-      "pipeline",
-      "evaluation",
-      "audit_event",
-      "tool_config",
-    ],
+    schemaHotSpots: ["conversation", "message", "agent_message", "note", "task"],
     solutionSummary:
-      "Neotoma replaces the glue you've been hand-rolling (checkpoint logic, state serialization, custom diffing) with deterministic primitives. Append-only observations, versioned history, and replayable timelines become infrastructure you build on, not plumbing you maintain.",
+      "Neotoma removes the tax you pay re-explaining your world to every tool. Store a fact once and it's available everywhere — Claude, Cursor, Codex, ChatGPT. Correct once and it sticks.",
   },
   {
-    slug: "agentic-systems-builders",
-    name: "Builders of agentic systems",
-    shortName: "Agent system builders",
-    tagline: "Your agent resolves entities by inference. Every session, it guesses again.",
+    slug: "building-pipelines",
+    name: "When you're building pipelines",
+    shortName: "Building pipelines",
+    tagline: "Your agent guesses entities every session. Corrections don't persist. Memory regressions ship because the architecture can't prevent them.",
+    modeLabel: "Building",
+    iconName: "Workflow",
+    escaping: "Babysitting inference — absorbing variance the architecture doesn't handle",
+    into: "Builder who ships on solid ground",
+    interactionShift: "Compensating for memory → building on top of it",
+    taxPaid: "Prompt workarounds, dedup hacks, memory regression fixes",
+    taxRecovered: "Product velocity, shipping confidence, roadmap ambition",
     painPoints: [
-      "No shared state for agents: token-based or conversation-only; no cross-session, cross-agent state",
-      "No provenance: cannot trace agent decisions or outputs to source data",
-      "No deterministic layer: need reproducible, explainable state for eval, debug, and compliance",
-      "Fragmented context across orchestration steps and multi-agent workflows",
-      "Sensitive client data flows through external memory services with no storage or access audit",
+      "No shared memory across sessions or agents; everything resets",
+      "Can't trace agent decisions back to the facts they were based on",
+      "Same pipeline, different results — no reproducible state to compare",
+      "Context fragments across orchestration steps and agent handoffs",
+      "Client data flows through memory services you can't audit",
     ],
     failureModes: [
-      { label: "Silent state mutation between agent sessions", icon: "ZapOff" },
-      { label: "Non-replayable pipelines; can't reconstruct agent reasoning", icon: "RotateCcw" },
-      { label: "Context loss across orchestration steps and agent handoffs", icon: "Hand" },
-      {
-        label: "Evaluation gaps; no audit trail linking outputs to source facts",
-        icon: "FileText",
-      },
+      { label: "Memory silently mutates between sessions", icon: "ZapOff" },
+      { label: "Can't replay a pipeline to understand what went wrong", icon: "RotateCcw" },
+      { label: "Context lost across orchestration steps", icon: "Hand" },
+      { label: "No trail linking agent output to source facts", icon: "FileText" },
       { label: "Client data in third-party memory with no access audit", icon: "ShieldAlert" },
-      { label: "Framework-specific memory; no portability across agent tools", icon: "Lock" },
+      { label: "Memory locked to one framework", icon: "Lock" },
     ],
     dataTypes: [
       "session state",
@@ -1086,54 +1313,67 @@ export const ICP_PROFILES: IcpProfile[] = [
       "tool_config",
     ],
     solutionSummary:
-      "Neotoma removes the tax your team pays compensating for unreliable memory. Entities resolve once and persist. State evolves through versioned, auditable transitions. Every fact traces to provenance. Cross-session state with full audit trail.",
+      "Neotoma removes the tax you pay compensating for unreliable memory. Entities resolve once and persist. Every fact traces back to its source. New features compound instead of regressing.",
   },
   {
-    slug: "ai-native-operators",
-    name: "AI-native individual operators",
-    shortName: "AI-native operators",
-    tagline: "The agent infers. It doesn't guarantee. Here's what that costs you.",
+    slug: "debugging-infrastructure",
+    name: "When you're debugging infrastructure",
+    shortName: "Debugging infrastructure",
+    tagline: "Two runs. Same inputs. Different state. No replay, no diff, no explanation.",
+    modeLabel: "Debugging",
+    iconName: "Bug",
+    escaping: "Log archaeologist — reverse-engineering truth from logs",
+    into: "Platform engineer with replayable state",
+    interactionShift: "Manual orchestration → declarative trust",
+    taxPaid: "Writing glue (checkpoint logic, custom diffing, state serialization)",
+    taxRecovered: "Debugging speed, platform design time, sleep",
     painPoints: [
-      "No persistent state across sessions; every AI conversation starts from zero",
-      "Fragmented document sources scattered across email, drives, and screenshots",
-      "Repetitive context-setting in every new AI interaction",
-      "Lost commitments and forgotten action items between sessions",
-      "Personal data (receipts, contacts, preferences) stored in provider memory with no control over retention or training use",
+      "Same inputs produce different state across runs — no way to detect why",
+      "State changes are invisible to your observability stack",
+      "Debugging means reading logs and guessing at what the agent believed",
+      "No trail connecting state changes to the pipeline step that caused them",
+      "Memory locked to one vendor's runtime; switching means starting over",
+      "Agent state routed through services with no data residency guarantees",
     ],
     failureModes: [
-      { label: "Lost commitments across tools", icon: "BookmarkX" },
-      { label: "Tool-to-tool context loss", icon: "Unlink" },
-      { label: "Silent state drift over time", icon: "Activity" },
-      { label: "Weak correction loop; no way to fix what the agent got wrong", icon: "RefreshCw" },
-      {
-        label: "Personal data in opaque provider memory with no deletion control",
-        icon: "ShieldAlert",
-      },
-      { label: "Memory locked to one vendor's ecosystem", icon: "Lock" },
+      { label: "Agent runs aren't reproducible", icon: "Repeat" },
+      { label: "State mutates invisibly between sessions", icon: "EyeOff" },
+      { label: "Can't trace output back to source data", icon: "LinkOff" },
+      { label: "State drifts depending on processing order", icon: "GitBranch" },
+      { label: "No proof of data residency for compliance", icon: "ShieldAlert" },
+      { label: "State layer locked to one vendor", icon: "Lock" },
     ],
     dataTypes: [
-      "tasks",
-      "preferences",
-      "contacts",
-      "deadlines",
-      "notes",
-      "conversations",
-      "receipts",
-      "travel docs",
-      "meeting notes",
+      "session state",
+      "agent actions",
+      "pipelines",
+      "evaluations",
+      "audit trails",
+      "run state",
+      "orchestration logs",
+      "tool configs",
+      "runbooks",
+      "entity graphs",
     ],
-    schemaHotSpots: ["conversation", "message", "agent_message", "note", "task"],
+    schemaHotSpots: [
+      "agent_session",
+      "action",
+      "pipeline",
+      "evaluation",
+      "audit_event",
+      "tool_config",
+    ],
     solutionSummary:
-      "Neotoma removes the tax you pay re-explaining your world to every tool. Every conversation, entity, and commitment persists as versioned state. Switch between Claude, Cursor, and Codex without losing context. Correct once and the correction sticks.",
+      "Neotoma replaces the glue you write by hand — checkpoint logic, state serialization, custom diffing — with primitives that just work. Replay any timeline, diff any state, trace any output to its source.",
   },
 ];
 
 export const SITE_METADATA = {
   canonicalUrl: "https://neotoma.io/",
   ogImageUrl: "https://neotoma.io/neotoma-og-1200x630.png",
-  pageTitle: "Neotoma | Deterministic state layer for long-running agents",
+  pageTitle: "Your agents forget. Neotoma makes them remember.",
   pageDescription:
-    "Deterministic agent state layer for long-running agents: deterministic state evolution, versioned, schema-bound, replayable, auditable. No silent mutation. Agents install Neotoma themselves.",
+    "Versioned records — contacts, tasks, decisions, finances — that persist across Claude, Cursor, ChatGPT, and every agent you run. Open-source and deterministic.",
   heroImageUrl: "neotoma-hero.png",
 };
 

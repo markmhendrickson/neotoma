@@ -149,6 +149,93 @@ describe("Cross-layer: CLI schema commands → Database", () => {
     });
   });
 
+  describe("schemas update --remove-fields → schema_registry field removal", () => {
+    it("should remove field via CLI and verify removed in DB", async () => {
+      const entityType = `${TEST_ENTITY_TYPE}_rm`;
+
+      const baseDef = JSON.stringify({
+        fields: {
+          keep_field: { type: "string", required: true },
+          noise_field: { type: "string", required: false },
+        },
+      });
+      const registerResult = await execCliJson(
+        `schemas register "${entityType}" --schema '${baseDef}' --user-id "${TEST_USER_ID}" --activate`
+      );
+      expect(registerResult).toHaveProperty("schema_version");
+
+      await verifyWithRetry(async () => {
+        await verifySchemaFieldExists(entityType, "noise_field", {
+          type: "string",
+        });
+      });
+
+      const removeFields = JSON.stringify(["noise_field"]);
+      const updateResult = await execCliJson(
+        `schemas update "${entityType}" --remove-fields '${removeFields}' --user-id "${TEST_USER_ID}"`
+      );
+      expect(updateResult).toBeDefined();
+
+      await verifyWithRetry(async () => {
+        await verifySchemaFieldExists(entityType, "keep_field", {
+          type: "string",
+          required: true,
+        });
+      });
+
+      await verifyWithRetry(async () => {
+        const { data: schema } = await (await import("../../src/db.js")).db
+          .from("schema_registry")
+          .select("*")
+          .eq("entity_type", entityType)
+          .eq("active", true)
+          .single();
+        expect(schema).toBeDefined();
+        expect(schema.schema_definition.fields.noise_field).toBeUndefined();
+        expect(schema.schema_definition.fields.keep_field).toBeDefined();
+      });
+
+      await cleanupTestSchema(entityType, TEST_USER_ID);
+    });
+
+    it("should add and remove fields in same CLI call and verify in DB", async () => {
+      const entityType = `${TEST_ENTITY_TYPE}_addrm`;
+
+      const baseDef = JSON.stringify({
+        fields: {
+          stable: { type: "string", required: true },
+          obsolete: { type: "number", required: false },
+        },
+      });
+      await execCliJson(
+        `schemas register "${entityType}" --schema '${baseDef}' --user-id "${TEST_USER_ID}" --activate`
+      );
+
+      const addFields = JSON.stringify([
+        { field_name: "replacement", field_type: "number" },
+      ]);
+      const removeFields = JSON.stringify(["obsolete"]);
+      await execCliJson(
+        `schemas update "${entityType}" --fields '${addFields}' --remove-fields '${removeFields}' --user-id "${TEST_USER_ID}"`
+      );
+
+      await verifyWithRetry(async () => {
+        const { data: schema } = await (await import("../../src/db.js")).db
+          .from("schema_registry")
+          .select("*")
+          .eq("entity_type", entityType)
+          .eq("active", true)
+          .single();
+        expect(schema).toBeDefined();
+        expect(schema.schema_definition.fields.stable).toBeDefined();
+        expect(schema.schema_definition.fields.replacement).toBeDefined();
+        expect(schema.schema_definition.fields.obsolete).toBeUndefined();
+      });
+
+      await cleanupTestSchema(entityType, TEST_USER_ID);
+    });
+  });
+
   describe("schemas list → reads from schema_registry", () => {
     it("should list registered schemas", async () => {
       const result = await execCliJson(

@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" role="img" aria-label="Auditable change log: a ledger with witness marks and review">
+  <defs>
+    <radialGradient id="bg_acl" cx="50%" cy="50%" r="65%">
+      <stop offset="0%" stop-color="#c8860a"/>
+      <stop offset="55%" stop-color="#7a4f08"/>
+      <stop offset="100%" stop-color="#2e1800"/>
+    </radialGradient>
+    <radialGradient id="glow_acl" cx="50%" cy="50%" r="42%">
+      <stop offset="0%" stop-color="#ffe8a0" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#c8860a" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="400" height="400" fill="url(#bg_acl)"/>
+  <rect width="400" height="400" fill="url(#glow_acl)"/>
+
+  <rect x="104" y="92" width="192" height="224" rx="10" fill="#f4e8c1" stroke="#4a3510" stroke-width="3"/>
+
+  <circle cx="132" cy="136" r="5" fill="#4a3510"/>
+  <line x1="148" y1="136" x2="256" y2="136" stroke="#6b4e1f" stroke-width="2"/>
+  <line x1="148" y1="154" x2="238" y2="154" stroke="#6b4e1f" stroke-width="2"/>
+
+  <circle cx="132" cy="186" r="5" fill="#4a3510"/>
+  <line x1="148" y1="186" x2="256" y2="186" stroke="#6b4e1f" stroke-width="2"/>
+  <line x1="148" y1="204" x2="228" y2="204" stroke="#6b4e1f" stroke-width="2"/>
+
+  <circle cx="132" cy="236" r="5" fill="#4a3510"/>
+  <line x1="148" y1="236" x2="256" y2="236" stroke="#6b4e1f" stroke-width="2"/>
+  <line x1="148" y1="254" x2="244" y2="254" stroke="#6b4e1f" stroke-width="2"/>
+
+  <circle cx="132" cy="286" r="5" fill="#4a3510"/>
+  <line x1="148" y1="286" x2="220" y2="286" stroke="#6b4e1f" stroke-width="2"/>
+
+  <circle cx="296" cy="136" r="16" fill="#f4e8c1" stroke="#4a3510" stroke-width="2.5"/>
+  <polyline points="288,136 294,142 306,128" fill="none" stroke="#4a3510" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="296" cy="186" r="16" fill="#f4e8c1" stroke="#4a3510" stroke-width="2.5"/>
+  <polyline points="288,186 294,192 306,178" fill="none" stroke="#4a3510" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <circle cx="286" cy="286" r="34" fill="#f4e8c1" stroke="#4a3510" stroke-width="3"/>
+  <circle cx="286" cy="286" r="14" fill="none" stroke="#4a3510" stroke-width="3"/>
+  <line x1="296" y1="296" x2="320" y2="320" stroke="#4a3510" stroke-width="5" stroke-linecap="round"/>
+</svg>

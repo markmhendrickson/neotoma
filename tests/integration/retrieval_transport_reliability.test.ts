@@ -1,9 +1,12 @@
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { createServer } from "node:http";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { app } from "../../src/actions.js";
 import { db } from "../../src/db.js";
 import { NeotomaServer } from "../../src/server.js";
 
 const TEST_USER_ID = "00000000-0000-0000-0000-000000000000";
-const API_BASE = "http://127.0.0.1:18084";
+const API_PORT = 18084;
+const API_BASE = `http://127.0.0.1:${API_PORT}`;
 
 function callMCPAction(server: NeotomaServer, actionName: string, params: any): Promise<any> {
   const methodName = actionName.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
@@ -12,12 +15,24 @@ function callMCPAction(server: NeotomaServer, actionName: string, params: any): 
 
 describe("retrieval transport reliability", () => {
   let server: NeotomaServer;
+  let httpServer: ReturnType<typeof createServer>;
   const createdEntityIds: string[] = [];
   const createdRelationshipKeys: string[] = [];
 
   beforeAll(async () => {
+    httpServer = createServer(app);
+    await new Promise<void>((resolve, reject) => {
+      httpServer.listen(API_PORT, "127.0.0.1", () => resolve());
+      httpServer.once("error", reject);
+    });
     server = new NeotomaServer();
     (server as any).authenticatedUserId = TEST_USER_ID;
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((resolve, reject) => {
+      httpServer.close((err) => (err ? reject(err) : resolve()));
+    });
   });
 
   afterEach(async () => {

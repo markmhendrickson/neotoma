@@ -435,4 +435,4 @@ node scripts/discovery/import_to_recruitment_log.js \
 - `discovery_plan.md` — Discovery overview
 - `participant_recruitment_log.md` — Participant tracking
 - `value_discovery_plan.md` — Value discovery activities
-- `docs/specs/ICP_PROFILES.md` — ICP profile definitions
+- `docs/icp/profiles.md` — ICP profile definitions

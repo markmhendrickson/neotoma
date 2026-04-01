@@ -15,7 +15,12 @@ export function AboutPage() {
           A deterministic state layer that transforms fragmented data into structured, queryable knowledge for AI agents.
         </p>
         <p className="text-muted-foreground">
-          Neotoma builds persistent structured memory for AI agents through <strong>dual-path storing</strong>: upload documents (PDFs, images, receipts, contracts) that get automatically structured, or provide structured data during agent conversations that gets stored and integrated into your memory graph. As you interact with ChatGPT, Claude, or Cursor, agents can read your accumulated memory, write new structured data, correct mistakes, and trigger reinterpretation.
+          Neotoma builds persistent structured memory for AI agents through{" "}
+          <strong>structured ingestion</strong>: agents and apps call <code className="text-sm">store</code>{" "}
+          with typed entity payloads (MCP, CLI, or REST), and Neotoma validates, deduplicates, and
+          records observations with full provenance. As you interact with ChatGPT, Claude, or Cursor,
+          agents can read your accumulated memory, write new structured data, and correct mistakes with
+          append-only history.
         </p>
       </div>
 
@@ -89,10 +94,11 @@ export function AboutPage() {
           <div className="space-y-2">
             <h3 className="text-lg font-semibold flex items-center gap-2">
               <FileText className="h-5 w-5" />
-              Dual-path storing
+              Structured ingestion
             </h3>
             <p className="text-sm text-muted-foreground">
-              File uploads (PDFs, images, receipts) AND agent-created structured source during interactions.
+              Typed entities via store (MCP, CLI, REST): schema validation, deduplication, and provenance
+              without a server-side file interpretation pipeline.
             </p>
           </div>
         </div>

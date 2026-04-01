@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" role="img" aria-hidden="true">
+  <!-- Transparent square asset; beige-only abstract packrat nest -->
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round" transform="translate(0,36)">
+    <!-- Outer weave -->
+    <g stroke="#a0907a" stroke-width="2.2">
+      <path d="M40 160 Q160 72 280 160"/>
+      <path d="M30 146 Q160 54 290 146"/>
+      <path d="M54 176 Q160 104 266 176"/>
+      <path d="M72 192 Q160 128 248 192"/>
+    </g>
+
+    <!-- Cross strands -->
+    <g stroke="#c9baa8" stroke-width="1.7" opacity="0.95">
+      <path d="M92 84 Q200 176 222 226"/>
+      <path d="M228 84 Q120 176 98 226"/>
+      <path d="M58 130 Q160 200 262 130"/>
+    </g>
+
+    <!-- Bowl lip -->
+    <path d="M86 164 Q160 198 234 164" stroke="#8a7d6c" stroke-width="2.3"/>
+
+    <!-- Inner cache ring -->
+    <ellipse cx="160" cy="156" rx="56" ry="24" stroke="#b5a690" stroke-width="1.8" opacity="0.9"/>
+
+    <!-- Abstract stored records -->
+    <g stroke="#8a7d6c" stroke-width="1.7">
+      <rect x="132" y="144" width="16" height="11" rx="2.5" opacity="0.9"/>
+      <rect x="152" y="149" width="16" height="11" rx="2.5" opacity="0.75"/>
+      <rect x="172" y="144" width="16" height="11" rx="2.5" opacity="0.9"/>
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,8 @@
+[
+  {
+    "file": "/Users/markmhendrickson/repos/neotoma/frontend/src/assets/images/hero/hero_illus_beige_packrat_nest_editorial_20260330-172618_01.png",
+    "prompt": "Transparent background. Museum-poster restraint: a single abstract diagram suggesting systems memory — woven arcs, shallow bowl, or converging paths — drawn like a refined architectural axonometric sketch but strictly 2D line-only. Warm beige palette only (cream #f4ebe0, sand #d9cbb8, taupe #a0907a, deep tan #6e6254). No black ink; use deep tan for emphasis lines only. Absolutely no clipart, no cute icons, no thick uniform cartoon strokes, no symmetry mandala, no mandala patterns, no tech clichés (no cloud shape, no brain, no chip). Generous breathing room; one hero motif occupying ~35–45% of the canvas, anchored slightly off-center. Lines: razor-sharp vector precision, variable stroke weight used sparingly for hierarchy. No text, no logos, no gradients, no noise texture.\n\nConcept focus: abstract packrat nest: interwoven arcs forming a shallow bowl, three tiny horizontal record slivers nested inside, square 1:1, motif lower-right weighted with open negative space upper-left",
+    "model": "gpt-image-1",
+    "size": "1024x1024"
+  }
+]

@@ -28,15 +28,15 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { SeoHead } from "../SeoHead";
-import { sendCtaClick, sendOutboundClick } from "@/utils/analytics";
+import { sendCtaClick } from "@/utils/analytics";
 import { SiClaude, SiOpenai } from "react-icons/si";
+import { CodexIcon } from "../icons/CodexIcon";
 import { CursorIcon } from "../icons/CursorIcon";
 import { OpenClawIcon } from "../icons/OpenClawIcon";
 
-const PROSPECT_CRM_URL = "https://preview--debut-domicile.lovable.app/";
 
 const SLIDE_CLASS = "min-h-[100svh] md:snap-start flex items-center justify-center relative";
-const SLIDE_INNER = "w-full max-w-6xl mx-auto px-6 md:px-12 lg:px-16 py-20 md:py-12";
+const SLIDE_INNER = "w-full max-w-6xl mx-auto px-6 md:px-12 lg:px-16 py-12";
 
 const CRM_SCENARIOS = [
   {
@@ -639,7 +639,7 @@ const LANDING_SECTIONS = [
   { id: "how-it-works", label: "How It Works" },
   { id: "capabilities", label: "Capabilities" },
   { id: "architecture", label: "Architecture" },
-  { id: "case-study", label: "Case Study" },
+  { id: "case-study", label: "In Practice" },
   { id: "get-started", label: "Get Started" },
 ];
 
@@ -675,6 +675,7 @@ export function CrmLandingPage() {
       <SeoHead />
       <div
         ref={scrollContainerRef}
+        data-site-header-scroll-root
         className="h-screen overflow-y-auto scroll-smooth md:snap-y md:snap-mandatory"
       >
         {/* Dot nav */}
@@ -809,7 +810,7 @@ export function CrmLandingPage() {
                         to="/neotoma-with-codex"
                         className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[12px] text-foreground/90 no-underline transition-colors hover:bg-muted hover:border-border"
                       >
-                        <SiOpenai className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                        <CodexIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
                         Codex
                       </Link>
                       <Link
@@ -1212,7 +1213,7 @@ export function CrmLandingPage() {
           </div>
         </section>
 
-        {/* Section 6: Case study (ProspectCRM) */}
+        {/* Section 6: In practice */}
         <section id="case-study" className={SLIDE_CLASS}>
           <div className={SLIDE_INNER}>
             <div className="space-y-8 max-w-5xl mx-auto">
@@ -1221,23 +1222,12 @@ export function CrmLandingPage() {
                   In practice
                 </p>
                 <h2 className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
-                  How ProspectCRM uses Neotoma as its truth layer
+                  How CRM teams use Neotoma as their truth layer
                 </h2>
                 <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl">
-                  <a
-                    href={PROSPECT_CRM_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-medium text-foreground underline underline-offset-2 hover:no-underline"
-                    onClick={() =>
-                      sendOutboundClick(PROSPECT_CRM_URL, "ProspectCRM case study link")
-                    }
-                  >
-                    ProspectCRM
-                  </a>{" "}
-                  is an AI relationship intelligence platform built for venture capital firms. It
-                  surfaces warm intros, tracks deal diligence, and flags LP re-up windows, all
-                  backed by Neotoma&apos;s deterministic state layer.
+                  AI relationship intelligence platforms surface warm intros, track deal diligence,
+                  and flag commitment windows. Neotoma versions every contact, deal stage, and
+                  relationship signal so you can reconstruct pipeline state at any prior date.
                 </p>
               </div>
 
@@ -1246,15 +1236,15 @@ export function CrmLandingPage() {
                   <div className="flex items-center gap-2">
                     <Sparkles className="h-4 w-4 text-sky-500" />
                     <span className="text-[14px] font-medium text-foreground">
-                      What ProspectCRM does
+                      What CRM teams build
                     </span>
                   </div>
                   <ul className="list-none pl-0 space-y-2.5">
                     {[
-                      "Discovers warm intro paths across LinkedIn, email, and meeting history",
-                      "Generates contextual follow-ups based on recent activity and deal stage",
-                      "Scores network contacts by relevance to the firm's current investment thesis",
-                      "Alerts partners when LPs approach re-up windows or commitment deadlines",
+                      "Discover warm intro paths across LinkedIn, email, and meeting history",
+                      "Generate contextual follow-ups based on recent activity and deal stage",
+                      "Score network contacts by relevance to the current investment or sales thesis",
+                      "Alert teams when key commitments approach renewal or re-up windows",
                     ].map((item) => (
                       <li
                         key={item}
@@ -1276,10 +1266,10 @@ export function CrmLandingPage() {
                   </div>
                   <ul className="list-none pl-0 space-y-2.5">
                     {[
-                      "Every contact, deal, and LP commitment is a versioned entity with full observation history",
-                      "Warm intro recommendations trace to specific LinkedIn connections and email threads with auditable provenance",
+                      "Every contact, deal, and commitment is a versioned entity with full observation history",
+                      "Intro recommendations trace to specific connections and threads with auditable provenance",
                       "Deal stage transitions are schema-validated: no skipping diligence, no silent field overwrites",
-                      "Fund state is replayable: reconstruct any LP commitment or pipeline snapshot at any prior date",
+                      "Pipeline state is replayable: reconstruct any commitment or snapshot at any prior date",
                     ].map((item) => (
                       <li
                         key={item}
@@ -1303,10 +1293,9 @@ export function CrmLandingPage() {
                       The pattern generalizes
                     </p>
                     <p className="text-[13px] leading-6 text-muted-foreground">
-                      ProspectCRM is one example of a next-generation CRM built on a deterministic
-                      state layer. The same architecture applies to enterprise sales, customer
-                      success, recruiting, and any domain where relationship data drives AI-native
-                      features. Replace &ldquo;LP commitments&rdquo; with &ldquo;enterprise
+                      The same architecture applies to enterprise sales, customer success, recruiting,
+                      venture capital, and any domain where relationship data drives AI-native
+                      features. Replace &ldquo;deal pipeline&rdquo; with &ldquo;enterprise
                       renewals&rdquo; and the guarantees are identical.
                     </p>
                   </div>
@@ -1314,16 +1303,13 @@ export function CrmLandingPage() {
               </div>
 
               <div className="flex flex-wrap gap-3">
-                <a
-                  href={PROSPECT_CRM_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-4 py-2 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
-                  onClick={() => sendOutboundClick(PROSPECT_CRM_URL, "ProspectCRM visit")}
+                <Link
+                  to="/install"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-emerald-600 bg-emerald-600 px-4 py-2 text-[14px] font-medium text-white no-underline shadow-sm shadow-emerald-600/30 transition-colors hover:bg-emerald-500 dark:border-emerald-500 dark:bg-emerald-500 dark:text-emerald-950"
+                  onClick={() => sendCtaClick("crm_case_study_install" as CtaName)}
                 >
-                  Visit ProspectCRM
-                  <ArrowRight className="h-4 w-4" />
-                </a>
+                  Install Neotoma
+                </Link>
                 <Link
                   to="/memory-guarantees"
                   className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-4 py-2 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors"

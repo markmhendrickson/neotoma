@@ -15,13 +15,10 @@ export function getLocalizedSiteSections(pack: StaticLocalePack): LocalizedSiteS
   const labelById: Record<string, { label: string; shortLabel: string }> = {
     intro: { label: labels.intro, shortLabel: labels.intro },
     outcomes: { label: labels.beforeAfter, shortLabel: labels.beforeAfter },
+    who: { label: labels.who ?? "Who", shortLabel: labels.who ?? "Who" },
     "memory-guarantees": { label: labels.guarantees, shortLabel: labels.guarantees },
-    install: { label: labels.install, shortLabel: labels.install },
-    inspect: { label: labels.inspect, shortLabel: labels.inspect },
-    architecture: { label: labels.architecture, shortLabel: labels.architecture },
-    "use-cases": { label: labels.useCases, shortLabel: labels.useCases },
-    interfaces: { label: labels.interfaces, shortLabel: labels.interfaces },
-    "learn-more": { label: labels.learnMore, shortLabel: labels.resources },
+    "record-types": { label: labels.recordTypes ?? "Record types", shortLabel: labels.recordTypes ?? "Types" },
+    evaluate: { label: labels.evaluate ?? "Evaluate", shortLabel: labels.evaluate ?? "Evaluate" },
   };
 
   return SITE_SECTION_CORE.map((section) => ({
@@ -39,6 +36,8 @@ export function getLocalizedDocNavCategories(dict: LocaleDictionary) {
     "Integration guides": dict.categoryIntegrationGuides,
     Integrations: dict.categoryIntegrationGuides,
     External: dict.categoryExternal,
+    Compare: dict.categoryCompare,
+    Verticals: dict.categoryVerticals,
   };
 
   const itemLabelByHref: Record<string, string> = {

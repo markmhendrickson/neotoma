@@ -3,15 +3,15 @@ import { ICP_PROFILES } from "../../site/site_data";
 import { IcpDetailPage } from "./IcpDetailPage";
 import type { IcpOutcomeCard } from "./IcpDetailPage";
 
-const profile = ICP_PROFILES.find((p) => p.slug === "ai-infrastructure-engineers")!;
+const profile = ICP_PROFILES.find((p) => p.slug === "debugging-infrastructure")!;
 
 const outcomes: IcpOutcomeCard[] = [
   {
-    category: "Pipeline reproducibility",
+    category: "Reproducibility",
     Icon: GitBranch,
     title: "Same pipeline, different results",
     description:
-      "Two runs of the same pipeline with identical inputs returned different entity states. Without content-addressed versioning, there was no way to detect or prevent the drift.",
+      "Two runs of the same pipeline with identical inputs returned different state. Without versioned state, there was no way to detect or explain the drift.",
     scenario: {
       left: "Replay yesterday's ingestion pipeline.",
       fail: "Pipeline completed. 3 entity conflicts unresolved.",
@@ -19,11 +19,11 @@ const outcomes: IcpOutcomeCard[] = [
     },
   },
   {
-    category: "State mutation visibility",
+    category: "Visibility",
     Icon: Eye,
     title: "Invisible overwrite, broken downstream",
     description:
-      "An upstream agent silently overwrote a shared entity. Downstream consumers read stale state and produced incorrect outputs. The mutation was invisible to observability tooling.",
+      "An upstream agent silently overwrote a shared record. Downstream consumers read stale data and produced incorrect output. The change was invisible.",
     scenario: {
       left: "What changed on entity acme-config since deploy?",
       fail: "No changes detected.",
@@ -35,7 +35,7 @@ const outcomes: IcpOutcomeCard[] = [
     Icon: ShieldCheck,
     title: "Missing provenance, failed audit",
     description:
-      "An evaluation harness needed to trace an agent's output to its source data. Without an immutable observation log, the audit trail had to be reconstructed manually from logs.",
+      "An evaluation needed to trace an agent's output to its source data. Without an immutable log, the trail had to be reconstructed manually from scattered logs.",
     scenario: {
       left: "Trace output of eval run 2841 to source.",
       fail: "Source data unavailable. Log retention expired.",
@@ -47,7 +47,7 @@ const outcomes: IcpOutcomeCard[] = [
     Icon: RotateCcw,
     title: "Can't reconstruct state after failure",
     description:
-      "A production agent crashed mid-run. The in-memory state was lost. Without an append-only observation log, the team had no way to reconstruct what the agent knew at the time of failure.",
+      "A production agent crashed mid-run. In-memory state was lost. Without an append-only log, there was no way to reconstruct what the agent knew at the time of failure.",
     scenario: {
       left: "Reconstruct agent state at 03:12 UTC crash.",
       fail: "State unavailable. Last checkpoint: 22:00 UTC.",
@@ -62,48 +62,50 @@ export function AiInfrastructureEngineersPage() {
       profile={profile}
       openingHook={
         <p>
-          Your observability stack watches everything except the thing that actually matters:
-          what the agent believed and why. When a production agent fails, your debugging process
-          is reconstructing what happened from scattered logs, guessing at state transitions,
-          and hoping you can reproduce the issue.
+          You're in this mode when something breaks and you need to understand
+          why. Your observability stack watches everything except the thing that
+          matters: what the agent believed and why. Debugging means
+          reconstructing truth from scattered logs and hoping to reproduce the
+          issue. Neotoma gives you replayable state so debugging takes minutes,
+          not days.
         </p>
       }
       outcomes={outcomes}
       aiNeeds={[
-        { label: "Deterministic state evolution: same observations always produce the same entity state", href: "/deterministic-state-evolution", linkTerm: "Deterministic state evolution" },
+        { label: "Same inputs always produce the same state - no silent drift", href: "/deterministic-state-evolution", linkTerm: "Same inputs always produce the same state" },
         { label: "Full provenance chain from agent outputs back to source data", href: "/auditable-change-log", linkTerm: "Full provenance chain" },
-        { label: "Replayable timelines for debugging production agent failures", href: "/replayable-timeline", linkTerm: "Replayable timelines" },
-        { label: "Schema constraints that reject malformed data at write time, not after the fact", href: "/schema-constraints", linkTerm: "Schema constraints" },
-        { label: "Append-only observation log for complete state reconstruction after failure", href: "/reproducible-state-reconstruction", linkTerm: "Append-only observation log" },
+        { label: "Replayable timelines for debugging production failures", href: "/replayable-timeline", linkTerm: "Replayable timelines" },
+        { label: "Validation at write time so bad data is rejected before it spreads", href: "/schema-constraints", linkTerm: "Validation at write time" },
+        { label: "Append-only log for complete state reconstruction after failure", href: "/reproducible-state-reconstruction", linkTerm: "Append-only log" },
       ]}
       keyDifferences={{
-        comparedTo: "Agent system builders",
-        comparedToHref: "/agentic-systems-builders",
+        comparedTo: "Building pipelines",
+        comparedToHref: "/building-pipelines",
         points: [
-          "Primary layer: infrastructure/platform (runtimes, orchestration, observability), not application workflows",
+          "Focus: infrastructure and platform layer - below application agents, above compute",
           "Adoption motion: evaluate guarantees first, then standardize across teams",
-          "Decision buyer: platform or reliability leads with infrastructure budget and longer review cycles",
-          "Success metric: reproducible runs and auditability at the platform level, not just better agent outputs",
+          "Success metric: reproducible runs and auditability, not just better agent outputs",
         ],
       }}
       deepPainPoints={[
         {
-          heading: "Agent runs are not reproducible",
+          heading: "Agent runs aren't reproducible",
           body: (
             <p>
-              Two runs of the same agent with identical inputs produce different results. State
-              mutations between sessions are invisible; there is no versioned history to compare,
-              no observation log to replay. Debugging means reading logs and guessing.
+              Two runs with identical inputs produce different results. State
+              changes between sessions are invisible - no versioned history to
+              compare, no log to replay. Debugging means reading logs and
+              guessing.
             </p>
           ),
         },
         {
-          heading: "State mutations are invisible",
+          heading: "State changes are invisible",
           body: (
             <p>
-              Ad-hoc state management overwrites values in place. When an entity changes, the
-              previous value is gone. There is no diff, no provenance, no way to know which
-              agent or pipeline step introduced the change.
+              Values overwrite in place. When a record changes, the previous
+              value is gone. No diff, no provenance, no way to know which agent
+              or pipeline step introduced the change.
             </p>
           ),
         },
@@ -111,63 +113,64 @@ export function AiInfrastructureEngineersPage() {
           heading: "No audit trail for compliance or evaluation",
           body: (
             <p>
-              Evaluation harnesses need to compare agent outputs against known-good state.
-              Compliance requires tracing decisions to source data. Without an immutable
-              observation log, neither is possible without rebuilding the audit trail manually.
+              Evaluation needs to compare outputs against known-good state.
+              Compliance needs to trace decisions to source data. Without an
+              immutable log, neither is possible without manual reconstruction.
             </p>
           ),
         },
         {
-          heading: "State layer locked to one vendor's runtime",
+          heading: "Memory locked to one vendor's runtime",
           body: (
             <p>
-              Each agent runtime provides its own memory abstraction: none portable, none
-              interoperable. Migrating to a new orchestration framework means rebuilding state
-              management from scratch. There is no standard state layer that works across vendors.
+              Each agent runtime ships its own memory: none portable, none
+              interoperable. Switching frameworks means rebuilding state
+              management from scratch.
             </p>
           ),
         },
         {
-          heading: "No data residency guarantees for agent state",
+          heading: "No data residency guarantees",
           body: (
             <p>
-              Agent state flows through third-party APIs with no contractual guarantee about where
-              it's stored, who can access it, or whether it's used for model training. For teams
-              with SOC 2, HIPAA, or GDPR obligations, opaque provider memory is a compliance gap
-              that manual audits cannot close.
+              Agent state flows through third-party APIs with no contractual
+              guarantee about where it's stored or who can access it. For teams
+              with compliance obligations, opaque provider memory is a gap that
+              manual audits cannot close.
             </p>
           ),
         },
       ]}
       problemsToSolutionsTransition={
         <p>
-          Your application teams ship in tight cycles. Your state layer should too. If you can't
-          replay an agent run, you can't debug it. If you can't debug it, you can't iterate.
-          Neotoma makes agent state inspectable, diffable, and replayable, so your debugging
-          cycle is minutes, not days of log archaeology.
+          If you can't replay an agent run, you can't debug it. If you can't
+          debug it, you can't iterate. Neotoma makes agent state inspectable,
+          diffable, and replayable - so your debugging cycle is minutes, not
+          days.
         </p>
       }
       solutions={[
         {
-          heading: "Deterministic state evolution",
+          heading: "Deterministic state",
           icon: "Repeat",
           href: "/deterministic-state-evolution",
           body: (
             <p>
-              Every state transition is content-addressed and versioned. Same observations always
-              produce the same entity state: no ordering sensitivity, no silent drift. Agent
-              runs become reproducible by construction.
+              Every state change is versioned. Same inputs always produce the
+              same state - no ordering sensitivity, no silent drift. Agent runs
+              become reproducible by construction.
             </p>
           ),
         },
         {
-          heading: "Append-only observation log",
+          heading: "Append-only log",
           icon: "FileStack",
           href: "/reproducible-state-reconstruction",
           body: (
             <p>
-              Observations are immutable. Corrections add new data; they never overwrite.
-              The full state can be reconstructed from the observation log at any point in time.
+              Records are immutable. Corrections add new data; they never
+              overwrite. The full state can be reconstructed from the log at any
+              point in time.
             </p>
           ),
         },
@@ -177,21 +180,21 @@ export function AiInfrastructureEngineersPage() {
           href: "/replayable-timeline",
           body: (
             <p>
-              Every entity, relationship, and fact links back to the observation that created it.
-              Replay the timeline to any historical state. Diff versions to understand what
-              changed and when.
+              Every record links back to where it came from. Replay the timeline
+              to any historical state. Diff versions to see what changed and
+              when.
             </p>
           ),
         },
         {
-          heading: "Schema-first validation",
+          heading: "Validation at write time",
           icon: "Shield",
           href: "/schema-constraints",
           body: (
             <p>
-              Entity types enforce schema constraints at write time. Malformed or invalid data
-              is rejected before it enters the memory graph, preventing garbage-in-garbage-out
-              failures across agent runtimes and orchestration layers.
+              Records enforce validation rules at write time. Bad data is
+              rejected before it enters the memory graph - preventing
+              garbage-in-garbage-out across runtimes.
             </p>
           ),
         },
@@ -199,45 +202,46 @@ export function AiInfrastructureEngineersPage() {
       whatChanges={
         <>
           <p>
-            You stop writing glue. Checkpoint logic, state serialization, custom diffing, retry
-            handlers. The guarantees you've been hand-rolling become primitives. You declare
-            invariants instead of building safety nets.
+            You stop writing glue. Checkpoint logic, state serialization, custom
+            diffing, retry handlers - the guarantees you've been hand-rolling
+            become primitives you build on.
           </p>
           <p>
-            When something fails, you query the timeline instead of reconstructing it from logs.
-            Post-mortems take thirty minutes because provenance answers "what changed and when"
-            directly. Your team stops treating agent state as a black box and starts treating it
-            like any other part of the stack they can reason about.
+            When something fails, you query the timeline instead of
+            reconstructing it from logs. Post-mortems take thirty minutes because
+            provenance answers "what changed and when" directly.
           </p>
           <p>
-            The job shifts from reactive firefighting to proactive platform design.
+            The job shifts from reactive firefighting to proactive platform
+            design.
           </p>
         </>
       }
       dataTypeDetails={[
-        { type: "agent_session", description: "Session state with versioned context windows and accumulated facts" },
+        { type: "agent_session", description: "Session state with versioned context and accumulated facts" },
         { type: "action", description: "Agent actions with inputs, outputs, timestamps, and provenance" },
-        { type: "pipeline", description: "Multi-step orchestration workflows with step-level state tracking" },
-        { type: "evaluation", description: "Eval results, benchmarks, and regression tracking tied to entity state" },
-        { type: "audit_event", description: "Immutable log of state transitions, entity mutations, and corrections" },
-        { type: "tool_config", description: "Agent tool configurations, MCP server bindings, and runtime parameters" },
-        { type: "entity_graph", description: "Resolved entities with typed relationships and temporal evolution" },
+        { type: "pipeline", description: "Multi-step workflows with step-level state tracking" },
+        { type: "evaluation", description: "Eval results, benchmarks, and regression tracking" },
+        { type: "audit_event", description: "Immutable log of state transitions and corrections" },
+        { type: "tool_config", description: "Agent tool configurations and runtime parameters" },
+        { type: "entity_graph", description: "Resolved records with typed relationships and temporal evolution" },
         { type: "runbook", description: "Operational procedures and agent behavioral rules with version history" },
       ]}
       scopeNote={
         <p>
-          If your agents are stateless request-response (no accumulated context, no entity
-          tracking), standard logging and tracing are sufficient. Neotoma is for when agents
-          accumulate state across sessions and pipeline steps, and you need that state to be
-          reproducible, traceable, and auditable.
+          If your agents are stateless request-response (no accumulated context,
+          no record tracking), standard logging and tracing are sufficient.
+          Neotoma is for when agents accumulate state across sessions and
+          pipeline steps, and you need that state to be reproducible, traceable,
+          and auditable.
         </p>
       }
-      credibilityBridge="Built because I hit every failure mode on this page while running a twelve-server agentic stack against a production monorepo."
+      credibilityBridge="Built because I hit every failure mode on this page while running a twelve-server agent stack against a production monorepo."
       blogPostLink={{
         label: "Building structural barriers that incumbents can't copy",
         href: "https://markmhendrickson.com/posts/building-structural-barriers",
       }}
-      closingStatement="You need guarantees, not features. Neotoma removes the tax your team pays hand-rolling state management and gives you deterministic primitives to build on instead."
+      closingStatement="The tax is writing glue: checkpoint logic, custom diffing, state serialization. Neotoma removes that tax and gives you primitives to build on instead."
     />
   );
 }

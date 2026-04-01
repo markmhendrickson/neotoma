@@ -224,10 +224,10 @@ const CONFIG: VerticalConfig = {
     },
   ],
   caseStudy: {
-    companyName: "DiligenceIQ",
-    companyUrl: "https://diligenceiq.example.com",
-    companyDesc:
-      "is a fictional AI-powered M&A diligence platform that orchestrates financial, legal, and technical agents for buy-side and strategic acquirers.",
+    headline: "How due diligence teams use Neotoma as their integrity layer",
+    desc:
+      "AI-powered M&A diligence platforms orchestrate financial, legal, and technical agents for buy-side and strategic acquirers. Neotoma versions every finding, assessment, and red flag so you can reconstruct what the team believed at any decision point, not just what the latest memo says.",
+    featuresHeading: "What due diligence teams build",
     features: [
       "Parallel agents that ingest data rooms, model synergies, and surface red flags across simultaneous processes",
       "IC-ready packs generated from live diligence state with drill-down to underlying observations",
@@ -241,7 +241,7 @@ const CONFIG: VerticalConfig = {
     ],
     generalizesTitle: "Any multi-agent diligence workflow shares the same failure modes",
     generalizesDesc:
-      "Growth equity, corporate development, and vendor risk teams all run long-horizon processes where truth evolves. Neotoma generalizes the DiligenceIQ pattern: versioned entities, explicit supersession, and temporal queries for the questions that matter when checks clear.",
+      "Growth equity, corporate development, and vendor risk teams all run long-horizon processes where truth evolves. Neotoma generalizes the pattern: versioned entities, explicit supersession, and temporal queries for the questions that matter when checks clear.",
   },
   ctaHeadline: "Ship diligence agents that can answer",
   ctaHighlight: "what the IC actually knew",

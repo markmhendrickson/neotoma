@@ -337,7 +337,7 @@ describe("MCP store action - parameter variations", () => {
       expect(source!.original_filename).toBe("sample_invoice.pdf");
     });
 
-    it("should store unstructured data with interpret: false", async () => {
+    it("should store unstructured data without creating observations", async () => {
       const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
@@ -355,7 +355,7 @@ describe("MCP store action - parameter variations", () => {
 
       tracker.trackSource(source!.id);
 
-      // Verify no observations created (interpret: false)
+      // Verify no observations created from raw file storage
       const { data: observations } = await db
         .from("observations")
         .select("*")
@@ -364,13 +364,7 @@ describe("MCP store action - parameter variations", () => {
       expect(observations).toHaveLength(0);
     });
 
-    it("should store unstructured data with custom interpretation_config", async () => {
-      const interpretationConfig = {
-        model: "gpt-4",
-        temperature: 0.2,
-        max_tokens: 2000
-      };
-
+    it("preserves raw file sources independently of interpretation config removal", async () => {
       const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
@@ -388,7 +382,6 @@ describe("MCP store action - parameter variations", () => {
 
       tracker.trackSource(source!.id);
 
-      // Would verify interpretation_config stored if interpretations table is updated
       await verifySourceExists(source!.id);
     });
   });

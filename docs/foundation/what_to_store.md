@@ -33,6 +33,50 @@ If an agent or user would later need to recall a fact, verify when it changed, t
 | **Session state** | Active environment, running tools, current working context |
 | **External data** | Records pulled from email, calendar, web, APIs, other MCPs |
 
+## Concrete examples by priority tier
+
+These before/after examples show what storage looks like in practice. "Before" is what happens without Neotoma; "After" is what happens with it.
+
+### Priority 1 — Entry point (first session)
+
+**Contacts from a conversation:**
+- Before: You mention "Clayton from Acme" in a chat. Next session, the agent has no idea who Clayton is. You re-explain.
+- After: Agent stores `{ entity_type: "contact", name: "Clayton", company: "Acme", canonical_name: "Clayton" }` with a REFERS_TO link to the conversation. Next session, agent retrieves Clayton's full context instantly.
+
+**Task from a commitment:**
+- Before: You say "I need to follow up with Sarah about the contract by Friday." The commitment exists only in that chat session.
+- After: Agent stores `{ entity_type: "task", title: "Follow up with Sarah about contract", due_date: "2026-04-04", status: "open" }` with a REFERS_TO to Sarah's contact entity. Task persists across sessions and tools.
+
+**Decision with rationale:**
+- Before: You and your agent decide to use PostgreSQL instead of MySQL for a project. Three weeks later, neither of you remembers why.
+- After: Agent stores `{ entity_type: "decision_note", title: "Use PostgreSQL over MySQL", rationale: "Better JSON support, existing team expertise", context: "Project X database selection" }`. The rationale is versioned and traceable.
+
+### Priority 2 — Personal domains (first week)
+
+**Financial transaction:**
+- Before: You import a bank statement. The data lives in the CSV file. No entity resolution, no timeline, no cross-referencing with contacts or tasks.
+- After: Agent stores each transaction with entity resolution: `{ entity_type: "transaction", merchant: "Starbucks", amount: -5.40, date: "2026-03-28" }`. "Starbucks" resolves to the same entity across all statements. You can query total spend by merchant over time.
+
+**Meeting from calendar:**
+- Before: Calendar events are siloed in Google Calendar. Your agent has no access to meeting context from last week.
+- After: Agent stores `{ entity_type: "event", title: "Q2 Planning with Nick", date: "2026-03-25", attendees: ["Nick Talwar", "Matt Kirk"] }` with REFERS_TO links to contact entities. When preparing for the next meeting, agent retrieves prior meeting context automatically.
+
+### Priority 3 — OS maturation (weeks 2-4)
+
+**Content pipeline state:**
+- Before: You have a blog post draft in one tool, publishing notes in another, and social distribution plans in a third. You are the human index.
+- After: Agent stores `{ entity_type: "blog_post", title: "How I built a personal agentic OS", status: "draft", published_date: null }` and updates the observation as the post progresses through editing, review, and publication. Full timeline of state changes is queryable.
+
+**Agent session context:**
+- Before: Every new coding session starts from scratch. The agent does not know which files were changed yesterday or what decisions were made.
+- After: Agent stores `{ entity_type: "architectural_decision", title: "Use event sourcing for audit trail", codebase: "neotoma", rationale: "Enables temporal queries and replay" }`. Next session, the agent retrieves relevant architectural context for the current work.
+
+### Priority 4 — Organic growth
+
+**Dispute tracking:**
+- Before: You have an ongoing billing dispute with a vendor. Details are scattered across emails, chat messages, and phone call notes. Reconstructing the timeline requires manual archaeology.
+- After: Agent stores each interaction as an observation on the dispute entity. `{ entity_type: "dispute", vendor: "Acme Billing", status: "open", amount_disputed: 250.00 }` with observations for each touchpoint. The full timeline is queryable: "What did we know about this dispute on March 15?"
+
 ## What NOT to store
 
 | Condition | Reason |
@@ -56,28 +100,38 @@ If any answer is yes, store it. If all are no, skip it.
 
 ## Where data comes from
 
-Data enters Neotoma from multiple sources. The decision heuristic above applies regardless of origin.
+Data enters Neotoma from multiple sources. The decision heuristic above applies regardless of origin. Sources are ordered by typical signal density during onboarding discovery.
 
-| Source | Examples |
-| --- | --- |
-| **Platform memory** | Facts that Claude, ChatGPT, Gemini, or Copilot already remember about the user — preferences, people, commitments. Opaque and non-exportable, but the agent can self-reflect and structure what it sees. |
-| **Claude Memory tool** | Client-side [Memory tool](https://platform.claude.com/docs/en/agents-and-tools/tool-use/memory-tool) files under `/memories` (or the app-mapped path). List and read those files; extract entities or ingest with provenance "from Claude Memory tool". |
-| **Conversation history** | ChatGPT exports, shared conversation links, transcript files. Entities extracted from message content. |
-| **Session context** | Current conversation, open files, git state, prior in-session messages. The richest passive source during install. |
-| **Project configuration** | `.cursor/memory/`, `.cursor/rules/`, `git config`, `package.json` — stable context about the user's tools and workflows. |
-| **File-based knowledge** | Markdown notes, JSON stores, Obsidian vaults, exported CSVs (LinkedIn, etc.). |
-| **External tools** | Email, calendar, web search, and other MCPs. Records pulled and stored per the store-first rule. |
-| **Direct input** | Facts the user states in conversation — commitments, preferences, corrections. |
+| Source | Examples | Signal density |
+| --- | --- | --- |
+| **Chat transcripts** | ChatGPT exports, Claude history, Slack/Discord exports, meeting transcripts. Encode decisions, commitments, causal sequences, and entity references with timestamps. See [`transcript_ingestion.md`](../developer/transcript_ingestion.md). | Very high |
+| **Platform memory** | Facts that Claude, ChatGPT, Gemini, or Copilot already remember about the user — preferences, people, commitments. Opaque and non-exportable, but the agent can self-reflect and structure what it sees. | High |
+| **Project documents** | Contracts, proposals, briefs, meeting notes, dated revision series. Rich in entities, version markers, and decision points. | High |
+| **Claude Memory tool** | Client-side [Memory tool](https://platform.claude.com/docs/en/agents-and-tools/tool-use/memory-tool) files under `/memories` (or the app-mapped path). List and read those files; extract entities or ingest with provenance "from Claude Memory tool". | Medium-High |
+| **Session context** | Current conversation, open files, git state, prior in-session messages. The richest passive source during install. | Medium |
+| **File-based knowledge** | Markdown notes, JSON stores, Obsidian vaults, exported CSVs (LinkedIn, etc.). | Medium |
+| **Project configuration** | `.cursor/memory/`, `.cursor/rules/`, `git config`, `package.json` — stable context about the user's tools and workflows. | Medium |
+| **External tools** | Email, calendar, web search, and other MCPs. Records pulled and stored per the store-first rule. | Medium |
+| **Direct input** | Facts the user states in conversation — commitments, preferences, corrections. | Varies |
 
-During first-run onboarding, the installing agent uses these sources to bootstrap Neotoma with existing knowledge rather than starting from an empty state. See [`install.md`](../../install.md#migration-from-existing-tools) for the full migration strategy per system type.
+During first-run onboarding, the installing agent uses these sources to bootstrap Neotoma with existing knowledge rather than starting from an empty state. The agent ranks candidates using the [file ranking heuristic](file_ranking_heuristic.md) to maximize signal density per file ingested. See [`install.md`](../../install.md) for the full onboarding workflow and migration strategy.
 
 ## Framing
 
 Neotoma is not limited to "personal data." It is a deterministic state layer for any data that agents and users interact with — personal records, professional context, project metadata, external facts, and third-party data the user chooses to track. The common thread is that the data benefits from the guarantees Neotoma provides: versioning, provenance, schema constraints, and reproducible state evolution.
 
+## File ranking for onboarding discovery
+
+During onboarding, agents must decide which local files to propose for ingestion. The [file ranking heuristic](file_ranking_heuristic.md) provides a composite scoring model based on entity density, temporal density, relationship potential, recency, and user salience. Key signals include repeated named entities, date/version markers in filenames, decision-rich file types, and cross-format co-occurrence within folder subtrees.
+
+The goal is to maximize the value of the first few files ingested, producing a timeline reconstruction (the Installation Aha) rather than a file count.
+
 ## Related documents
 
 - [Core identity](core_identity.md) — what Neotoma is and is not
 - [Philosophy](philosophy.md) — architectural invariants and principles
+- [File ranking heuristic](file_ranking_heuristic.md) — composite scoring model for file discovery
 - [MCP instructions](../developer/mcp/instructions.md) — agent storage behavior
 - [Install workflow](../../install.md) — first-run onboarding flow
+- [Agent onboarding confirmation](../developer/agent_onboarding_confirmation.md) — full stage-by-stage onboarding guide
+- [Transcript ingestion](../developer/transcript_ingestion.md) — chat transcript import guide

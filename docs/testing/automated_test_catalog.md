@@ -40,6 +40,13 @@ None.
 - **Remote mode**: Sets `RUN_REMOTE_TESTS=1`, runs migrations in setup, and runs the same suites against remote DB when configured. Run: `RUN_REMOTE_TESTS=1 npm test`.
 - **Frontend mode (`npm run test:frontend`)**: Sets `RUN_FRONTEND_TESTS=1` and runs only React/frontend tests in `frontend/src`. Use when you need to run or debug React component and frontend unit tests (jsdom). Run: `RUN_FRONTEND_TESTS=1 npm test -- frontend/src` or `npm run test:frontend`.
 
+## CI lanes
+
+- **Baseline CI**: [`.github/workflows/ci_test_lanes.yml`](../../.github/workflows/ci_test_lanes.yml) runs `type-check`, `lint`, `lint:site-copy`, `npm test`, `validate:coverage`, and `validate:doc-deps` on pushes and pull requests.
+- **Frontend CI**: The same workflow runs `npm run test:frontend` in a dedicated jsdom lane.
+- **Site/export CI**: The same workflow runs `validate:routes`, `build:ui`, `validate:locales`, `build:pages:site`, and `validate:site-export`.
+- **Remote integration lane**: [`.github/workflows/remote_integration_nightly.yml`](../../.github/workflows/remote_integration_nightly.yml) runs `npm run test:remote:critical` on a nightly schedule or manual dispatch when `CI_REMOTE_TESTS_ENABLED=1` is configured for the repo.
+
 ## Qualitative description: default run (npm test) vs skipped
 
 This section describes, in plain language, what the default `npm test` run executes and what it leaves out.
@@ -88,6 +95,7 @@ flowchart TD
 
 Files:
 - `tests/unit/bigint_serialization.test.ts`
+- `tests/unit/encrypt_response_middleware.test.ts`
 - `tests/unit/observation_reducer_converters.test.ts`
 - `tests/unit/parquet_reader.test.ts`
 - `tests/unit/relationship_reducer.test.ts`
@@ -132,7 +140,7 @@ Files:
 **Runner:** `vitest`  
 **Commands:** `npm run test:integration` (integration only).  
 **Requirements:** Database configured and migrations applied.  
-**Note:** Excluded by default from `npm test`; use `RUN_REMOTE_TESTS=1` to include.
+**Note:** Many integration tests run in the default local SQLite path. Only the remote-dependent subset listed in the "What is skipped" section is excluded from `npm test`. Use `RUN_REMOTE_TESTS=1` or `npm run test:remote:critical` for the highest-value remote lane.
 
 Files:
 - `tests/integration/dashboard_stats.test.ts`
@@ -155,7 +163,6 @@ Files:
 - `tests/integration/mcp_entity_variations.test.ts`
 - `tests/integration/mcp_graph_variations.test.ts`
 - `tests/integration/mcp_npm_check_update.test.ts`
-- `tests/integration/mcp_oauth_flow.test.ts`
 - `tests/integration/mcp_query_variations.test.ts`
 - `tests/integration/mcp_relationship_variations.test.ts`
 - `tests/integration/mcp_resources.test.ts`
@@ -244,17 +251,19 @@ Files:
 **Requirements:** None beyond base repo setup.
 
 Files:
-- `frontend/src/components/ChatPanel.test.tsx`
-- `frontend/src/components/RecordDetailsPanel.test.tsx`
-- `frontend/src/components/RecordsTable.test.tsx`
+- `frontend/src/bridge/websocket.test.ts`
 - `frontend/src/components/SchemaDetail.test.tsx`
-- `frontend/src/lib/api.test.ts`
-- `frontend/src/store/records.test.ts`
+- `frontend/src/contexts/auth_context.test.tsx`
+- `frontend/src/contexts/realtime_context.test.tsx`
+- `frontend/src/hooks/use_realtime_entities.test.tsx`
+- `frontend/src/lib/auth.test.ts`
+- `frontend/src/lib/idempotency.test.ts`
+- `frontend/src/site/repo_meta_client.test.ts`
+- `frontend/src/site/site_data.test.ts`
 - `frontend/src/utils/csv.test.ts`
-- `frontend/src/utils/entityDisplay.test.ts`
-- `frontend/src/utils/file_processing.test.ts`
-- `frontend/src/utils/record_search.test.ts`
-- `frontend/src/utils/schemaIcons.test.ts`
+- `frontend/src/utils/entity_display.test.ts`
+- `frontend/src/utils/schema_icons.test.ts`
+- `frontend/src/utils/vite_chunk_recovery.test.ts`
 
 ### Playwright E2E tests
 **Directory:** `playwright/tests/`  
@@ -313,6 +322,11 @@ npm test
 npm run test:integration
 ```
 
+### Run the remote critical lane
+```bash
+npm run test:remote:critical
+```
+
 ### Run Playwright E2E tests
 ```bash
 npm run test:e2e
@@ -323,6 +337,7 @@ npm run test:e2e
 2. Apply quality rules from `docs/testing/integration_test_quality_rules.mdc`.
 3. Apply enforcement rules from `docs/testing/test_quality_enforcement_rules.mdc`.
 4. For routes and E2E coverage, see `docs/testing/full_route_coverage_rules.md`.
+5. For the remaining manual surface, see `docs/testing/manual_regression_checklist.md`.
 
 ## Agent Instructions
 ### When to Load This Document

@@ -13,7 +13,7 @@ import {
 import { db } from "./db.js";
 import { logger } from "./utils/logger.js";
 import { z } from "zod";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import * as yaml from "js-yaml";
@@ -36,8 +36,6 @@ import {
   DeleteRelationshipRequestSchema,
   RestoreEntityRequestSchema,
   RestoreRelationshipRequestSchema,
-  InterpretUninterpretedRequestSchema,
-  ReinterpretRequestSchema,
   RelationshipSnapshotRequestSchema,
   RetrieveEntitiesRequestSchema,
   RetrieveEntityByIdentifierSchema,
@@ -50,16 +48,9 @@ import {
 import { ensureLocalDevUser } from "./services/local_auth.js";
 import type { RelationshipType } from "./services/relationships.js";
 import {
-  extractWithLLM,
-  extractWithLLMFromImage,
-  extractFromCSVWithChunking,
-  isLLMExtractionAvailable,
-} from "./services/llm_extraction.js";
-import {
   extractTextFromBuffer,
   getPdfFirstPageImageDataUrl,
   getMimeTypeFromExtension,
-  getPdfWorkerDebug,
 } from "./services/file_text_extraction.js";
 import {
   softDeleteEntity as softDeleteEntityService,
@@ -90,6 +81,12 @@ export class NeotomaServer {
   /** In-memory cache for npm registry dist-tags: key = "packageName:distTag", value = { version, until } */
   private registryCache = new Map<string, { version: string; until: number }>();
   private static REGISTRY_CACHE_TTL_MS = 10 * 60 * 1000;
+  private static INIT_UPDATE_NOTICE_TIMEOUT_MS = 750;
+  private static RUNTIME_UPDATE_NOTICE_TIMEOUT_MS = 200;
+  private static RUNTIME_UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
+  private isHTTPTransportSession = false;
+  private nextRuntimeUpdateCheckAt = 0;
+  private lastNotifiedUpdateVersion: string | null = null;
 
   constructor() {
     this.server = new Server(
@@ -200,6 +197,8 @@ export class NeotomaServer {
 
       // Detect transport type: HTTP has requestInfo, stdio does not
       const isHTTPTransport = !!extra?.requestInfo;
+      this.isHTTPTransportSession = isHTTPTransport;
+      const updateNotice = await this.getInitializeUpdateNotice(isHTTPTransport);
 
       // Extract connection_id: prefer HTTP-layer value (set by actions.ts) so auth works when SDK does not pass requestInfo
       const allHeaders = (extra?.requestInfo as any)?.headers || {};
@@ -253,12 +252,7 @@ export class NeotomaServer {
           logger.info(
             `[MCP Server] Using test authentication bypass (user: ${this.authenticatedUserId})`
           );
-          return {
-            protocolVersion: "2025-11-25",
-            capabilities: { tools: {}, resources: {} },
-            serverInfo: { name: "neotoma", version: "1.0.0" },
-            instructions: this.getMcpInteractionInstructions(),
-          };
+          return this.buildAuthenticatedInitializeResponse(updateNotice);
         }
 
         // HTTP (insecure) no-auth: default to anonymous 000... user so unencrypted access is restricted.
@@ -271,12 +265,7 @@ export class NeotomaServer {
           logger.info(
             `[MCP Server] Using HTTP no-auth (anonymous user: ${this.authenticatedUserId})`
           );
-          return {
-            protocolVersion: "2025-11-25",
-            capabilities: { tools: {}, resources: {} },
-            serverInfo: { name: "neotoma", version: "1.0.0" },
-            instructions: this.getMcpInteractionInstructions(),
-          };
+          return this.buildAuthenticatedInitializeResponse(updateNotice);
         }
 
         // Dev-local (HTTPS or secure): no-auth default with full dev user. Allowed when no creds over secure transport.
@@ -288,12 +277,7 @@ export class NeotomaServer {
             token: "dev-local",
           });
           logger.info(`[MCP Server] Using dev-local auth (user: ${this.authenticatedUserId})`);
-          return {
-            protocolVersion: "2025-11-25",
-            capabilities: { tools: {}, resources: {} },
-            serverInfo: { name: "neotoma", version: "1.0.0" },
-            instructions: this.getMcpInteractionInstructions(),
-          };
+          return this.buildAuthenticatedInitializeResponse(updateNotice);
         }
 
         // OAuth flow - check if connection ID is valid
@@ -309,18 +293,7 @@ export class NeotomaServer {
           logger.info(
             `[MCP Server] Initialized with OAuth connection: ${connectionId} (user: ${userId})`
           );
-          return {
-            protocolVersion: "2025-11-25",
-            capabilities: {
-              tools: {},
-              resources: {},
-            },
-            serverInfo: {
-              name: "neotoma",
-              version: "1.0.0",
-            },
-            instructions: this.getMcpInteractionInstructions(),
-          };
+          return this.buildAuthenticatedInitializeResponse(updateNotice);
         } catch (error: any) {
           const isConnectionNotFound =
             error.message?.includes("Connection not found") ||
@@ -347,12 +320,7 @@ export class NeotomaServer {
               userId: this.authenticatedUserId,
               token: "dev-local",
             });
-            return {
-              protocolVersion: "2025-11-25",
-              capabilities: { tools: {}, resources: {} },
-              serverInfo: { name: "neotoma", version: "1.0.0" },
-              instructions: this.getMcpInteractionInstructions(),
-            };
+            return this.buildAuthenticatedInitializeResponse(updateNotice);
           }
 
           if (isConnectionNotFound) {
@@ -422,6 +390,136 @@ export class NeotomaServer {
    */
   setSessionConnectionId(connectionId: string): void {
     this.sessionConnectionId = connectionId;
+  }
+
+  private buildAuthenticatedInitializeResponse(updateNotice: string | null) {
+    const instructions = updateNotice
+      ? `${updateNotice}\n\n${this.getMcpInteractionInstructions()}`
+      : this.getMcpInteractionInstructions();
+
+    return {
+      protocolVersion: "2025-11-25",
+      capabilities: { tools: {}, resources: {} },
+      serverInfo: {
+        name: "neotoma",
+        version: "1.0.0",
+        ...(updateNotice
+          ? {
+              title: "Update available",
+              description: updateNotice,
+            }
+          : {}),
+      },
+      instructions,
+    };
+  }
+
+  private markUpdateNoticeDelivered(latestVersion: string | null): void {
+    if (latestVersion) {
+      this.lastNotifiedUpdateVersion = latestVersion;
+    }
+  }
+
+  private getInstalledPackageMetadata(): { packageName: string; currentVersion: string } {
+    try {
+      const pkgPath = join(config.projectRoot, "package.json");
+      const raw = readFileSync(pkgPath, "utf-8");
+      const parsed = JSON.parse(raw) as { name?: string; version?: string };
+      return {
+        packageName: typeof parsed.name === "string" && parsed.name ? parsed.name : "neotoma",
+        currentVersion:
+          typeof parsed.version === "string" && parsed.version ? parsed.version : "1.0.0",
+      };
+    } catch {
+      return { packageName: "neotoma", currentVersion: "1.0.0" };
+    }
+  }
+
+  private async getLatestCachedPackageVersion(
+    packageName: string,
+    distTag: string
+  ): Promise<string | null> {
+    const cacheKey = `${packageName}:${distTag}`;
+    const cached = this.registryCache.get(cacheKey);
+    let latest: string | null = cached && cached.until > Date.now() ? cached.version : null;
+
+    if (latest === null) {
+      latest = await getLatestFromRegistry(packageName, distTag);
+      if (latest) {
+        this.registryCache.set(cacheKey, {
+          version: latest,
+          until: Date.now() + NeotomaServer.REGISTRY_CACHE_TTL_MS,
+        });
+      }
+    }
+
+    return latest;
+  }
+
+  private async getPackageUpdateNotice(
+    isHTTPTransport: boolean,
+    timeoutMs: number
+  ): Promise<{ message: string; latestVersion: string } | null> {
+    if (isHTTPTransport || process.env.NO_UPDATE_NOTIFIER === "1") {
+      return null;
+    }
+
+    const { packageName, currentVersion } = this.getInstalledPackageMetadata();
+    const latest = await Promise.race<string | null>([
+      this.getLatestCachedPackageVersion(packageName, "latest"),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
+    ]);
+
+    if (
+      !latest ||
+      !isUpdateAvailable(currentVersion, latest) ||
+      this.lastNotifiedUpdateVersion === latest
+    ) {
+      return null;
+    }
+
+    return {
+      latestVersion: latest,
+      message: `New ${packageName} version available (${currentVersion} -> ${latest}). Run ${formatUpgradeCommand(packageName, "latest", "global")} before continuing.`,
+    };
+  }
+
+  private async getInitializeUpdateNotice(isHTTPTransport: boolean): Promise<string | null> {
+    const notice = await this.getPackageUpdateNotice(
+      isHTTPTransport,
+      NeotomaServer.INIT_UPDATE_NOTICE_TIMEOUT_MS
+    );
+    if (!notice) return null;
+    this.markUpdateNoticeDelivered(notice.latestVersion);
+    return notice.message;
+  }
+
+  private async consumeRuntimeUpdateNotice(): Promise<string | null> {
+    const now = Date.now();
+    if (now < this.nextRuntimeUpdateCheckAt) {
+      return null;
+    }
+
+    this.nextRuntimeUpdateCheckAt = now + NeotomaServer.RUNTIME_UPDATE_CHECK_INTERVAL_MS;
+
+    const notice = await this.getPackageUpdateNotice(
+      this.isHTTPTransportSession,
+      NeotomaServer.RUNTIME_UPDATE_NOTICE_TIMEOUT_MS
+    );
+    if (!notice) return null;
+    this.markUpdateNoticeDelivered(notice.latestVersion);
+    return notice.message;
+  }
+
+  private withRuntimeUpdateNotice(
+    result: { content: Array<{ type: string; text?: string }> },
+    notice: string | null
+  ): { content: Array<{ type: string; text?: string }> } {
+    if (!notice) return result;
+    return {
+      ...result,
+      content: [...result.content, { type: "text", text: notice }],
+    };
   }
 
   /**
@@ -617,19 +715,7 @@ export class NeotomaServer {
     const parsed = schema.parse(args ?? {});
     const { packageName, currentVersion, distTag } = parsed;
 
-    const cacheKey = `${packageName}:${distTag}`;
-    const cached = this.registryCache.get(cacheKey);
-    let latest: string | null = cached && cached.until > Date.now() ? cached.version : null;
-
-    if (latest === null) {
-      latest = await getLatestFromRegistry(packageName, distTag);
-      if (latest) {
-        this.registryCache.set(cacheKey, {
-          version: latest,
-          until: Date.now() + NeotomaServer.REGISTRY_CACHE_TTL_MS,
-        });
-      }
-    }
+    const latest = await this.getLatestCachedPackageVersion(packageName, distTag);
 
     if (latest === null) {
       return this.buildTextResponse({
@@ -1017,7 +1103,7 @@ export class NeotomaServer {
             name: "store",
             description:
               this.toolDescriptions.get("store") ??
-              "Unified storing for both unstructured and structured sources. For unstructured (files): provide EITHER file_content (base64-encoded) + mime_type OR file_path (local file path). For structured (entities): provide entities array. Content-addressed storage with SHA-256 deduplication per user. IMPORTANT FOR UNSTRUCTURED FILES: Agents MUST NOT attempt to interpret, extract, or infer structured data from unstructured files before storing. Simply provide the raw file_content (base64-encoded) and mime_type, OR provide file_path for local files. The server will automatically handle file analysis and interpretation if interpret=true (default). Do NOT read file contents to extract entities or fields - pass the file as-is. IMPORTANT FOR STRUCTURED DATA: When storing structured data with an unregistered entity_type, the system will automatically infer and create a user-specific schema from the data structure (parquet schema or JSON field types). Agents do NOT need to pre-register schemas - they are created on-demand. Entity type: When the type is one of the common types (contact, person, company, task, invoice, transaction, receipt, note, contract, event) and the user's intent is clear, set entity_type directly and skip list_entity_types. For other types or when field schemas are needed, use list_entity_types or read resource neotoma://entity_types first. CRITICAL: When storing structured entities, agents MUST include ALL fields from the source data, not just fields that match the entity schema. Schema fields are stored in observations (validated), while non-schema fields are automatically stored in raw_fragments (preserved for future schema expansion). This ensures zero data loss - never filter or exclude fields based on schema compatibility. The system automatically validates and routes fields appropriately.",
+              "Unified storing for both file-backed and structured sources. For files: provide EITHER file_content (base64-encoded) + mime_type OR file_path. For structured data: provide entities array. File inputs are stored raw with content-addressed SHA-256 deduplication per user. Agents should parse and extract entities before storing when they need structured data from a file; the server no longer performs AI interpretation during store. IMPORTANT FOR STRUCTURED DATA: When storing structured entities with an unregistered entity_type, the system automatically infers and creates a user-specific schema from the data structure. Agents must include ALL fields from the source data, not just fields that match the entity schema. Schema fields are stored in observations (validated), while non-schema fields are automatically stored in raw_fragments.",
             inputSchema: (() => {
               const baseSchema = getOpenApiInputSchemaOrThrow("store");
               const baseProperties = (baseSchema.properties ?? {}) as Record<string, unknown>;
@@ -1026,11 +1112,10 @@ export class NeotomaServer {
                 type: "object",
                 properties: {
                   ...baseProperties,
-                  // Unstructured source - EITHER file_content OR file_path
                   file_content: {
                     type: "string",
                     description:
-                      "Base64-encoded file content (for unstructured storage). IMPORTANT: Do NOT interpret or extract data from the file before storing - provide the raw file content. The server handles interpretation automatically. Use file_path for local files instead of base64 encoding.",
+                      "Base64-encoded file content. Use file_path for local files instead of base64 encoding.",
                   },
                   file_path: {
                     type: "string",
@@ -1047,16 +1132,6 @@ export class NeotomaServer {
                     description:
                       "Original filename or source label (optional). For unstructured: auto-detected from file_path if not provided. For structured (entities): omit when data is agent-provided (no file origin); the source will have no filename. Pass only when mirroring a real file name or when a display label is desired.",
                   },
-                  interpret: {
-                    type: "boolean",
-                    description:
-                      "Whether to run AI interpretation immediately (for unstructured). Default: true. Set to false to defer interpretation (e.g., when approaching quota limits, for batch processing, or to interpret later with different config via reinterpret). Note: Interpretation is automatically skipped for deduplicated files only if observations already exist from that source. If a file is deduplicated but has no observations, interpretation will run if interpret=true.",
-                    default: true,
-                  },
-                  interpretation_config: {
-                    type: "object",
-                    description: "AI interpretation configuration (provider, model, etc.)",
-                  },
                 },
               };
             })(),
@@ -1072,7 +1147,7 @@ export class NeotomaServer {
             name: "store_unstructured",
             description:
               this.toolDescriptions.get("store_unstructured") ??
-              "Store raw files only. Provide file_content (base64) + mime_type or file_path. Use when you only have unstructured files.",
+              "Store raw files only. Provide file_content (base64) + mime_type or file_path.",
             inputSchema: {
               type: "object",
               properties: {
@@ -1100,68 +1175,36 @@ export class NeotomaServer {
                   description:
                     "Original filename (optional, auto-detected from file_path if not provided)",
                 },
-                interpret: {
-                  type: "boolean",
-                  description:
-                    "Whether to run AI interpretation immediately (for unstructured). Default: true.",
-                  default: true,
-                },
-                interpretation_config: {
-                  type: "object",
-                  description: "AI interpretation configuration (provider, model, etc.)",
-                },
               },
               required: ["idempotency_key"],
             },
           },
           {
-            name: "reinterpret",
+            name: "parse_file",
             description:
-              this.toolDescriptions.get("reinterpret") ??
-              "Re-run AI interpretation on an existing source with optional config. Creates new observations without modifying existing ones (immutability).",
+              this.toolDescriptions.get("parse_file") ??
+              "Parse local or base64-encoded files into agent-readable text and page images without storing anything. Use for PDFs or other files you need to inspect before structured storing.",
             inputSchema: {
               type: "object",
               properties: {
-                source_id: {
+                file_content: {
                   type: "string",
-                  description: "Source ID (UUID) to reinterpret",
+                  description: "Base64-encoded file content.",
                 },
-                interpretation_config: {
-                  type: "object",
-                  description:
-                    "Optional AI interpretation configuration (model_id, temperature, etc.)",
+                file_path: {
+                  type: "string",
+                  description: "Local file path. Preferred in local environments.",
+                },
+                mime_type: {
+                  type: "string",
+                  description: "Optional MIME type. Auto-detected from file_path when omitted.",
+                },
+                original_filename: {
+                  type: "string",
+                  description: "Optional filename hint for MIME detection and PDF parsing.",
                 },
               },
-              required: ["source_id"],
-            },
-          },
-          {
-            name: "interpret_uninterpreted",
-            description:
-              this.toolDescriptions.get("interpret_uninterpreted") ??
-              "Interpret stored sources that have no prior interpretation runs. Supports dry_run and limit.",
-            inputSchema: {
-              type: "object",
-              properties: {
-                user_id: {
-                  type: "string",
-                  description: "Optional. Inferred from authentication if omitted.",
-                },
-                limit: {
-                  type: "number",
-                  description: "Maximum number of uninterpreted sources to process (default 50, max 100).",
-                  default: 50,
-                },
-                dry_run: {
-                  type: "boolean",
-                  description: "When true, return source IDs that would be interpreted without running interpretation.",
-                  default: false,
-                },
-                interpretation_config: {
-                  type: "object",
-                  description: "Optional AI interpretation configuration to apply to each source run.",
-                },
-              },
+              required: [],
             },
           },
           {
@@ -1606,11 +1649,14 @@ export class NeotomaServer {
         }
 
         const result = await this.executeTool(name, args);
-        const resultSummary = summarizeToolResultForLog(name, result);
+        const runtimeUpdateNotice =
+          name === "npm_check_update" ? null : await this.consumeRuntimeUpdateNotice();
+        const resultWithNotice = this.withRuntimeUpdateNotice(result, runtimeUpdateNotice);
+        const resultSummary = summarizeToolResultForLog(name, resultWithNotice);
         if (resultSummary) {
           logger.info(`[MCP Server] ${name} → ${resultSummary}`);
         }
-        return result;
+        return resultWithNotice;
       } catch (error) {
         if (error instanceof McpError) {
           throw error;
@@ -1693,10 +1739,8 @@ export class NeotomaServer {
         return await this.store(args);
       case "store_unstructured":
         return await this.store(args);
-      case "reinterpret":
-        return await this.reinterpret(args);
-      case "interpret_uninterpreted":
-        return await this.interpretUninterpreted(args);
+      case "parse_file":
+        return await this.parseFile(args);
       case "correct":
         return await this.correct(args);
       case "merge_entities":
@@ -2104,6 +2148,73 @@ export class NeotomaServer {
     return {
       content: [{ type: "text", text: JSON.stringify(data, replacer) }],
     };
+  }
+
+  private async readUnstructuredInput(input: {
+    file_content?: string;
+    file_path?: string;
+    mime_type?: string;
+    original_filename?: string;
+  }): Promise<{ fileBuffer: Buffer; mimeType: string; filename: string }> {
+    if (input.file_path) {
+      const fs = await import("node:fs");
+      const path = await import("node:path");
+
+      if (!fs.existsSync(input.file_path)) {
+        throw new Error(`File not found: ${input.file_path}`);
+      }
+
+      const fileBuffer = fs.readFileSync(input.file_path);
+      const ext = path.extname(input.file_path).toLowerCase();
+      return {
+        fileBuffer,
+        mimeType: input.mime_type || getMimeTypeFromExtension(ext) || "application/octet-stream",
+        filename: input.original_filename || path.basename(input.file_path),
+      };
+    }
+
+    if (input.file_content && input.mime_type) {
+      return {
+        fileBuffer: Buffer.from(input.file_content, "base64"),
+        mimeType: input.mime_type,
+        filename: input.original_filename || "file",
+      };
+    }
+
+    throw new Error("file_content+mime_type OR file_path required");
+  }
+
+  private async parseFile(args: unknown): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const schema = z
+      .object({
+        file_content: z.string().optional(),
+        file_path: z.string().optional(),
+        mime_type: z.string().optional(),
+        original_filename: z.string().optional(),
+      })
+      .refine((data) => Boolean(data.file_path || (data.file_content && data.mime_type)), {
+        message: "Must provide file_path or file_content with mime_type",
+      });
+
+    const parsed = schema.parse(args ?? {});
+    const { fileBuffer, mimeType, filename } = await this.readUnstructuredInput(parsed);
+    const text = await extractTextFromBuffer(fileBuffer, mimeType, filename);
+    const firstPageImage = await getPdfFirstPageImageDataUrl(fileBuffer, mimeType, filename);
+    const pagePayload = firstPageImage ? [{ page: 1, image_data_url: firstPageImage }] : [];
+    const contentForHash = text
+      ? Buffer.from(text, "utf-8")
+      : firstPageImage
+        ? Buffer.from(firstPageImage, "utf-8")
+        : Buffer.alloc(0);
+
+    return this.buildTextResponse({
+      text: text || undefined,
+      pages: pagePayload.length > 0 ? pagePayload : undefined,
+      content_hash: createHash("sha256").update(contentForHash).digest("hex"),
+      mime_type: mimeType,
+      file_size: fileBuffer.byteLength,
+      original_filename: filename,
+    });
   }
 
   private buildTimelineWidgetHtml(): string {
@@ -3290,26 +3401,19 @@ export class NeotomaServer {
   }
 
   // FU-122: MCP store() Tool
-  // Implements idempotence pattern: retry loop, fixed-point guarantee, deduplication
+  // Raw file storage plus structured entity storage. Server-side LLM extraction has been removed.
   private async store(args: unknown): Promise<{ content: Array<{ type: string; text: string }> }> {
     const { storeRawContent } = await import("./services/raw_storage.js");
-    const { runInterpretation, runInterpretationWithFixedPoint, checkInterpretationQuota } =
-      await import("./services/interpretation.js");
 
-    // Unified schema: accepts file_content (unstructured), file_path, entities (structured), or both.
     const schema = z
       .object({
-        user_id: z.string().uuid().optional(), // Optional - will use authenticated user_id
+        user_id: z.string().uuid().optional(),
         idempotency_key: z.string().min(1),
         file_idempotency_key: z.string().min(1).optional(),
-        // Unstructured source - EITHER file_content OR file_path
         file_content: z.string().optional(),
         file_path: z.string().optional(),
         mime_type: z.string().optional(),
         original_filename: z.string().optional(),
-        interpret: z.boolean().default(true),
-        interpretation_config: z.record(z.unknown()).optional(),
-        // Structured source
         entities: z.array(z.record(z.unknown())).optional(),
         relationships: z
           .array(
@@ -3324,7 +3428,6 @@ export class NeotomaServer {
       })
       .refine(
         (data) => {
-          // Must have either file_content+mime_type OR file_path OR entities (or both structured+unstructured)
           const hasFileContent = data.file_content && data.mime_type;
           const hasFilePath = data.file_path;
           const hasEntities = data.entities && data.entities.length > 0;
@@ -3334,8 +3437,6 @@ export class NeotomaServer {
       );
 
     const parsed = schema.parse(args);
-
-    // Use authenticated user_id, validate if provided
     const userId = this.getAuthenticatedUserId(parsed.user_id);
     const idempotencyKey = parsed.idempotency_key;
 
@@ -3364,18 +3465,15 @@ export class NeotomaServer {
     }
 
     if (hasEntities && hasUnstructured) {
-      // Use a distinct idempotency key for the file so the unstructured source is not confused
-      // with the structured source (which already claimed idempotency_key). Otherwise reinterpret
-      // would run on the JSON body instead of the PDF. See docs/reports/neotoma_pdf_interpreted_as_note_investigation_2026_02_23.md
-      const fileIdempotencyKey =
-        parsed.file_idempotency_key ?? (parsed.idempotency_key ? `${parsed.idempotency_key}-file` : undefined);
-      const unstructuredOnlyArgs = {
-        ...parsed,
+      const fileIdempotencyKey = parsed.file_idempotency_key ?? `${parsed.idempotency_key}-file`;
+      const unstructuredResponse = await this.store({
         idempotency_key: fileIdempotencyKey,
-      };
-      delete (unstructuredOnlyArgs as Record<string, unknown>).entities;
-      delete (unstructuredOnlyArgs as Record<string, unknown>).relationships;
-      const unstructuredResponse = await this.store(unstructuredOnlyArgs);
+        file_content: parsed.file_content,
+        file_path: parsed.file_path,
+        mime_type: parsed.mime_type,
+        original_filename: parsed.original_filename,
+        source_priority: parsed.source_priority,
+      });
       let unstructuredPayload: Record<string, unknown>;
       try {
         const text = unstructuredResponse.content[0]?.text ?? "{}";
@@ -3389,430 +3487,26 @@ export class NeotomaServer {
       });
     }
 
-    // Handle unstructured source (file content OR file path)
-    let fileBuffer: Buffer;
-    let detectedMimeType: string;
-    let detectedFilename: string;
-
-    if (idempotencyKey) {
-      const { data: existingSource, error: existingSourceError } = await db
-        .from("sources")
-        .select("id, content_hash, file_size")
-        .eq("user_id", userId)
-        .eq("idempotency_key", idempotencyKey)
-        .maybeSingle();
-
-      if (existingSourceError) {
-        throw new Error(`Failed to check idempotency key: ${existingSourceError.message}`);
-      }
-
-      if (existingSource) {
-        if (!parsed.interpret) {
-          return this.buildTextResponse({
-            source_id: existingSource.id,
-            content_hash: existingSource.content_hash,
-            file_size: existingSource.file_size,
-            deduplicated: true,
-            interpretation: { skipped: true, reason: "interpret_false" },
-            interpretation_debug: {
-              interpret_requested: false,
-              deduplicated: true,
-              existing_observations_count: 0,
-              should_run: false,
-              reason: "interpret_false",
-            },
-            related_entities: [],
-            related_relationships: [],
-          });
-        }
-        // Idempotency-key hit with interpret=true: run reinterpret (download, extract, runInterpretation).
-        const {
-          runInterpretation: runInterpretationForIdempotency,
-          runInterpretationWithFixedPoint: runInterpretationWithFixedPointForIdempotency,
-          checkInterpretationQuota: checkInterpretationQuotaForIdempotency,
-        } = await import("./services/interpretation.js");
-        const { getSourceMetadata, downloadRawContent } = await import("./services/raw_storage.js");
-        const source = await getSourceMetadata(existingSource.id);
-        const isCsvIdem =
-          (source.mime_type || "").toLowerCase() === "text/csv" ||
-          (source.original_filename || "").toLowerCase().endsWith(".csv");
-        const quota = isCsvIdem
-          ? { allowed: true, current: 0, limit: 0 }
-          : await checkInterpretationQuotaForIdempotency(userId);
-        if (!quota.allowed) {
-          const existingEntityIds = await this.getEntityIdsFromSource(existingSource.id);
-          const relatedData = await this.getRelatedEntitiesAndRelationships(existingEntityIds);
-          return this.buildTextResponse({
-            source_id: existingSource.id,
-            content_hash: existingSource.content_hash,
-            file_size: existingSource.file_size,
-            deduplicated: true,
-            interpretation: { skipped: true, reason: "quota_exceeded", quota },
-            interpretation_debug: {
-              interpret_requested: true,
-              deduplicated: true,
-              existing_observations_count: existingEntityIds.length,
-              should_run: true,
-              reason: "quota_exceeded",
-            },
-            related_entities: relatedData.entities,
-            related_relationships: relatedData.relationships,
-          });
-        }
-        // Missing file in sources_prod fails the request so data is not silently lost
-        const idempotencyFileBuffer = await downloadRawContent(source.storage_url);
-        const rawText = await extractTextFromBuffer(
-          idempotencyFileBuffer,
-          source.mime_type,
-          source.original_filename || "file"
-        );
-        if (!isCsvIdem && !isLLMExtractionAvailable()) {
-          const existingEntityIds = await this.getEntityIdsFromSource(existingSource.id);
-          const relatedData = await this.getRelatedEntitiesAndRelationships(existingEntityIds);
-          return this.buildTextResponse({
-            source_id: existingSource.id,
-            content_hash: existingSource.content_hash,
-            file_size: existingSource.file_size,
-            deduplicated: true,
-            interpretation: {
-              skipped: true,
-              reason: "openai_not_configured",
-              message: "Set OPENAI_API_KEY in .env to enable AI interpretation",
-            },
-            interpretation_debug: {
-              interpret_requested: true,
-              deduplicated: true,
-              existing_observations_count: existingEntityIds.length,
-              should_run: true,
-              reason: "openai_not_configured",
-            },
-            related_entities: relatedData.entities,
-            related_relationships: relatedData.relationships,
-          });
-        }
-        const existingEntityIdsForDebug = await this.getEntityIdsFromSource(existingSource.id);
-        const idempotencyPdfDebug = getPdfWorkerDebug();
-        const idempotencyExtractionDebug: {
-          raw_text_length?: number;
-          extraction_field_keys?: string[];
-          used_vision_fallback?: boolean;
-          vision_fallback_attempted?: boolean;
-          vision_fallback_image_got?: boolean;
-          vision_fallback_image_error?: string;
-          vision_fallback_error?: string;
-          pdf_worker_wrapper_used?: boolean;
-          pdf_worker_wrapper_path_tried?: string | null;
-          pdf_worker_set_worker_error?: string;
-        } = {
-          raw_text_length: typeof rawText === "string" ? rawText.length : 0,
-          pdf_worker_wrapper_used: idempotencyPdfDebug.configured,
-          pdf_worker_wrapper_path_tried: idempotencyPdfDebug.wrapper_path_tried,
-          pdf_worker_set_worker_error: idempotencyPdfDebug.set_worker_error,
-        };
-        const isPdfIdem =
-          (source.mime_type || "").toLowerCase().includes("pdf") ||
-          (source.original_filename || "").toLowerCase().endsWith(".pdf");
-        let idempotencyExtractionResult:
-          | Awaited<ReturnType<typeof extractWithLLM>>
-          | Awaited<ReturnType<typeof extractFromCSVWithChunking>>
-          | undefined = undefined;
-        let idempotencyExtractedData: Array<Record<string, unknown>> = [];
-        if (idempotencyExtractionDebug.raw_text_length === 0 && isPdfIdem) {
-          idempotencyExtractionDebug.vision_fallback_attempted = true;
-          const imageResult = await getPdfFirstPageImageDataUrl(
-            idempotencyFileBuffer,
-            source.mime_type,
-            source.original_filename || "file",
-            { returnError: true }
-          );
-          const imageDataUrl = typeof imageResult === "object" ? imageResult.dataUrl : imageResult;
-          if (typeof imageResult === "object" && imageResult.error) {
-            idempotencyExtractionDebug.vision_fallback_image_error = imageResult.error;
-          }
-          idempotencyExtractionDebug.vision_fallback_image_got = Boolean(imageDataUrl);
-          if (imageDataUrl) {
-            try {
-              idempotencyExtractionResult = await extractWithLLMFromImage(
-                imageDataUrl,
-                source.original_filename || "file",
-                source.mime_type || "text/plain",
-                "gpt-4o"
-              );
-              idempotencyExtractionDebug.used_vision_fallback = true;
-            } catch (visionErr) {
-              logger.warn("Vision extraction failed (idempotency):", visionErr);
-              idempotencyExtractionDebug.vision_fallback_error =
-                visionErr instanceof Error ? visionErr.message : String(visionErr);
-            }
-          }
-        }
-        if (typeof idempotencyExtractionResult === "undefined") {
-          if (isCsvIdem) {
-            const { extractEntitiesFromCsvRows } = await import("./services/csv_row_extraction.js");
-            const csvExtracted = extractEntitiesFromCsvRows(
-              idempotencyFileBuffer,
-              source.original_filename || "file"
-            );
-            idempotencyExtractionDebug.extraction_field_keys = csvExtracted.flatMap((row) =>
-              Object.keys(row).filter((k) => k !== "entity_type" && k !== "type")
-            );
-            idempotencyExtractedData = csvExtracted;
-          } else {
-            idempotencyExtractionResult = await extractWithLLM(
-                rawText,
-                source.original_filename || "file",
-                source.mime_type || "text/plain",
-                "gpt-4o"
-              );
-          }
-        }
-        if (idempotencyExtractedData.length === 0 && idempotencyExtractionResult) {
-          if ("entities" in idempotencyExtractionResult) {
-            const multiResult = idempotencyExtractionResult as {
-              entities: Array<{ entity_type: string; fields: Record<string, unknown> }>;
-            };
-            idempotencyExtractedData = multiResult.entities.map((entity) => ({
-              entity_type: entity.entity_type,
-              ...entity.fields,
-            }));
-            idempotencyExtractionDebug.extraction_field_keys =
-              multiResult.entities.flatMap((e) =>
-                Object.keys(e.fields ?? {}).filter((k) => k !== "entity_type" && k !== "type")
-              );
-          } else {
-            const { entity_type, fields } = idempotencyExtractionResult;
-            idempotencyExtractionDebug.extraction_field_keys = Object.keys(fields ?? {}).filter(
-              (k) => k !== "entity_type" && k !== "type"
-            );
-            idempotencyExtractedData = [{ entity_type, ...fields }];
-          }
-        }
-        const defaultConfig = config.openaiApiKey
-          ? {
-              provider: "openai",
-              model_id: "gpt-4o",
-              temperature: 0,
-              prompt_hash: "llm_extraction_v2_idempotent",
-              code_version: "v0.2.0",
-            }
-          : {
-              provider: "rule_based",
-              model_id: "neotoma_v1",
-              temperature: 0,
-              prompt_hash: "n/a",
-              code_version: "v0.2.0",
-            };
-        const idempotencyInterpretationConfig = parsed.interpretation_config
-          ? {
-              provider: (parsed.interpretation_config.provider as string) || defaultConfig.provider,
-              model_id: (parsed.interpretation_config.model_id as string) || defaultConfig.model_id,
-              temperature:
-                (parsed.interpretation_config.temperature as number) ?? defaultConfig.temperature,
-              prompt_hash:
-                (parsed.interpretation_config.prompt_hash as string) || defaultConfig.prompt_hash,
-              code_version:
-                (parsed.interpretation_config.code_version as string) || defaultConfig.code_version,
-              feature_flags: parsed.interpretation_config.feature_flags as
-                | Record<string, boolean>
-                | undefined,
-            }
-          : defaultConfig;
-        const idempotencyFeatureFlags = parsed.interpretation_config?.feature_flags as
-          | Record<string, boolean>
-          | undefined;
-        const useFixedPoint = idempotencyFeatureFlags?.use_fixed_point ?? false;
-        let idempotencyInterpretationResult;
-        try {
-          idempotencyInterpretationResult = useFixedPoint
-            ? await runInterpretationWithFixedPointForIdempotency({
-                userId,
-                sourceId: existingSource.id,
-                extractedData: idempotencyExtractedData,
-                config: idempotencyInterpretationConfig,
-              })
-            : await runInterpretationForIdempotency({
-                userId,
-                sourceId: existingSource.id,
-                extractedData: idempotencyExtractedData,
-                config: idempotencyInterpretationConfig,
-              });
-        } catch (interpretError) {
-          logger.error("Interpretation error (idempotency-key reinterpret):", interpretError);
-          idempotencyInterpretationResult = {
-            error:
-              interpretError instanceof Error ? interpretError.message : String(interpretError),
-            skipped: true,
-            reason: "interpretation_failed",
-          };
-        }
-        let idempotencyEntityIds: string[] = [];
-        if (
-          idempotencyInterpretationResult &&
-          !(
-            "skipped" in idempotencyInterpretationResult && idempotencyInterpretationResult.skipped
-          ) &&
-          (idempotencyInterpretationResult as { entities?: { entityId: string }[] }).entities
-        ) {
-          idempotencyEntityIds = (
-            idempotencyInterpretationResult as { entities: { entityId: string }[] }
-          ).entities.map((e) => e.entityId);
-        } else {
-          idempotencyEntityIds = await this.getEntityIdsFromSource(existingSource.id);
-        }
-        const         idempotencyRelatedData =
-          await this.getRelatedEntitiesAndRelationships(idempotencyEntityIds);
-        return this.buildTextResponse({
-          source_id: existingSource.id,
-          content_hash: existingSource.content_hash,
-          file_size: existingSource.file_size,
-          deduplicated: true,
-          interpretation: idempotencyInterpretationResult,
-          interpretation_debug: {
-            interpret_requested: true,
-            deduplicated: true,
-            existing_observations_count: existingEntityIdsForDebug.length,
-            should_run: true,
-            reason: "idempotency_key_reinterpret",
-            ...idempotencyExtractionDebug,
-          },
-          related_entities: idempotencyRelatedData.entities,
-          related_relationships: idempotencyRelatedData.relationships,
-          entity_debug: {
-            entity_ids_retrieved: idempotencyEntityIds,
-            valid_entity_ids: idempotencyEntityIds.filter((id) => id != null),
-          },
-        });
-      }
-    }
-
     if (parsed.file_path) {
-      // Read file from filesystem
-      const fs = await import("fs");
-      const path = await import("path");
-
-      // Validate file exists
-      if (!fs.existsSync(parsed.file_path)) {
-        throw new Error(`File not found: ${parsed.file_path}`);
-      }
-
-      // Check if this is a parquet file - handle specially via structured path
       const { isParquetFile, readParquetFile } = await import("./services/parquet_reader.js");
       if (isParquetFile(parsed.file_path)) {
-        logger.error(`[STORE] Detected parquet file: ${parsed.file_path}`);
-
-        try {
-          // Configure timeout for large parquet files (5 minutes default)
-          const PARQUET_READ_TIMEOUT = 300000; // 5 minutes
-
-          // Wrap readParquetFile with timeout and BigInt error handling
-          let parquetResult;
-          try {
-            parquetResult = await Promise.race([
-              readParquetFile(parsed.file_path),
-              // eslint-disable-next-line @typescript-eslint/no-unused-vars
-              new Promise<never>((_resolve, reject) =>
-                setTimeout(
-                  () =>
-                    reject(
-                      new Error(
-                        `Parquet read timeout after ${PARQUET_READ_TIMEOUT / 1000}s. File may be too large or on slow network storage.`
-                      )
-                    ),
-                  PARQUET_READ_TIMEOUT
-                )
-              ),
-            ]);
-          } catch (parquetError: any) {
-            // If error contains BigInt serialization, provide clearer message
-            if (
-              parquetError?.message?.includes("BigInt") ||
-              parquetError?.message?.includes("serialize")
-            ) {
-              throw new Error(
-                `Parquet file contains INT64 fields that need BigInt conversion. ` +
-                  `This should be handled automatically. If this error persists, ` +
-                  `there may be a BigInt value in an unexpected location. ` +
-                  `Original: ${parquetError.message}`
-              );
-            }
-            throw parquetError;
-          }
-
-          // Safely log metadata (ensure no BigInt values)
-          const safeRowCount =
-            typeof parquetResult.metadata.row_count === "bigint"
-              ? Number(parquetResult.metadata.row_count)
-              : parquetResult.metadata.row_count;
-          logger.error(
-            `[STORE] Read ${safeRowCount} rows from parquet file (entity_type: ${parquetResult.metadata.entity_type})`
-          );
-
-          // Process as structured entities
-          return await this.storeStructuredInternal(
-            userId,
-            parquetResult.entities,
-            parsed.source_priority,
-            idempotencyKey,
-            parsed.original_filename
-          );
-        } catch (error: any) {
-          // Safely extract error message, handling potential BigInt values
-          let errorMessage = "Unknown error";
-          try {
-            if (error?.message) {
-              errorMessage = String(error.message);
-            } else if (typeof error === "string") {
-              errorMessage = error;
-            } else {
-              // Try to stringify with BigInt replacer
-              errorMessage = JSON.stringify(error, (key, value) => {
-                if (typeof value === "bigint") {
-                  return Number(value);
-                }
-                return value;
-              });
-            }
-          } catch {
-            // If stringification fails, use fallback
-            errorMessage = String(error);
-          }
-          throw new Error(`Failed to process parquet file: ${errorMessage}`);
-        }
+        const parquetResult = await readParquetFile(parsed.file_path);
+        return await this.storeStructuredInternal(
+          userId,
+          parquetResult.entities,
+          parsed.source_priority,
+          idempotencyKey,
+          parsed.original_filename
+        );
       }
-
-      // Read file
-      try {
-        fileBuffer = fs.readFileSync(parsed.file_path);
-      } catch (error: any) {
-        throw new Error(`File read error: ${error.message}`);
-      }
-
-      // Detect MIME type if not provided
-      if (parsed.mime_type) {
-        detectedMimeType = parsed.mime_type;
-      } else {
-        // Use file extension to infer MIME type
-        const ext = path.extname(parsed.file_path).toLowerCase();
-        detectedMimeType = getMimeTypeFromExtension(ext) || "application/octet-stream";
-      }
-
-      // Use filename from path if not provided
-      detectedFilename = parsed.original_filename || path.basename(parsed.file_path);
-    } else if (parsed.file_content && parsed.mime_type) {
-      // Existing base64 handling
-      fileBuffer = Buffer.from(parsed.file_content, "base64");
-      detectedMimeType = parsed.mime_type;
-      detectedFilename = parsed.original_filename || "file";
-    } else {
-      throw new Error("file_content+mime_type OR file_path required for unstructured storing");
     }
 
-    // Store raw content
+    const { fileBuffer, mimeType, filename } = await this.readUnstructuredInput(parsed);
     const storageResult = await storeRawContent({
-      userId: userId,
+      userId,
       fileBuffer,
-      mimeType: detectedMimeType,
-      originalFilename: detectedFilename,
+      mimeType,
+      originalFilename: filename,
       idempotencyKey,
       provenance: {
         upload_method: "mcp_store",
@@ -3820,281 +3514,31 @@ export class NeotomaServer {
       },
     });
 
-    const result: any = {
+    const result: Record<string, unknown> = {
       source_id: storageResult.sourceId,
       content_hash: storageResult.contentHash,
       file_size: storageResult.fileSize,
       deduplicated: storageResult.deduplicated,
     };
 
-    // Track entity IDs for related entities lookup
-    let entityIds: string[] = [];
+    const assetInfo = await this.ensureUnstructuredAssetEntity({
+      userId,
+      sourceId: storageResult.sourceId,
+      contentHash: storageResult.contentHash,
+      fileSize: storageResult.fileSize,
+      mimeType,
+      originalFilename: filename,
+      storageUrl: storageResult.storageUrl,
+      sourcePriority: parsed.source_priority,
+      idempotencyKey,
+    });
+    result.asset_entity_id = assetInfo.entityId;
+    result.asset_entity_type = assetInfo.entityType;
 
-    // Check if interpretation should run: when interpret=true, always run (first time or reinterpret).
-    const existingEntityIds = await this.getEntityIdsFromSource(storageResult.sourceId);
-    const shouldRunInterpretation = parsed.interpret;
-
-    // Add debug info to result
-    result.interpretation_debug = {
-      interpret_requested: parsed.interpret,
-      deduplicated: storageResult.deduplicated,
-      existing_observations_count: existingEntityIds.length,
-      should_run: shouldRunInterpretation,
-    };
-
-    if (shouldRunInterpretation) {
-      try {
-        const isCsvFile =
-          detectedMimeType?.toLowerCase() === "text/csv" ||
-          detectedFilename?.toLowerCase().endsWith(".csv");
-
-        // CSV extraction is deterministic/rule-based and does not consume LLM quota.
-        const quota = isCsvFile
-          ? { allowed: true, current: 0, limit: 0 }
-          : await checkInterpretationQuota(userId);
-        if (!quota.allowed) {
-          // Get existing entities from this source (if deduplicated previously)
-          entityIds = await this.getEntityIdsFromSource(storageResult.sourceId);
-          const relatedData = await this.getRelatedEntitiesAndRelationships(entityIds);
-          return this.buildTextResponse({
-            ...result,
-            interpretation: {
-              skipped: true,
-              reason: "quota_exceeded",
-              quota: quota,
-            },
-            related_entities: relatedData.entities,
-            related_relationships: relatedData.relationships,
-          });
-        }
-
-        // Extract data from file using AI interpretation
-        const rawText = await extractTextFromBuffer(fileBuffer, detectedMimeType, detectedFilename);
-
-        // Debug: surface extraction input/output so store response shows why refinement may have few keys
-        const extractionDebug: {
-          raw_text_length?: number;
-          extraction_field_keys?: string[];
-          used_vision_fallback?: boolean;
-          vision_fallback_attempted?: boolean;
-          vision_fallback_image_got?: boolean;
-          vision_fallback_image_error?: string;
-          vision_fallback_error?: string;
-          pdf_worker_wrapper_used?: boolean;
-          pdf_worker_wrapper_path_tried?: string | null;
-          pdf_worker_set_worker_error?: string;
-        } = {};
-        extractionDebug.raw_text_length = typeof rawText === "string" ? rawText.length : 0;
-        const pdfDebug = getPdfWorkerDebug();
-        extractionDebug.pdf_worker_wrapper_used = pdfDebug.configured;
-        extractionDebug.pdf_worker_wrapper_path_tried = pdfDebug.wrapper_path_tried;
-        extractionDebug.pdf_worker_set_worker_error = pdfDebug.set_worker_error;
-
-        // Check if OpenAI is configured for non-CSV interpretation paths
-        if (!isCsvFile && !isLLMExtractionAvailable()) {
-          return this.buildTextResponse({
-            ...result,
-            interpretation: {
-              skipped: true,
-              reason: "openai_not_configured",
-              message: "Set OPENAI_API_KEY in .env to enable AI interpretation",
-            },
-          });
-        }
-
-        // When PDF text is empty (e.g. scanned/image-only), use vision on first page
-        const isPdf =
-          detectedMimeType?.toLowerCase().includes("pdf") ||
-          detectedFilename?.toLowerCase().endsWith(".pdf");
-        let extractionResult:
-          | Awaited<ReturnType<typeof extractWithLLM>>
-          | Awaited<ReturnType<typeof extractFromCSVWithChunking>>
-          | undefined = undefined;
-        let extractedData: Array<Record<string, unknown>> = [];
-        if (extractionDebug.raw_text_length === 0 && isPdf) {
-          extractionDebug.vision_fallback_attempted = true;
-          const imageResult = await getPdfFirstPageImageDataUrl(
-            fileBuffer,
-            detectedMimeType,
-            detectedFilename,
-            { returnError: true }
-          );
-          const imageDataUrl = typeof imageResult === "object" ? imageResult.dataUrl : imageResult;
-          if (typeof imageResult === "object" && imageResult.error) {
-            extractionDebug.vision_fallback_image_error = imageResult.error;
-          }
-          extractionDebug.vision_fallback_image_got = Boolean(imageDataUrl);
-          if (imageDataUrl) {
-            try {
-              extractionResult = await extractWithLLMFromImage(
-                imageDataUrl,
-                detectedFilename,
-                detectedMimeType,
-                "gpt-4o"
-              );
-              extractionDebug.used_vision_fallback = true;
-            } catch (visionErr) {
-              logger.warn("Vision extraction failed:", visionErr);
-              extractionDebug.vision_fallback_error =
-                visionErr instanceof Error ? visionErr.message : String(visionErr);
-            }
-          }
-        }
-        if (typeof extractionResult === "undefined") {
-          if (isCsvFile) {
-            const { extractEntitiesFromCsvRows } = await import("./services/csv_row_extraction.js");
-            extractedData = extractEntitiesFromCsvRows(fileBuffer, detectedFilename);
-            extractionDebug.extraction_field_keys = extractedData.flatMap((row) =>
-              Object.keys(row).filter((k) => k !== "entity_type" && k !== "type")
-            );
-          } else {
-            extractionResult = await extractWithLLM(
-                rawText,
-                detectedFilename,
-                detectedMimeType,
-                "gpt-4o" // Will be overridden by interpretationConfig.model_id if specified
-              );
-          }
-        }
-
-        // Handle both single entity (LLMExtractionResult) and multi-entity (MultiEntityExtractionResult) results
-        if (extractedData.length === 0 && extractionResult) {
-          if ("entities" in extractionResult) {
-            // Multi-entity result from CSV chunking
-            const multiResult = extractionResult as {
-              entities: Array<{ entity_type: string; fields: Record<string, unknown> }>;
-            };
-            extractedData = multiResult.entities.map((entity) => ({
-              entity_type: entity.entity_type,
-              ...entity.fields,
-            }));
-          } else {
-            // Single entity result
-            const { entity_type, fields } = extractionResult;
-            extractionDebug.extraction_field_keys = Object.keys(fields ?? {}).filter(
-              (k) => k !== "entity_type" && k !== "type"
-            );
-            extractedData = [
-              {
-                entity_type,
-                ...fields,
-              },
-            ];
-          }
-          if ("entities" in extractionResult) {
-            const multiResult = extractionResult as {
-              entities: Array<{ entity_type: string; fields: Record<string, unknown> }>;
-            };
-            extractionDebug.extraction_field_keys = multiResult.entities.flatMap((e) =>
-              Object.keys(e.fields ?? {}).filter((k) => k !== "entity_type" && k !== "type")
-            );
-          }
-        }
-
-        // Run interpretation with fixed-point guarantee
-        // Use LLM-based config if OpenAI is configured, otherwise rule-based fallback
-        const defaultConfig = config.openaiApiKey
-          ? {
-              provider: "openai",
-              model_id: "gpt-4o", // GPT-4o recommended for accuracy
-              temperature: 0, // Most deterministic (changed from 0.1 for idempotence)
-              prompt_hash: "llm_extraction_v2_idempotent", // Updated version identifier
-              code_version: "v0.2.0",
-            }
-          : {
-              provider: "rule_based",
-              model_id: "neotoma_v1",
-              temperature: 0,
-              prompt_hash: "n/a",
-              code_version: "v0.2.0",
-            };
-
-        const interpretationConfig = parsed.interpretation_config
-          ? {
-              provider: (parsed.interpretation_config.provider as string) || defaultConfig.provider,
-              model_id: (parsed.interpretation_config.model_id as string) || defaultConfig.model_id,
-              temperature:
-                (parsed.interpretation_config.temperature as number) ?? defaultConfig.temperature,
-              prompt_hash:
-                (parsed.interpretation_config.prompt_hash as string) || defaultConfig.prompt_hash,
-              code_version:
-                (parsed.interpretation_config.code_version as string) || defaultConfig.code_version,
-              feature_flags: parsed.interpretation_config.feature_flags as
-                | Record<string, boolean>
-                | undefined,
-            }
-          : defaultConfig;
-
-        // Use fixed-point guarantee wrapper (retries until hash stabilizes)
-        const featureFlags = parsed.interpretation_config?.feature_flags as
-          | Record<string, boolean>
-          | undefined;
-        const useFixedPoint = featureFlags?.use_fixed_point ?? false;
-        const interpretationResult = useFixedPoint
-          ? await runInterpretationWithFixedPoint({
-              userId: userId,
-              sourceId: storageResult.sourceId,
-              extractedData,
-              config: interpretationConfig,
-            })
-          : await runInterpretation({
-              userId: userId,
-              sourceId: storageResult.sourceId,
-              extractedData,
-              config: interpretationConfig,
-            });
-
-        result.interpretation = interpretationResult;
-        result.interpretation_debug = {
-          ...result.interpretation_debug,
-          ...extractionDebug,
-        };
-
-        // Get entity IDs from interpretation result
-        if (interpretationResult.entities && interpretationResult.entities.length > 0) {
-          entityIds = interpretationResult.entities.map((e) => e.entityId);
-        }
-      } catch (error) {
-        // Log error but don't fail the store operation
-        logger.error("Interpretation error:", error);
-        result.interpretation = {
-          error: error instanceof Error ? error.message : String(error),
-          skipped: true,
-          reason: "interpretation_failed",
-        };
-        // Still try to get existing entities if any
-        entityIds = await this.getEntityIdsFromSource(storageResult.sourceId);
-      }
-    } else if (storageResult.deduplicated && parsed.interpret) {
-      // File was deduplicated and interpretation not requested or already has observations
-      // Get existing entities from this source
-      const { data: observations, error: obsError } = await db
-        .from("observations")
-        .select("id, entity_id, entity_type")
-        .eq("source_id", storageResult.sourceId);
-
-      entityIds = await this.getEntityIdsFromSource(storageResult.sourceId);
-      result.entity_debug = {
-        source_id: storageResult.sourceId,
-        observations_found: observations?.length || 0,
-        observations:
-          observations?.map((obs: any) => ({
-            observation_id: obs.id,
-            entity_id: obs.entity_id,
-            entity_type: obs.entity_type,
-          })) || [],
-        entity_ids_retrieved: entityIds,
-        entity_ids_count: entityIds.length,
-        observation_error: obsError?.message || null,
-      };
-    }
-
-    // Get entities themselves (created from this source) with snapshots
-    let entities: any[] = [];
+    const entityIds = await this.getEntityIdsFromSource(storageResult.sourceId);
+    let entities: Array<Record<string, unknown>> = [];
     if (entityIds.length > 0) {
-      // Filter out null/undefined entity IDs
-      const validEntityIds = entityIds.filter((id) => id != null);
-
+      const validEntityIds = entityIds.filter(Boolean);
       if (validEntityIds.length > 0) {
         const { data: entityData, error: entityError } = await db
           .from("entities")
@@ -4102,9 +3546,7 @@ export class NeotomaServer {
           .in("id", validEntityIds);
 
         if (!entityError && entityData) {
-          entities = entityData;
-
-          // Include snapshots
+          entities = entityData as Array<Record<string, unknown>>;
           const { data: snapshots, error: snapError } = await db
             .from("entity_snapshots")
             .select("*")
@@ -4116,31 +3558,100 @@ export class NeotomaServer {
             );
             entities = entities.map((entity) => ({
               ...entity,
-              snapshot: snapshotMap.get(entity.id) || null,
+              snapshot: snapshotMap.get(entity.id as string) || null,
             }));
           }
         }
       }
-
-      // Add debug info about entity retrieval (merge with any existing entity_debug from dedup path so client keeps entity_ids_retrieved)
-      const existingDebug = (result as { entity_debug?: Record<string, unknown> }).entity_debug ?? {};
-      result.entity_debug = {
-        ...existingDebug,
-        entity_ids_from_observations: entityIds,
-        valid_entity_ids: entityIds.filter((id) => id != null),
-        entities_found: entities.length,
-        entity_error:
-          entityIds.length > 0 && entities.length === 0 ? "No entities found for these IDs" : null,
-      };
     }
 
-    // Also get related entities and relationships (entities connected via relationships)
     const relatedData = await this.getRelatedEntitiesAndRelationships(entityIds);
-
-    result.related_entities = entities; // Entities created from this source
+    result.related_entities = entities;
     result.related_relationships = relatedData.relationships;
 
     return this.buildTextResponse(result);
+  }
+
+  // Helper method to get entity IDs from a source_id
+  private getAssetEntityType(mimeType: string): string {
+    const normalized = (mimeType || "").toLowerCase();
+    if (normalized.startsWith("image/")) return "image_asset";
+    if (normalized.startsWith("audio/")) return "audio_asset";
+    if (normalized.startsWith("video/")) return "video_asset";
+    return "file_asset";
+  }
+
+  private async ensureUnstructuredAssetEntity(params: {
+    userId: string;
+    sourceId: string;
+    contentHash: string;
+    fileSize: number;
+    mimeType: string;
+    originalFilename?: string;
+    storageUrl: string;
+    sourcePriority: number;
+    idempotencyKey?: string;
+  }): Promise<{ entityId: string; entityType: string }> {
+    const { resolveEntity } = await import("./services/entity_resolution.js");
+    const { createObservation } = await import("./services/observation_storage.js");
+    const {
+      userId,
+      sourceId,
+      contentHash,
+      fileSize,
+      mimeType,
+      originalFilename,
+      storageUrl,
+      sourcePriority,
+      idempotencyKey,
+    } = params;
+    const entityType = this.getAssetEntityType(mimeType);
+    const fields: Record<string, unknown> = {
+      source_id: sourceId,
+      content_hash: contentHash,
+      mime_type: mimeType,
+      file_size: fileSize,
+      storage_url: storageUrl,
+      original_filename: originalFilename,
+      title: originalFilename || sourceId,
+    };
+
+    const entityId = await resolveEntity({
+      entityType,
+      fields,
+      userId,
+    });
+
+    const { data: existingObservation, error: existingObservationError } = await db
+      .from("observations")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("source_id", sourceId)
+      .eq("entity_id", entityId)
+      .limit(1)
+      .maybeSingle();
+
+    if (existingObservationError) {
+      throw new Error(`Failed to check existing asset observation: ${existingObservationError.message}`);
+    }
+
+    if (!existingObservation) {
+      await createObservation({
+        entity_id: entityId,
+        entity_type: entityType,
+        schema_version: "1.0",
+        source_id: sourceId,
+        interpretation_id: null,
+        observed_at: new Date().toISOString(),
+        specificity_score: 1.0,
+        source_priority: sourcePriority,
+        fields,
+        user_id: userId,
+        idempotency_key: idempotencyKey ? `${idempotencyKey}:asset` : null,
+      });
+    }
+
+    return { entityId, entityType };
   }
 
   // Helper method to get entity IDs from a source_id
@@ -4468,22 +3979,36 @@ export class NeotomaServer {
         entityId,
         fieldsForObservation
       );
-      const { error: obsError } = await db.from("observations").insert({
-        id: observationId,
-        entity_id: entityId,
-        entity_type: entityType,
-        schema_version: schema?.schema_version || "1.0",
-        source_id: storageResult.sourceId,
-        interpretation_id: null, // No interpretation run for structured data
-        observed_at: new Date().toISOString(),
-        specificity_score: 1.0, // Structured data has high specificity
-        source_priority: sourcePriority, // Use provided priority (default 100)
-        fields: fieldsForObservation,
-        user_id: userId,
-      });
+      const { data: existingObservation, error: existingObservationError } = await db
+        .from("observations")
+        .select("id")
+        .eq("id", observationId)
+        .maybeSingle();
 
-      if (obsError) {
-        throw new Error(`Failed to create observation: ${obsError.message}`);
+      if (existingObservationError) {
+        throw new Error(
+          `Failed to check existing observation ${observationId}: ${existingObservationError.message}`
+        );
+      }
+
+      if (!existingObservation) {
+        const { error: obsError } = await db.from("observations").insert({
+          id: observationId,
+          entity_id: entityId,
+          entity_type: entityType,
+          schema_version: schema?.schema_version || "1.0",
+          source_id: storageResult.sourceId,
+          interpretation_id: null, // No interpretation run for structured data
+          observed_at: new Date().toISOString(),
+          specificity_score: 1.0, // Structured data has high specificity
+          source_priority: sourcePriority, // Use provided priority (default 100)
+          fields: fieldsForObservation,
+          user_id: userId,
+        });
+
+        if (obsError) {
+          throw new Error(`Failed to create observation: ${obsError.message}`);
+        }
       }
 
       createdEntities.push({
@@ -4620,226 +4145,6 @@ export class NeotomaServer {
       unknown_fields_count: unknownFieldsCount,
       related_entities: relatedData.entities,
       related_relationships: relatedData.relationships,
-    });
-  }
-
-  // FU-124: MCP reinterpret() Tool
-  // Invariant: Creates NEW observations; never modifies or deletes existing ones (docs/foundation/philosophy.md, docs/architecture/determinism.md).
-  private async reinterpret(
-    args: unknown
-  ): Promise<{ content: Array<{ type: string; text: string }> }> {
-    const { getSourceMetadata, downloadRawContent } = await import("./services/raw_storage.js");
-    const { runInterpretation, checkInterpretationQuota } =
-      await import("./services/interpretation.js");
-
-    const parsed = ReinterpretRequestSchema.parse(args);
-
-    if (!parsed.source_id) {
-      return this.buildTextResponse({
-        error: "source_id_required",
-        message: "source_id is required for MCP reinterpret action",
-      });
-    }
-
-    // Get source metadata
-    const source = await getSourceMetadata(parsed.source_id);
-
-    // Check quota
-    const quota = await checkInterpretationQuota(source.user_id);
-    if (!quota.allowed) {
-      return this.buildTextResponse({
-        error: "quota_exceeded",
-        quota,
-      });
-    }
-
-    // When this source is the "structured twin" (JSON from entities+file store) and a sibling file
-    // source exists (key K + "-file"), use the file source's content for extraction so we interpret
-    // the actual document instead of the message JSON. See docs/reports/neotoma_pdf_interpreted_as_note_investigation_2026_02_23.md
-    let contentSource = source;
-    const key = (source.idempotency_key as string) || "";
-    const isStructuredTwin =
-      (source.mime_type || "").toLowerCase() === "application/json" &&
-      key.length > 0 &&
-      !key.endsWith("-file");
-    if (isStructuredTwin) {
-      const { data: fileSourceRow } = await db
-        .from("sources")
-        .select("id, storage_url, mime_type, original_filename")
-        .eq("user_id", source.user_id)
-        .eq("idempotency_key", `${key}-file`)
-        .maybeSingle();
-      if (fileSourceRow) {
-        contentSource = fileSourceRow as typeof source;
-      }
-    }
-
-    // Download and re-analyze (from this source or linked file source). Missing file fails so sources_prod is not silently lost.
-    const fileBuffer = await downloadRawContent(contentSource.storage_url);
-    const rawText = await extractTextFromBuffer(
-      fileBuffer,
-      contentSource.mime_type,
-      contentSource.original_filename || "file"
-    );
-
-    // Check if OpenAI is configured
-    if (!isLLMExtractionAvailable()) {
-      return this.buildTextResponse({
-        error: "openai_not_configured",
-        message: "Set OPENAI_API_KEY in .env to enable AI interpretation",
-      });
-    }
-
-    // Validate and convert interpretation_config to InterpretationConfig
-    const configValue = parsed.interpretation_config || {};
-    const config = {
-      provider: (configValue.provider as string) || "openai",
-      model_id: (configValue.model_id as string) || "gpt-4o",
-      temperature: (configValue.temperature as number) ?? 0,
-      prompt_hash: (configValue.prompt_hash as string) || "llm_extraction_v2_idempotent",
-      code_version: (configValue.code_version as string) || "v0.2.0",
-      feature_flags: configValue.feature_flags as Record<string, boolean> | undefined,
-    };
-
-    const { entity_type, fields } = await extractWithLLM(
-      rawText,
-      contentSource.original_filename || "file",
-      contentSource.mime_type,
-      config.model_id
-    );
-
-    const extractedData = [
-      {
-        entity_type,
-        ...fields,
-      },
-    ];
-
-    // Run new interpretation (creates NEW observations; prior observations unchanged per immutability)
-    const interpretationResult = await runInterpretation({
-      userId: source.user_id,
-      sourceId: parsed.source_id,
-      extractedData,
-      config,
-    });
-
-    const responsePayload =
-      contentSource.id !== source.id
-        ? { ...interpretationResult, interpretation_used_file_source: true }
-        : interpretationResult;
-    return this.buildTextResponse(responsePayload);
-  }
-
-  private async listUninterpretedSourceIdsForUser(userId: string, limit: number): Promise<string[]> {
-    const interpretedSet = new Set<string>();
-    const { data: interpretedData, error: interpretedError } = await db
-      .from("interpretations")
-      .select("source_id")
-      .eq("user_id", userId);
-    if (interpretedError) {
-      throw new Error(`Failed to list interpretations: ${interpretedError.message}`);
-    }
-    for (const row of interpretedData || []) {
-      if (row.source_id) interpretedSet.add(row.source_id);
-    }
-
-    const pageSize = Math.max(100, limit * 3);
-    const sourceIds: string[] = [];
-    let offset = 0;
-
-    while (sourceIds.length < limit) {
-      const { data: sourcePage, error: sourceError } = await db
-        .from("sources")
-        .select("id")
-        .eq("user_id", userId)
-        .order("created_at", { ascending: true })
-        .range(offset, offset + pageSize - 1);
-      if (sourceError) {
-        throw new Error(`Failed to list sources: ${sourceError.message}`);
-      }
-      if (!sourcePage || sourcePage.length === 0) {
-        break;
-      }
-
-      for (const source of sourcePage) {
-        if (sourceIds.length >= limit) break;
-        if (interpretedSet.has(source.id)) continue;
-        sourceIds.push(source.id);
-      }
-
-      if (sourcePage.length < pageSize) break;
-      offset += sourcePage.length;
-    }
-
-    return sourceIds;
-  }
-
-  private async interpretUninterpreted(
-    args: unknown
-  ): Promise<{ content: Array<{ type: string; text: string }> }> {
-    const parsed = InterpretUninterpretedRequestSchema.parse(args);
-    const userId = this.getAuthenticatedUserId(parsed.user_id);
-    const limit = parsed.limit ?? 50;
-    const dryRun = parsed.dry_run ?? false;
-    const sourceIds = await this.listUninterpretedSourceIdsForUser(userId, limit);
-
-    if (dryRun) {
-      return this.buildTextResponse({
-        dry_run: true,
-        count: sourceIds.length,
-        would_interpret: sourceIds,
-      });
-    }
-
-    const interpreted: Array<{
-      source_id: string;
-      interpretation_id?: string;
-      observations_created?: number;
-      success: boolean;
-    }> = [];
-    const errors: Array<{ source_id: string; error: string }> = [];
-
-    for (const sourceId of sourceIds) {
-      const single = await this.reinterpret({
-        source_id: sourceId,
-        interpretation_config: parsed.interpretation_config,
-      });
-      const rawText = single.content?.[0]?.text;
-      if (!rawText) {
-        errors.push({ source_id: sourceId, error: "Missing reinterpret response payload" });
-        continue;
-      }
-      try {
-        const parsedSingle = JSON.parse(rawText) as Record<string, unknown>;
-        if (parsedSingle.error) {
-          errors.push({
-            source_id: sourceId,
-            error: String(parsedSingle.message ?? parsedSingle.error),
-          });
-          continue;
-        }
-        interpreted.push({
-          source_id: sourceId,
-          interpretation_id:
-            typeof parsedSingle.interpretation_id === "string"
-              ? parsedSingle.interpretation_id
-              : undefined,
-          observations_created:
-            typeof parsedSingle.observations_created === "number"
-              ? parsedSingle.observations_created
-              : undefined,
-          success: true,
-        });
-      } catch {
-        errors.push({ source_id: sourceId, error: "Failed to parse reinterpret response payload" });
-      }
-    }
-
-    return this.buildTextResponse({
-      dry_run: false,
-      count: interpreted.length,
-      interpreted,
-      errors,
     });
   }
 

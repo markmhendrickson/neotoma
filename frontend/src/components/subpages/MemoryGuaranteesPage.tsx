@@ -1,4 +1,18 @@
-import { ChevronDown } from "lucide-react";
+import {
+  AlertTriangle,
+  Box,
+  ChevronDown,
+  Eye,
+  Fingerprint,
+  GitMerge,
+  History,
+  Rocket,
+  RotateCcw,
+  ScrollText,
+  Sparkles,
+  SquarePen,
+  Waypoints,
+} from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { DetailPage } from "../DetailPage";
@@ -10,6 +24,10 @@ import { useLocale } from "@/i18n/LocaleContext";
 
 const MOBILE_GUARANTEE_PREVIEW_COUNT = 4;
 
+const sectionH2Class =
+  "flex items-start gap-2 text-[22px] font-medium tracking-[-0.01em] mb-4";
+const sectionIconClass = "mt-1 size-5 shrink-0 text-muted-foreground";
+
 export function MemoryGuaranteesPage() {
   const { pack } = useLocale();
   const memory = pack.memory;
@@ -17,6 +35,9 @@ export function MemoryGuaranteesPage() {
 
   return (
     <DetailPage title={pack.seo.memoryGuarantees.title.replace(" | Neotoma", "")}>
+      <p className="text-[16px] leading-7 font-medium text-foreground mb-6">
+        Neotoma provides nine memory guarantees: deterministic state evolution, versioned history, replayable timeline, auditable change log, schema constraints, silent mutation prevention, conflicting facts detection, reproducible state reconstruction, and human inspectability.
+      </p>
       <p className="text-[15px] leading-7 mb-4">
         These are the properties that determine whether an agent memory system is reliable under
         production load. Each guarantee addresses a specific failure mode; together they form the
@@ -52,16 +73,18 @@ export function MemoryGuaranteesPage() {
             </header>
             <CollapsibleContent>
               <dl className="text-[12px] leading-5 divide-y divide-border/50">
-                {(["platform", "retrieval", "file", "neotoma"] as const).map((key) => (
+                {(["platform", "retrieval", "file", "database", "neotoma"] as const).map((key) => (
                   <div key={key} className="px-3 py-1.5 flex items-center justify-between gap-2">
                     <dt className="font-medium text-foreground shrink-0">
                       {key === "neotoma"
                         ? memory.deterministic
-                        : key === "retrieval"
-                          ? memory.retrievalRag
-                          : key === "file"
-                            ? memory.files
-                            : memory.platform}
+                        : key === "database"
+                          ? memory.database
+                          : key === "retrieval"
+                            ? memory.retrievalRag
+                            : key === "file"
+                              ? memory.files
+                              : memory.platform}
                     </dt>
                     <dd className="text-muted-foreground text-right truncate">
                       {MEMORY_MODEL_VENDORS[key]}
@@ -104,12 +127,13 @@ export function MemoryGuaranteesPage() {
                 </CollapsibleTrigger>
               </header>
               <CollapsibleContent>
-                <div className="grid grid-cols-4 divide-x divide-border/50">
+                <div className="grid grid-cols-5 divide-x divide-border/50">
                   {(
                     [
                       { key: "platform" as const, label: memory.platformShort },
                       { key: "retrieval" as const, label: memory.ragShort },
                       { key: "file" as const, label: memory.filesShort },
+                      { key: "database" as const, label: memory.databaseShort },
                       { key: "neotoma" as const, label: memory.deterministicShort },
                     ] as const
                   ).map(({ key, label }) => (
@@ -138,10 +162,8 @@ export function MemoryGuaranteesPage() {
         </TooltipProvider>
       </div>
 
-      <div className="hidden md:block mb-8 overflow-x-auto w-full md:relative md:left-1/2 md:-translate-x-1/2 md:max-w-none md:w-[min(calc(100vw-var(--sidebar-width,16rem)-2rem),calc(100%+28rem))]">
-        <div className="min-w-[980px]">
-          <MemoryGuaranteesTable />
-        </div>
+      <div className="hidden md:block mb-8 w-full md:relative md:left-1/2 md:-translate-x-1/2 md:max-w-none md:w-[min(calc(100vw-var(--sidebar-width,16rem)-2rem),calc(100%+28rem))]">
+        <MemoryGuaranteesTable />
       </div>
 
       <nav className="rounded-lg border toc-panel p-4 mb-8">
@@ -248,8 +270,9 @@ export function MemoryGuaranteesPage() {
 
       {/* Deterministic state evolution */}
       <section id="deterministic-state-evolution" className="scroll-mt-20 mb-12">
-        <h2 className="text-[22px] font-medium tracking-[-0.01em] mb-4">
-          Deterministic state evolution
+        <h2 className={sectionH2Class}>
+          <Fingerprint className={sectionIconClass} aria-hidden />
+          <span>Deterministic state evolution</span>
         </h2>
         <p className="text-[15px] leading-7 mb-4">
           Given the same set of observations, the system always produces the same entity state
@@ -285,7 +308,10 @@ neotoma entities search --query "Ana Rivera" --type contact`}</pre>
 
       {/* Versioned history */}
       <section id="versioned-history" className="scroll-mt-20 mb-12">
-        <h2 className="text-[22px] font-medium tracking-[-0.01em] mb-4">Versioned history</h2>
+        <h2 className={sectionH2Class}>
+          <History className={sectionIconClass} aria-hidden />
+          <span>Versioned history</span>
+        </h2>
         <p className="text-[15px] leading-7 mb-4">
           Every change creates a new version instead of overwriting prior state. Earlier snapshots
           remain queryable, so you can answer what the system believed at any point.
@@ -309,7 +335,10 @@ neotoma observations list --entity-id <entity_id>`}</pre>
 
       {/* Replayable timeline */}
       <section id="replayable-timeline" className="scroll-mt-20 mb-12">
-        <h2 className="text-[22px] font-medium tracking-[-0.01em] mb-4">Replayable timeline</h2>
+        <h2 className={sectionH2Class}>
+          <Waypoints className={sectionIconClass} aria-hidden />
+          <span>Replayable timeline</span>
+        </h2>
         <p className="text-[15px] leading-7 mb-4">
           The full sequence of observations can be replayed to reconstruct state at any timestamp.
           This enables deterministic debugging and incident analysis.
@@ -346,7 +375,10 @@ neotoma relationships list --entity-id <entity_id>`}</pre>
 
       {/* Auditable change log */}
       <section id="auditable-change-log" className="scroll-mt-20 mb-12">
-        <h2 className="text-[22px] font-medium tracking-[-0.01em] mb-4">Auditable change log</h2>
+        <h2 className={sectionH2Class}>
+          <ScrollText className={sectionIconClass} aria-hidden />
+          <span>Auditable change log</span>
+        </h2>
         <p className="text-[15px] leading-7 mb-4">
           Every modification records who changed what, when, and from which source. This creates
           field-level lineage for every fact in state.
@@ -368,7 +400,10 @@ neotoma relationships list --entity-id <entity_id>`}</pre>
 
       {/* Schema constraints */}
       <section id="schema-constraints" className="scroll-mt-20 mb-12">
-        <h2 className="text-[22px] font-medium tracking-[-0.01em] mb-4">Schema constraints</h2>
+        <h2 className={sectionH2Class}>
+          <Box className={sectionIconClass} aria-hidden />
+          <span>Schema constraints</span>
+        </h2>
         <p className="text-[15px] leading-7 mb-4">
           Entities conform to defined types and validation rules. Invalid writes fail at store time
           so malformed data does not silently enter the memory graph.
@@ -404,7 +439,10 @@ neotoma store --json='[{"entity_type":"person","name":"Ana Rivera","age":30}]'`}
 
       {/* Silent mutation risk */}
       <section id="silent-mutation-risk" className="scroll-mt-20 mb-12">
-        <h2 className="text-[22px] font-medium tracking-[-0.01em] mb-4">Silent mutation risk</h2>
+        <h2 className={sectionH2Class}>
+          <AlertTriangle className={sectionIconClass} aria-hidden />
+          <span>Silent mutation risk</span>
+        </h2>
         <p className="text-[15px] leading-7 mb-4">
           Silent mutation risk is the chance that state changes without an explicit, inspectable
           trail. High-risk systems can overwrite or drop facts without leaving evidence.
@@ -437,7 +475,10 @@ neotoma relationships list --entity-id <entity_id>`}</pre>
 
       {/* Conflicting facts risk */}
       <section id="conflicting-facts-risk" className="scroll-mt-20 mb-12">
-        <h2 className="text-[22px] font-medium tracking-[-0.01em] mb-4">Conflicting facts risk</h2>
+        <h2 className={sectionH2Class}>
+          <GitMerge className={sectionIconClass} aria-hidden />
+          <span>Conflicting facts risk</span>
+        </h2>
         <p className="text-[15px] leading-7 mb-4">
           Conflicting facts risk is the likelihood that contradictory statements coexist without
           deterministic resolution. In production this causes unpredictable agent behavior.
@@ -472,8 +513,9 @@ neotoma entities search --query "Ana Rivera" --type contact`}</pre>
 
       {/* Reproducible state reconstruction */}
       <section id="reproducible-state-reconstruction" className="scroll-mt-20 mb-12">
-        <h2 className="text-[22px] font-medium tracking-[-0.01em] mb-4">
-          Reproducible state reconstruction
+        <h2 className={sectionH2Class}>
+          <RotateCcw className={sectionIconClass} aria-hidden />
+          <span>Reproducible state reconstruction</span>
         </h2>
         <p className="text-[15px] leading-7 mb-4">
           Reproducible state reconstruction means rebuilding complete state from raw observations
@@ -511,7 +553,10 @@ neotoma entities list --type task --limit 20`}</pre>
 
       {/* Human inspectability */}
       <section id="human-inspectability" className="scroll-mt-20 mb-12">
-        <h2 className="text-[22px] font-medium tracking-[-0.01em] mb-4">Human inspectability</h2>
+        <h2 className={sectionH2Class}>
+          <Eye className={sectionIconClass} aria-hidden />
+          <span>Human inspectability</span>
+        </h2>
         <p className="text-[15px] leading-7 mb-4">
           Human inspectability means a person can diff two versions, inspect lineage, and trace each
           fact to its source. Trust comes from verification, not hidden model behavior.
@@ -542,7 +587,10 @@ neotoma observations list --entity-id <entity_id>`}</pre>
 
       {/* Zero-setup onboarding */}
       <section id="zero-setup-onboarding" className="scroll-mt-20 mb-12">
-        <h2 className="text-[22px] font-medium tracking-[-0.01em] mb-4">Zero-setup onboarding</h2>
+        <h2 className={sectionH2Class}>
+          <Rocket className={sectionIconClass} aria-hidden />
+          <span>Zero-setup onboarding</span>
+        </h2>
         <p className="text-[15px] leading-7 mb-4">
           Zero-setup onboarding means memory works from the first message with no installation,
           configuration, or infrastructure required. Platform memory products like ChatGPT and
@@ -596,8 +644,9 @@ neotoma api start --env prod`}</pre>
 
       {/* Semantic similarity search */}
       <section id="semantic-similarity-search" className="scroll-mt-20 mb-12">
-        <h2 className="text-[22px] font-medium tracking-[-0.01em] mb-4">
-          Semantic similarity search
+        <h2 className={sectionH2Class}>
+          <Sparkles className={sectionIconClass} aria-hidden />
+          <span>Semantic similarity search</span>
         </h2>
         <p className="text-[15px] leading-7 mb-4">
           Semantic similarity search finds relevant prior context by meaning rather than exact text
@@ -650,8 +699,9 @@ neotoma entities search --query "design review" --type event`}</pre>
 
       {/* Direct human editability */}
       <section id="direct-human-editability" className="scroll-mt-20 mb-12">
-        <h2 className="text-[22px] font-medium tracking-[-0.01em] mb-4">
-          Direct human editability
+        <h2 className={sectionH2Class}>
+          <SquarePen className={sectionIconClass} aria-hidden />
+          <span>Direct human editability</span>
         </h2>
         <p className="text-[15px] leading-7 mb-4">
           Direct human editability means a person can open the memory store in a standard editor

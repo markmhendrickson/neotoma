@@ -185,6 +185,69 @@ describe("CLI schema commands", () => {
         )
       ).rejects.toThrow();
     });
+
+    it("should remove fields with --remove-fields", async () => {
+      const setupType = `${TEST_ENTITY_TYPE}_rm_${Date.now()}`;
+      const setupFields = JSON.stringify({
+        keep_me: { type: "string", required: true },
+        drop_me: { type: "string", required: false },
+      });
+
+      await execAsync(
+        `${CLI_PATH} schemas update --entity-type "${setupType}" --fields '${setupFields}' --user-id "${TEST_USER_ID}" --json`
+      );
+
+      const removeFields = JSON.stringify(["drop_me"]);
+      const { stdout } = await execAsync(
+        `${CLI_PATH} schemas update --entity-type "${setupType}" --remove-fields '${removeFields}' --user-id "${TEST_USER_ID}" --json`
+      );
+
+      const result = JSON.parse(stdout);
+      expect(result).toHaveProperty("schema");
+      if (result.schema?.fields) {
+        expect(result.schema.fields.keep_me).toBeDefined();
+        expect(result.schema.fields.drop_me).toBeUndefined();
+      }
+    });
+
+    it("should add and remove fields in same call", async () => {
+      const setupType = `${TEST_ENTITY_TYPE}_addrm_${Date.now()}`;
+      const setupFields = JSON.stringify({
+        stable: { type: "string", required: true },
+        obsolete: { type: "string", required: false },
+      });
+
+      await execAsync(
+        `${CLI_PATH} schemas update --entity-type "${setupType}" --fields '${setupFields}' --user-id "${TEST_USER_ID}" --json`
+      );
+
+      const addFields = JSON.stringify([
+        { field_name: "replacement", field_type: "number" },
+      ]);
+      const removeFields = JSON.stringify(["obsolete"]);
+      const { stdout } = await execAsync(
+        `${CLI_PATH} schemas update --entity-type "${setupType}" --fields '${addFields}' --remove-fields '${removeFields}' --user-id "${TEST_USER_ID}" --json`
+      );
+
+      const result = JSON.parse(stdout);
+      expect(result).toHaveProperty("schema");
+    });
+
+    it("should error when neither --fields nor --remove-fields provided", async () => {
+      await expect(
+        execAsync(
+          `${CLI_PATH} schemas update --entity-type "${TEST_ENTITY_TYPE}" --user-id "${TEST_USER_ID}" --json`
+        )
+      ).rejects.toThrow();
+    });
+
+    it("should error when --remove-fields is not a JSON array", async () => {
+      await expect(
+        execAsync(
+          `${CLI_PATH} schemas update --entity-type "${TEST_ENTITY_TYPE}" --remove-fields '{"not": "array"}' --user-id "${TEST_USER_ID}" --json`
+        )
+      ).rejects.toThrow();
+    });
   });
 
   describe("schemas register", () => {

@@ -4,6 +4,10 @@ import { cn } from "@/lib/utils";
 
 type TableScrollDir = "left" | "right" | "both";
 
+/** Outer shell for doc-style tables (API/CLI/MCP reference, architecture, terminology). */
+export const DOC_TABLE_SCROLL_OUTER_CLASS =
+  "my-6 w-full max-w-full md:rounded-lg md:bg-white dark:md:bg-transparent";
+
 interface TableScrollWrapperProps {
   children: React.ReactNode;
   className?: string;
@@ -71,9 +75,7 @@ export function TableScrollWrapper({
           viewportClassName
         )}
       >
-        <div className="table-scroll-inner">
-          {children}
-        </div>
+        <div className="table-scroll-inner">{children}</div>
       </div>
       {showHint && isScrollable && (
         <div className="table-scroll-edge" aria-hidden="true">

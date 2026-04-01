@@ -218,10 +218,10 @@ const CONFIG: VerticalConfig = {
     },
   ],
   caseStudy: {
-    companyName: "FreightMind",
-    companyUrl: "https://freightmind.example.com",
-    companyDesc:
-      "is a fictional AI-native logistics platform that automates carrier selection, inventory allocation, and multi-modal shipment coordination for enterprise shippers.",
+    headline: "How logistics teams use Neotoma as their integrity layer",
+    desc:
+      "AI-native logistics platforms automate carrier selection, inventory allocation, and multi-modal shipment coordination for enterprise shippers. Neotoma versions every routing decision, inventory position, and carrier commitment so you can reconstruct the constraint state at any decision point.",
+    featuresHeading: "What logistics teams build",
     features: [
       "Routing agents that evaluate carrier capacity, rates, and transit times across ground, air, and ocean in real time",
       "Inventory commitment engine that allocates ATP across warehouses and forward-stock locations",
@@ -235,7 +235,7 @@ const CONFIG: VerticalConfig = {
     ],
     generalizesTitle: "If agents make routing and fulfillment decisions, you need reconstructable logistics state",
     generalizesDesc:
-      "Any team running logistics agents for carrier selection, inventory allocation, or shipment coordination faces the same requirement: explain why a decision was made with the constraints that existed at the time. Neotoma generalizes the FreightMind pattern to your supply chain stack.",
+      "Any team running logistics agents for carrier selection, inventory allocation, or shipment coordination faces the same requirement: explain why a decision was made with the constraints that existed at the time. Neotoma generalizes the pattern to your supply chain stack.",
   },
   ctaHeadline: "Ship logistics agents that can explain",
   ctaHighlight: "every routing and fulfillment decision",

@@ -294,43 +294,52 @@
   }
 }
 
-/* Intro hero: solid word with a gradient fade overlay on top */
-.intro-hero-word-wrap {
-  position: relative;
-  display: inline-block;
-}
-
-.intro-hero-word-wrap::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  left: 0;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(
-    to right,
-    transparent 0%,
-    transparent 55%,
-    hsl(var(--background)) 100%
-  );
-  pointer-events: none;
-  animation: intro-hero-fade-over-in 0.6s ease-out 0.2s both;
-}
-
-@keyframes intro-hero-fade-over-in {
-  from {
+/* Hero: rotating record-type word swap */
+@keyframes hero-record-swap {
+  0% {
     opacity: 0;
+    transform: translateY(6px);
   }
-  to {
+  100% {
     opacity: 1;
+    transform: translateY(0);
   }
+}
+
+@keyframes outcome-card-in {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Home: sticky evaluate CTA — gentle vertical pulse (not Tailwind bounce) */
+@keyframes evaluate-cta-soft-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+.evaluate-cta-soft-bounce {
+  animation: evaluate-cta-soft-bounce 2.75s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .intro-hero-word-wrap::after {
+  .animate-\[hero-record-swap_0\.35s_ease-out\],
+  .animate-\[outcome-card-in_0\.4s_ease-out\] {
+    animation: none !important;
+  }
+
+  .evaluate-cta-soft-bounce {
     animation: none;
-    opacity: 1;
   }
 }
 

@@ -27,15 +27,15 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { SeoHead } from "../SeoHead";
-import { sendCtaClick, sendOutboundClick } from "@/utils/analytics";
+import { sendCtaClick } from "@/utils/analytics";
 import { SiClaude, SiOpenai } from "react-icons/si";
+import { CodexIcon } from "../icons/CodexIcon";
 import { CursorIcon } from "../icons/CursorIcon";
 import { OpenClawIcon } from "../icons/OpenClawIcon";
 
-const DAYDREAM_URL = "https://daydream.co/";
 
 const SLIDE_CLASS = "min-h-[100svh] md:snap-start flex items-center justify-center relative";
-const SLIDE_INNER = "w-full max-w-6xl mx-auto px-6 md:px-12 lg:px-16 py-20 md:py-12";
+const SLIDE_INNER = "w-full max-w-6xl mx-auto px-6 md:px-12 lg:px-16 py-12";
 
 const COMPLIANCE_SCENARIOS = [
   {
@@ -683,6 +683,7 @@ export function ComplianceLandingPage() {
       <SeoHead />
       <div
         ref={scrollContainerRef}
+        data-site-header-scroll-root
         className="h-screen overflow-y-auto scroll-smooth md:snap-y md:snap-mandatory"
       >
         <nav
@@ -814,7 +815,7 @@ export function ComplianceLandingPage() {
                         to="/neotoma-with-codex"
                         className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[12px] text-foreground/90 no-underline transition-colors hover:bg-muted hover:border-border"
                       >
-                        <SiOpenai className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                        <CodexIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
                         Codex
                       </Link>
                       <Link
@@ -1216,7 +1217,7 @@ export function ComplianceLandingPage() {
           </div>
         </section>
 
-        {/* Section 7: Case study (Daydream) */}
+        {/* Section 7: In practice */}
         <section id="case-study" className={SLIDE_CLASS}>
           <div className={SLIDE_INNER}>
             <div className="space-y-8 max-w-5xl mx-auto">
@@ -1225,21 +1226,13 @@ export function ComplianceLandingPage() {
                   In practice
                 </p>
                 <h2 className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
-                  How Daydream uses Neotoma as its integrity layer
+                  How compliance teams use Neotoma as their integrity layer
                 </h2>
                 <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl">
-                  <a
-                    href={DAYDREAM_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-medium text-foreground underline underline-offset-2 hover:no-underline"
-                    onClick={() => sendOutboundClick(DAYDREAM_URL, "Daydream case study link")}
-                  >
-                    Daydream
-                  </a>{" "}
-                  is an AI-native compliance platform for third-party and vendor risk. It runs
-                  diligence from intake through screening, analysis, and continuous monitoring, all
-                  backed by Neotoma&apos;s deterministic state integrity layer.
+                  AI-native compliance platforms run diligence from intake through screening,
+                  analysis, and continuous monitoring. Neotoma versions every risk profile,
+                  assessment, and monitoring event so you can reconstruct compliance state at any
+                  audit or examination date.
                 </p>
               </div>
 
@@ -1248,15 +1241,15 @@ export function ComplianceLandingPage() {
                   <div className="flex items-center gap-2">
                     <Sparkles className="h-4 w-4 text-sky-500" />
                     <span className="text-[14px] font-medium text-foreground">
-                      What Daydream does
+                      What compliance teams build
                     </span>
                   </div>
                   <ul className="list-none pl-0 space-y-2.5">
                     {[
-                      "Orchestrates third-party diligence: intake, screening, questionnaire analysis, and ongoing monitoring",
-                      "Scores vendors against sanctions, PEP, adverse media, and policy-specific risk dimensions",
-                      "Keeps risk profiles current as background agents ingest new filings, ownership changes, and alerts",
-                      "Surfaces decisions and evidence for auditors, risk committees, and regulator-facing narratives",
+                      "Orchestrate third-party diligence: intake, screening, questionnaire analysis, and ongoing monitoring",
+                      "Score vendors against sanctions, PEP, adverse media, and policy-specific risk dimensions",
+                      "Keep risk profiles current as background agents ingest new filings, ownership changes, and alerts",
+                      "Surface decisions and evidence for auditors, risk committees, and regulator-facing narratives",
                     ].map((item) => (
                       <li
                         key={item}
@@ -1305,28 +1298,23 @@ export function ComplianceLandingPage() {
                       The pattern generalizes
                     </p>
                     <p className="text-[13px] leading-6 text-muted-foreground">
-                      Daydream is one example of a next-generation compliance product built on a
-                      deterministic integrity layer. The same architecture applies to KYC/AML,
-                      contract lifecycle, regulatory change tracking, and any workflow where
-                      multiple agents update the same regulated entities. Replace &ldquo;vendor risk
-                      profile&rdquo; with &ldquo;customer risk assessment&rdquo; and the guarantees
-                      are identical.
+                      The same architecture applies to KYC/AML, contract lifecycle, regulatory change
+                      tracking, and any workflow where multiple agents update the same regulated
+                      entities. Replace &ldquo;vendor risk profile&rdquo; with &ldquo;customer risk
+                      assessment&rdquo; and the guarantees are identical.
                     </p>
                   </div>
                 </div>
               </div>
 
               <div className="flex flex-wrap gap-3">
-                <a
-                  href={DAYDREAM_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-4 py-2 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
-                  onClick={() => sendOutboundClick(DAYDREAM_URL, "Daydream visit")}
+                <Link
+                  to="/install"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-amber-600 bg-amber-600 px-4 py-2 text-[14px] font-medium text-white no-underline shadow-sm shadow-amber-600/30 transition-colors hover:bg-amber-500 dark:border-amber-500 dark:bg-amber-500 dark:text-amber-950"
+                  onClick={() => sendCtaClick("compliance_case_study_install" as CtaName)}
                 >
-                  Visit Daydream
-                  <ArrowRight className="h-4 w-4" />
-                </a>
+                  Install Neotoma
+                </Link>
                 <Link
                   to="/memory-guarantees"
                   className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-4 py-2 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors"

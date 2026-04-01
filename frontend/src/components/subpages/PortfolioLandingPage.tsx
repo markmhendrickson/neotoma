@@ -230,10 +230,10 @@ const CONFIG: VerticalConfig = {
     },
   ],
   caseStudy: {
-    companyName: "FundLens",
-    companyUrl: "https://fundlens.example.com",
-    companyDesc:
-      "is a fictional AI portfolio intelligence platform for venture capital, unifying marks, milestones, and LP-ready narratives across funds and portfolio companies.",
+    headline: "How portfolio intelligence teams use Neotoma as their integrity layer",
+    desc:
+      "AI portfolio intelligence platforms for venture capital unify marks, milestones, and LP-ready narratives across funds and portfolio companies. Neotoma versions every valuation, board signal, and cap-table event so you can reconstruct portfolio state at any quarter close or wire date.",
+    featuresHeading: "What portfolio intelligence teams build",
     features: [
       "Natural-language portfolio Q&A across IC history, board packs, and cap-table events",
       "Automated quarter-end snapshot packaging for allocator reporting",
@@ -247,7 +247,7 @@ const CONFIG: VerticalConfig = {
     ],
     generalizesTitle: "If you run multi-agent portfolio workflows, you share the same risk surface",
     generalizesDesc:
-      'Any team blending research agents, IR automation, and human partners needs the same guarantees: no silent mark overwrites, no LP letter built from the wrong day\'s cap table, and no single flattened "outlook" when board and market disagree. Neotoma generalizes the FundLens pattern to your stack.',
+      'Any team blending research agents, IR automation, and human partners needs the same guarantees: no silent mark overwrites, no LP letter built from the wrong day\'s cap table, and no single flattened "outlook" when board and market disagree. Neotoma generalizes the pattern to your stack.',
   },
   ctaHeadline: "Ship portfolio agents that can defend",
   ctaHighlight: "every mark and milestone they cite",

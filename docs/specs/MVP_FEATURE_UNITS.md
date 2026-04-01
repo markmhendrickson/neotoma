@@ -1175,7 +1175,7 @@ Adds UI layer, multi-user support (auth + RLS), billing, onboarding, and provide
 **Remaining P1 Work (Revenue Critical):** 10. **FU-702:** Billing and Subscription Management (enables M2: €5k MRR)
 **Estimated:** 10-11 P0 Feature Units remaining + 1 P1 Feature Unit (billing) for revenue-enabled MVP
 **Note:** FU-703 (Local Storage / Offline Mode) is already complete, bringing total P0 FUs to 11-12 (including complete ones).
-**Multi-User Rationale:** Multi-user support (FU-700, FU-701) is required for Tier 1 ICP \"AI-Native Founders & Small Teams (2–20 people)\". These users initially adopt individually, then expand to team usage organically, enabling bottom-up B2B expansion and higher ACVs (€3k–€15k/yr per team). See [`docs/specs/ICP_PRIORITY_TIERS.md`](./ICP_PRIORITY_TIERS.md) and [`docs/private/strategy_governance/revenue_timeline.md`](../private/strategy_governance/revenue_timeline.md).
+**Multi-User Rationale:** Multi-user support (FU-700, FU-701) is required for Tier 1 ICP \"AI-Native Founders & Small Teams (2–20 people)\". These users initially adopt individually, then expand to team usage organically, enabling bottom-up B2B expansion and higher ACVs (€3k–€15k/yr per team). See [`docs/icp/future_icps.md`](../icp/future_icps.md) and [`docs/private/strategy_governance/revenue_timeline.md`](../private/strategy_governance/revenue_timeline.md).
 ### Full MVP (P0 + P1)
 **Additional P1 Work:** 8. **FU-305:** Dashboard view 9. **FU-501:** Provider connectors UI 10. **FU-600:** Advanced search UI 12. **FU-702:** Billing and Subscription Management (revenue critical) 13. **FU-800:** Technical metrics (Prometheus) instrumentation 14. **FU-803:** Product analytics (PostHog/Mixpanel) integration 14. **FU-801:** Complete structured logging 15. **FU-900-902:** Polish (error handling, loading, empty states) 16. **FU-903:** A11y audit and fixes
 **Estimated:** Additional 9-10 Feature Units for full MVP (includes billing)
@@ -1555,7 +1555,7 @@ Estimates account for:
   - **Agent Estimate:** 12-16 hours (high complexity: Stripe integration + UI + usage tracking)
   - **Rationale:** Required for revenue collection to meet M2 milestone (€5k MRR by Jan 10, 2026). Enables Tier 1 ICPs to pay after experiencing value. See [`docs/feature_units/completed/FU-702/billing_spec.md`](../feature_units/completed/FU-702/billing_spec.md) for full specification.
 **Phase 7 Total:** 21-27 agent-hours (9-11 for P0 auth/RLS + 12-16 for P1 billing)
-**Note:** Multi-user support (FU-700, FU-701) is P0 for MVP because Tier 1 includes "AI-Native Founders & Small Teams" who need team functionality. Billing (FU-702) is P1 but revenue-critical for M2 milestone. See [`docs/specs/ICP_PROFILES.md`](./ICP_PROFILES.md) section 3 for detailed small team ICP profile.
+**Note:** Multi-user support (FU-700, FU-701) is P0 for MVP because Tier 1 includes "AI-Native Founders & Small Teams" who need team functionality. Billing (FU-702) is P1 but revenue-critical for M2 milestone. See [`docs/icp/profiles.md`](../icp/profiles.md) section 3 for detailed small team ICP profile.
 #### Phase 8: Observability
 **Remaining Work:**
 - **FU-800: Technical Metrics (Prometheus)** — ⏳ NEW (P1)

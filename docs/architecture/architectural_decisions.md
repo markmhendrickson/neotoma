@@ -444,6 +444,7 @@ Load `docs/architecture/architectural_decisions.md` when:
 - `docs/subsystems/schema_registry.md` — Schema registry patterns
 - `docs/subsystems/relationships.md` — [Relationship](../vocabulary/canonical_terms.md#relationship) types and patterns
 - `docs/architecture/determinism.md` — Determinism requirements
+- `docs/architecture/bounded_convergence.md` — Agent-layer convergence improvements
 - `docs/architecture/consistency.md` — Consistency models
 - `docs/foundation/data_models.md` — Data model definitions
 
@@ -456,6 +457,7 @@ Load `docs/architecture/architectural_decisions.md` when:
 
 ### Architectural Principles
 - **Determinism:** Same input → same output, always
+- **Bounded convergence:** Agent-layer nondeterminism converges toward consistent entity graphs (see [`docs/architecture/bounded_convergence.md`](bounded_convergence.md))
 - **Immutability:** Truth never changes after storage
 - **[Provenance](../vocabulary/canonical_terms.md#provenance):** Every output traces to source
 - **[Entity Schema](../vocabulary/canonical_terms.md#entity-schema)-first:** All [extraction](../vocabulary/canonical_terms.md#extraction) derives from [entity schemas](../vocabulary/canonical_terms.md#entity-schema)

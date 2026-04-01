@@ -1,4 +1,25 @@
 # Neotoma Product Positioning and Differentiation
+
+## 7.0 Positioning canvas (Obviously Awesome)
+
+This section maps Neotoma to April Dunford’s five core positioning choices plus the extended canvas used in agent skill `foundation/.cursor/skills/neversight-learn-skills.dev-obviously-awesome/SKILL.md`. Supporting evidence and nuance live in §7.1–7.5.
+
+| Component | Neotoma answer |
+|-----------|----------------|
+| **Competitive alternatives** | Homebrew SQLite/Postgres, git + markdown stacks, flat JSON/YAML, one-off agent memory implementations, and VC-funded retrieval memory (Mem0, Zep, LangChain-style patterns). Provider-native chat memory is a parallel alternative for conversation-only use cases. See §7.4. |
+| **Unique attributes** | Privacy-first user-controlled architecture; deterministic, schema-first extraction with hash-based IDs and reproducible state; cross-tool MCP access; versioned observations with field-level provenance and immutability guarantees. See §7.2. |
+| **Value themes** | **Tax removal** (not feature addition): removing re-prompting, glue code, and manual sync. **State integrity** (not just retrieval quality): trustworthy, replayable agent state. **Sovereignty**: data stays user-controlled. **Continuity**: one structured memory across tools. **Accountability**: reconstruct what an agent knew at decision time. Pain-forward phrasing in §7.3. |
+| **Best-fit customers** | One archetype — the **personal agentic OS builder/operator** — in three operational modes: debugging infrastructure, building pipelines, operating across tools. Not three separate personas. See `docs/icp/primary_icp.md`. Evaluator context in §7.5 (agents with tool use “get it” faster than search-only evals). |
+| **Market category** | Primary external frame: **cross-tool memory for AI agents** (ICP vocabulary). Architecture frame ("deterministic state layer," "DPME") used internally and after the fold. Previously: Named category hypothesis: **Deterministic Personal Memory Engine (DPME)** (§7.2) — a *new category* play with a higher education tax; use when the audience already grasps the stack diagram. |
+| **Relevant trends** | Proliferation of LLM apps that need private data + feedback loops; localhost / private-environment agents; agent evaluation and AEO as a discovery path (§7.1, §7.5). |
+| **Positioning statement (internal)** | For people building an operating system for their AI agents, Neotoma is the deterministic, privacy-first memory layer that gives cross-tool agents shared, verifiable state—not another notes app or provider-locked chat memory. |
+| **Key proof points** | Field evaluator quotes ("State integrity, not retrieval quality — that's the gap nobody else is filling"); open docs and repo checks on append-only/versioned models; memory guarantees table; MCP integration surface. See §7.2 and §7.5. |
+| **Primary message (external)** | "Your agents forget. Neotoma makes them remember." Lead with pain using ICP vocabulary; architecture terms only after the fold. Aligned with §7.3 (“your agents forget what they knew yesterday,” “one memory across AI tools,” “CI/CD for agent state”) before layering architecture terms. |
+| **Sales narrative** | Problem: fragmented tool-specific memory and non-replayable state → old way: files, CRUD DBs, or retrieval-only memory → new way: structured, versioned substrate with provenance → proof: guarantees, cross-tool access, deterministic behavior. |
+| **Content strategy** | Comparison and guarantee pages for agent evaluation; stack-level narrative (substrate beneath LLM apps); case-style stories for homebrew migration; avoid leading cold audiences with “deterministic” before felt pain (§7.3). |
+
+**Positioning quality (0–10 rubric from the skill): ~8.** Differentiation, alternatives, and value themes are strong. Homepage now leads with ICP pain vocabulary and tax-removal framing. Remaining gaps: category education for DPME with new audiences; expanding proof points beyond single evaluator quote.
+
 ## 7.1 Positioning
 Neotoma is **not a PKM or app**. Neotoma is:
 - A **substrate** for AI tools
@@ -67,3 +88,93 @@ These features are valuable but not defensible alone (competitors are developing
 **Compensating for Jagged Intelligence:** LLMs display ["jagged intelligence"](https://x.com/karpathy/status/2002118205729562949)—simultaneously genius and cognitively challenged, strong in verifiable domains but inconsistent elsewhere. Neotoma's deterministic substrate compensates for this by providing a reliable state layer that agents can depend on. By creating a verifiable domain for personal data with objective (non-gameable) results, Neotoma ensures consistent, reproducible outcomes despite LLM inconsistency.
 
 **This is a new category: Deterministic Personal Memory Engine (DPME).**
+
+## 7.3 Leading with Pain
+
+The defensible differentiators above are architecturally correct. But field feedback consistently shows that leading with architecture descriptions (deterministic, versioned, schema-bound) produces the "solution looking for a problem" reaction in conversations and on the website. The ICP Priority Tiers doc (constraint 7) already prescribes the fix: lead with felt experience, then ground in architecture. This section translates each differentiator into felt-experience language.
+
+### Evaluator-validated framings
+
+These framings emerged from real evaluator conversations and resonate more immediately than internal positioning language:
+
+| Framing | Origin | When to use |
+|---------|--------|-------------|
+| "State integrity, not retrieval quality" | Evaluator's Claude agent | Differentiating from RAG/Mem0/Zep. The crispest competitive framing in one phrase. |
+| "CI/CD for agent state" | Evaluator | Speaking to infra engineers. Powerful metaphor — they already understand CI/CD discipline. |
+| "System of record for AI agents" | Synthesis from feedback | Category creation. Use in the blog post and HN framing. |
+| "Your agents forget what they knew yesterday" | Action plan hero | Opening any conversation. Starts from universal pain. |
+| "Truth Layer" | Evaluator's Gemini 3 agent | Architecturally cleaner than "truth engine." Use in technical positioning. |
+
+### Differentiator-to-pain translation
+
+Each defensible differentiator translated into felt experience:
+
+**Privacy-first → "Your data stays on your machine."**
+Not "user-controlled memory with no provider access." The felt experience is sovereignty: you run it, you own it, nothing leaves your laptop. The architecture (end-to-end encryption, row-level security, no telemetry) backs the claim, but the claim is visceral, not architectural.
+
+**Deterministic extraction → "Same input, same state, every time."**
+Not "schema-first field extraction with deterministic, explainable results." The felt experience is trust: when your agent says "Acme Corp owes us $50,000," you can trace that to the specific invoice observation, not a probabilistic inference that might differ next session.
+
+**Cross-platform MCP → "One memory across all your AI tools."**
+Not "cross-platform access via MCP integration." The felt experience is continuity: store a contact in Claude Code, query it from Cursor, update it from ChatGPT. You stop being the human sync layer between tools.
+
+**Versioned history → "What did your agent know at decision time?"**
+Not "every state change creates a new version." The felt experience is accountability: when a decision was wrong, you can reconstruct exactly what the agent believed when it made the call. This is Evaluator's trigger question and the most powerful single framing for the personal agentic OS use case.
+
+**Schema constraints → "No garbage in, no garbage out."**
+Not "entities conform to defined types and validation rules." The felt experience is reliability: your agent's contact records actually have email addresses and phone numbers, not free-text blobs that drift into nonsense across sessions.
+
+## 7.4 What the ICP Actually Uses Today (Homebrew Competitive Set)
+
+The existing product comparisons (Mem0, Zep, mmry) represent the VC-funded competitor set. But the ICP's actual competitive alternatives are homebrew solutions they've built themselves or tools they've repurposed. These are the real incumbents to displace.
+
+### SQLite (or Postgres) as agent memory
+
+The simplest local store. Strong consistency, column types, mature ecosystem.
+
+**What breaks:** Standard CRUD (UPDATE) overwrites previous state. No versioning — you can't reconstruct what an entity looked like last Tuesday. No conflict detection — last write wins silently. No provenance — no audit trail for who changed what and when. No cross-tool sync — single-file, no MCP. No entity resolution — you build it yourself. No schema evolution — migrations are manual. Neotoma uses SQLite internally but adds the architecture that delivers memory guarantees on top.
+
+### git + markdown (SOUL.md, HEARTBEAT.md, markdown CRM)
+
+The most common incumbent for personal-infrastructure builders. Files in a repo, version-controlled via git, human-readable.
+
+**What breaks:** Files conflate observations with snapshots — when two agents write conflicting values, both edits land silently. No structured queries — finding "all contacts at Acme" requires grep, not a query. Merge conflicts on concurrent writes. Git versions file snapshots, not entity observations — it can tell you what a file looked like at a commit, but not which observation changed which field or how conflicting writes were resolved. No entity resolution across files. Scale limits hit quickly (one user's 112-person markdown CRM is already painful).
+
+### Flat JSON/YAML files
+
+Slightly more structured than markdown. Used for heartbeat state, config, agent checkpoints.
+
+**What breaks:** No provenance — no trail of who changed what and when. No cross-tool sync — files are local to one process. No schema validation — any agent can write any shape. No temporal queries — you have the current file, not the history. No entity resolution across files. Concurrent writes corrupt state.
+
+### Custom-built memory systems
+
+The build-in-house explosion: 10+ independent implementations of agent memory identified in the field (Cog, epistemic-memory, claude-cognitive, Basic Memory, Vestige, Ars Contexta, and more). Each developer builds their own worse version because the problem is real.
+
+**What breaks:** Maintenance burden — every custom system needs its own schema evolution, entity resolution, conflict handling, and migration story. No community, no shared improvements. Fragile to the original builder's availability. Typically lacks provenance, versioning, and cross-tool access because those are hard to build right.
+
+### VC-funded competitors (Mem0, Zep, LangChain memory)
+
+Retrieval-augmented memory: vector embeddings, semantic search, probabilistic matching. Different paradigm from deterministic state.
+
+**What Neotoma provides that they don't:** State integrity, not retrieval quality. Deterministic state evolution (same inputs → same state). Versioned history with temporal queries. Schema constraints with write-time validation. Field-level provenance. Cross-tool access via MCP. Local-first with no cloud dependency.
+
+## 7.5 Agent Evaluation Optimization (AEO)
+
+Agent evaluation is an emerging acquisition funnel. When a contact's agent evaluates Neotoma (via a prompt like "a friend is building this and wants to know if it would be helpful"), the agent's assessment carries significant weight in the adoption decision.
+
+### Key findings from field evidence
+
+1. **Agent evaluations produce more detailed, actionable feedback than human conversations.** The most structured and technically specific feedback came from agents, not humans.
+
+2. **Agents with infrastructural agency lean enthusiastic; search-only agents lean skeptical.** Agents that have MCP or tool-use capabilities recognize the need for a state layer because they experience the absence of one. Search-only agents (web-search-based evaluation) lack this experiential context.
+
+3. **Agent-to-agent recommendation is an emerging distribution channel.** Multiple independent contacts raised the idea of agent-to-agent paid queries or recommendations.
+
+4. **The starkest agent-vs-human divergence occurs with platform builders.** An agent may say "this is Neotoma-shaped" while the human says "I don't have the problem" — because the agent recognizes the architectural need while the human builds their own solution.
+
+### Site optimization for agent evaluation
+
+- **Structured data (JSON-LD):** schema.org SoftwareApplication, FAQPage, and HowTo markup so agents can parse product category, features, and install instructions directly.
+- **Agent-evaluatable claims:** Each claim on the site should be verifiable by an agent reading the docs or repo. "Append-only" — agent can check the code. "Versioned" — agent can check the schema. "Auditable" — agent can check the observation model.
+- **Machine-readable comparison points:** The memory models comparison page and guarantee table provide structured data agents can evaluate against their own capabilities.
+- **Test with multiple agent stacks:** Run the standard evaluation prompt through Claude, ChatGPT, and Gemini. Fix whatever they get wrong.

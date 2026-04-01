@@ -32,17 +32,18 @@ https://neotoma.fly.dev
 
 ## Authentication
 
-All endpoints (except `/health` and `/openapi.yaml`) require Bearer token authentication:
+All endpoints (except `/health`, `/openapi.yaml`, and MCP OAuth public endpoints) require Bearer token authentication:
 
 ```http
-Authorization: Bearer <ACTIONS_BEARER_TOKEN>
+Authorization: Bearer <NEOTOMA_BEARER_TOKEN>
 ```
 
 **Token Configuration:**
 
-- Set via `ACTIONS_BEARER_TOKEN` environment variable
+- Set via `NEOTOMA_BEARER_TOKEN` environment variable (preferred) or legacy `ACTIONS_BEARER_TOKEN`
 - Use strong random token in production
 - Never commit tokens to git
+- When encryption is enabled (`NEOTOMA_ENCRYPTION_ENABLED=true`), use the key-derived MCP token instead: `neotoma auth mcp-token`
 
 ## MCP OAuth Endpoints
 
@@ -52,7 +53,7 @@ OAuth endpoints for MCP client authentication (no bearer token required for publ
 
 Start OAuth authorization flow for MCP client.
 
-**Endpoint:** `POST /api/mcp/oauth/initiate`
+**Endpoint:** `POST /mcp/oauth/initiate`
 
 **Request:**
 
@@ -72,7 +73,7 @@ Start OAuth authorization flow for MCP client.
 
 ```json
 {
-  "auth_url": "https://your-server/api/mcp/oauth/authorize?...",
+  "auth_url": "https://your-server/mcp/oauth/authorize?...",
   "connection_id": "cursor-2025-01-21-abc123",
   "expires_at": "2025-01-21T10:10:00Z"
 }
@@ -87,7 +88,7 @@ Start OAuth authorization flow for MCP client.
 
 Handles OAuth authorization callback.
 
-**Endpoint:** `GET /api/mcp/oauth/callback`
+**Endpoint:** `GET /mcp/oauth/callback`
 
 **Query Parameters:**
 
@@ -108,7 +109,7 @@ Handles OAuth authorization callback.
 
 Check status of MCP OAuth connection.
 
-**Endpoint:** `GET /api/mcp/oauth/status`
+**Endpoint:** `GET /mcp/oauth/status`
 
 **Query Parameters:**
 
@@ -138,7 +139,7 @@ Check status of MCP OAuth connection.
 
 List user's active MCP OAuth connections (authenticated).
 
-**Endpoint:** `GET /api/mcp/oauth/connections`
+**Endpoint:** `GET /mcp/oauth/connections`
 
 **Headers:**
 
@@ -170,7 +171,7 @@ Authorization: Bearer <SESSION_TOKEN>
 
 Revoke an OAuth connection (authenticated).
 
-**Endpoint:** `DELETE /api/mcp/oauth/connections/:connection_id`
+**Endpoint:** `DELETE /mcp/oauth/connections/:connection_id`
 
 **Headers:**
 

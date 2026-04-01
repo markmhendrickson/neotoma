@@ -856,46 +856,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/reinterpret": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Reinterpret source
-         * @description Re-run AI interpretation on existing source
-         */
-        post: operations["reinterpret"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/interpret-uninterpreted": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Interpret uninterpreted sources
-         * @description Re-run AI interpretation for sources that have no prior interpretation runs
-         */
-        post: operations["interpretUninterpreted"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/correct": {
         parameters: {
             query?: never;
@@ -1110,11 +1070,6 @@ export interface components {
             /** @description Required with file_content, optional with file_path */
             mime_type?: string;
             original_filename?: string;
-            /** @default true */
-            interpret: boolean;
-            interpretation_config?: {
-                [key: string]: unknown;
-            };
             user_id?: string;
         };
         StoreResponse: {
@@ -1162,11 +1117,6 @@ export interface components {
             /** @description Optional idempotency key; if omitted, content hash is used */
             idempotency_key?: string;
             original_filename?: string;
-            /**
-             * @description Run AI interpretation after store
-             * @default true
-             */
-            interpret: boolean;
             /** Format: uuid */
             user_id?: string;
         };
@@ -1175,10 +1125,8 @@ export interface components {
             content_hash?: string;
             file_size?: number;
             deduplicated?: boolean;
-            interpretation?: {
-                [key: string]: unknown;
-            };
-            entity_ids?: string[];
+            entities_created?: number;
+            observations_created?: number;
         };
         GetRelationshipSnapshotRequest: {
             /** @enum {string} */
@@ -2635,72 +2583,6 @@ export interface operations {
         };
         responses: {
             /** @description Schema registered */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
-    };
-    reinterpret: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    source_id: string;
-                    interpretation_config?: {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
-        responses: {
-            /** @description Source reinterpreted */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
-    };
-    interpretUninterpreted: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    /** @default 50 */
-                    limit?: number;
-                    /** @default false */
-                    dry_run?: boolean;
-                    user_id?: string;
-                    interpretation_config?: {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
-        responses: {
-            /** @description Uninterpreted sources processed */
             200: {
                 headers: {
                     [name: string]: unknown;

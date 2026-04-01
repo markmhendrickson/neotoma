@@ -1,6 +1,6 @@
 ## Discovery Participant Filtering Criteria
 ### Purpose
-This document defines granular filtering criteria to ensure proper ICP matching for discovery participants. These criteria are derived from `docs/specs/ICP_PROFILES.md` and should be applied during lead sourcing and participant selection.
+This document defines granular filtering criteria to ensure proper ICP matching for discovery participants. These criteria are derived from `docs/icp/profiles.md` and should be applied during lead sourcing and participant selection.
 ### AI-Native Individual Operators — Enhanced Filtering
 **Current Basic Filters:**
 - Job title keywords: `founder`, `indie hacker`, `AI engineer`

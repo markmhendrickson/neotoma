@@ -21,9 +21,9 @@ const INDEXABLE_ROUTES = [
   "/mcp",
   "/cli",
   "/architecture",
-  "/ai-infrastructure-engineers",
-  "/ai-native-operators",
-  "/agentic-systems-builders",
+  "/operating",
+  "/building-pipelines",
+  "/debugging-infrastructure",
   "/neotoma-with-cursor",
   "/neotoma-with-claude",
   "/neotoma-with-claude-code",
@@ -131,6 +131,13 @@ describe("seo_metadata", () => {
     expect(metadata.alternates.find((entry) => entry.hrefLang === "x-default")?.href).toBe("https://neotoma.io/docs");
     expect(metadata.alternates.find((entry) => entry.hrefLang === "es")?.href).toBe("https://neotoma.io/es/docs");
     expect(metadata.alternates.find((entry) => entry.hrefLang === "en")?.href).toBe("https://neotoma.io/docs");
+  });
+
+  it("markdown mirror routes reuse install metadata with noindex", () => {
+    const meta = getSeoMetadataForPath("/markdown/install");
+    expect(meta.robots).toBe("noindex,nofollow");
+    expect(meta.title).toContain("Markdown");
+    expect(meta.description).toContain("/install");
   });
 
   describe("all indexable routes", () => {
@@ -262,7 +269,7 @@ describe("seo_metadata", () => {
 
     it("leaves homepage template mostly unchanged for root route", () => {
       const result = injectRouteMetaIntoHtml(TEMPLATE, "/");
-      expect(result).toContain("<title>Neotoma | Deterministic state layer for long-running agents</title>");
+      expect(result).toContain("<title>Your agents forget. Neotoma makes them remember.</title>");
       expect(result).toContain('href="https://neotoma.io/"');
     });
   });

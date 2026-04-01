@@ -229,10 +229,10 @@ const CONFIG: VerticalConfig = {
     },
   ],
   caseStudy: {
-    companyName: "LitGraph",
-    companyUrl: "https://litgraph.example.com",
-    companyDesc:
-      "is a fictional AI litigation intelligence platform that unifies docket data, discovery, and strategy analytics for complex commercial and insurance defense teams.",
+    headline: "How case management teams use Neotoma as their integrity layer",
+    desc:
+      "AI litigation and claims platforms unify docket data, discovery, and strategy analytics across complex commercial and insurance defense teams. Neotoma versions every exhibit, assessment, and analyst output so you can reconstruct case state at any filing date or mediation prep point.",
+    featuresHeading: "What case management teams build",
     features: [
       "Matter agents that summarize posture across parallel cases and coverage towers",
       "Continuous ingestion of filings, transcripts, and carrier correspondence",
@@ -247,7 +247,7 @@ const CONFIG: VerticalConfig = {
     generalizesTitle:
       "If you run multi-agent case or claims workflows, you share the same risk surface",
     generalizesDesc:
-      "Any team blending human counsel, adjusters, and generative research needs the same guarantees: no silent exhibit swaps, no orphaned opinions, and no guessing when a witness first surfaced. Neotoma generalizes the LitGraph pattern to your stack.",
+      "Any team blending human counsel, adjusters, and generative research needs the same guarantees: no silent exhibit swaps, no orphaned opinions, and no guessing when a witness first surfaced. Neotoma generalizes the pattern to your stack.",
   },
   ctaHeadline: "Ship case agents that can defend",
   ctaHighlight: "every answer they give",

@@ -231,10 +231,10 @@ const CONFIG: VerticalConfig = {
     },
   ],
   caseStudy: {
-    companyName: "CareGraph",
-    companyUrl: "https://caregraph.example.com",
-    companyDesc:
-      "is a fictional AI-native care coordination platform that automates clinical documentation, prior auth management, and shift handoff summaries for hospital systems.",
+    headline: "How healthcare teams use Neotoma as their integrity layer",
+    desc:
+      "AI-native care coordination platforms automate clinical documentation, prior auth management, and shift handoff summaries for hospital systems. Neotoma versions every clinical input, recommendation, and authorization change so you can reconstruct what was known at any decision point.",
+    featuresHeading: "What healthcare teams build",
     features: [
       "Clinical agents that generate shift summaries and flag deterioration patterns across ICU and med-surg units",
       "Automated prior authorization submission and appeal tracking with payer portal integration",
@@ -248,7 +248,7 @@ const CONFIG: VerticalConfig = {
     ],
     generalizesTitle: "If agents touch clinical data, you need reconstructable healthcare state",
     generalizesDesc:
-      "Any team deploying clinical agents for documentation, triage, prior auth, or care coordination faces the same requirement: prove what was known when a decision was made. Neotoma generalizes the CareGraph pattern to your clinical stack.",
+      "Any team deploying clinical agents for documentation, triage, prior auth, or care coordination faces the same requirement: prove what was known when a decision was made. Neotoma generalizes the pattern to your clinical stack.",
   },
   ctaHeadline: "Ship clinical agents that can defend",
   ctaHighlight: "every decision they supported",

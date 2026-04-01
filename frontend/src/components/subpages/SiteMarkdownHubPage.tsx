@@ -8,9 +8,9 @@ import { INDEXABLE_SITE_PAGE_PATHS } from "@/site/seo_metadata";
 import {
   buildAllSitePagesMarkdownBundle,
   buildSitePageMarkdown,
+  fullPageMarkdownPath,
   isIndexableSitePagePath,
   normalizeSiteMarkdownPathParam,
-  rawMarkdownTo,
 } from "@/site/site_page_markdown";
 
 export function SiteMarkdownHubPage() {
@@ -87,7 +87,7 @@ export function SiteMarkdownHubPage() {
           </Link>
           {" · "}
           <Link
-            to={rawMarkdownTo(normalizedPath, locale)}
+            to={fullPageMarkdownPath(normalizedPath, locale)}
             className="text-foreground underline underline-offset-2 hover:no-underline"
           >
             {dict.rawMarkdownDirect}
@@ -108,9 +108,11 @@ export function SiteMarkdownHubPage() {
   return (
     <DetailPage title="Site pages (Markdown)">
       <p className="text-[15px] leading-7 mb-4">
-        Every indexable site route (same set as the public sitemap for the default locale) as
-        Markdown derived from title, description, canonical URL, and breadcrumbs. This is not a full
-        HTML-to-Markdown conversion; use the linked HTML pages for complete copy.
+        Every indexable site route (same set as the public sitemap for the default locale): use{" "}
+        <code className="rounded bg-muted px-1 py-0.5 text-[13px]">/markdown/…</code> for a
+        full-page Markdown export (rendered HTML → GFM). This hub still offers a compact bundle
+        built from SEO metadata (title, description, canonical URL, breadcrumbs) for quick
+        reference.
       </p>
       <div className="mb-8 flex flex-wrap gap-2">
         <Button type="button" variant="secondary" size="sm" onClick={() => copyText("all", allMd)}>
@@ -125,17 +127,17 @@ export function SiteMarkdownHubPage() {
         {sortedPaths.map((p) => (
           <li key={p} className="text-[15px] leading-7">
             <Link
-              to={`${hubHref}?path=${encodeURIComponent(p)}`}
+              to={fullPageMarkdownPath(p, locale)}
               className="font-mono text-[13px] text-foreground underline underline-offset-2 hover:no-underline"
             >
               {p}
             </Link>
             <span className="text-muted-foreground"> · </span>
             <Link
-              to={rawMarkdownTo(p, locale)}
+              to={`${hubHref}?path=${encodeURIComponent(p)}`}
               className="text-[13px] text-foreground underline underline-offset-2 hover:no-underline"
             >
-              {dict.rawMarkdownDirect}
+              SEO summary
             </Link>
           </li>
         ))}

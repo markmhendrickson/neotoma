@@ -68,7 +68,7 @@ const SidebarProvider = React.forwardRef<
 >(
   (
     {
-      defaultOpen = true,
+      defaultOpen = false,
       open: openProp,
       onOpenChange: setOpenProp,
       className,
@@ -201,6 +201,8 @@ const Sidebar = React.forwardRef<
     collapsible?: "offcanvas" | "icon" | "none";
     /** When true, positions sidebar below a fixed header (top-12, height calc(100svh - 3rem)) */
     belowHeader?: boolean;
+    /** When false with belowHeader, sidebar meets top edge (fixed app bar scrolled away). */
+    appNavBarVisible?: boolean;
   }
 >(
   (
@@ -209,6 +211,7 @@ const Sidebar = React.forwardRef<
       variant = "sidebar",
       collapsible = "offcanvas",
       belowHeader = false,
+      appNavBarVisible = true,
       className,
       children,
       ...props
@@ -284,10 +287,13 @@ const Sidebar = React.forwardRef<
         />
         <div
           className={cn(
-            "fixed z-40 hidden w-[--sidebar-width] transition-[left,right,width] duration-200 ease-linear md:flex",
+            "fixed z-40 hidden w-[--sidebar-width] md:flex",
             belowHeader
-              ? "top-12 bottom-0"
-              : "inset-y-0 h-svh",
+              ? cn(
+                  "bottom-0 transition-[left,right,top,width] duration-300 ease-out",
+                  appNavBarVisible ? "top-12" : "top-0",
+                )
+              : "inset-y-0 h-svh transition-[left,right,width] duration-200 ease-linear",
             side === "left"
               ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
               : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",

@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" role="img" aria-label="Sessions to state: multiple chat sessions flowing into a single unified state record">
+  <defs>
+    <radialGradient id="bg_sts" cx="50%" cy="50%" r="70%">
+      <stop offset="0%" stop-color="#c8860a"/>
+      <stop offset="55%" stop-color="#7a4f08"/>
+      <stop offset="100%" stop-color="#2e1800"/>
+    </radialGradient>
+    <radialGradient id="glow_sts" cx="50%" cy="50%" r="45%">
+      <stop offset="0%" stop-color="#ffe8a0" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#c8860a" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="320" height="200" fill="url(#bg_sts)"/>
+  <rect width="320" height="200" fill="url(#glow_sts)"/>
+
+  <!-- Three session bubbles on the left -->
+  <!-- Session 1 (top) -->
+  <rect x="18" y="28" width="72" height="44" rx="8" fill="#f4e8c1" stroke="#4a3510" stroke-width="2.2"/>
+  <line x1="28" y1="44" x2="78" y2="44" stroke="#6b4e1f" stroke-width="1.6"/>
+  <line x1="28" y1="54" x2="70" y2="54" stroke="#6b4e1f" stroke-width="1.6"/>
+  <line x1="28" y1="64" x2="78" y2="64" stroke="#6b4e1f" stroke-width="1.6"/>
+
+  <!-- Session 2 (middle) -->
+  <rect x="18" y="84" width="72" height="44" rx="8" fill="#f4e8c1" stroke="#4a3510" stroke-width="2.2"/>
+  <line x1="28" y1="100" x2="78" y2="100" stroke="#6b4e1f" stroke-width="1.6"/>
+  <line x1="28" y1="110" x2="66" y2="110" stroke="#6b4e1f" stroke-width="1.6"/>
+  <line x1="28" y1="120" x2="78" y2="120" stroke="#6b4e1f" stroke-width="1.6"/>
+
+  <!-- Session 3 (bottom) -->
+  <rect x="18" y="140" width="72" height="44" rx="8" fill="#f4e8c1" stroke="#4a3510" stroke-width="2.2"/>
+  <line x1="28" y1="156" x2="78" y2="156" stroke="#6b4e1f" stroke-width="1.6"/>
+  <line x1="28" y1="166" x2="72" y2="166" stroke="#6b4e1f" stroke-width="1.6"/>
+  <line x1="28" y1="176" x2="78" y2="176" stroke="#6b4e1f" stroke-width="1.6"/>
+
+  <!-- Converging arrows -->
+  <path d="M92 50 Q130 50 140 92" fill="none" stroke="#f4e8c1" stroke-width="1.8" stroke-linecap="round" opacity="0.7"/>
+  <path d="M92 106 L140 106" fill="none" stroke="#f4e8c1" stroke-width="1.8" stroke-linecap="round" opacity="0.7"/>
+  <path d="M92 162 Q130 162 140 120" fill="none" stroke="#f4e8c1" stroke-width="1.8" stroke-linecap="round" opacity="0.7"/>
+  <!-- Arrowheads -->
+  <polygon points="137,87 143,92 137,97" fill="#f4e8c1" opacity="0.7"/>
+  <polygon points="137,101 143,106 137,111" fill="#f4e8c1" opacity="0.7"/>
+  <polygon points="137,115 143,120 137,125" fill="#f4e8c1" opacity="0.7"/>
+
+  <!-- Unified state record on the right -->
+  <rect x="155" y="62" width="88" height="88" rx="10" fill="#f4e8c1" stroke="#4a3510" stroke-width="3"/>
+  <!-- Corner fold -->
+  <path d="M221 62 L243 62 L221 82 Z" fill="#e0cc99" stroke="#4a3510" stroke-width="1.8" stroke-linejoin="round"/>
+  <line x1="169" y1="92" x2="233" y2="92" stroke="#6b4e1f" stroke-width="2"/>
+  <line x1="169" y1="106" x2="233" y2="106" stroke="#6b4e1f" stroke-width="2"/>
+  <line x1="169" y1="120" x2="224" y2="120" stroke="#6b4e1f" stroke-width="2"/>
+  <line x1="169" y1="134" x2="233" y2="134" stroke="#6b4e1f" stroke-width="2"/>
+
+  <!-- Checkmark badge -->
+  <circle cx="265" cy="106" r="16" fill="#f4e8c1" stroke="#4a3510" stroke-width="2.2"/>
+  <polyline points="256,106 262,113 275,97" fill="none" stroke="#4a3510" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

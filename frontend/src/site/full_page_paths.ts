@@ -19,7 +19,6 @@ const MARKETING_FULL_PAGE_FIRST_SEGMENTS = new Set([
   "customer-ops",
   "logistics",
   "personal-data",
-  "build-vs-buy",
 ]);
 
 /**

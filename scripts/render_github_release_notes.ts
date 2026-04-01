@@ -5,6 +5,8 @@
  * Usage:
  *   npm run -s release-notes:render -- --tag v0.3.11   # -s keeps npm from printing into piped files
  *   npx tsx scripts/render_github_release_notes.ts --tag v0.3.11 --supplement path/to/custom.md
+ *   npx tsx scripts/render_github_release_notes.ts --tag v0.3.12 --compare-base v0.3.10
+ *     # when the previous git tag was not published to npm; overrides compare + commit list base
  *
  * Supplement resolution (first hit wins):
  *   1) --supplement path
@@ -81,26 +83,43 @@ function gitLogMarkdown(prev: string, tag: string): string {
     .join("\n");
 }
 
-function parseArgs(argv: string[]): { tag: string; supplement?: string } {
+function parseArgs(argv: string[]): {
+  tag: string;
+  supplement?: string;
+  compareBase?: string;
+} {
   let tag = "";
   let supplement: string | undefined;
+  let compareBase: string | undefined;
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--tag" && argv[i + 1]) {
       tag = argv[++i]!;
     } else if (argv[i] === "--supplement" && argv[i + 1]) {
       supplement = argv[++i]!;
+    } else if (argv[i] === "--compare-base" && argv[i + 1]) {
+      compareBase = argv[++i]!;
     }
   }
   if (!tag || !/^v\d+\.\d+\.\d+$/.test(tag)) {
-    console.error("Usage: render_github_release_notes.ts --tag vX.Y.Z [--supplement path.md]");
+    console.error(
+      "Usage: render_github_release_notes.ts --tag vX.Y.Z [--supplement path.md] [--compare-base vA.B.C]",
+    );
     process.exit(1);
   }
-  return { tag, supplement };
+  if (compareBase && !/^v\d+\.\d+\.\d+$/.test(compareBase)) {
+    console.error("Invalid --compare-base: expected vX.Y.Z");
+    process.exit(1);
+  }
+  if (compareBase && compareBase === tag) {
+    console.error("--compare-base must differ from --tag");
+    process.exit(1);
+  }
+  return { tag, supplement, compareBase };
 }
 
 function main(): void {
-  const { tag, supplement } = parseArgs(process.argv.slice(2));
-  const prev = previousTag(tag);
+  const { tag, supplement, compareBase } = parseArgs(process.argv.slice(2));
+  const prev = (compareBase ?? "").trim() || previousTag(tag);
   const npmVersion = tag.replace(/^v/, "");
   const slug = getRepoSlug();
   const compareUrl = prev

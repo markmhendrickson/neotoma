@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" role="img" aria-label="Reproducible reconstruction: source parts rebuild the same record every time">
+  <defs>
+    <radialGradient id="bg_rr" cx="50%" cy="50%" r="65%">
+      <stop offset="0%" stop-color="#c8860a"/>
+      <stop offset="55%" stop-color="#7a4f08"/>
+      <stop offset="100%" stop-color="#2e1800"/>
+    </radialGradient>
+    <radialGradient id="glow_rr" cx="50%" cy="50%" r="42%">
+      <stop offset="0%" stop-color="#ffe8a0" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#c8860a" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="400" height="400" fill="url(#bg_rr)"/>
+  <rect width="400" height="400" fill="url(#glow_rr)"/>
+
+  <rect x="60" y="112" width="64" height="48" rx="8" fill="#f4e8c1" stroke="#4a3510" stroke-width="3"/>
+  <rect x="72" y="194" width="52" height="44" rx="8" fill="#f4e8c1" stroke="#4a3510" stroke-width="3"/>
+  <rect x="58" y="274" width="66" height="46" rx="8" fill="#f4e8c1" stroke="#4a3510" stroke-width="3"/>
+
+  <path d="M136 136 C168 138 186 146 202 168" fill="none" stroke="#f4e8c1" stroke-width="3" stroke-linecap="round" opacity="0.65"/>
+  <path d="M136 216 C172 216 192 212 206 198" fill="none" stroke="#f4e8c1" stroke-width="3" stroke-linecap="round" opacity="0.65"/>
+  <path d="M136 296 C174 292 192 278 206 248" fill="none" stroke="#f4e8c1" stroke-width="3" stroke-linecap="round" opacity="0.65"/>
+
+  <path d="M194 154 L210 170 L188 176" fill="none" stroke="#f4e8c1" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity="0.75"/>
+  <path d="M198 194 L214 182 L214 206" fill="none" stroke="#f4e8c1" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity="0.75"/>
+  <path d="M196 244 L214 238 L208 258" fill="none" stroke="#f4e8c1" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity="0.75"/>
+
+  <rect x="208" y="126" width="132" height="170" rx="12" fill="#f4e8c1" stroke="#4a3510" stroke-width="3.2"/>
+  <path d="M312 126 L340 126 L312 152 Z" fill="#e0cc99" stroke="#4a3510" stroke-width="2" stroke-linejoin="round"/>
+  <line x1="232" y1="168" x2="304" y2="168" stroke="#6b4e1f" stroke-width="2.2"/>
+  <line x1="232" y1="186" x2="292" y2="186" stroke="#6b4e1f" stroke-width="2.2"/>
+  <line x1="232" y1="204" x2="302" y2="204" stroke="#6b4e1f" stroke-width="2.2"/>
+  <line x1="232" y1="222" x2="286" y2="222" stroke="#6b4e1f" stroke-width="2.2"/>
+  <line x1="232" y1="240" x2="298" y2="240" stroke="#6b4e1f" stroke-width="2.2"/>
+  <circle cx="274" cy="330" r="20" fill="#f4e8c1" stroke="#4a3510" stroke-width="2.5"/>
+  <polyline points="264,330 272,338 286,320" fill="none" stroke="#4a3510" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

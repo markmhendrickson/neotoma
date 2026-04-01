@@ -18,7 +18,7 @@ function normalizeEntityValue(entityType: string, raw: string): string {
   return normalized;
 }
 ```
-**Same name → same ID, globally. No duplicates.**
+**Same name → same ID, globally. No duplicates.** Persisted `canonical_name` is produced by `formatCanonicalNameForStorage` in `src/services/entity_resolution.ts` (same structural rules as `normalizeEntityValue`, casing preserved); entity IDs still hash `normalizeEntityValue` only.
 ## 15.2 Entity Rules
 Entity IDs MUST be:
 - Canonical (globally unique representation)

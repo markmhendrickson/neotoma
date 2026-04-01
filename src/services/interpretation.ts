@@ -11,7 +11,6 @@ import {
   resolveEntityTypeFromAlias,
   refineEntityTypeFromExtractedFields,
 } from "./schema_definitions.js";
-import { inferCanonicalEntityType, isLLMExtractionAvailable } from "./llm_extraction.js";
 import { observationReducer } from "../reducers/observation_reducer.js";
 import { randomUUID } from "crypto";
 import { canonicalizeFields, hashCanonicalFields } from "./field_canonicalization.js";
@@ -39,8 +38,6 @@ export interface InterpretationConfig {
   feature_flags?: Record<string, boolean>;
   /** When true (default), create a user-scoped schema from extracted fields when entity type is unknown. */
   create_schema_for_unknown?: boolean;
-  /** When true, use LLM to infer canonical entity type when no schema alias matches (e.g. localized types). */
-  infer_entity_type_from_llm?: boolean;
 }
 
 export interface InterpretationOptions {
@@ -153,11 +150,7 @@ export async function runInterpretation(
                       (entityData.type as string) ||
                       "generic";
       // Resolve to canonical type via schema-defined aliases (no hardcoded map)
-      let resolvedType = resolveEntityTypeFromAlias(entityType);
-      if (!resolvedType && config.infer_entity_type_from_llm && isLLMExtractionAvailable()) {
-        const canonicalTypes = getRegisteredEntityTypes();
-        resolvedType = await inferCanonicalEntityType(entityType, canonicalTypes, config.model_id);
-      }
+      const resolvedType = resolveEntityTypeFromAlias(entityType);
       if (resolvedType) entityType = resolvedType;
       // Refine type by field fit (considers dynamic + code schemas when another schema fits better)
       const extractedFieldKeys = Object.keys(entityData).filter(

@@ -20,14 +20,16 @@ for (const locale of SUPPORTED_LOCALES) {
   assertNonEmpty(`${locale}.dict.docs`, dict.docs);
   assertNonEmpty(`${locale}.dict.search`, dict.search);
   assertNonEmpty(`${locale}.dict.install`, dict.install);
+  assertNonEmpty(`${locale}.dict.evaluate`, dict.evaluate);
   assertNonEmpty(`${locale}.dict.architecture`, dict.architecture);
+  assertNonEmpty(`${locale}.dict.memoryGuaranteesNav`, dict.memoryGuaranteesNav);
   assertNonEmpty(`${locale}.dict.docsIntro`, dict.docsIntro);
   assertNonEmpty(`${locale}.dict.showMore`, dict.showMore);
   assertNonEmpty(`${locale}.dict.showLess`, dict.showLess);
   assertNonEmpty(`${locale}.dict.noResults`, dict.noResults);
 
   assertNonEmpty(`${locale}.pack.siteSections.intro`, pack.siteSections.intro);
-  assertNonEmpty(`${locale}.pack.siteSections.install`, pack.siteSections.install);
+  assertNonEmpty(`${locale}.pack.siteSections.inspect`, pack.siteSections.inspect);
   assertNonEmpty(`${locale}.pack.siteSections.architecture`, pack.siteSections.architecture);
   assertNonEmpty(`${locale}.pack.foundations.title`, pack.foundations.title);
   assertNonEmpty(`${locale}.pack.memory.vendors`, pack.memory.vendors);

@@ -16,6 +16,13 @@ export function OpenClawConnectLocalStdioPage() {
         {" · "}
         Local setup where Neotoma runs on the same machine via stdio.
       </p>
+      <p className="text-[14px] leading-6 text-muted-foreground mb-4">
+        Need OpenClaw on another machine or HTTP to a tunneled MCP URL? See{" "}
+        <Link to="/neotoma-with-openclaw-connect-remote-http" className={extLink}>
+          OpenClaw remote setup (HTTP)
+        </Link>
+        .
+      </p>
 
       <IntegrationSection title="Setup" sectionKey="setup">
         <p className="text-[15px] leading-7 text-muted-foreground mb-4">

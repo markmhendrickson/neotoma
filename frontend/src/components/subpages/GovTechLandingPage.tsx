@@ -219,10 +219,10 @@ const CONFIG: VerticalConfig = {
     },
   ],
   caseStudy: {
-    companyName: "CivicAI",
-    companyUrl: "https://civicai.example.com",
-    companyDesc:
-      "is a fictional AI platform for government agencies that automates eligibility screening, cross-agency data reconciliation, and constituent communication for benefits programs.",
+    headline: "How government technology teams use Neotoma as their integrity layer",
+    desc:
+      "AI platforms for government agencies automate eligibility screening, cross-agency data reconciliation, and constituent communication for benefits programs. Neotoma versions every evaluation, policy application, and determination so you can reconstruct the evidence and rules that governed each decision.",
+    featuresHeading: "What government technology teams build",
     features: [
       "Eligibility agents that evaluate multi-program rules (SNAP, Medicaid, TANF) against real-time cross-agency data feeds",
       "Automated redetermination scheduling with evidence gap detection and applicant outreach",
@@ -236,7 +236,7 @@ const CONFIG: VerticalConfig = {
     ],
     generalizesTitle: "If agents make government decisions, you need reconstructable determination state",
     generalizesDesc:
-      "Any agency deploying agents for eligibility, permitting, or benefits adjudication faces the same requirement: prove which rules and evidence governed each decision. Neotoma generalizes the CivicAI pattern to your government stack.",
+      "Any agency deploying agents for eligibility, permitting, or benefits adjudication faces the same requirement: prove which rules and evidence governed each decision. Neotoma generalizes the pattern to your government stack.",
   },
   ctaHeadline: "Ship government agents that can defend",
   ctaHighlight: "every determination they make",

@@ -5,10 +5,12 @@ import { SiClaude, SiOpenai } from "react-icons/si";
 import { SITE_CODE_SNIPPETS } from "../../site/site_data";
 import { useCopyFeedback } from "../../lib/copy_feedback";
 import { copyTextToClipboard } from "../../lib/copy_to_clipboard";
+import { CODE_BLOCK_COPY_BUTTON_ABSOLUTE } from "../code_block_copy_button_classes";
 import { DetailPage } from "../DetailPage";
 import { Button } from "../ui/button";
 import { Card, CardContent } from "../ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
+import { CodexIcon } from "../icons/CodexIcon";
 import { CursorIcon } from "../icons/CursorIcon";
 import { OpenClawIcon } from "../icons/OpenClawIcon";
 
@@ -35,7 +37,7 @@ const INTEGRATIONS = [
     label: "Codex",
     href: "/neotoma-with-codex",
     desc: "Cross-task memory and CLI fallback",
-    Icon: SiOpenai,
+    Icon: CodexIcon,
   },
   {
     label: "Cursor",
@@ -80,7 +82,7 @@ function CodeBlock({ code }: { code: string }) {
         type="button"
         variant="outline"
         size="sm"
-        className="absolute top-2 right-2 z-10 min-w-[88px] h-8 justify-center gap-1.5 shrink-0 border-emerald-600 bg-emerald-600 px-2.5 text-white shadow-sm shadow-emerald-600/30 hover:border-emerald-500 hover:bg-emerald-500 hover:text-white focus-visible:ring-emerald-500 dark:border-emerald-500 dark:bg-emerald-500 dark:text-emerald-950 dark:shadow-emerald-500/30 dark:hover:border-emerald-400 dark:hover:bg-emerald-400 dark:hover:text-emerald-950 after:text-[11px] after:font-semibold after:tracking-wide after:content-[attr(aria-label)]"
+        className={CODE_BLOCK_COPY_BUTTON_ABSOLUTE}
         aria-label={copied ? "Copied" : "Copy"}
         onClick={onCopy}
       >
@@ -96,7 +98,7 @@ function CodeBlock({ code }: { code: string }) {
 
 export function InstallPage() {
   return (
-    <DetailPage title="Install">
+    <DetailPage title="Install options">
       <div className="flex flex-wrap gap-2 mb-6">
         <span className="inline-flex items-center gap-1.5 rounded border border-sky-500/20 bg-sky-500/5 px-2.5 py-1 text-[12px] font-medium text-sky-600 dark:text-sky-400">
           <Clock className="h-3.5 w-3.5 shrink-0" aria-hidden />
@@ -108,14 +110,119 @@ export function InstallPage() {
         </span>
       </div>
 
+      <div className="mb-8 rounded-lg border border-border/60 bg-muted/30 p-4">
+        <p className="text-[14px] leading-6 text-muted-foreground mb-3">
+          Want the full agent-driven sequence? Start with evaluation, then let the
+          agent install if needed, activate Neotoma with your data, and configure
+          the tool you are in.
+        </p>
+        <Link
+          to="/evaluate"
+          className="inline-flex items-center rounded-md border border-border bg-card px-4 py-2 text-[14px] font-medium text-foreground !no-underline hover:!no-underline hover:bg-muted transition-colors"
+        >
+          Start with evaluation →
+        </Link>
+      </div>
+
       <h2 className="text-[20px] font-medium tracking-[-0.01em] mb-3">Agent-assisted install</h2>
       <p className="text-[15px] leading-7 mb-4">
-        Paste this prompt into Claude, Codex, or Cursor. The agent handles npm install, init,
-        and MCP configuration.
+        If you want to skip the initial evaluation page and proceed directly from
+        install, paste this prompt into Claude, Codex, Cursor, or a similar
+        agent. The prompt is concise; this page contains the full install-first
+        sequence the agent should follow.
       </p>
       <CodeBlock code={SITE_CODE_SNIPPETS.agentInstallPrompt} />
 
-      <h2 className="text-[20px] font-medium tracking-[-0.01em] mt-10 mb-4">Integrations</h2>
+      <h3 className="text-[17px] font-medium tracking-[-0.01em] mt-6 mb-3">
+        Agent: install-first instructions
+      </h3>
+      <p className="text-[15px] leading-7 mb-3">
+        Use this path only when the user already wants to proceed with Neotoma
+        and does not need the broader fit-assessment flow on{" "}
+        <Link to="/evaluate" className="underline underline-offset-2 hover:no-underline">
+          /evaluate
+        </Link>
+        .
+      </p>
+      <ol className="list-decimal pl-5 space-y-2 mb-4">
+        <li className="text-[15px] leading-7 text-muted-foreground">
+          <strong className="text-foreground">Confirm the install-first path</strong>{" "}
+          - verify that the user wants to proceed now, identify their current
+          tool, and note any major tool constraints that affect setup quality.
+        </li>
+        <li className="text-[15px] leading-7 text-muted-foreground">
+          <strong className="text-foreground">Install only if needed</strong> -
+          check whether Neotoma is already installed. If not, run{" "}
+          <code className="text-sm bg-muted px-1.5 py-0.5 rounded">npm install -g neotoma</code>{" "}
+          and{" "}
+          <code className="text-sm bg-muted px-1.5 py-0.5 rounded">neotoma init</code>.
+          If it is already installed, skip re-installation unless something is
+          broken.
+        </li>
+        <li className="text-[15px] leading-7 text-muted-foreground">
+          <strong className="text-foreground">Set the first data target</strong>{" "}
+          - determine what data should be stored first and, if needed, ask the
+          user which onboarding mode they want: quick win, guided, or power
+          user.
+        </li>
+        <li className="text-[15px] leading-7 text-muted-foreground">
+          <strong className="text-foreground">Run activation</strong> - execute{" "}
+          <a
+            href="https://github.com/markmhendrickson/neotoma/blob/main/install.md"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-foreground underline underline-offset-2 hover:no-underline"
+          >
+            {SITE_CODE_SNIPPETS.activationSequence}
+          </a>
+          : discover candidates, preview them, ingest confirmed sources,
+          reconstruct a timeline, then query and correct.
+        </li>
+        <li className="text-[15px] leading-7 text-muted-foreground">
+          <strong className="text-foreground">Configure the current tool</strong>{" "}
+          - after first value is visible, set up the strongest ongoing Neotoma
+          workflow for the tool in use. If that tool is too constrained, say so
+          explicitly and recommend a better-supported primary environment.
+        </li>
+      </ol>
+      <p className="text-[14px] leading-6 text-muted-foreground mb-4">
+        Canonical written reference:{" "}
+        <a
+          href="https://github.com/markmhendrickson/neotoma/blob/main/install.md"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-foreground underline underline-offset-2 hover:no-underline"
+        >
+          install.md
+        </a>
+        . If the user wants the broader qualification flow first, send them to{" "}
+        <Link to="/evaluate" className="underline underline-offset-2 hover:no-underline">
+          /evaluate
+        </Link>
+        .
+      </p>
+
+      <p className="text-[13px] leading-5 text-muted-foreground mb-4">
+        More options:{" "}
+        <a
+          href="https://github.com/markmhendrickson/neotoma?tab=readme-ov-file#install"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-foreground underline underline-offset-2 hover:no-underline"
+        >
+          Manual install
+        </a>
+        {" · "}
+        <Link to="/install#docker" className="text-foreground underline underline-offset-2 hover:no-underline">
+          Docker
+        </Link>
+        {" · "}
+        <Link to="/cli" className="text-foreground underline underline-offset-2 hover:no-underline">
+          CLI reference
+        </Link>
+      </p>
+
+      <h2 className="text-[20px] font-medium tracking-[-0.01em] mt-10 mb-4">Direct integration docs</h2>
       <ul className="list-none pl-0 grid grid-cols-1 sm:grid-cols-2 auto-rows-fr gap-3 mb-10 [&_a]:!no-underline [&_a]:hover:!no-underline">
         {INTEGRATIONS.map(({ label, href, desc, Icon }) => (
           <li key={href} className="h-full">
@@ -155,16 +262,48 @@ export function InstallPage() {
       <CodeBlock code={SITE_CODE_SNIPPETS.installCommands} />
 
       <h3 className="text-[17px] font-medium tracking-[-0.01em] mt-6 mb-3">After installation</h3>
+      <p className="text-[15px] leading-7 text-muted-foreground mb-3">
+        Once installation is complete, activation follows. If evaluation already
+        identified the first data to store, carry that forward. Otherwise determine
+        it now, then run{" "}
+        <strong className="text-foreground">
+          {SITE_CODE_SNIPPETS.activationSequence}
+        </strong>
+        . After first value is visible, configure the current tool for robust
+        ongoing usage.
+      </p>
       <ol className="list-decimal pl-5 space-y-2 mb-6">
         <li className="text-[15px] leading-7 text-muted-foreground">
-          Run <code className="text-foreground">neotoma init</code>, choose your client, and
-          restart your tool.
+          <strong className="text-foreground">Preference selection</strong> - if
+          evaluation already established the priority data types and onboarding mode,
+          carry them forward. Otherwise choose which data types matter most
+          (project files, chat transcripts, meeting notes, financial docs, code
+          context, custom paths) and pick a mode: quick win, guided, or power
+          user.
         </li>
         <li className="text-[15px] leading-7 text-muted-foreground">
-          The agent gathers records from your session context and project metadata.
+          <strong className="text-foreground">Discovery</strong> - continue from any
+          candidate data already identified during evaluation. If that work has not
+          happened yet, the agent scans shallowly based on your preferences, groups
+          results into domains (not file counts), and checks for chat transcript
+          exports and platform memory.
         </li>
         <li className="text-[15px] leading-7 text-muted-foreground">
-          Review and approve. Nothing is stored until you confirm.
+          <strong className="text-foreground">Propose and confirm</strong> - for each
+          domain the agent explains why it was selected, what entities it likely contains,
+          and what timeline value it could unlock. You confirm per-folder or per-file
+          before anything is stored.
+        </li>
+        <li className="text-[15px] leading-7 text-muted-foreground">
+          <strong className="text-foreground">Ingest and reconstruct</strong> -
+          confirmed files are ingested and the agent reconstructs the strongest
+          timeline with provenance - every event traced to a specific source file.
+        </li>
+        <li className="text-[15px] leading-7 text-muted-foreground">
+          <strong className="text-foreground">Query and correct</strong> - the agent
+          surfaces a follow-up query against the reconstructed timeline and offers
+          next actions, then asks whether the timeline is accurate and supports
+          corrections (wrong merge, wrong date, source exclusion).
         </li>
       </ol>
 

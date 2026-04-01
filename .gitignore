@@ -2,6 +2,8 @@ node_modules/
 dist/
 .env*
 !.env.example
+!.env.development.example
+!.env.production.example
 *.log
 .DS_Store
 # .claude/ is committed (project settings), but .claude/settings.local.json is ignored (user overrides)
@@ -33,6 +35,9 @@ docs/developer/mcp.json.example
 tmp/
 .creds/
 backups/
+
+# Supabase CLI local cache (no committed supabase project in this repo)
+supabase/.temp/
 
 # Vite build artifacts
 frontend/.vite/deps/

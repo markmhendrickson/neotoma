@@ -41,7 +41,28 @@
   <url><loc>https://neotoma.io/platform-memory</loc></url>
   <url><loc>https://neotoma.io/retrieval-memory</loc></url>
   <url><loc>https://neotoma.io/file-based-memory</loc></url>
+  <url><loc>https://neotoma.io/database-memory</loc></url>
   <url><loc>https://neotoma.io/deterministic-memory</loc></url>
+  <url><loc>https://neotoma.io/build-vs-buy</loc></url>
+  <url><loc>https://neotoma.io/troubleshooting</loc></url>
+  <url><loc>https://neotoma.io/evaluate</loc></url>
+  <url><loc>https://neotoma.io/faq</loc></url>
+  <url><loc>https://neotoma.io/neotoma-vs-platform-memory</loc></url>
+  <url><loc>https://neotoma.io/neotoma-vs-mem0</loc></url>
+  <url><loc>https://neotoma.io/neotoma-vs-zep</loc></url>
+  <url><loc>https://neotoma.io/neotoma-vs-rag</loc></url>
+  <url><loc>https://neotoma.io/neotoma-vs-files</loc></url>
+  <url><loc>https://neotoma.io/neotoma-vs-database</loc></url>
+  <url><loc>https://neotoma.io/types/contacts</loc></url>
+  <url><loc>https://neotoma.io/types/tasks</loc></url>
+  <url><loc>https://neotoma.io/types/transactions</loc></url>
+  <url><loc>https://neotoma.io/types/contracts</loc></url>
+  <url><loc>https://neotoma.io/types/decisions</loc></url>
+  <url><loc>https://neotoma.io/types/events</loc></url>
+  <url><loc>https://neotoma.io/developer-walkthrough</loc></url>
+  <url><loc>https://neotoma.io/schema-management</loc></url>
+  <url><loc>https://neotoma.io/changelog</loc></url>
+  <url><loc>https://neotoma.io/memory-models</loc></url>
   <url><loc>https://neotoma.io/memory-guarantees</loc></url>
   <url><loc>https://neotoma.io/foundations</loc></url>
   <url><loc>https://neotoma.io/privacy-first</loc></url>
@@ -88,7 +109,28 @@
   <url><loc>https://neotoma.io/es/platform-memory</loc></url>
   <url><loc>https://neotoma.io/es/retrieval-memory</loc></url>
   <url><loc>https://neotoma.io/es/file-based-memory</loc></url>
+  <url><loc>https://neotoma.io/es/database-memory</loc></url>
   <url><loc>https://neotoma.io/es/deterministic-memory</loc></url>
+  <url><loc>https://neotoma.io/es/build-vs-buy</loc></url>
+  <url><loc>https://neotoma.io/es/troubleshooting</loc></url>
+  <url><loc>https://neotoma.io/es/evaluate</loc></url>
+  <url><loc>https://neotoma.io/es/faq</loc></url>
+  <url><loc>https://neotoma.io/es/neotoma-vs-platform-memory</loc></url>
+  <url><loc>https://neotoma.io/es/neotoma-vs-mem0</loc></url>
+  <url><loc>https://neotoma.io/es/neotoma-vs-zep</loc></url>
+  <url><loc>https://neotoma.io/es/neotoma-vs-rag</loc></url>
+  <url><loc>https://neotoma.io/es/neotoma-vs-files</loc></url>
+  <url><loc>https://neotoma.io/es/neotoma-vs-database</loc></url>
+  <url><loc>https://neotoma.io/es/types/contacts</loc></url>
+  <url><loc>https://neotoma.io/es/types/tasks</loc></url>
+  <url><loc>https://neotoma.io/es/types/transactions</loc></url>
+  <url><loc>https://neotoma.io/es/types/contracts</loc></url>
+  <url><loc>https://neotoma.io/es/types/decisions</loc></url>
+  <url><loc>https://neotoma.io/es/types/events</loc></url>
+  <url><loc>https://neotoma.io/es/developer-walkthrough</loc></url>
+  <url><loc>https://neotoma.io/es/schema-management</loc></url>
+  <url><loc>https://neotoma.io/es/changelog</loc></url>
+  <url><loc>https://neotoma.io/es/memory-models</loc></url>
   <url><loc>https://neotoma.io/es/memory-guarantees</loc></url>
   <url><loc>https://neotoma.io/es/foundations</loc></url>
   <url><loc>https://neotoma.io/es/privacy-first</loc></url>
@@ -135,7 +177,28 @@
   <url><loc>https://neotoma.io/ca/platform-memory</loc></url>
   <url><loc>https://neotoma.io/ca/retrieval-memory</loc></url>
   <url><loc>https://neotoma.io/ca/file-based-memory</loc></url>
+  <url><loc>https://neotoma.io/ca/database-memory</loc></url>
   <url><loc>https://neotoma.io/ca/deterministic-memory</loc></url>
+  <url><loc>https://neotoma.io/ca/build-vs-buy</loc></url>
+  <url><loc>https://neotoma.io/ca/troubleshooting</loc></url>
+  <url><loc>https://neotoma.io/ca/evaluate</loc></url>
+  <url><loc>https://neotoma.io/ca/faq</loc></url>
+  <url><loc>https://neotoma.io/ca/neotoma-vs-platform-memory</loc></url>
+  <url><loc>https://neotoma.io/ca/neotoma-vs-mem0</loc></url>
+  <url><loc>https://neotoma.io/ca/neotoma-vs-zep</loc></url>
+  <url><loc>https://neotoma.io/ca/neotoma-vs-rag</loc></url>
+  <url><loc>https://neotoma.io/ca/neotoma-vs-files</loc></url>
+  <url><loc>https://neotoma.io/ca/neotoma-vs-database</loc></url>
+  <url><loc>https://neotoma.io/ca/types/contacts</loc></url>
+  <url><loc>https://neotoma.io/ca/types/tasks</loc></url>
+  <url><loc>https://neotoma.io/ca/types/transactions</loc></url>
+  <url><loc>https://neotoma.io/ca/types/contracts</loc></url>
+  <url><loc>https://neotoma.io/ca/types/decisions</loc></url>
+  <url><loc>https://neotoma.io/ca/types/events</loc></url>
+  <url><loc>https://neotoma.io/ca/developer-walkthrough</loc></url>
+  <url><loc>https://neotoma.io/ca/schema-management</loc></url>
+  <url><loc>https://neotoma.io/ca/changelog</loc></url>
+  <url><loc>https://neotoma.io/ca/memory-models</loc></url>
   <url><loc>https://neotoma.io/ca/memory-guarantees</loc></url>
   <url><loc>https://neotoma.io/ca/foundations</loc></url>
   <url><loc>https://neotoma.io/ca/privacy-first</loc></url>
@@ -182,7 +245,28 @@
   <url><loc>https://neotoma.io/zh/platform-memory</loc></url>
   <url><loc>https://neotoma.io/zh/retrieval-memory</loc></url>
   <url><loc>https://neotoma.io/zh/file-based-memory</loc></url>
+  <url><loc>https://neotoma.io/zh/database-memory</loc></url>
   <url><loc>https://neotoma.io/zh/deterministic-memory</loc></url>
+  <url><loc>https://neotoma.io/zh/build-vs-buy</loc></url>
+  <url><loc>https://neotoma.io/zh/troubleshooting</loc></url>
+  <url><loc>https://neotoma.io/zh/evaluate</loc></url>
+  <url><loc>https://neotoma.io/zh/faq</loc></url>
+  <url><loc>https://neotoma.io/zh/neotoma-vs-platform-memory</loc></url>
+  <url><loc>https://neotoma.io/zh/neotoma-vs-mem0</loc></url>
+  <url><loc>https://neotoma.io/zh/neotoma-vs-zep</loc></url>
+  <url><loc>https://neotoma.io/zh/neotoma-vs-rag</loc></url>
+  <url><loc>https://neotoma.io/zh/neotoma-vs-files</loc></url>
+  <url><loc>https://neotoma.io/zh/neotoma-vs-database</loc></url>
+  <url><loc>https://neotoma.io/zh/types/contacts</loc></url>
+  <url><loc>https://neotoma.io/zh/types/tasks</loc></url>
+  <url><loc>https://neotoma.io/zh/types/transactions</loc></url>
+  <url><loc>https://neotoma.io/zh/types/contracts</loc></url>
+  <url><loc>https://neotoma.io/zh/types/decisions</loc></url>
+  <url><loc>https://neotoma.io/zh/types/events</loc></url>
+  <url><loc>https://neotoma.io/zh/developer-walkthrough</loc></url>
+  <url><loc>https://neotoma.io/zh/schema-management</loc></url>
+  <url><loc>https://neotoma.io/zh/changelog</loc></url>
+  <url><loc>https://neotoma.io/zh/memory-models</loc></url>
   <url><loc>https://neotoma.io/zh/memory-guarantees</loc></url>
   <url><loc>https://neotoma.io/zh/foundations</loc></url>
   <url><loc>https://neotoma.io/zh/privacy-first</loc></url>
@@ -229,7 +313,28 @@
   <url><loc>https://neotoma.io/hi/platform-memory</loc></url>
   <url><loc>https://neotoma.io/hi/retrieval-memory</loc></url>
   <url><loc>https://neotoma.io/hi/file-based-memory</loc></url>
+  <url><loc>https://neotoma.io/hi/database-memory</loc></url>
   <url><loc>https://neotoma.io/hi/deterministic-memory</loc></url>
+  <url><loc>https://neotoma.io/hi/build-vs-buy</loc></url>
+  <url><loc>https://neotoma.io/hi/troubleshooting</loc></url>
+  <url><loc>https://neotoma.io/hi/evaluate</loc></url>
+  <url><loc>https://neotoma.io/hi/faq</loc></url>
+  <url><loc>https://neotoma.io/hi/neotoma-vs-platform-memory</loc></url>
+  <url><loc>https://neotoma.io/hi/neotoma-vs-mem0</loc></url>
+  <url><loc>https://neotoma.io/hi/neotoma-vs-zep</loc></url>
+  <url><loc>https://neotoma.io/hi/neotoma-vs-rag</loc></url>
+  <url><loc>https://neotoma.io/hi/neotoma-vs-files</loc></url>
+  <url><loc>https://neotoma.io/hi/neotoma-vs-database</loc></url>
+  <url><loc>https://neotoma.io/hi/types/contacts</loc></url>
+  <url><loc>https://neotoma.io/hi/types/tasks</loc></url>
+  <url><loc>https://neotoma.io/hi/types/transactions</loc></url>
+  <url><loc>https://neotoma.io/hi/types/contracts</loc></url>
+  <url><loc>https://neotoma.io/hi/types/decisions</loc></url>
+  <url><loc>https://neotoma.io/hi/types/events</loc></url>
+  <url><loc>https://neotoma.io/hi/developer-walkthrough</loc></url>
+  <url><loc>https://neotoma.io/hi/schema-management</loc></url>
+  <url><loc>https://neotoma.io/hi/changelog</loc></url>
+  <url><loc>https://neotoma.io/hi/memory-models</loc></url>
   <url><loc>https://neotoma.io/hi/memory-guarantees</loc></url>
   <url><loc>https://neotoma.io/hi/foundations</loc></url>
   <url><loc>https://neotoma.io/hi/privacy-first</loc></url>
@@ -276,7 +381,28 @@
   <url><loc>https://neotoma.io/ar/platform-memory</loc></url>
   <url><loc>https://neotoma.io/ar/retrieval-memory</loc></url>
   <url><loc>https://neotoma.io/ar/file-based-memory</loc></url>
+  <url><loc>https://neotoma.io/ar/database-memory</loc></url>
   <url><loc>https://neotoma.io/ar/deterministic-memory</loc></url>
+  <url><loc>https://neotoma.io/ar/build-vs-buy</loc></url>
+  <url><loc>https://neotoma.io/ar/troubleshooting</loc></url>
+  <url><loc>https://neotoma.io/ar/evaluate</loc></url>
+  <url><loc>https://neotoma.io/ar/faq</loc></url>
+  <url><loc>https://neotoma.io/ar/neotoma-vs-platform-memory</loc></url>
+  <url><loc>https://neotoma.io/ar/neotoma-vs-mem0</loc></url>
+  <url><loc>https://neotoma.io/ar/neotoma-vs-zep</loc></url>
+  <url><loc>https://neotoma.io/ar/neotoma-vs-rag</loc></url>
+  <url><loc>https://neotoma.io/ar/neotoma-vs-files</loc></url>
+  <url><loc>https://neotoma.io/ar/neotoma-vs-database</loc></url>
+  <url><loc>https://neotoma.io/ar/types/contacts</loc></url>
+  <url><loc>https://neotoma.io/ar/types/tasks</loc></url>
+  <url><loc>https://neotoma.io/ar/types/transactions</loc></url>
+  <url><loc>https://neotoma.io/ar/types/contracts</loc></url>
+  <url><loc>https://neotoma.io/ar/types/decisions</loc></url>
+  <url><loc>https://neotoma.io/ar/types/events</loc></url>
+  <url><loc>https://neotoma.io/ar/developer-walkthrough</loc></url>
+  <url><loc>https://neotoma.io/ar/schema-management</loc></url>
+  <url><loc>https://neotoma.io/ar/changelog</loc></url>
+  <url><loc>https://neotoma.io/ar/memory-models</loc></url>
   <url><loc>https://neotoma.io/ar/memory-guarantees</loc></url>
   <url><loc>https://neotoma.io/ar/foundations</loc></url>
   <url><loc>https://neotoma.io/ar/privacy-first</loc></url>
@@ -323,7 +449,28 @@
   <url><loc>https://neotoma.io/fr/platform-memory</loc></url>
   <url><loc>https://neotoma.io/fr/retrieval-memory</loc></url>
   <url><loc>https://neotoma.io/fr/file-based-memory</loc></url>
+  <url><loc>https://neotoma.io/fr/database-memory</loc></url>
   <url><loc>https://neotoma.io/fr/deterministic-memory</loc></url>
+  <url><loc>https://neotoma.io/fr/build-vs-buy</loc></url>
+  <url><loc>https://neotoma.io/fr/troubleshooting</loc></url>
+  <url><loc>https://neotoma.io/fr/evaluate</loc></url>
+  <url><loc>https://neotoma.io/fr/faq</loc></url>
+  <url><loc>https://neotoma.io/fr/neotoma-vs-platform-memory</loc></url>
+  <url><loc>https://neotoma.io/fr/neotoma-vs-mem0</loc></url>
+  <url><loc>https://neotoma.io/fr/neotoma-vs-zep</loc></url>
+  <url><loc>https://neotoma.io/fr/neotoma-vs-rag</loc></url>
+  <url><loc>https://neotoma.io/fr/neotoma-vs-files</loc></url>
+  <url><loc>https://neotoma.io/fr/neotoma-vs-database</loc></url>
+  <url><loc>https://neotoma.io/fr/types/contacts</loc></url>
+  <url><loc>https://neotoma.io/fr/types/tasks</loc></url>
+  <url><loc>https://neotoma.io/fr/types/transactions</loc></url>
+  <url><loc>https://neotoma.io/fr/types/contracts</loc></url>
+  <url><loc>https://neotoma.io/fr/types/decisions</loc></url>
+  <url><loc>https://neotoma.io/fr/types/events</loc></url>
+  <url><loc>https://neotoma.io/fr/developer-walkthrough</loc></url>
+  <url><loc>https://neotoma.io/fr/schema-management</loc></url>
+  <url><loc>https://neotoma.io/fr/changelog</loc></url>
+  <url><loc>https://neotoma.io/fr/memory-models</loc></url>
   <url><loc>https://neotoma.io/fr/memory-guarantees</loc></url>
   <url><loc>https://neotoma.io/fr/foundations</loc></url>
   <url><loc>https://neotoma.io/fr/privacy-first</loc></url>
@@ -370,7 +517,28 @@
   <url><loc>https://neotoma.io/pt/platform-memory</loc></url>
   <url><loc>https://neotoma.io/pt/retrieval-memory</loc></url>
   <url><loc>https://neotoma.io/pt/file-based-memory</loc></url>
+  <url><loc>https://neotoma.io/pt/database-memory</loc></url>
   <url><loc>https://neotoma.io/pt/deterministic-memory</loc></url>
+  <url><loc>https://neotoma.io/pt/build-vs-buy</loc></url>
+  <url><loc>https://neotoma.io/pt/troubleshooting</loc></url>
+  <url><loc>https://neotoma.io/pt/evaluate</loc></url>
+  <url><loc>https://neotoma.io/pt/faq</loc></url>
+  <url><loc>https://neotoma.io/pt/neotoma-vs-platform-memory</loc></url>
+  <url><loc>https://neotoma.io/pt/neotoma-vs-mem0</loc></url>
+  <url><loc>https://neotoma.io/pt/neotoma-vs-zep</loc></url>
+  <url><loc>https://neotoma.io/pt/neotoma-vs-rag</loc></url>
+  <url><loc>https://neotoma.io/pt/neotoma-vs-files</loc></url>
+  <url><loc>https://neotoma.io/pt/neotoma-vs-database</loc></url>
+  <url><loc>https://neotoma.io/pt/types/contacts</loc></url>
+  <url><loc>https://neotoma.io/pt/types/tasks</loc></url>
+  <url><loc>https://neotoma.io/pt/types/transactions</loc></url>
+  <url><loc>https://neotoma.io/pt/types/contracts</loc></url>
+  <url><loc>https://neotoma.io/pt/types/decisions</loc></url>
+  <url><loc>https://neotoma.io/pt/types/events</loc></url>
+  <url><loc>https://neotoma.io/pt/developer-walkthrough</loc></url>
+  <url><loc>https://neotoma.io/pt/schema-management</loc></url>
+  <url><loc>https://neotoma.io/pt/changelog</loc></url>
+  <url><loc>https://neotoma.io/pt/memory-models</loc></url>
   <url><loc>https://neotoma.io/pt/memory-guarantees</loc></url>
   <url><loc>https://neotoma.io/pt/foundations</loc></url>
   <url><loc>https://neotoma.io/pt/privacy-first</loc></url>
@@ -417,7 +585,28 @@
   <url><loc>https://neotoma.io/ru/platform-memory</loc></url>
   <url><loc>https://neotoma.io/ru/retrieval-memory</loc></url>
   <url><loc>https://neotoma.io/ru/file-based-memory</loc></url>
+  <url><loc>https://neotoma.io/ru/database-memory</loc></url>
   <url><loc>https://neotoma.io/ru/deterministic-memory</loc></url>
+  <url><loc>https://neotoma.io/ru/build-vs-buy</loc></url>
+  <url><loc>https://neotoma.io/ru/troubleshooting</loc></url>
+  <url><loc>https://neotoma.io/ru/evaluate</loc></url>
+  <url><loc>https://neotoma.io/ru/faq</loc></url>
+  <url><loc>https://neotoma.io/ru/neotoma-vs-platform-memory</loc></url>
+  <url><loc>https://neotoma.io/ru/neotoma-vs-mem0</loc></url>
+  <url><loc>https://neotoma.io/ru/neotoma-vs-zep</loc></url>
+  <url><loc>https://neotoma.io/ru/neotoma-vs-rag</loc></url>
+  <url><loc>https://neotoma.io/ru/neotoma-vs-files</loc></url>
+  <url><loc>https://neotoma.io/ru/neotoma-vs-database</loc></url>
+  <url><loc>https://neotoma.io/ru/types/contacts</loc></url>
+  <url><loc>https://neotoma.io/ru/types/tasks</loc></url>
+  <url><loc>https://neotoma.io/ru/types/transactions</loc></url>
+  <url><loc>https://neotoma.io/ru/types/contracts</loc></url>
+  <url><loc>https://neotoma.io/ru/types/decisions</loc></url>
+  <url><loc>https://neotoma.io/ru/types/events</loc></url>
+  <url><loc>https://neotoma.io/ru/developer-walkthrough</loc></url>
+  <url><loc>https://neotoma.io/ru/schema-management</loc></url>
+  <url><loc>https://neotoma.io/ru/changelog</loc></url>
+  <url><loc>https://neotoma.io/ru/memory-models</loc></url>
   <url><loc>https://neotoma.io/ru/memory-guarantees</loc></url>
   <url><loc>https://neotoma.io/ru/foundations</loc></url>
   <url><loc>https://neotoma.io/ru/privacy-first</loc></url>
@@ -464,7 +653,28 @@
   <url><loc>https://neotoma.io/bn/platform-memory</loc></url>
   <url><loc>https://neotoma.io/bn/retrieval-memory</loc></url>
   <url><loc>https://neotoma.io/bn/file-based-memory</loc></url>
+  <url><loc>https://neotoma.io/bn/database-memory</loc></url>
   <url><loc>https://neotoma.io/bn/deterministic-memory</loc></url>
+  <url><loc>https://neotoma.io/bn/build-vs-buy</loc></url>
+  <url><loc>https://neotoma.io/bn/troubleshooting</loc></url>
+  <url><loc>https://neotoma.io/bn/evaluate</loc></url>
+  <url><loc>https://neotoma.io/bn/faq</loc></url>
+  <url><loc>https://neotoma.io/bn/neotoma-vs-platform-memory</loc></url>
+  <url><loc>https://neotoma.io/bn/neotoma-vs-mem0</loc></url>
+  <url><loc>https://neotoma.io/bn/neotoma-vs-zep</loc></url>
+  <url><loc>https://neotoma.io/bn/neotoma-vs-rag</loc></url>
+  <url><loc>https://neotoma.io/bn/neotoma-vs-files</loc></url>
+  <url><loc>https://neotoma.io/bn/neotoma-vs-database</loc></url>
+  <url><loc>https://neotoma.io/bn/types/contacts</loc></url>
+  <url><loc>https://neotoma.io/bn/types/tasks</loc></url>
+  <url><loc>https://neotoma.io/bn/types/transactions</loc></url>
+  <url><loc>https://neotoma.io/bn/types/contracts</loc></url>
+  <url><loc>https://neotoma.io/bn/types/decisions</loc></url>
+  <url><loc>https://neotoma.io/bn/types/events</loc></url>
+  <url><loc>https://neotoma.io/bn/developer-walkthrough</loc></url>
+  <url><loc>https://neotoma.io/bn/schema-management</loc></url>
+  <url><loc>https://neotoma.io/bn/changelog</loc></url>
+  <url><loc>https://neotoma.io/bn/memory-models</loc></url>
   <url><loc>https://neotoma.io/bn/memory-guarantees</loc></url>
   <url><loc>https://neotoma.io/bn/foundations</loc></url>
   <url><loc>https://neotoma.io/bn/privacy-first</loc></url>
@@ -511,7 +721,28 @@
   <url><loc>https://neotoma.io/ur/platform-memory</loc></url>
   <url><loc>https://neotoma.io/ur/retrieval-memory</loc></url>
   <url><loc>https://neotoma.io/ur/file-based-memory</loc></url>
+  <url><loc>https://neotoma.io/ur/database-memory</loc></url>
   <url><loc>https://neotoma.io/ur/deterministic-memory</loc></url>
+  <url><loc>https://neotoma.io/ur/build-vs-buy</loc></url>
+  <url><loc>https://neotoma.io/ur/troubleshooting</loc></url>
+  <url><loc>https://neotoma.io/ur/evaluate</loc></url>
+  <url><loc>https://neotoma.io/ur/faq</loc></url>
+  <url><loc>https://neotoma.io/ur/neotoma-vs-platform-memory</loc></url>
+  <url><loc>https://neotoma.io/ur/neotoma-vs-mem0</loc></url>
+  <url><loc>https://neotoma.io/ur/neotoma-vs-zep</loc></url>
+  <url><loc>https://neotoma.io/ur/neotoma-vs-rag</loc></url>
+  <url><loc>https://neotoma.io/ur/neotoma-vs-files</loc></url>
+  <url><loc>https://neotoma.io/ur/neotoma-vs-database</loc></url>
+  <url><loc>https://neotoma.io/ur/types/contacts</loc></url>
+  <url><loc>https://neotoma.io/ur/types/tasks</loc></url>
+  <url><loc>https://neotoma.io/ur/types/transactions</loc></url>
+  <url><loc>https://neotoma.io/ur/types/contracts</loc></url>
+  <url><loc>https://neotoma.io/ur/types/decisions</loc></url>
+  <url><loc>https://neotoma.io/ur/types/events</loc></url>
+  <url><loc>https://neotoma.io/ur/developer-walkthrough</loc></url>
+  <url><loc>https://neotoma.io/ur/schema-management</loc></url>
+  <url><loc>https://neotoma.io/ur/changelog</loc></url>
+  <url><loc>https://neotoma.io/ur/memory-models</loc></url>
   <url><loc>https://neotoma.io/ur/memory-guarantees</loc></url>
   <url><loc>https://neotoma.io/ur/foundations</loc></url>
   <url><loc>https://neotoma.io/ur/privacy-first</loc></url>
@@ -558,7 +789,28 @@
   <url><loc>https://neotoma.io/id/platform-memory</loc></url>
   <url><loc>https://neotoma.io/id/retrieval-memory</loc></url>
   <url><loc>https://neotoma.io/id/file-based-memory</loc></url>
+  <url><loc>https://neotoma.io/id/database-memory</loc></url>
   <url><loc>https://neotoma.io/id/deterministic-memory</loc></url>
+  <url><loc>https://neotoma.io/id/build-vs-buy</loc></url>
+  <url><loc>https://neotoma.io/id/troubleshooting</loc></url>
+  <url><loc>https://neotoma.io/id/evaluate</loc></url>
+  <url><loc>https://neotoma.io/id/faq</loc></url>
+  <url><loc>https://neotoma.io/id/neotoma-vs-platform-memory</loc></url>
+  <url><loc>https://neotoma.io/id/neotoma-vs-mem0</loc></url>
+  <url><loc>https://neotoma.io/id/neotoma-vs-zep</loc></url>
+  <url><loc>https://neotoma.io/id/neotoma-vs-rag</loc></url>
+  <url><loc>https://neotoma.io/id/neotoma-vs-files</loc></url>
+  <url><loc>https://neotoma.io/id/neotoma-vs-database</loc></url>
+  <url><loc>https://neotoma.io/id/types/contacts</loc></url>
+  <url><loc>https://neotoma.io/id/types/tasks</loc></url>
+  <url><loc>https://neotoma.io/id/types/transactions</loc></url>
+  <url><loc>https://neotoma.io/id/types/contracts</loc></url>
+  <url><loc>https://neotoma.io/id/types/decisions</loc></url>
+  <url><loc>https://neotoma.io/id/types/events</loc></url>
+  <url><loc>https://neotoma.io/id/developer-walkthrough</loc></url>
+  <url><loc>https://neotoma.io/id/schema-management</loc></url>
+  <url><loc>https://neotoma.io/id/changelog</loc></url>
+  <url><loc>https://neotoma.io/id/memory-models</loc></url>
   <url><loc>https://neotoma.io/id/memory-guarantees</loc></url>
   <url><loc>https://neotoma.io/id/foundations</loc></url>
   <url><loc>https://neotoma.io/id/privacy-first</loc></url>
@@ -605,7 +857,28 @@
   <url><loc>https://neotoma.io/de/platform-memory</loc></url>
   <url><loc>https://neotoma.io/de/retrieval-memory</loc></url>
   <url><loc>https://neotoma.io/de/file-based-memory</loc></url>
+  <url><loc>https://neotoma.io/de/database-memory</loc></url>
   <url><loc>https://neotoma.io/de/deterministic-memory</loc></url>
+  <url><loc>https://neotoma.io/de/build-vs-buy</loc></url>
+  <url><loc>https://neotoma.io/de/troubleshooting</loc></url>
+  <url><loc>https://neotoma.io/de/evaluate</loc></url>
+  <url><loc>https://neotoma.io/de/faq</loc></url>
+  <url><loc>https://neotoma.io/de/neotoma-vs-platform-memory</loc></url>
+  <url><loc>https://neotoma.io/de/neotoma-vs-mem0</loc></url>
+  <url><loc>https://neotoma.io/de/neotoma-vs-zep</loc></url>
+  <url><loc>https://neotoma.io/de/neotoma-vs-rag</loc></url>
+  <url><loc>https://neotoma.io/de/neotoma-vs-files</loc></url>
+  <url><loc>https://neotoma.io/de/neotoma-vs-database</loc></url>
+  <url><loc>https://neotoma.io/de/types/contacts</loc></url>
+  <url><loc>https://neotoma.io/de/types/tasks</loc></url>
+  <url><loc>https://neotoma.io/de/types/transactions</loc></url>
+  <url><loc>https://neotoma.io/de/types/contracts</loc></url>
+  <url><loc>https://neotoma.io/de/types/decisions</loc></url>
+  <url><loc>https://neotoma.io/de/types/events</loc></url>
+  <url><loc>https://neotoma.io/de/developer-walkthrough</loc></url>
+  <url><loc>https://neotoma.io/de/schema-management</loc></url>
+  <url><loc>https://neotoma.io/de/changelog</loc></url>
+  <url><loc>https://neotoma.io/de/memory-models</loc></url>
   <url><loc>https://neotoma.io/de/memory-guarantees</loc></url>
   <url><loc>https://neotoma.io/de/foundations</loc></url>
   <url><loc>https://neotoma.io/de/privacy-first</loc></url>

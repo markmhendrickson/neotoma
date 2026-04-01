@@ -2,7 +2,9 @@ import { Link } from "react-router-dom";
 import { SITE_CODE_SNIPPETS } from "../../site/site_data";
 import { CopyableCodeBlock } from "../CopyableCodeBlock";
 import { DetailPage } from "../DetailPage";
+import { GettingStartedEvaluateInstallLinks } from "../GettingStartedEvaluateInstallLinks";
 import { IntegrationSection } from "../IntegrationSection";
+import { TableScrollWrapper } from "../ui/table-scroll-wrapper";
 
 const extLink = "text-foreground underline underline-offset-2 hover:no-underline";
 
@@ -116,53 +118,57 @@ export function NeotomaWithClaudeCodePage() {
         per-project, so it handles what it&apos;s good at; Neotoma handles what it cannot. Both are
         active simultaneously with no conflict.
         </p>
-        <table className="w-full text-[14px] leading-6 mb-2 border-collapse">
-        <thead>
-          <tr className="border-b border-border">
-            <th className="text-left py-2 pr-4 font-medium text-foreground">Concern</th>
-            <th className="text-left py-2 pr-4 font-medium text-foreground">Claude Code</th>
-            <th className="text-left py-2 font-medium text-foreground">Neotoma</th>
-          </tr>
-        </thead>
-        <tbody className="text-muted-foreground">
-          <tr className="border-b border-border">
-            <td className="py-2 pr-4">Coding preferences &amp; corrections</td>
-            <td className="py-2 pr-4">Auto memory</td>
-            <td className="py-2">&mdash;</td>
-          </tr>
-          <tr className="border-b border-border">
-            <td className="py-2 pr-4">Project instructions</td>
-            <td className="py-2 pr-4">CLAUDE.md</td>
-            <td className="py-2">&mdash;</td>
-          </tr>
-          <tr className="border-b border-border">
-            <td className="py-2 pr-4">Build commands &amp; debugging notes</td>
-            <td className="py-2 pr-4">Auto memory (MEMORY.md)</td>
-            <td className="py-2">&mdash;</td>
-          </tr>
-          <tr className="border-b border-border">
-            <td className="py-2 pr-4">Structured entities (people, tasks, decisions)</td>
-            <td className="py-2 pr-4">&mdash;</td>
-            <td className="py-2">Store via MCP</td>
-          </tr>
-          <tr className="border-b border-border">
-            <td className="py-2 pr-4">Cross-tool state</td>
-            <td className="py-2 pr-4">&mdash;</td>
-            <td className="py-2">Shared memory graph</td>
-          </tr>
-          <tr>
-            <td className="py-2 pr-4">Audit trail &amp; provenance</td>
-            <td className="py-2 pr-4">&mdash;</td>
-            <td className="py-2">Observation history</td>
-          </tr>
-        </tbody>
-        </table>
+        <TableScrollWrapper className="mb-4 w-full max-w-full">
+          <table className="w-full text-[14px] leading-6 border-collapse">
+            <thead>
+              <tr className="border-b border-border">
+                <th className="text-left align-top px-4 py-3 font-medium text-foreground">Concern</th>
+                <th className="text-left align-top px-4 py-3 font-medium text-foreground">Claude Code</th>
+                <th className="text-left align-top px-4 py-3 font-medium text-foreground">Neotoma</th>
+              </tr>
+            </thead>
+            <tbody className="text-muted-foreground">
+              <tr className="border-b border-border">
+                <td className="align-top px-4 py-3">Coding preferences &amp; corrections</td>
+                <td className="align-top px-4 py-3">Auto memory</td>
+                <td className="align-top px-4 py-3">-</td>
+              </tr>
+              <tr className="border-b border-border">
+                <td className="align-top px-4 py-3">Project instructions</td>
+                <td className="align-top px-4 py-3">CLAUDE.md</td>
+                <td className="align-top px-4 py-3">-</td>
+              </tr>
+              <tr className="border-b border-border">
+                <td className="align-top px-4 py-3">Build commands &amp; debugging notes</td>
+                <td className="align-top px-4 py-3">Auto memory (MEMORY.md)</td>
+                <td className="align-top px-4 py-3">-</td>
+              </tr>
+              <tr className="border-b border-border">
+                <td className="align-top px-4 py-3">Structured entities (people, tasks, decisions)</td>
+                <td className="align-top px-4 py-3">-</td>
+                <td className="align-top px-4 py-3">Store via MCP</td>
+              </tr>
+              <tr className="border-b border-border">
+                <td className="align-top px-4 py-3">Cross-tool state</td>
+                <td className="align-top px-4 py-3">-</td>
+                <td className="align-top px-4 py-3">Shared memory graph</td>
+              </tr>
+              <tr>
+                <td className="align-top px-4 py-3">Audit trail &amp; provenance</td>
+                <td className="align-top px-4 py-3">-</td>
+                <td className="align-top px-4 py-3">Observation history</td>
+              </tr>
+            </tbody>
+          </table>
+        </TableScrollWrapper>
       </IntegrationSection>
 
       <IntegrationSection sectionKey="getting-started" title="Getting started">
+        <GettingStartedEvaluateInstallLinks agentTargetPhrase="Claude Code" />
         <p className="text-[15px] leading-7 text-muted-foreground mb-4">
-        Paste this prompt into Claude Code. The agent handles npm install, initialization, and MCP
-        configuration.
+        If you are ready to proceed, paste this prompt into Claude Code. The
+        agent handles evaluation, installation if needed, activation, and local
+        MCP configuration.
         </p>
         <CopyableCodeBlock code={SITE_CODE_SNIPPETS.agentInstallPrompt} className="mb-4" />
         <p className="text-[14px] leading-6 text-muted-foreground mb-2">
@@ -172,6 +178,10 @@ export function NeotomaWithClaudeCodePage() {
         <p className="text-[14px] leading-6 text-muted-foreground mb-2">
         When MCP is not available, agents can use the <code>neotoma</code> CLI directly from the
         terminal as a fallback.
+        </p>
+        <p className="text-[14px] leading-6 text-muted-foreground mb-2">
+        After activation, offer additional remote access points only if the user
+        wants Neotoma available outside Claude Code as well.
         </p>
       </IntegrationSection>
 
@@ -212,7 +222,11 @@ export function NeotomaWithClaudeCodePage() {
       </IntegrationSection>
 
       <p className="text-[14px] leading-6 text-muted-foreground">
-        See{" "}
+        Start with{" "}
+        <Link to="/evaluate" className={extLink}>
+          evaluation
+        </Link>
+        , see the{" "}
         <Link to="/install" className={extLink}>
           install guide
         </Link>{" "}

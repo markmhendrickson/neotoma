@@ -1,6 +1,6 @@
 {
   "name": "neotoma",
-  "version": "0.3.11",
+  "version": "0.3.12",
   "description": "MCP server for structured personal data memory with unified source ingestion",
   "main": "dist/index.js",
   "type": "module",
@@ -42,6 +42,7 @@
     "test:unit": "cross-env VITEST_SKIP_MIGRATIONS=1 vitest run",
     "test:frontend": "cross-env RUN_FRONTEND_TESTS=1 vitest run frontend/src",
     "test:integration": "vitest run tests/integration",
+    "test:remote:critical": "cross-env RUN_REMOTE_TESTS=1 vitest run tests/integration/mcp_actions_matrix.test.ts tests/integration/mcp_resources.test.ts tests/integration/mcp_store_unstructured.test.ts tests/integration/mcp_store_parquet.test.ts tests/integration/mcp_schema_actions.test.ts tests/integration/schema_recommendation_integration.test.ts tests/integration/observation_ingestion.test.ts tests/integration/relationship_snapshots.test.ts tests/services/auto_enhancement_converter_detection.test.ts tests/services/auto_enhancement_processor.test.ts",
     "test:contract": "vitest run tests/contract",
     "test:cross-layer": "vitest run tests/integration/cli_to_mcp_store.test.ts tests/integration/cli_to_mcp_entities.test.ts tests/integration/cli_to_mcp_relationships.test.ts tests/integration/cli_to_mcp_schemas.test.ts",
     "test:parity": "vitest run tests/contract/contract_mcp_cli_parity.test.ts",
@@ -120,7 +121,14 @@
     "simulate:install": "node scripts/simulate_npm_install.js",
     "check:bundlephobia": "node scripts/check_bundlephobia.js",
     "validate:locales": "tsx --tsconfig frontend/tsconfig.json scripts/validate_locale_parity.ts",
-    "release-notes:render": "tsx scripts/render_github_release_notes.ts"
+    "validate:routes": "tsx scripts/validate_site_route_parity.ts",
+    "validate:site-export": "tsx scripts/validate_site_export.ts",
+    "release-notes:render": "tsx scripts/render_github_release_notes.ts",
+    "illustrations:generate": "tsx scripts/generate_illustrations.ts",
+    "illustrations:guarantees": "tsx scripts/generate_guarantee_pngs.ts",
+    "illustrations:guarantees:sym": "tsx scripts/generate_guarantee_sym_hero_pngs.ts",
+    "illustrations:guarantees:sym:square": "tsx scripts/generate_guarantee_sym_square_pngs.ts",
+    "illustrations:who-icp:square": "tsx scripts/generate_who_icp_square_pngs.ts"
   },
   "keywords": [
     "mcp",
@@ -190,7 +198,6 @@
     "react-dom": "^18.2.0",
     "react-helmet-async": "^2.0.5",
     "react-icons": "^5.5.0",
-    "react-markdown": "^10.1.0",
     "react-router-dom": "^7.12.0",
     "react-syntax-highlighter": "^16.1.0",
     "semver": "^7.7.4",
@@ -198,6 +205,8 @@
     "sqlite-vec": "^0.1.6",
     "tailwind-merge": "^2.2.0",
     "tailwindcss-animate": "^1.0.7",
+    "turndown": "^7.2.2",
+    "turndown-plugin-gfm": "^1.0.2",
     "typewriter-effect": "^2.22.0",
     "ws": "^8.18.0",
     "zod": "^3.22.4"
@@ -210,6 +219,7 @@
     "qs": "^6.15.0"
   },
   "devDependencies": {
+    "@fal-ai/client": "^1.9.5",
     "@playwright/test": "^1.56.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.0",
@@ -240,6 +250,7 @@
     "pdfkit": "^0.17.2",
     "postcss": "^8.4.32",
     "prettier": "^3.7.4",
+    "sharp": "^0.33.5",
     "tailwindcss": "^3.4.0",
     "tsx": "^4.7.1",
     "typescript": "^5.3.3",

@@ -1,17 +1,55 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 320" role="img" aria-label="Engraved documentation illustration">
-  <rect width="480" height="320" fill="#000"/>
-  <g fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M68 82h168a10 10 0 0 1 10 10v146a10 10 0 0 1-10 10H68a10 10 0 0 1-10-10V92a10 10 0 0 1 10-10z" stroke-width="2.6"/>
-    <path d="M92 106h124M92 122h128M92 138h116M92 154h128M92 170h110M92 186h124M92 202h106M92 218h118" stroke-width="1.35" opacity=".95"/>
-    <path d="M270 70h154a10 10 0 0 1 10 10v162a10 10 0 0 1-10 10H270a10 10 0 0 1-10-10V80a10 10 0 0 1 10-10z" stroke-width="2.6"/>
-    <path d="M294 96h106M294 112h114M294 128h104M294 144h116M294 160h92M294 176h110M294 192h98M294 208h104" stroke-width="1.35" opacity=".95"/>
-    <path d="M246 120l20-20M246 148l20-20M246 176l20-20M246 204l20-20" stroke-width="1.1" opacity=".7"/>
-    <circle cx="350" cy="252" r="46" stroke-width="2.4"/>
-    <circle cx="350" cy="252" r="30" stroke-width="1.6" opacity=".9"/>
-    <circle cx="350" cy="252" r="13" stroke-width="1.8"/>
-    <path d="M350 206v18M350 280v18M304 252h18M378 252h18M319 221l13 13M381 283l13 13M381 221l-13 13M319 283l-13 13" stroke-width="1.4"/>
-    <path d="M74 248l158-158M84 248l158-158M96 248l148-148M108 248l136-136M120 248l124-124M132 248l112-112M144 248l100-100M156 248l88-88" stroke-width=".62" opacity=".35"/>
-    <path d="M274 252l148-148M286 252l138-138M298 252l126-126M310 252l114-114M322 252l102-102M334 252l90-90M346 252l78-78M358 252l66-66" stroke-width=".62" opacity=".35"/>
-    <path d="M48 264h388" stroke-width=".9" opacity=".55"/>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 320" role="img" aria-label="Documentation: open reference manual with structured sections">
+  <defs>
+    <radialGradient id="bg_doc" cx="50%" cy="50%" r="65%">
+      <stop offset="0%" stop-color="#c8860a"/>
+      <stop offset="55%" stop-color="#7a4f08"/>
+      <stop offset="100%" stop-color="#2e1800"/>
+    </radialGradient>
+    <radialGradient id="glow_doc" cx="50%" cy="50%" r="42%">
+      <stop offset="0%" stop-color="#ffe8a0" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#c8860a" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="480" height="320" fill="url(#bg_doc)"/>
+  <rect width="480" height="320" fill="url(#glow_doc)"/>
+
+  <!-- Open book: spine in center -->
+  <rect x="228" y="52" width="24" height="220" rx="6" fill="#c8a45a" stroke="#4a3510" stroke-width="2.2"/>
+
+  <!-- Left page -->
+  <rect x="72" y="52" width="160" height="220" rx="8" fill="#f4e8c1" stroke="#4a3510" stroke-width="2.8"/>
+  <!-- Left page heading bar -->
+  <rect x="86" y="70" width="80" height="12" rx="3" fill="#e0cc99" stroke="#6b4e1f" stroke-width="1.5"/>
+  <!-- Left page ruled lines -->
+  <line x1="86" y1="96" x2="220" y2="96" stroke="#6b4e1f" stroke-width="1.6"/>
+  <line x1="86" y1="112" x2="220" y2="112" stroke="#6b4e1f" stroke-width="1.6"/>
+  <line x1="86" y1="128" x2="212" y2="128" stroke="#6b4e1f" stroke-width="1.6"/>
+  <line x1="86" y1="144" x2="220" y2="144" stroke="#6b4e1f" stroke-width="1.6"/>
+  <!-- Section break -->
+  <rect x="86" y="160" width="60" height="10" rx="3" fill="#e0cc99" stroke="#6b4e1f" stroke-width="1.2"/>
+  <line x1="86" y1="182" x2="220" y2="182" stroke="#6b4e1f" stroke-width="1.6"/>
+  <line x1="86" y1="198" x2="220" y2="198" stroke="#6b4e1f" stroke-width="1.6"/>
+  <line x1="86" y1="214" x2="208" y2="214" stroke="#6b4e1f" stroke-width="1.6"/>
+  <line x1="86" y1="230" x2="220" y2="230" stroke="#6b4e1f" stroke-width="1.6"/>
+  <line x1="86" y1="246" x2="200" y2="246" stroke="#6b4e1f" stroke-width="1.6"/>
+
+  <!-- Right page -->
+  <rect x="248" y="52" width="160" height="220" rx="8" fill="#f4e8c1" stroke="#4a3510" stroke-width="2.8"/>
+  <!-- Right page heading bar -->
+  <rect x="262" y="70" width="72" height="12" rx="3" fill="#e0cc99" stroke="#6b4e1f" stroke-width="1.5"/>
+  <!-- Right page ruled lines -->
+  <line x1="262" y1="96" x2="394" y2="96" stroke="#6b4e1f" stroke-width="1.6"/>
+  <line x1="262" y1="112" x2="394" y2="112" stroke="#6b4e1f" stroke-width="1.6"/>
+  <line x1="262" y1="128" x2="386" y2="128" stroke="#6b4e1f" stroke-width="1.6"/>
+  <line x1="262" y1="144" x2="394" y2="144" stroke="#6b4e1f" stroke-width="1.6"/>
+  <!-- Section break -->
+  <rect x="262" y="160" width="52" height="10" rx="3" fill="#e0cc99" stroke="#6b4e1f" stroke-width="1.2"/>
+  <line x1="262" y1="182" x2="394" y2="182" stroke="#6b4e1f" stroke-width="1.6"/>
+  <line x1="262" y1="198" x2="394" y2="198" stroke="#6b4e1f" stroke-width="1.6"/>
+  <line x1="262" y1="214" x2="380" y2="214" stroke="#6b4e1f" stroke-width="1.6"/>
+  <line x1="262" y1="230" x2="394" y2="230" stroke="#6b4e1f" stroke-width="1.6"/>
+  <line x1="262" y1="246" x2="372" y2="246" stroke="#6b4e1f" stroke-width="1.6"/>
+
+  <!-- Book bottom shadow curve -->
+  <path d="M78 272 Q240 288 402 272" fill="none" stroke="#4a3510" stroke-width="2.2" stroke-linecap="round" opacity="0.45"/>
 </svg>

@@ -6165,9 +6165,22 @@ const siteCommand = program.command("site").description("Site and frontend confi
 siteCommand
   .command("configure")
   .description(
-    "Configure site env vars: Google Analytics (VITE_GA_MEASUREMENT_ID) and optional Google API credentials"
+    "Configure site env vars: GA4, Umami (prod + optional dev keys), and optional Google API credentials"
   )
   .option("--ga-measurement-id <id>", "GA4 measurement ID (e.g. G-XXXXXXXXXX)")
+  .option(
+    "--umami-url <url>",
+    "Umami origin for production builds (no trailing slash); required in .env when using Umami on the live site"
+  )
+  .option("--umami-website-id <uuid>", "Umami website ID for production / vite build")
+  .option(
+    "--umami-url-dev <url>",
+    "Optional Umami origin override for vite dev (written to .env.development.local)"
+  )
+  .option(
+    "--umami-website-id-dev <uuid>",
+    "Umami website ID for vite dev only (written to .env.development.local)"
+  )
   .option(
     "--google-application-credentials <path>",
     "Path to Google application credentials JSON (server-side APIs)"
@@ -6179,6 +6192,10 @@ siteCommand
   .action(
     async (opts: {
       gaMeasurementId?: string;
+      umamiUrl?: string;
+      umamiWebsiteId?: string;
+      umamiUrlDev?: string;
+      umamiWebsiteIdDev?: string;
       googleApplicationCredentials?: string;
       googleOauthCredentials?: string;
     }) => {
@@ -6199,6 +6216,7 @@ siteCommand
         return;
       }
       const envPath = path.join(repoRoot, ".env");
+      const envDevLocalPath = path.join(repoRoot, ".env.development.local");
       const envExamplePath = path.join(repoRoot, ".env.example");
       if (!(await pathExists(envPath))) {
         if (await pathExists(envExamplePath)) {
@@ -6215,6 +6233,14 @@ siteCommand
       }
 
       let gaId = opts.gaMeasurementId?.trim();
+      let umamiUrl =
+        opts.umamiUrl !== undefined ? opts.umamiUrl.trim() : undefined;
+      let umamiWebsiteId =
+        opts.umamiWebsiteId !== undefined ? opts.umamiWebsiteId.trim() : undefined;
+      let umamiUrlDev =
+        opts.umamiUrlDev !== undefined ? opts.umamiUrlDev.trim() : undefined;
+      let umamiWebsiteIdDev =
+        opts.umamiWebsiteIdDev !== undefined ? opts.umamiWebsiteIdDev.trim() : undefined;
       let googleAppCreds = opts.googleApplicationCredentials?.trim();
       let googleOauthCreds = opts.googleOauthCredentials?.trim();
       if (process.stdout.isTTY && outputMode === "pretty") {
@@ -6223,6 +6249,30 @@ siteCommand
             "VITE_GA_MEASUREMENT_ID (GA4 measurement ID, e.g. G-XXXXXXXXXX) [optional, Enter to skip]: "
           );
           gaId = raw.trim();
+        }
+        if (umamiUrl === undefined || umamiUrl === "") {
+          const raw = await askQuestion(
+            "VITE_UMAMI_URL (Umami origin, no trailing slash) [optional, Enter to skip]: "
+          );
+          umamiUrl = raw.trim();
+        }
+        if (umamiWebsiteId === undefined || umamiWebsiteId === "") {
+          const raw = await askQuestion(
+            "VITE_UMAMI_WEBSITE_ID (production / vite build UUID) [optional, Enter to skip]: "
+          );
+          umamiWebsiteId = raw.trim();
+        }
+        if (umamiWebsiteIdDev === undefined || umamiWebsiteIdDev === "") {
+          const raw = await askQuestion(
+            "VITE_UMAMI_WEBSITE_ID_DEV (vite dev UUID) [optional, Enter to skip]: "
+          );
+          umamiWebsiteIdDev = raw.trim();
+        }
+        if (umamiUrlDev === undefined || umamiUrlDev === "") {
+          const raw = await askQuestion(
+            "VITE_UMAMI_URL_DEV (optional dev-only origin) [optional, Enter to skip]: "
+          );
+          umamiUrlDev = raw.trim();
         }
         if (googleAppCreds === undefined || googleAppCreds === "") {
           const raw = await askPathQuestion(
@@ -6246,6 +6296,46 @@ siteCommand
       } else if (gaId !== undefined && gaId !== "") {
         await updateOrInsertEnvVar(envPath, "VITE_GA_MEASUREMENT_ID", gaId);
         updated.push("VITE_GA_MEASUREMENT_ID");
+      }
+      if (opts.umamiUrl !== undefined) {
+        await updateOrInsertEnvVar(envPath, "VITE_UMAMI_URL", opts.umamiUrl.trim());
+        updated.push("VITE_UMAMI_URL");
+      } else if (umamiUrl !== undefined && umamiUrl !== "") {
+        await updateOrInsertEnvVar(envPath, "VITE_UMAMI_URL", umamiUrl);
+        updated.push("VITE_UMAMI_URL");
+      }
+      if (opts.umamiWebsiteId !== undefined) {
+        await updateOrInsertEnvVar(
+          envPath,
+          "VITE_UMAMI_WEBSITE_ID",
+          opts.umamiWebsiteId.trim()
+        );
+        updated.push("VITE_UMAMI_WEBSITE_ID");
+      } else if (umamiWebsiteId !== undefined && umamiWebsiteId !== "") {
+        await updateOrInsertEnvVar(envPath, "VITE_UMAMI_WEBSITE_ID", umamiWebsiteId);
+        updated.push("VITE_UMAMI_WEBSITE_ID");
+      }
+      if (opts.umamiUrlDev !== undefined) {
+        await updateOrInsertEnvVar(envDevLocalPath, "VITE_UMAMI_URL_DEV", opts.umamiUrlDev.trim());
+        updated.push("VITE_UMAMI_URL_DEV (.env.development.local)");
+      } else if (umamiUrlDev !== undefined && umamiUrlDev !== "") {
+        await updateOrInsertEnvVar(envDevLocalPath, "VITE_UMAMI_URL_DEV", umamiUrlDev);
+        updated.push("VITE_UMAMI_URL_DEV (.env.development.local)");
+      }
+      if (opts.umamiWebsiteIdDev !== undefined) {
+        await updateOrInsertEnvVar(
+          envDevLocalPath,
+          "VITE_UMAMI_WEBSITE_ID_DEV",
+          opts.umamiWebsiteIdDev.trim()
+        );
+        updated.push("VITE_UMAMI_WEBSITE_ID_DEV (.env.development.local)");
+      } else if (umamiWebsiteIdDev !== undefined && umamiWebsiteIdDev !== "") {
+        await updateOrInsertEnvVar(
+          envDevLocalPath,
+          "VITE_UMAMI_WEBSITE_ID_DEV",
+          umamiWebsiteIdDev
+        );
+        updated.push("VITE_UMAMI_WEBSITE_ID_DEV (.env.development.local)");
       }
       if (opts.googleApplicationCredentials !== undefined) {
         await updateOrInsertEnvVar(
@@ -6284,6 +6374,13 @@ siteCommand
         );
         process.stdout.write(
           dim("  ") + pathStyle("neotoma site configure --ga-measurement-id G-XXXXXXXXXX") + "\n"
+        );
+        process.stdout.write(
+          dim("  ") +
+            pathStyle(
+              "neotoma site configure --umami-url <origin> --umami-website-id <prod-uuid> [--umami-website-id-dev <dev-uuid>]"
+            ) +
+            "\n"
         );
         process.stdout.write(
           dim("  ") +
@@ -7740,6 +7837,8 @@ storageCommand
   .action(async () => {
     const outputMode = resolveOutputMode();
     const config = await readConfig();
+    const { repoRoot } = await resolveRepoRootFromInitContext();
+    await hydrateDataDirFromConfiguredEnv(repoRoot);
     const baseUrl = (await resolveBaseUrl(program.opts().baseUrl, config)).replace(/\/$/, "");
 
     const storageBackend = "local";
@@ -10048,10 +10147,11 @@ schemasCommand
 
 schemasCommand
   .command("update")
-  .description("Incrementally update schema by adding new fields")
+  .description("Incrementally update schema by adding or removing fields")
   .argument("[entityType]", "Entity type (or use --entity-type)")
   .option("--entity-type <type>", "Entity type to update (alternative to positional argument)")
-  .option("--fields <json>", "JSON object or array of fields to add (required)")
+  .option("--fields <json>", "JSON object or array of fields to add")
+  .option("--remove-fields <json>", "JSON array of field names to remove (triggers major version bump; data preserved in observations)")
   .option("--user-id <userId>", "User ID")
   .option("--activate", "Activate schema immediately", true)
   .option("--migrate-existing", "Migrate existing raw_fragments to observations", false)
@@ -10063,6 +10163,7 @@ schemasCommand
       opts: {
         entityType?: string;
         fields?: string;
+        removeFields?: string;
         userId?: string;
         activate?: boolean;
         migrateExisting?: boolean;
@@ -10080,31 +10181,43 @@ schemasCommand
         baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
         token,
       });
-      if (!opts.fields) {
-        throw new Error("--fields is required (JSON object or array of field definitions)");
+      if (!opts.fields && !opts.removeFields) {
+        throw new Error("at least one of --fields or --remove-fields is required");
       }
-      let fieldsToAdd: any[];
-      const parsedFields = JSON.parse(opts.fields);
-      if (Array.isArray(parsedFields)) {
-        fieldsToAdd = parsedFields;
-      } else {
-        fieldsToAdd = Object.entries(parsedFields).map(([field_name, def]: [string, any]) => ({
-          field_name,
-          field_type: def.type ?? "string",
-          required: def.required ?? false,
-          reducer_strategy: def.reducer,
-        }));
+      let fieldsToAdd: any[] | undefined;
+      if (opts.fields) {
+        const parsedFields = JSON.parse(opts.fields);
+        if (Array.isArray(parsedFields)) {
+          fieldsToAdd = parsedFields;
+        } else {
+          fieldsToAdd = Object.entries(parsedFields).map(([field_name, def]: [string, any]) => ({
+            field_name,
+            field_type: def.type ?? "string",
+            required: def.required ?? false,
+            reducer_strategy: def.reducer,
+          }));
+        }
       }
+      let fieldsToRemove: string[] | undefined;
+      if (opts.removeFields) {
+        const parsed = JSON.parse(opts.removeFields);
+        if (!Array.isArray(parsed)) {
+          throw new Error("--remove-fields must be a JSON array of field name strings");
+        }
+        fieldsToRemove = parsed;
+      }
+      const body: Record<string, unknown> = {
+        entity_type: entityType,
+        user_id: opts.userId,
+        activate: opts.activate,
+        migrate_existing: opts.migrateExisting,
+        schema_version: opts.schemaVersion,
+        user_specific: opts.userSpecific,
+      };
+      if (fieldsToAdd) body.fields_to_add = fieldsToAdd;
+      if (fieldsToRemove) body.fields_to_remove = fieldsToRemove;
       const { data, error } = await api.POST("/update_schema_incremental", {
-        body: {
-          entity_type: entityType,
-          fields_to_add: fieldsToAdd,
-          user_id: opts.userId,
-          activate: opts.activate,
-          migrate_existing: opts.migrateExisting,
-          schema_version: opts.schemaVersion,
-          user_specific: opts.userSpecific,
-        },
+        body: body as any,
       });
       if (error) throw new Error("Failed to update schema");
       const updateResult = data as Record<string, unknown> | null;
@@ -10220,6 +10333,174 @@ schemasCommand
   );
 
 program
+  .command("preferences")
+  .description("View or update data type preferences for onboarding discovery")
+  .option("--set <types>", "Comma-separated data types to prioritize (e.g. project_files,chat_transcripts,meeting_notes,notes,code,email,financial,custom)")
+  .option("--show", "Show current preferences", false)
+  .option("--reset", "Reset preferences to default", false)
+  .action(async (cmd: Command) => {
+    const opts = cmd.opts() as { set?: string; show?: boolean; reset?: boolean };
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({
+      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      token,
+    });
+
+    const PREFERENCE_CATEGORIES = [
+      { key: "project_files", label: "Project files (contracts, proposals, briefs, specs)" },
+      { key: "chat_transcripts", label: "Chat transcripts (AI conversations, Slack, Discord exports)" },
+      { key: "meeting_notes", label: "Meeting notes and transcripts" },
+      { key: "notes", label: "Notes and journals (Obsidian, markdown, dated files)" },
+      { key: "code", label: "Code and development context (git history, READMEs, configs)" },
+      { key: "email", label: "Email exports" },
+      { key: "financial", label: "Financial documents (invoices, receipts, statements)" },
+      { key: "custom", label: "Custom paths (user-specified folders)" },
+    ];
+
+    if (opts.reset) {
+      const allKeys = PREFERENCE_CATEGORIES.map((c) => c.key);
+      try {
+        const { error } = await api.POST("/store", {
+          body: {
+            entities: [
+              {
+                entity_type: "user_preference",
+                preference_key: "onboarding_data_types",
+                selected_types: allKeys,
+                onboarding_mode: "quick",
+              },
+            ],
+            idempotency_key: `preferences-reset-${Date.now()}`,
+            interpret: false,
+          },
+        });
+        if (error) throw new Error(JSON.stringify(error));
+        console.log("Preferences reset to defaults (all types enabled, quick mode).");
+      } catch (err: any) {
+        console.error("Failed to store preferences:", err.message ?? err);
+      }
+      return;
+    }
+
+    if (opts.set) {
+      const selectedTypes = opts.set.split(",").map((s) => s.trim());
+      const validTypes = selectedTypes.filter((t) =>
+        PREFERENCE_CATEGORIES.some((c) => c.key === t),
+      );
+
+      if (validTypes.length === 0) {
+        console.error(
+          "No valid types provided. Available types:\n" +
+            PREFERENCE_CATEGORIES.map((c) => `  ${c.key} — ${c.label}`).join("\n"),
+        );
+        return;
+      }
+
+      try {
+        const { error } = await api.POST("/store", {
+          body: {
+            entities: [
+              {
+                entity_type: "user_preference",
+                preference_key: "onboarding_data_types",
+                selected_types: validTypes,
+              },
+            ],
+            idempotency_key: `preferences-set-${Date.now()}`,
+            interpret: false,
+          },
+        });
+        if (error) throw new Error(JSON.stringify(error));
+        console.log(`Preferences updated: ${validTypes.join(", ")}`);
+      } catch (err: any) {
+        console.error("Failed to store preferences:", err.message ?? err);
+      }
+      return;
+    }
+
+    // Default: show categories
+    console.log("Data type preference categories:\n");
+    for (const cat of PREFERENCE_CATEGORIES) {
+      console.log(`  ${cat.key.padEnd(20)} ${cat.label}`);
+    }
+    console.log(
+      "\nSet preferences with: neotoma preferences --set project_files,chat_transcripts,meeting_notes",
+    );
+  });
+
+program
+  .command("discover [paths...]")
+  .description("Discover high-value local files for onboarding ingestion")
+  .option("--depth <n>", "Shallow scan depth", "2")
+  .option("--top <n>", "Number of top candidates to show", "20")
+  .option("--mode <mode>", "Discovery mode: quick, guided, full", "quick")
+  .option("--output <format>", "Output format: text, json", "text")
+  .action(async (paths: string[], cmd: Command) => {
+    const opts = cmd.opts() as {
+      depth?: string;
+      top?: string;
+      mode?: string;
+      output?: string;
+    };
+    const { discover, formatDiscoveryOutput, formatDiscoveryJson } = await import(
+      "./discovery.js"
+    );
+    const scanPaths =
+      paths.length > 0
+        ? paths
+        : [process.env.HOME ?? process.env.USERPROFILE ?? process.cwd()];
+    const result = await discover({
+      paths: scanPaths,
+      depth: parseInt(opts.depth ?? "2", 10),
+      top: parseInt(opts.top ?? "20", 10),
+      mode: (opts.mode ?? "quick") as "quick" | "guided" | "full",
+    });
+    if (opts.output === "json") {
+      console.log(formatDiscoveryJson(result));
+    } else {
+      console.log(formatDiscoveryOutput(result));
+    }
+  });
+
+program
+  .command("ingest-transcript <path>")
+  .description("Parse and preview a chat transcript for ingestion")
+  .option(
+    "--source <type>",
+    "Source platform: chatgpt, claude, slack, discord, meeting, other",
+  )
+  .option("--preview", "Preview extracted data without storing", false)
+  .option("--limit <n>", "Process only the N most recent conversations")
+  .option("--filter <term>", "Only process conversations containing this term")
+  .action(async (filePath: string, cmd: Command) => {
+    const opts = cmd.opts() as {
+      source?: string;
+      preview?: boolean;
+      limit?: string;
+      filter?: string;
+    };
+    const { parseTranscript, formatTranscriptPreview } = await import(
+      "./transcript_parser.js"
+    );
+    const result = await parseTranscript({
+      filePath,
+      source: opts.source as any,
+      preview: opts.preview,
+      limit: opts.limit ? parseInt(opts.limit, 10) : undefined,
+      filter: opts.filter,
+    });
+    console.log(formatTranscriptPreview(result));
+    if (!opts.preview) {
+      console.log(
+        "\nTo store these conversations, use:\n" +
+          `  neotoma store --file-path "${filePath}"\n` +
+          "\nOr use the MCP store action with the parsed entities.",
+      );
+    }
+  });
+
+program
   .command("store")
   .description("Store structured entities, unstructured files, or both in one request")
   .option("--entities <json>", "Inline JSON array of entities (legacy structured store)")
@@ -10227,7 +10508,6 @@ program
   .option("--file-path <path>", "Path to any file to store (unstructured pipeline)")
   .option("--file-content <content>", "Inline file content to store")
   .option("--user-id <id>", "User ID for the operation")
-  .option("--interpret <bool>", "Run AI interpretation after store (default: false)", "false")
   .option("--source-priority <level>", "Source priority level (default: 100)")
   .option("--idempotency-key <key>", "Idempotency key to prevent duplicate stores")
   .option(
@@ -10283,13 +10563,11 @@ program
         ".pdf": "application/pdf",
       };
       const mimeType = mimeMap[ext] ?? "application/octet-stream";
-      const shouldInterpret = opts.interpret === "true" || opts.interpret === true;
       const contentBase64 = fileBuffer.toString("base64");
       unstructuredBody = {
         file_content: contentBase64,
         mime_type: mimeType,
         original_filename: originalFilename,
-        interpret: shouldInterpret,
       };
       if (opts.fileIdempotencyKey) {
         unstructuredBody.file_idempotency_key = opts.fileIdempotencyKey;
@@ -10313,13 +10591,18 @@ program
           structuredBody.source_priority = parsedPriority;
         }
       }
+      if (opts.file && !hasUnstructured) {
+        const resolvedFile = path.isAbsolute(opts.file)
+          ? opts.file
+          : path.resolve(process.cwd(), opts.file);
+        structuredBody.original_filename = path.basename(resolvedFile);
+      }
     }
 
     const { data, error } = await api.POST("/store", {
       body: {
         ...structuredBody,
         ...unstructuredBody,
-        interpret: hasUnstructured ? Boolean((unstructuredBody as any).interpret) : false,
         user_id: opts.userId,
       },
     });
@@ -10521,7 +10804,6 @@ program
   .option("--file-path <path>", "Path to file to store")
   .option("--file-content <content>", "Inline file content to store")
   .option("--user-id <id>", "User ID for the operation")
-  .option("--interpret <bool>", "Run AI interpretation after store (default: true)", "true")
   .option("--idempotency-key <key>", "Idempotency key to prevent duplicate stores")
   .action(async (opts) => {
     const outputMode = resolveOutputMode();
@@ -10556,7 +10838,6 @@ program
       ".pdf": "application/pdf",
     };
     const mimeType = mimeMap[ext] ?? "text/plain";
-    const shouldInterpret = opts.interpret !== "false" && opts.interpret !== false;
     const contentBase64 = fileBuffer.toString("base64");
     const idempotencyKey = opts.idempotencyKey ?? createIdempotencyKey({ content: contentBase64 });
 
@@ -10565,7 +10846,6 @@ program
         file_content: contentBase64,
         mime_type: mimeType,
         original_filename: originalFilename,
-        interpret: shouldInterpret,
         idempotency_key: idempotencyKey,
         user_id: opts.userId,
       },
@@ -10576,8 +10856,7 @@ program
 
 program
   .command("upload <path>")
-  .description("Store an unstructured file (raw upload with optional AI interpretation)")
-  .option("--no-interpret", "Skip AI interpretation after store")
+  .description("Store an unstructured file")
   .option("--idempotency-key <key>", "Idempotency key (default: content hash)")
   .option("--mime-type <type>", "MIME type (default: inferred from extension)")
   .option("--local", "Run store and interpretation in-process (no API server required)")
@@ -10641,156 +10920,12 @@ program
             content_hash: string;
             file_size: number;
             deduplicated?: boolean;
-            interpretation?: unknown;
-            interpretation_debug?: Record<string, unknown>;
-            entity_ids?: string[];
           } = {
             source_id: storageResult.sourceId,
             content_hash: storageResult.contentHash,
             file_size: storageResult.fileSize,
             deduplicated: storageResult.deduplicated,
           };
-
-          const interpret = opts.interpret !== false;
-          if (interpret && storageResult.sourceId) {
-            const { extractTextFromBuffer, getPdfFirstPageImageDataUrl, getPdfWorkerDebug } =
-              await import("../services/file_text_extraction.js");
-            const {
-              extractWithLLM,
-              extractWithLLMFromImage,
-              extractFromCSVWithChunking,
-              isLLMExtractionAvailable,
-            } = await import("../services/llm_extraction.js");
-            const { runInterpretation } = await import("../services/interpretation.js");
-
-            const rawText = await extractTextFromBuffer(
-              fileBuffer,
-              mimeType,
-              originalFilename || "file"
-            );
-
-            if (!isLLMExtractionAvailable()) {
-              response.interpretation = {
-                skipped: true,
-                reason: "openai_not_configured",
-                message: "Set OPENAI_API_KEY in .env to enable AI interpretation",
-              };
-              writeOutput(response, outputMode);
-              return;
-            }
-
-            const isCsv = mimeType?.toLowerCase() === "text/csv";
-            const isPdf =
-              mimeType.toLowerCase().includes("pdf") ||
-              originalFilename.toLowerCase().endsWith(".pdf");
-            const rawTextLength = typeof rawText === "string" ? rawText.length : 0;
-
-            const pdfDebug = getPdfWorkerDebug();
-            const interpretationDebug: Record<string, unknown> = {
-              raw_text_length: rawTextLength,
-              pdf_worker_wrapper_used: pdfDebug.configured,
-              pdf_worker_wrapper_path_tried: pdfDebug.wrapper_path_tried,
-              pdf_worker_set_worker_error: pdfDebug.set_worker_error,
-            };
-
-            let extractionResult:
-              | Awaited<ReturnType<typeof extractWithLLM>>
-              | Awaited<ReturnType<typeof extractFromCSVWithChunking>>;
-
-            if (rawTextLength === 0 && isPdf) {
-              interpretationDebug.vision_fallback_attempted = true;
-              const imageResult = await getPdfFirstPageImageDataUrl(
-                fileBuffer,
-                mimeType,
-                originalFilename || "file",
-                { returnError: true }
-              );
-              const imageDataUrl =
-                typeof imageResult === "object" ? imageResult.dataUrl : imageResult;
-              if (typeof imageResult === "object" && imageResult.error) {
-                interpretationDebug.vision_fallback_image_error = imageResult.error;
-              }
-              interpretationDebug.vision_fallback_image_got = Boolean(imageDataUrl);
-              if (imageDataUrl) {
-                try {
-                  extractionResult = await extractWithLLMFromImage(
-                    imageDataUrl,
-                    originalFilename || "file",
-                    mimeType,
-                    "gpt-4o"
-                  );
-                  interpretationDebug.used_vision_fallback = true;
-                } catch (visionErr) {
-                  interpretationDebug.vision_fallback_error =
-                    visionErr instanceof Error ? visionErr.message : String(visionErr);
-                  extractionResult = await extractWithLLM(
-                    rawText,
-                    originalFilename || "file",
-                    mimeType,
-                    "gpt-4o"
-                  );
-                }
-              } else {
-                extractionResult = await extractWithLLM(
-                  rawText,
-                  originalFilename || "file",
-                  mimeType,
-                  "gpt-4o"
-                );
-              }
-            } else {
-              extractionResult = isCsv
-                ? await extractFromCSVWithChunking(
-                    rawText,
-                    originalFilename || "file",
-                    mimeType,
-                    "gpt-4o"
-                  )
-                : await extractWithLLM(rawText, originalFilename || "file", mimeType, "gpt-4o");
-            }
-
-            let extractedData: Array<Record<string, unknown>>;
-            if ("entities" in extractionResult) {
-              extractedData = extractionResult.entities.map((e) => ({
-                entity_type: e.entity_type,
-                ...e.fields,
-              }));
-            } else {
-              const { entity_type, fields } = extractionResult;
-              extractedData = [{ entity_type, ...fields }];
-            }
-
-            const defaultConfig = {
-              provider: "openai",
-              model_id: "gpt-4o",
-              temperature: 0,
-              prompt_hash: "llm_extraction_v2_idempotent",
-              code_version: "v0.2.0",
-            };
-            interpretationDebug.extraction_field_keys = extractedData.flatMap((d) =>
-              Object.keys(d).filter((k) => k !== "entity_type" && k !== "type")
-            );
-            response.interpretation_debug = interpretationDebug;
-
-            try {
-              const interpretationResult = await runInterpretation({
-                userId,
-                sourceId: storageResult.sourceId,
-                extractedData,
-                config: defaultConfig,
-              });
-              response.interpretation = interpretationResult;
-              if (interpretationResult.entities?.length) {
-                response.entity_ids = interpretationResult.entities.map((e) => e.entityId);
-              }
-            } catch (interpretError) {
-              response.interpretation = {
-                error:
-                  interpretError instanceof Error ? interpretError.message : String(interpretError),
-                skipped: true,
-              };
-            }
-          }
 
           writeOutput(response, outputMode);
         } catch (localError) {
@@ -10813,7 +10948,6 @@ program
         file_content: base64,
         mime_type: mimeType,
         original_filename: originalFilename,
-        interpret: opts.interpret !== false,
       };
       if (opts.idempotencyKey) {
         (body as { idempotency_key?: string }).idempotency_key = opts.idempotencyKey;
@@ -10938,108 +11072,6 @@ function printEntitiesByTypeTable(stats: StatsData): void {
   }
   process.stdout.write("\n");
 }
-
-// Add new interpretations command (after store command)
-const interpretationsCommand = program
-  .command("interpretations")
-  .description("Interpretation commands");
-
-interpretationsCommand
-  .command("reinterpret")
-  .description("Re-run AI interpretation on an existing source or interpretation")
-  .argument("[sourceId]", "Source ID to reinterpret (or use --source-id / --interpretation-id)")
-  .option("--source-id <id>", "Source ID to reinterpret")
-  .option("--interpretation-id <id>", "Interpretation ID (looks up source automatically)")
-  .option("--interpretation-config <json>", "Optional interpretation configuration JSON")
-  .option("--user-id <userId>", "User ID")
-  .action(
-    async (
-      sourceIdArg: string | undefined,
-      opts: {
-        sourceId?: string;
-        interpretationId?: string;
-        interpretationConfig?: string;
-        userId?: string;
-      }
-    ) => {
-      const outputMode = resolveOutputMode();
-      const config = await readConfig();
-      const token = await getCliToken();
-      const api = createApiClient({
-        baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
-        token,
-      });
-      const interpretationConfig = opts.interpretationConfig
-        ? JSON.parse(opts.interpretationConfig)
-        : undefined;
-
-      const sourceId = opts.sourceId ?? sourceIdArg;
-
-      if (!sourceId && !opts.interpretationId)
-        throw new Error("source ID or --interpretation-id is required");
-
-      const reinterpretBody: Record<string, unknown> = {
-        interpretation_config: interpretationConfig,
-      };
-      if (sourceId) reinterpretBody["source_id"] = sourceId;
-      if (opts.interpretationId) reinterpretBody["interpretation_id"] = opts.interpretationId;
-
-      const { data, error } = await api.POST("/reinterpret", {
-        body: reinterpretBody as any,
-      });
-      if (error) throw new Error("Failed to reinterpret source");
-      const result = data as any;
-      writeOutput(
-        {
-          interpretation_id: result?.interpretation_id ?? opts.interpretationId,
-          reinterpreted: result?.success ?? true,
-          observations_created: result?.observations_created ?? 0,
-        },
-        outputMode
-      );
-    }
-  );
-
-interpretationsCommand
-  .command("interpret-uninterpreted")
-  .description("Interpret sources that do not yet have any interpretations")
-  .option("--limit <n>", "Maximum uninterpreted sources to process", "50")
-  .option("--dry-run", "Only list source IDs that would be interpreted")
-  .option("--interpretation-config <json>", "Optional interpretation configuration JSON")
-  .option("--user-id <userId>", "User ID")
-  .action(
-    async (opts: {
-      limit?: string;
-      dryRun?: boolean;
-      interpretationConfig?: string;
-      userId?: string;
-    }) => {
-      const outputMode = resolveOutputMode();
-      const config = await readConfig();
-      const token = await getCliToken();
-      const api = createApiClient({
-        baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
-        token,
-      });
-      const parsedLimit = Number(opts.limit ?? "50");
-      if (!Number.isFinite(parsedLimit) || parsedLimit <= 0) {
-        throw new Error("--limit must be a positive number");
-      }
-      const interpretationConfig = opts.interpretationConfig
-        ? JSON.parse(opts.interpretationConfig)
-        : undefined;
-      const { data, error } = await api.POST("/interpret-uninterpreted", {
-        body: {
-          limit: Math.trunc(parsedLimit),
-          dry_run: Boolean(opts.dryRun),
-          interpretation_config: interpretationConfig,
-          user_id: opts.userId,
-        } as any,
-      });
-      if (error) throw new Error("Failed to interpret uninterpreted sources");
-      writeOutput(data, outputMode);
-    }
-  );
 
 // Add new corrections command (after interpretations command)
 const correctionsCommand = program.command("corrections").description("Correction commands");

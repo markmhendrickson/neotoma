@@ -147,7 +147,6 @@ describe("MCP Actions Matrix - All 17 Actions", () => {
         const result = await (server as any).store({
           user_id: testUserId,
           file_path: testFile,
-          interpret: false,
         });
 
         const responseData = JSON.parse(result.content[0].text);

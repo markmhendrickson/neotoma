@@ -1,0 +1,101 @@
+name: CI test lanes
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - dev
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-test-lanes-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run type-check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Lint site copy
+        run: npm run lint:site-copy
+
+      - name: Run default Vitest suite
+        run: npm test
+
+      - name: Validate Playwright coverage map
+        run: npm run validate:coverage
+
+      - name: Validate documentation dependencies
+        run: npm run validate:doc-deps
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run frontend Vitest suite
+        run: npm run test:frontend
+
+  site_export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate route parity
+        run: npm run validate:routes
+
+      - name: Build UI
+        run: npm run build:ui
+
+      - name: Install Playwright browser (Chromium)
+        run: npx playwright install --with-deps chromium
+
+      - name: Validate locale parity
+        run: npm run validate:locales
+
+      - name: Build site export
+        run: npm run build:pages:site
+
+      - name: Validate site export
+        run: npm run validate:site-export

@@ -199,12 +199,10 @@ const CONFIG: VerticalConfig = {
     },
   ],
   caseStudy: {
-    companyName: "Personal Agent Stack",
-    companyUrl: "https://neotoma.io/ai-native-operators",
-    companyDesc:
-      "is the pattern where AI-native individuals use multiple agents (Claude for thinking, ChatGPT for research, Cursor for building) with Neotoma as the shared memory layer underneath.",
     headline: "The personal agent stack: multiple tools, one versioned memory",
-    whatTheyDoHeading: "What the personal agent stack does",
+    desc:
+      "AI-native individuals use multiple agents for thinking, research, and building with Neotoma as the shared memory layer underneath. Whether you use two tools or ten, every observation flows into the same versioned, queryable state.",
+    featuresHeading: "What the personal agent stack does",
     features: [
       "Logs workouts, nutrition, and body metrics through conversational AI during or after sessions",
       "Tracks spending, income, and savings goals across banking and budgeting interactions",
@@ -213,7 +211,7 @@ const CONFIG: VerticalConfig = {
     ],
     guarantees: [
       "Every workout set, transaction, and health reading is a versioned entity with full observation history",
-      "Entity resolution across tools: 'Bench Press' in Claude and 'bench press' in ChatGPT resolve to one entity",
+      "Entity resolution across tools so the same concept in different agents resolves to one entity",
       "Temporal queries answer 'what was my state on date X?' with the exact snapshot from that date",
       "Cross-domain queries correlate sleep with training, spending with habits, goals with outcomes",
     ],

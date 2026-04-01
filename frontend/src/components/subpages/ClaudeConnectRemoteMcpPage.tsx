@@ -15,6 +15,13 @@ export function ClaudeConnectRemoteMcpPage() {
         {" · "}
         Remote setup for connecting Neotoma to claude.ai.
       </p>
+      <p className="text-[14px] leading-6 text-muted-foreground mb-4">
+        Looking for Claude Desktop (local stdio) instead? See{" "}
+        <Link to="/neotoma-with-claude-connect-desktop" className={extLink}>
+          Claude Desktop local setup
+        </Link>
+        .
+      </p>
 
       <IntegrationSection title="Setup" sectionKey="setup">
         <p className="text-[15px] leading-7 text-muted-foreground mb-4">

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useCopyFeedback } from "../lib/copy_feedback";
 import { copyTextToClipboard } from "../lib/copy_to_clipboard";
 import { useLocale } from "@/i18n/LocaleContext";
+import { CODE_BLOCK_COPY_BUTTON_ABSOLUTE, CODE_BLOCK_EMERALD_PANEL } from "./code_block_copy_button_classes";
 import { Button } from "./ui/button";
 
 function sanitizeCodeForCopy(rawCode: string): string {
@@ -24,12 +25,15 @@ type CopyableCodeBlockProps = {
   code: string;
   className?: string;
   previewLineCount?: number;
+  /** Emerald-tinted shell to match the home evaluate prompt. */
+  variant?: "default" | "emerald";
 };
 
 export function CopyableCodeBlock({
   code,
   className = "mb-4",
   previewLineCount,
+  variant = "default",
 }: CopyableCodeBlockProps) {
   const { dict } = useLocale();
   const [copied, markCopied] = useCopyFeedback(`copyable:${code}`);
@@ -45,20 +49,22 @@ export function CopyableCodeBlock({
     await copyTextToClipboard(sanitizeCodeForCopy(code));
   };
 
+  const paletteClass = variant === "emerald" ? CODE_BLOCK_EMERALD_PANEL : "code-block-palette";
+
   return (
     <div className="relative">
       <Button
         type="button"
-        variant="default"
+        variant="outline"
         size="sm"
-        className="absolute top-2 right-2 z-10 min-w-[92px] h-8 justify-center gap-1.5 shrink-0 rounded-md border !border-[hsl(var(--doc-primary))] !bg-[hsl(var(--doc-primary))] !text-[hsl(var(--doc-primary-foreground))] px-2.5 shadow-sm shadow-black/10 transition-colors hover:!border-[hsl(var(--doc-primary-hover))] hover:!bg-[hsl(var(--doc-primary-hover))] hover:!text-[hsl(var(--doc-primary-foreground))] focus-visible:ring-2 focus-visible:ring-[hsl(var(--doc-primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--doc-background))] dark:!border-[hsl(var(--doc-primary))] dark:!bg-[hsl(var(--doc-primary))] dark:!text-[hsl(var(--doc-primary-foreground))] dark:hover:!border-[hsl(var(--doc-primary-hover))] dark:hover:!bg-[hsl(var(--doc-primary-hover))] after:text-[11px] after:font-semibold after:tracking-wide after:content-[attr(aria-label)]"
+        className={CODE_BLOCK_COPY_BUTTON_ABSOLUTE}
         aria-label={copied ? dict.copied : dict.copy}
         onClick={onCopy}
       >
         {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
       </Button>
       <pre
-        className={`rounded-lg border code-block-shell code-block-palette p-4 overflow-x-auto overflow-y-auto font-mono text-[13px] leading-6 whitespace-pre-wrap break-words ${canExpand && !showFullCode ? "max-h-60 md:max-h-none" : ""} ${className}`}
+        className={`rounded-lg border code-block-shell ${paletteClass} p-4 overflow-x-auto overflow-y-auto font-mono text-[13px] leading-6 whitespace-pre-wrap break-words ${canExpand && !showFullCode ? "max-h-60 md:max-h-none" : ""} ${className}`}
       >
         <span className="float-right h-8 w-20 shrink-0" aria-hidden />
         <code>{displayCode}</code>

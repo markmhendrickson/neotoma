@@ -1,7 +1,9 @@
 import { Link } from "react-router-dom";
 import { DetailPage } from "../DetailPage";
+import { GettingStartedEvaluateInstallLinks } from "../GettingStartedEvaluateInstallLinks";
 import { IntegrationLinkCard } from "../IntegrationLinkCard";
 import { IntegrationSection } from "../IntegrationSection";
+import { TableScrollWrapper } from "../ui/table-scroll-wrapper";
 
 const extLink = "text-foreground underline underline-offset-2 hover:no-underline";
 
@@ -13,6 +15,13 @@ export function NeotomaWithCodexPage() {
           Codex runs tasks in sandboxed environments with session-scoped context. Neotoma adds
           persistent memory that survives across sessions, tasks, and tools. The CLI provides a
           fallback when MCP is not available.
+        </p>
+        <p className="text-[14px] leading-6 text-muted-foreground">
+          Looking for ChatGPT (conversations, custom GPTs, or developer-mode MCP)? See{" "}
+          <Link to="/neotoma-with-chatgpt" className={extLink}>
+            Neotoma with ChatGPT
+          </Link>
+          .
         </p>
       </section>
 
@@ -94,46 +103,52 @@ export function NeotomaWithCodexPage() {
         Codex provides the execution sandbox; Neotoma provides the persistent state layer.
         Each sandbox starts fresh, but Neotoma carries structured memory across every task.
         </p>
-        <table className="w-full text-[14px] leading-6 mb-2 border-collapse">
-        <thead>
-          <tr className="border-b border-border">
-            <th className="text-left py-2 pr-4 font-medium text-foreground">Concern</th>
-            <th className="text-left py-2 pr-4 font-medium text-foreground">Codex</th>
-            <th className="text-left py-2 font-medium text-foreground">Neotoma</th>
-          </tr>
-        </thead>
-        <tbody className="text-muted-foreground">
-          <tr className="border-b border-border">
-            <td className="py-2 pr-4">Task execution environment</td>
-            <td className="py-2 pr-4">Sandbox</td>
-            <td className="py-2">&mdash;</td>
-          </tr>
-          <tr className="border-b border-border">
-            <td className="py-2 pr-4">Session context</td>
-            <td className="py-2 pr-4">Within current task</td>
-            <td className="py-2">&mdash;</td>
-          </tr>
-          <tr className="border-b border-border">
-            <td className="py-2 pr-4">Persistent state across tasks</td>
-            <td className="py-2 pr-4">&mdash;</td>
-            <td className="py-2">Store via MCP or CLI</td>
-          </tr>
-          <tr className="border-b border-border">
-            <td className="py-2 pr-4">Structured entities (people, tasks, decisions)</td>
-            <td className="py-2 pr-4">&mdash;</td>
-            <td className="py-2">Store via MCP or CLI</td>
-          </tr>
-          <tr>
-            <td className="py-2 pr-4">Cross-tool state &amp; audit trail</td>
-            <td className="py-2 pr-4">&mdash;</td>
-            <td className="py-2">Shared memory graph</td>
-          </tr>
-        </tbody>
-        </table>
+        <TableScrollWrapper className="mb-4 w-full max-w-full">
+          <table className="w-full text-[14px] leading-6 border-collapse">
+            <thead>
+              <tr className="border-b border-border">
+                <th className="text-left align-top px-4 py-3 font-medium text-foreground">Concern</th>
+                <th className="text-left align-top px-4 py-3 font-medium text-foreground">Codex</th>
+                <th className="text-left align-top px-4 py-3 font-medium text-foreground">Neotoma</th>
+              </tr>
+            </thead>
+            <tbody className="text-muted-foreground">
+              <tr className="border-b border-border">
+                <td className="align-top px-4 py-3">Task execution environment</td>
+                <td className="align-top px-4 py-3">Sandbox</td>
+                <td className="align-top px-4 py-3">-</td>
+              </tr>
+              <tr className="border-b border-border">
+                <td className="align-top px-4 py-3">Session context</td>
+                <td className="align-top px-4 py-3">Within current task</td>
+                <td className="align-top px-4 py-3">-</td>
+              </tr>
+              <tr className="border-b border-border">
+                <td className="align-top px-4 py-3">Persistent state across tasks</td>
+                <td className="align-top px-4 py-3">-</td>
+                <td className="align-top px-4 py-3">Store via MCP or CLI</td>
+              </tr>
+              <tr className="border-b border-border">
+                <td className="align-top px-4 py-3">Structured entities (people, tasks, decisions)</td>
+                <td className="align-top px-4 py-3">-</td>
+                <td className="align-top px-4 py-3">Store via MCP or CLI</td>
+              </tr>
+              <tr>
+                <td className="align-top px-4 py-3">Cross-tool state &amp; audit trail</td>
+                <td className="align-top px-4 py-3">-</td>
+                <td className="align-top px-4 py-3">Shared memory graph</td>
+              </tr>
+            </tbody>
+          </table>
+        </TableScrollWrapper>
       </IntegrationSection>
 
       <IntegrationSection sectionKey="getting-started" title="Getting started">
-        <p className="text-[15px] leading-7 text-muted-foreground mb-3">Choose an integration path:</p>
+        <GettingStartedEvaluateInstallLinks agentTargetPhrase="Codex" />
+        <p className="text-[15px] leading-7 text-muted-foreground mb-3">
+          Once Neotoma has been evaluated, installed if needed, and activated
+          with your first data, choose an integration path:
+        </p>
         <IntegrationLinkCard
           title="Local setup (stdio)"
           preview="Install and configure Neotoma directly in Codex using .codex/config.toml."
@@ -173,7 +188,11 @@ export function NeotomaWithCodexPage() {
       </IntegrationSection>
 
       <p className="text-[14px] leading-6 text-muted-foreground">
-        See{" "}
+        Start with{" "}
+        <Link to="/evaluate" className={extLink}>
+          evaluation
+        </Link>
+        , see the{" "}
         <Link to="/install" className={extLink}>
           install guide
         </Link>{" "}

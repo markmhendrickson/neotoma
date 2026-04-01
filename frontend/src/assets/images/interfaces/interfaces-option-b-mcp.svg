@@ -1,61 +1,55 @@
-<svg width="280" height="280" viewBox="0 0 280 280" fill="none" xmlns="http://www.w3.org/2000/svg">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" role="img" aria-label="MCP: multiple AI agents connected to a central memory hub">
   <defs>
-    <radialGradient id="mcpBg" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(140 140) rotate(90) scale(138)">
-      <stop offset="0" stop-color="#F3FCF8"/>
-      <stop offset="1" stop-color="#E1F4EE"/>
+    <radialGradient id="bg_mcp" cx="50%" cy="50%" r="65%">
+      <stop offset="0%" stop-color="#c8860a"/>
+      <stop offset="55%" stop-color="#7a4f08"/>
+      <stop offset="100%" stop-color="#2e1800"/>
     </radialGradient>
-    <linearGradient id="mcpAgent" x1="90" y1="200" x2="190" y2="100" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#D8F1E8"/>
-      <stop offset="1" stop-color="#B8E6D4"/>
-    </linearGradient>
-    <linearGradient id="mcpTool" x1="0" y1="0" x2="1" y2="1" gradientUnits="objectBoundingBox">
-      <stop stop-color="#39B695"/>
-      <stop offset="1" stop-color="#1E8E71"/>
-    </linearGradient>
+    <radialGradient id="glow_mcp" cx="50%" cy="50%" r="42%">
+      <stop offset="0%" stop-color="#ffe8a0" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#c8860a" stop-opacity="0"/>
+    </radialGradient>
   </defs>
+  <rect width="400" height="400" fill="url(#bg_mcp)"/>
+  <rect width="400" height="400" fill="url(#glow_mcp)"/>
 
-  <rect x="10" y="10" width="260" height="260" rx="20" fill="url(#mcpBg)"/>
-  <ellipse cx="78" cy="68" rx="32" ry="26" fill="#D4EFE6" opacity="0.7"/>
-  <ellipse cx="206" cy="218" rx="30" ry="24" fill="#CCEBE1" opacity="0.7"/>
+  <!-- Central hub (memory store) -->
+  <rect x="152" y="152" width="96" height="96" rx="14" fill="#f4e8c1" stroke="#4a3510" stroke-width="3.5"/>
+  <line x1="170" y1="178" x2="232" y2="178" stroke="#6b4e1f" stroke-width="2"/>
+  <line x1="170" y1="192" x2="232" y2="192" stroke="#6b4e1f" stroke-width="2"/>
+  <line x1="170" y1="206" x2="220" y2="206" stroke="#6b4e1f" stroke-width="2"/>
+  <line x1="170" y1="220" x2="232" y2="220" stroke="#6b4e1f" stroke-width="2"/>
 
-  <!-- Agent: head and body -->
-  <circle cx="140" cy="168" r="28" fill="url(#mcpAgent)" stroke="#8FD7C2" stroke-width="1.5"/>
-  <circle cx="140" cy="162" r="16" fill="#F4FCF9" stroke="#9FDCCB"/>
-  <ellipse cx="138" cy="161" rx="3" ry="4" fill="#0E745B"/>
-  <path d="M118 188 L132 202 L140 198 L148 202 L162 188" fill="none" stroke="#8FD7C2" stroke-width="3" stroke-linecap="round"/>
-  <rect x="108" y="202" width="64" height="26" rx="13" fill="url(#mcpAgent)" stroke="#8FD7C2" stroke-width="1"/>
+  <!-- Agent top-left -->
+  <circle cx="88" cy="88" r="30" fill="#f4e8c1" stroke="#4a3510" stroke-width="2.8"/>
+  <!-- Robot face -->
+  <rect x="74" y="76" width="28" height="22" rx="4" fill="#e0cc99" stroke="#4a3510" stroke-width="1.8"/>
+  <circle cx="82" cy="85" r="4" fill="#4a3510"/>
+  <circle cx="94" cy="85" r="4" fill="#4a3510"/>
+  <line x1="80" y1="93" x2="96" y2="93" stroke="#4a3510" stroke-width="1.8" stroke-linecap="round"/>
+  <!-- Antenna -->
+  <line x1="88" y1="76" x2="88" y2="66" stroke="#4a3510" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="88" cy="63" r="4" fill="#f4e8c1" stroke="#4a3510" stroke-width="2"/>
+  <!-- Connection line to hub -->
+  <line x1="113" y1="113" x2="155" y2="155" stroke="#f4e8c1" stroke-width="2" stroke-dasharray="6 4" stroke-linecap="round" opacity="0.7"/>
 
-  <!-- Tool 1: wrench -->
-  <g transform="translate(82 94) rotate(-25)">
-    <rect x="0" y="0" width="8" height="36" rx="4" fill="url(#mcpTool)" stroke="#2A9E80"/>
-    <path d="M-6 36 L-2 28 L2 28 L6 36 Z" fill="#1AA581" stroke="#2A9E80"/>
-  </g>
-  <!-- Tool 2: screwdriver -->
-  <g transform="translate(188 98) rotate(20)">
-    <rect x="0" y="0" width="6" height="32" rx="3" fill="#56BFA2" stroke="#2A9E80"/>
-    <rect x="-4" y="32" width="14" height="6" rx="2" fill="#39B695" stroke="#2A9E80"/>
-  </g>
-  <!-- Tool 3: gear / cog -->
-  <circle cx="140" cy="88" r="18" fill="#FFFFFF" stroke="#1AA581" stroke-width="2"/>
-  <g fill="#1AA581" transform="translate(140 88)">
-    <circle r="6" fill="#DDF4EC"/>
-    <rect x="-2" y="-14" width="4" height="12" rx="1"/>
-    <rect x="-2" y="2" width="4" height="12" rx="1"/>
-    <rect x="-14" y="-2" width="12" height="4" rx="1"/>
-    <rect x="2" y="-2" width="12" height="4" rx="1"/>
-    <rect x="-10" y="-10" width="6" height="6" rx="1" transform="rotate(45)"/>
-    <rect x="-10" y="4" width="6" height="6" rx="1" transform="rotate(-45)"/>
-    <rect x="4" y="-10" width="6" height="6" rx="1" transform="rotate(45)"/>
-    <rect x="4" y="4" width="6" height="6" rx="1" transform="rotate(-45)"/>
-  </g>
+  <!-- Agent top-right -->
+  <circle cx="312" cy="88" r="30" fill="#f4e8c1" stroke="#4a3510" stroke-width="2.8"/>
+  <rect x="298" y="76" width="28" height="22" rx="4" fill="#e0cc99" stroke="#4a3510" stroke-width="1.8"/>
+  <circle cx="306" cy="85" r="4" fill="#4a3510"/>
+  <circle cx="318" cy="85" r="4" fill="#4a3510"/>
+  <line x1="304" y1="93" x2="320" y2="93" stroke="#4a3510" stroke-width="1.8" stroke-linecap="round"/>
+  <line x1="312" y1="76" x2="312" y2="66" stroke="#4a3510" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="312" cy="63" r="4" fill="#f4e8c1" stroke="#4a3510" stroke-width="2"/>
+  <line x1="287" y1="113" x2="245" y2="155" stroke="#f4e8c1" stroke-width="2" stroke-dasharray="6 4" stroke-linecap="round" opacity="0.7"/>
 
-  <!-- Agent holding tool (arm extended) -->
-  <path d="M122 178 L98 120 L92 102" fill="none" stroke="#9FDCCB" stroke-width="5" stroke-linecap="round"/>
-  <path d="M158 178 L182 124 L188 106" fill="none" stroke="#9FDCCB" stroke-width="5" stroke-linecap="round"/>
-  <circle cx="92" cy="100" r="8" fill="#FFFFFF" stroke="#1AA581"/>
-  <circle cx="188" cy="104" r="8" fill="#FFFFFF" stroke="#1AA581"/>
-
-  <!-- Small tool icons near agent -->
-  <rect x="62" y="198" width="20" height="8" rx="2" fill="#6FC5AE"/>
-  <rect x="198" y="194" width="18" height="6" rx="2" fill="#6FC5AE"/>
+  <!-- Agent bottom-center -->
+  <circle cx="200" cy="318" r="30" fill="#f4e8c1" stroke="#4a3510" stroke-width="2.8"/>
+  <rect x="186" y="306" width="28" height="22" rx="4" fill="#e0cc99" stroke="#4a3510" stroke-width="1.8"/>
+  <circle cx="194" cy="315" r="4" fill="#4a3510"/>
+  <circle cx="206" cy="315" r="4" fill="#4a3510"/>
+  <line x1="192" y1="323" x2="208" y2="323" stroke="#4a3510" stroke-width="1.8" stroke-linecap="round"/>
+  <line x1="200" y1="306" x2="200" y2="296" stroke="#4a3510" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="200" cy="293" r="4" fill="#f4e8c1" stroke="#4a3510" stroke-width="2"/>
+  <line x1="200" y1="289" x2="200" y2="248" stroke="#f4e8c1" stroke-width="2" stroke-dasharray="6 4" stroke-linecap="round" opacity="0.7"/>
 </svg>

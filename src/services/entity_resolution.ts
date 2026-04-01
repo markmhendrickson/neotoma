@@ -31,22 +31,88 @@ export function generateEntityId(
 }
 
 /**
- * Normalize entity value for consistent resolution
+ * Normalize entity value for consistent resolution (entity ID hashing).
+ *
+ * More aggressive normalization reduces duplicate entities caused by slight
+ * name variations across sessions (e.g. "Acme Corp" vs "acme corp." vs
+ * "ACME Corp, Inc.").
  */
 export function normalizeEntityValue(entityType: string, raw: string): string {
   let normalized = raw.trim().toLowerCase();
 
-  // Remove common suffixes for companies
+  // Email addresses: keep local-part and domain intact for hashing and identifier
+  // search (hyphens and dots in the local part must not become spaces).
+  if (/\S+@\S+/.test(normalized)) {
+    return normalized;
+  }
+
+  // ID-derived canonical names (e.g. "id:turn_key:cursor:chat:turn-7") use
+  // colons and underscores structurally — skip punctuation stripping for these.
+  const isIdDerived = normalized.startsWith("id:") || /^\w+:/.test(normalized);
+
   if (entityType === "company" || entityType === "organization") {
     normalized = normalized
-      .replace(/\s+(inc|llc|ltd|corp|corporation|co|company|limited)\.?$/i, "")
+      .replace(/\s+(inc|llc|ltd|corp|corporation|co|company|limited|plc|gmbh|sa|ag|pty|pvt)\.?$/i, "")
       .trim();
   }
 
-  // Remove extra whitespace
+  if (entityType === "person" || entityType === "contact") {
+    normalized = normalized
+      .replace(/\b(mr|mrs|ms|dr|prof|sir|jr|sr|ii|iii|iv)\.?\b/gi, "")
+      .trim();
+  }
+
+  if (!isIdDerived) {
+    normalized = normalized.replace(/[-.,;:!?'"()[\]{}_/\\]+/g, " ");
+  }
+
   normalized = normalized.replace(/\s+/g, " ").trim();
 
   return normalized;
+}
+
+/**
+ * Human-readable canonical name for persistence. Applies the same structural
+ * rules as {@link normalizeEntityValue} (suffixes, honorifics, punctuation,
+ * whitespace) but preserves letter casing. {@link generateEntityId} still
+ * hashes {@link normalizeEntityValue} of this string, so IDs stay stable and
+ * case-insensitive.
+ */
+export function formatCanonicalNameForStorage(
+  entityType: string,
+  raw: string,
+): string {
+  let s = raw.trim();
+  const probe = s.toLowerCase();
+  const isIdDerived =
+    probe.startsWith("id:") || /^\w+:/.test(probe);
+
+  if (/\S+@\S+/.test(probe)) {
+    return raw.trim().toLowerCase();
+  }
+
+  if (entityType === "company" || entityType === "organization") {
+    s = s
+      .replace(
+        /\s+(inc|llc|ltd|corp|corporation|co|company|limited|plc|gmbh|sa|ag|pty|pvt)\.?$/i,
+        "",
+      )
+      .trim();
+  }
+
+  if (entityType === "person" || entityType === "contact") {
+    s = s
+      .replace(/\b(mr|mrs|ms|dr|prof|sir|jr|sr|ii|iii|iv)\.?\b/gi, "")
+      .trim();
+  }
+
+  if (!isIdDerived) {
+    s = s.replace(/[-.,;:!?'"()[\]{}_/\\]+/g, " ");
+  }
+
+  s = s.replace(/\s+/g, " ").trim();
+
+  return s;
 }
 
 export function deriveCanonicalNameFromFields(
@@ -78,8 +144,10 @@ export function deriveCanonicalNameFromFields(
   if (nameField == null || String(nameField).trim() === "") {
     const idFields = [
       "message_id",
+      "turn_key",
       "thread_id",
       "external_id",
+      "source_id",
       "id",
       "uuid",
       "company_id",
@@ -151,7 +219,10 @@ export function deriveCanonicalNameFromFields(
     }
   }
 
-  return normalizeEntityValue(entityType, String(nameField ?? "unknown"));
+  return formatCanonicalNameForStorage(
+    entityType,
+    String(nameField ?? "unknown"),
+  );
 }
 
 /**
@@ -174,7 +245,10 @@ export async function resolveEntity(
   if (typeof options === "string") {
     // Old signature: resolveEntity(entityType, rawValue)
     entityType = options;
-    canonicalName = normalizeEntityValue(entityType, rawValue || "");
+    canonicalName = formatCanonicalNameForStorage(
+      entityType,
+      rawValue || "",
+    );
   } else {
     // New signature: resolveEntity({ entityType, fields, userId })
     entityType = options.entityType;

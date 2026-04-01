@@ -1,0 +1,8 @@
+[
+  {
+    "file": "/Users/markmhendrickson/repos/neotoma/frontend/src/assets/images/hero/hero_illus_packrat_holding_record_20260330-175237_01.png",
+    "prompt": "Transparent background. Stylized packrat (small rodent) in refined minimal line-art, holding one abstract symbolic record: a simple flat card or rectangle with a single horizontal divider line suggesting structured data—no legible text, no icons. Warm beige and tan palette only (cream through deep tan, roughly #f4ebe0 #d9cbb8 #a0907a #6e6254), no pure black, no gradients, no shading blocks. Two stroke weights for hierarchy. Editorial product-illustration quality—not photorealistic, not emoji, not clipart. Generous negative space. Square 1:1 composition, subject centered or slightly off-center.",
+    "model": "gpt-image-1",
+    "size": "1024x1024"
+  }
+]

@@ -27,10 +27,26 @@ if (!process.env.ICON_GENERATION_ENABLED) {
   process.env.ICON_GENERATION_ENABLED = "false";
 }
 
-// Set test encryption key for OAuth token encryption tests (if not already set)
-if (!process.env.NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY && !process.env.MCP_TOKEN_ENCRYPTION_KEY) {
-  const testKey = randomBytes(32).toString("hex");
-  process.env.NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY = testKey;
+// OAuth tests require a 64-char hex key. .env placeholders (e.g. your-encryption-key-here) must not win.
+const VALID_MCP_TOKEN_ENC_KEY = /^[0-9a-fA-F]{64}$/;
+function isValidMcpTokenEncryptionKey(key: string | undefined): boolean {
+  return typeof key === "string" && VALID_MCP_TOKEN_ENC_KEY.test(key);
+}
+{
+  const nk = process.env.NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY;
+  const mk = process.env.MCP_TOKEN_ENCRYPTION_KEY;
+  if (nk && !isValidMcpTokenEncryptionKey(nk)) {
+    delete process.env.NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY;
+  }
+  if (mk && !isValidMcpTokenEncryptionKey(mk)) {
+    delete process.env.MCP_TOKEN_ENCRYPTION_KEY;
+  }
+  if (
+    !isValidMcpTokenEncryptionKey(process.env.NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY) &&
+    !isValidMcpTokenEncryptionKey(process.env.MCP_TOKEN_ENCRYPTION_KEY)
+  ) {
+    process.env.NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY = randomBytes(32).toString("hex");
+  }
 }
 
 // Set test OAuth client ID for OAuth 2.1 Server tests (if not already set)

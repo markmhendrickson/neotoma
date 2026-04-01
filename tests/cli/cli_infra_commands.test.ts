@@ -358,6 +358,60 @@ describe("CLI infrastructure command smoke tests", () => {
       await expect(readFile(join(configuredRepoRoot, ".env"), "utf-8")).rejects.toBeDefined();
     });
 
+    it("site configure writes Umami env vars when flags are passed", async () => {
+      const root = await mkdtemp(join(tmpdir(), "neotoma-site-config-umami-"));
+      const home = join(root, "home");
+      const localRepoRoot = join(root, "local-repo");
+      const cliPathAbsolute = join(process.cwd(), "dist", "cli", "index.js");
+      await mkdir(home, { recursive: true });
+      await mkdir(localRepoRoot, { recursive: true });
+      await setupTempNeotomaRepo(localRepoRoot);
+
+      await execAsync(
+        `node "${cliPathAbsolute}" site configure --umami-url https://umami.test.local --umami-website-id 11111111-1111-1111-1111-111111111111`,
+        {
+          cwd: localRepoRoot,
+          env: {
+            ...process.env,
+            HOME: home,
+            USERPROFILE: home,
+            NEOTOMA_REPO_ROOT: "",
+          },
+        }
+      );
+
+      const localEnv = await readFile(join(localRepoRoot, ".env"), "utf-8");
+      expect(localEnv).toMatch(/VITE_UMAMI_URL=https:\/\/umami\.test\.local/);
+      expect(localEnv).toMatch(/VITE_UMAMI_WEBSITE_ID=11111111-1111-1111-1111-111111111111/);
+    });
+
+    it("site configure writes Umami dev vars to .env.development.local when flags are passed", async () => {
+      const root = await mkdtemp(join(tmpdir(), "neotoma-site-config-umami-dev-"));
+      const home = join(root, "home");
+      const localRepoRoot = join(root, "local-repo");
+      const cliPathAbsolute = join(process.cwd(), "dist", "cli", "index.js");
+      await mkdir(home, { recursive: true });
+      await mkdir(localRepoRoot, { recursive: true });
+      await setupTempNeotomaRepo(localRepoRoot);
+
+      await execAsync(
+        `node "${cliPathAbsolute}" site configure --umami-website-id-dev 22222222-2222-2222-2222-222222222222 --umami-url-dev https://umami-dev.test`,
+        {
+          cwd: localRepoRoot,
+          env: {
+            ...process.env,
+            HOME: home,
+            USERPROFILE: home,
+            NEOTOMA_REPO_ROOT: "",
+          },
+        }
+      );
+
+      const devLocal = await readFile(join(localRepoRoot, ".env.development.local"), "utf-8");
+      expect(devLocal).toMatch(/VITE_UMAMI_WEBSITE_ID_DEV=22222222-2222-2222-2222-222222222222/);
+      expect(devLocal).toMatch(/VITE_UMAMI_URL_DEV=https:\/\/umami-dev\.test/);
+    });
+
     it("storage backup create and restore should work with temporary directories", async () => {
       const root = await mkdtemp(join(tmpdir(), "neotoma-cli-backup-"));
       const dataDir = join(root, "data");

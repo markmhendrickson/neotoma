@@ -9,20 +9,26 @@ export interface SeoRouteCopy {
 export interface StaticLocalePack {
   homeHero: {
     titlePrefix: string;
+    titleAccent: string;
+    titleMid: string;
     titleFocus: string;
     withoutStateLayer: string;
     bullets: [string, string, string];
     summary: string;
+    summaryRecordTypes: string[];
+    ctaEvaluateWithAgent: string;
     ctaViewGuarantees: string;
     ctaInstall: string;
     subcopy: string;
   };
   siteSections: {
     intro: string;
+    personalOs: string;
     beforeAfter: string;
+    who?: string;
+    recordTypes?: string;
     guarantees: string;
-    evaluate: string;
-    install: string;
+    evaluate?: string;
     inspect: string;
     architecture: string;
     useCases: string;
@@ -36,10 +42,12 @@ export interface StaticLocalePack {
     platform: string;
     retrievalRag: string;
     files: string;
+    database: string;
     deterministic: string;
     platformShort: string;
     ragShort: string;
     filesShort: string;
+    databaseShort: string;
     deterministicShort: string;
     onThisPage: string;
     showFewer: string;
@@ -63,27 +71,44 @@ export interface StaticLocalePack {
 
 const EN_PACK: StaticLocalePack = {
   homeHero: {
-    titlePrefix: "Your production agent has",
-    titleFocus: "amnesia",
-    withoutStateLayer: "Without a state layer:",
+    titlePrefix: "Your agents forget.",
+    titleAccent: "Neotoma",
+    titleMid: "makes them",
+    titleFocus: "remember.",
+    withoutStateLayer: "Without shared memory across your AI tools:",
     bullets: [
-      "Context drifts across sessions.",
-      "Facts conflict across tools and tasks.",
-      "Decisions execute without a reproducible trail.",
+      "Context drifts between Claude, Cursor, ChatGPT, and everything else.",
+      "Decisions vanish when the session ends.",
+      "You become the human sync layer — re-prompting what the agent should already know.",
     ],
     summary:
-      "Neotoma is the deterministic state layer for long-running agents. Every observation is versioned. Every entity snapshot is reproducible. Every decision can be replayed.",
+      "Your {record} disappear between sessions and tools. Neotoma stores them once, versioned and queryable, across every agent you run — so you stop re-explaining your world.",
+    summaryRecordTypes: [
+      "contacts",
+      "tasks",
+      "decisions",
+      "conversations",
+      "notes",
+      "preferences",
+      "transactions",
+      "meeting notes",
+      "companies",
+      "health data",
+    ],
+    ctaEvaluateWithAgent: "Ask your agent to evaluate",
     ctaViewGuarantees: "View guarantees",
-    ctaInstall: "Install deterministic memory in 5 minutes",
+    ctaInstall: "Install in 5 minutes",
     subcopy:
-      "RAG retrieves documents. Platform memory personalizes chat. Neither maintains durable state. Neotoma does, with deterministic guarantees and no silent mutation.",
+      "Your data stays on your machine. One memory across Claude, Cursor, ChatGPT, OpenClaw, and more.",
   },
   siteSections: {
     intro: "Intro",
+    personalOs: "Your OS",
     beforeAfter: "Before / After",
+    who: "Who",
+    recordTypes: "Record types",
     guarantees: "Guarantees",
     evaluate: "Evaluate",
-    install: "Install",
     inspect: "Inspect",
     architecture: "Architecture",
     useCases: "Use cases",
@@ -97,10 +122,12 @@ const EN_PACK: StaticLocalePack = {
     platform: "Platform",
     retrievalRag: "Retrieval / RAG",
     files: "Files",
+    database: "Database",
     deterministic: "Deterministic",
     platformShort: "Plat.",
     ragShort: "RAG",
     filesShort: "Files",
+    databaseShort: "DB",
     deterministicShort: "Det.",
     onThisPage: "On this page",
     showFewer: "Show fewer",
@@ -115,9 +142,9 @@ const EN_PACK: StaticLocalePack = {
   },
   seo: {
     home: {
-      title: "Neotoma | Deterministic state layer for long-running agents",
+      title: "Your agents forget. Neotoma makes them remember.",
       description:
-        "Deterministic agent state layer for long-running agents: deterministic state evolution, versioned, schema-bound, replayable, auditable. No silent mutation. Agents install Neotoma themselves.",
+        "Versioned records — contacts, tasks, decisions, finances — that persist across Claude, Cursor, ChatGPT, and every agent you run. Store once, query everywhere, stop re-prompting. Open-source and deterministic.",
     },
     docs: {
       title: "Neotoma Documentation | Setup, API, MCP, CLI References",
@@ -142,12 +169,15 @@ const EN_PACK: StaticLocalePack = {
   },
 };
 
-function buildLocalizedSeo(locale: SupportedLocale, dict: ReturnType<typeof getDictionary>): StaticLocalePack["seo"] {
+function buildLocalizedSeo(
+  locale: SupportedLocale,
+  dict: ReturnType<typeof getDictionary>
+): StaticLocalePack["seo"] {
   if (locale === "en") return EN_PACK.seo;
   return {
     home: {
       title: `Neotoma | ${dict.languageName}`,
-      description: `${dict.install} Neotoma. Deterministic, versioned, schema-bound, replayable, auditable state layer for long-running agents.`,
+      description: `${dict.install} Neotoma. Versioned, auditable memory for AI agents: contacts, finances, tasks, decisions — agent-driven, deterministic, cross-tool.`,
     },
     docs: {
       title: `${dict.docs} | Neotoma`,
@@ -174,15 +204,13 @@ function buildPack(locale: SupportedLocale): StaticLocalePack {
   return {
     homeHero: {
       ...EN_PACK.homeHero,
+      ctaEvaluateWithAgent:
+        locale === "es" ? "Pide a tu agente que evalúe" : EN_PACK.homeHero.ctaEvaluateWithAgent,
       ctaViewGuarantees: locale === "es" ? "Ver garantías" : EN_PACK.homeHero.ctaViewGuarantees,
-      ctaInstall:
-        locale === "es"
-          ? "Instalar memoria determinista en 5 minutos"
-          : EN_PACK.homeHero.ctaInstall,
+      ctaInstall: locale === "es" ? "Instalar en 5 minutos" : EN_PACK.homeHero.ctaInstall,
     },
     siteSections: {
       ...EN_PACK.siteSections,
-      install: dict.install,
       architecture: dict.architecture,
       guarantees: "Guarantees",
       learnMore: "Learn more",
@@ -210,4 +238,3 @@ const STATIC_LOCALE_PACKS: Record<SupportedLocale, StaticLocalePack> = Object.fr
 export function getStaticLocalePack(locale: SupportedLocale): StaticLocalePack {
   return STATIC_LOCALE_PACKS[locale] ?? EN_PACK;
 }
-

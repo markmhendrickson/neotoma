@@ -6,7 +6,11 @@ export interface LocaleDictionary {
   search: string;
   quickStart: string;
   install: string;
+  /** Primary marketing nav CTA (e.g. /evaluate). */
+  evaluate: string;
   architecture: string;
+  /** Homepage header nav: scroll target for the memory guarantees section. */
+  memoryGuaranteesNav: string;
   allDocumentation: string;
   developerPreview: string;
   home: string;
@@ -24,6 +28,10 @@ export interface LocaleDictionary {
   categoryUseCases: string;
   categoryIntegrationGuides: string;
   categoryExternal: string;
+  /** Docs nav: comparison and evaluation pages (e.g. vs Mem0, build vs buy). */
+  categoryCompare: string;
+  /** Docs nav: industry / workflow landing pages. */
+  categoryVerticals: string;
   viewAll: string;
   showMore: string;
   showLess: string;
@@ -37,7 +45,7 @@ export interface LocaleDictionary {
   backToHtmlPage: string;
   /** Raw Markdown view: link to the Markdown index hub. */
   allPagesMarkdown: string;
-  /** Hub list / preview: link to minimal /raw view. */
+  /** Hub list / preview: link to full-page Markdown at `/markdown/…`. */
   rawMarkdownDirect: string;
 }
 
@@ -47,7 +55,9 @@ const en: LocaleDictionary = {
   search: "Search",
   quickStart: "Quick start",
   install: "Install",
+  evaluate: "Evaluate",
   architecture: "Architecture",
+  memoryGuaranteesNav: "Guarantees",
   allDocumentation: "Documentation",
   developerPreview: "Developer preview",
   home: "Home",
@@ -66,6 +76,8 @@ const en: LocaleDictionary = {
   categoryUseCases: "Use cases",
   categoryIntegrationGuides: "Integrations",
   categoryExternal: "External",
+  categoryCompare: "Compare",
+  categoryVerticals: "Verticals",
   viewAll: "View all",
   showMore: "Show more",
   showLess: "Show less",
@@ -76,7 +88,7 @@ const en: LocaleDictionary = {
   viewPageMarkdown: "Markdown",
   backToHtmlPage: "HTML page",
   allPagesMarkdown: "All pages",
-  rawMarkdownDirect: "Raw view",
+  rawMarkdownDirect: "Full page",
 };
 
 const dictionaries: Record<SupportedLocale, LocaleDictionary> = {
@@ -107,6 +119,8 @@ const dictionaries: Record<SupportedLocale, LocaleDictionary> = {
     categoryUseCases: "Casos de uso",
     categoryIntegrationGuides: "Integraciones",
     categoryExternal: "Externo",
+    categoryCompare: "Comparar",
+    categoryVerticals: "Verticales",
     viewAll: "Ver todo",
     showMore: "Mostrar más",
     showLess: "Mostrar menos",
@@ -141,6 +155,8 @@ const dictionaries: Record<SupportedLocale, LocaleDictionary> = {
     categoryUseCases: "Casos d'ús",
     categoryIntegrationGuides: "Integracions",
     categoryExternal: "Extern",
+    categoryCompare: "Comparar",
+    categoryVerticals: "Verticals",
     viewAll: "Veure tot",
     showMore: "Mostrar més",
     showLess: "Mostrar menys",
@@ -175,6 +191,8 @@ const dictionaries: Record<SupportedLocale, LocaleDictionary> = {
     categoryUseCases: "使用场景",
     categoryIntegrationGuides: "集成",
     categoryExternal: "外部",
+    categoryCompare: "对比",
+    categoryVerticals: "行业场景",
     viewAll: "查看全部",
     showMore: "显示更多",
     showLess: "显示更少",
@@ -209,6 +227,8 @@ const dictionaries: Record<SupportedLocale, LocaleDictionary> = {
     categoryUseCases: "उपयोग के मामले",
     categoryIntegrationGuides: "इंटीग्रेशन",
     categoryExternal: "बाहरी",
+    categoryCompare: "तुलना",
+    categoryVerticals: "वर्टिकल",
     viewAll: "सभी देखें",
     showMore: "और दिखाएं",
     showLess: "कम दिखाएं",
@@ -243,6 +263,8 @@ const dictionaries: Record<SupportedLocale, LocaleDictionary> = {
     categoryUseCases: "حالات الاستخدام",
     categoryIntegrationGuides: "التكاملات",
     categoryExternal: "خارجي",
+    categoryCompare: "مقارنة",
+    categoryVerticals: "القطاعات",
     viewAll: "عرض الكل",
     showMore: "عرض المزيد",
     showLess: "عرض أقل",
@@ -277,6 +299,8 @@ const dictionaries: Record<SupportedLocale, LocaleDictionary> = {
     categoryUseCases: "Cas d'utilisation",
     categoryIntegrationGuides: "Intégrations",
     categoryExternal: "Externe",
+    categoryCompare: "Comparer",
+    categoryVerticals: "Verticaux",
     viewAll: "Voir tout",
     showMore: "Afficher plus",
     showLess: "Afficher moins",
@@ -311,6 +335,8 @@ const dictionaries: Record<SupportedLocale, LocaleDictionary> = {
     categoryUseCases: "Casos de uso",
     categoryIntegrationGuides: "Integrações",
     categoryExternal: "Externo",
+    categoryCompare: "Comparar",
+    categoryVerticals: "Verticais",
     viewAll: "Ver tudo",
     showMore: "Mostrar mais",
     showLess: "Mostrar menos",
@@ -345,6 +371,8 @@ const dictionaries: Record<SupportedLocale, LocaleDictionary> = {
     categoryUseCases: "Примеры использования",
     categoryIntegrationGuides: "Интеграции",
     categoryExternal: "Внешние",
+    categoryCompare: "Сравнение",
+    categoryVerticals: "Отрасли",
     viewAll: "Показать все",
     showMore: "Показать больше",
     showLess: "Показать меньше",
@@ -379,6 +407,8 @@ const dictionaries: Record<SupportedLocale, LocaleDictionary> = {
     categoryUseCases: "ব্যবহারের ক্ষেত্র",
     categoryIntegrationGuides: "ইন্টিগ্রেশন",
     categoryExternal: "বাহ্যিক",
+    categoryCompare: "তুলনা",
+    categoryVerticals: "ভার্টিক্যাল",
     viewAll: "সব দেখুন",
     showMore: "আরও দেখুন",
     showLess: "কম দেখুন",
@@ -413,6 +443,8 @@ const dictionaries: Record<SupportedLocale, LocaleDictionary> = {
     categoryUseCases: "استعمال کے معاملات",
     categoryIntegrationGuides: "انضمامات",
     categoryExternal: "بیرونی",
+    categoryCompare: "موازنہ",
+    categoryVerticals: "عمودی شعبے",
     viewAll: "سب دیکھیں",
     showMore: "مزید دکھائیں",
     showLess: "کم دکھائیں",
@@ -447,6 +479,8 @@ const dictionaries: Record<SupportedLocale, LocaleDictionary> = {
     categoryUseCases: "Kasus penggunaan",
     categoryIntegrationGuides: "Integrasi",
     categoryExternal: "Eksternal",
+    categoryCompare: "Bandingkan",
+    categoryVerticals: "Vertikal",
     viewAll: "Lihat semua",
     showMore: "Tampilkan lebih",
     showLess: "Tampilkan kurang",
@@ -481,6 +515,8 @@ const dictionaries: Record<SupportedLocale, LocaleDictionary> = {
     categoryUseCases: "Anwendungsfälle",
     categoryIntegrationGuides: "Integrationen",
     categoryExternal: "Extern",
+    categoryCompare: "Vergleich",
+    categoryVerticals: "Branchen",
     viewAll: "Alle anzeigen",
     showMore: "Mehr anzeigen",
     showLess: "Weniger anzeigen",

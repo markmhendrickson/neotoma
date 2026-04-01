@@ -312,8 +312,8 @@ private getUnauthenticatedResponse() {
     capabilities: {
       authentication: {
         type: "oauth2",
-        authorizationUrl: `${config.apiBase}/api/mcp/oauth/authorize`,
-        tokenUrl: `${config.apiBase}/api/mcp/oauth/token`,
+        authorizationUrl: `${config.apiBase}/mcp/oauth/authorize`,
+        tokenUrl: `${config.apiBase}/mcp/oauth/token`,
       },
     },
     serverInfo: {
@@ -452,7 +452,7 @@ Summaries from official Cursor docs, the MCP Authorization specification, and RF
 | Redirect          | Cursor: fixed `cursor://anysphere.cursor-mcp/oauth/callback`                              | Our OAuth callback must accept this redirect and use `state` to identify the MCP server                                                                                          |
 | PKCE / tokens     | MCP spec: PKCE required; Bearer in header; 401 for invalid/expired                        | We implement OAuth 2.1 flow with PKCE; resource server validates Bearer and returns 401 for invalid/expired tokens on **authenticated** requests                                 |
 
-**Implementation (applied):** Neotoma exposes `/.well-known/oauth-authorization-server` and `/.well-known/oauth-protected-resource`, GET `/api/mcp/oauth/authorize` (RFC 8414 authorization endpoint), and POST `/api/mcp/oauth/token` (token exchange). When the client uses Cursor's redirect URI (`cursor://...`), the callback redirects there with `code=connection_id` and `state`; Cursor then exchanges the code at the token endpoint for an access token. Initialize `capabilities.authentication` uses the same authorize and token URLs.
+**Implementation (applied):** Neotoma exposes `/.well-known/oauth-authorization-server` and `/.well-known/oauth-protected-resource`, GET `/mcp/oauth/authorize` (RFC 8414 authorization endpoint), and POST `/mcp/oauth/token` (token exchange). When the client uses Cursor's redirect URI (`cursor://...`), the callback redirects there with `code=connection_id` and `state`; Cursor then exchanges the code at the token endpoint for an access token. Initialize `capabilities.authentication` uses the same authorize and token URLs.
 
 ---
 

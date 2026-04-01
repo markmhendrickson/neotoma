@@ -42,12 +42,8 @@ describe("site_page_markdown", () => {
     }
   });
 
-  it("rawMarkdownTo points at localized /raw with path query", () => {
-    const to = rawMarkdownTo("/install", "en");
-    expect(to.pathname).toBe("/raw");
-    expect(to.search).toBe("?path=%2Finstall");
-    const toEs = rawMarkdownTo("/", "es");
-    expect(toEs.pathname).toBe("/es/raw");
-    expect(toEs.search).toBe("?path=%2F");
+  it("rawMarkdownTo points at localized /markdown/… full-page export", () => {
+    expect(rawMarkdownTo("/install", "en")).toBe("/markdown/install");
+    expect(rawMarkdownTo("/", "es")).toBe("/es/markdown");
   });
 });

@@ -1,0 +1,37 @@
+name: Remote integration nightly
+
+on:
+  schedule:
+    - cron: "17 8 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: remote-integration-nightly
+  cancel-in-progress: true
+
+jobs:
+  remote_integration:
+    if: ${{ vars.CI_REMOTE_TESTS_ENABLED == '1' }}
+    runs-on: ubuntu-latest
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      ACTIONS_BEARER_TOKEN: ${{ secrets.ACTIONS_BEARER_TOKEN }}
+      NEOTOMA_CONNECTION_ID: ${{ secrets.NEOTOMA_CONNECTION_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run remote critical suite
+        run: npm run test:remote:critical

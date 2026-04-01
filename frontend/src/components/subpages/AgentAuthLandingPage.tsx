@@ -230,28 +230,25 @@ const CONFIG: VerticalConfig = {
     },
   ],
   caseStudy: {
-    companyName: "Hellō",
-    companyUrl: "https://hello.coop/",
-    headline:
-      "How Hellō uses Neotoma as its authorization integrity layer",
-    companyDesc:
-      "provides decentralized, consent-forward identity for the web. Its agent authorization surface needs durable records of which agents are bound to which subjects, under what scopes, when consent changed, and how offboarding revokes authority.",
-    whatTheyDoHeading: "What Hellō does for agent authorization",
+    headline: "How agent authorization teams use Neotoma as their integrity layer",
+    desc:
+      "Production agent authorization surfaces need durable records of which agents are bound to which subjects, under what scopes, when consent changed, and how offboarding revokes authority. Neotoma versions every binding, delegation, and policy evaluation so you can reconstruct authorization state at any point in time.",
+    featuresHeading: "What agent authorization teams build",
     features: [
-      "Binds software agents to Hellō subjects with explicit scopes (payments, PII, infra changes) instead of ad hoc API keys",
-      "Issues, narrows, time-boxes, and revokes agent bindings with onboarding and offboarding lifecycle events auditors can replay",
-      "Emits consent grants and revocations as structured state for policy engines, orchestrators, and incident response",
+      "Bind software agents to subjects with explicit scopes (payments, PII, infra changes) instead of ad hoc API keys",
+      "Issue, narrow, time-box, and revoke agent bindings with onboarding and offboarding lifecycle events auditors can replay",
+      "Emit consent grants and revocations as structured state for policy engines, orchestrators, and incident response",
     ],
     guarantees: [
       "Immutable observations for every binding change, consent edge, delegation hop, and policy evaluation the stack emits",
       'Temporal snapshots so "was this agent allowed to act then?" uses the consent and policy state in effect at that moment',
       "Relationship integrity between human identity, consent records, agent sessions, and downstream actions",
-      "Audit-oriented exports that trace authority from the Hellō subject through each delegation hop to the acting agent",
+      "Audit-oriented exports that trace authority from the subject through each delegation hop to the acting agent",
     ],
     generalizesTitle:
       "The same integrity pattern fits any agent authorization stack",
     generalizesDesc:
-      "Hellō provides identity and consent-forward agent bindings. Standalone authorization builders like AAuth face the same requirement from a different angle. Any production agent that moves money, touches PII, or changes systems needs reconstructable authorization state. Neotoma generalizes the pattern underneath.",
+      "Whether you build on decentralized identity providers, standalone authorization frameworks, or custom policy engines, any production agent that moves money, touches PII, or changes systems needs reconstructable authorization state. Neotoma generalizes the pattern underneath.",
   },
   ctaHeadline: "Ship agents that can prove",
   ctaHighlight: "every authorization decision they made",

@@ -1,0 +1,57 @@
+# Neotoma
+
+> Deterministic state layer for long-running AI agents
+
+## What it does
+
+Neotoma is an open-source deterministic state layer for AI agents. It uses append-only observation logs, hash-based entity IDs, and schema constraints to give agents versioned, reproducible, auditable memory that never silently mutates. Same observations always produce the same entity state.
+
+## Key facts
+
+- Open-source, MIT-licensed
+- Installs via npm: `npm install -g neotoma`
+- Interfaces: REST API, MCP server, CLI
+- Platforms: macOS, Linux, Windows (WSL)
+- AI tool integrations: Cursor, Claude, Claude Code, ChatGPT, Codex, OpenClaw
+- Local-first: data stays on your machine, no cloud sync, no telemetry
+- Written in TypeScript, backed by SQLite
+
+## Core guarantees
+
+- Deterministic state evolution: same observations always produce the same entity state
+- Versioned history: every change creates a new version, earlier states preserved
+- Replayable timeline: replay observations to reconstruct any historical state
+- Auditable change log: every modification records who, when, and from what source
+- Schema constraints: entities validated against defined types, malformed writes rejected
+- Silent mutation prevention: no overwrites, merges, or drops without a trace
+- Conflicting facts detection: contradictory statements detected and resolved deterministically
+- Reproducible state reconstruction: rebuild complete state from raw inputs alone
+- Human inspectability: diff any two versions, trace every fact to its origin
+
+## Key concepts
+
+- Entity: canonical representation of a person, company, task, or object with deterministic ID
+- Observation: immutable, timestamped fact about an entity; never modified or deleted
+- Snapshot: current truth for an entity, computed by merging all observations via reducers
+- Reducer: deterministic function that merges observations into a snapshot
+- Provenance: origin tracking so every value traces back to its source
+- Memory graph: the graph of sources, observations, entities, relationships, and events
+
+## How it compares
+
+- vs Platform memory (Claude, ChatGPT): Neotoma adds deterministic state, versioned history, schema constraints, and reproducible reconstruction
+- vs Retrieval memory (Mem0, Zep): Neotoma provides state integrity instead of retrieval relevance; deterministic composition instead of probabilistic matching
+- vs File-based memory (Markdown, JSON): Neotoma adds schema validation, deterministic merging, temporal queries, and auditable provenance
+- vs RAG: Neotoma is not a RAG system; it provides deterministic entity state, not document retrieval for prompt augmentation
+
+## Links
+
+- Website: https://neotoma.io
+- Documentation: https://neotoma.io/docs
+- Install guide: https://neotoma.io/install
+- FAQ: https://neotoma.io/faq
+- GitHub: https://github.com/markmhendrickson/neotoma
+- npm: https://www.npmjs.com/package/neotoma
+- Architecture: https://neotoma.io/architecture
+- Memory guarantees: https://neotoma.io/memory-guarantees
+- Memory models comparison: https://neotoma.io/memory-models

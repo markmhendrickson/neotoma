@@ -169,7 +169,7 @@ This discovery plan coordinates the following topic-specific documents:
 - `release_plan.md` — Release overview and scope
 - `discovery_checklist.md` — Complete checklist of all discovery needs
 - `docs/feature_units/standards/discovery_process.md` — Discovery process standard
-- `docs/specs/ICP_PROFILES.md` — ICP profile definitions (source for filtering criteria)
+- `docs/icp/profiles.md` — ICP profile definitions (source for filtering criteria)
 ### 8. Status
 - **Current Status**: Not started
 - **Owner**: Mark Hendrickson

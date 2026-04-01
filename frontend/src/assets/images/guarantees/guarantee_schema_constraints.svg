@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" role="img" aria-label="Schema constraints: valid structure passes the gate while invalid shape is rejected">
+  <defs>
+    <radialGradient id="bg_sc" cx="50%" cy="50%" r="65%">
+      <stop offset="0%" stop-color="#c8860a"/>
+      <stop offset="55%" stop-color="#7a4f08"/>
+      <stop offset="100%" stop-color="#2e1800"/>
+    </radialGradient>
+    <radialGradient id="glow_sc" cx="50%" cy="50%" r="42%">
+      <stop offset="0%" stop-color="#ffe8a0" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#c8860a" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="400" height="400" fill="url(#bg_sc)"/>
+  <rect width="400" height="400" fill="url(#glow_sc)"/>
+
+  <rect x="68" y="112" width="116" height="176" rx="18" fill="none" stroke="#f4e8c1" stroke-width="3" opacity="0.6"/>
+  <rect x="94" y="144" width="64" height="112" rx="10" fill="#f4e8c1" stroke="#4a3510" stroke-width="3"/>
+  <line x1="108" y1="174" x2="144" y2="174" stroke="#6b4e1f" stroke-width="2"/>
+  <line x1="108" y1="190" x2="144" y2="190" stroke="#6b4e1f" stroke-width="2"/>
+  <line x1="108" y1="206" x2="138" y2="206" stroke="#6b4e1f" stroke-width="2"/>
+
+  <path d="M184 200 H230" fill="none" stroke="#f4e8c1" stroke-width="4" stroke-linecap="round" opacity="0.7"/>
+  <rect x="230" y="112" width="102" height="176" rx="18" fill="#f4e8c1" stroke="#4a3510" stroke-width="3.2"/>
+  <rect x="254" y="142" width="54" height="116" rx="10" fill="none" stroke="#6b4e1f" stroke-width="2.4" stroke-dasharray="8 6"/>
+
+  <circle cx="216" cy="278" r="18" fill="#f4e8c1" stroke="#4a3510" stroke-width="2.5"/>
+  <line x1="208" y1="270" x2="224" y2="286" stroke="#4a3510" stroke-width="3" stroke-linecap="round"/>
+  <line x1="224" y1="270" x2="208" y2="286" stroke="#4a3510" stroke-width="3" stroke-linecap="round"/>
+
+  <circle cx="216" cy="150" r="18" fill="#e0cc99" stroke="#4a3510" stroke-width="2.5"/>
+  <path d="M206 150 H226 M216 140 V160" fill="none" stroke="#4a3510" stroke-width="3" stroke-linecap="round"/>
+</svg>

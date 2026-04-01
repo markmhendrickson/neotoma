@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
+import { useEffectiveRoutePath } from "@/hooks/useEffectiveRoutePath";
 import { ChevronRight } from "lucide-react";
 import {
   Sidebar,
@@ -15,10 +16,21 @@ import {
 import { DOC_NAV_ICONS, INTEGRATION_BRAND_ICONS } from "@/site/doc_icons";
 import { cn } from "@/lib/utils";
 import { useLocale } from "@/i18n/LocaleContext";
-import { localizePath } from "@/i18n/routing";
+import type { SupportedLocale } from "@/i18n/config";
+import { localizePath, normalizeToDefaultRoute, stripLocaleFromPath } from "@/i18n/routing";
 import { getLocalizedDocNavCategories } from "@/site/site_data_localized";
+import { useSiteAppNavBarVisible } from "@/context/SiteAppNavContext";
 
-const SECTION_PREVIEW_COUNT = 3;
+/** Categories with more items show a "Show more" control after this many links (Reference, Compare, …). */
+const DOC_SIDEBAR_ITEMS_BEFORE_MORE = 6;
+
+function navKeyForHref(href: string, locale: SupportedLocale): string {
+  const [pathPart, frag] = href.split("#");
+  if (!pathPart.startsWith("/")) return href;
+  const localized = localizePath(pathPart, locale);
+  const base = normalizeToDefaultRoute(stripLocaleFromPath(localized));
+  return frag ? `${base}#${frag}` : base;
+}
 
 const linkClass = (active: boolean) =>
   cn(
@@ -35,8 +47,12 @@ interface DocsSidebarProps {
 }
 
 export function DocsSidebar({ siteName: _siteName, belowHeader }: DocsSidebarProps) {
-  const { pathname, hash } = useLocation();
+  const appNavBarVisible = useSiteAppNavBarVisible();
+  const { hash } = useLocation();
+  const effectivePath = useEffectiveRoutePath();
   const { isMobile, setOpenMobile, state: sidebarState } = useSidebar();
+  /** Icon/collapsed desktop rail: show every link (tooltips); omit show-more row (no room for label). */
+  const sidebarShowsLabels = isMobile || sidebarState === "expanded";
   const { locale, dict, direction } = useLocale();
   const orderedCategories = useMemo(() => {
     const categories = [...getLocalizedDocNavCategories(dict)];
@@ -44,7 +60,7 @@ export function DocsSidebar({ siteName: _siteName, belowHeader }: DocsSidebarPro
       category.items.some((item) => item.href === "/api")
     );
     const useCasesIndex = categories.findIndex((category) =>
-      category.items.some((item) => item.href === "/ai-infrastructure-engineers")
+      category.items.some((item) => item.href === "/debugging-infrastructure")
     );
     if (
       referenceIndex >= 0 &&
@@ -56,13 +72,15 @@ export function DocsSidebar({ siteName: _siteName, belowHeader }: DocsSidebarPro
     }
     return categories;
   }, [dict]);
-  const isItemActive = (href: string) => {
-    const localizedHref = href.startsWith("/") ? localizePath(href, locale) : href;
-    const currentFullPath = `${pathname}${hash}`;
-    return (
-      localizedHref === currentFullPath || (!localizedHref.includes("#") && pathname === localizedHref)
-    );
-  };
+
+  const isItemActive = useCallback(
+    (href: string) => {
+      if (!href.startsWith("/")) return false;
+      const currentKey = hash ? `${effectivePath}${hash}` : effectivePath;
+      return navKeyForHref(href, locale) === currentKey;
+    },
+    [effectivePath, hash, locale],
+  );
 
   const defaultOpenCategories = useMemo(() => {
     const open = new Set<string>(orderedCategories.map((category) => category.title));
@@ -72,22 +90,9 @@ export function DocsSidebar({ siteName: _siteName, belowHeader }: DocsSidebarPro
       }
     });
     return open;
-  }, [orderedCategories, pathname, hash, locale]);
+  }, [orderedCategories, isItemActive]);
 
   const [openCategories, setOpenCategories] = useState<Set<string>>(defaultOpenCategories);
-  const defaultExpandedCategoryItems = useMemo(() => {
-    const expanded = new Set<string>();
-    orderedCategories.forEach((category) => {
-      const activeIndex = category.items.findIndex(
-        (item) => item.href.startsWith("/") && isItemActive(item.href),
-      );
-      if (activeIndex >= SECTION_PREVIEW_COUNT) expanded.add(category.title);
-    });
-    return expanded;
-  }, [orderedCategories, pathname, hash, locale]);
-  const [expandedCategoryItems, setExpandedCategoryItems] = useState<Set<string>>(
-    defaultExpandedCategoryItems,
-  );
 
   useEffect(() => {
     setOpenCategories((current) => {
@@ -96,13 +101,26 @@ export function DocsSidebar({ siteName: _siteName, belowHeader }: DocsSidebarPro
       return next;
     });
   }, [defaultOpenCategories]);
+
+  const [navExpandedByCategory, setNavExpandedByCategory] = useState<Record<string, boolean>>({});
+
   useEffect(() => {
-    setExpandedCategoryItems((current) => {
-      const next = new Set(current);
-      defaultExpandedCategoryItems.forEach((title) => next.add(title));
-      return next;
+    setNavExpandedByCategory((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const cat of orderedCategories) {
+        if (cat.items.length <= DOC_SIDEBAR_ITEMS_BEFORE_MORE) continue;
+        const overflow = cat.items.slice(DOC_SIDEBAR_ITEMS_BEFORE_MORE);
+        if (overflow.some((item) => item.href.startsWith("/") && isItemActive(item.href))) {
+          if (!next[cat.title]) {
+            next[cat.title] = true;
+            changed = true;
+          }
+        }
+      }
+      return changed ? next : prev;
     });
-  }, [defaultExpandedCategoryItems]);
+  }, [orderedCategories, isItemActive]);
 
   const closeMobileOnClick = () => {
     if (isMobile) setOpenMobile(false);
@@ -115,104 +133,94 @@ export function DocsSidebar({ siteName: _siteName, belowHeader }: DocsSidebarPro
       return next;
     });
   };
-  const toggleCategoryItems = (title: string) => {
-    setExpandedCategoryItems((current) => {
-      const next = new Set(current);
-      if (next.has(title)) next.delete(title);
-      else next.add(title);
-      return next;
-    });
-  };
-
   const navContent = (
     <>
-      {orderedCategories.map((cat) => (
-        <SidebarGroup key={cat.title}>
-          {(() => {
-            const isCategoryOpen = openCategories.has(cat.title);
-            const isPreviewExpanded = expandedCategoryItems.has(cat.title);
-            const isIntegrationsCategory = cat.items.some((item) =>
-              item.href.startsWith("/neotoma-with-")
-            );
-            const visibleItems =
-              isIntegrationsCategory
-                ? cat.items
-                : isPreviewExpanded
-                  ? cat.items
-                  : cat.items.slice(0, SECTION_PREVIEW_COUNT);
-            const isShowingAllItems = visibleItems.length >= cat.items.length;
-            const showExpandCollapse = !isIntegrationsCategory && cat.items.length > SECTION_PREVIEW_COUNT && sidebarState === "expanded";
-            return (
-              <>
-          <SidebarGroupLabel className="px-0">
-            <button
-              type="button"
-              onClick={() => toggleCategory(cat.title)}
-              className="flex w-full items-center gap-1 px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/50 hover:text-sidebar-foreground"
-              aria-expanded={isCategoryOpen}
-            >
-              <ChevronRight
-                className={cn(
-                  "h-3.5 w-3.5 shrink-0 transition-transform",
-                  isCategoryOpen && "rotate-90",
-                )}
-                aria-hidden
-              />
-              {cat.title}
-            </button>
-          </SidebarGroupLabel>
-          <SidebarGroupContent className={cn(!isCategoryOpen && "hidden")}>
-            <SidebarMenu>
-              {visibleItems.map((item) => {
-                const localizedHref = item.href.startsWith("/")
-                  ? localizePath(item.href, locale)
-                  : item.href;
-                const isActive = isItemActive(item.href);
-                const isIntegrations = cat.items.some((candidate) =>
-                  candidate.href.startsWith("/neotoma-with-")
-                );
-                const BrandIcon =
-                  isIntegrations && item.href.startsWith("/") ? INTEGRATION_BRAND_ICONS[item.href] : null;
-                const Icon = BrandIcon ?? DOC_NAV_ICONS[item.icon ?? "BookOpen"];
-                return (
-                  <SidebarMenuItem key={item.href}>
+      {orderedCategories.map((cat) => {
+        const isCategoryOpen = openCategories.has(cat.title);
+        const needsMoreToggle = cat.items.length > DOC_SIDEBAR_ITEMS_BEFORE_MORE;
+        const isNavExpanded = navExpandedByCategory[cat.title] ?? false;
+        const displayItems =
+          sidebarShowsLabels && needsMoreToggle && !isNavExpanded
+            ? cat.items.slice(0, DOC_SIDEBAR_ITEMS_BEFORE_MORE)
+            : cat.items;
+        const isIntegrationsCategory = cat.items.some((candidate) =>
+          candidate.href.startsWith("/neotoma-with-"),
+        );
+        return (
+          <SidebarGroup key={cat.title}>
+            <SidebarGroupLabel className="px-0">
+              <button
+                type="button"
+                onClick={() => toggleCategory(cat.title)}
+                className="flex w-full items-center gap-1 px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/50 hover:text-sidebar-foreground"
+                aria-expanded={isCategoryOpen}
+              >
+                <ChevronRight
+                  className={cn(
+                    "h-3.5 w-3.5 shrink-0 transition-transform",
+                    isCategoryOpen && "rotate-90",
+                  )}
+                  aria-hidden
+                />
+                {cat.title}
+              </button>
+            </SidebarGroupLabel>
+            <SidebarGroupContent className={cn(!isCategoryOpen && "hidden")}>
+              <SidebarMenu>
+                {displayItems.map((item) => {
+                  const localizedHref = item.href.startsWith("/")
+                    ? localizePath(item.href, locale)
+                    : item.href;
+                  const isActive = isItemActive(item.href);
+                  const BrandIcon =
+                    isIntegrationsCategory && item.href.startsWith("/")
+                      ? INTEGRATION_BRAND_ICONS[item.href]
+                      : null;
+                  const Icon = BrandIcon ?? DOC_NAV_ICONS[item.icon ?? "BookOpen"];
+                  return (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={isActive}
+                        tooltip={item.label}
+                        className={linkClass(isActive)}
+                      >
+                        <Link to={localizedHref} onClick={closeMobileOnClick}>
+                          {BrandIcon ? (
+                            <BrandIcon className="size-4 shrink-0" aria-hidden />
+                          ) : Icon ? (
+                            <Icon aria-hidden />
+                          ) : null}
+                          <span>{item.label}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
+                {needsMoreToggle && sidebarShowsLabels ? (
+                  <SidebarMenuItem>
                     <SidebarMenuButton
-                      asChild
-                      isActive={isActive}
-                      tooltip={item.label}
-                      className={linkClass(isActive)}
+                      type="button"
+                      onClick={() =>
+                        setNavExpandedByCategory((s) => ({
+                          ...s,
+                          [cat.title]: !isNavExpanded,
+                        }))
+                      }
+                      className={cn(
+                        "h-8 text-[12px] font-medium text-sidebar-foreground/60 hover:text-sidebar-foreground",
+                      )}
+                      aria-expanded={isNavExpanded}
                     >
-                      <Link to={localizedHref} onClick={closeMobileOnClick}>
-                        {BrandIcon ? (
-                          <BrandIcon className="size-4 shrink-0" aria-hidden />
-                        ) : Icon ? (
-                          <Icon aria-hidden />
-                        ) : null}
-                        <span>{item.label}</span>
-                      </Link>
+                      {isNavExpanded ? dict.showLess : dict.showMore}
                     </SidebarMenuButton>
                   </SidebarMenuItem>
-                );
-              })}
-              {showExpandCollapse && (
-                <SidebarMenuItem>
-                  <button
-                    type="button"
-                    onClick={() => toggleCategoryItems(cat.title)}
-                    aria-expanded={isShowingAllItems}
-                    className="h-8 w-full rounded-md px-2 text-left text-[12px] text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground group-data-[collapsible=icon]:hidden"
-                  >
-                    {isShowingAllItems ? dict.showLess : dict.showMore}
-                  </button>
-                </SidebarMenuItem>
-              )}
-            </SidebarMenu>
-          </SidebarGroupContent>
-              </>
-            );
-          })()}
-        </SidebarGroup>
-      ))}
+                ) : null}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        );
+      })}
     </>
   );
 
@@ -221,6 +229,7 @@ export function DocsSidebar({ siteName: _siteName, belowHeader }: DocsSidebarPro
       collapsible="icon"
       side={isMobile ? "right" : direction === "rtl" ? "right" : "left"}
       belowHeader={belowHeader}
+      appNavBarVisible={appNavBarVisible}
     >
       <SidebarContent className="md:pb-4">
         {isMobile ? (

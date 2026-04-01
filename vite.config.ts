@@ -8,6 +8,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
   plugins: [react()],
   root: "frontend",
+  // Load .env / .env.development / .env.production from repo root (same as neotoma site configure).
+  envDir: path.resolve(__dirname, "."),
   define: {
     "import.meta.env.VITE_WS_PORT": JSON.stringify(process.env.WS_PORT || "8280"),
   },

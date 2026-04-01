@@ -108,7 +108,7 @@ export function AppNavigationSidebar({ siteName }: AppNavigationSidebarProps) {
   const { isMobile, setOpen, setOpenMobile, state } = useSidebar();
   const { direction, pack } = useLocale();
   const siteSections = useMemo(() => getLocalizedSiteSections(pack), [pack]);
-  const [activeSection, setActiveSection] = useState<string>(siteSections[0]?.id ?? "install");
+  const [activeSection, setActiveSection] = useState<string>(siteSections[0]?.id ?? "intro");
   const hasManualSidebarToggleRef = useRef(false);
   const autoSidebarStateRef = useRef<boolean | null>(null);
 
@@ -151,14 +151,14 @@ export function AppNavigationSidebar({ siteName }: AppNavigationSidebarProps) {
   useEffect(() => {
     if (isMobile) return;
 
-    // Desktop behavior for site home: auto-collapse while in install section,
+    // Desktop behavior for site home: auto-collapse while in guarantees section,
     // auto-expand below it, unless user has manually toggled.
-    const installSection = document.getElementById("install");
-    if (!installSection) return;
+    const guaranteesSection = document.getElementById("memory-guarantees");
+    if (!guaranteesSection) return;
 
     const syncSidebarToScroll = () => {
       if (hasManualSidebarToggleRef.current) return;
-      const threshold = installSection.getBoundingClientRect().bottom + window.scrollY - 120;
+      const threshold = guaranteesSection.getBoundingClientRect().bottom + window.scrollY - 120;
       const shouldBeOpen = window.scrollY >= threshold;
       if (autoSidebarStateRef.current !== shouldBeOpen) {
         setOpen(shouldBeOpen);

@@ -115,7 +115,7 @@
 5. **`docs/architecture/architecture.md`**
    - System architecture
    - Layer descriptions
-6. **`docs/specs/ICP_PROFILES.md`**
+6. **`docs/icp/profiles.md`**
    - Target user profiles
    - Use cases
 7. **`docs/releases/in_progress/`**
@@ -189,7 +189,7 @@ README must be regenerated when:
 9. **Integration changes** — New providers added
 10. **Philosophy/principles changes** — `docs/foundation/philosophy.md` modified
 11. **Problem statement changes** — `docs/foundation/problem_statement.md` modified
-12. **Target user changes** — `docs/specs/ICP_PROFILES.md` modified
+12. **Target user changes** — `docs/icp/profiles.md` modified
 13. **User explicitly requests** — "regenerate README" or similar
 ### What Constitutes "Materially Affecting"
 A documentation change is "materially affecting" if it:

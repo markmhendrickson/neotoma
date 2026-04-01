@@ -219,10 +219,10 @@ const CONFIG: VerticalConfig = {
     },
   ],
   caseStudy: {
-    companyName: "ResolveAI",
-    companyUrl: "https://resolveai.example.com",
-    companyDesc:
-      "is a fictional AI-native customer operations platform that automates triage, routing, and multi-channel resolution for SaaS and e-commerce support teams.",
+    headline: "How customer operations teams use Neotoma as their integrity layer",
+    desc:
+      "AI-native customer operations platforms automate triage, routing, and multi-channel resolution for SaaS and e-commerce support teams. Neotoma versions every routing decision, priority change, and interaction so you can reconstruct support state at any SLA audit or CSAT investigation point.",
+    featuresHeading: "What customer operations teams build",
     features: [
       "Triage agents that classify and route tickets across billing, technical, and account queues with real-time queue balancing",
       "Multi-channel interaction management spanning chat, email, voice, and social with unified customer context",
@@ -236,7 +236,7 @@ const CONFIG: VerticalConfig = {
     ],
     generalizesTitle: "If agents route, respond, and escalate, you need reconstructable support state",
     generalizesDesc:
-      "Any team running support agents for triage, routing, or resolution faces the same requirement: explain why a case was handled the way it was. Neotoma generalizes the ResolveAI pattern to your CX stack.",
+      "Any team running support agents for triage, routing, or resolution faces the same requirement: explain why a case was handled the way it was. Neotoma generalizes the pattern to your CX stack.",
   },
   ctaHeadline: "Ship support agents that can explain",
   ctaHighlight: "every routing and resolution decision",

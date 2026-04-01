@@ -16,6 +16,13 @@ export function CodexConnectLocalStdioPage() {
         {" · "}
         Local setup where Neotoma is configured in Codex on the same machine.
       </p>
+      <p className="text-[14px] leading-6 text-muted-foreground mb-4">
+        Need a remote MCP URL for sandboxes (HTTP with OAuth)? See{" "}
+        <Link to="/neotoma-with-codex-connect-remote-http-oauth" className={extLink}>
+          Codex remote setup (HTTP with OAuth)
+        </Link>
+        .
+      </p>
 
       <IntegrationSection title="Setup" sectionKey="setup">
         <p className="text-[15px] leading-7 text-muted-foreground mb-4">

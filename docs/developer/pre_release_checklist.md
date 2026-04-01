@@ -30,9 +30,10 @@ npm run lint
 
 ### 1.3 Migration completeness
 
-- Ensure every table in schema/source of truth has a corresponding migration.
-- Compare `CREATE TABLE` in `supabase/schema.sql` (or repo schema source) with `supabase/migrations/*.sql` (or equivalent).
-- **Common failures:** New tables without migrations, `record_relationships` / `records` or external tables missing.
+- **Source of truth:** Local SQLite schema is defined in `src/repositories/sqlite/sqlite_client.ts` (`SCHEMA_STATEMENTS`, column adds in `ensureSchema`, and `DEPRECATED_TABLES` drops).
+- **`npm run migrate`** is a no-op for local SQLite (schema is applied on first DB open); still run it in CI/checklists so the command stays healthy.
+- If a release ships **optional SQL** for operators (e.g. under `docs/releases/vX.Y.Z/migrations/`), confirm those scripts align with the in-code schema for that release.
+- **Common failures:** New tables or columns added only in one place (code vs. release SQL), or legacy tables reappearing because `DEPRECATED_TABLES` was not updated.
 
 ### 1.4 Migration execution
 
@@ -42,14 +43,14 @@ npm run migrate
 
 - **Required:** Succeeds without errors. Prefer a clean environment when possible.
 
-### 1.5 Schema advisor (when applicable)
+### 1.5 Health check (local stack)
 
 ```bash
-npm run check:advisors
+npm run doctor
 ```
 
-- **Required:** 0 critical issues.
-- **Common failures:** Tables with policies but RLS not enabled.
+- **Required:** No failures (warnings from `doctor` are acceptable if documented).
+- **Note:** This repo uses **local SQLite**, not hosted Postgres/Supabase; there is no separate RLS/schema-advisor script in `package.json`.
 
 ### 1.6 Build verification
 

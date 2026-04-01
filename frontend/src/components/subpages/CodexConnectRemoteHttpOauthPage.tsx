@@ -15,6 +15,13 @@ export function CodexConnectRemoteHttpOauthPage() {
         {" · "}
         Remote setup for Codex sandboxes that cannot run local Neotoma.
       </p>
+      <p className="text-[14px] leading-6 text-muted-foreground mb-4">
+        Running Codex on the same machine as Neotoma? See{" "}
+        <Link to="/neotoma-with-codex-connect-local-stdio" className={extLink}>
+          Codex local setup (stdio)
+        </Link>
+        .
+      </p>
 
       <IntegrationSection title="Setup" sectionKey="setup">
         <p className="text-[15px] leading-7 text-muted-foreground mb-4">

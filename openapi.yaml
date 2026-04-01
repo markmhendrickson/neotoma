@@ -275,11 +275,6 @@ components:
           description: Required with file_content, optional with file_path
         original_filename:
           type: string
-        interpret:
-          type: boolean
-          default: true
-        interpretation_config:
-          type: object
           additionalProperties: true
         user_id:
           type: string
@@ -362,9 +357,6 @@ components:
           description: Optional idempotency key; if omitted, content hash is used
         original_filename:
           type: string
-        interpret:
-          type: boolean
-          default: true
           description: Run AI interpretation after store
         user_id:
           type: string
@@ -1940,68 +1932,6 @@ paths:
       responses:
         '200':
           description: Schema registered
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: true
-
-  /reinterpret:
-    post:
-      summary: Reinterpret source
-      description: Re-run AI interpretation on existing source
-      operationId: reinterpret
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - source_id
-              properties:
-                source_id:
-                  type: string
-                interpretation_config:
-                  type: object
-                  additionalProperties: true
-      responses:
-        '200':
-          description: Source reinterpreted
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: true
-
-  /interpret-uninterpreted:
-    post:
-      summary: Interpret uninterpreted sources
-      description: Re-run AI interpretation for sources that have no prior interpretation runs
-      operationId: interpretUninterpreted
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                limit:
-                  type: integer
-                  minimum: 1
-                  maximum: 100
-                  default: 50
-                dry_run:
-                  type: boolean
-                  default: false
-                user_id:
-                  type: string
-                interpretation_config:
-                  type: object
-                  additionalProperties: true
-      responses:
-        '200':
-          description: Uninterpreted sources processed
           content:
             application/json:
               schema:

@@ -2,7 +2,9 @@ import { Link } from "react-router-dom";
 import { SITE_CODE_SNIPPETS } from "../../site/site_data";
 import { CopyableCodeBlock } from "../CopyableCodeBlock";
 import { DetailPage } from "../DetailPage";
+import { GettingStartedEvaluateInstallLinks } from "../GettingStartedEvaluateInstallLinks";
 import { IntegrationSection } from "../IntegrationSection";
+import { TableScrollWrapper } from "../ui/table-scroll-wrapper";
 
 const extLink = "text-foreground underline underline-offset-2 hover:no-underline";
 
@@ -132,53 +134,57 @@ export function NeotomaWithCursorPage() {
           context snippets. Neotoma handles structured data that persists across projects and tools.
           Both are active simultaneously with no conflict.
         </p>
-        <table className="w-full text-[14px] leading-6 mb-2 border-collapse">
-          <thead>
-            <tr className="border-b border-border">
-              <th className="text-left py-2 pr-4 font-medium text-foreground">Concern</th>
-              <th className="text-left py-2 pr-4 font-medium text-foreground">Cursor</th>
-              <th className="text-left py-2 font-medium text-foreground">Neotoma</th>
-            </tr>
-          </thead>
-          <tbody className="text-muted-foreground">
-            <tr className="border-b border-border">
-              <td className="py-2 pr-4">Project context &amp; open files</td>
-              <td className="py-2 pr-4">Workspace</td>
-              <td className="py-2">&mdash;</td>
-            </tr>
-            <tr className="border-b border-border">
-              <td className="py-2 pr-4">Persistent AI instructions</td>
-              <td className="py-2 pr-4">.cursor/rules/</td>
-              <td className="py-2">&mdash;</td>
-            </tr>
-            <tr className="border-b border-border">
-              <td className="py-2 pr-4">Reusable context snippets</td>
-              <td className="py-2 pr-4">Notepads</td>
-              <td className="py-2">&mdash;</td>
-            </tr>
-            <tr className="border-b border-border">
-              <td className="py-2 pr-4">Structured entities across projects</td>
-              <td className="py-2 pr-4">&mdash;</td>
-              <td className="py-2">Store via MCP</td>
-            </tr>
-            <tr className="border-b border-border">
-              <td className="py-2 pr-4">Cross-tool state</td>
-              <td className="py-2 pr-4">&mdash;</td>
-              <td className="py-2">Shared memory graph</td>
-            </tr>
-            <tr>
-              <td className="py-2 pr-4">Versioned history &amp; audit trail</td>
-              <td className="py-2 pr-4">&mdash;</td>
-              <td className="py-2">Observation history</td>
-            </tr>
-          </tbody>
-        </table>
+        <TableScrollWrapper className="mb-4 w-full max-w-full">
+          <table className="w-full text-[14px] leading-6 border-collapse">
+            <thead>
+              <tr className="border-b border-border">
+                <th className="text-left align-top px-4 py-3 font-medium text-foreground">Concern</th>
+                <th className="text-left align-top px-4 py-3 font-medium text-foreground">Cursor</th>
+                <th className="text-left align-top px-4 py-3 font-medium text-foreground">Neotoma</th>
+              </tr>
+            </thead>
+            <tbody className="text-muted-foreground">
+              <tr className="border-b border-border">
+                <td className="align-top px-4 py-3">Project context &amp; open files</td>
+                <td className="align-top px-4 py-3">Workspace</td>
+                <td className="align-top px-4 py-3">-</td>
+              </tr>
+              <tr className="border-b border-border">
+                <td className="align-top px-4 py-3">Persistent AI instructions</td>
+                <td className="align-top px-4 py-3">.cursor/rules/</td>
+                <td className="align-top px-4 py-3">-</td>
+              </tr>
+              <tr className="border-b border-border">
+                <td className="align-top px-4 py-3">Reusable context snippets</td>
+                <td className="align-top px-4 py-3">Notepads</td>
+                <td className="align-top px-4 py-3">-</td>
+              </tr>
+              <tr className="border-b border-border">
+                <td className="align-top px-4 py-3">Structured entities across projects</td>
+                <td className="align-top px-4 py-3">-</td>
+                <td className="align-top px-4 py-3">Store via MCP</td>
+              </tr>
+              <tr className="border-b border-border">
+                <td className="align-top px-4 py-3">Cross-tool state</td>
+                <td className="align-top px-4 py-3">-</td>
+                <td className="align-top px-4 py-3">Shared memory graph</td>
+              </tr>
+              <tr>
+                <td className="align-top px-4 py-3">Versioned history &amp; audit trail</td>
+                <td className="align-top px-4 py-3">-</td>
+                <td className="align-top px-4 py-3">Observation history</td>
+              </tr>
+            </tbody>
+          </table>
+        </TableScrollWrapper>
       </IntegrationSection>
 
       <IntegrationSection sectionKey="getting-started" title="Getting started">
+        <GettingStartedEvaluateInstallLinks agentTargetPhrase="a Cursor agent chat" />
         <p className="text-[15px] leading-7 text-muted-foreground mb-4">
-          Paste this prompt into a Cursor agent chat. The agent handles npm install, initialization,
-          and MCP configuration.
+          If you are ready to proceed, paste this prompt into a Cursor agent chat.
+          The agent handles evaluation, installation if needed, activation, and
+          local MCP configuration.
         </p>
         <CopyableCodeBlock code={SITE_CODE_SNIPPETS.agentInstallPrompt} className="mb-4" />
         <p className="text-[14px] leading-6 text-muted-foreground mb-2">
@@ -186,6 +192,10 @@ export function NeotomaWithCursorPage() {
           server or remote access is required. The agent writes to <code>.cursor/mcp.json</code>{" "}
           (project-level) or <code>~/.cursor/mcp.json</code> (global) and restarts MCP
           automatically.
+        </p>
+        <p className="text-[14px] leading-6 text-muted-foreground mb-2">
+          After activation, offer to configure additional remote access points if
+          the user also wants Neotoma available in hosted tools.
         </p>
       </IntegrationSection>
 
@@ -240,7 +250,11 @@ export function NeotomaWithCursorPage() {
       </IntegrationSection>
 
       <p className="text-[14px] leading-6 text-muted-foreground">
-        See{" "}
+        Start with{" "}
+        <Link to="/evaluate" className={extLink}>
+          evaluation
+        </Link>
+        , see the{" "}
         <Link to="/install" className={extLink}>
           install guide
         </Link>{" "}

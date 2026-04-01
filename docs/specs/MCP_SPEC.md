@@ -86,14 +86,14 @@ flowchart LR
 
 1. **User navigates** to Neotoma web UI MCP Setup page
 2. **User creates** OAuth connection with unique `connection_id`
-3. **Backend initiates** OAuth flow via `POST /api/mcp/oauth/initiate`
+3. **Backend initiates** OAuth flow via `POST /mcp/oauth/initiate`
 4. **Backend returns** authorization URL with PKCE challenge
 5. **User opens** authorization URL in browser
 6. **User signs in** via auth provider and approves connection
 7. **Auth provider redirects** to callback URL with authorization code
 8. **Backend exchanges** code for access token and refresh token
 9. **Backend stores** encrypted refresh token in database
-10. **MCP client polls** `GET /api/mcp/oauth/status` until status is "active"
+10. **MCP client polls** `GET /mcp/oauth/status` until status is "active"
 
 **MCP Initialization:**
 
@@ -117,11 +117,11 @@ flowchart LR
 
 | Endpoint                         | Method | Purpose                                          |
 | -------------------------------- | ------ | ------------------------------------------------ |
-| `/api/mcp/oauth/initiate`        | POST   | Start OAuth flow, generate PKCE challenge        |
-| `/api/mcp/oauth/callback`        | GET    | Handle OAuth callback, store tokens              |
-| `/api/mcp/oauth/status`          | GET    | Check connection status (pending/active/expired) |
-| `/api/mcp/oauth/connections`     | GET    | List user's connections (authenticated)          |
-| `/api/mcp/oauth/connections/:id` | DELETE | Revoke connection (authenticated)                |
+| `/mcp/oauth/initiate`        | POST   | Start OAuth flow, generate PKCE challenge        |
+| `/mcp/oauth/callback`        | GET    | Handle OAuth callback, store tokens              |
+| `/mcp/oauth/status`          | GET    | Check connection status (pending/active/expired) |
+| `/mcp/oauth/connections`     | GET    | List user's connections (authenticated)          |
+| `/mcp/oauth/connections/:id` | DELETE | Revoke connection (authenticated)                |
 
 ### 2.2 Session Token Flow (Deprecated)
 
@@ -252,15 +252,14 @@ flowchart LR
 
 **Note:** No side effects. Agents can call at session start and, if `updateAvailable` is true, prompt the user to upgrade.
 
-### 2.6 Correction and Re-[interpretation](../vocabulary/canonical_terms.md#interpretation) Operations
+### 2.6 Correction and Parsing Operations
 
-| Action                  | Purpose                                                                                                                                   | Consistency | Deterministic | MVP Status |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ------------- | ---------- |
-| `correct`               | Create high-priority correction [observation](../vocabulary/canonical_terms.md#observation)                                               | Strong      | Yes           | MVP        |
-| `reinterpret`           | Re-run AI [interpretation](../vocabulary/canonical_terms.md#interpretation) on existing [source](../vocabulary/canonical_terms.md#source) | Strong      | Yes           | MVP        |
-| `interpret_uninterpreted` | Interpret stored [sources](../vocabulary/canonical_terms.md#source) with zero prior [interpretation](../vocabulary/canonical_terms.md#interpretation) runs (supports `limit` and `dry_run`) | Strong      | Yes           | MVP        |
+| Action       | Purpose                                                                                              | Consistency | Deterministic | MVP Status |
+| ------------ | ---------------------------------------------------------------------------------------------------- | ----------- | ------------- | ---------- |
+| `correct`    | Create high-priority correction [observation](../vocabulary/canonical_terms.md#observation)         | Strong      | Yes           | MVP        |
+| `parse_file` | Parse a file into agent-readable text and/or first-page PDF image data without storing anything     | N/A         | Yes           | MVP        |
 
-**Note:** `correct` creates priority-1000 [observations](../vocabulary/canonical_terms.md#observation) that override AI [extraction](../vocabulary/canonical_terms.md#extraction). `reinterpret` creates new [observations](../vocabulary/canonical_terms.md#observation) without modifying existing ones. `interpret_uninterpreted` orchestrates repeated `reinterpret` runs for sources that do not have any prior interpretation records.
+**Note:** `correct` creates priority-1000 [observations](../vocabulary/canonical_terms.md#observation) that override earlier extracted values. `parse_file` is a side-effect-free utility for agent-side extraction workflows.
 
 ### 2.6 Using the Unified `store` Action
 
@@ -271,7 +270,7 @@ The unified `store` action handles all [source](../vocabulary/canonical_terms.md
 Choose the storage path based on **where the data came from**, not only on what format you have. This keeps provenance correct (artifact vs agent-derived) and avoids double interpretation of files.
 
 - **Conversation-sourced or tool-sourced:** Data from what the user said in chat, or from another MCP/tool (e.g. email, calendar) where the agent is extracting entities. Use the **structured** path: `store` or `store_structured` with an `entities` array. Omit `original_filename`.
-- **File-sourced or resource-sourced:** User attached a file, or the agent has a file/blob to preserve as an artifact. Use the **unstructured** path: `store` or `store_unstructured` with `file_content`+`mime_type` or `file_path`. Do not interpret the file; pass it raw so the server can store and optionally interpret.
+- **File-sourced or resource-sourced:** User attached a file, or the agent has a file/blob to preserve as an artifact. Use the **unstructured** path: `store` or `store_unstructured` with `file_content`+`mime_type` or `file_path` to preserve the raw artifact. If you also need entities from that file, parse/extract first and send those entities in the same combined request.
 
 **For Unstructured [Source](../vocabulary/canonical_terms.md#source):**
 
@@ -281,23 +280,12 @@ Choose the storage path based on **where the data came from**, not only on what 
   file_content: string;               // Required: Base64-encoded file content
   mime_type: string;                  // Required: MIME type (e.g., "application/pdf")
   original_filename?: string;         // Optional: Original filename
-  interpret?: boolean;                // Optional: Run interpretation (default: true). Set to false to defer interpretation.
-  interpretation_config?: { ... };    // Optional: Interpretation configuration
 }
 ```
 
-**IMPORTANT:** Agents MUST NOT attempt to interpret, extract, or infer structured data from unstructured files before storing. Simply provide the raw `file_content` and `mime_type`. The server handles all interpretation automatically.
+**IMPORTANT:** Agents SHOULD extract entities from readable files before storing when structured data is needed. Use `parse_file` for PDFs, read text/CSV/JSON/Markdown directly, and use vision directly for images. If parsing yields nothing usable, store the raw file only.
 
-**When to Use `interpret=false`:**
-
-- Quota management: Store files when approaching interpretation quota limits
-- Deferred interpretation: Store now, interpret later with different config (use `reinterpret`)
-- Batch processing: Store multiple files first, then interpret in batch
-- Testing/debugging: Store files without processing for testing
-
-**Note**: When `interpret=true`, interpretation always runs: for a new file it is the first interpretation; for a file that deduplicates to an existing [source](../vocabulary/canonical_terms.md#source) (same content or same idempotency key) it is a reinterpret (new interpretation run, new [observations](../vocabulary/canonical_terms.md#observation); existing observations unchanged). Agents do not need to call `reinterpret` separately.
-
-Flow: [Store](../vocabulary/canonical_terms.md#storing) [source](../vocabulary/canonical_terms.md#source) → [Interpretation](../vocabulary/canonical_terms.md#interpretation) (if `interpret=true`, including when file is deduplicated) → [Entity schema](../vocabulary/canonical_terms.md#entity-schema) processing → [Observations](../vocabulary/canonical_terms.md#observation)
+Flow: parse/read file (agent-side) → extract entities if needed → [Store](../vocabulary/canonical_terms.md#storing) raw file and optional entities → [Entity schema](../vocabulary/canonical_terms.md#entity-schema) processing for structured entities → [Observations](../vocabulary/canonical_terms.md#observation)
 
 **For Structured [Source](../vocabulary/canonical_terms.md#source):**
 
@@ -324,7 +312,6 @@ Flow: [Store](../vocabulary/canonical_terms.md#storing) [source](../vocabulary/c
   file_content?: string;
   mime_type?: string;
   file_idempotency_key?: string;      // Optional separate idempotency key for file path
-  interpret?: boolean;
 }
 ```
 
@@ -616,8 +603,6 @@ Clients can subscribe to resource updates:
   file_path?: string;
   mime_type?: string;
   original_filename?: string;
-  interpret?: boolean;
-  interpretation_config?: Record<string, unknown>;
   file_idempotency_key?: string;
 }
 ```
@@ -641,15 +626,7 @@ Validation: at least one of `entities`, `file_path`, or (`file_content` + `mime_
   idempotency_key: string;            // Required: Client-provided idempotency key
   file_content: string;               // Required: Base64-encoded file content
   mime_type: string;                  // Required: MIME type (e.g., "application/pdf", "image/jpeg")
-  original_filename?: string;          // Optional: Original filename
-  interpret?: boolean;                 // Optional: Run AI interpretation (default: true). Set to false to defer interpretation.
-  interpretation_config?: {            // Optional: Interpretation configuration
-    provider?: string;
-    model_id?: string;
-    temperature?: number;
-    prompt_hash?: string;
-    code_version?: string;
-  };
+  original_filename?: string;         // Optional: Original filename
 }
 ```
 
@@ -659,27 +636,18 @@ Validation: at least one of `entities`, `file_path`, or (`file_content` + `mime_
 {
   user_id?: string;                   // Optional: Inferred from authentication if omitted
   idempotency_key: string;            // Required: Client-provided idempotency key
-  file_path: string;                   // Required: Local file path (alternative to file_content)
-  mime_type?: string;                  // Optional: MIME type (auto-detected from extension if not provided)
-  original_filename?: string;           // Optional: Original filename (defaults to basename of file_path)
-  interpret?: boolean;                  // Optional: Run AI interpretation (default: true). Set to false to defer interpretation.
-  interpretation_config?: {            // Optional: Interpretation configuration
-    provider?: string;
-    model_id?: string;
-    temperature?: number;
-    prompt_hash?: string;
-    code_version?: string;
-  };
+  file_path: string;                  // Required: Local file path (alternative to file_content)
+  mime_type?: string;                 // Optional: MIME type (auto-detected from extension if not provided)
+  original_filename?: string;         // Optional: Original filename (defaults to basename of file_path)
 }
 ```
 
 **IMPORTANT: For Unstructured Files**
-Agents MUST NOT attempt to interpret, extract, or infer structured data from unstructured files before storing. Simply provide the raw `file_content` (base64-encoded) and `mime_type`, OR provide `file_path` for local files. The server will automatically:
+Agents are responsible for extraction when structured data is needed from a file. Use `parse_file` for PDFs, direct reads for text/CSV/JSON/Markdown, and vision for images. The server will:
 
 1. Store the raw file content (content-addressed, deduplicated)
-2. Analyze the file (extract text, detect schema type) if `interpret=true` (default)
-3. Run interpretation to create observations
-4. Process through the entity schema system
+2. Preserve the file as provenance
+3. Process any agent-supplied entities through the entity schema system
 
 Do NOT:
 
@@ -697,14 +665,6 @@ The server handles all interpretation automatically. Agents should only pass the
 - `file_path` is more efficient for large files (no base64 encoding overhead)
 - `file_content` works universally across all environments
 
-**When to Use `interpret=false`:**
-
-- **Quota management**: When approaching interpretation quota limits, store files now and interpret later
-- **Deferred interpretation**: Store files immediately but interpret later with different configuration (use `reinterpret` action)
-- **Batch processing**: Store multiple files first, then interpret in batch for efficiency
-- **Testing/debugging**: Store files without processing for testing storage and deduplication
-
-**Note**: When `interpret=true`, interpretation always runs. For a new file this is the first interpretation; for a file that deduplicates to an existing source (same content or same idempotency key) this is a reinterpret (new interpretation run, new observations; existing observations unchanged). Agents do not need to call `reinterpret` separately. Observation idempotence is enforced via canonicalization and hashing (no duplicate observations for the same extracted content).
 
 **Request Schema (Structured):**
 
@@ -799,11 +759,8 @@ When the type is one of the common types (contact, person, company, task, invoic
   content_hash: string;                // SHA-256 hash of content
   file_size?: number;                  // File size in bytes (if unstructured)
   deduplicated: boolean;               // Whether [source](../vocabulary/canonical_terms.md#source) was already [stored](../vocabulary/canonical_terms.md#storing)
-  interpretation?: {                   // Present if interpret=true (unstructured) or always (structured)
-    run_id: string;                    // UUID of interpretation
-    entities_created: number;          // Number of entities created
-    observations_created: number;       // Number of observations created
-  } | null;
+  asset_entity_id?: string;            // File/image/audio/video asset entity for raw stores
+  asset_entity_type?: string;          // Asset entity type
   // For structured storage:
   entities?: Array<{                   // Entities created from this source (structured storage only)
     entity_id: string;
@@ -1370,23 +1327,18 @@ This enables full explainability: for any fact in the system, you can trace it b
 **Consistency:** Strong (correction immediately affects [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot))
 **Determinism:** Yes (same correction → same [observation](../vocabulary/canonical_terms.md#observation))
 
-### 3.13 `reinterpret`
+### 3.13 `parse_file`
 
-**Purpose:** Re-run AI [interpretation](../vocabulary/canonical_terms.md#interpretation) on existing [source](../vocabulary/canonical_terms.md#source) with new config. Creates new [observations](../vocabulary/canonical_terms.md#observation) without modifying existing ones.
+**Purpose:** Parse local or base64-encoded files into agent-readable content without storing anything. Use it before `store` when the agent needs to extract entities from PDFs or other non-trivial file formats.
 
 **Request Schema:**
 
 ```typescript
 {
-  source_id: string;                   // Required: Source ID (UUID) to reinterpret
-  interpretation_config: {             // Required: Interpretation configuration
-    provider?: string;
-    model_id?: string;
-    temperature?: number;
-    prompt_hash?: string;
-    code_version?: string;
-    feature_flags?: Record<string, boolean>;
-  };
+  file_path?: string;                  // Local file path
+  file_content?: string;               // Base64-encoded file content
+  mime_type?: string;                  // Required with file_content, optional with file_path
+  original_filename?: string;          // Optional filename hint
 }
 ```
 
@@ -1394,22 +1346,17 @@ This enables full explainability: for any fact in the system, you can trace it b
 
 ```typescript
 {
-  run_id: string; // UUID of new interpretation
-  entities_created: number;
-  observations_created: number;
-  source_id: string;
+  text?: string;
+  pages?: Array<{ page: number; image_data_url: string }>;
+  content_hash: string;
+  mime_type: string;
+  file_size: number;
+  original_filename?: string;
 }
 ```
 
-**Errors:**
-| Code | HTTP | Meaning | Retry? |
-|------|------|---------|--------|
-| `SOURCE_NOT_FOUND` | 404 | [Source](../vocabulary/canonical_terms.md#source) doesn't exist | No |
-| `QUOTA_EXCEEDED` | 429 | [Interpretation](../vocabulary/canonical_terms.md#interpretation) quota exceeded | No |
-| `DB_INSERT_FAILED` | 500 | Failed to create [interpretation](../vocabulary/canonical_terms.md#interpretation) | Yes |
-
-**Consistency:** Strong (new [observations](../vocabulary/canonical_terms.md#observation) immediately queryable)
-**Determinism:** Yes (same [source](../vocabulary/canonical_terms.md#source) + config → same [interpretation](../vocabulary/canonical_terms.md#interpretation) result)
+**Consistency:** N/A
+**Determinism:** Yes (same bytes + same parser versions → same output)
 
 ### 3.14 `merge_entities`
 
@@ -1983,27 +1930,6 @@ At least one of `fields_to_add` or `fields_to_remove` must be provided and non-e
 **Response:** List of stale snapshots found and any repairs performed.
 
 **Determinism:** Yes (read-only scan; repairs are deterministic recomputations)
-
-### 3.29 `interpret_uninterpreted`
-
-**Purpose:** Find sources that have zero interpretation runs and trigger interpretation for them. Useful for catching sources that were stored with `interpret: false` or where interpretation failed silently.
-
-**Request Schema:**
-
-```typescript
-{
-  user_id?: string;             // Optional: inferred from auth context
-  limit?: number;               // Optional: max sources to process (default: 10)
-  interpretation_config?: {     // Optional: interpretation config override
-    model?: string;
-    schema_types?: string[];
-  };
-}
-```
-
-**Response:** List of source IDs interpreted with results.
-
-**Determinism:** No (triggers LLM interpretation which is non-deterministic)
 
 ## 4. Error Envelope Standard
 

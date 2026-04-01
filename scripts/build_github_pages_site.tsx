@@ -1,14 +1,35 @@
 #!/usr/bin/env tsx
+/**
+ * Static site builder for GitHub Pages (neotoma.io).
+ *
+ * Adding a new public page:
+ *   1. Add the route to APP_ROUTES in frontend/src/components/MainApp.tsx.
+ *   2. Add an entry to ROUTE_METADATA in frontend/src/site/seo_metadata.ts
+ *      with at least title, description, and robots ("index,follow" for
+ *      indexable pages). Pages with "index,follow" are automatically
+ *      included in the sitemap and prerendered as static HTML.
+ *   3. Run `npm run validate:routes` to confirm parity.
+ *   4. After building (`npm run build:pages:site`), run
+ *      `npm run validate:site-export` to verify the HTML was emitted.
+ *
+ * CI runs both validations before deploying; a mismatch blocks the deploy.
+ */
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { FAVICON_SVG } from "../frontend/src/site/site_data";
-import { DEFAULT_LOCALE, SUPPORTED_LOCALES, type SupportedLocale } from "../frontend/src/i18n/config";
+import {
+  DEFAULT_LOCALE,
+  NON_DEFAULT_LOCALES,
+  SUPPORTED_LOCALES,
+  type SupportedLocale,
+} from "../frontend/src/i18n/config";
 import { getLocaleFromPath, localizePath, stripLocaleFromPath } from "../frontend/src/i18n/routing";
 import {
   buildRobotsTxt,
   buildSitemapXml,
+  INDEXABLE_SITE_PAGE_PATHS,
   injectRouteMetaIntoHtml,
   SITEMAP_PATHS,
 } from "../frontend/src/site/seo_metadata";
@@ -25,6 +46,8 @@ const ogImageSrc = path.join(repoRoot, "frontend", "public", "neotoma-og-1200x63
 const ogImageDest = path.join(outputDir, "neotoma-og-1200x630.png");
 const robotsFile = path.join(outputDir, "robots.txt");
 const sitemapFile = path.join(outputDir, "sitemap.xml");
+const llmsTxtSrc = path.join(repoRoot, "frontend", "public", "llms.txt");
+const llmsTxtDest = path.join(outputDir, "llms.txt");
 const notFoundFile = path.join(outputDir, "404.html");
 const publicIndex = path.join(repoRoot, "public", "index.html");
 const publicAssetsDir = path.join(repoRoot, "public", "assets");
@@ -33,6 +56,18 @@ const buildId =
   process.env.GITHUB_SHA?.slice(0, 7) ||
   process.env.BUILD_ID ||
   `local-${Date.now()}`;
+
+function markdownMirrorStaticPaths(): string[] {
+  const out: string[] = [];
+  for (const p of INDEXABLE_SITE_PAGE_PATHS) {
+    const md = p === "/" ? "/markdown" : `/markdown${p}`;
+    out.push(md);
+    for (const loc of NON_DEFAULT_LOCALES) {
+      out.push(localizePath(md, loc));
+    }
+  }
+  return out;
+}
 
 const LOCALE_TO_GOOGLE_CODE: Record<SupportedLocale, string> = {
   en: "en",
@@ -151,6 +186,7 @@ async function prerenderHtmlRoutes(routePaths: readonly string[]): Promise<void>
   const server = await startStaticServer(outputDir);
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
+  await page.setViewportSize({ width: 1280, height: 900 });
 
   try {
     for (const routePath of routePaths) {
@@ -348,8 +384,10 @@ async function main() {
     }
   }
 
+  const allStaticRoutePaths = [...new Set([...SITEMAP_PATHS, ...markdownMirrorStaticPaths()])];
+
   let routeCount = 0;
-  for (const routePath of SITEMAP_PATHS) {
+  for (const routePath of allStaticRoutePaths) {
     if (routePath === "/") continue;
     const slug = routePath.replace(/^\//, "");
     const routeDir = path.join(outputDir, slug);
@@ -376,7 +414,11 @@ async function main() {
   }
   fs.writeFileSync(robotsFile, buildRobotsTxt(), "utf-8");
   fs.writeFileSync(sitemapFile, buildSitemapXml(), "utf-8");
-  await prerenderHtmlRoutes(SITEMAP_PATHS);
+  if (fs.existsSync(llmsTxtSrc)) {
+    fs.copyFileSync(llmsTxtSrc, llmsTxtDest);
+    console.log(`Copied llms.txt: ${path.relative(repoRoot, llmsTxtDest)}`);
+  }
+  await prerenderHtmlRoutes(allStaticRoutePaths);
 
   console.log(`Built site page: ${path.relative(repoRoot, outputFile)}`);
   console.log(`Built ${routeCount} route pages (fully pre-rendered HTML)`);

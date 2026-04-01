@@ -15,6 +15,13 @@ export function OpenClawConnectRemoteHttpPage() {
         {" · "}
         Remote setup for cloud or multi-machine deployments.
       </p>
+      <p className="text-[14px] leading-6 text-muted-foreground mb-4">
+        OpenClaw and Neotoma on the same machine? See{" "}
+        <Link to="/neotoma-with-openclaw-connect-local-stdio" className={extLink}>
+          OpenClaw local setup (stdio)
+        </Link>
+        .
+      </p>
 
       <IntegrationSection title="Setup" sectionKey="setup">
         <p className="text-[15px] leading-7 text-muted-foreground mb-4">

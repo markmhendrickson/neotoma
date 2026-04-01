@@ -227,10 +227,10 @@ const CONFIG: VerticalConfig = {
     },
   ],
   caseStudy: {
-    companyName: "SourceFlow",
-    companyUrl: "https://sourceflow.example.com",
-    companyDesc:
-      "is a fictional AI procurement intelligence platform for enterprise sourcing that automates RFP assembly, supplier comparison, and bid scoring across global categories.",
+    headline: "How procurement teams use Neotoma as their integrity layer",
+    desc:
+      "AI procurement intelligence platforms for enterprise sourcing automate RFP assembly, supplier comparison, and bid scoring across global categories. Neotoma versions every score, specification change, and approval so you can reconstruct award decisions at any audit point.",
+    featuresHeading: "What procurement teams build",
     features: [
       "Autonomous RFP drafting with clause libraries synced to live specification entities",
       "Side-by-side bid scoring with explainable weights and scenario what-if runs",
@@ -244,7 +244,7 @@ const CONFIG: VerticalConfig = {
     ],
     generalizesTitle: "If you run AI-assisted sourcing, you share the same evidentiary bar",
     generalizesDesc:
-      "Any team blending generative RFPs, automated scoring, and human approvers needs the same guarantees: no silent spec drift, no orphan approvals, and no guessing which competing offer justified the award. Neotoma generalizes the SourceFlow pattern to your stack.",
+      "Any team blending generative RFPs, automated scoring, and human approvers needs the same guarantees: no silent spec drift, no orphan approvals, and no guessing which competing offer justified the award. Neotoma generalizes the pattern to your stack.",
   },
   ctaHeadline: "Ship procurement agents that can defend",
   ctaHighlight: "every award they support",

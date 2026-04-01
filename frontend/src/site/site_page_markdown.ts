@@ -51,15 +51,15 @@ export function buildSitePageMarkdown(pathname: string): string {
   return lines.join("\n");
 }
 
-/** React Router `to` value for the raw Markdown view of an indexable route. */
-export function rawMarkdownTo(
-  indexablePath: string,
-  locale: SupportedLocale,
-): { pathname: string; search: string } {
-  return {
-    pathname: localizePath("/raw", locale),
-    search: `?path=${encodeURIComponent(indexablePath)}`,
-  };
+/** Localized pathname for full-page Markdown (`/markdown/...`, HTML → GFM). */
+export function fullPageMarkdownPath(indexablePath: string, locale: SupportedLocale): string {
+  const markdownRoute = indexablePath === "/" ? "/markdown" : `/markdown${indexablePath}`;
+  return localizePath(markdownRoute, locale);
+}
+
+/** @deprecated Use {@link fullPageMarkdownPath}; name kept for existing call sites. */
+export function rawMarkdownTo(indexablePath: string, locale: SupportedLocale): string {
+  return fullPageMarkdownPath(indexablePath, locale);
 }
 
 /** All indexable pages in one file, stable sort by path. */
