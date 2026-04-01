@@ -1471,7 +1471,8 @@ export function SitePage({ staticMode = false }: SitePageProps) {
         <main id="home-main">
           {/* Slide 1: Hero */}
           <section id="intro" className={SLIDE_CLASS}>
-            <div className="relative z-10 w-full min-w-0">
+            {/* self-stretch: full slide height so SectionEdgeIndicators (absolute to this layer) sit at true section bottom */}
+            <div className="relative z-10 flex w-full min-w-0 flex-col justify-center self-stretch">
               <FadeSection scrollContainerRef={scrollContainerRef} staticMode={staticMode}>
                 <div className={SLIDE_INNER}>
                   <div className="mx-auto max-w-6xl pt-4 md:pt-20 lg:pt-12">

@@ -25,6 +25,33 @@ test.describe("sitePage coverage", () => {
     await expect(pageSections.getByRole("button")).toHaveCount(6);
   });
 
+  test("intro content layer stretches to the section bottom on desktop", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name.includes("mobile"), "Desktop-only intro layout assertion");
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+
+    const metrics = await page.evaluate(() => {
+      const intro = document.querySelector("#intro");
+      const introLayer = document.querySelector("#intro > div");
+      if (!(intro instanceof HTMLElement) || !(introLayer instanceof HTMLElement)) {
+        return null;
+      }
+
+      const introRect = intro.getBoundingClientRect();
+      const introLayerRect = introLayer.getBoundingClientRect();
+
+      return {
+        heightGap: Math.abs(introRect.height - introLayerRect.height),
+        bottomGap: Math.abs(introRect.bottom - introLayerRect.bottom),
+      };
+    });
+
+    expect(metrics).not.toBeNull();
+    expect(metrics!.heightGap).toBeLessThanOrEqual(4);
+    expect(metrics!.bottomGap).toBeLessThanOrEqual(4);
+  });
+
   test("renders learn more links", async ({ page }) => {
     await page.goto("/");
     await page.waitForLoadState("networkidle");
