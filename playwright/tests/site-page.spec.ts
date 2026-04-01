@@ -103,6 +103,24 @@ test.describe("sitePage coverage", () => {
     }
   });
 
+  test("site header keeps evaluate, install, and architecture links available", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name.includes("mobile"), "Desktop-only header nav assertion");
+
+    const routes = ["/", "/docs"];
+
+    for (const path of routes) {
+      await page.goto(path);
+      await page.waitForLoadState("networkidle");
+
+      const header = page.getByRole("banner");
+      await expect(header.getByRole("link", { name: /^evaluate$/i }).first()).toBeVisible();
+      await expect(header.getByRole("link", { name: /^install$/i }).first()).toBeVisible();
+      await expect(header.getByRole("link", { name: /^architecture$/i }).first()).toBeVisible();
+    }
+  });
+
   test("SEO meta tags are present on homepage", async ({ page }) => {
     await page.goto("/");
     await page.waitForLoadState("networkidle");

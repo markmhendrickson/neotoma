@@ -1,6 +1,6 @@
 {
   "name": "neotoma",
-  "version": "0.3.12",
+  "version": "0.4.0",
   "description": "MCP server for structured personal data memory with unified source ingestion",
   "main": "dist/index.js",
   "type": "module",
@@ -127,8 +127,7 @@
     "illustrations:generate": "tsx scripts/generate_illustrations.ts",
     "illustrations:guarantees": "tsx scripts/generate_guarantee_pngs.ts",
     "illustrations:guarantees:sym": "tsx scripts/generate_guarantee_sym_hero_pngs.ts",
-    "illustrations:guarantees:sym:square": "tsx scripts/generate_guarantee_sym_square_pngs.ts",
-    "illustrations:who-icp:square": "tsx scripts/generate_who_icp_square_pngs.ts"
+    "illustrations:guarantees:sym:square": "tsx scripts/generate_guarantee_sym_square_icp_pngs.ts"
   },
   "keywords": [
     "mcp",

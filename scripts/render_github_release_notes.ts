@@ -5,7 +5,7 @@
  * Usage:
  *   npm run -s release-notes:render -- --tag v0.3.11   # -s keeps npm from printing into piped files
  *   npx tsx scripts/render_github_release_notes.ts --tag v0.3.11 --supplement path/to/custom.md
- *   npx tsx scripts/render_github_release_notes.ts --tag v0.3.12 --compare-base v0.3.10
+ *   npx tsx scripts/render_github_release_notes.ts --tag v0.4.0 --compare-base v0.3.10
  *     # when the previous git tag was not published to npm; overrides compare + commit list base
  *
  * Supplement resolution (first hit wins):

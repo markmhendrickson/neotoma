@@ -985,8 +985,6 @@ const HERO_TITLE_TOOLS_EMPHASIS_CLASS = "text-emerald-600 dark:text-emerald-400"
 
 // Keep fade-in permissive so very tall sections never stay fully hidden.
 const IN_VIEW_THRESHOLD = 0.01;
-/** Hero must be at least this visible before we treat it as "on the intro slide" (hides evaluate banner). */
-const HERO_IN_VIEW_RATIO_FOR_BANNER = 0.12;
 /** Space reserved at bottom of scroll root when the evaluate banner is shown (bar + breathing room). */
 const EVALUATE_BANNER_SCROLL_PADDING_BOTTOM =
   "max(5.75rem, calc(4.5rem + env(safe-area-inset-bottom, 0px)))";
@@ -1291,7 +1289,7 @@ function RotatingHeroQuote({ quotes }: { quotes: typeof HERO_QUOTES }) {
           }`}
         >
           &ldquo;{q.text}&rdquo;
-          <span className="not-italic text-muted-foreground/60"> - {q.attribution}</span>
+          <span className="not-italic text-muted-foreground">, {q.attribution}</span>
         </p>
       ))}
     </div>
@@ -1338,16 +1336,38 @@ export function SitePage({ staticMode = false }: SitePageProps) {
   const navigate = useNavigate();
   const dotNavSections = useMemo(() => getLocalizedDotNavSections(pack), [pack]);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const heroSectionRef = useRef<HTMLElement>(null);
-  const evaluateSectionRef = useRef<HTMLElement>(null);
   /** While true, ignore SectionDotNav-driven hash updates so initial /#section is not cleared by intro. */
   const suppressDotNavHashSyncRef = useRef(false);
-  /** Intro/hero slide intersects scrollport (not just the CTA row: on mobile the CTA is often below the fold). */
-  const [heroSectionInView, setHeroSectionInView] = useState(true);
-  /** Evaluate section visible - hide banner when user is already looking at the evaluate CTA. */
-  const [evaluateSectionInView, setEvaluateSectionInView] = useState(false);
+  /**
+   * Mirrors SectionDotNav focal section (null = FAQ neutral zone / no dot). Banner shows for every state
+   * except intro (hero) and evaluate, avoids IntersectionObserver edge cases where a sliver of hero
+   * stayed "in view" and hid the bar on middle slides.
+   */
+  const [navActiveSectionId, setNavActiveSectionId] = useState<string | null>("intro");
+  /** Hide the fixed evaluate bar while the page footer is on screen (footer has its own Evaluate link). */
+  const [footerInScrollView, setFooterInScrollView] = useState(false);
 
-  const showEvaluateScrollBanner = !heroSectionInView && !evaluateSectionInView;
+  const showEvaluateScrollBanner =
+    !footerInScrollView && navActiveSectionId !== "intro" && navActiveSectionId !== "evaluate";
+
+  useEffect(() => {
+    if (staticMode || typeof window === "undefined") return;
+
+    const scrollEl = scrollContainerRef.current;
+    const footerEl = document.getElementById("site-footer");
+    if (!scrollEl || !footerEl) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (!entry) return;
+        setFooterInScrollView(entry.isIntersecting);
+      },
+      { root: scrollEl, threshold: 0, rootMargin: "0px" }
+    );
+    observer.observe(footerEl);
+    return () => observer.disconnect();
+  }, [staticMode]);
 
   useEffect(() => {
     if (staticMode || typeof window === "undefined") return;
@@ -1388,54 +1408,8 @@ export function SitePage({ staticMode = false }: SitePageProps) {
     }
   }, [staticMode]);
 
-  useLayoutEffect(() => {
-    if (staticMode || typeof window === "undefined") return;
-    const scrollEl = scrollContainerRef.current;
-    const heroSection = heroSectionRef.current;
-    if (!scrollEl || !heroSection) return;
-
-    const evalSection = evaluateSectionRef.current;
-
-    const setHeroFromEntry = (entry: IntersectionObserverEntry) => {
-      setHeroSectionInView(
-        entry.isIntersecting && entry.intersectionRatio >= HERO_IN_VIEW_RATIO_FOR_BANNER
-      );
-    };
-
-    const heroObserver = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.target === heroSection) setHeroFromEntry(entry);
-        }
-      },
-      {
-        root: scrollEl,
-        rootMargin: "0px",
-        threshold: [0, 0.04, HERO_IN_VIEW_RATIO_FOR_BANNER, 0.25, 0.5, 0.75, 1],
-      }
-    );
-
-    const evaluateObserver = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.target === evalSection) {
-            setEvaluateSectionInView(entry.isIntersecting);
-          }
-        }
-      },
-      { root: scrollEl, threshold: 0, rootMargin: "0px" }
-    );
-
-    heroObserver.observe(heroSection);
-    if (evalSection) evaluateObserver.observe(evalSection);
-
-    return () => {
-      heroObserver.disconnect();
-      evaluateObserver.disconnect();
-    };
-  }, [staticMode]);
-
   const handleActiveSectionChange = useCallback((sectionId: string | null) => {
+    setNavActiveSectionId(sectionId);
     if (typeof window === "undefined") return;
     if (suppressDotNavHashSyncRef.current) return;
 
@@ -1483,343 +1457,346 @@ export function SitePage({ staticMode = false }: SitePageProps) {
           />
         )}
 
-        {/* Slide 1: Hero */}
-        <section id="intro" ref={heroSectionRef} className={SLIDE_CLASS}>
-          <div className="relative z-10 w-full min-w-0">
-            <FadeSection scrollContainerRef={scrollContainerRef} staticMode={staticMode}>
-              <div className={SLIDE_INNER}>
-                <div className="mx-auto max-w-6xl pt-4 md:pt-20 lg:pt-12">
-                  <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(340px,0.92fr)] lg:items-center">
-                    <div className="space-y-6 text-center lg:text-left">
-                      <HeroProofStrip />
+        <main id="home-main">
+          {/* Slide 1: Hero */}
+          <section id="intro" className={SLIDE_CLASS}>
+            <div className="relative z-10 w-full min-w-0">
+              <FadeSection scrollContainerRef={scrollContainerRef} staticMode={staticMode}>
+                <div className={SLIDE_INNER}>
+                  <div className="mx-auto max-w-6xl pt-4 md:pt-20 lg:pt-12">
+                    <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(340px,0.92fr)] lg:items-center">
+                      <div className="space-y-6 text-center lg:text-left">
+                        <HeroProofStrip />
 
-                      <h1 className="text-[36px] md:text-[48px] font-semibold tracking-[-0.035em] leading-[1.1]">
-                        {pack.homeHero.titlePrefix}{" "}
-                        <span className={HERO_TITLE_RECORD_EMPHASIS_CLASS}>
-                          {pack.homeHero.titleAccent}
-                        </span>{" "}
-                        {pack.homeHero.titleMid}{" "}
-                        <span className={`whitespace-nowrap ${HERO_TITLE_TOOLS_EMPHASIS_CLASS}`}>
-                          {pack.homeHero.titleFocus}
-                        </span>
-                      </h1>
+                        <h1 className="text-[36px] md:text-[48px] font-semibold tracking-[-0.035em] leading-[1.1]">
+                          {pack.homeHero.titlePrefix}{" "}
+                          <span className={HERO_TITLE_RECORD_EMPHASIS_CLASS}>
+                            {pack.homeHero.titleAccent}
+                          </span>{" "}
+                          {pack.homeHero.titleMid}{" "}
+                          <span className={`whitespace-nowrap ${HERO_TITLE_TOOLS_EMPHASIS_CLASS}`}>
+                            {pack.homeHero.titleFocus}
+                          </span>
+                        </h1>
 
-                      <p className="text-[17px] md:text-[19px] leading-7 text-muted-foreground max-w-xl mx-auto lg:mx-0">
-                        {(() => {
-                          const parts = pack.homeHero.summary.split("{record}");
-                          if (parts.length < 2) return pack.homeHero.summary;
-                          return (
-                            <>
-                              {parts[0]}
-                              <RotatingRecordType words={pack.homeHero.summaryRecordTypes} />
-                              {parts[1]}
-                            </>
-                          );
-                        })()}
-                      </p>
+                        <p className="text-[17px] md:text-[19px] leading-7 text-muted-foreground max-w-xl mx-auto lg:mx-0">
+                          {(() => {
+                            const parts = pack.homeHero.summary.split("{record}");
+                            if (parts.length < 2) return pack.homeHero.summary;
+                            return (
+                              <>
+                                {parts[0]}
+                                <RotatingRecordType words={pack.homeHero.summaryRecordTypes} />
+                                {parts[1]}
+                              </>
+                            );
+                          })()}
+                        </p>
 
-                      <div className="flex flex-col sm:flex-row sm:flex-wrap justify-center gap-3 pt-1 lg:justify-start">
-                        <a
-                          href="/evaluate"
-                          className={`${HOME_EVALUATE_CTA_CLASS} w-full sm:w-auto`}
-                          onClick={(e) => {
-                            sendCtaClick("hero_evaluate");
-                            if (isModifiedClick(e)) return;
-                            e.preventDefault();
-                            navigate("/evaluate");
-                          }}
-                        >
-                          <MessageSquare className="h-4 w-4 shrink-0" aria-hidden />
-                          {pack.homeHero.ctaEvaluateWithAgent}
-                        </a>
-                        <a
-                          href="/install"
-                          className="inline-flex w-full sm:w-auto justify-center items-center gap-1.5 rounded-md border border-border bg-card px-5 py-2.5 text-[15px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
-                          onClick={(e) => {
-                            sendCtaClick("hero_install");
-                            if (isModifiedClick(e)) return;
-                            e.preventDefault();
-                            navigate("/install");
-                          }}
-                        >
-                          <Download className="h-4 w-4 shrink-0" aria-hidden />
-                          {pack.homeHero.ctaInstall}
-                        </a>
+                        <div className="flex flex-col sm:flex-row sm:flex-wrap justify-center gap-3 pt-1 lg:justify-start">
+                          <a
+                            href="/evaluate"
+                            className={`${HOME_EVALUATE_CTA_CLASS} w-full sm:w-auto`}
+                            onClick={(e) => {
+                              sendCtaClick("hero_evaluate");
+                              if (isModifiedClick(e)) return;
+                              e.preventDefault();
+                              navigate("/evaluate");
+                            }}
+                          >
+                            <MessageSquare className="h-4 w-4 shrink-0" aria-hidden />
+                            {pack.homeHero.ctaEvaluateWithAgent}
+                          </a>
+                          <a
+                            href="/install"
+                            className="inline-flex w-full sm:w-auto justify-center items-center gap-1.5 rounded-md border border-border bg-card px-5 py-2.5 text-[15px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
+                            onClick={(e) => {
+                              sendCtaClick("hero_install");
+                              if (isModifiedClick(e)) return;
+                              e.preventDefault();
+                              navigate("/install");
+                            }}
+                          >
+                            <Download className="h-4 w-4 shrink-0" aria-hidden />
+                            {pack.homeHero.ctaInstall}
+                          </a>
+                        </div>
+
+                        <RotatingHeroQuote quotes={HERO_QUOTES} />
+                        <HomeAgentToolChips align="start" />
                       </div>
 
-                      <RotatingHeroQuote quotes={HERO_QUOTES} />
-                      <HomeAgentToolChips align="start" />
+                      <HeroStatePreview />
                     </div>
+                  </div>
+                </div>
+                <SectionEdgeIndicators sectionId="intro" />
+              </FadeSection>
+            </div>
+          </section>
 
-                    <HeroStatePreview />
+          {/* Slide 2: Before / After */}
+          <OutcomesSlide scrollContainerRef={scrollContainerRef} staticMode={staticMode} />
+
+          {/* One archetype, three operational modes */}
+          <section id="who" className={SLIDE_CLASS}>
+            <FadeSection scrollContainerRef={scrollContainerRef} staticMode={staticMode}>
+              <div className={SLIDE_INNER}>
+                <div className="space-y-6 md:space-y-8 max-w-5xl mx-auto">
+                  <div className="space-y-2 text-center">
+                    <p className="text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
+                      Who this is for
+                    </p>
+                    <h2 className={HOME_SECTION_H2_CLASS}>
+                      You run AI agents across tools and sessions...
+                      <span className="mt-1.5 block text-muted-foreground sm:mt-2">
+                        ...becoming the human sync layer.
+                      </span>
+                    </h2>
+                    <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl mx-auto">
+                      Stop spending real effort re-prompting context, patching state gaps, and
+                      compensating for memory that doesn&rsquo;t persist across AI tools and custom
+                      scripts. The cost shows up differently depending on what you&rsquo;re doing.
+                    </p>
+                  </div>
+
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {ICP_PROFILES.map((profile, index) => {
+                      const Icon = ICP_ICON_MAP[profile.iconName] ?? Server;
+                      return (
+                        <Link
+                          key={profile.slug}
+                          to={`/${profile.slug}`}
+                          className="group flex flex-col rounded-xl border border-border bg-card/50 p-4 no-underline transition-colors hover:bg-muted/60 hover:border-border/80 sm:p-5"
+                        >
+                          <ScrollRevealOnce
+                            scrollContainerRef={scrollContainerRef}
+                            staticMode={staticMode}
+                            staggerMs={index * ILLUS_REVEAL_STAGGER_MS}
+                          >
+                            <WhoProfileCardVisual
+                              profileSlug={profile.slug}
+                              modeLabel={profile.modeLabel}
+                              Icon={Icon}
+                            />
+                          </ScrollRevealOnce>
+                          <div className="flex min-h-0 flex-1 flex-col px-1 pt-4">
+                            <p className="text-[15px] font-medium text-foreground">
+                              {profile.name}
+                            </p>
+                            <p className="mt-2 text-[13px] leading-6 text-muted-foreground">
+                              {profile.tagline}
+                            </p>
+                          </div>
+                        </Link>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
-              <SectionEdgeIndicators sectionId="intro" />
+              <SectionEdgeIndicators sectionId="who" />
             </FadeSection>
-          </div>
-        </section>
+          </section>
 
-        {/* Slide 2: Before / After */}
-        <OutcomesSlide scrollContainerRef={scrollContainerRef} staticMode={staticMode} />
+          {/* Slide 3: Memory Guarantees - concise card preview */}
+          <section id="memory-guarantees" className={SLIDE_CLASS}>
+            <FadeSection scrollContainerRef={scrollContainerRef} staticMode={staticMode}>
+              <div className={SLIDE_INNER}>
+                <div className="space-y-6 md:space-y-8 max-w-5xl mx-auto">
+                  <div className="space-y-2 text-center">
+                    <p className="text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
+                      Guarantees
+                    </p>
+                    <h2 className={HOME_SECTION_H2_CLASS}>
+                      Neotoma provides state integrity, not just storage
+                    </h2>
+                    <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl mx-auto">
+                      Systems like Mem0, Zep, Claude memory, and ChatGPT memory optimize retrieval.
+                      Neotoma enforces guarantees those systems don&rsquo;t provide.
+                    </p>
+                  </div>
 
-        {/* One archetype, three operational modes */}
-        <section id="who" className={SLIDE_CLASS}>
-          <FadeSection scrollContainerRef={scrollContainerRef} staticMode={staticMode}>
-            <div className={SLIDE_INNER}>
-              <div className="space-y-6 md:space-y-8 max-w-5xl mx-auto">
-                <div className="space-y-2 text-center">
-                  <p className="text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
-                    Who this is for
-                  </p>
-                  <h2 className={HOME_SECTION_H2_CLASS}>
-                    You run AI agents across tools and sessions...
-                    <span className="mt-1.5 block text-muted-foreground sm:mt-2">
-                      ...becoming the human sync layer.
-                    </span>
-                  </h2>
-                  <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl mx-auto">
-                    Stop spending real effort re-prompting context, patching state gaps, and
-                    compensating for memory that doesn&rsquo;t persist across AI tools and custom
-                    scripts. The cost shows up differently depending on what you&rsquo;re doing.
-                  </p>
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {ICP_PROFILES.map((profile, index) => {
-                    const Icon = ICP_ICON_MAP[profile.iconName] ?? Server;
-                    return (
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {GUARANTEE_PREVIEW_CARDS.map((card, index) => (
                       <Link
-                        key={profile.slug}
-                        to={`/${profile.slug}`}
-                        className="group flex flex-col rounded-xl border border-border bg-card/50 p-4 no-underline transition-colors hover:bg-muted/60 hover:border-border/80 sm:p-5"
+                        key={card.slug}
+                        to={`/memory-guarantees#${card.slug}`}
+                        className="group flex flex-col overflow-hidden rounded-xl border border-border bg-card/50 no-underline transition-colors hover:bg-muted/60 hover:border-border/80"
                       >
                         <ScrollRevealOnce
                           scrollContainerRef={scrollContainerRef}
                           staticMode={staticMode}
                           staggerMs={index * ILLUS_REVEAL_STAGGER_MS}
+                          className="relative mx-auto w-full max-w-[104px] sm:max-w-[120px] aspect-square bg-gradient-to-b from-muted/30 to-transparent"
                         >
-                          <WhoProfileCardVisual
-                            profileSlug={profile.slug}
-                            modeLabel={profile.modeLabel}
-                            Icon={Icon}
+                          <img
+                            src={card.illus}
+                            alt=""
+                            width={1024}
+                            height={1024}
+                            className="absolute inset-0 h-full w-full rounded-lg object-contain object-center p-1.5 sm:p-2 opacity-[0.95] dark:opacity-100 transition-transform duration-300 group-hover:scale-[1.03]"
+                            loading="lazy"
+                            decoding="async"
                           />
                         </ScrollRevealOnce>
-                        <div className="flex min-h-0 flex-1 flex-col px-1 pt-4">
-                          <p className="text-[15px] font-medium text-foreground">{profile.name}</p>
-                          <p className="mt-2 text-[13px] leading-6 text-muted-foreground">
-                            {profile.tagline}
-                          </p>
-                        </div>
-                      </Link>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-            <SectionEdgeIndicators sectionId="who" />
-          </FadeSection>
-        </section>
-
-        {/* Slide 3: Memory Guarantees - concise card preview */}
-        <section id="memory-guarantees" className={SLIDE_CLASS}>
-          <FadeSection scrollContainerRef={scrollContainerRef} staticMode={staticMode}>
-            <div className={SLIDE_INNER}>
-              <div className="space-y-6 md:space-y-8 max-w-5xl mx-auto">
-                <div className="space-y-2 text-center">
-                  <p className="text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
-                    Guarantees
-                  </p>
-                  <h2 className={HOME_SECTION_H2_CLASS}>
-                    Neotoma provides state integrity, not just storage
-                  </h2>
-                  <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl mx-auto">
-                    Systems like Mem0, Zep, Claude memory, and ChatGPT memory optimize retrieval.
-                    Neotoma enforces guarantees those systems don&rsquo;t provide.
-                  </p>
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {GUARANTEE_PREVIEW_CARDS.map((card, index) => (
-                    <Link
-                      key={card.slug}
-                      to={`/memory-guarantees#${card.slug}`}
-                      className="group flex flex-col overflow-hidden rounded-xl border border-border bg-card/50 no-underline transition-colors hover:bg-muted/60 hover:border-border/80"
-                    >
-                      <ScrollRevealOnce
-                        scrollContainerRef={scrollContainerRef}
-                        staticMode={staticMode}
-                        staggerMs={index * ILLUS_REVEAL_STAGGER_MS}
-                        className="relative mx-auto w-full max-w-[104px] sm:max-w-[120px] aspect-square bg-gradient-to-b from-muted/30 to-transparent"
-                      >
-                        <img
-                          src={card.illus}
-                          alt=""
-                          width={1024}
-                          height={1024}
-                          className="absolute inset-0 h-full w-full rounded-lg object-contain object-center p-1.5 sm:p-2 opacity-[0.95] dark:opacity-100 transition-transform duration-300 group-hover:scale-[1.03]"
-                          loading="lazy"
-                          decoding="async"
-                        />
-                      </ScrollRevealOnce>
-                      <div className="flex min-h-0 items-start gap-3 p-4">
-                        <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400">
-                          <Check className="h-3 w-3 stroke-[2.5]" aria-hidden />
-                        </span>
-                        <div className="min-w-0">
-                          <p className="text-[14px] font-medium text-foreground leading-5">
-                            {card.property}
-                          </p>
-                          <p className="text-[13px] leading-5 text-muted-foreground mt-0.5">
-                            {card.brief}
-                          </p>
-                        </div>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-
-                <div className="flex justify-center pt-2">
-                  <Link
-                    to="/memory-guarantees"
-                    className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-4 py-2 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
-                  >
-                    <Eye className="h-4 w-4 shrink-0" aria-hidden />
-                    See all {MEMORY_GUARANTEE_ROWS.length} guarantees compared
-                  </Link>
-                </div>
-              </div>
-            </div>
-            <SectionEdgeIndicators sectionId="memory-guarantees" />
-          </FadeSection>
-        </section>
-
-        {/* Slide 4: Record types - entity type cards */}
-        <section id="record-types" className={SLIDE_CLASS}>
-          <FadeSection scrollContainerRef={scrollContainerRef} staticMode={staticMode}>
-            <div className={SLIDE_INNER}>
-              <div className="space-y-6 md:space-y-8 max-w-5xl mx-auto">
-                <div className="space-y-2 text-center">
-                  <p className="text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
-                    What you store
-                  </p>
-                  <h2 className={HOME_SECTION_H2_CLASS}>
-                    You deserve structured records, not raw text
-                  </h2>
-                  <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl mx-auto">
-                    Neotoma stores typed entities with versioned history and provenance. Each guide
-                    shows how to store and retrieve that type via CLI, MCP, and API.
-                  </p>
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {RECORD_TYPE_CARDS.map((card) => {
-                    const CardIcon = card.icon;
-                    return (
-                      <Link
-                        key={card.label}
-                        to={card.href}
-                        className="group flex flex-col rounded-xl border border-border bg-card/50 p-5 no-underline transition-colors hover:bg-muted/60 hover:border-border/80"
-                      >
-                        <div className="flex items-center gap-2.5 mb-2">
-                          <span
-                            className={`flex items-center justify-center w-7 h-7 rounded-lg ${card.accent
-                              .replace("text-", "bg-")
-                              .replace(/dark:text-[^\s]+/, "")
-                              .trim()}/10 ${card.accent} shrink-0`}
-                          >
-                            <CardIcon className="w-3.5 h-3.5" />
+                        <div className="flex min-h-0 items-start gap-3 p-4">
+                          <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400">
+                            <Check className="h-3 w-3 stroke-[2.5]" aria-hidden />
                           </span>
-                          <p className="text-[15px] font-medium text-foreground">{card.label}</p>
-                        </div>
-                        <p className="text-[13px] leading-5 text-muted-foreground mb-3">
-                          {card.description}
-                        </p>
-                        <div className="flex flex-wrap gap-1.5 mt-auto">
-                          {card.entities.map((entity) => (
-                            <code
-                              key={entity}
-                              className="bg-muted/60 px-1.5 py-0.5 rounded text-[11px] text-muted-foreground"
-                            >
-                              {entity}
-                            </code>
-                          ))}
+                          <div className="min-w-0">
+                            <p className="text-[14px] font-medium text-foreground leading-5">
+                              {card.property}
+                            </p>
+                            <p className="text-[13px] leading-5 text-muted-foreground mt-0.5">
+                              {card.brief}
+                            </p>
+                          </div>
                         </div>
                       </Link>
-                    );
-                  })}
+                    ))}
+                  </div>
+
+                  <div className="flex justify-center pt-2">
+                    <Link
+                      to="/memory-guarantees"
+                      className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-4 py-2 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
+                    >
+                      <Eye className="h-4 w-4 shrink-0" aria-hidden />
+                      See all {MEMORY_GUARANTEE_ROWS.length} guarantees compared
+                    </Link>
+                  </div>
                 </div>
               </div>
-            </div>
-            <SectionEdgeIndicators sectionId="record-types" />
-          </FadeSection>
-        </section>
+              <SectionEdgeIndicators sectionId="memory-guarantees" />
+            </FadeSection>
+          </section>
 
-        {/* Slide 5+: Evaluate - agent-led evaluation CTA */}
-        <section id="evaluate" ref={evaluateSectionRef} className={SLIDE_CLASS}>
-          <FadeSection scrollContainerRef={scrollContainerRef} staticMode={staticMode}>
+          {/* Slide 4: Record types - entity type cards */}
+          <section id="record-types" className={SLIDE_CLASS}>
+            <FadeSection scrollContainerRef={scrollContainerRef} staticMode={staticMode}>
+              <div className={SLIDE_INNER}>
+                <div className="space-y-6 md:space-y-8 max-w-5xl mx-auto">
+                  <div className="space-y-2 text-center">
+                    <p className="text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
+                      What you store
+                    </p>
+                    <h2 className={HOME_SECTION_H2_CLASS}>
+                      You deserve structured records, not raw text
+                    </h2>
+                    <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl mx-auto">
+                      Neotoma stores typed entities with versioned history and provenance. Each
+                      guide shows how to store and retrieve that type via CLI, MCP, and API.
+                    </p>
+                  </div>
+
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {RECORD_TYPE_CARDS.map((card) => {
+                      const CardIcon = card.icon;
+                      return (
+                        <Link
+                          key={card.label}
+                          to={card.href}
+                          className="group flex flex-col rounded-xl border border-border bg-card/50 p-5 no-underline transition-colors hover:bg-muted/60 hover:border-border/80"
+                        >
+                          <div className="flex items-center gap-2.5 mb-2">
+                            <span
+                              className={`flex items-center justify-center w-7 h-7 rounded-lg ${card.accent
+                                .replace("text-", "bg-")
+                                .replace(/dark:text-[^\s]+/, "")
+                                .trim()}/10 ${card.accent} shrink-0`}
+                            >
+                              <CardIcon className="w-3.5 h-3.5" />
+                            </span>
+                            <p className="text-[15px] font-medium text-foreground">{card.label}</p>
+                          </div>
+                          <p className="text-[13px] leading-5 text-muted-foreground mb-3">
+                            {card.description}
+                          </p>
+                          <div className="flex flex-wrap gap-1.5 mt-auto">
+                            {card.entities.map((entity) => (
+                              <code
+                                key={entity}
+                                className="bg-muted/60 px-1.5 py-0.5 rounded text-[11px] text-muted-foreground"
+                              >
+                                {entity}
+                              </code>
+                            ))}
+                          </div>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+              <SectionEdgeIndicators sectionId="record-types" />
+            </FadeSection>
+          </section>
+
+          {/* Slide 5+: Evaluate - agent-led evaluation CTA */}
+          <section id="evaluate" className={SLIDE_CLASS}>
+            <FadeSection scrollContainerRef={scrollContainerRef} staticMode={staticMode}>
+              <div className={SLIDE_INNER}>
+                <div className="space-y-6 md:space-y-8 max-w-5xl mx-auto">
+                  <div className="space-y-3 text-center flex flex-col items-center">
+                    <img
+                      src={heroEvaluateIllus}
+                      alt="Neotoma evaluate page preview"
+                      width={1536}
+                      height={1024}
+                      className="w-full max-w-[200px] sm:max-w-[240px] rounded-lg h-auto object-contain mx-auto"
+                      loading="lazy"
+                      decoding="async"
+                    />
+                    <p className="text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
+                      Evaluate it
+                    </p>
+                    <h2 className={HOME_SECTION_H2_CLASS}>Let your agent decide if Neotoma fits</h2>
+                  </div>
+
+                  <EvaluateSectionCta />
+                </div>
+              </div>
+              <SectionEdgeIndicators sectionId="evaluate" hideNext />
+            </FadeSection>
+          </section>
+
+          {/* FAQ preview before footer: natural-height block, no viewport snap (unlike full slides). */}
+          <section id="common-questions" className="relative w-full shrink-0 scroll-mt-12">
             <div className={SLIDE_INNER}>
               <div className="space-y-6 md:space-y-8 max-w-5xl mx-auto">
-                <div className="space-y-3 text-center flex flex-col items-center">
-                  <img
-                    src={heroEvaluateIllus}
-                    alt="Neotoma evaluate page preview"
-                    className="w-full max-w-[200px] sm:max-w-[240px] rounded-lg h-auto object-contain mx-auto"
-                    loading="lazy"
-                  />
-                  <p className="text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
-                    Evaluate it
-                  </p>
-                  <h2 className={HOME_SECTION_H2_CLASS}>Let your agent decide if Neotoma fits</h2>
-                  <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl mx-auto">
-                    We provide an evaluation page your AI agent can read. It assesses your workflow,
-                    asks one or two questions, and tells you honestly whether Neotoma is a fit.
+                <h2 className="text-center text-[20px] sm:text-[21px] md:text-[22px] font-medium tracking-[-0.02em] leading-snug text-foreground">
+                  {pack.siteSections.frequentlyAskedQuestions ?? "Frequently asked questions"}
+                </h2>
+                <div className="max-w-2xl mx-auto">
+                  <div className="divide-y divide-border/40 rounded-xl border border-border/60 bg-card/30 px-4 py-1 sm:px-5">
+                    {HOME_FAQ_PREVIEW_ITEMS.map((qa) => (
+                      <details key={qa.q} className="group py-3 text-left first:pt-2">
+                        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[13px] font-normal leading-snug text-muted-foreground transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden">
+                          {qa.q}
+                          <ChevronDown
+                            className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60 transition-transform group-open:rotate-180"
+                            aria-hidden
+                          />
+                        </summary>
+                        <p className="mt-2.5 pl-0 text-[12px] leading-6 text-muted-foreground/90">
+                          {qa.a}
+                        </p>
+                      </details>
+                    ))}
+                  </div>
+                  <p className="mt-6 text-center text-[12px] text-muted-foreground/80">
+                    <Link
+                      to="/faq"
+                      className="text-muted-foreground underline decoration-border/50 underline-offset-[3px] transition-colors hover:text-foreground hover:decoration-foreground/30"
+                    >
+                      More questions? See the FAQ
+                    </Link>
                   </p>
                 </div>
-
-                <EvaluateSectionCta />
               </div>
             </div>
-            <SectionEdgeIndicators sectionId="evaluate" hideNext />
-          </FadeSection>
-        </section>
-
-        {/* FAQ preview before footer: natural-height block, no viewport snap (unlike full slides). */}
-        <section id="common-questions" className="relative w-full shrink-0 scroll-mt-12">
-          <div className={SLIDE_INNER}>
-            <div className="space-y-6 md:space-y-8 max-w-5xl mx-auto">
-              <h2 className="text-center text-[20px] sm:text-[21px] md:text-[22px] font-medium tracking-[-0.02em] leading-snug text-foreground">
-                {pack.siteSections.frequentlyAskedQuestions ?? "Frequently asked questions"}
-              </h2>
-              <div className="max-w-2xl mx-auto">
-                <div className="divide-y divide-border/40 rounded-xl border border-border/60 bg-card/30 px-4 py-1 sm:px-5">
-                  {HOME_FAQ_PREVIEW_ITEMS.map((qa) => (
-                    <details key={qa.q} className="group py-3 text-left first:pt-2">
-                      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[13px] font-normal leading-snug text-muted-foreground transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden">
-                        {qa.q}
-                        <ChevronDown
-                          className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60 transition-transform group-open:rotate-180"
-                          aria-hidden
-                        />
-                      </summary>
-                      <p className="mt-2.5 pl-0 text-[12px] leading-6 text-muted-foreground/90">
-                        {qa.a}
-                      </p>
-                    </details>
-                  ))}
-                </div>
-                <p className="mt-6 text-center text-[12px] text-muted-foreground/80">
-                  <Link
-                    to="/faq"
-                    className="text-muted-foreground underline decoration-border/50 underline-offset-[3px] transition-colors hover:text-foreground hover:decoration-foreground/30"
-                  >
-                    More questions? See the FAQ
-                  </Link>
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
+          </section>
+        </main>
 
         {/* Proximity snap (not mandatory) so expanded FAQ can scroll without snapping to the previous slide; footer snap still aids landing at the tail. */}
         <div id="site-footer" className="w-full shrink-0 scroll-mt-12 md:snap-start md:snap-always">
@@ -1838,27 +1815,25 @@ export function SitePage({ staticMode = false }: SitePageProps) {
           aria-label={pack.homeHero.ctaEvaluateWithAgent}
           aria-hidden={!showEvaluateScrollBanner}
         >
-          <div className="mx-auto flex w-full max-w-6xl justify-center px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] md:px-12 lg:px-16">
-            <div
-              className={`w-full sm:w-auto md:rounded-xl md:border md:border-emerald-500/30 md:bg-emerald-500/10 md:px-3 md:py-2 md:shadow-[0_14px_32px_-20px_rgba(16,185,129,0.9)] md:backdrop-blur-sm ${
-                showEvaluateScrollBanner ? "evaluate-cta-soft-bounce" : ""
-              }`}
-            >
-              <a
-                href="/evaluate"
-                className={`${HOME_EVALUATE_CTA_CLASS} w-full sm:w-auto md:min-w-[320px]`}
-                onClick={(e) => {
-                  sendCtaClick("hero_evaluate_scroll_banner");
-                  if (isModifiedClick(e)) return;
-                  e.preventDefault();
-                  navigate("/evaluate");
-                }}
-              >
-                <MessageSquare className="h-4 w-4 shrink-0" aria-hidden />
-                {pack.homeHero.ctaEvaluateWithAgent}
-              </a>
+          {showEvaluateScrollBanner ? (
+            <div className="mx-auto flex w-full max-w-6xl justify-center px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] md:px-12 lg:px-16">
+              <div className="evaluate-cta-soft-bounce w-full sm:w-auto md:rounded-xl md:border md:border-emerald-500/30 md:bg-emerald-500/10 md:px-3 md:py-2 md:shadow-[0_14px_32px_-20px_rgba(16,185,129,0.9)] md:backdrop-blur-sm">
+                <a
+                  href="/evaluate"
+                  className={`${HOME_EVALUATE_CTA_CLASS} w-full sm:w-auto md:min-w-[320px]`}
+                  onClick={(e) => {
+                    sendCtaClick("hero_evaluate_scroll_banner");
+                    if (isModifiedClick(e)) return;
+                    e.preventDefault();
+                    navigate("/evaluate");
+                  }}
+                >
+                  <MessageSquare className="h-4 w-4 shrink-0" aria-hidden />
+                  {pack.homeHero.ctaEvaluateWithAgent}
+                </a>
+              </div>
             </div>
-          </div>
+          ) : null}
         </div>
       ) : null}
     </>

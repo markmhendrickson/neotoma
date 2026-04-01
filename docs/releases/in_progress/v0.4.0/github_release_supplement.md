@@ -1,15 +1,15 @@
-**npm `0.3.12`** is the **first package published to the registry after `neotoma@0.3.10`**. Git tag **`v0.3.11`** was **never published to npm**; **`0.3.10 → 0.3.12`** is the registry upgrade path. For the **`v0.3.10…v0.3.11`** git narrative, read **`docs/releases/in_progress/v0.3.11/github_release_supplement.md`**.
+**npm `0.4.0`** is the **first package published to the registry after `neotoma@0.3.10`**. Git tag **`v0.3.11`** was **never published to npm**; **`0.3.10 → 0.4.0`** is the registry upgrade path. For the **`v0.3.10…v0.3.11`** git narrative, read **`docs/releases/in_progress/v0.3.11/github_release_supplement.md`**.
 
 Render GitHub Release notes with **`--compare-base v0.3.10`** so compare URL + commit list match npm users (see **`docs/developer/github_release_process.md`**).
 
 ## Before you tag (release readiness)
 
-This supplement describes **all work intended for `0.3.12`**, including:
+This supplement describes **all work intended for `0.4.0`**, including:
 
 1. **Eight commits** already on **`dev`** after **`v0.3.11`** (`649003c` … `715673d`).
 2. A **large uncommitted working tree** on **`dev`** (~**774** files vs `HEAD` as of prepare): server/CLI/actions refactors, regenerated **`site_pages/`**, doc moves, test reshuffles, dependency/script changes.
 
-**You MUST commit (or discard) every change you want in the release, then create tag `v0.3.12` on that commit.** Do not tag `v0.3.11` or an older `HEAD` and expect the working tree to ship.
+**You MUST commit (or discard) every change you want in the release, then create tag `v0.4.0` on that commit.** Do not tag `v0.3.11` or an older `HEAD` and expect the working tree to ship.
 
 Suggested checks before tag + `npm publish`:
 
@@ -55,7 +55,7 @@ Subjects (newest first): site marketing pages + markdown hub + SEO dev tooling; 
 
 **Dependencies & scripts (working tree)**
 
-- **`package.json` / `package-lock.json`:** version **0.3.12**; add **`test:remote:critical`**; **`validate:routes`**, **`validate:site-export`**; **`illustrations:generate`**, **`illustrations:guarantees`**, **`illustrations:guarantees:sym`**; replace **`react-markdown`** with **`turndown`** + **`turndown-plugin-gfm`**; dev **`sharp`**, **`@fal-ai/client`**.
+- **`package.json` / `package-lock.json`:** version **0.4.0**; add **`test:remote:critical`**; **`validate:routes`**, **`validate:site-export`**; **`illustrations:generate`**, **`illustrations:guarantees`**, **`illustrations:guarantees:sym`**; replace **`react-markdown`** with **`turndown`** + **`turndown-plugin-gfm`**; dev **`sharp`**, **`@fal-ai/client`**.
 
 **Docs & repo (working tree)**
 
@@ -99,4 +99,4 @@ Subjects (newest first): site marketing pages + markdown hub + SEO dev tooling; 
 ## Breaking changes
 
 - **v0.3.11 git train (unpublished on npm):** see **Breaking changes** in **`docs/releases/in_progress/v0.3.11/github_release_supplement.md`** (e.g. **`storage merge-db`** defaults).
-- **Pending uncommitted work:** **likely semver-significant** — removal of **`llm_extraction.ts`**, large **`server`/`actions`** edits, and OpenAPI churn. If you guarantee stability for HTTP/MCP clients, complete contract + integration proof before calling this patch-only; otherwise consider shipping as **minor `0.4.0`** after explicit breaking-notes review.
+- **Pending uncommitted work:** **likely semver-significant** — removal of **`llm_extraction.ts`**, large **`server`/`actions`** edits, and OpenAPI churn. This is why this release is now prepared as **minor `0.4.0`** instead of a patch.

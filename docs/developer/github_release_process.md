@@ -32,7 +32,7 @@ npm run -s release-notes:render -- --tag v0.3.11 --supplement path/to/extra.md
 **Skipped npm version:** If a git tag exists but that version was **never published to npm** (registry still on an older semver), set **`--compare-base`** to the **last published npm tag** so the GitHub compare link and commit list match what registry users actually upgrade from:
 
 ```bash
-npm run -s release-notes:render -- --tag v0.3.12 --compare-base v0.3.10
+npm run -s release-notes:render -- --tag v0.4.0 --compare-base v0.3.10
 ```
 
 ## Create or update the GitHub Release
@@ -47,10 +47,10 @@ gh release create "$TAG" --title "$TAG" --notes-file /tmp/gh-release-"$TAG".md
 gh release edit "$TAG" --notes-file /tmp/gh-release-"$TAG".md
 ```
 
-If the **last npm publish** is older than the previous git tag (example: **`v0.3.12`** after **`v0.3.11`** was never on npm):
+If the **last npm publish** is older than the previous git tag (example: **`v0.4.0`** after **`v0.3.11`** was never on npm):
 
 ```bash
-TAG=v0.3.12
+TAG=v0.4.0
 npm run -s release-notes:render -- --tag "$TAG" --compare-base v0.3.10 > /tmp/gh-release-"$TAG".md
 gh release create "$TAG" --title "$TAG" --notes-file /tmp/gh-release-"$TAG".md
 ```
