@@ -32,10 +32,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
     <title>Architecture (Markdown) | Neotoma</title>
-    <script type="module" crossorigin="" src="../../../assets/main-DmE0kf3o.js"></script>
-    <link rel="stylesheet" crossorigin="" href="../../../assets/main-BluIWsBd.css">
+    <script type="module" crossorigin="" src="../../../assets/main-DxVKJUI6.js"></script>
+    <link rel="stylesheet" crossorigin="" href="../../../assets/main-DUcwN7CH.css">
   
-    <!-- build: local-1774967236156 -->
+    <!-- build: local-1775039455392 -->
       <link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/architecture">
     <link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/architecture">
     <link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/architecture">
@@ -52,139 +52,244 @@
     <link rel="alternate" hreflang="de" href="https://neotoma.io/de/markdown/architecture">
   <link rel="canonical" href="https://neotoma.io/ca/markdown/architecture" data-rh="true"><link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/architecture" data-rh="true"><link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/architecture" data-rh="true"><link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/architecture" data-rh="true"><link rel="alternate" hreflang="ca" href="https://neotoma.io/ca/markdown/architecture" data-rh="true"><link rel="alternate" hreflang="zh" href="https://neotoma.io/zh/markdown/architecture" data-rh="true"><link rel="alternate" hreflang="hi" href="https://neotoma.io/hi/markdown/architecture" data-rh="true"><link rel="alternate" hreflang="ar" href="https://neotoma.io/ar/markdown/architecture" data-rh="true"><link rel="alternate" hreflang="fr" href="https://neotoma.io/fr/markdown/architecture" data-rh="true"><link rel="alternate" hreflang="pt" href="https://neotoma.io/pt/markdown/architecture" data-rh="true"><link rel="alternate" hreflang="ru" href="https://neotoma.io/ru/markdown/architecture" data-rh="true"><link rel="alternate" hreflang="bn" href="https://neotoma.io/bn/markdown/architecture" data-rh="true"><link rel="alternate" hreflang="ur" href="https://neotoma.io/ur/markdown/architecture" data-rh="true"><link rel="alternate" hreflang="id" href="https://neotoma.io/id/markdown/architecture" data-rh="true"><link rel="alternate" hreflang="de" href="https://neotoma.io/de/markdown/architecture" data-rh="true"><meta name="description" content="Markdown export of the rendered /architecture page. Neotoma system architecture: state flow, three foundations, entity resolution pipeline, and deterministic guarantees." data-rh="true"><meta name="author" content="Neotoma" data-rh="true"><meta name="robots" content="noindex,nofollow" data-rh="true"><meta property="og:type" content="website" data-rh="true"><meta property="og:site_name" content="Neotoma" data-rh="true"><meta property="og:locale" content="ca_ES" data-rh="true"><meta property="og:title" content="Architecture (Markdown) | Neotoma" data-rh="true"><meta property="og:description" content="Markdown export of the rendered /architecture page. Neotoma system architecture: state flow, three foundations, entity resolution pipeline, and deterministic guarantees." data-rh="true"><meta property="og:url" content="https://neotoma.io/ca/markdown/architecture" data-rh="true"><meta property="og:image" content="https://neotoma.io/neotoma-og-1200x630.png" data-rh="true"><meta property="og:image:width" content="1200" data-rh="true"><meta property="og:image:height" content="630" data-rh="true"><meta property="og:image:alt" content="Architecture (Markdown) | Neotoma. Markdown export of the rendered /architecture page. Neotoma system architecture: state flow, three foundations, entity resolution pipelin..." data-rh="true"><meta name="keywords" content="Architecture (Markdown), Neotoma, MCP, Model Context Protocol, AI agents, agent memory, deterministic state" data-rh="true"><meta name="twitter:card" content="summary_large_image" data-rh="true"><meta name="twitter:site" content="@markmhendrickson" data-rh="true"><meta name="twitter:title" content="Architecture (Markdown) | Neotoma" data-rh="true"><meta name="twitter:description" content="Markdown export of the rendered /architecture page. Neotoma system architecture: state flow, three foundations, entity resolution pipeline, and deterministic guarantees." data-rh="true"><meta name="twitter:image" content="https://neotoma.io/neotoma-og-1200x630.png" data-rh="true"><meta name="twitter:image:width" content="1200" data-rh="true"><meta name="twitter:image:height" content="630" data-rh="true"><meta name="twitter:image:alt" content="Architecture (Markdown) | Neotoma. Markdown export of the rendered /architecture page. Neotoma system architecture: state flow, three foundations, entity resolution pipelin..." data-rh="true"><script type="application/ld+json" data-rh="true">{"@context":"https://schema.org","@type":"WebPage","name":"Architecture (Markdown) | Neotoma","description":"Markdown export of the rendered /architecture page. Neotoma system architecture: state flow, three foundations, entity resolution pipeline, and deterministic guarantees.","url":"https://neotoma.io/ca/markdown/architecture","publisher":{"@type":"Organization","name":"Neotoma"},"image":{"@type":"ImageObject","url":"https://neotoma.io/neotoma-og-1200x630.png","width":1200,"height":630,"caption":"Architecture (Markdown) | Neotoma. Markdown export of the rendered /architecture page. Neotoma system architecture: state flow, three foundations, entity resolution pipelin..."}}</script><script type="application/ld+json" data-rh="true">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://neotoma.io/"},{"@type":"ListItem","position":2,"name":"Docs","item":"https://neotoma.io/docs"},{"@type":"ListItem","position":3,"name":"Architecture","item":"https://neotoma.io/architecture"}]}</script></head>
   <body>
-    <div id="root"><iframe title="Markdown capture" aria-hidden="true" width="1280" height="900" class="pointer-events-none fixed left-[-9999px] top-0 z-[-1] border-0 opacity-0" sandbox="allow-same-origin allow-scripts allow-forms"></iframe><div class="min-h-screen bg-background text-foreground"><div class="sticky top-0 z-10 flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border bg-background/95 px-3 py-2 text-[13px] backdrop-blur supports-[backdrop-filter]:bg-background/80"><span class="min-w-0"><a class="text-foreground underline underline-offset-2 hover:no-underline" href="/ca/architecture" data-discover="true">← HTML page</a> · <a class="text-foreground underline underline-offset-2 hover:no-underline" href="/ca/site-markdown" data-discover="true">All pages</a></span><span class="inline-flex rounded-md border border-border bg-muted/40 p-0.5" role="group" aria-label="Markdown view"><button type="button" class="rounded px-2.5 py-1 text-[12px] font-medium transition-colors bg-background text-foreground shadow-sm">Preview</button><button type="button" class="rounded px-2.5 py-1 text-[12px] font-medium transition-colors text-muted-foreground hover:text-foreground">Source</button></span></div><article class="max-w-4xl px-4 py-6 text-foreground"><h1 class="mb-4 mt-8 text-2xl font-semibold tracking-tight first:mt-0">Architecture</h1>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Neotoma's architecture is built on three foundations: append-only observation logs for immutability, deterministic reducers for consistent state composition, and schema-bound entity types for structural guarantees.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Memory evolves deterministically. Given the same observations, Neotoma produces the same entity snapshots. Every state change is versioned with full provenance. Nothing mutates silently; nothing overwrites implicitly.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">This means you can inspect any entity at any point in time, diff two versions, and replay the full sequence of changes that produced the current state.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">◆</p>
-<h2 class="mb-3 mt-10 text-xl font-semibold tracking-tight">How state flows<a href="#state-flow" class="text-foreground underline underline-offset-2 decoration-muted-foreground hover:decoration-foreground">#</a></h2>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">state evolution pipeline</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">1</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Source</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">file · text · JSON</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">interpret</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">2</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Observations</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">granular facts + provenance</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">reduce</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">3</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Entity Snapshots</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">current truth · versioned</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">relate</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">4</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Memory Graph</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">entities + relationships + timeline</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">↻ replay · reconstruct state at any past point</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Source (file, text, structured JSON)</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">↓ interpret</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Observations (granular facts with provenance)</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">↓ reduce (deterministic)</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Entity snapshots (current truth, versioned)</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">↓ relate</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Memory graph (entities + relationships + timeline)</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">◆</p>
-<h2 class="mb-3 mt-10 text-xl font-semibold tracking-tight">How data enters Neotoma<a href="#how-data-enters" class="text-foreground underline underline-offset-2 decoration-muted-foreground hover:decoration-foreground">#</a></h2>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Data enters through two paths. Which path runs depends on what the caller sends.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Structured path</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Agent calls <code class="rounded bg-muted px-1 py-0.5 font-mono text-[12px]" node="[object Object]">store</code> with an <code class="rounded bg-muted px-1 py-0.5 font-mono text-[12px]" node="[object Object]">entities</code> array (typed JSON). Observations are created directly. No LLM calls. No interpretation pipeline.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">The agent's own reasoning produces the structured data. Neotoma validates against schema, deduplicates, and records with full provenance.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Chat, tool output, agent-extracted facts → this path.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Unstructured path</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Caller sends a file (PDF, image, CSV, text). Neotoma stores the raw content (content-addressed, immutable), then runs interpretation: text extraction followed by schema-first entity extraction.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">CSV files use deterministic row mapping (no LLM). Other files use LLM extraction with <code class="rounded bg-muted px-1 py-0.5 font-mono text-[12px]" node="[object Object]">temperature:&nbsp;0</code> and a fixed seed for reproducibility. Interpretation creates new observations without modifying the source.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">File uploads, document ingestion → this path.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">The agent is the author; Neotoma is the ledger.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Most agent interactions use the structured path. The agent decides what to store; Neotoma ensures it is schema-valid, deduplicated, and provenance-tracked. There is no hidden LLM between the agent and the data layer.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">◆</p>
-<h2 class="mb-3 mt-10 text-xl font-semibold tracking-tight">Guarantees<a href="#guarantees" class="text-foreground underline underline-offset-2 decoration-muted-foreground hover:decoration-foreground">#</a></h2>
-<ul class="mb-4 list-disc space-y-1 pl-6 text-[15px] leading-7">
-<li class="marker:text-muted-foreground">→<strong>Deterministic reduction.</strong> Same observations always produce the same entity snapshot. No ordering sensitivity, no hidden state.</li>
-<li class="marker:text-muted-foreground">→<strong>Full provenance.</strong> Every field traces to a source, timestamp, and interpretation. You can always answer "where did this value come from?"</li>
-<li class="marker:text-muted-foreground">→<strong>Immutable history.</strong> Observations are append-only. Corrections add new observations; they do not erase previous ones.</li>
-<li class="marker:text-muted-foreground">→<strong>Timeline replay.</strong> Reconstruct entity state at any past point. Diff versions. Audit what changed and why.</li>
-<li class="marker:text-muted-foreground">→<strong>Schema-bound storage.</strong> Entity types have schemas. New fields extend the schema incrementally; nothing is untyped at rest.</li>
-</ul>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">◆</p>
-<h2 class="mb-3 mt-10 text-xl font-semibold tracking-tight">Three foundations<a href="#foundations" class="text-foreground underline underline-offset-2 decoration-muted-foreground hover:decoration-foreground">#</a></h2>
-<div class="my-6 w-full overflow-x-auto rounded-lg border border-border bg-card"><table class="w-full min-w-[36rem] border-collapse text-left text-[13px] leading-snug"><thead class="bg-muted/70"><tr class="border-b border-border/60 last:border-0"><th class="whitespace-normal px-3 py-2.5 align-top font-medium text-foreground first:min-w-[12rem]">Foundation</th><th class="whitespace-normal px-3 py-2.5 align-top font-medium text-foreground first:min-w-[12rem]">What it means</th></tr></thead><tbody><tr class="border-b border-border/60 last:border-0"><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">Privacy-first</td><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">User-controlled memory, end-to-end encryption and row-level security, never used for training. Your data remains yours.</td></tr><tr class="border-b border-border/60 last:border-0"><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">Deterministic</td><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">Same input always produces same output. Schema-first extraction, hash-based entity IDs, full provenance. No hallucinations or probabilistic behavior.</td></tr><tr class="border-b border-border/60 last:border-0"><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">Cross-platform</td><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">Works with ChatGPT, Claude, Cursor, and Claude Code via MCP. One memory system across tools; no platform lock-in.</td></tr></tbody></table></div>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">These enable: immutable audit trail and time-travel queries, cryptographic integrity, event-sourced history, entity resolution across documents and agent data, timeline generation, dual-path storing (files + agent interactions), and persistent memory without context-window limits.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">◆</p>
-<h2 class="mb-3 mt-10 text-xl font-semibold tracking-tight">How agents remember<a href="#agent-loop" class="text-foreground underline underline-offset-2 decoration-muted-foreground hover:decoration-foreground">#</a></h2>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Every agent follows a mandatory loop: retrieve context, store the conversation and entities, extract structured facts, then respond. Storage completes before any reply.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">→<strong>Retrieve.</strong> Bounded query for entities implied by the message.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">→<strong>Store.</strong> Persist conversation and extracted entities in one call.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">→<strong>Extract.</strong> Facts become typed entities with relationships.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">→<strong>Respond.</strong> Reply only after storage completes.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Invariant: responding before storing is forbidden.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">See <a href="/agent-instructions" class="text-foreground underline underline-offset-2 decoration-muted-foreground hover:decoration-foreground">agent instructions</a> for full behavioral requirements.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">◆</p>
-<h2 class="mb-3 mt-10 text-xl font-semibold tracking-tight">What this is not<a href="#what-this-is-not" class="text-foreground underline underline-offset-2 decoration-muted-foreground hover:decoration-foreground">#</a></h2>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Neotoma is not a RAG pipeline or embedding-first retrieval layer. Its core is structured, schema-based, and deterministic. Optional similarity search is available when an embedding provider is configured (via <code class="rounded bg-muted px-1 py-0.5 font-mono text-[12px]" node="[object Object]">OPENAI_API_KEY</code>), but retrieval falls back to keyword matching without it.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">It is not an app, agent, or workflow engine. It is the lowest-level canonical source of truth for structured data (documents and agent-created data), exposed to AI tools via Model Context Protocol (MCP).</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Retrieval layers can read from Neotoma. Neotoma governs what they read.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">◆</p>
-<h2 class="mb-3 mt-10 text-xl font-semibold tracking-tight">Problems solved<a href="#problems-solved" class="text-foreground underline underline-offset-2 decoration-muted-foreground hover:decoration-foreground">#</a></h2>
-<div class="my-6 w-full overflow-x-auto rounded-lg border border-border bg-card"><table class="w-full min-w-[36rem] border-collapse text-left text-[13px] leading-snug"><thead class="bg-muted/70"><tr class="border-b border-border/60 last:border-0"><th class="whitespace-normal px-3 py-2.5 align-top font-medium text-foreground first:min-w-[12rem]">Problem</th><th class="whitespace-normal px-3 py-2.5 align-top font-medium text-foreground first:min-w-[12rem]">How Neotoma addresses it</th></tr></thead><tbody><tr class="border-b border-border/60 last:border-0"><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">Personal data is fragmented</td><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">Dual-path storing from file uploads and agent interactions into one source of truth.</td></tr><tr class="border-b border-border/60 last:border-0"><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">Provider memory is conversation-only</td><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">Structured data memory with entity resolution and timelines across documents and agent-created data.</td></tr><tr class="border-b border-border/60 last:border-0"><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">No trust when agents act</td><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">Explicit, named operations; visible inputs; reconstructable history. Replay and audit trail.</td></tr><tr class="border-b border-border/60 last:border-0"><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">No cross-data reasoning</td><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">One graph: sources, entities, events, typed relationships.</td></tr><tr class="border-b border-border/60 last:border-0"><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">Entity fragmentation</td><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">Hash-based canonical IDs unify "Acme Corp" across all stored data.</td></tr><tr class="border-b border-border/60 last:border-0"><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">No temporal reasoning</td><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">Automatic timeline generation from date fields.</td></tr><tr class="border-b border-border/60 last:border-0"><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">Platform lock-in</td><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">MCP-based access; works with any compatible AI tool.</td></tr></tbody></table></div>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">◆</p>
-<h2 class="mb-3 mt-10 text-xl font-semibold tracking-tight">Core terminology<a href="#terminology" class="text-foreground underline underline-offset-2 decoration-muted-foreground hover:decoration-foreground">#</a></h2>
-<div class="my-6 w-full overflow-x-auto rounded-lg border border-border bg-card"><table class="w-full min-w-[36rem] border-collapse text-left text-[13px] leading-snug"><thead class="bg-muted/70"><tr class="border-b border-border/60 last:border-0"><th class="whitespace-normal px-3 py-2.5 align-top font-medium text-foreground first:min-w-[12rem]">Term</th><th class="whitespace-normal px-3 py-2.5 align-top font-medium text-foreground first:min-w-[12rem]">Definition</th></tr></thead><tbody><tr class="border-b border-border/60 last:border-0"><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">State layer</td><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">Neotoma's role: a deterministic, immutable structured memory substrate that other layers read and write.</td></tr><tr class="border-b border-border/60 last:border-0"><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">Entity</td><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">Canonical representation of a person, company, or other object with a deterministic ID.</td></tr><tr class="border-b border-border/60 last:border-0"><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">Entity snapshot</td><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">Current truth for an entity; computed by merging all observations about that entity.</td></tr><tr class="border-b border-border/60 last:border-0"><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">Observation</td><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">Granular fact extracted from source; reducers merge observations into entity snapshots.</td></tr><tr class="border-b border-border/60 last:border-0"><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">Source</td><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">Raw data (file, text, URL, or structured JSON) stored with content-addressed deduplication.</td></tr><tr class="border-b border-border/60 last:border-0"><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">Provenance</td><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">Origin tracking (source, timestamp, user, interpretation) so every value traces back to its source.</td></tr><tr class="border-b border-border/60 last:border-0"><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">Memory graph</td><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">The graph of source, observations, entities, relationships, and events with typed edges.</td></tr><tr class="border-b border-border/60 last:border-0"><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">Reducer</td><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">Deterministic function that merges observations into an entity snapshot; same observations always yield the same snapshot.</td></tr><tr class="border-b border-border/60 last:border-0"><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">Relationship</td><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">Typed connection between two entities (e.g. SETTLES, REFERS_TO, PART_OF).</td></tr><tr class="border-b border-border/60 last:border-0"><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">Entity type</td><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">Classification (e.g. person, company, invoice) that determines the entity schema and resolution rules.</td></tr><tr class="border-b border-border/60 last:border-0"><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">Storing</td><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">Uploading and processing source into the memory graph (unstructured or structured).</td></tr><tr class="border-b border-border/60 last:border-0"><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">Retrieving</td><td class="whitespace-normal px-3 py-2.5 align-middle text-foreground first:font-medium [&amp;:not(:first-child)]:text-center">Querying entities, entity snapshots, observations, and related data from the memory graph.</td></tr></tbody></table></div>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">◆</p>
-<h2 class="mb-3 mt-10 text-xl font-semibold tracking-tight">Interfaces<a href="#interfaces" class="text-foreground underline underline-offset-2 decoration-muted-foreground hover:decoration-foreground">#</a></h2>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Neotoma exposes three interfaces. All three use the same OpenAPI-backed operations, so the same guarantees apply regardless of how you interact with the system.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">MCP Server</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">For AI agents (Claude, Cursor, Codex). Agents store and retrieve via tool calls.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0"><a href="/mcp" class="text-foreground underline underline-offset-2 decoration-muted-foreground hover:decoration-foreground">MCP reference →</a></p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">CLI</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">For developers. Init, store, retrieve, inspect, and manage from the terminal.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0"><a href="/cli" class="text-foreground underline underline-offset-2 decoration-muted-foreground hover:decoration-foreground">CLI reference →</a></p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">REST API</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">For apps and integrations. OpenAPI-first; every operation is an HTTP endpoint.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0"><a href="/api" class="text-foreground underline underline-offset-2 decoration-muted-foreground hover:decoration-foreground">API reference →</a></p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">◆</p>
-<h2 class="mb-3 mt-10 text-xl font-semibold tracking-tight">Core principles<a href="#principles" class="text-foreground underline underline-offset-2 decoration-muted-foreground hover:decoration-foreground">#</a></h2>
-<ul class="mb-4 list-disc space-y-1 pl-6 text-[15px] leading-7">
-<li class="marker:text-muted-foreground"><strong>Deterministic.</strong> Same input, same output. No probabilistic behavior at the data layer.</li>
-<li class="marker:text-muted-foreground"><strong>Schema-first.</strong> Entity types have schemas; extraction is structured, not freeform.</li>
-<li class="marker:text-muted-foreground"><strong>Explainable.</strong> Every value traces to a source and operation. No opaque transformations.</li>
-<li class="marker:text-muted-foreground"><strong>Entity-unified.</strong> Hash-based canonical IDs resolve duplicates across all data.</li>
-<li class="marker:text-muted-foreground"><strong>Timeline-aware.</strong> Date fields generate timeline events automatically.</li>
-<li class="marker:text-muted-foreground"><strong>Cross-platform.</strong> MCP, CLI, and REST API expose the same contract.</li>
-<li class="marker:text-muted-foreground"><strong>Privacy-first.</strong> User-controlled. Never used for training. Encryption at rest.</li>
-<li class="marker:text-muted-foreground"><strong>Immutable.</strong> Observations are append-only. History is never rewritten.</li>
-<li class="marker:text-muted-foreground"><strong>Provenance.</strong> Every fact links to its source, timestamp, and interpretation.</li>
-<li class="marker:text-muted-foreground"><strong>Explicit control.</strong> Nothing updates memory implicitly. The user decides what goes in.</li>
-<li class="marker:text-muted-foreground"><strong>Four-layer model.</strong> Source → Interpretation → Observation → Entity Snapshot.</li>
-</ul>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">◆</p>
-<h2 class="mb-3 mt-10 text-xl font-semibold tracking-tight">Developer preview status<a href="#preview-status" class="text-foreground underline underline-offset-2 decoration-muted-foreground hover:decoration-foreground">#</a></h2>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">The developer preview exposes the core contract only: CLI for humans, MCP for agents, OpenAPI as the single source of truth.</p>
-<h3 class="mb-2 mt-8 text-lg font-medium tracking-tight">What is guaranteed (even in preview)</h3>
-<ul class="mb-4 list-disc space-y-1 pl-6 text-[15px] leading-7">
-<li class="marker:text-muted-foreground">→No silent data loss: operations either succeed and are recorded or fail with explicit errors.</li>
-<li class="marker:text-muted-foreground">→Explicit, inspectable state mutations: every change is a named operation with visible inputs; state is reconstructable from the audit trail.</li>
-<li class="marker:text-muted-foreground">→Auditable operations: full provenance; CLI and MCP map to the same underlying contract.</li>
-<li class="marker:text-muted-foreground">→Same contract for CLI and MCP: both use the same OpenAPI-backed operations.</li>
-</ul>
-<h3 class="mb-2 mt-8 text-lg font-medium tracking-tight">What is not guaranteed yet</h3>
-<ul class="mb-4 list-disc space-y-1 pl-6 text-[15px] leading-7">
-<li class="marker:text-muted-foreground">×Stable schemas</li>
-<li class="marker:text-muted-foreground">×Deterministic extraction across versions</li>
-<li class="marker:text-muted-foreground">×Long-term replay compatibility</li>
-<li class="marker:text-muted-foreground">×Backward compatibility</li>
-</ul>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Breaking changes should be expected.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">◆</p>
-<h2 class="mb-3 mt-10 text-xl font-semibold tracking-tight">Go deeper<a href="#go-deeper" class="text-foreground underline underline-offset-2 decoration-muted-foreground hover:decoration-foreground">#</a></h2>
-<ul class="mb-4 list-disc space-y-1 pl-6 text-[15px] leading-7">
-<li class="marker:text-muted-foreground"><a href="/" class="text-foreground underline underline-offset-2 decoration-muted-foreground hover:decoration-foreground">Home</a> — hero, install, use cases, and how agents remember</li>
-<li class="marker:text-muted-foreground"><a href="/terminology" class="text-foreground underline underline-offset-2 decoration-muted-foreground hover:decoration-foreground">Terminology</a> — full glossary</li>
-<li class="marker:text-muted-foreground"><a href="/install#docker" class="text-foreground underline underline-offset-2 decoration-muted-foreground hover:decoration-foreground">Docker</a> — run Neotoma in Docker</li>
-<li class="marker:text-muted-foreground"><a href="/cli" class="text-foreground underline underline-offset-2 decoration-muted-foreground hover:decoration-foreground">CLI reference</a> — commands and flags</li>
-<li class="marker:text-muted-foreground"><a href="/mcp" class="text-foreground underline underline-offset-2 decoration-muted-foreground hover:decoration-foreground">MCP reference</a> — Model Context Protocol actions</li>
-<li class="marker:text-muted-foreground"><a href="/api" class="text-foreground underline underline-offset-2 decoration-muted-foreground hover:decoration-foreground">API reference</a> — REST endpoints</li>
-<li class="marker:text-muted-foreground"><a href="https://github.com/markmhendrickson/neotoma" class="text-foreground underline underline-offset-2 decoration-muted-foreground hover:decoration-foreground">GitHub</a> — source and README</li>
-<li class="marker:text-muted-foreground"><a href="https://markmhendrickson.com/posts/truth-layer-agent-memory" class="text-foreground underline underline-offset-2 decoration-muted-foreground hover:decoration-foreground">Building a truth layer for persistent agent memory</a> — rationale essay</li>
-</ul></article></div><div role="region" aria-label="Notifications (F8)" tabindex="-1" style="pointer-events: none;"><ol tabindex="-1" class="fixed top-0 z-[100] flex w-full flex-col-reverse p-4 sm:bottom-4 sm:right-4 sm:top-auto sm:flex-col sm:max-h-[calc(100vh-1rem)] sm:overflow-y-auto md:max-w-[420px]"></ol></div></div>
+    <div id="root"><iframe title="Markdown capture" aria-hidden="true" width="1280" height="900" class="pointer-events-none fixed left-[-9999px] top-0 z-[-1] border-0 opacity-0" sandbox="allow-same-origin allow-scripts allow-forms"></iframe><div class="min-h-screen bg-background text-foreground"><pre class="whitespace-pre-wrap break-words p-4 font-mono text-[13px] leading-relaxed text-foreground">&lt;!--
+  Full-page Markdown export (rendered HTML → GFM).
+  Source: https://neotoma.io/ca/architecture
+  Generated: 2026-04-01T10:33:15.410Z
+--&gt;
+# Architecture
+
+Neotoma's architecture is built on three foundations: append-only observation logs for immutability, deterministic reducers for consistent state composition, and schema-bound entity types for structural guarantees.
+
+Memory evolves deterministically. Given the same observations, Neotoma produces the same entity snapshots. Every state change is versioned with full provenance. Nothing mutates silently; nothing overwrites implicitly.
+
+This means you can inspect any entity at any point in time, diff two versions, and replay the full sequence of changes that produced the current state.
+
+◆
+
+## How state flows[#](#state-flow)
+
+neotoma state pipeline
+
+1
+
+Source
+
+structured entities · MCP · CLI · API
+
+record
+
+2
+
+Observations
+
+granular facts + provenance
+
+reduce
+
+3
+
+Entity Snapshots
+
+current truth · versioned
+
+relate
+
+4
+
+Memory Graph
+
+entities · relationships · timeline
+
+↻ replay · inspect any past state
+
+Structured payloads (entities JSON via MCP / CLI / REST)
+
+↓ record observations
+
+Observations (granular facts with provenance)
+
+↓ reduce (deterministic)
+
+Entity snapshots (current truth, versioned)
+
+↓ relate
+
+Memory graph (entities + relationships + timeline)
+
+◆
+
+## How data enters Neotoma[#](#how-data-enters)
+
+Data enters through `store` with a structured `entities` array (MCP, CLI, or REST). Observations are created from that payload; there is no server-side file interpretation or LLM extraction pipeline.
+
+Structured ingestion
+
+Callers pass typed JSON entities. Neotoma validates against schema, deduplicates, and records observations with full provenance. No LLM runs inside the store path.
+
+The agent's own reasoning (or your app) produces the structured data. Chat, tool output, and agent-extracted facts all land here.
+
+The agent is the author; Neotoma is the ledger.
+
+The agent decides what to store; Neotoma ensures it is schema-valid, deduplicated, and provenance-tracked. There is no hidden LLM between the caller and the data layer.
+
+◆
+
+## Guarantees[#](#guarantees)
+
+-   →**Deterministic reduction.** Same observations always produce the same entity snapshot. No ordering sensitivity, no hidden state.
+-   →**Full provenance.** Every field traces to a source, timestamp, and store operation. You can always answer "where did this value come from?"
+-   →**Immutable history.** Observations are append-only. Corrections add new observations; they do not erase previous ones.
+-   →**Timeline replay.** Reconstruct entity state at any past point. Diff versions. Audit what changed and why.
+-   →**Schema-bound storage.** Entity types have schemas. New fields extend the schema incrementally; nothing is untyped at rest.
+
+◆
+
+## Three foundations[#](#foundations)
+
+| Foundation | What it means |
+| --- | --- |
+| Privacy-first | User-controlled memory, end-to-end encryption and row-level security, never used for training. Your data remains yours. |
+| Deterministic | Same input always produces same output. Schema-first extraction, hash-based entity IDs, full provenance. No hallucinations or probabilistic behavior. |
+| Cross-platform | Works with ChatGPT, Claude, Cursor, and Claude Code via MCP. One memory system across tools; no platform lock-in. |
+
+These enable: immutable audit trail and time-travel queries, cryptographic integrity, event-sourced history, entity resolution across documents and agent data, timeline generation, structured ingestion via MCP/CLI/API, and persistent memory without context-window limits.
+
+◆
+
+## How agents remember[#](#agent-loop)
+
+Every agent follows a mandatory loop: retrieve context, store the conversation and entities, extract structured facts, then respond. Storage completes before any reply.
+
+→**Retrieve.** Bounded query for entities implied by the message.
+
+→**Store.** Persist conversation and extracted entities in one call.
+
+→**Extract.** Facts become typed entities with relationships.
+
+→**Respond.** Reply only after storage completes.
+
+Invariant: responding before storing is forbidden.
+
+See [agent instructions](/agent-instructions) for full behavioral requirements.
+
+◆
+
+## What this is not[#](#what-this-is-not)
+
+Neotoma is not a RAG pipeline or embedding-first retrieval layer. Its core is structured, schema-based, and deterministic. Optional similarity search is available when an embedding provider is configured (via `OPENAI_API_KEY`), but retrieval falls back to keyword matching without it.
+
+It is not an app, agent, or workflow engine. It is the lowest-level canonical source of truth for structured data (documents and agent-created data), exposed to AI tools via Model Context Protocol (MCP).
+
+Retrieval layers can read from Neotoma. Neotoma governs what they read.
+
+◆
+
+## Problems solved[#](#problems-solved)
+
+| Problem | How Neotoma addresses it |
+| --- | --- |
+| Personal data is fragmented | Structured agent-authored data consolidated into one provenance-backed source of truth. |
+| Provider memory is conversation-only | Structured data memory with entity resolution and timelines across documents and agent-created data. |
+| No trust when agents act | Explicit, named operations; visible inputs; reconstructable history. Replay and audit trail. |
+| No cross-data reasoning | One graph: sources, entities, events, typed relationships. |
+| Entity fragmentation | Hash-based canonical IDs unify "Acme Corp" across all stored data. |
+| No temporal reasoning | Automatic timeline generation from date fields. |
+| Platform lock-in | MCP-based access; works with any compatible AI tool. |
+
+◆
+
+## Core terminology[#](#terminology)
+
+| Term | Definition |
+| --- | --- |
+| State layer | Neotoma's role: a deterministic, immutable structured memory substrate that other layers read and write. |
+| Entity | Canonical representation of a person, company, or other object with a deterministic ID. |
+| Entity snapshot | Current truth for an entity; computed by merging all observations about that entity. |
+| Observation | Granular fact extracted from source; reducers merge observations into entity snapshots. |
+| Source | Raw data (file, text, URL, or structured JSON) stored with content-addressed deduplication. |
+| Provenance | Origin tracking (source, timestamp, user, interpretation) so every value traces back to its source. |
+| Memory graph | The graph of source, observations, entities, relationships, and events with typed edges. |
+| Reducer | Deterministic function that merges observations into an entity snapshot; same observations always yield the same snapshot. |
+| Relationship | Typed connection between two entities (e.g. SETTLES, REFERS\_TO, PART\_OF). |
+| Entity type | Classification (e.g. person, company, invoice) that determines the entity schema and resolution rules. |
+| Storing | Uploading and processing source into the memory graph (unstructured or structured). |
+| Retrieving | Querying entities, entity snapshots, observations, and related data from the memory graph. |
+
+◆
+
+## Interfaces[#](#interfaces)
+
+Neotoma exposes three interfaces. All three use the same OpenAPI-backed operations, so the same guarantees apply regardless of how you interact with the system.
+
+MCP Server
+
+For AI agents (Claude, Cursor, Codex). Agents store and retrieve via tool calls.
+
+[MCP reference →](/mcp)
+
+CLI
+
+For developers. Init, store, retrieve, inspect, and manage from the terminal.
+
+[CLI reference →](/cli)
+
+REST API
+
+For apps and integrations. OpenAPI-first; every operation is an HTTP endpoint.
+
+[API reference →](/api)
+
+◆
+
+## Core principles[#](#principles)
+
+-   **Deterministic.** Same input, same output. No probabilistic behavior at the data layer.
+-   **Schema-first.** Entity types have schemas; extraction is structured, not freeform.
+-   **Explainable.** Every value traces to a source and operation. No opaque transformations.
+-   **Entity-unified.** Hash-based canonical IDs resolve duplicates across all data.
+-   **Timeline-aware.** Date fields generate timeline events automatically.
+-   **Cross-platform.** MCP, CLI, and REST API expose the same contract.
+-   **Privacy-first.** User-controlled. Never used for training. Encryption at rest.
+-   **Immutable.** Observations are append-only. History is never rewritten.
+-   **Provenance.** Every fact links to its source, timestamp, and ingestion operation.
+-   **Explicit control.** Nothing updates memory implicitly. The user decides what goes in.
+-   **Four-layer model.** Structured payloads → Observations → Entity snapshots → Memory graph.
+
+◆
+
+## Developer preview status[#](#preview-status)
+
+The developer preview exposes the core contract only: CLI for humans, MCP for agents, OpenAPI as the single source of truth.
+
+### What is guaranteed (even in preview)
+
+-   →No silent data loss: operations either succeed and are recorded or fail with explicit errors.
+-   →Explicit, inspectable state mutations: every change is a named operation with visible inputs; state is reconstructable from the audit trail.
+-   →Auditable operations: full provenance; CLI and MCP map to the same underlying contract.
+-   →Same contract for CLI and MCP: both use the same OpenAPI-backed operations.
+
+### What is not guaranteed yet
+
+-   ×Stable schemas
+-   ×Deterministic extraction across versions
+-   ×Long-term replay compatibility
+-   ×Backward compatibility
+
+Breaking changes should be expected.
+
+◆
+
+## Go deeper[#](#go-deeper)
+
+-   [Home](/) — hero, install, use cases, and how agents remember
+-   [Terminology](/terminology) — full glossary
+-   [Docker](/install#docker) — run Neotoma in Docker
+-   [CLI reference](/cli) — commands and flags
+-   [MCP reference](/mcp) — Model Context Protocol actions
+-   [API reference](/api) — REST endpoints
+-   [GitHub](https://github.com/markmhendrickson/neotoma) — source and README
+-   [Building a truth layer for persistent agent memory](https://markmhendrickson.com/posts/truth-layer-agent-memory) — rationale essay</pre></div><div role="region" aria-label="Notifications (F8)" tabindex="-1" style="pointer-events: none;"><ol tabindex="-1" class="fixed top-0 z-[100] flex w-full flex-col-reverse p-4 sm:bottom-4 sm:right-4 sm:top-auto sm:flex-col sm:max-h-[calc(100vh-1rem)] sm:overflow-y-auto md:max-w-[420px]"></ol></div></div>
   
 
 

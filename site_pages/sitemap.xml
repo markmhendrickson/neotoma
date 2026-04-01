@@ -9,9 +9,9 @@
   <url><loc>https://neotoma.io/mcp</loc></url>
   <url><loc>https://neotoma.io/cli</loc></url>
   <url><loc>https://neotoma.io/architecture</loc></url>
-  <url><loc>https://neotoma.io/ai-infrastructure-engineers</loc></url>
-  <url><loc>https://neotoma.io/ai-native-operators</loc></url>
-  <url><loc>https://neotoma.io/agentic-systems-builders</loc></url>
+  <url><loc>https://neotoma.io/operating</loc></url>
+  <url><loc>https://neotoma.io/building-pipelines</loc></url>
+  <url><loc>https://neotoma.io/debugging-infrastructure</loc></url>
   <url><loc>https://neotoma.io/neotoma-with-cursor</loc></url>
   <url><loc>https://neotoma.io/neotoma-with-claude</loc></url>
   <url><loc>https://neotoma.io/neotoma-with-claude-connect-desktop</loc></url>
@@ -77,9 +77,9 @@
   <url><loc>https://neotoma.io/es/mcp</loc></url>
   <url><loc>https://neotoma.io/es/cli</loc></url>
   <url><loc>https://neotoma.io/es/architecture</loc></url>
-  <url><loc>https://neotoma.io/es/ai-infrastructure-engineers</loc></url>
-  <url><loc>https://neotoma.io/es/ai-native-operators</loc></url>
-  <url><loc>https://neotoma.io/es/agentic-systems-builders</loc></url>
+  <url><loc>https://neotoma.io/es/operating</loc></url>
+  <url><loc>https://neotoma.io/es/building-pipelines</loc></url>
+  <url><loc>https://neotoma.io/es/debugging-infrastructure</loc></url>
   <url><loc>https://neotoma.io/es/neotoma-with-cursor</loc></url>
   <url><loc>https://neotoma.io/es/neotoma-with-claude</loc></url>
   <url><loc>https://neotoma.io/es/neotoma-with-claude-connect-desktop</loc></url>
@@ -145,9 +145,9 @@
   <url><loc>https://neotoma.io/ca/mcp</loc></url>
   <url><loc>https://neotoma.io/ca/cli</loc></url>
   <url><loc>https://neotoma.io/ca/architecture</loc></url>
-  <url><loc>https://neotoma.io/ca/ai-infrastructure-engineers</loc></url>
-  <url><loc>https://neotoma.io/ca/ai-native-operators</loc></url>
-  <url><loc>https://neotoma.io/ca/agentic-systems-builders</loc></url>
+  <url><loc>https://neotoma.io/ca/operating</loc></url>
+  <url><loc>https://neotoma.io/ca/building-pipelines</loc></url>
+  <url><loc>https://neotoma.io/ca/debugging-infrastructure</loc></url>
   <url><loc>https://neotoma.io/ca/neotoma-with-cursor</loc></url>
   <url><loc>https://neotoma.io/ca/neotoma-with-claude</loc></url>
   <url><loc>https://neotoma.io/ca/neotoma-with-claude-connect-desktop</loc></url>
@@ -213,9 +213,9 @@
   <url><loc>https://neotoma.io/zh/mcp</loc></url>
   <url><loc>https://neotoma.io/zh/cli</loc></url>
   <url><loc>https://neotoma.io/zh/architecture</loc></url>
-  <url><loc>https://neotoma.io/zh/ai-infrastructure-engineers</loc></url>
-  <url><loc>https://neotoma.io/zh/ai-native-operators</loc></url>
-  <url><loc>https://neotoma.io/zh/agentic-systems-builders</loc></url>
+  <url><loc>https://neotoma.io/zh/operating</loc></url>
+  <url><loc>https://neotoma.io/zh/building-pipelines</loc></url>
+  <url><loc>https://neotoma.io/zh/debugging-infrastructure</loc></url>
   <url><loc>https://neotoma.io/zh/neotoma-with-cursor</loc></url>
   <url><loc>https://neotoma.io/zh/neotoma-with-claude</loc></url>
   <url><loc>https://neotoma.io/zh/neotoma-with-claude-connect-desktop</loc></url>
@@ -281,9 +281,9 @@
   <url><loc>https://neotoma.io/hi/mcp</loc></url>
   <url><loc>https://neotoma.io/hi/cli</loc></url>
   <url><loc>https://neotoma.io/hi/architecture</loc></url>
-  <url><loc>https://neotoma.io/hi/ai-infrastructure-engineers</loc></url>
-  <url><loc>https://neotoma.io/hi/ai-native-operators</loc></url>
-  <url><loc>https://neotoma.io/hi/agentic-systems-builders</loc></url>
+  <url><loc>https://neotoma.io/hi/operating</loc></url>
+  <url><loc>https://neotoma.io/hi/building-pipelines</loc></url>
+  <url><loc>https://neotoma.io/hi/debugging-infrastructure</loc></url>
   <url><loc>https://neotoma.io/hi/neotoma-with-cursor</loc></url>
   <url><loc>https://neotoma.io/hi/neotoma-with-claude</loc></url>
   <url><loc>https://neotoma.io/hi/neotoma-with-claude-connect-desktop</loc></url>
@@ -349,9 +349,9 @@
   <url><loc>https://neotoma.io/ar/mcp</loc></url>
   <url><loc>https://neotoma.io/ar/cli</loc></url>
   <url><loc>https://neotoma.io/ar/architecture</loc></url>
-  <url><loc>https://neotoma.io/ar/ai-infrastructure-engineers</loc></url>
-  <url><loc>https://neotoma.io/ar/ai-native-operators</loc></url>
-  <url><loc>https://neotoma.io/ar/agentic-systems-builders</loc></url>
+  <url><loc>https://neotoma.io/ar/operating</loc></url>
+  <url><loc>https://neotoma.io/ar/building-pipelines</loc></url>
+  <url><loc>https://neotoma.io/ar/debugging-infrastructure</loc></url>
   <url><loc>https://neotoma.io/ar/neotoma-with-cursor</loc></url>
   <url><loc>https://neotoma.io/ar/neotoma-with-claude</loc></url>
   <url><loc>https://neotoma.io/ar/neotoma-with-claude-connect-desktop</loc></url>
@@ -417,9 +417,9 @@
   <url><loc>https://neotoma.io/fr/mcp</loc></url>
   <url><loc>https://neotoma.io/fr/cli</loc></url>
   <url><loc>https://neotoma.io/fr/architecture</loc></url>
-  <url><loc>https://neotoma.io/fr/ai-infrastructure-engineers</loc></url>
-  <url><loc>https://neotoma.io/fr/ai-native-operators</loc></url>
-  <url><loc>https://neotoma.io/fr/agentic-systems-builders</loc></url>
+  <url><loc>https://neotoma.io/fr/operating</loc></url>
+  <url><loc>https://neotoma.io/fr/building-pipelines</loc></url>
+  <url><loc>https://neotoma.io/fr/debugging-infrastructure</loc></url>
   <url><loc>https://neotoma.io/fr/neotoma-with-cursor</loc></url>
   <url><loc>https://neotoma.io/fr/neotoma-with-claude</loc></url>
   <url><loc>https://neotoma.io/fr/neotoma-with-claude-connect-desktop</loc></url>
@@ -485,9 +485,9 @@
   <url><loc>https://neotoma.io/pt/mcp</loc></url>
   <url><loc>https://neotoma.io/pt/cli</loc></url>
   <url><loc>https://neotoma.io/pt/architecture</loc></url>
-  <url><loc>https://neotoma.io/pt/ai-infrastructure-engineers</loc></url>
-  <url><loc>https://neotoma.io/pt/ai-native-operators</loc></url>
-  <url><loc>https://neotoma.io/pt/agentic-systems-builders</loc></url>
+  <url><loc>https://neotoma.io/pt/operating</loc></url>
+  <url><loc>https://neotoma.io/pt/building-pipelines</loc></url>
+  <url><loc>https://neotoma.io/pt/debugging-infrastructure</loc></url>
   <url><loc>https://neotoma.io/pt/neotoma-with-cursor</loc></url>
   <url><loc>https://neotoma.io/pt/neotoma-with-claude</loc></url>
   <url><loc>https://neotoma.io/pt/neotoma-with-claude-connect-desktop</loc></url>
@@ -553,9 +553,9 @@
   <url><loc>https://neotoma.io/ru/mcp</loc></url>
   <url><loc>https://neotoma.io/ru/cli</loc></url>
   <url><loc>https://neotoma.io/ru/architecture</loc></url>
-  <url><loc>https://neotoma.io/ru/ai-infrastructure-engineers</loc></url>
-  <url><loc>https://neotoma.io/ru/ai-native-operators</loc></url>
-  <url><loc>https://neotoma.io/ru/agentic-systems-builders</loc></url>
+  <url><loc>https://neotoma.io/ru/operating</loc></url>
+  <url><loc>https://neotoma.io/ru/building-pipelines</loc></url>
+  <url><loc>https://neotoma.io/ru/debugging-infrastructure</loc></url>
   <url><loc>https://neotoma.io/ru/neotoma-with-cursor</loc></url>
   <url><loc>https://neotoma.io/ru/neotoma-with-claude</loc></url>
   <url><loc>https://neotoma.io/ru/neotoma-with-claude-connect-desktop</loc></url>
@@ -621,9 +621,9 @@
   <url><loc>https://neotoma.io/bn/mcp</loc></url>
   <url><loc>https://neotoma.io/bn/cli</loc></url>
   <url><loc>https://neotoma.io/bn/architecture</loc></url>
-  <url><loc>https://neotoma.io/bn/ai-infrastructure-engineers</loc></url>
-  <url><loc>https://neotoma.io/bn/ai-native-operators</loc></url>
-  <url><loc>https://neotoma.io/bn/agentic-systems-builders</loc></url>
+  <url><loc>https://neotoma.io/bn/operating</loc></url>
+  <url><loc>https://neotoma.io/bn/building-pipelines</loc></url>
+  <url><loc>https://neotoma.io/bn/debugging-infrastructure</loc></url>
   <url><loc>https://neotoma.io/bn/neotoma-with-cursor</loc></url>
   <url><loc>https://neotoma.io/bn/neotoma-with-claude</loc></url>
   <url><loc>https://neotoma.io/bn/neotoma-with-claude-connect-desktop</loc></url>
@@ -689,9 +689,9 @@
   <url><loc>https://neotoma.io/ur/mcp</loc></url>
   <url><loc>https://neotoma.io/ur/cli</loc></url>
   <url><loc>https://neotoma.io/ur/architecture</loc></url>
-  <url><loc>https://neotoma.io/ur/ai-infrastructure-engineers</loc></url>
-  <url><loc>https://neotoma.io/ur/ai-native-operators</loc></url>
-  <url><loc>https://neotoma.io/ur/agentic-systems-builders</loc></url>
+  <url><loc>https://neotoma.io/ur/operating</loc></url>
+  <url><loc>https://neotoma.io/ur/building-pipelines</loc></url>
+  <url><loc>https://neotoma.io/ur/debugging-infrastructure</loc></url>
   <url><loc>https://neotoma.io/ur/neotoma-with-cursor</loc></url>
   <url><loc>https://neotoma.io/ur/neotoma-with-claude</loc></url>
   <url><loc>https://neotoma.io/ur/neotoma-with-claude-connect-desktop</loc></url>
@@ -757,9 +757,9 @@
   <url><loc>https://neotoma.io/id/mcp</loc></url>
   <url><loc>https://neotoma.io/id/cli</loc></url>
   <url><loc>https://neotoma.io/id/architecture</loc></url>
-  <url><loc>https://neotoma.io/id/ai-infrastructure-engineers</loc></url>
-  <url><loc>https://neotoma.io/id/ai-native-operators</loc></url>
-  <url><loc>https://neotoma.io/id/agentic-systems-builders</loc></url>
+  <url><loc>https://neotoma.io/id/operating</loc></url>
+  <url><loc>https://neotoma.io/id/building-pipelines</loc></url>
+  <url><loc>https://neotoma.io/id/debugging-infrastructure</loc></url>
   <url><loc>https://neotoma.io/id/neotoma-with-cursor</loc></url>
   <url><loc>https://neotoma.io/id/neotoma-with-claude</loc></url>
   <url><loc>https://neotoma.io/id/neotoma-with-claude-connect-desktop</loc></url>
@@ -825,9 +825,9 @@
   <url><loc>https://neotoma.io/de/mcp</loc></url>
   <url><loc>https://neotoma.io/de/cli</loc></url>
   <url><loc>https://neotoma.io/de/architecture</loc></url>
-  <url><loc>https://neotoma.io/de/ai-infrastructure-engineers</loc></url>
-  <url><loc>https://neotoma.io/de/ai-native-operators</loc></url>
-  <url><loc>https://neotoma.io/de/agentic-systems-builders</loc></url>
+  <url><loc>https://neotoma.io/de/operating</loc></url>
+  <url><loc>https://neotoma.io/de/building-pipelines</loc></url>
+  <url><loc>https://neotoma.io/de/debugging-infrastructure</loc></url>
   <url><loc>https://neotoma.io/de/neotoma-with-cursor</loc></url>
   <url><loc>https://neotoma.io/de/neotoma-with-claude</loc></url>
   <url><loc>https://neotoma.io/de/neotoma-with-claude-connect-desktop</loc></url>

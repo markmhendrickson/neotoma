@@ -3,7 +3,7 @@
     <meta charset="UTF-8">
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='1' x2='1' y2='0'%3E%3Cstop offset='0' stop-color='%23000'/%3E%3Cstop offset='1' stop-color='%234c1d95'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='16' height='16' rx='3' fill='url(%23g)'/%3E%3Ctext x='8' y='11' text-anchor='middle' font-family='Arial' font-size='9' fill='white'%3EN%3C/text%3E%3C/svg%3E">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Markdown export of the rendered /build-vs-buy page. Audit and observability are solved. This page helps you determine whether you also need state integrity: deterministic temporal reconstruction, multi-writer consistency, and version-bound provenance for agent systems.">
+    <meta name="description" content="Markdown export of the rendered /build-vs-buy page. For builders running agents across sessions and tools: logging is solved. This page separates observability from state integrity-deterministic reconstruction, multi-writer merges, and version-bound provenance-with examples by entity type (contacts, tasks, transactions, and more).">
     <meta name="author" content="Neotoma">
     <meta name="robots" content="noindex,nofollow">
     <link rel="canonical" href="https://neotoma.io/pt/markdown/build-vs-buy">
@@ -11,32 +11,32 @@
     <meta property="og:site_name" content="Neotoma">
     <meta property="og:locale" content="pt_PT">
     <meta property="og:title" content="Build vs Buy | When to Add a State Integrity Layer (Markdown) | Neotoma">
-    <meta property="og:description" content="Markdown export of the rendered /build-vs-buy page. Audit and observability are solved. This page helps you determine whether you also need state integrity: deterministic temporal reconstruction, multi-writer consistency, and version-bound provenance for agent systems.">
+    <meta property="og:description" content="Markdown export of the rendered /build-vs-buy page. For builders running agents across sessions and tools: logging is solved. This page separates observability from state integrity-deterministic reconstruction, multi-writer merges, and version-bound provenance-with examples by entity type (contacts, tasks, transactions, and more).">
     <meta property="og:url" content="https://neotoma.io/pt/markdown/build-vs-buy">
     <meta property="og:image" content="https://neotoma.io/neotoma-og-1200x630.png">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
-    <meta property="og:image:alt" content="Build vs Buy | When to Add a State Integrity Layer (Markdown) | Neotoma. Markdown export of the rendered /build-vs-buy page. Audit and observability are solved. This page helps you determine whethe...">
+    <meta property="og:image:alt" content="Build vs Buy | When to Add a State Integrity Layer (Markdown) | Neotoma. Markdown export of the rendered /build-vs-buy page. For builders running agents across sessions and tools: logging is solved...">
     <meta name="keywords" content="Build vs Buy, When to Add a State Integrity Layer (Markdown), Neotoma, MCP, Model Context Protocol, AI agents, agent memory, deterministic state">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:site" content="@markmhendrickson">
     <meta name="twitter:title" content="Build vs Buy | When to Add a State Integrity Layer (Markdown) | Neotoma">
-    <meta name="twitter:description" content="Markdown export of the rendered /build-vs-buy page. Audit and observability are solved. This page helps you determine whether you also need state integrity: deterministic temporal reconstruction, multi-writer consistency, and version-bound provenance for agent systems.">
+    <meta name="twitter:description" content="Markdown export of the rendered /build-vs-buy page. For builders running agents across sessions and tools: logging is solved. This page separates observability from state integrity-deterministic reconstruction, multi-writer merges, and version-bound provenance-with examples by entity type (contacts, tasks, transactions, and more).">
     <meta name="twitter:image" content="https://neotoma.io/neotoma-og-1200x630.png">
     <meta name="twitter:image:width" content="1200">
     <meta name="twitter:image:height" content="630">
-    <meta name="twitter:image:alt" content="Build vs Buy | When to Add a State Integrity Layer (Markdown) | Neotoma. Markdown export of the rendered /build-vs-buy page. Audit and observability are solved. This page helps you determine whethe...">
-    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"Build vs Buy | When to Add a State Integrity Layer (Markdown) | Neotoma","description":"Markdown export of the rendered /build-vs-buy page. Audit and observability are solved. This page helps you determine whether you also need state integrity: deterministic temporal reconstruction, multi-writer consistency, and version-bound provenance for agent systems.","url":"https://neotoma.io/pt/markdown/build-vs-buy","publisher":{"@type":"Organization","name":"Neotoma"},"image":{"@type":"ImageObject","url":"https://neotoma.io/neotoma-og-1200x630.png","width":1200,"height":630,"caption":"Build vs Buy | When to Add a State Integrity Layer (Markdown) | Neotoma. Markdown export of the rendered /build-vs-buy page. Audit and observability are solved. This page helps you determine whethe..."}}</script>
+    <meta name="twitter:image:alt" content="Build vs Buy | When to Add a State Integrity Layer (Markdown) | Neotoma. Markdown export of the rendered /build-vs-buy page. For builders running agents across sessions and tools: logging is solved...">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"Build vs Buy | When to Add a State Integrity Layer (Markdown) | Neotoma","description":"Markdown export of the rendered /build-vs-buy page. For builders running agents across sessions and tools: logging is solved. This page separates observability from state integrity-deterministic reconstruction, multi-writer merges, and version-bound provenance-with examples by entity type (contacts, tasks, transactions, and more).","url":"https://neotoma.io/pt/markdown/build-vs-buy","publisher":{"@type":"Organization","name":"Neotoma"},"image":{"@type":"ImageObject","url":"https://neotoma.io/neotoma-og-1200x630.png","width":1200,"height":630,"caption":"Build vs Buy | When to Add a State Integrity Layer (Markdown) | Neotoma. Markdown export of the rendered /build-vs-buy page. For builders running agents across sessions and tools: logging is solved..."}}</script>
     <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://neotoma.io/"},{"@type":"ListItem","position":2,"name":"Build vs Buy","item":"https://neotoma.io/build-vs-buy"}]}</script>
     <script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"When do I need a state integrity layer instead of observability?","acceptedAnswer":{"@type":"Answer","text":"When multiple writers update the same entities, you need the composed state at a point in time, rules change while entities have active state, actions flow through delegation hops, or explanation requires full input context."}},{"@type":"Question","name":"What is the difference between observability and state integrity?","acceptedAnswer":{"@type":"Answer","text":"Observability shows what happened: events, logs, traces. State integrity proves what was true: the deterministic composed entity state at any moment, with multi-writer conflict resolution and version-bound provenance."}},{"@type":"Question","name":"Is observability enough for my agent system?","acceptedAnswer":{"@type":"Answer","text":"If 0-1 of these conditions apply: multiple entity writers, temporal state queries, changing rules, delegation chains, full-context explanations. At 4-5 conditions, you need a state integrity layer."}}]}</script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
     <title>Build vs Buy | When to Add a State Integrity Layer (Markdown) | Neotoma</title>
-    <script type="module" crossorigin="" src="../../../assets/main-DmE0kf3o.js"></script>
-    <link rel="stylesheet" crossorigin="" href="../../../assets/main-BluIWsBd.css">
+    <script type="module" crossorigin="" src="../../../assets/main-DxVKJUI6.js"></script>
+    <link rel="stylesheet" crossorigin="" href="../../../assets/main-DUcwN7CH.css">
   
-    <!-- build: local-1774967236156 -->
+    <!-- build: local-1775039455392 -->
       <link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/build-vs-buy">
     <link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/build-vs-buy">
     <link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/build-vs-buy">
@@ -51,125 +51,241 @@
     <link rel="alternate" hreflang="ur" href="https://neotoma.io/ur/markdown/build-vs-buy">
     <link rel="alternate" hreflang="id" href="https://neotoma.io/id/markdown/build-vs-buy">
     <link rel="alternate" hreflang="de" href="https://neotoma.io/de/markdown/build-vs-buy">
-  <link rel="canonical" href="https://neotoma.io/pt/markdown/build-vs-buy" data-rh="true"><link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/build-vs-buy" data-rh="true"><link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/build-vs-buy" data-rh="true"><link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/build-vs-buy" data-rh="true"><link rel="alternate" hreflang="ca" href="https://neotoma.io/ca/markdown/build-vs-buy" data-rh="true"><link rel="alternate" hreflang="zh" href="https://neotoma.io/zh/markdown/build-vs-buy" data-rh="true"><link rel="alternate" hreflang="hi" href="https://neotoma.io/hi/markdown/build-vs-buy" data-rh="true"><link rel="alternate" hreflang="ar" href="https://neotoma.io/ar/markdown/build-vs-buy" data-rh="true"><link rel="alternate" hreflang="fr" href="https://neotoma.io/fr/markdown/build-vs-buy" data-rh="true"><link rel="alternate" hreflang="pt" href="https://neotoma.io/pt/markdown/build-vs-buy" data-rh="true"><link rel="alternate" hreflang="ru" href="https://neotoma.io/ru/markdown/build-vs-buy" data-rh="true"><link rel="alternate" hreflang="bn" href="https://neotoma.io/bn/markdown/build-vs-buy" data-rh="true"><link rel="alternate" hreflang="ur" href="https://neotoma.io/ur/markdown/build-vs-buy" data-rh="true"><link rel="alternate" hreflang="id" href="https://neotoma.io/id/markdown/build-vs-buy" data-rh="true"><link rel="alternate" hreflang="de" href="https://neotoma.io/de/markdown/build-vs-buy" data-rh="true"><meta name="description" content="Markdown export of the rendered /build-vs-buy page. Audit and observability are solved. This page helps you determine whether you also need state integrity: deterministic temporal reconstruction, multi-writer consistency, and version-bound provenance for agent systems." data-rh="true"><meta name="author" content="Neotoma" data-rh="true"><meta name="robots" content="noindex,nofollow" data-rh="true"><meta property="og:type" content="website" data-rh="true"><meta property="og:site_name" content="Neotoma" data-rh="true"><meta property="og:locale" content="pt_PT" data-rh="true"><meta property="og:title" content="Build vs Buy | When to Add a State Integrity Layer (Markdown) | Neotoma" data-rh="true"><meta property="og:description" content="Markdown export of the rendered /build-vs-buy page. Audit and observability are solved. This page helps you determine whether you also need state integrity: deterministic temporal reconstruction, multi-writer consistency, and version-bound provenance for agent systems." data-rh="true"><meta property="og:url" content="https://neotoma.io/pt/markdown/build-vs-buy" data-rh="true"><meta property="og:image" content="https://neotoma.io/neotoma-og-1200x630.png" data-rh="true"><meta property="og:image:width" content="1200" data-rh="true"><meta property="og:image:height" content="630" data-rh="true"><meta property="og:image:alt" content="Build vs Buy | When to Add a State Integrity Layer (Markdown) | Neotoma. Markdown export of the rendered /build-vs-buy page. Audit and observability are solved. This page helps you determine whethe..." data-rh="true"><meta name="keywords" content="Build vs Buy, When to Add a State Integrity Layer (Markdown), Neotoma, MCP, Model Context Protocol, AI agents, agent memory, deterministic state" data-rh="true"><meta name="twitter:card" content="summary_large_image" data-rh="true"><meta name="twitter:site" content="@markmhendrickson" data-rh="true"><meta name="twitter:title" content="Build vs Buy | When to Add a State Integrity Layer (Markdown) | Neotoma" data-rh="true"><meta name="twitter:description" content="Markdown export of the rendered /build-vs-buy page. Audit and observability are solved. This page helps you determine whether you also need state integrity: deterministic temporal reconstruction, multi-writer consistency, and version-bound provenance for agent systems." data-rh="true"><meta name="twitter:image" content="https://neotoma.io/neotoma-og-1200x630.png" data-rh="true"><meta name="twitter:image:width" content="1200" data-rh="true"><meta name="twitter:image:height" content="630" data-rh="true"><meta name="twitter:image:alt" content="Build vs Buy | When to Add a State Integrity Layer (Markdown) | Neotoma. Markdown export of the rendered /build-vs-buy page. Audit and observability are solved. This page helps you determine whethe..." data-rh="true"><script type="application/ld+json" data-rh="true">{"@context":"https://schema.org","@type":"WebPage","name":"Build vs Buy | When to Add a State Integrity Layer (Markdown) | Neotoma","description":"Markdown export of the rendered /build-vs-buy page. Audit and observability are solved. This page helps you determine whether you also need state integrity: deterministic temporal reconstruction, multi-writer consistency, and version-bound provenance for agent systems.","url":"https://neotoma.io/pt/markdown/build-vs-buy","publisher":{"@type":"Organization","name":"Neotoma"},"image":{"@type":"ImageObject","url":"https://neotoma.io/neotoma-og-1200x630.png","width":1200,"height":630,"caption":"Build vs Buy | When to Add a State Integrity Layer (Markdown) | Neotoma. Markdown export of the rendered /build-vs-buy page. Audit and observability are solved. This page helps you determine whethe..."}}</script><script type="application/ld+json" data-rh="true">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://neotoma.io/"},{"@type":"ListItem","position":2,"name":"Build vs Buy","item":"https://neotoma.io/build-vs-buy"}]}</script><script type="application/ld+json" data-rh="true">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"When do I need a state integrity layer instead of observability?","acceptedAnswer":{"@type":"Answer","text":"When multiple writers update the same entities, you need the composed state at a point in time, rules change while entities have active state, actions flow through delegation hops, or explanation requires full input context."}},{"@type":"Question","name":"What is the difference between observability and state integrity?","acceptedAnswer":{"@type":"Answer","text":"Observability shows what happened: events, logs, traces. State integrity proves what was true: the deterministic composed entity state at any moment, with multi-writer conflict resolution and version-bound provenance."}},{"@type":"Question","name":"Is observability enough for my agent system?","acceptedAnswer":{"@type":"Answer","text":"If 0-1 of these conditions apply: multiple entity writers, temporal state queries, changing rules, delegation chains, full-context explanations. At 4-5 conditions, you need a state integrity layer."}}]}</script></head>
+  <link rel="canonical" href="https://neotoma.io/pt/markdown/build-vs-buy" data-rh="true"><link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/build-vs-buy" data-rh="true"><link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/build-vs-buy" data-rh="true"><link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/build-vs-buy" data-rh="true"><link rel="alternate" hreflang="ca" href="https://neotoma.io/ca/markdown/build-vs-buy" data-rh="true"><link rel="alternate" hreflang="zh" href="https://neotoma.io/zh/markdown/build-vs-buy" data-rh="true"><link rel="alternate" hreflang="hi" href="https://neotoma.io/hi/markdown/build-vs-buy" data-rh="true"><link rel="alternate" hreflang="ar" href="https://neotoma.io/ar/markdown/build-vs-buy" data-rh="true"><link rel="alternate" hreflang="fr" href="https://neotoma.io/fr/markdown/build-vs-buy" data-rh="true"><link rel="alternate" hreflang="pt" href="https://neotoma.io/pt/markdown/build-vs-buy" data-rh="true"><link rel="alternate" hreflang="ru" href="https://neotoma.io/ru/markdown/build-vs-buy" data-rh="true"><link rel="alternate" hreflang="bn" href="https://neotoma.io/bn/markdown/build-vs-buy" data-rh="true"><link rel="alternate" hreflang="ur" href="https://neotoma.io/ur/markdown/build-vs-buy" data-rh="true"><link rel="alternate" hreflang="id" href="https://neotoma.io/id/markdown/build-vs-buy" data-rh="true"><link rel="alternate" hreflang="de" href="https://neotoma.io/de/markdown/build-vs-buy" data-rh="true"><meta name="description" content="Markdown export of the rendered /build-vs-buy page. For builders running agents across sessions and tools: logging is solved. This page separates observability from state integrity-deterministic reconstruction, multi-writer merges, and version-bound provenance-with examples by entity type (contacts, tasks, transactions, and more)." data-rh="true"><meta name="author" content="Neotoma" data-rh="true"><meta name="robots" content="noindex,nofollow" data-rh="true"><meta property="og:type" content="website" data-rh="true"><meta property="og:site_name" content="Neotoma" data-rh="true"><meta property="og:locale" content="pt_PT" data-rh="true"><meta property="og:title" content="Build vs Buy | When to Add a State Integrity Layer (Markdown) | Neotoma" data-rh="true"><meta property="og:description" content="Markdown export of the rendered /build-vs-buy page. For builders running agents across sessions and tools: logging is solved. This page separates observability from state integrity-deterministic reconstruction, multi-writer merges, and version-bound provenance-with examples by entity type (contacts, tasks, transactions, and more)." data-rh="true"><meta property="og:url" content="https://neotoma.io/pt/markdown/build-vs-buy" data-rh="true"><meta property="og:image" content="https://neotoma.io/neotoma-og-1200x630.png" data-rh="true"><meta property="og:image:width" content="1200" data-rh="true"><meta property="og:image:height" content="630" data-rh="true"><meta property="og:image:alt" content="Build vs Buy | When to Add a State Integrity Layer (Markdown) | Neotoma. Markdown export of the rendered /build-vs-buy page. For builders running agents across sessions and tools: logging is solved..." data-rh="true"><meta name="keywords" content="Build vs Buy, When to Add a State Integrity Layer (Markdown), Neotoma, MCP, Model Context Protocol, AI agents, agent memory, deterministic state" data-rh="true"><meta name="twitter:card" content="summary_large_image" data-rh="true"><meta name="twitter:site" content="@markmhendrickson" data-rh="true"><meta name="twitter:title" content="Build vs Buy | When to Add a State Integrity Layer (Markdown) | Neotoma" data-rh="true"><meta name="twitter:description" content="Markdown export of the rendered /build-vs-buy page. For builders running agents across sessions and tools: logging is solved. This page separates observability from state integrity-deterministic reconstruction, multi-writer merges, and version-bound provenance-with examples by entity type (contacts, tasks, transactions, and more)." data-rh="true"><meta name="twitter:image" content="https://neotoma.io/neotoma-og-1200x630.png" data-rh="true"><meta name="twitter:image:width" content="1200" data-rh="true"><meta name="twitter:image:height" content="630" data-rh="true"><meta name="twitter:image:alt" content="Build vs Buy | When to Add a State Integrity Layer (Markdown) | Neotoma. Markdown export of the rendered /build-vs-buy page. For builders running agents across sessions and tools: logging is solved..." data-rh="true"><script type="application/ld+json" data-rh="true">{"@context":"https://schema.org","@type":"WebPage","name":"Build vs Buy | When to Add a State Integrity Layer (Markdown) | Neotoma","description":"Markdown export of the rendered /build-vs-buy page. For builders running agents across sessions and tools: logging is solved. This page separates observability from state integrity-deterministic reconstruction, multi-writer merges, and version-bound provenance-with examples by entity type (contacts, tasks, transactions, and more).","url":"https://neotoma.io/pt/markdown/build-vs-buy","publisher":{"@type":"Organization","name":"Neotoma"},"image":{"@type":"ImageObject","url":"https://neotoma.io/neotoma-og-1200x630.png","width":1200,"height":630,"caption":"Build vs Buy | When to Add a State Integrity Layer (Markdown) | Neotoma. Markdown export of the rendered /build-vs-buy page. For builders running agents across sessions and tools: logging is solved..."}}</script><script type="application/ld+json" data-rh="true">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://neotoma.io/"},{"@type":"ListItem","position":2,"name":"Build vs Buy","item":"https://neotoma.io/build-vs-buy"}]}</script><script type="application/ld+json" data-rh="true">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"When do I need a state integrity layer instead of observability?","acceptedAnswer":{"@type":"Answer","text":"When multiple writers update the same entities, you need the composed state at a point in time, rules change while entities have active state, actions flow through delegation hops, or explanation requires full input context."}},{"@type":"Question","name":"What is the difference between observability and state integrity?","acceptedAnswer":{"@type":"Answer","text":"Observability shows what happened: events, logs, traces. State integrity proves what was true: the deterministic composed entity state at any moment, with multi-writer conflict resolution and version-bound provenance."}},{"@type":"Question","name":"Is observability enough for my agent system?","acceptedAnswer":{"@type":"Answer","text":"If 0-1 of these conditions apply: multiple entity writers, temporal state queries, changing rules, delegation chains, full-context explanations. At 4-5 conditions, you need a state integrity layer."}}]}</script></head>
   <body>
-    <div id="root"><iframe title="Markdown capture" aria-hidden="true" width="1280" height="900" class="pointer-events-none fixed left-[-9999px] top-0 z-[-1] border-0 opacity-0" sandbox="allow-same-origin allow-scripts allow-forms"></iframe><div class="min-h-screen bg-background text-foreground"><div class="sticky top-0 z-10 flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border bg-background/95 px-3 py-2 text-[13px] backdrop-blur supports-[backdrop-filter]:bg-background/80"><span class="min-w-0"><a class="text-foreground underline underline-offset-2 hover:no-underline" href="/pt/build-vs-buy" data-discover="true">← HTML page</a> · <a class="text-foreground underline underline-offset-2 hover:no-underline" href="/pt/site-markdown" data-discover="true">All pages</a></span><span class="inline-flex rounded-md border border-border bg-muted/40 p-0.5" role="group" aria-label="Markdown view"><button type="button" class="rounded px-2.5 py-1 text-[12px] font-medium transition-colors bg-background text-foreground shadow-sm">Preview</button><button type="button" class="rounded px-2.5 py-1 text-[12px] font-medium transition-colors text-muted-foreground hover:text-foreground">Source</button></span></div><article class="max-w-4xl px-4 py-6 text-foreground"><p class="mb-4 text-[15px] leading-7 last:mb-0">Build vs Buy</p>
-<h1 class="mb-4 mt-8 text-2xl font-semibold tracking-tight first:mt-0">When to add a state integrity layer (and when observability is enough)</h1>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Recording what your agents do is a solved problem. Knowing what was true at any point, the composed state of an entity derived from multiple writers, bound to the policies that governed it, is a different problem. This page helps you figure out which one you have.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Already solved</p>
-<h2 class="mb-3 mt-10 text-xl font-semibold tracking-tight">What existing tools cover well</h2>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Audit and observability have mature solutions. If your requirements stop at knowing what happened (who did what, when, and in what order) you do not need Neotoma. These are real, valuable capabilities, and they are handled.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Event logging</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Append-only event streams with structured payloads. Datadog, Splunk, ELK, or a Postgres table: recording what happened is a solved problem.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Observability and alerting</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Real-time visibility into agent behavior: metrics, traces, anomaly detection. Mature tooling covers this across every stack.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Activity feeds</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Show users or operators what's happening in their systems. Chronological, filterable, exportable. Standard product feature with standard solutions.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Compliance exports</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">On-demand or scheduled data exports for auditors. Query by entity and time range, package as CSV or PDF. Straightforward with any data store.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">The gap</p>
-<h2 class="mb-3 mt-10 text-xl font-semibold tracking-tight">Where observability ends and state integrity begins</h2>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Observability shows you what happened. State integrity tells you what was true: the composed entity state at any moment, with deterministic reconstruction guarantees. They solve different problems, and the second does not reduce to the first.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">An analogy: Saving files is trivial. Git exists because knowing the composed state of a codebase at any commit, with blame, merge history, and conflict resolution, is a qualitatively different problem from saving files. The same gap exists between logging what your agents did and knowing the composed state of your entities at any point in time.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Knowing historical state</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Observability covers</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Query event logs by entity and timestamp. See what happened: which agents wrote, what payloads they sent, when. Reconstruct a timeline from individual events.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">State integrity adds</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Reconstruct the composed entity state at any point in time: all fields, all writers merged, conflicts resolved deterministically. Not what happened, but what was true.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Multi-writer consistency</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Observability covers</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Log writes from each agent independently. See that two agents updated the same entity in the same window. Alert on conflicts after they happen.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">State integrity adds</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Deterministic reducer merges observations by priority, recency, or custom policy. The composed snapshot is the same regardless of query order. Conflicts are resolved, not just detected.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Provenance across hops</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Observability covers</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Trace requests across services with correlation IDs. See the path a decision took through your system. Build dashboards showing delegation and approval patterns.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">State integrity adds</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Traverse from any outcome back to its origin through a chain of delegations, approvals, or handoffs. Bind each hop to the entity state and policy version at that moment. Prove the chain is complete.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Version-bound decisions</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Observability covers</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Log which policy or rule version was active when a decision ran. Query by policy ID to find affected decisions. Build reports on policy coverage.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">State integrity adds</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Each observation records the policy version, role bindings, and constraints that produced it. Historical queries return the decision bound to the exact context that governed it. Counterfactual queries are supported.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Cross-system entity identity</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Observability covers</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Track entity IDs per system. Build sync pipelines to correlate records across sources. Deduplicate on ingest. Monitor for drift between systems.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">State integrity adds</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Hash-based entity IDs resolve the same entity across systems. Multiple sources produce observations on one entity. Reducer composes one canonical snapshot with provenance from every source.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Self-assessment</p>
-<h2 class="mb-3 mt-10 text-xl font-semibold tracking-tight">How many of these describe your system?</h2>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">1</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Multiple sources write to the same entities</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Two or more agents, services, or systems update the same record: a vendor profile, contract, account, or authorization decision. The question is not whether writes are logged. It is whether the merged result is deterministic and the same on every read.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">2</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">You need the composed state at a specific point in time</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Not what events occurred, but what was true: the full entity state derived from all observations up to that moment. Regulators, auditors, and incident responders need the reconstructed state, not a log search.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">3</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Rules or context change while entities have active state</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Business rules, scoring models, authorization policies, or contract terms update while entities are in play. You need to know which version governed which outcome, and what the answer would have been under the previous version.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">4</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Actions flow through multiple systems or delegation hops</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">An orchestrator delegates to a downstream agent, which calls an external service, which produces a result. Reconstructing the full chain, and proving it is complete, requires traversal, not log correlation.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">5</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Explanation requires the full input context, not a summary</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">When asked why an outcome occurred, the answer must include the exact entity state, policy version, writer context, and conflict resolution at that moment. A log entry or current-state lookup is not sufficient.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">0-1 conditions</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Observability is enough. Invest in good event logging and dashboards. Revisit if your agent surface area or regulatory requirements grow.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">2-3 conditions</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">You're at the boundary. You can approximate state integrity on top of observability tools, but the gap widens as writers, policies, and entity types multiply.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">4-5 conditions</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">You need a state integrity layer. The gap between what observability shows you and what you need to know is structural, not incremental.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">By domain</p>
-<h2 class="mb-3 mt-10 text-xl font-semibold tracking-tight">Where the line falls across verticals</h2>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">The pattern is consistent: observability covers what happened. State integrity answers what was true. The gap shows up in every vertical where agents make consequential decisions.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">[</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">auth_decision</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Agent Authorization</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Observability covers: Log allow/deny per request with timestamp, agent ID, and policy reference</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">State integrity gap: Reconstruct the policy version, delegation chain, consent grants, and scope constraints that produced a specific decision on a specific date</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">](/agent-auth)[</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">vendor_risk_profile</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Vendor Risk</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Observability covers: Log risk score changes with timestamps, agent IDs, and triggering events</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">State integrity gap: Explain to a regulator what the system believed about a vendor when it approved them, including which agent assessed what and how conflicting signals were resolved</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">](/compliance)[</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">contract</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Contract Lifecycle</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Observability covers: Log contract updates with version numbers, timestamps, and agent attribution</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">State integrity gap: Diff any two points in a contract's history, trace which agent introduced which clause change, and reconstruct the obligations that were active on the signing date</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">](/contracts)[</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">reconciliation</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Financial Ops</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Observability covers: Log ledger entries with transaction IDs, timestamps, and reconciliation status</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">State integrity gap: Prove that a specific liability existed in the books on the audit date, trace every mutation that touched it, and show the reconciliation state at close</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">](/financial-ops)</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0"><a href="/verticals" class="text-foreground underline underline-offset-2 decoration-muted-foreground hover:decoration-foreground">See all verticals</a></p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">The real question</p>
-<h2 class="mb-3 mt-10 text-xl font-semibold tracking-tight">Observability tells you what happened. State integrity proves what was true.</h2>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">What observability gives you</p>
-<ul class="mb-4 list-disc space-y-1 pl-6 text-[15px] leading-7">
-<li class="marker:text-muted-foreground">A complete record of every event, decision, and action in your system</li>
-<li class="marker:text-muted-foreground">Real-time dashboards and alerting on agent behavior</li>
-<li class="marker:text-muted-foreground">Searchable logs by entity, agent, time range, and event type</li>
-<li class="marker:text-muted-foreground">Exportable audit trails for compliance and incident response</li>
-</ul>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">If this is all you need, you're set. Existing tools and straightforward engineering cover these requirements well.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">What state integrity adds</p>
-<ul class="mb-4 list-disc space-y-1 pl-6 text-[15px] leading-7">
-<li class="marker:text-muted-foreground">Deterministic reconstruction of entity state at any historical point</li>
-<li class="marker:text-muted-foreground">Multi-writer conflict resolution with guaranteed consistency</li>
-<li class="marker:text-muted-foreground">Every decision bound to the exact policy version and context that produced it</li>
-<li class="marker:text-muted-foreground">Provenance chains traversable from outcome back to origin</li>
-<li class="marker:text-muted-foreground">Cross-system entity correlation into one canonical snapshot</li>
-</ul>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">This is the gap: not a harder version of observability, but a different requirement that existing tools do not address.</p>
-<h2 class="mb-3 mt-10 text-xl font-semibold tracking-tight">Past the threshold?</h2>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Neotoma is an open-source state integrity layer: deterministic temporal reconstruction, multi-writer consistency, and version-bound provenance. Install it in five minutes and see what composed entity state looks like for your domain.</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0"><a href="/install" class="text-foreground underline underline-offset-2 decoration-muted-foreground hover:decoration-foreground">Install Neotoma</a><a href="/architecture" class="text-foreground underline underline-offset-2 decoration-muted-foreground hover:decoration-foreground">Read the architecture</a><a href="/verticals" class="text-foreground underline underline-offset-2 decoration-muted-foreground hover:decoration-foreground">Explore verticals</a></p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Open-source</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">MIT-licensed</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">5-minute install</p>
-<p class="mb-4 text-[15px] leading-7 last:mb-0">Fully reversible</p></article></div><div role="region" aria-label="Notifications (F8)" tabindex="-1" style="pointer-events: none;"><ol tabindex="-1" class="fixed top-0 z-[100] flex w-full flex-col-reverse p-4 sm:bottom-4 sm:right-4 sm:top-auto sm:flex-col sm:max-h-[calc(100vh-1rem)] sm:overflow-y-auto md:max-w-[420px]"></ol></div></div>
+    <div id="root"><iframe title="Markdown capture" aria-hidden="true" width="1280" height="900" class="pointer-events-none fixed left-[-9999px] top-0 z-[-1] border-0 opacity-0" sandbox="allow-same-origin allow-scripts allow-forms"></iframe><div class="min-h-screen bg-background text-foreground"><pre class="whitespace-pre-wrap break-words p-4 font-mono text-[13px] leading-relaxed text-foreground">&lt;!--
+  Full-page Markdown export (rendered HTML → GFM).
+  Source: https://neotoma.io/pt/build-vs-buy
+  Generated: 2026-04-01T10:33:47.519Z
+--&gt;
+Build vs Buy
+
+# When to add a state integrity layer (and when observability is enough)
+
+If you run agents across sessions and tools-IDE, chat, cron, CLI-you already pay the tax of re-prompting, manual sync, and homegrown markdown or JSON workarounds. Logging what ran is a solved problem. Knowing the composed, replayable state of each entity (contacts, tasks, money facts, decisions) across those writers is a different problem. This page separates the two.
+
+Already solved
+
+## What existing tools cover well
+
+Audit and observability have mature solutions. If your requirements stop at knowing what happened (who did what, when, and in what order) you do not need Neotoma. These are real, valuable capabilities, and they are handled.
+
+Event logging
+
+Append-only event streams with structured payloads. Datadog, Splunk, ELK, or a Postgres table: recording what happened is a solved problem.
+
+Observability and alerting
+
+Real-time visibility into agent behavior: metrics, traces, anomaly detection. Mature tooling covers this across every stack.
+
+Activity feeds
+
+Show users or operators what's happening in their systems. Chronological, filterable, exportable. Standard product feature with standard solutions.
+
+Compliance exports
+
+On-demand or scheduled data exports for auditors. Query by entity and time range, package as CSV or PDF. Straightforward with any data store.
+
+The gap
+
+## Where observability ends and state integrity begins
+
+Observability shows you what happened. State integrity tells you what was true: the composed entity state at any moment, with deterministic reconstruction guarantees-what you need when agents must not contradict themselves across sessions and tools without you re-typing context every time. The second problem does not reduce to the first.
+
+An analogy: Saving files is trivial. Git exists because knowing the composed state of a codebase at any commit, with blame, merge history, and conflict resolution, is a qualitatively different problem from saving files. The same gap exists between logging what your agents did and knowing the composed state of your entities at any point in time.
+
+Knowing historical state
+
+Observability covers
+
+Query event logs by entity and timestamp. See what happened: which agents wrote, what payloads they sent, when. Reconstruct a timeline from individual events.
+
+State integrity adds
+
+Reconstruct the composed entity state at any point in time: all fields, all writers merged, conflicts resolved deterministically. Not what happened, but what was true.
+
+Multi-writer consistency
+
+Observability covers
+
+Log writes from each agent independently. See that two agents updated the same entity in the same window. Alert on conflicts after they happen.
+
+State integrity adds
+
+Deterministic reducer merges observations by priority, recency, or custom policy. The composed snapshot is the same regardless of query order. Conflicts are resolved, not just detected.
+
+Provenance across hops
+
+Observability covers
+
+Trace requests across services with correlation IDs. See the path a decision took through your system. Build dashboards showing delegation and approval patterns.
+
+State integrity adds
+
+Traverse from any outcome back to its origin through a chain of delegations, approvals, or handoffs. Bind each hop to the entity state and policy version at that moment. Prove the chain is complete.
+
+Version-bound decisions
+
+Observability covers
+
+Log which policy or rule version was active when a decision ran. Query by policy ID to find affected decisions. Build reports on policy coverage.
+
+State integrity adds
+
+Each observation records the policy version, role bindings, and constraints that produced it. Historical queries return the decision bound to the exact context that governed it. Counterfactual queries are supported.
+
+Cross-system entity identity
+
+Observability covers
+
+Track entity IDs per system. Build sync pipelines to correlate records across sources. Deduplicate on ingest. Monitor for drift between systems.
+
+State integrity adds
+
+Hash-based entity IDs resolve the same entity across systems. Multiple sources produce observations on one entity. Reducer composes one canonical snapshot with provenance from every source.
+
+Self-assessment
+
+## How many of these describe your system?
+
+A useful diagnostic: what are you doing today to compensate for unreliable or missing agent state? Each item below is a structural signal-not a vendor checklist.
+
+1
+
+Multiple sources write to the same entities
+
+Chat agents, cron jobs, CLI scripts, or services all touch the same contact, task, or ledger row. Logging each write is not the same as a single deterministic snapshot everyone reads-especially when tools disagree.
+
+2
+
+You need the composed state at a specific point in time
+
+Not only which events fired, but what was true: the full derived state from every observation up to that moment. That is how you answer “what did the stack believe last Tuesday?”-for yourself, an auditor, or a postmortem-not just “what got logged.”
+
+3
+
+Rules or context change while entities have active state
+
+Prompt packs, merge policies, scoring rules, authorization gates, or contract terms change while records stay live. You need which version governed which outcome, and what the answer would have been under the prior version.
+
+4
+
+Actions flow through multiple systems, tools, or delegation hops
+
+An orchestrator, IDE agent, and background worker each contribute. Reconstructing the full chain-and proving it is complete-means traversing provenance on entities, not only correlating traces.
+
+5
+
+Explanation requires the full input context, not a summary
+
+Debugging drift, contradictions, or non-reproducible runs requires the exact entity fields, schema or policy version, writer context, and conflict resolution at that moment-not a terse log line or today’s live row.
+
+0-1 conditions
+
+Observability is enough. Invest in good event logging and dashboards. Revisit if agents gain autonomy, you add tools, or you need stronger audit and replay.
+
+2-3 conditions
+
+You're at the boundary. You can approximate state integrity on top of observability tools, but the gap widens as writers, policies, and entity types multiply.
+
+4-5 conditions
+
+You need a state integrity layer. The gap between what observability shows you and what you need to know is structural, not incremental.
+
+By entity type
+
+## Where the line shows up in typed state
+
+Neotoma is schema-first: each entity type carries observations that reduce to a deterministic snapshot. The same observability-vs-integrity split appears whether the record is a contact, a task, or a transaction-see the guides for store and retrieval patterns.
+
+[
+
+Contacts
+
+Observability covers: Log each upsert from chat, CRM import, or script with timestamps and source labels
+
+State integrity gap: One canonical person or company record across tools, with deterministic merge when two agents update the same identity on the same day
+
+](/types/contacts)[
+
+Tasks
+
+Observability covers: Append status changes to an activity feed: opened, reassigned, completed, with agent IDs
+
+State integrity gap: Composed task state (owner, status, due date) after concurrent edits from scheduled jobs and interactive agents-same answer on every read
+
+](/types/tasks)[
+
+Transactions
+
+Observability covers: Record ingest events, file uploads, and reconciliation checks with correlation IDs
+
+State integrity gap: What your agents treated as settled financial truth on a given date, with every observation that fed the snapshot traceable
+
+](/types/transactions)[
+
+Contracts
+
+Observability covers: Log clause edits, reviews, and signatures with versions and timestamps
+
+State integrity gap: Reconstruct obligations and terms as they existed on signing day, including which change came from which writer and how conflicts were reduced
+
+](/types/contracts)[
+
+Decisions
+
+Observability covers: Store decision logs and rationale snippets as unstructured events or documents
+
+State integrity gap: Bind rationale to versioned entity state so “why we chose X” replays with the same facts the agent had then-not the notebook file as it reads today
+
+](/types/decisions)[
+
+Events
+
+Observability covers: Track calendar syncs, invites, and reschedule notifications in order
+
+State integrity gap: Composed meeting or milestone state when agents and calendars both mutate attendees, time, or status-without last-write-wins ambiguity
+
+](/types/events)
+
+Guides[Contacts](/types/contacts)·[Tasks](/types/tasks)·[Transactions](/types/transactions)·[Contracts](/types/contracts)·[Decisions](/types/decisions)·[Events](/types/events)
+
+The real question
+
+## Observability tells you what happened. State integrity proves what was true.
+
+What observability gives you
+
+-   A complete record of every event, decision, and action in your system
+-   Real-time dashboards and alerting on agent behavior
+-   Searchable logs by entity, agent, time range, and event type
+-   Exportable audit trails for compliance and incident response
+
+If this is all you need, you're set. Existing tools and straightforward engineering cover these requirements well.
+
+What state integrity adds
+
+-   Deterministic reconstruction of entity state at any historical point
+-   Multi-writer conflict resolution with guaranteed consistency
+-   Every decision bound to the exact policy version and context that produced it
+-   Provenance chains traversable from outcome back to origin
+-   Cross-system entity correlation into one canonical snapshot
+
+This is the gap: not a harder version of observability, but a different requirement that existing tools do not address.
+
+## Past the threshold?
+
+Neotoma is an open-source state integrity layer: deterministic temporal reconstruction, multi-writer consistency, and version-bound provenance. Install it in five minutes and see composed entity state for the types you already store-contacts, tasks, money movement, and the rest of your agent OS.
+
+[Install Neotoma](/install)[Read the architecture](/architecture)[Record types](/types/contacts)
+
+Open-source
+
+MIT-licensed
+
+5-minute install
+
+Fully reversible</pre></div><div role="region" aria-label="Notifications (F8)" tabindex="-1" style="pointer-events: none;"><ol tabindex="-1" class="fixed top-0 z-[100] flex w-full flex-col-reverse p-4 sm:bottom-4 sm:right-4 sm:top-auto sm:flex-col sm:max-h-[calc(100vh-1rem)] sm:overflow-y-auto md:max-w-[420px]"></ol></div></div>
   
 
 
