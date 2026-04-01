@@ -1790,13 +1790,13 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                             aria-hidden
                           />
                         </summary>
-                        <p className="mt-2.5 pl-0 text-[12px] leading-6 text-muted-foreground/90">
+                        <p className="mt-2.5 pl-0 text-[12px] leading-6 text-muted-foreground">
                           {qa.a}
                         </p>
                       </details>
                     ))}
                   </div>
-                  <p className="mt-6 text-center text-[12px] text-muted-foreground/80">
+                  <p className="mt-6 text-center text-[12px] text-muted-foreground">
                     <Link
                       to="/faq"
                       className="text-muted-foreground underline decoration-border/50 underline-offset-[3px] transition-colors hover:text-foreground hover:decoration-foreground/30"

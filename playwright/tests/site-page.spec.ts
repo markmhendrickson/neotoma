@@ -60,6 +60,49 @@ test.describe("sitePage coverage", () => {
     expect(await githubLinks.count()).toBeGreaterThan(0);
   });
 
+  test("install page code blocks use themed backgrounds instead of plain white", async ({ page }) => {
+    await page.goto("/install");
+    await page.waitForLoadState("networkidle");
+
+    const codeBlockStyle = await page.evaluate(() => {
+      const codeBlock = document.querySelector(".code-block-palette");
+      if (!(codeBlock instanceof HTMLElement)) {
+        return null;
+      }
+
+      return {
+        backgroundColor: window.getComputedStyle(codeBlock).backgroundColor,
+      };
+    });
+
+    expect(codeBlockStyle).not.toBeNull();
+    expect(codeBlockStyle!.backgroundColor).not.toBe("rgb(255, 255, 255)");
+  });
+
+  test("footer section labels stay distinct from the footer background", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+
+    const footerLabelStyle = await page.evaluate(() => {
+      const footer = document.querySelector("footer");
+      const productLabel = Array.from(footer?.querySelectorAll("p") ?? []).find(
+        (node) => node.textContent?.trim() === "Product",
+      );
+
+      if (!(footer instanceof HTMLElement) || !(productLabel instanceof HTMLElement)) {
+        return null;
+      }
+
+      return {
+        footerBackground: window.getComputedStyle(footer).backgroundColor,
+        labelColor: window.getComputedStyle(productLabel).color,
+      };
+    });
+
+    expect(footerLabelStyle).not.toBeNull();
+    expect(footerLabelStyle!.labelColor).not.toBe(footerLabelStyle!.footerBackground);
+  });
+
   test("loads hashed section into view on initial page load", async ({ page }) => {
     await page.goto("/#evaluate");
     await page.waitForLoadState("networkidle");

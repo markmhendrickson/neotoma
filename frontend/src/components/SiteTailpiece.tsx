@@ -123,7 +123,7 @@ export function SiteTailpiece() {
           </div>
 
           <div>
-            <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground/80">
+            <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground/80 dark:text-muted-foreground">
               Product
             </p>
             <div className="mt-3 flex flex-col gap-2">
@@ -141,7 +141,7 @@ export function SiteTailpiece() {
           </div>
 
           <div>
-            <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground/80">
+            <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground/80 dark:text-muted-foreground">
               Documentation
             </p>
             <div className="mt-3 flex flex-col gap-2">
@@ -152,7 +152,7 @@ export function SiteTailpiece() {
           </div>
 
           <div>
-            <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground/80">
+            <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground/80 dark:text-muted-foreground">
               External
             </p>
             <div className="mt-3 flex flex-col gap-2">

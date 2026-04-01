@@ -179,9 +179,6 @@
     line-height: 1.5;
   }
   pre {
-    background-color: #ffffff;
-  }
-  .dark pre {
     background-color: hsl(var(--doc-code-bg));
   }
   h1 {
@@ -260,7 +257,7 @@
   .code-block-palette {
     border-width: 1px;
     border-color: color-mix(in srgb, hsl(var(--doc-border)) 92%, hsl(var(--doc-foreground)) 8%);
-    background-color: #ffffff;
+    background-color: hsl(var(--doc-code-bg));
     color: color-mix(in srgb, hsl(var(--doc-foreground)) 92%, #000 8%);
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.42),
