@@ -44,10 +44,11 @@ export function HomeEvaluatePromptBlock({
   return (
     <div className={cn("flex flex-col gap-3", className)}>
       <p className="text-[15px] leading-7 text-muted-foreground">
-        Copy this prompt into {target} and let it evaluate Neotoma, then install the integration
-        you&apos;re viewing if it fits your workflow.
+        Copy this prompt into {target} to have it read the evaluation page,
+        inspect your tool, workspace, and configuration context, then judge
+        whether Neotoma fits your real workflow and what to persist first.
       </p>
-      <div className="relative w-full">
+      <div className="relative my-4 w-full">
         <code
           className={`block text-sm px-4 py-3 pr-20 rounded-md text-left w-full ${CODE_BLOCK_EMERALD_PANEL}`}
         >

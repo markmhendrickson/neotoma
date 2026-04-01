@@ -1,3 +1,4 @@
+import { Bot, Bug, Code } from "lucide-react";
 import { Link } from "react-router-dom";
 import { PRODUCT_NAV_SOURCES } from "@/utils/analytics";
 import { DetailPage } from "../DetailPage";
@@ -65,7 +66,8 @@ export function DeveloperWalkthroughPage() {
           You use Claude, Cursor, and ChatGPT throughout the day. By the third tool switch, you're
           re-explaining who your contacts are, what you decided last session, and which tasks are
           still open. This walkthrough shows what changes when a shared state layer sits behind
-          all of them, and how that same system pays off across operating, building, and debugging.
+          all of them, and how that same system pays off across operating, building integrations,
+          and debugging.
         </p>
         <p className="text-[15px] leading-7 text-muted-foreground mb-3">
           In day-to-day use, your{" "}
@@ -93,27 +95,45 @@ export function DeveloperWalkthroughPage() {
 
       <section className="grid gap-3 mb-6 md:grid-cols-3">
         <div className="rounded-lg border p-4 md:p-5">
-          <p className="text-[12px] font-medium uppercase tracking-wide text-emerald-600 dark:text-emerald-400 mb-2">
-            Operating
-          </p>
+          <div className="flex items-center gap-2 mb-2">
+            <Bot
+              className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400"
+              aria-hidden
+            />
+            <p className="text-[12px] font-medium uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
+              Operating
+            </p>
+          </div>
           <p className="text-[14px] leading-6 text-muted-foreground">
             Sessions 1 and 3 show the user-facing outcome: context survives tool switches, and
             later updates become the new state instead of another re-prompting burden.
           </p>
         </div>
         <div className="rounded-lg border p-4 md:p-5">
-          <p className="text-[12px] font-medium uppercase tracking-wide text-emerald-600 dark:text-emerald-400 mb-2">
-            Building
-          </p>
+          <div className="flex items-center gap-2 mb-2">
+            <Code
+              className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400"
+              aria-hidden
+            />
+            <p className="text-[12px] font-medium uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
+              Building
+            </p>
+          </div>
           <p className="text-[14px] leading-6 text-muted-foreground">
-            The MCP and CLI payloads are the implementation surface. This is how agents, scripts,
-            and integrations all talk to the same state layer.
+            Building means the integration surface: the MCP and CLI contract that lets agents,
+            scripts, and other tools talk to the same state layer.
           </p>
         </div>
         <div className="rounded-lg border p-4 md:p-5">
-          <p className="text-[12px] font-medium uppercase tracking-wide text-emerald-600 dark:text-emerald-400 mb-2">
-            Debugging
-          </p>
+          <div className="flex items-center gap-2 mb-2">
+            <Bug
+              className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400"
+              aria-hidden
+            />
+            <p className="text-[12px] font-medium uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
+              Debugging
+            </p>
+          </div>
           <p className="text-[14px] leading-6 text-muted-foreground">
             The audit trail is what makes the system inspectable later: you can trace what changed,
             when it changed, and which tool authored it.
@@ -190,15 +210,17 @@ export function DeveloperWalkthroughPage() {
       <SectionDivider />
 
       {/* Session 2 */}
-      <SectionHeading id="session-2">Building: The same state layer works in another tool</SectionHeading>
+      <SectionHeading id="session-2">
+        Building: Another tool integrates with the same state layer
+      </SectionHeading>
       <p className="text-[15px] leading-7 mb-3">
         <StepNumber n={2} />
         <ToolBadge tool="Building" />
         <ToolBadge tool="Claude" />
         Next morning, you open Claude to draft the SOW. Instead of re-explaining who Sarah is
-        and what the project covers, the agent retrieves what it already knows. The important
-        implementation detail is that Claude is using the same store and retrieve contract as the
-        earlier Cursor session.
+        and what the project covers, the agent retrieves what it already knows. This is the
+        building surface in practice: Claude is integrating against the same store and retrieve
+        contract as the earlier Cursor session.
       </p>
 
       <ChatPrelude>

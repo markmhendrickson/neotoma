@@ -113,7 +113,7 @@ export function SectionDotNav({
     <nav
       role="navigation"
       aria-label="Page sections"
-      className="fixed right-4 top-1/2 -translate-y-1/2 z-40 hidden md:flex flex-col items-end gap-3"
+      className="fixed right-4 top-1/2 -translate-y-1/2 z-40 hidden md:flex flex-col items-end gap-1"
     >
       {sections.map((section, i) => (
         <div key={section.id} className="relative flex items-center">
@@ -129,12 +129,17 @@ export function SectionDotNav({
             onMouseLeave={() => setHoveredIndex(null)}
             aria-label={section.label}
             aria-current={activeIndex === i ? "true" : undefined}
-            className={`h-2.5 w-2.5 rounded-full border-2 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
               activeIndex === i
-                ? "border-emerald-500 bg-emerald-500 scale-125"
-                : "border-muted-foreground/40 bg-transparent hover:border-muted-foreground/70"
+                ? "[&>span]:border-emerald-500 [&>span]:bg-emerald-500 [&>span]:scale-125"
+                : "[&>span]:border-muted-foreground/40 [&>span]:bg-transparent hover:[&>span]:border-muted-foreground/70"
             }`}
-          />
+          >
+            <span
+              className="pointer-events-none h-2.5 w-2.5 rounded-full border-2 transition-all duration-200"
+              aria-hidden
+            />
+          </button>
         </div>
       ))}
     </nav>

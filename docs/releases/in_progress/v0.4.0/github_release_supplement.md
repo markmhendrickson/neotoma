@@ -1,102 +1,65 @@
-**npm `0.4.0`** is the **first package published to the registry after `neotoma@0.3.10`**. Git tag **`v0.3.11`** was **never published to npm**; **`0.3.10 → 0.4.0`** is the registry upgrade path. For the **`v0.3.10…v0.3.11`** git narrative, read **`docs/releases/in_progress/v0.3.11/github_release_supplement.md`**.
+**Draft release summary:** Neotoma `0.4.0` is planned as the first npm release after `0.3.10`, combining the unpublished `v0.3.11` train with the current `dev` work. The headline is a clearer evaluation-first site, expanded vertical positioning, and a larger round of CLI/runtime/schema changes that justify a minor release instead of another patch.
 
-Render GitHub Release notes with **`--compare-base v0.3.10`** so compare URL + commit list match npm users (see **`docs/developer/github_release_process.md`**).
+**Release-prep note:** This draft assumes the remaining `dev` changes are committed before tagging `v0.4.0`. Render GitHub Release notes with **`--compare-base v0.3.10`** so the compare link matches what npm users actually upgrade from.
 
-## Before you tag (release readiness)
+## What changed for npm package users
 
-This supplement describes **all work intended for `0.4.0`**, including:
+**CLI and runtime**
 
-1. **Eight commits** already on **`dev`** after **`v0.3.11`** (`649003c` … `715673d`).
-2. A **large uncommitted working tree** on **`dev`** (~**774** files vs `HEAD` as of prepare): server/CLI/actions refactors, regenerated **`site_pages/`**, doc moves, test reshuffles, dependency/script changes.
+- `storage info` is clearer and more script-friendly, with explicit environment context, absolute local paths, and a stronger nudge toward `--json` for stable automation.
+- CLI argument handling is more reliable when Neotoma is invoked through node, bun, or deno wrappers. The `extractUserCliArgs` change avoids accidental fallback into interactive session mode.
+- Timeline, observation projection, snapshot computation, schema registry, interpretation, and action schema work continue the push toward cleaner schema-aware behavior across the packaged server and CLI.
 
-**You MUST commit (or discard) every change you want in the release, then create tag `v0.4.0` on that commit.** Do not tag `v0.3.11` or an older `HEAD` and expect the working tree to ship.
+**Why it matters**
 
-Suggested checks before tag + `npm publish`:
+- Operators get a more dependable CLI surface for automation and debugging.
+- Teams depending on timeline- and schema-heavy flows should expect more capable behavior, but should still validate those paths before rollout because the release range is broad.
 
-- `npm install`, `npm run build:server`, `npm test` (and `npm run test:remote:critical` if you rely on it).
-- Diff **`openapi.yaml`** / MCP clients against prior **`0.3.10`** behavior.
-- `npm run build:ui`, `npm run validate:routes`, `npm run validate:site-export` if shipping the static site.
+**Shipped artifacts**
 
----
-
-## A. Committed since git `v0.3.11` (8 commits)
-
-Subjects (newest first): site marketing pages + markdown hub + SEO dev tooling; `docs/private` bump; healthcare/gov/customer-ops/logistics verticals; vertical shell UX + agent-auth; fix AgentAuth import / `/agent-auth` full-page segment; vertical index + marketing full-page shell; CI Playwright Chromium for dev Pages prerender; CRM/compliance verticals + timeline/schema + docs + scripts.
-
-**npm / runtime (committed)**
-
-- **`storage info`:** clearer sections, **`environment`**, absolute paths, pointer to **`--json`**.
-- **`extractUserCliArgs`** for node/bun/deno argv (avoids bogus interactive session); tests in **`tests/cli/extract_user_cli_args.test.ts`**.
-- **`cli_init_interactive.test.ts`** trimmed (file still present).
-- **`timeline_events`**, **`observation_reducer`**, **`snapshot_computation`**, **`schema_registry`**, **`interpretation`**, **`actions.ts`**, **`server.ts`**, **`action_schemas`** — timeline/projection/schema train.
-- **`scripts/render_github_release_notes.ts`**, **`check_timeline_health`**, **`backfill_timeline_via_recompute`**, **`lint_site_copy_style`**.
-
-**Site / CI (committed)**
-
-- Vertical landings, `/verticals`, agent-auth / build-vs-buy / personal-data pages, markdown hub, SEO metadata, `SeoDevMetaFooter`, Playwright + workflow tweaks, many frontend/site files (see git log).
-
----
-
-## B. Additional outstanding changes (uncommitted on `dev`)
-
-*Ship only after these are committed to the release branch.*
-
-**Packaged server / CLI / OpenAPI (working tree)**
-
-- **Large refactors** of **`src/server.ts`**, **`src/actions.ts`**, and **`src/cli/index.ts`** (substantial line churn vs the 8-commit snapshot).
-- **Removed** **`src/services/llm_extraction.ts`** and the **`tests/integration/llm_extraction.test.ts`** suite; **removed** **`docs/prompts/llm_extraction_system_prompt.md`**. Confirm extraction/LLM behavior is intentionally out of this path or replaced elsewhere before release.
-- Updates to **`entity_resolution`**, **`interpretation`**, **`action_schemas`**, **`openapi_types`**, **`openapi.yaml`**, and slimmer **`contract_mappings`** — **treat OpenAPI/MCP contract as changed** until you verify parity.
-- **Tests:** new **`cli_to_mcp_schemas`**, **`mcp_schema_actions`**, **`mcp_npm_check_update`**; reworked **`mcp_store_unstructured`**, **`nonjson_csv_store_behavior`**, **`nonjson_fixtures_mcp_replay`**; removed **`mcp_correction_variations`**; assorted CLI contract/infra/correction test edits.
-
-**Site export + frontend (working tree)**
-
-- **~614 files under `site_pages/`** — regenerated static HTML (multilingual pages refreshed).
-- **~77 files under `frontend/`** — marketing/subpage/layout/nav/SEO/illustration updates; **`CrossPlatformPage`** removed (IA/route change).
-
-**Dependencies & scripts (working tree)**
-
-- **`package.json` / `package-lock.json`:** version **0.4.0**; add **`test:remote:critical`**; **`validate:routes`**, **`validate:site-export`**; **`illustrations:generate`**, **`illustrations:guarantees`**, **`illustrations:guarantees:sym`**; replace **`react-markdown`** with **`turndown`** + **`turndown-plugin-gfm`**; dev **`sharp`**, **`@fal-ai/client`**.
-
-**Docs & repo (working tree)**
-
-- **ICP** docs consolidated under **`docs/icp/`** (moves from **`docs/specs/`** / **`docs/developer/`**); updates across **`MCP_SPEC`**, MVP/onboarding specs, auth, testing catalog, foundation/problem/positioning/**`what_to_store`**, REST API doc, CLI/MCP developer docs, pre-release + SEO checklists, architectural decisions, determinism, readme generation framework, FU-702 billing, aspirational release archive notes.
-- **Deleted** **`docs/specs/ICP_PRIORITY_TIERS.md`**.
-- **`.env.example`**, **`.gitignore`**, **`.github/workflows`** (Pages), **`install.md`**, **`.cursor/skills/create-release`**, **`foundation`** / **`docs/private`** submodule metadata.
-
----
+- `openapi.yaml` and the generated `dist/` output change with this release.
+- The release-prep toolchain now includes a better GitHub release renderer plus helper scripts for timeline health, timeline recomputation, and site copy linting.
 
 ## API surface & contracts
 
-- **Committed train:** timeline/projection may shift event shapes at the margin — validate **`list_timeline_events`** / UI timeline if you depend on specifics.
-- **Uncommitted train:** assume **OpenAPI and runtime routing** may differ materially from **`0.3.10`** until you complete contract tests and MCP matrix runs.
-
-## Docs site & CI / tooling
-
-- **Committed:** vertical marketing pages, markdown hub, Playwright Chromium in dev Pages workflow, lint site copy style, etc.
-- **Uncommitted:** mass **`site_pages/`** regen, new **`validate:*`** and illustration scripts, workflow/copy tweaks, broad frontend edits.
+- This release range includes meaningful changes around actions, timeline generation, schema behavior, and OpenAPI output.
+- If the currently outstanding server/runtime work lands before tag, treat the HTTP and MCP contract surface as materially updated from `0.3.10` and verify integrations accordingly.
+- If you consume Neotoma programmatically, plan on rechecking OpenAPI-driven clients and any assumptions about timeline event shape.
 
 ## Behavior changes
 
-- **CLI:** **`storage info`** layout + absolute paths (prefer **`--json`** for scripts).
-- **CLI:** embedded-runtime argv fix (node/bun/deno).
-- **Pending commit:** server/actions behavior may change with refactor; **no claim of byte-for-byte API parity** with `0.3.10` until validated.
+- The website now pushes a clearer evaluation-first path: users are expected to evaluate fit before install or tool-specific setup.
+- The docs and marketing surface expand further into vertical-specific entry points such as CRM, compliance, healthcare, government, logistics, and customer operations.
+- Header navigation and related page flows are being simplified so key routes such as Evaluate, Install, and Architecture stay consistently reachable.
+- If the remaining runtime refactors ship in this release, some server-side behavior may change even where the public surface area looks similar.
+
+## Docs site & CI / tooling
+
+- The site adds more landing pages, more explicit product positioning, a markdown hub, and broader SEO/dev-preview support.
+- GitHub Pages and Playwright coverage continue to expand so site regressions are caught earlier.
+- The static export pipeline and route/site validation scripts are being tightened as part of the same train.
+- Repo documentation is being reorganized, including ICP material moving into a clearer `docs/icp/` home.
 
 ## Internal changes
 
-- **Committed:** frontend vertical shell stack, server simplification in that snapshot, new unit/integration tests listed in section A.
-- **Uncommitted:** removal of **`llm_extraction`** module path, test suite consolidation, **`site_pages`** regeneration pipeline outputs.
+- This release train includes broader refactoring across `src/server.ts`, `src/actions.ts`, and `src/cli/index.ts`.
+- The current `dev` work also removes the older `llm_extraction` path and reshapes related tests and docs.
+- Test coverage is being updated to reflect navigation, schema, MCP, and CLI changes, including the new header-navigation assertion added during release prep.
 
 ## Fixes
 
-- **Committed:** Vite/CI fix for **`AgentAuthLandingPage`** / **`/agent-auth`** (`a1ae104`).
-- **Uncommitted:** any additional fixes bundled in the large diff (review `git log` / diff per file as needed).
+- The known `AgentAuthLandingPage` / `/agent-auth` Vite build regression was fixed.
+- Navigation and section-flow cleanup continues across the site experience.
+- The release-prep flow itself is now better documented for skipped npm versions, so GitHub release compare ranges can match the real npm upgrade path.
 
 ## Tests and validation
 
-- Run full **`npm test`** + applicable integration/remote suites after committing.
-- **Upgrading from npm `0.3.10`:** exercise CLI (**`entities search`**, **`store`**, **`storage merge-db`** from v0.3.11 narrative), then **`storage info`**, schema/MCP flows, and timeline after this release’s server changes.
+- Release prep has already passed typecheck, lint, site copy lint, unit/integration suites, Playwright site coverage, Playwright coverage validation, and doc dependency validation for the committed release-prep changes.
+- Before tagging `v0.4.0`, run the full release checks against the final committed tree: `npm run build:server`, `npm test`, and any route/site-export validation needed for the final site content.
+- If the remaining outstanding runtime work is included, validate CLI workflows, MCP/OpenAPI consumers, and timeline behavior against real data before publish.
 
 ## Breaking changes
 
-- **v0.3.11 git train (unpublished on npm):** see **Breaking changes** in **`docs/releases/in_progress/v0.3.11/github_release_supplement.md`** (e.g. **`storage merge-db`** defaults).
-- **Pending uncommitted work:** **likely semver-significant** — removal of **`llm_extraction.ts`**, large **`server`/`actions`** edits, and OpenAPI churn. This is why this release is now prepared as **minor `0.4.0`** instead of a patch.
+- The upgrade path is effectively `0.3.10 -> 0.4.0` because `v0.3.11` never shipped to npm.
+- The currently intended scope includes semver-significant work: removal of the old `llm_extraction` path, larger server/action refactors, and OpenAPI churn. That is why this release is being prepared as **minor `0.4.0`** rather than a patch.
+- For users coming from `0.3.10`, also review the unpublished `v0.3.11` narrative because its CLI and runtime changes are expected to land in the same next npm release.

@@ -447,8 +447,8 @@ docker build -t neotoma .`,
   }
 }`,
   /** Short prompt — home evaluate section + integration “Getting started” blocks. */
-  homeEvaluatePrompt: `Read neotoma.io/evaluate and assess whether Neotoma fits my workflow based on what you know about me.`,
-  agentEvaluationPrompt: `Read https://neotoma.io/evaluate. Tell me whether Neotoma is a real fit for my workflow, what data would be highest value to persist, and what I should do next.`,
+  homeEvaluatePrompt: `Read https://neotoma.io/evaluate. Before you answer, inspect any broader tool, workspace, and configuration context you can access so you assess my real workflow rather than just this chat. Then assess whether Neotoma fits my workflow, what data would be highest value to persist first, and what I should do next.`,
+  agentEvaluationPrompt: `Read https://neotoma.io/evaluate. Before you answer, inspect any broader tool, workspace, and configuration context you can access so you assess my real workflow rather than just this chat. Then tell me whether Neotoma is a real fit for my workflow, what data would be highest value to persist first, and what I should do next.`,
   agentEvaluationShareEmail: "contact@neotoma.io",
   agentEvaluationShareSubject: "Agent evaluation of Neotoma",
   dockerCliExample: `# Store an entity

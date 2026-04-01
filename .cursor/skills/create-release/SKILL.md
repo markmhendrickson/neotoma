@@ -41,6 +41,8 @@ This is a foundation command. If installed, it will be available in `.cursor/com
 
 1. **Target version:** Resolve `TAG` (`vX.Y.Z`) from context, `package.json`, or ask once if ambiguous.
 2. **Supplement / narrative:** Per **Step 5**, include at least: grouped **What changed**, **Behavior changes**, **Internal changes**, **Fixes**, **Tests and validation**, **Breaking changes** (or explicit none). Walk commits in range (`git log <prev>..<ref>`) and ensure coverage; do not omit refactors or test-only work from **Internal** / **Tests**. If the repo uses `github_release_supplement.md`, create or update `docs/releases/in_progress/<TAG>/github_release_supplement.md` following the repo’s example file.
+   - Write for a human reader deciding whether to upgrade: open with a plain-English summary, explain why notable changes matter, and keep bullets concise.
+   - Keep the public release notes focused on shipped behavior, operator impact, fixes, and validation. Move exhaustive inventories, raw prep notes, and deeper narrative to a separate internal note or blog post.
 3. **Wrap + render:** When the repo provides `release-notes:render` (or equivalent), run it after the tag exists on the release commit. If the tag does not exist yet, draft the supplement first and note that render may require the tag for an accurate commit list.
 4. **GitHub Release:** Create or update the GitHub Release with curated notes (not auto-only), per Step 5.
 5. **Quality bar:** If narrative would not pass Step 5 validation, expand before treating the release as prepared.

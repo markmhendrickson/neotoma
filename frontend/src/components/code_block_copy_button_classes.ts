@@ -15,4 +15,10 @@ export const CODE_BLOCK_COPY_BUTTON_FLOAT =
 
 /** Primary emerald CTA — hero evaluate links, home evaluate copy control, banners (SitePage). */
 export const HOME_EVALUATE_CTA_CLASS =
-  "inline-flex justify-center items-center gap-1.5 rounded-md border border-emerald-600 bg-emerald-600 px-5 py-2.5 text-[15px] font-medium text-white no-underline shadow-sm shadow-emerald-600/30 hover:border-emerald-500 hover:bg-emerald-500 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 dark:border-emerald-500 dark:bg-emerald-500 dark:text-emerald-950 dark:shadow-emerald-500/30 dark:hover:border-emerald-400 dark:hover:bg-emerald-400 dark:hover:text-emerald-950 transition-colors";
+  "inline-flex justify-center items-center gap-1.5 rounded-md border border-emerald-700 bg-emerald-700 px-5 py-2.5 text-[15px] font-medium text-white no-underline shadow-sm shadow-emerald-700/30 hover:border-emerald-600 hover:bg-emerald-600 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 dark:border-emerald-500 dark:bg-emerald-500 dark:text-emerald-950 dark:shadow-emerald-500/30 dark:hover:border-emerald-400 dark:hover:bg-emerald-400 dark:hover:text-emerald-950 transition-colors";
+
+/**
+ * Compact emerald evaluate CTA — SiteTailpiece: full width below sm, content width from sm up.
+ */
+export const FOOTER_EVALUATE_CTA_CLASS =
+  "inline-flex w-full sm:w-auto sm:shrink-0 justify-center items-center gap-2 rounded-md border border-emerald-700 bg-emerald-700 px-4 py-2.5 text-[13px] font-medium text-white no-underline shadow-sm shadow-emerald-700/30 hover:border-emerald-600 hover:bg-emerald-600 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-50 dark:border-emerald-500 dark:bg-emerald-500 dark:text-emerald-950 dark:shadow-emerald-500/30 dark:hover:border-emerald-400 dark:hover:bg-emerald-400 dark:hover:text-emerald-950 dark:focus-visible:ring-offset-zinc-950 transition-colors";

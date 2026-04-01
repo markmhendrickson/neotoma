@@ -93,6 +93,26 @@ test.describe("sitePage coverage", () => {
     await expect(page.locator('a[href="/neotoma-with-cursor"]').first()).toBeVisible();
   });
 
+  test("evaluate page tells agents to inspect broader context before recommending fit", async ({
+    page,
+  }) => {
+    await page.goto("/evaluate");
+    await page.waitForLoadState("networkidle");
+
+    await expect(
+      page.getByText(/do not give a fit recommendation from the URL alone/i).first(),
+    ).toBeVisible();
+    await expect(
+      page.getByText(/Start by checking the user's broader tool context first/i).first(),
+    ).toBeVisible();
+    await expect(
+      page.getByText(/what context you checked/i).first(),
+    ).toBeVisible();
+    await expect(
+      page.getByText(/star or follow the project/i).first(),
+    ).toBeVisible();
+  });
+
   test("install and integration pages funnel users to evaluation first", async ({ page }) => {
     const routes = ["/install", "/neotoma-with-chatgpt", "/neotoma-with-claude", "/neotoma-with-cursor"];
 

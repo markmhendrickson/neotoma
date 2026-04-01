@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { FileText } from "lucide-react";
+import { FileText, MessageSquare } from "lucide-react";
 import heroPackratHoldingRecordIllus from "@/assets/images/hero/hero_illus_packrat_holding_record.png";
 import { useIndexableMarkdownSourcePath } from "@/hooks/useIndexableMarkdownSourcePath";
 import { useRepoMetaClient } from "@/hooks/useRepoMetaClient";
@@ -8,6 +8,7 @@ import { REPO_RELEASES_COUNT, REPO_STARS_COUNT, REPO_VERSION } from "@/site/site
 import { rawMarkdownTo } from "@/site/site_page_markdown";
 import { LanguageNavButton, ThemeToggleNavButton } from "@/components/SiteChromeControls";
 import { sendCtaClick } from "@/utils/analytics";
+import { FOOTER_EVALUATE_CTA_CLASS } from "@/components/code_block_copy_button_classes";
 
 const PRODUCT_LINKS = [
   { label: "Install", href: "/install" },
@@ -91,6 +92,7 @@ function FooterLink({
 
 export function SiteTailpiece() {
   const year = new Date().getFullYear();
+  const { pack } = useLocale();
   const { version: liveVersion, releasesCount: liveReleasesCount } = useRepoMetaClient(
     REPO_VERSION,
     REPO_RELEASES_COUNT,
@@ -161,20 +163,32 @@ export function SiteTailpiece() {
           </div>
         </div>
 
-        <div className="mt-8 flex flex-col gap-3 border-t border-border/60 pt-4 md:flex-row md:items-center md:justify-between">
-          <p className="max-w-full text-[12px] leading-relaxed text-muted-foreground">
-            © {year} Neotoma · v{liveVersion} · {liveReleasesCount}{" "}
-            {liveReleasesCount === 1 ? "release" : "releases"} · MIT-licensed · Built by{" "}
-            <a
-              href="https://markmhendrickson.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-foreground underline underline-offset-2 hover:no-underline"
+        <div className="mt-8 border-t border-border/60 pt-6 space-y-6">
+          <div className="w-full sm:flex sm:justify-start">
+            <Link
+              to="/evaluate"
+              className={FOOTER_EVALUATE_CTA_CLASS}
+              onClick={() => sendCtaClick("footer_evaluate")}
             >
-              Mark Hendrickson
-            </a>
-          </p>
-          <SiteFooterUtilities />
+              <MessageSquare className="h-4 w-4 shrink-0" aria-hidden />
+              <span className="whitespace-nowrap">{pack.homeHero.ctaEvaluateWithAgent}</span>
+            </Link>
+          </div>
+          <div className="flex flex-col gap-3 border-t border-border/40 pt-4 md:flex-row md:items-center md:justify-between">
+            <p className="max-w-full text-[12px] leading-relaxed text-muted-foreground">
+              © {year} Neotoma · v{liveVersion} · {liveReleasesCount}{" "}
+              {liveReleasesCount === 1 ? "release" : "releases"} · MIT-licensed · Built by{" "}
+              <a
+                href="https://markmhendrickson.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-foreground underline underline-offset-2 hover:no-underline"
+              >
+                Mark Hendrickson
+              </a>
+            </p>
+            <SiteFooterUtilities />
+          </div>
         </div>
       </div>
     </footer>

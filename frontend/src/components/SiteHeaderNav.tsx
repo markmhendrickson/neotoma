@@ -83,7 +83,10 @@ import { OpenClawIcon } from "@/components/icons/OpenClawIcon";
 import { getLocalizedDocNavCategories } from "@/site/site_data_localized";
 import { VERTICAL_LANDING_PATHS } from "@/site/site_data";
 import { sendCtaClick, sendOutboundClick, sendDocsNavClick } from "@/utils/analytics";
-import { useSiteAppNavBarVisibleSetter } from "@/context/SiteAppNavContext";
+import {
+  useSiteAppNavBarVisibleSetter,
+  useSiteHomeEvaluateScrollBannerVisible,
+} from "@/context/SiteAppNavContext";
 
 const sidebarNavItemClass =
   "!bg-transparent text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus:bg-sidebar-accent focus:text-sidebar-accent-foreground data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground";
@@ -422,7 +425,8 @@ function SiteNavSearch({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
-  const [expanded, setExpanded] = useState(alwaysShowInput);
+  /** Start collapsed so mobile sheet open does not autofocus the input (keyboard). Visibility uses alwaysShowInput. */
+  const [expanded, setExpanded] = useState(false);
 
   const localizedDocCategories = useMemo(() => getLocalizedDocNavCategories(dict), [dict]);
 
@@ -472,10 +476,10 @@ function SiteNavSearch({
   }, []);
 
   useEffect(() => {
-    if (!expanded) return;
+    if (!expanded || alwaysShowInput) return;
     const t = setTimeout(() => inputRef.current?.focus(), 0);
     return () => clearTimeout(t);
-  }, [expanded]);
+  }, [expanded, alwaysShowInput]);
 
   useEffect(() => {
     if (!open) return;
@@ -615,11 +619,15 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
     pathname,
     mobileMenuOpen || !isMarketingHomeChrome,
   );
-  const mobileNavFabVisible = useMobileNavFabVisibility(
+  const mobileNavFabBaseVisible = useMobileNavFabVisibility(
     pathname,
     mobileMenuOpen,
     isMarketingHomeChrome,
   );
+  const homeEvaluateScrollBannerVisible = useSiteHomeEvaluateScrollBannerVisible();
+  const mobileNavFabVisible =
+    mobileMenuOpen ||
+    (mobileNavFabBaseVisible && !homeEvaluateScrollBannerVisible);
   const setAppNavBarVisible = useSiteAppNavBarVisibleSetter();
   useEffect(() => {
     setAppNavBarVisible(headerScrollVisible);
@@ -693,47 +701,29 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
       {/* Mobile: Evaluate + Architecture in header */}
       <nav
         className="md:hidden flex items-center gap-1"
-        aria-label={
-          isMarketingHomeChrome
-            ? `${dict.evaluate}, ${dict.install}, and ${dict.architecture}`
-            : `${dict.evaluate} and ${dict.architecture}`
-        }
+        aria-label={`${dict.evaluate}, ${dict.install}, and ${dict.architecture}`}
       >
-        {isMarketingHomeChrome ? (
-          <>
-            <Link
-              to={localizePath("/evaluate", locale)}
-              className="rounded-md px-2 py-1.5 text-[13px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-              onClick={() => sendCtaClick("header_evaluate")}
-            >
-              {dict.evaluate}
-            </Link>
-            <Link
-              to={localizePath("/architecture", locale)}
-              className="rounded-md px-2 py-1.5 text-[13px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-              onClick={() => sendCtaClick("view_architecture")}
-            >
-              {dict.architecture}
-            </Link>
-          </>
-        ) : (
-          <>
-            <Link
-              to={localizePath("/evaluate", locale)}
-              className="rounded-md px-2 py-1.5 text-[13px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-              onClick={() => sendCtaClick("header_evaluate")}
-            >
-              {dict.evaluate}
-            </Link>
-            <Link
-              to={localizePath("/architecture", locale)}
-              className="rounded-md px-2 py-1.5 text-[13px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-              onClick={() => sendCtaClick("view_architecture")}
-            >
-              {dict.architecture}
-            </Link>
-          </>
-        )}
+        <Link
+          to={localizePath("/evaluate", locale)}
+          className="rounded-md px-2 py-1.5 text-[13px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          onClick={() => sendCtaClick("header_evaluate")}
+        >
+          {dict.evaluate}
+        </Link>
+        <Link
+          to={localizePath("/install", locale)}
+          className="rounded-md px-2 py-1.5 text-[13px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          onClick={() => sendCtaClick("header_install")}
+        >
+          {dict.install}
+        </Link>
+        <Link
+          to={localizePath("/architecture", locale)}
+          className="rounded-md px-2 py-1.5 text-[13px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          onClick={() => sendCtaClick("view_architecture")}
+        >
+          {dict.architecture}
+        </Link>
       </nav>
 
       <NavigationMenu className="hidden md:block">
@@ -750,41 +740,27 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
             </NavigationMenuLink>
           </NavigationMenuItem>
           <NavigationMenuItem className="hidden md:flex">
-            {isMarketingHomeChrome ? (
-              <NavigationMenuLink asChild>
-                <Link
-                  to={localizePath("/install", locale)}
-                  className={`${navigationMenuTriggerStyle()} ${sidebarNavItemClass}`}
-                  onClick={() => sendCtaClick("header_install")}
-                >
-                  {dict.install}
-                </Link>
-              </NavigationMenuLink>
-            ) : (
-              <NavigationMenuLink asChild>
-                <Link
-                  to={localizePath("/architecture", locale)}
-                  className={`${navigationMenuTriggerStyle()} ${sidebarNavItemClass}`}
-                  onClick={() => sendCtaClick("view_architecture")}
-                >
-                  {dict.architecture}
-                </Link>
-              </NavigationMenuLink>
-            )}
+            <NavigationMenuLink asChild>
+              <Link
+                to={localizePath("/install", locale)}
+                className={`${navigationMenuTriggerStyle()} ${sidebarNavItemClass}`}
+                onClick={() => sendCtaClick("header_install")}
+              >
+                {dict.install}
+              </Link>
+            </NavigationMenuLink>
           </NavigationMenuItem>
-          {isMarketingHomeChrome && (
-            <NavigationMenuItem className="hidden md:flex">
-              <NavigationMenuLink asChild>
-                <Link
-                  to={localizePath("/architecture", locale)}
-                  className={`${navigationMenuTriggerStyle()} ${sidebarNavItemClass}`}
-                  onClick={() => sendCtaClick("view_architecture")}
-                >
-                  {dict.architecture}
-                </Link>
-              </NavigationMenuLink>
-            </NavigationMenuItem>
-          )}
+          <NavigationMenuItem className="hidden md:flex">
+            <NavigationMenuLink asChild>
+              <Link
+                to={localizePath("/architecture", locale)}
+                className={`${navigationMenuTriggerStyle()} ${sidebarNavItemClass}`}
+                onClick={() => sendCtaClick("view_architecture")}
+              >
+                {dict.architecture}
+              </Link>
+            </NavigationMenuLink>
+          </NavigationMenuItem>
           <NavigationMenuItem className="hidden md:flex">
             <NavigationMenuTrigger
               className={`text-[14px] ${sidebarNavItemClass}`}
@@ -920,63 +896,38 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
               style={{ paddingBottom: "max(5.75rem, 1.5rem, env(safe-area-inset-bottom, 0px))" }}
             >
               <nav className="flex flex-col gap-1">
-                {isMarketingHomeChrome ? (
-                  <>
-                    <Link
-                      to={localizePath("/evaluate", locale)}
-                      className="rounded-md px-3 py-2 text-[14px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                      onClick={() => {
-                        sendCtaClick("header_evaluate");
-                        setMobileMenuOpen(false);
-                      }}
-                    >
-                      {dict.evaluate}
-                    </Link>
-                    <Link
-                      to={localizePath("/install", locale)}
-                      className="rounded-md px-3 py-2 text-[14px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                      onClick={() => {
-                        sendCtaClick("header_install");
-                        setMobileMenuOpen(false);
-                      }}
-                    >
-                      {dict.install}
-                    </Link>
-                    <Link
-                      to={localizePath("/architecture", locale)}
-                      className="rounded-md px-3 py-2 text-[14px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                      onClick={() => {
-                        sendCtaClick("view_architecture");
-                        setMobileMenuOpen(false);
-                      }}
-                    >
-                      {dict.architecture}
-                    </Link>
-                  </>
-                ) : (
-                  <>
-                    <Link
-                      to={localizePath("/evaluate", locale)}
-                      className="rounded-md px-3 py-2 text-[14px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                      onClick={() => {
-                        sendCtaClick("header_evaluate");
-                        setMobileMenuOpen(false);
-                      }}
-                    >
-                      {dict.evaluate}
-                    </Link>
-                    <Link
-                      to={localizePath("/architecture", locale)}
-                      className="rounded-md px-3 py-2 text-[14px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                      onClick={() => {
-                        sendCtaClick("view_architecture");
-                        setMobileMenuOpen(false);
-                      }}
-                    >
-                      {dict.architecture}
-                    </Link>
-                  </>
-                )}
+                <>
+                  <Link
+                    to={localizePath("/evaluate", locale)}
+                    className="rounded-md px-3 py-2 text-[14px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                    onClick={() => {
+                      sendCtaClick("header_evaluate");
+                      setMobileMenuOpen(false);
+                    }}
+                  >
+                    {dict.evaluate}
+                  </Link>
+                  <Link
+                    to={localizePath("/install", locale)}
+                    className="rounded-md px-3 py-2 text-[14px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                    onClick={() => {
+                      sendCtaClick("header_install");
+                      setMobileMenuOpen(false);
+                    }}
+                  >
+                    {dict.install}
+                  </Link>
+                  <Link
+                    to={localizePath("/architecture", locale)}
+                    className="rounded-md px-3 py-2 text-[14px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                    onClick={() => {
+                      sendCtaClick("view_architecture");
+                      setMobileMenuOpen(false);
+                    }}
+                  >
+                    {dict.architecture}
+                  </Link>
+                </>
                 <Link
                   to={localizePath("/docs", locale)}
                   className="rounded-md px-3 py-2 text-[14px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"

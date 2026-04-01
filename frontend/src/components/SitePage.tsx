@@ -47,6 +47,7 @@ import guaranteeReproducibleReconstructionIllus from "@/assets/images/guarantees
 import heroEvaluateIllus from "@/assets/images/hero/hero_illus_evaluate_agent_page.png";
 
 import { useLocale } from "@/i18n/LocaleContext";
+import { useSiteHomeEvaluateScrollBannerVisibleSetter } from "@/context/SiteAppNavContext";
 import { sendCtaClick } from "@/utils/analytics";
 interface SitePageProps {
   staticMode?: boolean;
@@ -1239,7 +1240,7 @@ function SectionEdgeIndicators({
 }
 
 /**
- * Lines trace to docs/foundation/field_validation.md; attributions are anonymized for the public site.
+ * Lines trace to docs/foundation/field_validation.md; attributions are mostly role labels on the public site (Laurie Voss named).
  */
 const HERO_QUOTES: { text: string; attribution: string }[] = [
   {
@@ -1248,7 +1249,7 @@ const HERO_QUOTES: { text: string; attribution: string }[] = [
   },
   {
     text: "Very relevant problem, most people rolling their own.",
-    attribution: "Developer tooling founder",
+    attribution: "Laurie Voss, npm co-founder",
   },
   {
     text: "Genuinely useful for production agents, overkill for hobbyist chatbots.",
@@ -1349,6 +1350,16 @@ export function SitePage({ staticMode = false }: SitePageProps) {
 
   const showEvaluateScrollBanner =
     !footerInScrollView && navActiveSectionId !== "intro" && navActiveSectionId !== "evaluate";
+
+  const setHomeEvaluateScrollBannerVisible = useSiteHomeEvaluateScrollBannerVisibleSetter();
+  useEffect(() => {
+    if (staticMode) {
+      setHomeEvaluateScrollBannerVisible(false);
+      return;
+    }
+    setHomeEvaluateScrollBannerVisible(showEvaluateScrollBanner);
+    return () => setHomeEvaluateScrollBannerVisible(false);
+  }, [staticMode, showEvaluateScrollBanner, setHomeEvaluateScrollBannerVisible]);
 
   useEffect(() => {
     if (staticMode || typeof window === "undefined") return;
@@ -1550,7 +1561,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                     <h2 className={HOME_SECTION_H2_CLASS}>
                       You run AI agents across tools and sessions...
                       <span className="mt-1.5 block text-muted-foreground sm:mt-2">
-                        ...becoming the human sync layer.
+                        ...and become the human sync layer 😵
                       </span>
                     </h2>
                     <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl mx-auto">

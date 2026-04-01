@@ -55,7 +55,8 @@ export function SeoDevMetaFooter() {
   ];
 
   return (
-    <footer
+    <div
+      role="region"
       className="border-t border-amber-500/40 bg-amber-950/90 text-amber-100/95 dark:bg-amber-950/95 dark:text-amber-50/95"
       data-testid="seo-dev-meta-footer"
       aria-label="Development SEO metadata"
@@ -108,6 +109,8 @@ export function SeoDevMetaFooter() {
                   <img
                     src={ogPreviewSrc}
                     alt={meta.ogImageAlt}
+                    width={1200}
+                    height={630}
                     className="h-auto w-full rounded border border-amber-500/40 bg-amber-900/40 object-contain shadow-sm"
                     loading="lazy"
                     decoding="async"
@@ -123,6 +126,6 @@ export function SeoDevMetaFooter() {
           </div>
         </details>
       </div>
-    </footer>
+    </div>
   );
 }

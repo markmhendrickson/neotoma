@@ -1,29 +1,27 @@
 # Neotoma
 
-Deterministic state layer for AI agents. Open-source. Local-first. MIT licensed. For a guided overview, see [neotoma.io](https://neotoma.io).
+Your agents forget. Neotoma makes them remember.
+
+Versioned records — contacts, tasks, decisions, finances — that persist across Claude, Cursor, ChatGPT, OpenClaw, and every agent you run. Open-source. Local-first. Deterministic. MIT licensed.
+
+**[neotoma.io](https://neotoma.io)** · **[Evaluate](https://neotoma.io/evaluate)** · **[Install](https://neotoma.io/install)** · **[Documentation](https://neotoma.io/docs)**
 
 ## Why this exists
 
-Production agents fail because their state has no invariant. Without a state invariant:
+You run AI agents across tools and sessions. Without a state layer, you become the human sync layer:
 
-- Context drifts across sessions
-- Facts conflict across tools
-- Decisions execute without a reproducible trail
+- Every session starts from zero — nothing your agent learns carries over
+- Facts conflict across tools — two agents store different versions of the same person
+- Decisions execute without a reproducible trail — you can't trace why your agent acted
+- Corrections don't stick — you fix something in Claude and it's wrong again in Cursor
 
-These are not hypothetical. They happen every day in production agent systems:
+These are not hypothetical. They happen every day in production agent systems. You compensate by re-prompting context, patching state gaps, and maintaining manual workarounds. Neotoma removes that tax.
 
-- An agent references an outdated contract clause retrieved from a stale embedding.
-- Two tools record different versions of the same entity.
-- An automated decision cannot be reproduced during debugging.
-- Context drifts across sessions and the agent silently changes behavior.
+## What Neotoma does
 
-Agent state must obey invariants. Without them, every downstream action inherits the uncertainty of the state it reads.
+Neotoma is a deterministic state layer for AI agents. It stores structured records — contacts, tasks, transactions, decisions, events, contracts — with versioned history and full provenance. Every change creates a new version. Nothing is overwritten. Every state can be replayed from the observation log.
 
-## The state invariant
-
-Neotoma enforces a deterministic state invariant. State is **versioned**, **schema-bound**, **replayable**, and **auditable**. Every mutation is recorded. Every state change can be inspected or replayed. No silent mutation. No implicit overwrite.
-
-Agents need a deterministic state layer. RAG retrieves documents. Neotoma enforces state evolution. Neotoma treats memory as state evolution, not retrieval. State evolves through a four-stage pipeline. Every stage is versioned with full provenance.
+Not retrieval memory (RAG, vector search, semantic lookup). Neotoma enforces deterministic state evolution: same observations always produce the same entity state, regardless of when or in what order they are processed.
 
 ## Architecture
 
@@ -35,8 +33,9 @@ graph LR
   Snapshots --> Graph[Memory Graph]
   Graph <--> MCP[MCP Protocol]
   MCP --> Claude
+  MCP --> ChatGPT
   MCP --> Cursor
-  MCP --> Codex
+  MCP --> OpenClaw
 ```
 
 - **Deterministic.** Same observations always produce the same versioned entity snapshots. No ordering sensitivity.
@@ -50,39 +49,47 @@ graph LR
 | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
 | **Privacy-first**  | Your data stays local. Never used for training. User-controlled storage, optional encryption at rest. Full export and deletion control. |
 | **Deterministic**  | Same input always produces same output. Schema-first extraction, hash-based entity IDs, full provenance. No silent mutation.            |
-| **Cross-platform** | One memory graph across Claude, Cursor, Codex, and CLI. MCP-based access. No platform lock-in. Works alongside native memory.           |
+| **Cross-platform** | One memory graph across Claude, ChatGPT, Cursor, OpenClaw, Codex, and CLI. MCP-based access. No platform lock-in. Works alongside native memory. |
 
 ## State guarantees
 
-Most AI memory systems optimize storage or retrieval. Neotoma enforces state integrity.
+Most AI memory systems optimize storage or retrieval. Neotoma enforces state integrity. [Full comparison with explanations →](https://neotoma.io/memory-guarantees)
 
-| Property                             | Platform  | Retrieval / RAG | Files      | Deterministic |
-| ------------------------------------ | --------- | --------------- | ---------- | ------------- |
-| Deterministic state evolution        | ✗         | ✗               | ✗          | ✓             |
-| Versioned history                    | ✗         | ✗               | ⚠ manual   | ✓             |
-| Replayable timeline                  | ✗         | ✗               | ✗          | ✓             |
-| Auditable change log                 | ✗         | ✗               | ⚠ partial  | ✓             |
-| Schema constraints                   | ✗         | ✗               | ✗          | ✓             |
-| Silent mutation risk                 | ⚠ common  | ⚠ common        | ⚠ common   | prevented     |
-| Conflicting facts risk               | ⚠ common  | ⚠ common        | ⚠ possible | prevented     |
-| Reproducible state reconstruction    | ✗         | ✗               | ✗          | ✓             |
-| Human inspectability (diffs/lineage) | ⚠ partial | ⚠ partial       | ⚠ partial  | ✓             |
-| Zero-setup onboarding                | ✓         | ✗               | ✗          | ✗             |
-| Semantic similarity search           | ✗         | ✓               | ✗          | ✓             |
-| Direct human editability             | ✗         | ✗               | ✓          | ✗             |
+| Property                             | Platform  | Retrieval / RAG | Files      | Database      | Neotoma       |
+| ------------------------------------ | --------- | --------------- | ---------- | ------------- | ------------- |
+| Deterministic state evolution        | ✗         | ✗               | ✗          | ✗             | ✓             |
+| Versioned history                    | ✗         | ✗               | ⚠ manual   | ✗             | ✓             |
+| Replayable timeline                  | ✗         | ✗               | ✗          | ✗             | ✓             |
+| Auditable change log                 | ✗         | ✗               | ⚠ partial  | ✗             | ✓             |
+| Schema constraints                   | ✗         | ✗               | ✗          | ⚠ partial     | ✓             |
+| Silent mutation risk                 | ⚠ common  | ⚠ common        | ⚠ common   | ⚠ common      | prevented     |
+| Conflicting facts risk               | ⚠ common  | ⚠ common        | ⚠ possible | ⚠ common      | prevented     |
+| Reproducible state reconstruction    | ✗         | ✗               | ✗          | ✗             | ✓             |
+| Human inspectability (diffs/lineage) | ⚠ partial | ⚠ partial       | ⚠ partial  | ⚠ partial     | ✓             |
+| Zero-setup onboarding                | ✓         | ✗               | ✗          | ✗             | ✗             |
+| Semantic similarity search           | ✗         | ✓               | ✗          | ✗             | ✓             |
+| Direct human editability             | ✗         | ✗               | ✓          | ✗             | ✗             |
 
-**Platform:** Claude, ChatGPT, Gemini, Copilot. **Retrieval:** Mem0, Zep, LangChain Memory. **Files:** Markdown files, JSON stores, CRDT docs. **Deterministic:** Neotoma (reference implementation).
+**Platform:** Claude, ChatGPT, Gemini, Copilot. **Retrieval:** Mem0, Zep, LangChain Memory. **Files:** Markdown files, JSON stores, CRDT docs. **Database:** SQLite, Postgres, MySQL. **Neotoma:** Deterministic state layer (reference implementation).
 
 ## Quick start
 
-### Agent-driven install (recommended)
+### Evaluate first (recommended)
 
-Agents install Neotoma themselves. Paste this prompt into Claude, Codex, or Cursor:
+Ask your AI agent whether Neotoma fits your workflow. Paste this into Claude, Cursor, ChatGPT, or any MCP-capable tool:
 
 ```
-Install Neotoma by following these instructions: https://github.com/markmhendrickson/neotoma/blob/main/install.md
+Read https://neotoma.io/evaluate. Before you answer, inspect any broader tool, workspace, and configuration context you can access so you assess my real workflow rather than just this chat. Then tell me whether Neotoma is a real fit for my workflow, what data would be highest value to persist first, and what I should do next.
+```
 
-Discover candidate data from available context — including any facts this tool already remembers about me — preview it for approval, and save only what I confirm.
+The agent reads the evaluation page, checks your context, and gives you an honest assessment. If it's a fit, the agent carries you through install and activation.
+
+### Agent-driven install
+
+Agents install Neotoma themselves. Paste this prompt into Claude, Cursor, ChatGPT, or Codex:
+
+```
+Read https://neotoma.io/install and carry me through the install-first Neotoma flow. Install, activate it with my data, and configure my current tool for robust ongoing use.
 ```
 
 The agent handles npm install, initialization, and MCP configuration. **Manual install:**
@@ -112,24 +119,41 @@ Three interfaces. One state invariant. Every interface provides the same determi
 | Interface      | Description                                                                                                                    |
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | **REST API**   | Full HTTP interface for application integration. Entities, relationships, observations, schema, timeline, and version history. |
-| **MCP Server** | Model Context Protocol for Claude, Cursor, and Codex. Agents store and retrieve state through structured tool calls.           |
+| **MCP Server** | Model Context Protocol for Claude, ChatGPT, Cursor, OpenClaw, Codex, and more. Agents store and retrieve state through structured tool calls. |
 | **CLI**        | Command-line for scripting and direct access. Inspect entities, replay timelines, and manage state from the terminal.          |
 
 All three map to the same OpenAPI-backed operations. MCP tool calls log the equivalent CLI invocation.
 
 ## Who this is for
 
-| Who                             | What they need                                                     |
-| ------------------------------- | ------------------------------------------------------------------ |
-| **AI infrastructure engineers** | State integrity guarantees for agent runtimes and orchestration    |
-| **Agent system builders**       | Deterministic state and provenance layer for agents and toolchains |
-| **AI-native operators**         | State that follows across every tool and session                   |
+People building a personal operating system with AI agents across their life — wiring together tools like Claude, Cursor, ChatGPT, OpenClaw, and custom scripts to manage contacts, tasks, finances, code, content, and other domains. The same person operates their agents, builds new pipelines, and debugs state drift. These are three operational modes, not separate personas:
 
-Not for casual note-taking. Not for UI-first users expecting reliability guarantees today.
+| Mode | What you're doing | The tax you pay without Neotoma | What you get back |
+| ---- | ----------------- | ------------------------------- | ----------------- |
+| **Operating** | Running AI tools across sessions and contexts | Re-prompting, context re-establishment, manual cross-tool sync | Attention, continuity, trust in your tools |
+| **Building** | Shipping agents and pipelines | Prompt workarounds, dedup hacks, memory regression fixes | Product velocity, shipping confidence |
+| **Debugging** | Tracing state drift and reproducing failures | Writing glue (checkpoint logic, custom diffing, state serialization) | Debugging speed, platform design time |
+
+**Not for:** Casual note-taking. PKM/Obsidian-style users. Thought-partner usage where the human drives every turn. Platform builders who build state management as their core product. Users who need zero-install onboarding (Neotoma requires npm and CLI today).
+
+## Record types
+
+Neotoma stores typed entities with versioned history and provenance. Each type has a dedicated guide on [neotoma.io](https://neotoma.io):
+
+| Type | What it stores | Examples |
+| ---- | -------------- | -------- |
+| **[Contacts](https://neotoma.io/types/contacts)** | People, companies, roles, relationships | `contact`, `company`, `account` |
+| **[Tasks](https://neotoma.io/types/tasks)** | Obligations, deadlines, habits, goals | `task`, `habit`, `goal` |
+| **[Transactions](https://neotoma.io/types/transactions)** | Payments, receipts, invoices, ledger entries | `transaction`, `invoice`, `receipt` |
+| **[Contracts](https://neotoma.io/types/contracts)** | Agreements, clauses, amendments | `contract`, `clause`, `amendment` |
+| **[Decisions](https://neotoma.io/types/decisions)** | Choices, rationale, audit trails | `decision`, `assessment`, `review` |
+| **[Events](https://neotoma.io/types/events)** | Meetings, milestones, outcomes | `event`, `meeting`, `milestone` |
+
+Schema is flexible — store any entity type with whatever fields the message implies. The system infers and evolves schemas automatically.
 
 ## Current status
 
-**Version:** v0.3.9 · **Releases:** 10 · **License:** MIT
+**Version:** v0.4.0 · **Releases:** 12 · **License:** MIT
 
 ### What is guaranteed (even in preview)
 
@@ -190,15 +214,27 @@ npm test
 
 Neotoma exposes state via MCP. Local storage only in preview. Local built-in auth.
 
-**Setup:**
-
-- [Cursor MCP setup](docs/developer/mcp_cursor_setup.md)
-- [Claude Code MCP setup](docs/developer/mcp_claude_code_setup.md)
-- [ChatGPT Custom GPT setup](docs/developer/mcp_chatgpt_setup.md)
+**Setup guides:** [Cursor](https://neotoma.io/neotoma-with-cursor) · [Claude Code](https://neotoma.io/neotoma-with-claude-code) · [Claude](https://neotoma.io/neotoma-with-claude) · [ChatGPT](https://neotoma.io/neotoma-with-chatgpt) · [Codex](https://neotoma.io/neotoma-with-codex) · [OpenClaw](https://neotoma.io/neotoma-with-openclaw)
 
 **Agent behavior contract:** Store first, retrieve before storing, extract entities from user input, create tasks for commitments. Full instructions: [MCP instructions](docs/developer/mcp/instructions.md) and [CLI agent instructions](docs/developer/cli_agent_instructions.md).
 
 **Representative actions:** `store`, `retrieve_entities`, `retrieve_entity_snapshot`, `merge_entities`, `list_observations`, `create_relationship`, `list_relationships`, `list_timeline_events`, `retrieve_graph_neighborhood`. Full list: [MCP spec](docs/specs/MCP_SPEC.md).
+
+## Common questions
+
+**Platform memory (Claude, ChatGPT) is good enough — why add another tool?**
+Platform memory stores what one vendor decides to remember, in a format you can't inspect or export. It doesn't version, doesn't detect conflicts, and vanishes if you switch tools. Neotoma gives you structured, cross-tool state you control.
+
+**Can't I just build this with SQLite or a JSON file?**
+You can start there — many teams do. But you'll eventually need versioning, conflict detection, schema evolution, and cross-tool sync. That's months of infrastructure work. Neotoma ships those guarantees on day one.
+
+**What's the difference between RAG memory and deterministic memory?**
+RAG stores text chunks and retrieves them by similarity. Neotoma stores structured observations and composes entity state with reducers; the same observations always yield the same snapshot. RAG optimizes relevance; deterministic memory optimizes integrity, versioning, and auditability.
+
+**Is this production-ready?**
+Neotoma is in developer preview — used daily by real agent workflows. The core guarantees (deterministic state, versioned history, append-only log) are stable. Install in 5 minutes and let your agent evaluate the fit.
+
+More questions: [FAQ](https://neotoma.io/faq)
 
 ## Related posts
 
@@ -206,19 +242,21 @@ Neotoma exposes state via MCP. Local storage only in preview. Local built-in aut
 - [Your AI remembers your vibe but not your work](https://markmhendrickson.com/posts/your-ai-remembers-your-vibe-but-not-your-work)
 - [Building a truth layer for persistent agent memory](https://markmhendrickson.com/posts/truth-layer-agent-memory)
 - [Agent memory has a truth problem](https://markmhendrickson.com/posts/agent-memory-truth-problem)
+- [Six agentic trends I'm betting on (and how I might be wrong)](https://markmhendrickson.com/posts/six-agentic-trends-betting-on)
 - [Why agent memory needs more than RAG](https://markmhendrickson.com/posts/why-agent-memory-needs-more-than-rag)
+- [Agent command centers need one source of truth](https://markmhendrickson.com/posts/agent-command-centers-source-of-truth)
 
 ## Documentation
 
 Full documentation is organized at [neotoma.io/docs](https://neotoma.io/docs) and in the `docs/` directory.
 
-**Foundational:** [Core identity](docs/foundation/core_identity.md), [Philosophy](docs/foundation/philosophy.md), [Problem statement](docs/foundation/problem_statement.md), [Architecture](docs/architecture/architecture.md)
+**Getting started:** [Evaluate](https://neotoma.io/evaluate), [Install](https://neotoma.io/install), [Walkthrough](https://neotoma.io/developer-walkthrough)
 
-**Developer:** [Getting started](docs/developer/getting_started.md), [CLI reference](docs/developer/cli_reference.md), [MCP overview](docs/developer/mcp_overview.md), [Development workflow](docs/developer/development_workflow.md)
+**Reference:** [REST API](https://neotoma.io/api), [MCP server](https://neotoma.io/mcp), [CLI](https://neotoma.io/cli), [Memory guarantees](https://neotoma.io/memory-guarantees), [Architecture](https://neotoma.io/architecture), [Terminology](https://neotoma.io/terminology)
 
-**Specs:** [MCP spec](docs/specs/MCP_SPEC.md), [Schema](docs/subsystems/schema.md), [REST API](docs/api/rest_api.md), [Terminology](https://neotoma.io/terminology)
+**Foundational:** [Core identity](docs/foundation/core_identity.md), [Philosophy](docs/foundation/philosophy.md), [Problem statement](docs/foundation/problem_statement.md)
 
-**Operations:** [Runbook](docs/operations/runbook.md), [Health check](docs/operations/health_check.md) (`npm run doctor`), [Troubleshooting](docs/operations/troubleshooting.md)
+**Operations:** [Runbook](docs/operations/runbook.md), [Health check](docs/operations/health_check.md) (`npm run doctor`), [Troubleshooting](https://neotoma.io/troubleshooting)
 
 ## Contributing
 
