@@ -20,6 +20,8 @@ data.vite/
 data
 data/
 data*
+# `data*` matches this marketing route page name on case-insensitive filesystems; keep it versioned.
+!frontend/src/components/subpages/DatabaseMemoryPage.tsx
 data.backup.*/
 data_backups/
 # Vite build output (outDir: public/); source is frontend/
