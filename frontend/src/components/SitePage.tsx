@@ -1240,7 +1240,7 @@ function SectionEdgeIndicators({
 }
 
 /**
- * Lines trace to docs/foundation/field_validation.md; attributions are mostly role labels on the public site (Laurie Voss and Tycho Onnasch named).
+ * Consented public attributions. Named evaluator data in docs/private/icp/field_evidence.md.
  */
 const HERO_QUOTES: { text: string; attribution: string; attributionHref?: string }[] = [
   {

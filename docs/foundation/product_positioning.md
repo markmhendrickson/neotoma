@@ -99,11 +99,13 @@ These framings emerged from real evaluator conversations and resonate more immed
 
 | Framing | Origin | When to use |
 |---------|--------|-------------|
-| "State integrity, not retrieval quality" | Evaluator's Claude agent | Differentiating from RAG/Mem0/Zep. The crispest competitive framing in one phrase. |
+| "State integrity, not retrieval quality" | Evaluator's agent | Differentiating from RAG/Mem0/Zep. The crispest competitive framing in one phrase. |
 | "CI/CD for agent state" | Evaluator | Speaking to infra engineers. Powerful metaphor — they already understand CI/CD discipline. |
 | "System of record for AI agents" | Synthesis from feedback | Category creation. Use in the blog post and HN framing. |
 | "Your agents forget what they knew yesterday" | Action plan hero | Opening any conversation. Starts from universal pain. |
-| "Truth Layer" | Evaluator's Gemini 3 agent | Architecturally cleaner than "truth engine." Use in technical positioning. |
+| "Truth Layer" | Evaluator's agent | Architecturally cleaner than "truth engine." Use in technical positioning. |
+
+**Named attributions:** See `docs/private/icp/field_evidence.md`.
 
 ### Differentiator-to-pain translation
 
@@ -119,7 +121,7 @@ Not "schema-first field extraction with deterministic, explainable results." The
 Not "cross-platform access via MCP integration." The felt experience is continuity: store a contact in Claude Code, query it from Cursor, update it from ChatGPT. You stop being the human sync layer between tools.
 
 **Versioned history → "What did your agent know at decision time?"**
-Not "every state change creates a new version." The felt experience is accountability: when a decision was wrong, you can reconstruct exactly what the agent believed when it made the call. This is Evaluator's trigger question and the most powerful single framing for the personal agentic OS use case.
+Not "every state change creates a new version." The felt experience is accountability: when a decision was wrong, you can reconstruct exactly what the agent believed when it made the call. This trigger question is the most powerful single framing for the personal agentic OS use case.
 
 **Schema constraints → "No garbage in, no garbage out."**
 Not "entities conform to defined types and validation rules." The felt experience is reliability: your agent's contact records actually have email addresses and phone numbers, not free-text blobs that drift into nonsense across sessions.
