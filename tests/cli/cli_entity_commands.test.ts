@@ -252,7 +252,12 @@ describe("CLI entity commands", () => {
           const url = typeof input === "string" ? input : (input as Request).url;
           if (url.includes(`/entities/${testEntityId}`)) {
             return new Response(
-              JSON.stringify({ entity: { id: testEntityId, entity_type: "company", canonical_name: "Test Company" } }),
+              JSON.stringify({
+                entity_id: testEntityId,
+                entity_type: "company",
+                canonical_name: "Test Company",
+                snapshot: { name: "Test Company" },
+              }),
               { status: 200, headers: { "Content-Type": "application/json" } }
             );
           }
@@ -273,7 +278,7 @@ describe("CLI entity commands", () => {
 
         expect(fetchMock).toHaveBeenCalled();
         const parsed = JSON.parse(stdout.output.join(""));
-        expect(parsed.entity.id).toBe(testEntityId);
+        expect(parsed.entity_id).toBe(testEntityId);
       });
     });
 

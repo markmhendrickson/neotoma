@@ -207,69 +207,69 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     ],
   },
   "/operating": {
-    title: "Operating across tools | Neotoma",
+    title: "Context janitor | Neotoma",
     description:
-      "Every session starts from zero. Neotoma removes the re-prompting tax with persistent, cross-tool memory that survives session resets and makes corrections stick.",
+      "Every session starts from zero. You re-explain context, re-prompt corrections, re-establish what your agent already knew. Neotoma removes the re-prompting tax with persistent, cross-tool state.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
-      { name: "Operating across tools", path: "/operating" },
+      { name: "Context janitor", path: "/operating" },
     ],
   },
   "/building-pipelines": {
-    title: "Building pipelines | Neotoma",
+    title: "Inference variance | Neotoma",
     description:
-      "Your agent guesses entities every session. Neotoma gives pipelines persistent memory, entity resolution, and provenance so new features compound instead of regressing.",
+      "Your agent guesses entities every session. Corrections don\u2019t persist. Memory regressions ship because the architecture can\u2019t prevent them. Neotoma gives pipelines deterministic state.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
-      { name: "Building pipelines", path: "/building-pipelines" },
+      { name: "Inference variance", path: "/building-pipelines" },
     ],
   },
   "/debugging-infrastructure": {
-    title: "Debugging infrastructure | Neotoma",
+    title: "Log archaeology | Neotoma",
     description:
-      "Two runs, same inputs, different state. Neotoma replaces log archaeology with replayable timelines, state diffs, and full provenance.",
+      "Two runs. Same inputs. Different state. No replay, no diff, no explanation. Neotoma replaces log archaeology with replayable timelines, state diffs, and full provenance.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
-      { name: "Debugging infrastructure", path: "/debugging-infrastructure" },
+      { name: "Log archaeology", path: "/debugging-infrastructure" },
     ],
   },
   "/ai-native-operators": {
     title: "AI-native operators | Neotoma",
     description:
-      "Legacy path; redirects to operating across tools. Persistent cross-session memory for operators running agents in production.",
+      "Legacy path; redirects to context janitor. Persistent cross-session state for operators running agents in production.",
     robots: "noindex,nofollow",
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
-      { name: "Operating across tools", path: "/operating" },
+      { name: "Context janitor", path: "/operating" },
     ],
   },
   "/agentic-systems-builders": {
     title: "Agentic systems builders | Neotoma",
     description:
-      "Legacy path; redirects to building pipelines. Deterministic state and entity resolution for teams shipping agent features.",
+      "Legacy path; redirects to inference variance. Deterministic state and entity resolution for teams shipping agent features.",
     robots: "noindex,nofollow",
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
-      { name: "Building pipelines", path: "/building-pipelines" },
+      { name: "Inference variance", path: "/building-pipelines" },
     ],
   },
   "/ai-infrastructure-engineers": {
     title: "AI infrastructure engineers | Neotoma",
     description:
-      "Legacy path; redirects to debugging infrastructure. Replayable timelines and provenance for infra teams debugging agent state.",
+      "Legacy path; redirects to log archaeology. Replayable timelines and provenance for infra teams debugging agent state.",
     robots: "noindex,nofollow",
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
-      { name: "Debugging infrastructure", path: "/debugging-infrastructure" },
+      { name: "Log archaeology", path: "/debugging-infrastructure" },
     ],
   },
   "/neotoma-with-cursor": {

@@ -180,12 +180,24 @@ components:
         event_timestamp:
           type: string
           format: date-time
+        event_date:
+          type: string
         source_id:
+          type: string
+        source_field:
+          type: string
+        entity_id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        user_id:
           type: string
         entity_ids:
           type: array
           items:
             type: string
+          description: Optional; not populated by all transports. Prefer entity_id.
         properties:
           type: object
           additionalProperties: true
@@ -1239,6 +1251,14 @@ paths:
           name: offset
           required: false
           schema: { type: integer }
+        - in: query
+          name: order_by
+          required: false
+          description: Sort column descending. event_timestamp = dates from extracted data; created_at = when the timeline row was written (better for "recent activity").
+          schema:
+            type: string
+            enum: [event_timestamp, created_at]
+            default: event_timestamp
       responses:
         '200':
           description: Timeline events

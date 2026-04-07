@@ -74,6 +74,7 @@ It does not cover:
 ## Emergency Procedures
 
 - **Rollback:** Revert deployment to previous version; re-run migrations only if a migration rollback is defined (see migration docs). Restore DB/storage from backup if data corruption is suspected.
+- **SQLite corruption:** If Neotoma reports `database disk image is malformed`, `btreeInitPage`, or a failed `PRAGMA integrity_check`, run `neotoma storage recover-db` first. If it reports corruption, stop Neotoma and run `neotoma storage recover-db --recover` to write a recovered copy. Review and swap files manually; do not auto-replace the live DB.
 - **Incident response:** Triage using [Troubleshooting](troubleshooting.md). Check logs and `npm run doctor` output. For security issues, see [SECURITY.md](../../SECURITY.md) in the source root.
 
 ---

@@ -85,7 +85,7 @@ export function WhoProfileCardVisual({
           </span>
         </div>
         <div className="relative flex justify-center px-3 pb-3 pt-2 sm:px-4 sm:pb-4 sm:pt-3">
-          <div className="relative mx-auto w-full max-w-[104px] sm:max-w-[120px] aspect-square bg-gradient-to-b from-muted/30 to-transparent">
+          <div className="relative mx-auto w-full max-w-[160px] sm:max-w-[180px] aspect-square bg-gradient-to-b from-muted/30 to-transparent">
             <img
               src={illusSrc}
               alt=""

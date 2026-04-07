@@ -437,28 +437,27 @@ export function EvaluatePage() {
       </section>
 
       <section>
-        <h2 className="text-xl font-medium mb-4">Operational modes</h2>
+        <h2 className="text-xl font-medium mb-4">Where the tax shows up</h2>
         <p className="text-[15px] leading-7 mb-3">
-          The same person operates in three modes - not separate personas, but facets
-          of the same workflow. Understanding which mode dominates helps identify where
-          Neotoma delivers value first. Each mode also maps to a different proof
-          surface if the user wants to go deeper.
+          The same person pays the tax in three ways: not separate personas, but facets
+          of the same workflow. Understanding which one dominates helps identify where
+          Neotoma delivers value first. Each maps to a different proof
+          surface if you want to go deeper.
         </p>
         <ul className="list-disc pl-6 space-y-2 text-[15px] leading-7 mb-4">
           <li>
-            <strong>Operating</strong> - power user across AI tools, paying the
-            re-prompting tax. Currently compensates by re-explaining context each
-            session and manually syncing state between tools. What they get back:
-            attention, continuity, trust in their tools. See{" "}
+            <strong>Context janitor</strong>: you re-explain context every session,
+            re-prompt corrections, manually sync state between tools. What you get back:
+            attention, continuity, trust in your tools. See{" "}
             <a href="/memory-models" className="underline">
               memory models
             </a>
             .
           </li>
           <li>
-            <strong>Building</strong> - shipping agents and pipelines, compensating
-            for unreliable memory. Currently writes prompt engineering workarounds,
-            deduplication hacks, and memory regression fixes. What they get back:
+            <strong>Inference variance</strong>: your agent guesses entities every session.
+            Corrections don&rsquo;t persist. Memory regressions ship because the architecture
+            can&rsquo;t prevent them. What you get back:
             product velocity, shipping confidence, roadmap ambition. See{" "}
             <a href="/architecture" className="underline">
               architecture
@@ -466,9 +465,9 @@ export function EvaluatePage() {
             .
           </li>
           <li>
-            <strong>Debugging</strong> - debugging state drift,
-            writing glue for reproducibility. Currently writes checkpoint logic,
-            custom diffing, and state serialization code. What they get back:
+            <strong>Log archaeology</strong>: two runs, same inputs, different state.
+            No replay, no diff, no explanation. You write checkpoint logic,
+            custom diffing, and state serialization code. What you get back:
             debugging speed, platform design time. See{" "}
             <a href="/memory-guarantees" className="underline">
               memory guarantees

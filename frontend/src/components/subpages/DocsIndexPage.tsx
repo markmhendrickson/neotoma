@@ -1,44 +1,9 @@
 import { Link } from "react-router-dom";
-import {
-  BookOpen,
-  Bookmark,
-  Bot,
-  Boxes,
-  Bug,
-  Building2,
-  Code,
-  Cpu,
-  Database,
-  Download,
-  FileText,
-  GitCompare,
-  Github,
-  Globe,
-  History,
-  Layers,
-  MessageCircle,
-  MessageSquare,
-  Monitor,
-  Package,
-  PanelRight,
-  SatelliteDish,
-  Search,
-  Server,
-  ShieldCheck,
-  Sparkles,
-  Terminal,
-  Waypoints,
-  Zap,
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
-import { SiClaude, SiOpenai } from "react-icons/si";
 import { DetailPage } from "../DetailPage";
 import { useLocale } from "@/i18n/LocaleContext";
 import { localizePath } from "@/i18n/routing";
 import { Card, CardContent } from "@/components/ui/card";
-import { CodexIcon } from "@/components/icons/CodexIcon";
-import { CursorIcon } from "@/components/icons/CursorIcon";
-import { OpenClawIcon } from "@/components/icons/OpenClawIcon";
+import { DOC_NAV_ICONS, INTEGRATION_BRAND_ICONS } from "@/site/doc_icons";
 import { DOC_NAV_CATEGORIES } from "@/site/site_data";
 import { sendCtaClick, type CtaName } from "@/utils/analytics";
 
@@ -50,51 +15,6 @@ function docsHubCta(itemHref: string, categoryTitle: string): CtaName | null {
   }
   return null;
 }
-
-/** Same branded icons as DocsSidebar for integration hrefs. */
-const INTEGRATION_BRAND_ICONS: Record<
-  string,
-  React.ComponentType<{ className?: string; "aria-hidden"?: boolean; size?: number }>
-> = {
-  "/neotoma-with-claude-code": SiClaude,
-  "/neotoma-with-claude": SiClaude,
-  "/neotoma-with-chatgpt": SiOpenai,
-  "/neotoma-with-codex": CodexIcon,
-  "/neotoma-with-cursor": CursorIcon,
-  "/neotoma-with-openclaw": OpenClawIcon,
-};
-
-const DOC_NAV_ICONS: Record<string, LucideIcon> = {
-  BookOpen,
-  Bookmark,
-  Bot,
-  Boxes,
-  Bug,
-  Building2,
-  Code,
-  Cpu,
-  Database,
-  Download,
-  FileText,
-  GitCompare,
-  Github,
-  Globe,
-  History,
-  Layers,
-  MessageCircle,
-  MessageSquare,
-  Monitor,
-  Package,
-  PanelRight,
-  SatelliteDish,
-  Search,
-  Server,
-  ShieldCheck,
-  Sparkles,
-  Terminal,
-  Waypoints,
-  Zap,
-};
 
 /** href -> icon name from DOC_NAV_CATEGORIES (External uses full URL). */
 const ICON_BY_HREF = (() => {
@@ -217,22 +137,22 @@ const DOC_CATEGORIES = [
     ],
   },
   {
-    title: "Operational modes",
+    title: "Where the tax shows up",
     items: [
       {
-        label: "Operating across tools",
+        label: "Context janitor",
         href: "/operating",
-        desc: "Memory that survives session resets and follows you between tools",
+        desc: "You re-explain context every session. State that persists across tools.",
       },
       {
-        label: "Building pipelines",
+        label: "Inference variance",
         href: "/building-pipelines",
-        desc: "Persistent memory and provenance for agent pipelines",
+        desc: "Corrections don\u2019t stick. Deterministic state for agent pipelines.",
       },
       {
-        label: "Debugging infrastructure",
+        label: "Log archaeology",
         href: "/debugging-infrastructure",
-        desc: "Replayable state for debugging agent runs",
+        desc: "Same inputs, different state. Replayable timelines and diffs.",
       },
     ],
   },
@@ -332,9 +252,10 @@ export function DocsIndexPage() {
                     ? INTEGRATION_BRAND_ICONS[item.href]
                     : null;
                   const iconName = ICON_BY_HREF[item.href];
-                  const LucideIconComponent = iconName
-                    ? DOC_NAV_ICONS[iconName]
-                    : DOC_NAV_ICONS.BookOpen;
+                  const LucideIconComponent =
+                    iconName && DOC_NAV_ICONS[iconName]
+                      ? DOC_NAV_ICONS[iconName]
+                      : DOC_NAV_ICONS.BookOpen;
                   const Icon = BrandIcon ?? LucideIconComponent;
                   const desc = "desc" in item ? item.desc : null;
                   const trackDocsHub = () => {

@@ -5,15 +5,15 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
+  ExternalLink,
   Eye,
   ListChecks,
   Download,
+  Quote,
   Receipt,
-  Scale,
   Server,
   MessageSquare,
   Users,
-  Waypoints,
   Workflow,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -45,6 +45,13 @@ import guaranteeSilentMutationPreventionIllus from "@/assets/images/guarantees/g
 import guaranteeSchemaConstraintsIllus from "@/assets/images/guarantees/guarantee_sym_schema_square.png";
 import guaranteeReproducibleReconstructionIllus from "@/assets/images/guarantees/guarantee_sym_rebuild_square.png";
 import heroEvaluateIllus from "@/assets/images/hero/hero_illus_evaluate_agent_page.png";
+import recordTypeContactsIllus from "@/assets/images/record_types/record_type_contacts_square.png";
+import recordTypeTasksIllus from "@/assets/images/record_types/record_type_tasks_square.png";
+import recordTypeTransactionsIllus from "@/assets/images/record_types/record_type_transactions_square.png";
+import recordTypeContractsIllus from "@/assets/images/record_types/record_type_contracts_square.png";
+import recordTypeDecisionsIllus from "@/assets/images/record_types/record_type_decisions_square.png";
+import recordTypeEventsIllus from "@/assets/images/record_types/record_type_events_square.png";
+import founderPhoto from "@/assets/images/people/mark_hendrickson.jpg";
 
 import { useLocale } from "@/i18n/LocaleContext";
 import { useSiteHomeEvaluateScrollBannerVisibleSetter } from "@/context/SiteAppNavContext";
@@ -56,6 +63,7 @@ interface SitePageProps {
 /** Full home scroll order (edge indicators, sidebar hash targets). FAQ block is not a dot-nav stop. */
 const SECTION_ORDER: readonly string[] = [
   "intro",
+  "how-i-use-it",
   "outcomes",
   "who",
   "memory-guarantees",
@@ -73,6 +81,7 @@ const DOT_NAV_SECTION_IDS = new Set<string>(
 function getLocalizedDotNavSections(pack: ReturnType<typeof useLocale>["pack"]) {
   return [
     { id: "intro", label: pack.siteSections.intro },
+    { id: "how-i-use-it", label: pack.siteSections.personalOs },
     { id: "outcomes", label: pack.siteSections.beforeAfter },
     { id: "who", label: pack.siteSections.who ?? "Who" },
     { id: "memory-guarantees", label: pack.siteSections.guarantees },
@@ -84,49 +93,49 @@ function getLocalizedDotNavSections(pack: ReturnType<typeof useLocale>["pack"]) 
 const GUARANTEE_PREVIEW_CARDS: {
   slug: string;
   property: string;
-  brief: string;
+  failure: string;
   status: "guaranteed" | "prevented";
   illus: string;
 }[] = [
   {
     slug: "deterministic-state-evolution",
     property: "Deterministic state",
-    brief: "Same observations always produce the same entity state - no ordering bugs.",
+    failure: "Same pipeline, different outputs \u2014 ordering bugs you can\u2019t trace.",
     status: "guaranteed",
     illus: guaranteeDeterministicStateIllus,
   },
   {
     slug: "versioned-history",
     property: "Versioned history",
-    brief: "Every change creates a new version. Nothing is overwritten.",
+    failure: "A retry silently overwrites a preference. The original is gone.",
     status: "guaranteed",
     illus: guaranteeVersionedHistoryIllus,
   },
   {
     slug: "auditable-change-log",
     property: "Auditable change log",
-    brief: "Who changed what, when, and from which source.",
+    failure: "Your agent made a bad call. You can\u2019t trace what it was working from.",
     status: "guaranteed",
     illus: guaranteeAuditableChangeLogIllus,
   },
   {
     slug: "silent-mutation-risk",
     property: "Silent mutation prevention",
-    brief: "No hidden overwrites or silent data drops.",
+    failure: "Data changes without your knowledge. You discover it downstream.",
     status: "prevented",
     illus: guaranteeSilentMutationPreventionIllus,
   },
   {
     slug: "schema-constraints",
     property: "Schema constraints",
-    brief: "Invalid writes rejected at store time.",
+    failure: "Agents write malformed data. Garbage in, garbage out \u2014 silently.",
     status: "guaranteed",
     illus: guaranteeSchemaConstraintsIllus,
   },
   {
     slug: "reproducible-state-reconstruction",
     property: "Reproducible reconstruction",
-    brief: "Rebuild complete state from observations alone.",
+    failure: "Database corrupts. No way to rebuild state from source.",
     status: "guaranteed",
     illus: guaranteeReproducibleReconstructionIllus,
   },
@@ -165,9 +174,9 @@ const HOME_FAQ_PREVIEW_ITEMS: { q: string; a: string }[] = [
  *  [0] Contacts, [1] Tasks & commitments, [2] Financial data, [3] Decisions & provenance */
 const SCENARIOS = [
   {
-    left: "Send that update to Sarah from the call last week.",
-    fail: "No contact named Sarah found.",
-    succeed: "Sending to Sarah Chen, met at demo call Mar 24.",
+    left: "Use the new email I gave you for Sarah.",
+    fail: "Sent to sarah@oldcompany.com.",
+    succeed: "Sent to sarah@newstartup.io, updated Mar 28. Previous email preserved in v2.",
     version: "contact\u00B7v3",
   },
   {
@@ -219,9 +228,9 @@ const SCENARIOS = [
     version: "task\u00B7v5",
   },
   {
-    left: "Use the new email I gave you for Alex.",
-    fail: "Sent to alex@oldcompany.com.",
-    succeed: "Sent to alex@newstartup.io, updated Mar 28.",
+    left: "Send that update to Alex from the call last week.",
+    fail: "No contact named Alex found.",
+    succeed: "Sending to Alex Rivera, met at demo call Mar 24.",
     version: "contact\u00B7v4",
   },
   {
@@ -244,12 +253,12 @@ const OUTCOME_CARDS: {
   {
     category: "Contacts & people",
     Icon: Users,
-    failTitle: "Lost contact, broken handoff",
+    failTitle: "Silently overwritten, confidently wrong",
     failDescription:
-      "You mentioned someone in a call last week. Your agent in Cursor has no idea who they are. You re-explain every person, every session, across every tool.",
-    successTitle: "One contact graph, every tool",
+      "You corrected a contact's email last week. A different agent session overwrote it with the old address. Your agent sends to the wrong person, and nobody notices until it's too late.",
+    successTitle: "Every version preserved, corrections verified",
     successDescription:
-      "People mentioned in any session are stored once with versioned history. Switch from Claude to Cursor and the contact is already there - name, context, and last interaction.",
+      "Both the old and new email exist as versioned observations. Your agent works from the verified current state, and you can inspect exactly when and why each value changed.",
     scenarioIndex: 0,
   },
   {
@@ -288,60 +297,67 @@ const OUTCOME_CARDS: {
 ];
 
 const RECORD_TYPE_CARDS: {
-  icon: LucideIcon;
   label: string;
   description: string;
   entities: string[];
   href: string;
+  illus: string;
   accent: string;
+  accentBorder: string;
 }[] = [
   {
-    icon: Users,
     label: "Contacts",
     description: "People, companies, roles, and the relationships between them.",
     entities: ["contact", "company", "account"],
     href: "/types/contacts",
+    illus: recordTypeContactsIllus,
     accent: "text-emerald-600 dark:text-emerald-400",
+    accentBorder: "border-t-emerald-500/50",
   },
   {
-    icon: ListChecks,
     label: "Tasks",
     description: "Obligations, deadlines, habits, and goals - tracked across sessions.",
     entities: ["task", "habit", "goal"],
     href: "/types/tasks",
+    illus: recordTypeTasksIllus,
     accent: "text-violet-600 dark:text-violet-400",
+    accentBorder: "border-t-violet-500/50",
   },
   {
-    icon: Receipt,
     label: "Transactions",
     description: "Payments, receipts, invoices, and ledger entries - versioned, not overwritten.",
     entities: ["transaction", "invoice", "receipt"],
     href: "/types/transactions",
+    illus: recordTypeTransactionsIllus,
     accent: "text-teal-600 dark:text-teal-400",
+    accentBorder: "border-t-teal-500/50",
   },
   {
-    icon: Scale,
     label: "Contracts",
     description: "Agreements, clauses, and amendments - what the terms were on any date.",
     entities: ["contract", "clause", "amendment"],
     href: "/types/contracts",
+    illus: recordTypeContractsIllus,
     accent: "text-indigo-600 dark:text-indigo-400",
+    accentBorder: "border-t-indigo-500/50",
   },
   {
-    icon: Waypoints,
     label: "Decisions",
     description: "Choices, rationale, and the audit trail that proves why.",
     entities: ["decision", "assessment", "review"],
     href: "/types/decisions",
+    illus: recordTypeDecisionsIllus,
     accent: "text-amber-600 dark:text-amber-400",
+    accentBorder: "border-t-amber-500/50",
   },
   {
-    icon: CalendarClock,
     label: "Events",
     description: "Meetings, milestones, and the outcomes attached to them.",
     entities: ["event", "meeting", "milestone"],
     href: "/types/events",
+    illus: recordTypeEventsIllus,
     accent: "text-sky-600 dark:text-sky-400",
+    accentBorder: "border-t-sky-500/50",
   },
 ];
 
@@ -941,8 +957,8 @@ function OutcomesSlide({
               </p>
               <h2 className={HOME_SECTION_H2_CLASS}>Same question, different outcome</h2>
               <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl mx-auto">
-                Without a state layer, agents return stale or wrong data. With Neotoma, every
-                response reads from versioned, schema-bound state.
+                Without a state layer, agents act on state they can&rsquo;t verify. With Neotoma,
+                every response reads from versioned, schema-bound state.
               </p>
             </div>
 
@@ -968,7 +984,8 @@ function OutcomesSlide({
   );
 }
 
-const SLIDE_CLASS = "min-h-[100svh] md:snap-start flex items-center justify-center relative";
+const SLIDE_CLASS =
+  "min-h-[100svh] md:snap-start flex items-center justify-center relative print:min-h-0 print:[scroll-snap-align:unset]";
 /** Extra md+ vertical padding so SectionEdgeIndicators (absolute top-6/bottom-6) do not overlap copy. */
 const SLIDE_INNER = "w-full max-w-6xl mx-auto px-6 md:px-12 lg:px-16 py-12 md:pt-16 md:pb-16";
 
@@ -1082,7 +1099,7 @@ function FadeSection({
   return (
     <div
       ref={wrapperRef}
-      className={`transition-opacity duration-500 ease-out motion-reduce:transition-none ${inView ? "opacity-100" : "opacity-0"}`}
+      className={`transition-opacity duration-500 ease-out motion-reduce:transition-none print:!opacity-100 ${inView ? "opacity-100" : "opacity-0"}`}
     >
       {children}
     </div>
@@ -1092,27 +1109,27 @@ function FadeSection({
 /** Tool chip row reused in hero and evaluate section. */
 function HomeAgentToolChips({ align = "center" }: { align?: "center" | "start" }) {
   const chipClass =
-    "inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[12px] text-foreground/90 no-underline transition-colors hover:bg-muted";
+    "inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3.5 py-2 text-[14px] font-medium text-foreground/90 no-underline transition-colors hover:bg-muted";
   const alignmentClass = align === "start" ? "justify-center lg:justify-start" : "justify-center";
   return (
     <div
-      className={`flex flex-wrap items-center gap-2 pt-1 ${alignmentClass}`}
+      className={`flex flex-wrap items-center gap-3 pt-1 ${alignmentClass}`}
       aria-label="AI agents and tools"
     >
       <Link to="/neotoma-with-claude" className={chipClass}>
-        <SiClaude className="h-3.5 w-3.5 shrink-0" aria-hidden />
+        <SiClaude className="h-4 w-4 shrink-0" aria-hidden />
         Claude
       </Link>
       <Link to="/neotoma-with-chatgpt" className={chipClass}>
-        <SiOpenai className="h-3.5 w-3.5 shrink-0" aria-hidden />
+        <SiOpenai className="h-4 w-4 shrink-0" aria-hidden />
         ChatGPT
       </Link>
       <Link to="/neotoma-with-cursor" className={chipClass}>
-        <CursorIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+        <CursorIcon className="h-4 w-4 shrink-0" aria-hidden />
         Cursor
       </Link>
       <Link to="/neotoma-with-openclaw" className={chipClass}>
-        <OpenClawIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+        <OpenClawIcon className="h-4 w-4 shrink-0" aria-hidden />
         OpenClaw
       </Link>
     </div>
@@ -1120,7 +1137,7 @@ function HomeAgentToolChips({ align = "center" }: { align?: "center" | "start" }
 }
 
 const heroProofStripItemClass =
-  "rounded-full border border-border/80 bg-background/80 px-3 py-1.5 text-[11px] font-medium text-muted-foreground lg:rounded-none lg:border-0 lg:bg-transparent lg:px-0 lg:py-0";
+  "rounded-full border border-border/80 bg-background/80 px-3.5 py-2 text-[13px] font-medium text-muted-foreground lg:rounded-none lg:border-0 lg:bg-transparent lg:px-0 lg:py-0";
 
 function HeroProofStrip() {
   const { starsCount: liveStars, starsResolved } = useRepoMetaClient(
@@ -1136,9 +1153,9 @@ function HeroProofStrip() {
     </span>
   );
   return (
-    <div className="flex flex-wrap items-center justify-center gap-2 text-[11px] font-medium text-muted-foreground lg:inline-flex lg:gap-x-2 lg:gap-y-1 lg:rounded-full lg:border lg:border-border/80 lg:bg-background/80 lg:px-3 lg:py-1.5 lg:justify-start">
+    <div className="flex flex-wrap items-center justify-center gap-2.5 text-[13px] font-medium text-muted-foreground lg:inline-flex lg:gap-x-3 lg:gap-y-1 lg:rounded-full lg:border lg:border-border/80 lg:bg-background/80 lg:px-4 lg:py-2 lg:justify-center">
       <span className={`${heroProofStripItemClass} hidden sm:inline-flex`}>
-        Cross-tool memory for AI agents
+        Trustworthy state for AI agents
       </span>
       {dot}
       <a
@@ -1209,7 +1226,7 @@ function SectionEdgeIndicators({
       {previousId && !hidePrevious ? (
         <a
           href={previousId === "intro" ? "/" : `#${previousId}`}
-          className="absolute top-6 left-1/2 -translate-x-1/2 hidden md:inline-flex items-center justify-center rounded-full border border-border bg-background/80 p-1.5 text-muted-foreground backdrop-blur-sm no-underline hover:text-foreground hover:bg-background transition"
+          className="absolute top-6 left-1/2 -translate-x-1/2 hidden md:inline-flex print:hidden items-center justify-center rounded-full border border-border bg-background/80 p-1.5 text-muted-foreground backdrop-blur-sm no-underline hover:text-foreground hover:bg-background transition"
           aria-label="Go to previous section"
           onClick={(e) => {
             if (isModifiedClick(e)) return;
@@ -1224,7 +1241,7 @@ function SectionEdgeIndicators({
       {nextId && !hideNext ? (
         <a
           href={`#${nextId}`}
-          className="absolute bottom-6 left-1/2 -translate-x-1/2 hidden md:inline-flex items-center justify-center rounded-full border border-border bg-background/80 p-1.5 text-muted-foreground backdrop-blur-sm no-underline hover:text-foreground hover:bg-background transition"
+          className="absolute bottom-6 left-1/2 -translate-x-1/2 hidden md:inline-flex print:hidden items-center justify-center rounded-full border border-border bg-background/80 p-1.5 text-muted-foreground backdrop-blur-sm no-underline hover:text-foreground hover:bg-background transition"
           aria-label="Go to next section"
           onClick={(e) => {
             if (isModifiedClick(e)) return;
@@ -1279,14 +1296,14 @@ function RotatingHeroQuote({ quotes }: { quotes: typeof HERO_QUOTES }) {
 
   return (
     <div
-      className="relative h-[3.25em] sm:h-[2.5em] max-w-xl mx-auto lg:mx-0"
+      className="relative h-[3.25em] sm:h-[2.5em] max-w-2xl mx-auto print:h-auto print:min-h-0"
       aria-live="polite"
       aria-atomic="true"
     >
       {quotes.map((q, i) => (
         <p
           key={i}
-          className={`absolute inset-0 text-[13px] leading-5 italic text-muted-foreground transition-opacity duration-500 ${
+          className={`absolute inset-0 text-center text-[15px] leading-6 italic text-muted-foreground transition-opacity duration-500 print:static print:inset-auto print:mb-3 print:opacity-100 print:last:mb-0 ${
             i === index ? "opacity-100" : "opacity-0"
           }`}
         >
@@ -1330,14 +1347,17 @@ function RotatingRecordType({ words }: { words: string[] }) {
 
   return (
     <span
-      className="inline-grid justify-items-center align-middle rounded-md bg-accent/55 px-2.5 py-0.5 dark:bg-muted/45"
+      className="inline-grid justify-items-center align-middle rounded-md bg-accent/55 px-2.5 py-0.5 dark:bg-muted/45 print:inline print:rounded-md print:px-2.5 print:py-0.5"
       aria-live="polite"
       aria-atomic="true"
     >
+      <span className="col-start-1 row-start-1 hidden font-semibold text-foreground print:inline">
+        {words.join(", ")}
+      </span>
       {words.map((word, i) => (
         <span
           key={`${i}-${word}`}
-          className={`col-start-1 row-start-1 inline-block text-foreground font-semibold transition-opacity duration-300 ${
+          className={`col-start-1 row-start-1 inline-block text-foreground font-semibold transition-opacity duration-300 print:hidden ${
             i === index ? "visible animate-[hero-record-swap_0.35s_ease-out]" : "invisible"
           }`}
         >
@@ -1468,7 +1488,8 @@ export function SitePage({ staticMode = false }: SitePageProps) {
       <div
         ref={scrollContainerRef}
         data-site-header-scroll-root
-        className="h-screen overflow-y-auto scroll-smooth md:snap-y md:snap-proximity"
+        data-site-home-scroll-root
+        className="h-screen overflow-y-auto scroll-smooth md:snap-y md:snap-proximity print:h-auto print:min-h-0 print:overflow-visible print:snap-none"
         style={
           !staticMode && showEvaluateScrollBanner
             ? { scrollPaddingBottom: EVALUATE_BANNER_SCROLL_PADDING_BOTTOM }
@@ -1494,8 +1515,6 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                   <div className="mx-auto max-w-6xl pt-4 md:pt-20 lg:pt-12">
                     <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(340px,0.92fr)] lg:items-center">
                       <div className="space-y-6 text-center lg:text-left">
-                        <HeroProofStrip />
-
                         <h1 className="text-[36px] md:text-[48px] font-semibold tracking-[-0.035em] leading-[1.1]">
                           {pack.homeHero.titlePrefix}{" "}
                           <span className={HERO_TITLE_RECORD_EMPHASIS_CLASS}>
@@ -1507,18 +1526,8 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                           </span>
                         </h1>
 
-                        <p className="text-[17px] md:text-[19px] leading-7 text-muted-foreground max-w-xl mx-auto lg:mx-0">
-                          {(() => {
-                            const parts = pack.homeHero.summary.split("{record}");
-                            if (parts.length < 2) return pack.homeHero.summary;
-                            return (
-                              <>
-                                {parts[0]}
-                                <RotatingRecordType words={pack.homeHero.summaryRecordTypes} />
-                                {parts[1]}
-                              </>
-                            );
-                          })()}
+                        <p className="text-[15px] md:text-[17px] leading-7 text-muted-foreground max-w-xl mx-auto lg:mx-0">
+                          {pack.homeHero.subcopy}
                         </p>
 
                         <div className="flex flex-col sm:flex-row sm:flex-wrap justify-center gap-3 pt-1 lg:justify-start">
@@ -1549,9 +1558,6 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                             {pack.homeHero.ctaInstall}
                           </a>
                         </div>
-
-                        <RotatingHeroQuote quotes={HERO_QUOTES} />
-                        <HomeAgentToolChips align="start" />
                       </div>
 
                       <HeroStatePreview />
@@ -1563,7 +1569,96 @@ export function SitePage({ staticMode = false }: SitePageProps) {
             </div>
           </section>
 
-          {/* Slide 2: Before / After */}
+          {/* Social proof strip: proof badges, testimonials, tool chips */}
+          <div className="relative w-full shrink-0 py-12 md:py-20">
+            <div className="mx-auto max-w-4xl px-6 space-y-6 text-center">
+              <div className="flex justify-center">
+                <HeroProofStrip />
+              </div>
+              <RotatingHeroQuote quotes={HERO_QUOTES} />
+              <HomeAgentToolChips align="center" />
+            </div>
+          </div>
+
+          {/* Slide 2: How I use it - founder story / Sinatra test */}
+          <section id="how-i-use-it" className={SLIDE_CLASS}>
+            <FadeSection scrollContainerRef={scrollContainerRef} staticMode={staticMode}>
+              <div className={SLIDE_INNER}>
+                <div className="mx-auto max-w-3xl space-y-6 py-8 md:py-12">
+                  <p className="text-center text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
+                    How it&rsquo;s used
+                  </p>
+
+                  <blockquote className="flex gap-3 border-l-2 border-emerald-500/40 pl-4 md:pl-5">
+                    <Quote
+                      className="mt-0.5 h-5 w-5 shrink-0 text-emerald-500/40 md:h-6 md:w-6"
+                      aria-hidden
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[17px] md:text-[19px] leading-8 text-foreground/90 italic">
+                        Every morning I ask my agents what I worked on yesterday, what&rsquo;s due
+                        this week, and what I told a specific investor. Neotoma holds 1,100+
+                        contacts, 16,000+ tasks, and 380+ entity types. This isn&rsquo;t a demo.
+                        It&rsquo;s my actual operating system.
+                      </p>
+                      <footer className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 text-[13px] text-muted-foreground">
+                        <img
+                          src={founderPhoto}
+                          alt="Mark Hendrickson"
+                          width={36}
+                          height={36}
+                          className="h-9 w-9 rounded-full object-cover"
+                          loading="lazy"
+                          decoding="async"
+                        />
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                          <span className="font-medium text-foreground/80">Mark Hendrickson</span>
+                          <span aria-hidden="true" className="text-border">&middot;</span>
+                          <span>Neotoma creator</span>
+                          <span aria-hidden="true" className="text-border">&middot;</span>
+                          <a
+                            href="https://markmhendrickson.com/posts/what-my-agentic-stack-actually-does/"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-emerald-600 no-underline hover:text-emerald-500 transition-colors dark:text-emerald-400 dark:hover:text-emerald-300"
+                          >
+                            Read the full post
+                            <ExternalLink className="h-3 w-3" aria-hidden />
+                          </a>
+                        </div>
+                      </footer>
+                    </div>
+                  </blockquote>
+
+                  <div className="flex flex-wrap justify-center gap-x-6 gap-y-4 pt-2 text-center text-[13px] text-muted-foreground">
+                    <div>
+                      <span className="block text-[22px] font-semibold tracking-tight text-foreground">1,100+</span>
+                      contacts
+                    </div>
+                    <div>
+                      <span className="block text-[22px] font-semibold tracking-tight text-foreground">16,000+</span>
+                      tasks
+                    </div>
+                    <div>
+                      <span className="block text-[22px] font-semibold tracking-tight text-foreground">900+</span>
+                      conversations
+                    </div>
+                    <div>
+                      <span className="block text-[22px] font-semibold tracking-tight text-foreground">2,000+</span>
+                      agent messages
+                    </div>
+                    <div>
+                      <span className="block text-[22px] font-semibold tracking-tight text-foreground">380+</span>
+                      entity types
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <SectionEdgeIndicators sectionId="how-i-use-it" />
+            </FadeSection>
+          </section>
+
+          {/* Slide 3: Before / After */}
           <OutcomesSlide scrollContainerRef={scrollContainerRef} staticMode={staticMode} />
 
           {/* One archetype, three operational modes */}
@@ -1576,15 +1671,15 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                       Who this is for
                     </p>
                     <h2 className={HOME_SECTION_H2_CLASS}>
-                      You run AI agents across tools and sessions...
+                      You run AI agents seriously...
                       <span className="mt-1.5 block text-muted-foreground sm:mt-2">
-                        ...and become the human sync layer 😵
+                        ...and pay the tax for missing state
                       </span>
                     </h2>
                     <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl mx-auto">
-                      Stop spending real effort re-prompting context, patching state gaps, and
-                      compensating for memory that doesn&rsquo;t persist across AI tools and custom
-                      scripts. The cost shows up differently depending on what you&rsquo;re doing.
+                      The re-prompting tax is annoying. The real risk is when your agent acts
+                      confidently on wrong state, and you don&rsquo;t find out until the damage is
+                      done.
                     </p>
                   </div>
 
@@ -1615,6 +1710,11 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                             <p className="mt-2 text-[13px] leading-6 text-muted-foreground">
                               {profile.tagline}
                             </p>
+                            {profile.into ? (
+                              <p className="mt-2 text-[12px] leading-5 font-medium text-emerald-600 dark:text-emerald-400">
+                                &rarr; {profile.into}
+                              </p>
+                            ) : null}
                           </div>
                         </Link>
                       );
@@ -1639,35 +1739,36 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                       Neotoma provides state integrity, not just storage
                     </h2>
                     <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl mx-auto">
-                      Systems like Mem0, Zep, Claude memory, and ChatGPT memory optimize retrieval.
-                      Neotoma enforces guarantees those systems don&rsquo;t provide.
+                      Chat memory, RAG retrieval, ad-hoc JSON, rolling your own DB: they optimize
+                      recall. None of them enforce versioning,
+                      provenance, or tamper detection.
                     </p>
                   </div>
 
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
                     {GUARANTEE_PREVIEW_CARDS.map((card, index) => (
                       <Link
                         key={card.slug}
                         to={`/memory-guarantees#${card.slug}`}
-                        className="group flex flex-col overflow-hidden rounded-xl border border-border bg-card/50 no-underline transition-colors hover:bg-muted/60 hover:border-border/80"
+                        className="group flex flex-row items-center gap-4 overflow-hidden rounded-xl border border-border bg-card/50 p-4 no-underline transition-colors hover:bg-muted/60 hover:border-border/80"
                       >
                         <ScrollRevealOnce
                           scrollContainerRef={scrollContainerRef}
                           staticMode={staticMode}
                           staggerMs={index * ILLUS_REVEAL_STAGGER_MS}
-                          className="relative mx-auto w-full max-w-[104px] sm:max-w-[120px] aspect-square bg-gradient-to-b from-muted/30 to-transparent"
+                          className="relative shrink-0 w-[72px] h-[72px] sm:w-[88px] sm:h-[88px] bg-gradient-to-br from-muted/30 to-transparent rounded-lg"
                         >
                           <img
                             src={card.illus}
                             alt=""
                             width={1024}
                             height={1024}
-                            className="absolute inset-0 h-full w-full rounded-lg object-contain object-center p-1.5 sm:p-2 opacity-[0.95] dark:opacity-100 transition-transform duration-300 group-hover:scale-[1.03]"
+                            className="absolute inset-0 h-full w-full rounded-lg object-contain object-center p-1 opacity-[0.95] dark:opacity-100 transition-transform duration-300 group-hover:scale-[1.05]"
                             loading="lazy"
                             decoding="async"
                           />
                         </ScrollRevealOnce>
-                        <div className="flex min-h-0 items-start gap-3 p-4">
+                        <div className="flex min-h-0 min-w-0 flex-1 items-start gap-2.5">
                           <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400">
                             <Check className="h-3 w-3 stroke-[2.5]" aria-hidden />
                           </span>
@@ -1675,8 +1776,8 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                             <p className="text-[14px] font-medium text-foreground leading-5">
                               {card.property}
                             </p>
-                            <p className="text-[13px] leading-5 text-muted-foreground mt-0.5">
-                              {card.brief}
+                            <p className="text-[12px] italic leading-5 text-muted-foreground/70 mt-0.5">
+                              {card.failure}
                             </p>
                           </div>
                         </div>
@@ -1712,47 +1813,65 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                       You deserve structured records, not raw text
                     </h2>
                     <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl mx-auto">
-                      Neotoma stores typed entities with versioned history and provenance. Each
-                      guide shows how to store and retrieve that type via CLI, MCP, and API.
+                      {(() => {
+                        const parts = pack.homeHero.summary.split("{record}");
+                        if (parts.length < 2) return pack.homeHero.summary;
+                        return (
+                          <>
+                            {parts[0]}
+                            <RotatingRecordType words={pack.homeHero.summaryRecordTypes} />
+                            {parts[1]}
+                          </>
+                        );
+                      })()}
                     </p>
                   </div>
 
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    {RECORD_TYPE_CARDS.map((card) => {
-                      const CardIcon = card.icon;
-                      return (
-                        <Link
-                          key={card.label}
-                          to={card.href}
-                          className="group flex flex-col rounded-xl border border-border bg-card/50 p-5 no-underline transition-colors hover:bg-muted/60 hover:border-border/80"
-                        >
-                          <div className="flex items-center gap-2.5 mb-2">
-                            <span
-                              className={`flex items-center justify-center w-7 h-7 rounded-lg ${card.accent
-                                .replace("text-", "bg-")
-                                .replace(/dark:text-[^\s]+/, "")
-                                .trim()}/10 ${card.accent} shrink-0`}
+                    {RECORD_TYPE_CARDS.map((card, index) => (
+                      <Link
+                        key={card.label}
+                        to={card.href}
+                        className={`group flex flex-col rounded-xl border border-t-2 border-border bg-card/50 p-5 no-underline transition-colors hover:bg-muted/60 hover:border-border/80 hover:border-t-2 ${card.accentBorder}`}
+                      >
+                        <div className="flex items-start gap-3.5 mb-3">
+                          <ScrollRevealOnce
+                            scrollContainerRef={scrollContainerRef}
+                            staticMode={staticMode}
+                            staggerMs={index * ILLUS_REVEAL_STAGGER_MS}
+                            className="relative shrink-0 w-[52px] h-[52px] sm:w-[60px] sm:h-[60px] rounded-lg bg-gradient-to-br from-muted/30 to-transparent"
+                          >
+                            <img
+                              src={card.illus}
+                              alt=""
+                              width={1024}
+                              height={1024}
+                              className="absolute inset-0 h-full w-full rounded-lg object-contain object-center opacity-[0.95] dark:opacity-100 transition-transform duration-300 group-hover:scale-[1.05]"
+                              loading="lazy"
+                              decoding="async"
+                            />
+                          </ScrollRevealOnce>
+                          <div className="min-w-0 pt-0.5">
+                            <p className={`text-[15px] font-semibold ${card.accent}`}>
+                              {card.label}
+                            </p>
+                            <p className="text-[13px] leading-5 text-muted-foreground mt-1">
+                              {card.description}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5 mt-auto">
+                          {card.entities.map((entity) => (
+                            <code
+                              key={entity}
+                              className="bg-muted/60 px-1.5 py-0.5 rounded text-[11px] text-muted-foreground"
                             >
-                              <CardIcon className="w-3.5 h-3.5" />
-                            </span>
-                            <p className="text-[15px] font-medium text-foreground">{card.label}</p>
-                          </div>
-                          <p className="text-[13px] leading-5 text-muted-foreground mb-3">
-                            {card.description}
-                          </p>
-                          <div className="flex flex-wrap gap-1.5 mt-auto">
-                            {card.entities.map((entity) => (
-                              <code
-                                key={entity}
-                                className="bg-muted/60 px-1.5 py-0.5 rounded text-[11px] text-muted-foreground"
-                              >
-                                {entity}
-                              </code>
-                            ))}
-                          </div>
-                        </Link>
-                      );
-                    })}
+                              {entity}
+                            </code>
+                          ))}
+                        </div>
+                      </Link>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -1779,6 +1898,9 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                       Evaluate it
                     </p>
                     <h2 className={HOME_SECTION_H2_CLASS}>Let your agent decide if Neotoma fits</h2>
+                    <p className="text-[15px] leading-7 text-muted-foreground max-w-lg mx-auto">
+                      You don&rsquo;t need to read the docs. Your agent can.
+                    </p>
                   </div>
 
                   <EvaluateSectionCta />
@@ -1787,6 +1909,20 @@ export function SitePage({ staticMode = false }: SitePageProps) {
               <SectionEdgeIndicators sectionId="evaluate" hideNext />
             </FadeSection>
           </section>
+
+          {/* Transformation beat: short bridge between evaluate and FAQ */}
+          <div className="relative w-full shrink-0 py-12 md:py-16">
+            <div className="mx-auto max-w-2xl px-6">
+              <blockquote className="relative border-l-2 border-emerald-500/40 dark:border-emerald-400/30 pl-5 md:pl-6">
+                <p className="text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400 mb-3">
+                  The shift
+                </p>
+                <p className="text-[17px] md:text-[19px] leading-7 text-foreground/85 font-medium">
+                  Once you can inspect what an agent knew at decision time, opaque memory stops being acceptable.
+                </p>
+              </blockquote>
+            </div>
+          </div>
 
           {/* FAQ preview before footer: natural-height block, no viewport snap (unlike full slides). */}
           <section id="common-questions" className="relative w-full shrink-0 scroll-mt-12">
@@ -1827,14 +1963,17 @@ export function SitePage({ staticMode = false }: SitePageProps) {
         </main>
 
         {/* Proximity snap (not mandatory) so expanded FAQ can scroll without snapping to the previous slide; footer snap still aids landing at the tail. */}
-        <div id="site-footer" className="w-full shrink-0 scroll-mt-12 md:snap-start md:snap-always">
+        <div
+          id="site-footer"
+          className="w-full shrink-0 scroll-mt-12 md:snap-start md:snap-always print:[scroll-snap-align:unset]"
+        >
           <SiteTailpiece />
         </div>
       </div>
 
       {!staticMode ? (
         <div
-          className={`fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background/95 shadow-[0_-4px_24px_-8px_rgba(0,0,0,0.12)] backdrop-blur-md transition-[transform,opacity] duration-300 ease-out motion-reduce:transition-none supports-[backdrop-filter]:bg-background/85 dark:shadow-[0_-4px_24px_-8px_rgba(0,0,0,0.35)] ${
+          className={`print:hidden fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background/95 shadow-[0_-4px_24px_-8px_rgba(0,0,0,0.12)] backdrop-blur-md transition-[transform,opacity] duration-300 ease-out motion-reduce:transition-none supports-[backdrop-filter]:bg-background/85 dark:shadow-[0_-4px_24px_-8px_rgba(0,0,0,0.35)] ${
             showEvaluateScrollBanner
               ? "translate-y-0 opacity-100"
               : "pointer-events-none translate-y-full opacity-0"

@@ -1390,6 +1390,22 @@ export class NeotomaServer {
             },
           },
           {
+            name: "get_entity_type_counts",
+            description:
+              this.toolDescriptions.get("get_entity_type_counts") ??
+              "Return canonical entity counts by entity_type for the authenticated user, sorted by count descending. Use this when you need row counts by type; do not infer counts from list_entity_types field_count.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                user_id: {
+                  type: "string",
+                  description: "Optional. Inferred from authentication if omitted.",
+                },
+              },
+              required: [],
+            },
+          },
+          {
             name: "list_entity_types",
             description:
               this.toolDescriptions.get("list_entity_types") ??
@@ -1723,6 +1739,8 @@ export class NeotomaServer {
         return await this.retrieveRelatedEntities(args);
       case "retrieve_graph_neighborhood":
         return await this.retrieveGraphNeighborhood(args);
+      case "get_entity_type_counts":
+        return await this.getEntityTypeCounts(args);
       case "list_entity_types":
         return await this.listEntityTypes(args);
       case "analyze_schema_candidates":
@@ -2858,9 +2876,12 @@ export class NeotomaServer {
       );
     }
 
+    const orderColumn =
+      parsed.order_by === "created_at" ? "created_at" : "event_timestamp";
+
     // Get events with pagination
     const { data: events, error } = await query
-      .order("event_timestamp", { ascending: false })
+      .order(orderColumn, { ascending: false })
       .range(parsed.offset, parsed.offset + parsed.limit - 1);
 
     if (error) {
@@ -3195,6 +3216,40 @@ export class NeotomaServer {
     }
 
     return this.buildTextResponse(result);
+  }
+
+  // List entity types with optional keyword filtering (hybrid: keyword + vector search)
+  private async getEntityTypeCounts(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const schema = z.object({
+      user_id: z.string().optional(),
+    });
+
+    const parsed = schema.parse(args ?? {});
+    const userId = this.getAuthenticatedUserId(parsed.user_id);
+    const { getDashboardStats } = await import("./services/dashboard_stats.js");
+
+    try {
+      const stats = await getDashboardStats(userId);
+      const sortedEntries = Object.entries(stats.entities_by_type ?? {}).sort((a, b) => {
+        const diff = b[1] - a[1];
+        return diff !== 0 ? diff : a[0].localeCompare(b[0]);
+      });
+
+      return this.buildTextResponse({
+        entities_by_type: Object.fromEntries(sortedEntries),
+        total_entities: stats.total_entities ?? 0,
+        last_updated: stats.last_updated,
+        count_source: "dashboard_stats",
+        scope: "authenticated_user",
+      });
+    } catch (error: any) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to get entity type counts: ${error.message}`
+      );
+    }
   }
 
   // List entity types with optional keyword filtering (hybrid: keyword + vector search)

@@ -118,7 +118,7 @@ export function SiteTailpiece() {
             </figure>
             <p className="text-[13px] font-medium text-foreground">Neotoma</p>
             <p className="mt-2 text-[13px] leading-6 text-muted-foreground">
-              Cross-tool memory for AI agents. Open-source and local-first.
+              The state layer for AI agents. Open-source and local-first.
             </p>
           </div>
 

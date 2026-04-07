@@ -22,7 +22,7 @@ test.describe("sitePage coverage", () => {
 
     const pageSections = page.getByRole("navigation", { name: /page sections/i });
     await expect(pageSections).toBeVisible();
-    await expect(pageSections.getByRole("button")).toHaveCount(6);
+    await expect(pageSections.getByRole("button")).toHaveCount(7);
   });
 
   test("intro content layer stretches to the section bottom on desktop", async ({ page }, testInfo) => {
@@ -84,7 +84,8 @@ test.describe("sitePage coverage", () => {
     await page.waitForLoadState("networkidle");
 
     const footerLabelStyle = await page.evaluate(() => {
-      const footer = document.querySelector("footer");
+      const siteFooter = document.querySelector("#site-footer");
+      const footer = siteFooter?.querySelector("footer");
       const productLabel = Array.from(footer?.querySelectorAll("p") ?? []).find(
         (node) => node.textContent?.trim() === "Product",
       );

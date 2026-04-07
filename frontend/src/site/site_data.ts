@@ -291,6 +291,8 @@ export interface DocNavItem {
 
 export interface DocNavCategory {
   title: string;
+  /** Shorter label for the docs sidebar group header (uppercase in UI). Omit to use `title`. */
+  sidebarTitle?: string;
   items: DocNavItem[];
 }
 
@@ -372,11 +374,12 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
     ],
   },
   {
-    title: "Operational modes",
+    title: "Where the tax shows up",
+    sidebarTitle: "The tax",
     items: [
-      { label: "Operating across tools", href: "/operating", icon: "SatelliteDish" },
-      { label: "Building pipelines", href: "/building-pipelines", icon: "Zap" },
-      { label: "Debugging infrastructure", href: "/debugging-infrastructure", icon: "Cpu" },
+      { label: "Context janitor", href: "/operating", icon: "SatelliteDish" },
+      { label: "Inference variance", href: "/building-pipelines", icon: "Zap" },
+      { label: "Log archaeology", href: "/debugging-infrastructure", icon: "Cpu" },
     ],
   },
   {
@@ -1234,10 +1237,10 @@ export interface IcpProfile {
 export const ICP_PROFILES: IcpProfile[] = [
   {
     slug: "operating",
-    name: "When you're operating across tools",
-    shortName: "Operating across tools",
-    tagline: "Every session starts from zero. You re-explain context, re-prompt corrections, re-establish what your agent already knew.",
-    modeLabel: "Operating",
+    name: "You're the context janitor between tools",
+    shortName: "Context janitor",
+    tagline: "Every session starts from zero. You re-explain context, re-prompt corrections, re-establish what the agent already knew.",
+    modeLabel: "Cross-tool sync",
     iconName: "ArrowLeftRight",
     escaping: "Context janitor — human sync layer between tools",
     into: "Operator with continuity — steering, not driving",
@@ -1276,10 +1279,10 @@ export const ICP_PROFILES: IcpProfile[] = [
   },
   {
     slug: "building-pipelines",
-    name: "When you're building pipelines",
-    shortName: "Building pipelines",
-    tagline: "Your agent guesses entities every session. Corrections don't persist. Memory regressions ship because the architecture can't prevent them.",
-    modeLabel: "Building",
+    name: "You're babysitting inference variance",
+    shortName: "Inference variance",
+    tagline: "Your agent guesses entities every run. Corrections don\u2019t persist. Regressions ship because the architecture can\u2019t prevent them.",
+    modeLabel: "Pipeline state",
     iconName: "Workflow",
     escaping: "Babysitting inference — absorbing variance the architecture doesn't handle",
     into: "Builder who ships on solid ground",
@@ -1326,10 +1329,10 @@ export const ICP_PROFILES: IcpProfile[] = [
   },
   {
     slug: "debugging-infrastructure",
-    name: "When you're debugging infrastructure",
-    shortName: "Debugging infrastructure",
+    name: "You're the log archaeologist",
+    shortName: "Log archaeology",
     tagline: "Two runs. Same inputs. Different state. No replay, no diff, no explanation.",
-    modeLabel: "Debugging",
+    modeLabel: "Replay & debug",
     iconName: "Bug",
     escaping: "Log archaeologist — reverse-engineering truth from logs",
     into: "Platform engineer with replayable state",
@@ -1382,7 +1385,7 @@ export const SITE_METADATA = {
   ogImageUrl: "https://neotoma.io/neotoma-og-1200x630.png",
   pageTitle: "Your agents forget. Neotoma makes them remember.",
   pageDescription:
-    "Versioned records — contacts, tasks, decisions, finances — that persist across Claude, Cursor, ChatGPT, and every agent you run. Open-source and deterministic.",
+    "Deterministic, versioned state for AI agents that can\u2019t afford to guess. Contacts, tasks, decisions, finances \u2014 stored once, queryable everywhere. Open-source and local-first.",
   heroImageUrl: "neotoma-hero.png",
 };
 

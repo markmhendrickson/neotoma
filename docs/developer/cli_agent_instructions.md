@@ -98,6 +98,7 @@ If `store` fails:
 1. Retry once with the same payload.
 2. If it fails again, surface the error to the user ("Storage failed: [error message]") before responding with the retrieved data.
 3. Do not silently skip storage and respond as if it succeeded.
+4. If the error includes `database disk image is malformed`, `SQLITE_CORRUPT`, `btreeInitPage`, or failed SQLite integrity checks, tell the user the local SQLite file is likely corrupted and suggest `neotoma storage recover-db` first, then `neotoma storage recover-db --recover` after they stop Neotoma. Do not auto-swap the recovered DB without explicit user approval.
 
 ## Rule (instruction content)
 

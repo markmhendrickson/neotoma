@@ -75,6 +75,7 @@ export const TimelineEventsRequestSchema = z.object({
   after_date: z.string().optional(),
   before_date: z.string().optional(),
   source_id: z.string().optional(),
+  order_by: z.enum(["event_timestamp", "created_at"]).optional().default("event_timestamp"),
   limit: z.number().int().positive().optional().default(100),
   offset: z.number().int().nonnegative().optional().default(0),
 });

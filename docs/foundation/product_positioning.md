@@ -2,7 +2,7 @@
 
 ## 7.0 Positioning canvas (Obviously Awesome)
 
-This section maps Neotoma to April Dunford’s five core positioning choices plus the extended canvas used in agent skill `foundation/.cursor/skills/neversight-learn-skills.dev-obviously-awesome/SKILL.md`. Supporting evidence and nuance live in §7.1–7.5.
+This section maps Neotoma to April Dunford’s five core positioning choices plus the extended canvas used in agent skill `foundation/agent_instructions/cursor_skills/evaluate_positioning/SKILL.md` (mirrored at `.cursor/skills/evaluate_positioning/SKILL.md`). Supporting evidence and nuance live in §7.1–7.5.
 
 | Component | Neotoma answer |
 |-----------|----------------|

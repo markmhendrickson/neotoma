@@ -20,6 +20,7 @@ export interface StaticLocalePack {
     ctaViewGuarantees: string;
     ctaInstall: string;
     subcopy: string;
+    curiosityGap: string;
   };
   siteSections: {
     intro: string;
@@ -86,7 +87,7 @@ const EN_PACK: StaticLocalePack = {
       "You become the human sync layer — re-prompting what the agent should already know.",
     ],
     summary:
-      "Your {record} disappear between sessions and tools. Neotoma stores them once, versioned and queryable, across every agent you run — so you stop re-explaining your world.",
+      "Neotoma stores your {record} as versioned, auditable state — so every agent works from truth.",
     summaryRecordTypes: [
       "contacts",
       "tasks",
@@ -103,7 +104,9 @@ const EN_PACK: StaticLocalePack = {
     ctaViewGuarantees: "View guarantees",
     ctaInstall: "Install in 5 minutes",
     subcopy:
-      "Your data stays on your machine. One memory across Claude, Cursor, ChatGPT, OpenClaw, and more.",
+      "Structured, versioned state for AI agents across Claude, Cursor, ChatGPT, and everything else. Not chat memory, not RAG retrieval, not another JSON file.",
+    curiosityGap:
+      "Most memory tools help agents retrieve information. None of them can prove it hasn\u2019t been silently corrupted.",
   },
   siteSections: {
     intro: "Intro",
@@ -150,7 +153,7 @@ const EN_PACK: StaticLocalePack = {
     home: {
       title: "Your agents forget. Neotoma makes them remember.",
       description:
-        "Versioned records — contacts, tasks, decisions, finances — that persist across Claude, Cursor, ChatGPT, and every agent you run. Store once, query everywhere, stop re-prompting. Open-source and deterministic.",
+        "Versioned records \u2014 contacts, tasks, decisions, finances \u2014 that persist across Claude, Cursor, ChatGPT, and every agent you run. Store once, query everywhere, stop re-prompting. Open-source and deterministic.",
     },
     docs: {
       title: "Neotoma Documentation | Setup, API, MCP, CLI References",

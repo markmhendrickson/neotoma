@@ -1,10 +1,13 @@
 ---
-name: obviously-awesome
-description: 'Product positioning framework based on April Dunford''s "Obviously Awesome". Use when you need to: (1) define competitive alternatives your customers actually consider, (2) identify unique attributes that differentiate your product, (3) map attributes to customer value themes, (4) define best-fit target customers, (5) choose the right market category, (6) create a positioning canvas for team alignment, (7) run team positioning exercises and workshops.'
+name: evaluate_positioning
+description: 'Define product positioning by mapping competitive alternatives, unique attributes, and best-fit customers to the right market category. Use when the user mentions "positioning", "competitive alternatives", "how to position", "market category", "why customers dont get it", "positioning canvas", "repositioning", or "category creation". Also trigger when launching a new product, entering a crowded market, or diagnosing why prospects dont understand the products value. Covers positioning canvas and team workshops. For customer jobs analysis, see jobs-to-be-done. For go-to-market, see crossing-the-chasm.'
 license: MIT
 metadata:
   author: wondelai
-  version: "1.0.0"
+  version: "1.1.0"
+  source_catalog: "https://mcpmarket.com/tools/skills/obviously-awesome-product-positioning"
+  upstream_repo: "https://github.com/wondelai/skills"
+  upstream_path: "obviously-awesome"
 ---
 
 # Product Positioning Framework
@@ -77,7 +80,7 @@ The foundation of great positioning is understanding that customers always evalu
 
 **Ethical boundary:** Never misrepresent competitive alternatives. Base them on actual customer research, not assumptions or wishful thinking.
 
-See: [Competitive Alternatives Analysis](references/competitive-alternatives.md)
+See: [Competitive Alternatives Analysis](references/competitive_alternatives.md)
 
 ### Step 2: Identify Your Unique Attributes
 
@@ -108,7 +111,7 @@ See: [Competitive Alternatives Analysis](references/competitive-alternatives.md)
 
 **Ethical boundary:** Never claim attributes that aren't genuinely unique. If a competitor also has the capability, it's table stakes, not a differentiator.
 
-See: [Unique Attributes Discovery](references/unique-attributes.md)
+See: [Unique Attributes Discovery](references/unique_attributes.md)
 
 ### Step 3: Map Attributes to Customer Value
 
@@ -139,7 +142,7 @@ See: [Unique Attributes Discovery](references/unique-attributes.md)
 
 **Ethical boundary:** Never exaggerate value claims. Back every value assertion with evidence from real customer outcomes.
 
-See: [Value Mapping Framework](references/value-mapping.md)
+See: [Value Mapping Framework](references/value_mapping.md)
 
 ### Step 4: Define Your Best-Fit Target Customers
 
@@ -170,7 +173,7 @@ See: [Value Mapping Framework](references/value-mapping.md)
 
 **Ethical boundary:** Defining best-fit customers is about focus, not exclusion. Be honest about who your product serves best without denigrating other segments.
 
-See: [Target Customer Analysis](references/target-customers.md)
+See: [Target Customer Analysis](references/target_customers.md)
 
 ### Step 5: Choose Your Market Category
 
@@ -201,7 +204,7 @@ See: [Target Customer Analysis](references/target-customers.md)
 
 **Ethical boundary:** Don't create a new category purely to avoid competition. Only create a new category when your product genuinely can't be understood within existing frameworks.
 
-See: [Market Category Strategy](references/market-category.md)
+See: [Market Category Strategy](references/market_category.md)
 
 ## Market Reference Points
 
@@ -239,7 +242,7 @@ Use this template to capture your positioning decisions in one place. Every memb
 | **Primary Message** | External headline derived from positioning |
 | **Sales Narrative** | How we tell this story in a sales conversation |
 
-See: [Positioning Canvas with Worked Examples](references/positioning-canvas.md)
+See: [Positioning Canvas with Worked Examples](references/positioning_canvas.md)
 
 ## Team Positioning Exercise
 
@@ -258,7 +261,7 @@ Effective positioning requires cross-functional alignment. The positioning exerc
 
 The most important output is team alignment — everyone describing the product the same way.
 
-See: [Team Exercise Facilitator Guide](references/team-exercise.md)
+See: [Team Exercise Facilitator Guide](references/team_exercise.md)
 
 ## Common Mistakes
 
@@ -285,19 +288,19 @@ See: [Team Exercise Facilitator Guide](references/team-exercise.md)
 
 ## Reference Files
 
-- [Competitive Alternatives Analysis](references/competitive-alternatives.md) — Customer interview scripts, clustering techniques, and the "do nothing" analysis for discovering true competitive alternatives
-- [Unique Attributes Discovery](references/unique-attributes.md) — Workshop process for identifying genuinely unique attributes, verification techniques, and attribute clustering
-- [Value Mapping Framework](references/value-mapping.md) — The "So what?" chain technique, value theme identification, proof point creation, and value hierarchy
-- [Target Customer Analysis](references/target-customers.md) — Best-fit customer analysis, actionable segmentation criteria, persona creation, and TAM differentiation
-- [Market Category Strategy](references/market-category.md) — Deep dive on all three category strategies, decision framework, education tax analysis, and when to change categories
-- [Positioning Canvas with Worked Examples](references/positioning-canvas.md) — Blank template plus three fully worked examples (B2B SaaS, consumer app, professional services)
-- [Team Exercise Facilitator Guide](references/team-exercise.md) — Full facilitator guide with minute-by-minute agenda, preparation requirements, and remote adaptations
-- [Positioning Case Studies](references/case-studies.md) — Real-world positioning examples including repositioning wins, niche discovery, and category creation
+- [Competitive Alternatives Analysis](references/competitive_alternatives.md) — Customer interview scripts, clustering techniques, and the "do nothing" analysis for discovering true competitive alternatives
+- [Unique Attributes Discovery](references/unique_attributes.md) — Workshop process for identifying genuinely unique attributes, verification techniques, and attribute clustering
+- [Value Mapping Framework](references/value_mapping.md) — The "So what?" chain technique, value theme identification, proof point creation, and value hierarchy
+- [Target Customer Analysis](references/target_customers.md) — Best-fit customer analysis, actionable segmentation criteria, persona creation, and TAM differentiation
+- [Market Category Strategy](references/market_category.md) — Deep dive on all three category strategies, decision framework, education tax analysis, and when to change categories
+- [Positioning Canvas with Worked Examples](references/positioning_canvas.md) — Blank template plus three fully worked examples (B2B SaaS, consumer app, professional services)
+- [Team Exercise Facilitator Guide](references/team_exercise.md) — Full facilitator guide with minute-by-minute agenda, preparation requirements, and remote adaptations
+- [Positioning Case Studies](references/case_studies.md) — Real-world positioning examples including repositioning wins, niche discovery, and category creation
 
 ## Further Reading
 
-- [Obviously Awesome by April Dunford](https://www.amazon.com/Obviously-Awesome-Product-Positioning-Customers/dp/1999023005?tag=wondelai00-20) — The definitive guide to product positioning
-- [Sales Pitch by April Dunford](https://www.amazon.com/Sales-Pitch-Compelling-Positioning-Positioning/dp/1999023048?tag=wondelai00-20) — How to translate positioning into a winning sales narrative
+- [Obviously Awesome by April Dunford](https://www.amazon.com/Obviously-Awesome-Product-Positioning-Customers/dp/1999023005) — The definitive guide to product positioning
+- [Sales Pitch by April Dunford](https://www.amazon.com/Sales-Pitch-Compelling-Positioning-Positioning/dp/1999023048) — How to translate positioning into a winning sales narrative
 
 ## About the Author
 

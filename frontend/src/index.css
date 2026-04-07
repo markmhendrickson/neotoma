@@ -181,6 +181,25 @@
   pre {
     background-color: hsl(var(--doc-code-bg));
   }
+
+  /* Marketing home: inner scrollport + snap + fade-in would otherwise clip or hide sections when printing. */
+  @media print {
+    :has([data-site-home-scroll-root]) body,
+    :has([data-site-home-scroll-root]) #root {
+      min-height: 0 !important;
+      height: auto !important;
+    }
+
+    [data-site-home-scroll-root] {
+      height: auto !important;
+      min-height: 0 !important;
+      max-height: none !important;
+      overflow: visible !important;
+      overscroll-behavior: auto !important;
+      scroll-snap-type: none !important;
+      scroll-padding-bottom: 0 !important;
+    }
+  }
   h1 {
     font-size: 1.75rem; /* 28px */
     font-weight: 700;
