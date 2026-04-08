@@ -19,14 +19,19 @@ export interface StaticLocalePack {
     ctaEvaluateWithAgent: string;
     ctaViewGuarantees: string;
     ctaInstall: string;
+    ctaOfficeHours: string;
+    ctaOfficeHoursSubtext: string;
     subcopy: string;
     curiosityGap: string;
+    /** Hero micro-label below primary CTAs (displayed uppercase in UI) */
+    audienceTagline: string;
   };
   siteSections: {
     intro: string;
     personalOs: string;
     beforeAfter: string;
     who?: string;
+    demo?: string;
     recordTypes?: string;
     guarantees: string;
     evaluate?: string;
@@ -103,16 +108,21 @@ const EN_PACK: StaticLocalePack = {
     ctaEvaluateWithAgent: "Ask your agent to evaluate",
     ctaViewGuarantees: "View guarantees",
     ctaInstall: "Install in 5 minutes",
+    ctaOfficeHours: "Talk to the founder",
+    ctaOfficeHoursSubtext:
+      "Building a multi-agent stack? Office hours for developers who want to talk architecture.",
     subcopy:
-      "Structured, versioned state for AI agents across Claude, Cursor, ChatGPT, and everything else. Not chat memory, not RAG retrieval, not another JSON file.",
+      "Neotoma is git for what your agents know. Versioned, diffable, replayable state across Claude, Cursor, ChatGPT, and everything else. Stop being the human sync layer.",
     curiosityGap:
       "Most memory tools help agents retrieve information. None of them can prove it hasn\u2019t been silently corrupted.",
+    audienceTagline: "Built for developers running agents across sessions and tools",
   },
   siteSections: {
     intro: "Intro",
-    personalOs: "Your OS",
+    personalOs: "Proof",
     beforeAfter: "Before / After",
     who: "Who",
+    demo: "Demo",
     recordTypes: "Record types",
     guarantees: "Guarantees",
     evaluate: "Evaluate",
@@ -217,6 +227,10 @@ function buildPack(locale: SupportedLocale): StaticLocalePack {
         locale === "es" ? "Pide a tu agente que evalúe" : EN_PACK.homeHero.ctaEvaluateWithAgent,
       ctaViewGuarantees: locale === "es" ? "Ver garantías" : EN_PACK.homeHero.ctaViewGuarantees,
       ctaInstall: locale === "es" ? "Instalar en 5 minutos" : EN_PACK.homeHero.ctaInstall,
+      audienceTagline:
+        locale === "es"
+          ? "Para desarrolladores que ejecutan agentes entre sesiones y herramientas"
+          : EN_PACK.homeHero.audienceTagline,
     },
     siteSections: {
       ...EN_PACK.siteSections,

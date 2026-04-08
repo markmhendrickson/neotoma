@@ -380,7 +380,7 @@ agent_instructions:
       - publish
     custom_commands:
       - create_feature_unit
-      - create_release
+      - release
       - fix_feature_bug
       - run_feature_workflow
       - ui_workflow

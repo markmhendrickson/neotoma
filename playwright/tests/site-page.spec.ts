@@ -122,9 +122,9 @@ test.describe("sitePage coverage", () => {
     await page.goto("/");
     await page.waitForLoadState("networkidle");
 
-    await page.locator("#record-types").scrollIntoViewIfNeeded();
+    await page.locator("#who").scrollIntoViewIfNeeded();
 
-    await expect.poll(() => page.url()).toContain("#record-types");
+    await expect.poll(() => page.url()).toContain("#who");
   });
 
   test("subpage routes render with back-to-home link", async ({ page }) => {

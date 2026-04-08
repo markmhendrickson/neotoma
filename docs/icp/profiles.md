@@ -410,7 +410,7 @@ The shift is from compensating for memory to building on top of it. The builder 
 ### Side-by-Side: AI Infrastructure Engineers vs Agent System Builders
 
 - **Primary layer:** Infrastructure engineers build runtimes, orchestration, and observability foundations; agent system builders build application-layer agents and shipped workflows on top.
-- **Adoption motion:** Infrastructure engineers are evaluation-first (validate guarantees before rollout); agent builders are integration-first (wire via MCP and iterate quickly).
+- **Adoption motion:** Infrastructure engineers are evaluation-first (validate guarantees before rollout); agent system builders are integration-first (wire via MCP and iterate quickly).
 - **Decision owner:** Infrastructure adoption is usually led by platform/reliability leads; builder adoption is often led by individual developers or product engineering teams.
 - **Cycle length:** Infrastructure cycles are typically longer (14-60 days) because standardization risk is higher; builder cycles are faster (7-30 days) because scope is narrower.
 - **Success metric:** Infrastructure teams optimize for platform reproducibility and auditability; builders optimize for reliable multi-step execution, lower debugging time, and stable shipped behavior.

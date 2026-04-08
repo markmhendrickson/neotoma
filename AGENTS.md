@@ -77,6 +77,6 @@ In those cases: ask a short, concrete question with 1–2 options or "proceed wi
 
 All rules in `.Codex/rules/` apply; they are modular instructions loaded automatically by context.
 
-Skills in `.Codex/skills/` are workflows invokable with `/skill-name` (e.g. `/create_release`, `/fix_feature_bug`).
+Skills in `.Codex/skills/` are workflows invokable with `/skill-name` (e.g. `/release`, `/fix_feature_bug`).
 
 For complete documentation map, reading strategies, and dependency graph, see `docs/context/index_rules.mdc`.

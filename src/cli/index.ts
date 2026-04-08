@@ -1899,10 +1899,20 @@ program.hook("preAction", (_thisCommand, actionCommand) => {
     offline?: boolean;
     apiOnly?: boolean;
   };
+  const isTestEnv = process.env.NODE_ENV === "test";
   if (opts.offline && opts.apiOnly) {
     throw new Error("Choose one: --offline or --api-only");
   }
   if (opts.apiOnly) {
+    process.env.NEOTOMA_FORCE_LOCAL_TRANSPORT = "false";
+    process.env.NEOTOMA_DISABLE_OFFLINE_FALLBACK = "true";
+    return;
+  }
+
+  // In test runs, prefer the shared test API server unless --offline was explicitly
+  // requested. This avoids per-command local transport startup flakes across large
+  // CLI suites while preserving explicit offline coverage.
+  if (isTestEnv && !opts.offline) {
     process.env.NEOTOMA_FORCE_LOCAL_TRANSPORT = "false";
     process.env.NEOTOMA_DISABLE_OFFLINE_FALLBACK = "true";
     return;

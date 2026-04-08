@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useHashSyncedTab } from "@/hooks/use_hash_synced_tab";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -165,9 +166,15 @@ const SECTIONS = [
   { id: "collapsible", label: "Collapsible", icon: ChevronDown },
 ];
 
+const STYLE_GUIDE_TABS_DEMO_VALUES = ["snapshot", "observations", "relationships", "timeline"] as const;
+
 export function StyleGuide({ onClose }: StyleGuideProps) {
   const [isDark, setIsDark] = useState(false);
   const [activeSection, setActiveSection] = useState<string | null>(null);
+  const { tab: styleGuideTabsDemo, setTab: setStyleGuideTabsDemo } = useHashSyncedTab(
+    "snapshot",
+    STYLE_GUIDE_TABS_DEMO_VALUES,
+  );
 
   const toggleTheme = () => {
     setIsDark(!isDark);
@@ -1881,7 +1888,7 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Tabs defaultValue="snapshot" className="w-full">
+              <Tabs value={styleGuideTabsDemo} onValueChange={setStyleGuideTabsDemo} className="w-full">
                 <TabsList className="grid w-full grid-cols-4">
                   <TabsTrigger value="snapshot">Snapshot</TabsTrigger>
                   <TabsTrigger value="observations">Observations</TabsTrigger>

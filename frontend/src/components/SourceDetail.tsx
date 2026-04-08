@@ -8,6 +8,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { useHashSyncedTab } from "@/hooks/use_hash_synced_tab";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
@@ -62,7 +63,13 @@ interface SourceDetailProps {
   onClose?: () => void;
 }
 
+const SOURCE_DETAIL_TAB_VALUES = ["interpretations", "observations", "content"] as const;
+
 export function SourceDetail({ sourceId, onClose }: SourceDetailProps) {
+  const { tab: sourceDetailTab, setTab: setSourceDetailTab } = useHashSyncedTab(
+    "interpretations",
+    SOURCE_DETAIL_TAB_VALUES,
+  );
   const [source, setSource] = useState<Source | null>(null);
   const [interpretations, setInterpretations] = useState<Interpretation[]>([]);
   const [observations, setObservations] = useState<Observation[]>([]);
@@ -219,7 +226,7 @@ export function SourceDetail({ sourceId, onClose }: SourceDetailProps) {
         </Card>
 
         {/* Four-Layer Truth Model Tabs */}
-        <Tabs defaultValue="interpretations" className="w-full">
+        <Tabs value={sourceDetailTab} onValueChange={setSourceDetailTab} className="w-full">
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="interpretations">
               Interpretations ({interpretations.length})

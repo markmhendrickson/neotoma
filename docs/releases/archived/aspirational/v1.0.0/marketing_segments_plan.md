@@ -88,7 +88,7 @@ This document defines the user segments for v1.0.0 marketing activities, includi
 - **For Knowledge Workers**: "Privacy-first structured memory with deterministic extraction. User-controlled, no provider access."
 - **For Privacy-Conscious Users**: "User-controlled memory that's never used for training. You own your data."
 **Preview Audience Constraints:**
-- CLI-comfortable developers and agent builders
+- CLI-comfortable agentic OS operators
 - Users who accept breaking changes and precision disclaimers
 - Not for UI-first or reliability-first expectations yet
 **Key Messages (Defensible Differentiators First):**

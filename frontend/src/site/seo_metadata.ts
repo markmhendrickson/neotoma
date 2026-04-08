@@ -68,7 +68,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/": {
     title: "Your agents forget. Neotoma makes them remember.",
     description:
-      "Versioned records - contacts, tasks, decisions, finances - that persist across Claude, Cursor, ChatGPT, and every agent you run. Store once, query everywhere, stop re-prompting. Open-source and deterministic.",
+      "Stop re-prompting. Prove your agent isn\u2019t operating on bad data. Versioned, auditable state for AI agents across Claude, Cursor, ChatGPT, and every tool you run. Open-source and deterministic.",
     robots: "index,follow",
     ogType: "website",
     jsonLdType: "WebSite",

@@ -349,16 +349,15 @@ At that point, Neotoma becomes the reference implementation for **deterministic 
 
 *Last assessed: 2026-04-07 after gap-closure pass (curiosity-gap isolation, integrity-first proof, transformation beat, category-level guarantees copy).*
 
-### Current slide structure (8 sections)
+### Current slide structure (7 sections)
 
-1. Hero (#intro) — headline ("Your agents forget. Neotoma makes them remember."), curiosity gap line, summary with rotating record types, CTAs, rotating testimonials, proof strip
-2. Before / After (#outcomes) — concrete demo comparing agent responses with and without Neotoma
-3. How It's Used (#how-i-use-it) — founder story blockquote with usage stats (1,000+ contacts, 600 tasks, 170 entity types)
+1. Hero (#intro) — headline ("Your agents forget. Neotoma makes them remember."), curiosity gap line, summary, CTAs
+2. Proof (#proof) — founder story blockquote with usage stats, evaluator quotes, proof strip, tool chips
+3. Before / After (#outcomes) — concrete demo comparing agent responses with and without Neotoma
 4. Who This Is For (#who) — three ICP mode cards with identity-led titles and role transformation language
 5. Memory Guarantees (#memory-guarantees) — six guarantee preview cards, each pairing a failure mode with the guarantee that prevents it
-6. Record Types (#record-types) — typed entity guides (contacts, tasks, transactions, contracts, decisions, events)
-7. Evaluate (#evaluate) — agent-driven evaluation prompt + link to /evaluate
-8. Common Questions (#common-questions) — FAQ accordion
+6. Evaluate (#evaluate) — transformation lead-in + agent-driven evaluation prompt + link to /evaluate
+7. Common Questions (#common-questions) — FAQ accordion
 
 ### Fulfilled well
 

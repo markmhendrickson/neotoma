@@ -164,7 +164,11 @@ export function SiteTailpiece() {
         </div>
 
         <div className="mt-8 border-t border-border/60 pt-6 space-y-6">
-          <div className="w-full sm:flex sm:justify-start">
+          <div className="w-full space-y-3 sm:max-w-md">
+            <p className="text-[12px] leading-5 text-muted-foreground">
+              Re-prompting costs time. Wrong state costs trust. Find out if
+              Neotoma fits before either compounds.
+            </p>
             <Link
               to="/evaluate"
               className={FOOTER_EVALUATE_CTA_CLASS}
