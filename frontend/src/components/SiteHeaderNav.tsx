@@ -392,6 +392,7 @@ interface SearchablePageItem {
 const SITE_SEARCH_TOP_PAGE_HREFS = [
   "/docs",
   "/evaluate",
+  "/meet",
   "/install",
   "/faq",
   "/memory-guarantees",
@@ -691,26 +692,26 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
 
       {/* Mobile: Evaluate + Architecture in header */}
       <nav
-        className="md:hidden flex items-center gap-1"
+        className="md:hidden flex min-w-0 items-center gap-0.5"
         aria-label={`${dict.evaluate}, ${dict.install}, and ${dict.architecture}`}
       >
         <Link
           to={localizePath("/evaluate", locale)}
-          className="rounded-md px-2 py-1.5 text-[13px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          className="rounded-md px-1.5 py-1.5 text-[13px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
           onClick={() => sendCtaClick("header_evaluate")}
         >
           {dict.evaluate}
         </Link>
         <Link
           to={localizePath("/install", locale)}
-          className="rounded-md px-2 py-1.5 text-[13px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          className="rounded-md px-1.5 py-1.5 text-[13px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
           onClick={() => sendCtaClick("header_install")}
         >
           {dict.install}
         </Link>
         <Link
           to={localizePath("/architecture", locale)}
-          className="rounded-md px-2 py-1.5 text-[13px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          className="hidden rounded-md px-1.5 py-1.5 text-[13px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground sm:inline-flex"
           onClick={() => sendCtaClick("view_architecture")}
         >
           {dict.architecture}

@@ -68,7 +68,10 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/": {
     title: "Your agents forget. Neotoma makes them remember.",
     description:
-      "Stop re-prompting. Prove your agent isn\u2019t operating on bad data. Versioned, auditable state for AI agents across Claude, Cursor, ChatGPT, and every tool you run. Open-source and deterministic.",
+      "Stop being the human sync layer. Deterministic, versioned state for multi-agent builders and operators running Claude, Cursor, ChatGPT, and MCP-connected tools. Replay changes, trace provenance, and prove your agents aren\u2019t operating on bad state.",
+    /** Matches on-image copy and footer positioning; dev preview img uses this for alt/figcaption. */
+    ogImageAlt:
+      "Neotoma: the state layer for AI agents. Open-source and local-first. Large headline and supporting lines on warm brown with a Neotoma packrat holding a record.",
     robots: "index,follow",
     ogType: "website",
     jsonLdType: "WebSite",
@@ -346,6 +349,18 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Home", path: "/" },
       { name: "Docs", path: "/docs" },
       { name: "Claude Code", path: "/neotoma-with-claude-code" },
+    ],
+  },
+  "/neotoma-with-claude-agent-sdk": {
+    title: "Memory infrastructure for Claude agents | Agent SDK and Managed Agents",
+    description:
+      "Schema-bound, append-only memory for agents built on the Claude Agent SDK and Managed Agents. Complements the Memory Tool via MCP.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Claude Agent SDK", path: "/neotoma-with-claude-agent-sdk" },
     ],
   },
   "/neotoma-with-chatgpt": {
@@ -915,6 +930,17 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Evaluate", path: "/evaluate" },
     ],
   },
+  "/meet": {
+    title: "Meet with the Creator | Neotoma",
+    description:
+      "Book time with Mark Hendrickson via Notion Calendar to discuss Neotoma, implementation, or product feedback.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Meet", path: "/meet" },
+    ],
+  },
   "/faq": {
     title: "Frequently Asked Questions | Neotoma",
     description:
@@ -1375,7 +1401,9 @@ const DEFAULT_SEO_KEYWORDS = [
 export function buildDefaultOgImageAlt(title: string, description: string): string {
   const snippet =
     description.length > 140 ? `${description.slice(0, 137).trimEnd()}...` : description;
-  const combined = `${title}. ${snippet}`.trim();
+  const titleTrim = title.trimEnd();
+  const head = titleTrim.replace(/[.!?…]+$/u, "").trimEnd() || titleTrim;
+  const combined = `${head}. ${snippet}`.trim();
   return combined.length > 200 ? `${combined.slice(0, 197)}...` : combined;
 }
 

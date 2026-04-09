@@ -236,6 +236,10 @@ export type CtaName =
   | "docs_install_reference"
   | "evaluate_copy_prompt"
   | "evaluate_prompt_install"
+  | "founder_office_hours"
+  | "meet_with_creator_banner"
+  | "meet_page_notion_interview"
+  | "demo_inspector_github"
   | "section_evaluate";
 
 /** Track a CTA button/link click with the CTA name and current page. */
@@ -349,6 +353,8 @@ export const PRODUCT_NAV_SOURCES = {
   neotomaWithCursorTailInstall: "neotoma_with_cursor_tail_install",
   neotomaWithClaudeCodeTailEvaluate: "neotoma_with_claude_code_tail_evaluate",
   neotomaWithClaudeCodeTailInstall: "neotoma_with_claude_code_tail_install",
+  neotomaWithClaudeAgentSdkTailEvaluate: "neotoma_with_claude_agent_sdk_tail_evaluate",
+  neotomaWithClaudeAgentSdkTailInstall: "neotoma_with_claude_agent_sdk_tail_install",
   neotomaWithCodexTailEvaluate: "neotoma_with_codex_tail_evaluate",
   neotomaWithCodexTailInstall: "neotoma_with_codex_tail_install",
   neotomaWithChatgptTailEvaluate: "neotoma_with_chatgpt_tail_evaluate",

@@ -12,9 +12,11 @@ import {
   Download,
   Quote,
   Receipt,
+  Scale,
   Server,
   MessageSquare,
   Users,
+  Waypoints,
   Workflow,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -29,7 +31,12 @@ import {
   ICP_PROFILES,
 } from "../site/site_data";
 import { useRepoMetaClient } from "../hooks/useRepoMetaClient";
-import { HOME_EVALUATE_CTA_CLASS } from "./code_block_copy_button_classes";
+import {
+  HOME_EVALUATE_CTA_CLASS,
+  HOME_SCROLL_BANNER_PRIMARY_CELL_CLASS,
+  HOME_SCROLL_BANNER_SECONDARY_CELL_CLASS,
+  HOME_SCROLL_BANNER_SPLIT_CELL_CLASS,
+} from "./code_block_copy_button_classes";
 import { HomeEvaluatePromptBlock } from "./HomeEvaluatePromptBlock";
 import { SeoHead } from "./SeoHead";
 import { SectionDotNav } from "./SectionDotNav";
@@ -50,6 +57,7 @@ import heroEvaluateIllus from "@/assets/images/hero/hero_illus_evaluate_agent_pa
 import founderPhoto from "@/assets/images/people/mark_hendrickson.jpg";
 
 import { useLocale } from "@/i18n/LocaleContext";
+import { localizePath } from "@/i18n/routing";
 import { useSiteHomeEvaluateScrollBannerVisibleSetter } from "@/context/SiteAppNavContext";
 import { sendCtaClick } from "@/utils/analytics";
 interface SitePageProps {
@@ -64,6 +72,7 @@ const SECTION_ORDER: readonly string[] = [
   "demo",
   "who",
   "memory-guarantees",
+  "record-types",
   "evaluate",
   "common-questions",
 ];
@@ -74,6 +83,12 @@ const DOT_NAV_SECTION_IDS = new Set<string>(
   SECTION_ORDER.filter((id) => id !== "common-questions")
 );
 
+function getHomeInitialNavSectionId(): string | null {
+  if (typeof window === "undefined") return "intro";
+  const rawHash = window.location.hash.replace(/^#/, "");
+  return HOME_HASH_SECTION_IDS.has(rawHash) ? rawHash : "intro";
+}
+
 function getLocalizedDotNavSections(pack: ReturnType<typeof useLocale>["pack"]) {
   return [
     { id: "intro", label: pack.siteSections.intro },
@@ -82,6 +97,7 @@ function getLocalizedDotNavSections(pack: ReturnType<typeof useLocale>["pack"]) 
     { id: "demo", label: pack.siteSections.demo ?? "Demo" },
     { id: "who", label: pack.siteSections.who ?? "Who" },
     { id: "memory-guarantees", label: pack.siteSections.guarantees },
+    { id: "record-types", label: pack.siteSections.recordTypes ?? "Record types" },
     { id: "evaluate", label: pack.siteSections.evaluate ?? "Evaluate" },
   ];
 }
@@ -289,6 +305,68 @@ const OUTCOME_CARDS: {
     successDescription:
       'Every decision is stored with its inputs, rationale, and the session that produced it. When you ask "why did you do that?", the agent can show you exactly.',
     scenarioIndex: 3,
+  },
+];
+
+const RECORD_TYPE_CARDS: {
+  label: string;
+  href: string;
+  description: string;
+  entities: readonly string[];
+  accent: string;
+  icon: LucideIcon;
+  starter?: boolean;
+}[] = [
+  {
+    label: "Contacts",
+    href: "/types/contacts",
+    description: "People, companies, roles, and the relationships between them.",
+    entities: ["contact", "company", "account"],
+    accent: "text-blue-600 dark:text-blue-400",
+    icon: Users,
+    starter: true,
+  },
+  {
+    label: "Tasks",
+    href: "/types/tasks",
+    description: "Obligations, deadlines, habits, and goals tracked across sessions.",
+    entities: ["task", "habit", "goal"],
+    accent: "text-emerald-600 dark:text-emerald-400",
+    icon: ListChecks,
+    starter: true,
+  },
+  {
+    label: "Events",
+    href: "/types/events",
+    description: "Meetings, milestones, and the outcomes attached to them.",
+    entities: ["event", "meeting", "milestone"],
+    accent: "text-violet-600 dark:text-violet-400",
+    icon: CalendarClock,
+    starter: true,
+  },
+  {
+    label: "Transactions",
+    href: "/types/transactions",
+    description: "Payments, receipts, invoices, and ledger entries versioned instead of overwritten.",
+    entities: ["transaction", "invoice", "receipt"],
+    accent: "text-amber-600 dark:text-amber-400",
+    icon: Receipt,
+  },
+  {
+    label: "Contracts",
+    href: "/types/contracts",
+    description: "Agreements, clauses, and amendments with the exact terms preserved over time.",
+    entities: ["contract", "clause", "amendment"],
+    accent: "text-slate-600 dark:text-slate-400",
+    icon: Scale,
+  },
+  {
+    label: "Decisions",
+    href: "/types/decisions",
+    description: "Choices, rationale, and the audit trail that proves why an agent acted.",
+    entities: ["decision", "assessment", "review"],
+    accent: "text-rose-600 dark:text-rose-400",
+    icon: Waypoints,
   },
 ];
 
@@ -907,7 +985,6 @@ function OutcomesSlide({
                 />
               </div>
             </div>
-
           </div>
         </div>
         <SectionEdgeIndicators sectionId="outcomes" />
@@ -1060,9 +1137,7 @@ function HomeAgentToolChips({
       className={`flex flex-wrap items-center pt-1 ${rowClass} ${alignmentClass}`}
       aria-label="AI agents and tools"
     >
-      <span className={labelClass}>
-        Works with
-      </span>
+      <span className={labelClass}>Works with</span>
       <Link to="/neotoma-with-claude" className={chipClass}>
         <SiClaude className={iconClass} aria-hidden />
         Claude
@@ -1101,7 +1176,7 @@ function HeroProofStrip() {
   );
   return (
     <div className="flex flex-wrap items-center justify-center gap-2.5 text-[13px] font-medium text-muted-foreground lg:inline-flex lg:gap-x-3 lg:gap-y-1 lg:rounded-full lg:border lg:border-border/80 lg:bg-background/80 lg:px-4 lg:py-2 lg:justify-center">
-      <span className={`${heroProofStripItemClass} hidden sm:inline-flex`}>
+      <span className={`${heroProofStripItemClass} inline-flex`}>
         Trustworthy state for AI agents
       </span>
       {dot}
@@ -1226,9 +1301,8 @@ const HERO_QUOTES: { text: string; attribution: string; attributionHref?: string
   },
 ];
 
-
 export function SitePage({ staticMode = false }: SitePageProps) {
-  const { pack } = useLocale();
+  const { pack, locale } = useLocale();
   const navigate = useNavigate();
   const dotNavSections = useMemo(() => getLocalizedDotNavSections(pack), [pack]);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -1239,7 +1313,9 @@ export function SitePage({ staticMode = false }: SitePageProps) {
    * except intro (hero) and evaluate, avoids IntersectionObserver edge cases where a sliver of hero
    * stayed "in view" and hid the bar on middle slides.
    */
-  const [navActiveSectionId, setNavActiveSectionId] = useState<string | null>("intro");
+  const [navActiveSectionId, setNavActiveSectionId] = useState<string | null>(
+    getHomeInitialNavSectionId
+  );
   /** Hide the fixed evaluate bar while the page footer is on screen (footer has its own Evaluate link). */
   const [footerInScrollView, setFooterInScrollView] = useState(false);
 
@@ -1371,25 +1447,27 @@ export function SitePage({ staticMode = false }: SitePageProps) {
             <div className="relative z-10 flex w-full min-w-0 flex-col justify-center self-stretch">
               <FadeSection scrollContainerRef={scrollContainerRef} staticMode={staticMode}>
                 <div className={SLIDE_INNER}>
-                  <div className="mx-auto max-w-6xl pt-4 md:pt-20 lg:pt-12">
+                  <div className="mx-auto max-w-6xl pt-10 md:pt-20 lg:pt-12">
                     <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(340px,0.92fr)] lg:items-center">
                       <div className="space-y-6 text-center lg:text-left">
                         <h1 className="text-[36px] md:text-[48px] font-semibold tracking-[-0.035em] leading-[1.1]">
-                          {pack.homeHero.titlePrefix}{" "}
-                          <span className={HERO_TITLE_RECORD_EMPHASIS_CLASS}>
-                            {pack.homeHero.titleAccent}
-                          </span>{" "}
-                          {pack.homeHero.titleMid}{" "}
-                          <span className={`whitespace-nowrap ${HERO_TITLE_TOOLS_EMPHASIS_CLASS}`}>
-                            {pack.homeHero.titleFocus}
+                          <span className="block">{pack.homeHero.titlePrefix}</span>
+                          <span className="block">
+                            <span className={HERO_TITLE_RECORD_EMPHASIS_CLASS}>
+                              {pack.homeHero.titleAccent}
+                            </span>{" "}
+                            {pack.homeHero.titleMid}{" "}
+                            <span className={`whitespace-nowrap ${HERO_TITLE_TOOLS_EMPHASIS_CLASS}`}>
+                              {pack.homeHero.titleFocus}
+                            </span>
                           </span>
                         </h1>
 
-                        <p className="text-[15px] md:text-[17px] leading-7 text-muted-foreground max-w-xl mx-auto lg:mx-0">
+                        <p className="text-[15px] md:text-[17px] leading-7 text-foreground/80 max-w-xl mx-auto lg:mx-0">
                           {pack.homeHero.curiosityGap}
                         </p>
 
-                        <p className="text-[15px] md:text-[17px] leading-7 text-muted-foreground max-w-xl mx-auto lg:mx-0">
+                        <p className="text-[15px] md:text-[17px] leading-7 text-foreground/80 max-w-xl mx-auto lg:mx-0">
                           {pack.homeHero.subcopy}
                         </p>
 
@@ -1422,12 +1500,12 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                           </a>
                         </div>
 
-                        <div className="flex min-w-0 max-w-full flex-nowrap items-center justify-center gap-2 pt-4 lg:justify-start">
+                        <div className="flex min-w-0 max-w-full flex-row items-baseline justify-center gap-2 pt-4 lg:justify-start">
                           <Workflow
-                            className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60"
+                            className="h-3.5 w-3.5 shrink-0 translate-y-[2px] text-muted-foreground/60"
                             aria-hidden
                           />
-                          <p className="min-w-0 truncate text-[12px] font-mono tracking-wide text-muted-foreground/60 uppercase max-w-xl">
+                          <p className="min-w-0 max-w-xl break-words text-center text-[12px] font-mono leading-snug tracking-wide text-muted-foreground/60 uppercase lg:text-left">
                             {pack.homeHero.audienceTagline}
                           </p>
                         </div>
@@ -1463,11 +1541,11 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                     />
                     <div className="min-w-0 flex-1">
                       <p className="text-[17px] md:text-[19px] leading-8 text-foreground/90 italic">
-                        Running daily for 5+ months across Claude Code, Cursor, ChatGPT,
-                        and CLI. Every morning I ask my agents what I worked on yesterday,
-                        what&rsquo;s due this week, and what I told a specific investor.
-                        Zero re-prompting for cross-session context. This isn&rsquo;t a
-                        demo, it&rsquo;s my actual operating system.
+                        Running daily for 5+ months across Claude Code, Cursor, ChatGPT, and CLI.
+                        Every morning I ask my agents what I worked on yesterday, what&rsquo;s due
+                        this week, and what I told a specific investor. Zero re-prompting for
+                        cross-session context. This isn&rsquo;t a demo, it&rsquo;s my actual
+                        operating system.
                       </p>
                       <footer className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 text-[13px] text-muted-foreground">
                         <img
@@ -1481,9 +1559,13 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                         />
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                           <span className="font-medium text-foreground/80">Mark Hendrickson</span>
-                          <span aria-hidden="true" className="text-border">&middot;</span>
+                          <span aria-hidden="true" className="text-border">
+                            &middot;
+                          </span>
                           <span>Neotoma creator</span>
-                          <span aria-hidden="true" className="text-border">&middot;</span>
+                          <span aria-hidden="true" className="text-border">
+                            &middot;
+                          </span>
                           <a
                             href="https://markmhendrickson.com/posts/what-my-agentic-stack-actually-does/"
                             target="_blank"
@@ -1500,23 +1582,33 @@ export function SitePage({ staticMode = false }: SitePageProps) {
 
                   <div className="flex flex-wrap justify-center gap-x-6 gap-y-4 pt-2 text-center text-[13px] text-muted-foreground">
                     <div>
-                      <span className="block text-[22px] font-semibold tracking-tight text-foreground">1,100+</span>
+                      <span className="block text-[22px] font-semibold tracking-tight text-foreground">
+                        1,100+
+                      </span>
                       contacts
                     </div>
                     <div>
-                      <span className="block text-[22px] font-semibold tracking-tight text-foreground">16,000+</span>
+                      <span className="block text-[22px] font-semibold tracking-tight text-foreground">
+                        16,000+
+                      </span>
                       tasks
                     </div>
                     <div>
-                      <span className="block text-[22px] font-semibold tracking-tight text-foreground">900+</span>
+                      <span className="block text-[22px] font-semibold tracking-tight text-foreground">
+                        900+
+                      </span>
                       conversations
                     </div>
                     <div>
-                      <span className="block text-[22px] font-semibold tracking-tight text-foreground">2,000+</span>
+                      <span className="block text-[22px] font-semibold tracking-tight text-foreground">
+                        2,000+
+                      </span>
                       agent messages
                     </div>
                     <div>
-                      <span className="block text-[22px] font-semibold tracking-tight text-foreground">380+</span>
+                      <span className="block text-[22px] font-semibold tracking-tight text-foreground">
+                        380+
+                      </span>
                       entity types
                     </div>
                   </div>
@@ -1527,10 +1619,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                         key={i}
                         className="flex flex-col rounded-xl border border-border/60 bg-card/30 p-5 text-left"
                       >
-                        <Quote
-                          className="h-5 w-5 shrink-0 text-emerald-500/40 mb-3"
-                          aria-hidden
-                        />
+                        <Quote className="h-5 w-5 shrink-0 text-emerald-500/40 mb-3" aria-hidden />
                         <p className="text-[16px] md:text-[18px] leading-7 text-foreground/90 italic flex-1">
                           &ldquo;{q.text}&rdquo;
                         </p>
@@ -1552,6 +1641,9 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                     ))}
                   </div>
 
+                  <div className="flex justify-center pt-2">
+                    <HomeAgentToolChips />
+                  </div>
                 </div>
               </div>
               <SectionEdgeIndicators sectionId="proof" />
@@ -1574,8 +1666,8 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                       Inspectable state you can version, diff, and replay
                     </h2>
                     <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl mx-auto">
-                      The same operations work from the CLI, the REST API, or through any
-                      MCP-connected agent. Toggle between views to see all four.
+                      The same operations work from the CLI, the REST API, the Inspector app, or
+                      through any MCP-connected agent. Toggle between views to try each interface.
                     </p>
                   </div>
                   <CliDemoInteractive />
@@ -1634,16 +1726,10 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                             <p className="mt-2 text-[13px] leading-6 text-muted-foreground">
                               {profile.tagline}
                             </p>
-                            {profile.escaping && profile.into ? (
-                              <div className="mt-3 pt-3 border-t border-border/40 space-y-1">
-                                <p className="text-[12px] leading-5 text-muted-foreground/70">
-                                  <span className="text-red-400/70 dark:text-red-400/60">Escaping:</span>{" "}
-                                  {profile.escaping}
-                                </p>
-                                <p className="text-[12px] leading-5 font-medium text-emerald-600 dark:text-emerald-400">
-                                  <span>Becoming:</span> {profile.into}
-                                </p>
-                              </div>
+                            {profile.homepageTransition ? (
+                              <p className="mt-2 text-[13px] leading-6 text-muted-foreground">
+                                {profile.homepageTransition}
+                              </p>
                             ) : null}
                           </div>
                         </Link>
@@ -1656,26 +1742,11 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                       aria-hidden
                     />
                     <p>
-                      If your AI is a thought partner you drive every turn, or you&rsquo;re
-                      looking for a note-taking app, this isn&rsquo;t built for you.
+                      If your AI is a thought partner you drive every turn, or you&rsquo;re looking
+                      for a note-taking app, this isn&rsquo;t built for you.
                     </p>
                   </div>
 
-                  <div className="flex flex-col items-center gap-1.5 pt-2">
-                    <a
-                      href="https://cal.com/markhendrickson/office-hours"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 text-[13px] text-muted-foreground no-underline hover:text-foreground transition-colors"
-                      onClick={() => sendCtaClick("founder_office_hours")}
-                    >
-                      <CalendarClock className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                      {pack.homeHero.ctaOfficeHours}
-                    </a>
-                    <p className="text-[11px] text-muted-foreground/60 text-center max-w-sm">
-                      {pack.homeHero.ctaOfficeHoursSubtext}
-                    </p>
-                  </div>
                 </div>
               </div>
               <SectionEdgeIndicators sectionId="who" />
@@ -1696,8 +1767,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                     </h2>
                     <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl mx-auto">
                       Chat memory, RAG retrieval, ad-hoc JSON, rolling your own DB: they optimize
-                      recall. None of them enforce versioning,
-                      provenance, or tamper detection.
+                      recall. None of them enforce versioning, provenance, or tamper detection.
                     </p>
                   </div>
 
@@ -1753,6 +1823,73 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                 </div>
               </div>
               <SectionEdgeIndicators sectionId="memory-guarantees" />
+            </FadeSection>
+          </section>
+
+          {/* Slide 3c: What to store: cold-start guidance */}
+          <section id="record-types" className={SLIDE_CLASS}>
+            <FadeSection scrollContainerRef={scrollContainerRef} staticMode={staticMode}>
+              <div className={SLIDE_INNER}>
+                <div className="space-y-6 md:space-y-8 max-w-5xl mx-auto">
+                  <div className="space-y-2 text-center">
+                    <p className="text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
+                      What to store
+                    </p>
+                    <h2 className={HOME_SECTION_H2_CLASS}>
+                      Not sure where to start? Pick three.
+                    </h2>
+                    <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl mx-auto">
+                      Your contacts, tasks, and events disappear between sessions and tools.
+                      Store them once, versioned and queryable across every agent you run, and
+                      stop re-explaining your world.
+                    </p>
+                  </div>
+
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {RECORD_TYPE_CARDS.map((card) => {
+                      const CardIcon = card.icon;
+                      return (
+                        <Link
+                          key={card.label}
+                          to={card.href}
+                          className="group relative flex flex-col rounded-xl border border-border bg-card/50 p-5 no-underline transition-colors hover:bg-muted/60 hover:border-border/80"
+                        >
+                          {card.starter && (
+                            <span className="absolute -top-2.5 right-3 rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-white dark:bg-emerald-500">
+                              Start here
+                            </span>
+                          )}
+                          <div className="flex items-center gap-2.5 mb-2">
+                            <span
+                              className={`flex items-center justify-center w-7 h-7 rounded-lg ${card.accent
+                                .replace("text-", "bg-")
+                                .replace(/dark:text-[^\s]+/, "")
+                                .trim()}/10 ${card.accent} shrink-0`}
+                            >
+                              <CardIcon className="w-3.5 h-3.5" />
+                            </span>
+                            <p className="text-[15px] font-medium text-foreground">{card.label}</p>
+                          </div>
+                          <p className="text-[13px] leading-5 text-muted-foreground mb-3">
+                            {card.description}
+                          </p>
+                          <div className="flex flex-wrap gap-1.5 mt-auto">
+                            {card.entities.map((entity) => (
+                              <code
+                                key={entity}
+                                className="bg-muted/60 px-1.5 py-0.5 rounded text-[11px] text-muted-foreground"
+                              >
+                                {entity}
+                              </code>
+                            ))}
+                          </div>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+              <SectionEdgeIndicators sectionId="record-types" />
             </FadeSection>
           </section>
 
@@ -1843,25 +1980,35 @@ export function SitePage({ staticMode = false }: SitePageProps) {
               : "pointer-events-none translate-y-full opacity-0"
           }`}
           role="region"
-          aria-label={pack.homeHero.ctaEvaluateWithAgent}
+          aria-label={`${pack.homeHero.ctaEvaluateWithAgent}. ${pack.homeHero.ctaMeetCreator}`}
           aria-hidden={!showEvaluateScrollBanner}
         >
           {showEvaluateScrollBanner ? (
             <div className="mx-auto flex w-full max-w-6xl justify-center px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] md:px-12 lg:px-16">
-              <div className="evaluate-cta-soft-bounce w-full sm:w-auto md:rounded-xl md:border md:border-emerald-500/30 md:bg-emerald-500/10 md:px-3 md:py-2 md:shadow-[0_14px_32px_-20px_rgba(16,185,129,0.9)] md:backdrop-blur-sm">
-                <a
-                  href="/evaluate"
-                  className={`${HOME_EVALUATE_CTA_CLASS} w-full sm:w-auto md:min-w-[320px]`}
-                  onClick={(e) => {
-                    sendCtaClick("hero_evaluate_scroll_banner");
-                    if (isModifiedClick(e)) return;
-                    e.preventDefault();
-                    navigate("/evaluate");
-                  }}
-                >
-                  <MessageSquare className="h-4 w-4 shrink-0" aria-hidden />
-                  {pack.homeHero.ctaEvaluateWithAgent}
-                </a>
+              <div className="flex w-full flex-col items-center md:w-auto">
+                <div className="flex w-full flex-col gap-2 rounded-xl border border-border/80 bg-background p-2 shadow-sm md:w-max md:max-w-full md:flex-row md:flex-wrap md:justify-center">
+                  <a
+                    href={localizePath("/evaluate", locale)}
+                    className={`${HOME_SCROLL_BANNER_SPLIT_CELL_CLASS} ${HOME_SCROLL_BANNER_PRIMARY_CELL_CLASS}`}
+                    onClick={(e) => {
+                      sendCtaClick("hero_evaluate_scroll_banner");
+                      if (isModifiedClick(e)) return;
+                      e.preventDefault();
+                      navigate(localizePath("/evaluate", locale));
+                    }}
+                  >
+                    <MessageSquare className="h-4 w-4 shrink-0" aria-hidden />
+                    <span>{pack.homeHero.ctaEvaluateWithAgent}</span>
+                  </a>
+                  <Link
+                    to={localizePath("/meet", locale)}
+                    className={`${HOME_SCROLL_BANNER_SPLIT_CELL_CLASS} ${HOME_SCROLL_BANNER_SECONDARY_CELL_CLASS}`}
+                    onClick={() => sendCtaClick("meet_with_creator_banner")}
+                  >
+                    <CalendarClock className="h-4 w-4 shrink-0" aria-hidden />
+                    <span>{pack.homeHero.ctaMeetCreator}</span>
+                  </Link>
+                </div>
               </div>
             </div>
           ) : null}

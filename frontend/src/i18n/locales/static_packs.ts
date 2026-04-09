@@ -17,8 +17,12 @@ export interface StaticLocalePack {
     summary: string;
     summaryRecordTypes: string[];
     ctaEvaluateWithAgent: string;
+    ctaEvaluateCompact: string;
     ctaViewGuarantees: string;
     ctaInstall: string;
+    /** Sticky home banner: second action → /meet (creator meetings). */
+    ctaMeetCreator: string;
+    ctaMeetCreatorCompact: string;
     ctaOfficeHours: string;
     ctaOfficeHoursSubtext: string;
     subcopy: string;
@@ -106,8 +110,11 @@ const EN_PACK: StaticLocalePack = {
       "health data",
     ],
     ctaEvaluateWithAgent: "Ask your agent to evaluate",
+    ctaEvaluateCompact: "Evaluate",
     ctaViewGuarantees: "View guarantees",
     ctaInstall: "Install in 5 minutes",
+    ctaMeetCreator: "Meet the creator",
+    ctaMeetCreatorCompact: "Meet",
     ctaOfficeHours: "Talk to the founder",
     ctaOfficeHoursSubtext:
       "Building a multi-agent stack? Office hours for developers who want to talk architecture.",
@@ -163,7 +170,7 @@ const EN_PACK: StaticLocalePack = {
     home: {
       title: "Your agents forget. Neotoma makes them remember.",
       description:
-        "Versioned records \u2014 contacts, tasks, decisions, finances \u2014 that persist across Claude, Cursor, ChatGPT, and every agent you run. Store once, query everywhere, stop re-prompting. Open-source and deterministic.",
+        "Stop being the human sync layer. Deterministic, versioned state for multi-agent builders and operators running Claude, Cursor, ChatGPT, and MCP-connected tools. Replay changes, trace provenance, and prove your agents aren\u2019t operating on bad state.",
     },
     docs: {
       title: "Neotoma Documentation | Setup, API, MCP, CLI References",
@@ -225,8 +232,12 @@ function buildPack(locale: SupportedLocale): StaticLocalePack {
       ...EN_PACK.homeHero,
       ctaEvaluateWithAgent:
         locale === "es" ? "Pide a tu agente que evalúe" : EN_PACK.homeHero.ctaEvaluateWithAgent,
+      ctaEvaluateCompact: locale === "es" ? "Evaluar" : EN_PACK.homeHero.ctaEvaluateCompact,
       ctaViewGuarantees: locale === "es" ? "Ver garantías" : EN_PACK.homeHero.ctaViewGuarantees,
       ctaInstall: locale === "es" ? "Instalar en 5 minutos" : EN_PACK.homeHero.ctaInstall,
+      ctaMeetCreator: locale === "es" ? "Conocer al creador" : EN_PACK.homeHero.ctaMeetCreator,
+      ctaMeetCreatorCompact:
+        locale === "es" ? "Creador" : EN_PACK.homeHero.ctaMeetCreatorCompact,
       audienceTagline:
         locale === "es"
           ? "Para desarrolladores que ejecutan agentes entre sesiones y herramientas"

@@ -15,6 +15,7 @@ import { isMarketingFullPageRoute } from "@/site/full_page_paths";
 function shouldCollapseDocsSidebarForRoute(normalizedPath: string): boolean {
   return (
     normalizedPath === "/evaluate" ||
+    normalizedPath === "/meet" ||
     normalizedPath === "/install" ||
     normalizedPath.startsWith("/install/")
   );
@@ -70,6 +71,10 @@ export function Layout({ children, siteName = DEFAULT_SITE_NAME }: LayoutProps) 
     return <>{children}</>;
   }
 
+  /** Marketing `/` (and locale roots) scroll inside `SitePage`; dev SEO panel belongs in that scroll, not below `h-screen`. */
+  const seoDevMetaRenderedInsideSitePageScroll =
+    stripped === "/" && !isProductBasePath();
+
   return (
     <SiteAppNavProvider>
       <LayoutShell
@@ -77,6 +82,7 @@ export function Layout({ children, siteName = DEFAULT_SITE_NAME }: LayoutProps) 
         isHomeShell={isHomeShell}
         showDocsSidebar={showDocsSidebar}
         docsSidebarDefaultOpen={docsSidebarDefaultOpen}
+        omitHomeShellSeoDevMeta={seoDevMetaRenderedInsideSitePageScroll}
       >
         {children}
       </LayoutShell>
@@ -90,12 +96,14 @@ function LayoutShell({
   isHomeShell,
   showDocsSidebar,
   docsSidebarDefaultOpen,
+  omitHomeShellSeoDevMeta,
 }: {
   children: React.ReactNode;
   siteName: string;
   isHomeShell: boolean;
   showDocsSidebar: boolean;
   docsSidebarDefaultOpen: boolean;
+  omitHomeShellSeoDevMeta: boolean;
 }) {
   const appNavBarVisible = useSiteAppNavBarVisible();
 
@@ -118,7 +126,7 @@ function LayoutShell({
             <div data-site-markdown-root className="contents">
               {children}
             </div>
-            <SeoDevMetaFooter />
+            {!omitHomeShellSeoDevMeta ? <SeoDevMetaFooter /> : null}
           </>
         ) : (
           <>

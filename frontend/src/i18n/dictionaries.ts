@@ -8,6 +8,8 @@ export interface LocaleDictionary {
   install: string;
   /** Primary marketing nav CTA (e.g. /evaluate). */
   evaluate: string;
+  /** Docs nav label for /meet (book time with the creator). */
+  meetTheCreator: string;
   architecture: string;
   /** Homepage header nav: scroll target for the memory guarantees section. */
   memoryGuaranteesNav: string;
@@ -56,6 +58,7 @@ const en: LocaleDictionary = {
   quickStart: "Quick start",
   install: "Install",
   evaluate: "Evaluate",
+  meetTheCreator: "Meet the creator",
   architecture: "Architecture",
   memoryGuaranteesNav: "Guarantees",
   allDocumentation: "Documentation",
@@ -100,6 +103,7 @@ const dictionaries: Record<SupportedLocale, LocaleDictionary> = {
     search: "Buscar",
     quickStart: "Inicio rápido",
     install: "Instalar",
+    meetTheCreator: "Conocer al creador",
     architecture: "Arquitectura",
     allDocumentation: "Documentación",
     developerPreview: "Vista previa para desarrolladores",

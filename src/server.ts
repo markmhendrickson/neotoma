@@ -123,6 +123,7 @@ export class NeotomaServer {
       "For reverted turns: optionally link the new message to the previous one with create_relationship(SUPERSEDES, new_message_entity_id, previous_message_entity_id).",
       'When you pull data from other MCPs (e.g. email, calendar, search), apply the same proactive storage: extract and store people, companies, locations, events, tasks, notifications, device status, and relationships from that data. Create tasks for action items (e.g. "replace battery", "share feedback", "review security alert", "reply about Madrid trip"). Store locations and link events or tasks to them. Store first, then respond.',
       "When confirming stored information, you MUST use memory-related language (e.g. “remember”, “recall”, “store in memory”) and include one of those phrases in the confirmation.",
+      "When any MCP action creates or updates Neotoma entities, the user-visible reply MUST include one markdown table per affected entity with action, entity_id, entity_type, and every stored or changed property available from the snapshot or store response.",
       'Extract and store all relevant entities from what the user says: people, tasks, events, commitments, preferences, possessions, relationships, places, and any other types that fit. Store every distinct entity (e.g. a person and a task and an event from the same message). When the user mentions a place, property, or location (e.g. "our home in Barcelona", "my office", "apartment in Madrid"), store it as an entity (e.g. location, property, or place) and link the task or other entities to it. Create relationships when implied (e.g. friend of, task for person, event attendee, task for location) using create_relationship or relationship fields per schema.',
       "Proactively create a task when the user expresses intent, obligation, debt, or a future action (e.g. “I need to”, “I have to”, “I owe”, “I should”, “I want to buy”, “remind me”, or any deadline). Unless the user explicitly says no reminders or no tasks, create a task with due date if available and relate it to the relevant person or entity.",
       'When entity type is not in the known list, use list_entity_types with a keyword (e.g. "device", "asset", "preference", "gift", "reminder") or store with a descriptive entity_type; the system will infer or create schema from the data. Be proactive about storing any type of relevant entity, including types not yet registered.',
@@ -131,7 +132,7 @@ export class NeotomaServer {
       "Check for existing records before storing to avoid duplicates.",
       "Include all fields from source data when storing entities. Unknown fields must be included.",
       "Omit user_id. It is inferred from authentication.",
-      "After any MCP action, summarize entities and relationships with all snapshot fields.",
+      "After any MCP action, summarize entities and relationships with all snapshot fields, and do not replace required per-entity tables with prose-only summary.",
       'If the prompt ends with "via mcp", use MCP actions only and do not read or write local files.',
     ].join("\n");
     const instructionsPath = join(this.mcpDocsPath(), "instructions.md");

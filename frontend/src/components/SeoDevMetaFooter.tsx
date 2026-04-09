@@ -57,7 +57,7 @@ export function SeoDevMetaFooter() {
   return (
     <div
       role="region"
-      className="border-t border-amber-500/40 bg-amber-950/90 text-amber-100/95 dark:bg-amber-950/95 dark:text-amber-50/95"
+      className="relative shrink-0 border-t border-amber-500/40 bg-amber-950/90 text-amber-100/95 dark:bg-amber-950/95 dark:text-amber-50/95"
       data-testid="seo-dev-meta-footer"
       aria-label="Development SEO metadata"
     >
@@ -105,18 +105,24 @@ export function SeoDevMetaFooter() {
                   <span className="break-all text-amber-100">{ogPreviewSrc}</span>
                 </p>
               ) : (
-                <figure className="max-w-md space-y-1">
-                  <img
-                    src={ogPreviewSrc}
-                    alt={meta.ogImageAlt}
-                    width={1200}
-                    height={630}
-                    className="h-auto w-full rounded border border-amber-500/40 bg-amber-900/40 object-contain shadow-sm"
-                    loading="lazy"
-                    decoding="async"
-                    data-testid="seo-dev-meta-footer-preview-image"
-                    onError={() => setImageFailed(true)}
-                  />
+                <figure className="max-w-2xl space-y-2">
+                  {/*
+                    Dark OG assets disappear on the amber panel without a light mat. Eager load: <details>
+                    keeps the img offscreen until opened; lazy loading can delay or skip decode there.
+                  */}
+                  <div className="rounded-md border border-amber-500/50 bg-zinc-200 p-2 shadow-inner dark:border-zinc-600 dark:bg-zinc-300">
+                    <img
+                      src={ogPreviewSrc}
+                      alt={meta.ogImageAlt}
+                      width={1200}
+                      height={630}
+                      className="h-auto w-full rounded-sm object-contain"
+                      loading="eager"
+                      decoding="async"
+                      data-testid="seo-dev-meta-footer-preview-image"
+                      onError={() => setImageFailed(true)}
+                    />
+                  </div>
                   <figcaption className="font-mono text-[10px] leading-snug text-amber-400/90">
                     {meta.ogImageAlt}
                   </figcaption>

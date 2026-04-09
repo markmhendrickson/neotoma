@@ -59,9 +59,9 @@ function HeroStateFlow({ visible }: { visible: boolean }) {
   const arrowAfterAsksDelay = `${HERO_LAYERS.length * 2 * STAGGER_MS + 60}ms`;
 
   return (
-    <div className="relative flex flex-col gap-3">
+    <div className="relative flex min-w-0 max-w-full flex-col gap-3">
       <div
-        className="rounded-xl border border-sky-300/60 bg-sky-50/90 p-4 transition-[opacity,transform] duration-500 ease-out dark:border-sky-500/30 dark:bg-sky-500/10"
+        className="max-w-full rounded-xl border border-sky-300/60 bg-sky-50/90 p-3 transition-[opacity,transform] duration-500 ease-out dark:border-sky-500/30 dark:bg-sky-500/10 sm:p-4"
         style={{
           opacity: visible ? 1 : 0,
           transform: visible ? "translateY(0)" : "translateY(12px)",
@@ -71,7 +71,7 @@ function HeroStateFlow({ visible }: { visible: boolean }) {
         <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-sky-700 dark:text-sky-300">
           You tell OpenClaw
         </p>
-        <p className="mt-2 font-mono text-[13px] leading-6 text-slate-800 dark:text-slate-100">
+        <p className="mt-2 break-words font-mono text-[12px] leading-6 text-slate-800 dark:text-slate-100 sm:text-[13px]">
           &rdquo;I've issued Acme $3,200 invoice due Dec 15.&rdquo;
         </p>
       </div>
@@ -84,7 +84,7 @@ function HeroStateFlow({ visible }: { visible: boolean }) {
         return (
           <div key={layer.label}>
             <div
-              className="group flex items-center gap-3 rounded-xl border border-slate-200 bg-white/90 px-4 py-3 transition-[opacity,transform] duration-500 ease-out dark:border-slate-700/40 dark:bg-slate-900/70"
+              className="group flex min-w-0 max-w-full items-center gap-3 rounded-xl border border-slate-200 bg-white/90 px-3 py-3 transition-[opacity,transform] duration-500 ease-out dark:border-slate-700/40 dark:bg-slate-900/70 sm:px-4"
               style={{
                 opacity: visible ? 1 : 0,
                 transform: visible ? "translateY(0)" : "translateY(12px)",
@@ -95,10 +95,10 @@ function HeroStateFlow({ visible }: { visible: boolean }) {
                 <Database className="h-3.5 w-3.5 shrink-0" strokeWidth={1.65} aria-hidden />
               </div>
               <div className="min-w-0">
-                <p className="font-mono text-[13px] font-medium text-slate-800 dark:text-slate-100">
+                <p className="break-words font-mono text-[13px] font-medium text-slate-800 dark:text-slate-100">
                   {layer.label}
                 </p>
-                <p className="font-mono text-[10px] text-slate-500 dark:text-slate-400">
+                <p className="break-words font-mono text-[10px] leading-5 text-slate-500 dark:text-slate-400">
                   {layer.sub}
                 </p>
               </div>
@@ -110,7 +110,7 @@ function HeroStateFlow({ visible }: { visible: boolean }) {
       <HeroVerticalArrow visible={visible} delay={arrowAfterStoredDelay} />
 
       <div
-        className="mt-1 flex items-center gap-2 rounded-lg border border-dashed border-slate-300/60 bg-slate-50/80 px-3 py-2 transition-[opacity,transform] duration-500 ease-out dark:border-slate-700/50 dark:bg-slate-900/40"
+        className="mt-1 flex min-w-0 max-w-full items-center gap-2 rounded-lg border border-dashed border-slate-300/60 bg-slate-50/80 px-3 py-2 transition-[opacity,transform] duration-500 ease-out dark:border-slate-700/50 dark:bg-slate-900/40"
         style={{
           opacity: visible ? 1 : 0,
           transform: visible ? "translateY(0)" : "translateY(12px)",
@@ -121,7 +121,7 @@ function HeroStateFlow({ visible }: { visible: boolean }) {
           <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400/80">
             You ask Claude later
           </p>
-          <p className="mt-1 font-mono text-[12px] leading-5 text-slate-700 dark:text-slate-200">
+          <p className="mt-1 break-words font-mono text-[12px] leading-5 text-slate-700 dark:text-slate-200">
             &ldquo;What&apos;s my total outstanding balance?&rdquo;
           </p>
         </div>
@@ -130,7 +130,7 @@ function HeroStateFlow({ visible }: { visible: boolean }) {
       <HeroVerticalArrow visible={visible} delay={arrowAfterAsksDelay} />
 
       <div
-        className="rounded-xl border border-emerald-300/60 bg-emerald-50/80 px-3 py-3 transition-[opacity,transform] duration-500 ease-out dark:border-emerald-500/30 dark:bg-emerald-500/10"
+        className="max-w-full rounded-xl border border-emerald-300/60 bg-emerald-50/80 px-3 py-3 transition-[opacity,transform] duration-500 ease-out dark:border-emerald-500/30 dark:bg-emerald-500/10"
         style={{
           opacity: visible ? 1 : 0,
           transform: visible ? "translateY(0)" : "translateY(12px)",
@@ -142,7 +142,7 @@ function HeroStateFlow({ visible }: { visible: boolean }) {
             <Lightbulb className="h-3.5 w-3.5 shrink-0" strokeWidth={1.65} aria-hidden />
           </div>
           <div className="min-w-0">
-            <p className="font-mono text-[14px] leading-snug text-emerald-900 dark:text-emerald-100">
+            <p className="break-words font-mono text-[13px] leading-snug text-emerald-900 dark:text-emerald-100 sm:text-[14px]">
               <span className="font-semibold">$16,302</span>
               <span className="font-medium"> from 4 unpaid invoices, 2 past due</span>
             </p>

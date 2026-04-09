@@ -324,6 +324,7 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
     items: [
       { label: "Documentation", href: "/docs", icon: "Home" },
       { label: "Evaluate", href: "/evaluate", icon: "ClipboardCheck" },
+      { label: "Meet the creator", href: "/meet", icon: "CalendarClock" },
       { label: "Install", href: "/install", icon: "Download" },
       { label: "Walkthrough", href: "/developer-walkthrough", icon: "Waypoints" },
     ],
@@ -1213,6 +1214,8 @@ export interface IcpProfile {
   name: string;
   shortName: string;
   tagline: string;
+  /** Homepage-only second paragraph that expresses the role shift in normal prose. */
+  homepageTransition: string;
   /** Operational mode label (e.g. "Operating", "Building", "Debugging"). */
   modeLabel: string;
   /** Lucide icon name rendered on the homepage card (e.g. "Server"). */
@@ -1240,6 +1243,8 @@ export const ICP_PROFILES: IcpProfile[] = [
     name: "You're the context janitor between tools",
     shortName: "Context janitor",
     tagline: "Every session starts from zero. You re-explain context, re-prompt corrections, re-establish what the agent already knew.",
+    homepageTransition:
+      "You stop acting as the human sync layer between tools and start operating with continuity, steering instead of re-explaining.",
     modeLabel: "Cross-tool sync",
     iconName: "ArrowLeftRight",
     escaping: "Context janitor — human sync layer between tools",
@@ -1282,6 +1287,8 @@ export const ICP_PROFILES: IcpProfile[] = [
     name: "You're babysitting inference variance",
     shortName: "Inference variance",
     tagline: "Your agent guesses entities every run. Corrections don\u2019t persist. Regressions ship because the architecture can\u2019t prevent them.",
+    homepageTransition:
+      "You stop babysitting inference variance and start building on solid ground, with state that stays corrected from run to run.",
     modeLabel: "Pipeline state",
     iconName: "Workflow",
     escaping: "Babysitting inference — absorbing variance the architecture doesn't handle",
@@ -1332,6 +1339,8 @@ export const ICP_PROFILES: IcpProfile[] = [
     name: "You're the log archaeologist",
     shortName: "Log archaeology",
     tagline: "Two runs. Same inputs. Different state. No replay, no diff, no explanation.",
+    homepageTransition:
+      "You stop reverse-engineering truth from logs and start debugging from replayable state you can inspect, diff, and trust.",
     modeLabel: "Replay & debug",
     iconName: "Bug",
     escaping: "Log archaeologist — reverse-engineering truth from logs",

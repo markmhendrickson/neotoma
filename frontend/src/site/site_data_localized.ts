@@ -47,6 +47,7 @@ export function getLocalizedDocNavCategories(dict: LocaleDictionary) {
   const itemLabelByHref: Record<string, string> = {
     "/docs": dict.allDocumentation,
     "/install": dict.install,
+    "/meet": dict.meetTheCreator,
     "/architecture": dict.architecture,
   };
 

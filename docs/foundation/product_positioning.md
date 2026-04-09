@@ -48,6 +48,8 @@ Neotoma positions as the substrate layer beneath the emerging "LLM app layer" (a
 - **Neotoma (State Layer)**: Provides structured personal data substrate—the private data that enables LLM apps to be effective
 
 **vs. Provider Memory:** ChatGPT, Claude, and Gemini offer conversation-only memory (platform-locked, provider-controlled). Neotoma provides structured personal data memory with entity resolution, timelines, and cross-platform access via MCP.
+
+**Hybrid retrieval:** Neotoma supports all three retrieval modes co-available: structured queries (primary, deterministic, the path agents should default to), entity semantic search (vector similarity over the structured entity store when a text query is provided), and graph traversal (relationship-typed walks across the Records → Entities → Events graph). The distinction from retrieval-only memory (Mem0, Zep, Penfield) is not the *absence* of semantic or graph retrieval — it is that structured, deterministic queries remain primary, and semantic/graph modes operate over a verifiable structured store rather than re-deriving structure every session.
 ## 7.2 Differentiation
 Neotoma is **not competing** with Notion, Evernote, Google Docs, or PKM systems.
 **Those tools store files. Neotoma understands files.**
@@ -235,6 +237,49 @@ The distinction: observability records events, logs, and traces. State integrity
 **Supporting:** *Stop being the sync layer. Prove what your agent knew.*
 
 **Evaluator-validated phrases:** "State integrity, not retrieval quality." "CI/CD for agent state." "System of record for AI agents." "Your agents forget what they knew yesterday." "Truth Layer."
+
+### Catchphrase registry
+
+Consolidated inventory of short-form phrases. Use for hero copy, subheadlines, CTAs, social posts, HN comments, blog openers, and slide decks. Organized by value theme so each messaging surface can draw from both wedges.
+
+**Tax removal (chronic pain — continuity, sovereignty, sync burden):**
+
+| Phrase | Origin | Best slot |
+|--------|--------|-----------|
+| "Your agents forget. Neotoma makes them remember." | Hero headline | Hero h1, cold open |
+| "Your agents forget what they knew yesterday." | Hero variant | Blog openers, social |
+| "Stop being the human sync layer." | Hero subcopy | Subheadline, HN |
+| "Re-prompting costs time. Wrong state costs trust." | Footer CTA | CTA lead-in, consequence framing |
+| "One memory across all your AI tools." | Differentiator translation | Feature explanation, comparison pages |
+| "Your data stays on your machine." | Differentiator translation | Privacy-first audiences, install page |
+
+**State integrity (acute pain — corruption, auditability, reconstruction):**
+
+| Phrase | Origin | Best slot |
+|--------|--------|-----------|
+| "State integrity, not retrieval quality." | Evaluator | Competitive differentiation, technical audiences |
+| "CI/CD for agent state." | Evaluator (Tycho Onnasch) | Infra engineers, HN, technical blog |
+| "Most memory tools help agents retrieve information. None of them can prove it hasn't been silently corrupted." | Hero curiosity gap | Below-fold, long-form |
+| "Same input, same state, every time." | Differentiator translation | Guarantee claims, architecture page |
+| "What did your agent know at decision time?" | Differentiator translation | Accountability framing, blog, demos |
+| "No garbage in, no garbage out." | Differentiator translation | Schema/validation audiences |
+| "Observability tells you what happened. State integrity proves what was true." | Build-vs-buy page | Technical positioning, comparison pages |
+
+**Category framing (what Neotoma is):**
+
+| Phrase | Origin | Best slot |
+|--------|--------|-----------|
+| "The state layer for AI agents." | Footer tagline | Tagline, meta descriptions |
+| "System of record for AI agents." | Synthesis from feedback | Category creation, blog, HN |
+| "Truth Layer." | Evaluator | Technical shorthand, architecture discussions |
+| "git for what your agents know." | Hero subcopy | Analogy for developers, social |
+| "Those tools store files. Neotoma understands files." | Positioning doc | Competitive contrast (PKM/notes tools) |
+| "Other memory solutions give your agents a notepad. Neotoma gives them a ledger." | Proposed | Competitive contrast (Mem0/Zep), social, blog |
+| "Memory is a feature. State is an invariant." | Proposed | Category distinction, technical audiences |
+| "Retrieval tells you what an agent found. State proves what it knew." | Proposed | Competitive contrast, below-fold |
+| "Your agents don't have a memory problem. They have a state problem." | Proposed | Reframing opener, blog, HN comments |
+
+Phrases marked "Proposed" are candidates awaiting field validation. Move to confirmed after use in a messaging surface with positive signal.
 
 ### Strategic risks
 

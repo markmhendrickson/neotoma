@@ -333,19 +333,33 @@
   }
 }
 
-/* Home: sticky evaluate CTA — gentle vertical pulse (not Tailwind bounce) */
-@keyframes evaluate-cta-soft-bounce {
-  0%,
-  100% {
-    transform: translateY(0);
+/* CliDemoInteractive: comment + output line enter */
+@keyframes cli-demo-comment-in {
+  from {
+    opacity: 0;
   }
-  50% {
-    transform: translateY(-5px);
+  to {
+    opacity: 1;
   }
 }
 
-.evaluate-cta-soft-bounce {
-  animation: evaluate-cta-soft-bounce 2.75s ease-in-out infinite;
+@keyframes cli-demo-output-line-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.cli-demo-comment-in {
+  animation: cli-demo-comment-in 0.35s ease-out forwards;
+}
+
+.cli-demo-output-line-in {
+  animation: cli-demo-output-line-in 0.28s ease-out forwards;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -354,7 +368,8 @@
     animation: none !important;
   }
 
-  .evaluate-cta-soft-bounce {
+  .cli-demo-comment-in,
+  .cli-demo-output-line-in {
     animation: none;
   }
 }

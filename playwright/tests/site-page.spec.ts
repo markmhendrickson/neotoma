@@ -22,7 +22,7 @@ test.describe("sitePage coverage", () => {
 
     const pageSections = page.getByRole("navigation", { name: /page sections/i });
     await expect(pageSections).toBeVisible();
-    await expect(pageSections.getByRole("button")).toHaveCount(7);
+    await expect(pageSections.getByRole("button")).toHaveCount(8);
   });
 
   test("intro content layer stretches to the section bottom on desktop", async ({ page }, testInfo) => {
