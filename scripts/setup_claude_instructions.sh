@@ -226,12 +226,9 @@ done
 
 print_info "Adapted $RULES_COPIED foundation rule(s)"
 
-# Process foundation commands → skills
+# Process foundation commands → skills (all commands; names match slash invocations, e.g. /analyze)
 print_info "Processing foundation commands → skills..."
 SKILLS_COPIED=0
-
-# High-value commands to convert to skills
-SKILL_COMMANDS=("release" "fix_feature_bug" "create_feature_unit" "setup_symlinks" "pull" "commit")
 
 for cmd_file in "$COMMANDS_DIR"/*.md "$COMMANDS_DIR"/*/SKILL.md; do
     if [ -f "$cmd_file" ]; then
@@ -240,24 +237,11 @@ for cmd_file in "$COMMANDS_DIR"/*.md "$COMMANDS_DIR"/*/SKILL.md; do
         if [ "$cmd_name" = "SKILL" ]; then
             cmd_name=$(basename "$(dirname "$cmd_file")")
         fi
-        
-        # Check if this is a high-value command
-        convert_to_skill=false
-        for skill_cmd in "${SKILL_COMMANDS[@]}"; do
-            if [[ "$cmd_name" == "$skill_cmd" ]]; then
-                convert_to_skill=true
-                break
-            fi
-        done
-        
-        if [ "$convert_to_skill" = true ]; then
-            target_file=".claude/skills/${cmd_name}.md"
-            adapt_command_to_skill "$cmd_file" "$cmd_file" "$cmd_name" > "$target_file"
-            print_info "  ✓ Adapted $cmd_name.md → skill"
-            SKILLS_COPIED=$((SKILLS_COPIED + 1))
-        else
-            print_info "  ⊘ Skipped command (low-priority): $cmd_name.md"
-        fi
+
+        target_file=".claude/skills/${cmd_name}.md"
+        adapt_command_to_skill "$cmd_file" "$cmd_file" "$cmd_name" > "$target_file"
+        print_info "  ✓ Adapted $cmd_name.md → skill"
+        SKILLS_COPIED=$((SKILLS_COPIED + 1))
     fi
 done
 
@@ -397,7 +381,7 @@ In those cases: ask a short, concrete question with 1–2 options or "proceed wi
 
 All rules in `.claude/rules/` apply; they are modular instructions loaded automatically by context.
 
-Skills in `.claude/skills/` are workflows invokable with `/skill-name` (e.g. `/release`, `/fix_feature_bug`).
+Skills in `.claude/skills/` are workflows invokable with `/command_name` matching each foundation command file (e.g. `/analyze`, `/release`, `/fix_feature_bug`).
 
 For complete documentation map, reading strategies, and dependency graph, see `docs/context/index_rules.mdc`.
 EOF
@@ -447,7 +431,7 @@ print_info "Next steps:"
 print_info "  1. Configure permissions in ~/.claude/settings.json if needed"
 print_info "  2. Open Claude Code in this project"
 print_info "  3. Claude will load CLAUDE.md and rules automatically"
-print_info "  4. Use skills like /release, /fix_feature_bug"
+print_info "  4. Use skills like /analyze, /release, /fix_feature_bug (see .claude/skills/)"
 print_info ""
 print_info "To update after editing sources: ./scripts/setup_claude_instructions.sh"
 print_info ""

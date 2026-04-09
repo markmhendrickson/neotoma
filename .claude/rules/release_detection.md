@@ -1,9 +1,9 @@
 ---
-description: "Automatically detects release intent from user patterns and triggers the release creation workflow. Load when user mentions release, version, or launch."
-alwaysApply: false
+description: "Automatically detects release intent from user patterns and triggers the release creation workflow"
+alwaysApply: true
 ---
 
-<!-- Source: foundation/.cursor/rules/release_detection.mdc -->
+<!-- Source: foundation/agent_instructions/cursor_rules/release_detection.mdc -->
 
 # Release Detection Rule
 
@@ -18,6 +18,7 @@ When a user mentions any of the following patterns, automatically detect release
 - "new release"
 - "internal release"
 - "create release"
+- "/release"
 - "release vX.Y.Z"
 - "split out [features] into a [type] release"
 - "prior release"
@@ -45,7 +46,7 @@ If context suggests a release (mentions "release", version numbers, "split out",
 
 3. **Ask for confirmation:**
    ```
-   I see you're requesting a new release. Should I create a release plan in 
+   I see you're requesting a release. Should I draft and preview the full release details in
    `{configured_releases_directory}/in_progress/{release_id}/` following the release workflow? (yes/no)
    ```
    
@@ -61,7 +62,7 @@ If context suggests a release (mentions "release", version numbers, "split out",
 
 1. **Load required documents:**
    - `foundation/development/release_workflow.md` (primary workflow)
-   - Skill `create-release` (`.cursor/skills/create-release/SKILL.md` or `foundation/agent_instructions/cursor_skills/create-release/SKILL.md`)
+   - `foundation/agent_instructions/cursor_commands/release.md` (canonical command) and `foundation/agent_instructions/cursor_commands/create_release.md` (legacy alias implementation)
    - `foundation/development/feature_unit_workflow.md` (for FU creation, if feature units enabled)
    - Repository-specific execution instructions (if they exist)
 
@@ -87,9 +88,9 @@ If context suggests a release (mentions "release", version numbers, "split out",
 
 ## Integration with Commands
 
-This rule complements the explicit `/create_release` command:
+This rule complements the explicit `/release` command:
 - **Rule-based detection:** Triggers automatically when patterns are detected
-- **Explicit command:** User can call `/create_release` directly without pattern matching
+- **Explicit command:** User can call `/release` directly without pattern matching (`/create_release` remains a legacy alias)
 
 Both paths lead to the same workflow execution.
 

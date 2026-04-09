@@ -1,9 +1,9 @@
 ---
-description: "Describe manual test cases after completing a release build. Load when finishing a release build or describing verification steps."
-alwaysApply: false
+description: "Ensures agents always describe manual test cases after completing a release build"
+alwaysApply: true
 ---
 
-<!-- Source: foundation/.cursor/rules/post_build_testing.mdc -->
+<!-- Source: foundation/agent_instructions/cursor_rules/post_build_testing.mdc -->
 
 # Post-Build Testing Rule
 

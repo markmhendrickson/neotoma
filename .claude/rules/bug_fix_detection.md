@@ -1,13 +1,13 @@
 ---
-description: "Automatically detects bug fix intent from user patterns and triggers the bug fix workflow. Load when user reports bugs, errors, or failing tests."
-alwaysApply: false
+description: "Automatically detects bug fix intent from user patterns and triggers the bug fix workflow"
+alwaysApply: true
 ---
 
-<!-- Source: foundation/.cursor/rules/bug_fix_detection.mdc -->
+<!-- Source: foundation/agent_instructions/cursor_rules/bug_fix_detection.mdc -->
 
 # Bug Fix Detection Rule
 
-**Reference:** Skill `fix-feature-bug` — Bug fix workflow (`.cursor/skills/fix-feature-bug/SKILL.md` or `foundation/agent_instructions/cursor_skills/fix-feature-bug/SKILL.md`)
+**Reference:** `foundation/agent_instructions/cursor_commands/fix_feature_bug.md` — Bug fix workflow (or `.claude/skills/foundation_fix_feature_bug.md` if symlinked)
 
 Configuration is read from `foundation-config.yaml`.
 
@@ -68,7 +68,7 @@ If context suggests a bug (mentions "bug", "error", "fix", "broken", error messa
    - Determine feature unit directory (if feature units enabled)
 
 2. **Load required documents:**
-   - Skill `fix-feature-bug` (`.cursor/skills/fix-feature-bug/SKILL.md` or `foundation/agent_instructions/cursor_skills/fix-feature-bug/SKILL.md`)
+   - `foundation/agent_instructions/cursor_commands/fix_feature_bug.md` (command implementation, or `.claude/skills/foundation_fix_feature_bug.md` if symlinked)
    - Repository navigation guide (if configured)
    - Feature spec and manifest (if feature units enabled and identifier provided)
    - Error classification documentation (if configured)
