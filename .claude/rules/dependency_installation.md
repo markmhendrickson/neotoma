@@ -1,9 +1,9 @@
 ---
-description: "Install required dependencies when code or scripts need missing packages. Load when imports fail, tools are missing, or setup requires npm/pip/etc."
-alwaysApply: false
+description: "Ensures agents automatically install required dependencies when needed to fulfill prompts"
+alwaysApply: true
 ---
 
-<!-- Source: foundation/.cursor/rules/dependency_installation.mdc -->
+<!-- Source: foundation/agent_instructions/cursor_rules/dependency_installation.mdc -->
 
 # Dependency Installation Rule
 
@@ -74,16 +74,10 @@ After installing:
 - Test that tools/commands work as expected
 - Ensure no installation errors occurred
 
-### 5. Proceed After Installing
-
-- After installing dependencies, retry the operation that failed (re-run the command or continue the workflow)
-- Do not stop and ask the user to run the command; run it again in the same workflow
-
 ## Constraints
 
 - **Do NOT ask for permission** - Install dependencies automatically when needed
 - **Do NOT skip installation** - If code requires a dependency, install it
-- **MUST NOT leave missing dependencies unresolved** - Install or report failure; do not proceed with broken imports or missing tools
 - **Use correct package manager** - Follow project conventions (don't mix npm/yarn/pnpm)
 - **Update dependency files** - Always update manifest files after installation
 - **Handle errors gracefully** - If installation fails, report the error and suggest alternatives

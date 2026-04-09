@@ -12,7 +12,7 @@ tools:
   list_relationships: "List relationships for an entity"
   get_relationship_snapshot: "Get the current snapshot of a specific relationship with provenance"
   retrieve_entities: "Use this when you need filtered entity lists (by type, pagination, and optional published/date filters) or lexical/semantic retrieval via `search`. Strict mode: `search` cannot be combined with non-default sorting or published filters. Set `include_snapshots=false` for lightweight responses that omit snapshot/provenance/raw_fragments. Compatibility aliases `search_query` and `query` are accepted but `search` is canonical."
-  list_timeline_events: "Use this when you need chronological event history, date-window filtering, or source-scoped timeline queries. Returns ordered events derived from source date fields."
+  list_timeline_events: "Use this when you need chronological event history, date-window filtering, or source-scoped timeline queries. Returns ordered events derived from source date fields. Default sort is event_timestamp (extracted dates); use order_by created_at for newest-ingested rows first."
   retrieve_entity_by_identifier: "Retrieve entity by identifier (name, email, etc.) across entity types or specific type. Falls back to semantic search when keyword match returns no results."
   retrieve_related_entities: "Retrieve entities connected to a given entity via relationships. Supports n-hop traversal."
   retrieve_graph_neighborhood: "Retrieve complete graph neighborhood around a node (entity or source): related entities, relationships, sources, and events."
@@ -27,8 +27,10 @@ tools:
   delete_relationship: "Delete a relationship. Creates a deletion observation so the relationship is excluded from snapshots and queries. Immutable and reversible for audit."
   restore_entity: "Restore a deleted entity. Creates a restoration observation (priority 1001) that overrides the deletion. Entity becomes visible in snapshots and queries again. Immutable restoration for audit."
   restore_relationship: "Restore a deleted relationship. Creates a restoration observation (priority 1001) that overrides the deletion. Relationship becomes visible in snapshots and queries again. Immutable restoration for audit."
+  get_entity_type_counts: |
+    Return canonical entity counts by entity_type for the authenticated user. Uses the same dashboard stats aggregation behind GET /stats and sorts results by count descending, then entity_type ascending. Use this when the user asks for counts by type, histograms, or sorted totals. This returns row counts, unlike list_entity_types where field_count is schema field width.
   list_entity_types: |
-    List available entity types. Without keyword: returns a short summary (entity_type, schema_version, field_count) for all types. With keyword: returns full schema (field_names, field_summary) for matching types; pass summary: true to get summary only. Uses hybrid search when keyword is provided: keyword matching first, then vector semantic search. Use before storing structured data to determine the correct entity_type.
+    List available entity types. Without keyword: returns a short summary (entity_type, schema_version, field_count) for all types. field_count here means schema field width, not stored entity row count. With keyword: returns full schema (field_names, field_summary) for matching types; pass summary: true to get summary only. Uses hybrid search when keyword is provided: keyword matching first, then vector semantic search. Use before storing structured data to determine the correct entity_type.
   analyze_schema_candidates: |
     Analyze raw_fragments to identify fields that should be promoted to schema fields. Returns recommendations with confidence scores based on frequency and type consistency.
   get_schema_recommendations: "Get schema update recommendations for an entity type from raw_fragments analysis, agent suggestions, or inference."

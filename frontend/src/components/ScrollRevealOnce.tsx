@@ -70,7 +70,7 @@ export function ScrollRevealOnce({
   return (
     <div
       ref={wrapperRef}
-      className={`transition-[opacity,transform] duration-500 ease-out motion-reduce:transition-none ${revealed ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3"} ${className}`}
+      className={`transition-[opacity,transform] duration-500 ease-out motion-reduce:transition-none print:!opacity-100 print:!translate-y-0 ${revealed ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3"} ${className}`}
       style={{ transitionDelay: revealed ? `${staggerMs}ms` : "0ms" }}
     >
       {children}

@@ -194,6 +194,143 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/.well-known/oauth-authorization-server": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** OAuth 2.0 Authorization Server Metadata (RFC 8414) */
+        get: operations["oauthServerMetadata"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/.well-known/oauth-protected-resource": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** OAuth 2.0 Protected Resource Metadata */
+        get: operations["oauthProtectedResource"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mcp/oauth/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** OAuth callback endpoint */
+        get: operations["mcpOAuthCallback"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mcp/oauth/key-auth": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Key-based authorization page (GET) */
+        get: operations["mcpOAuthKeyAuthGet"];
+        put?: never;
+        /** Key-based authorization submission (POST) */
+        post: operations["mcpOAuthKeyAuthPost"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mcp/oauth/local-login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Local login for development (auto-creates dev user) */
+        get: operations["mcpOAuthLocalLogin"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mcp/oauth/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Dynamic Client Registration (RFC 7591) */
+        post: operations["mcpOAuthRegister"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mcp/oauth/authorization-details": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Authorization details proxy */
+        get: operations["mcpOAuthAuthorizationDetails"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/dev-signin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Dev-only sign-in endpoint (development mode only) */
+        post: operations["devSignIn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/entities/query": {
         parameters: {
             query?: never;
@@ -1016,7 +1153,14 @@ export interface components {
             event_type?: string;
             /** Format: date-time */
             event_timestamp?: string;
+            event_date?: string;
             source_id?: string;
+            source_field?: string;
+            entity_id?: string;
+            /** Format: date-time */
+            created_at?: string;
+            user_id?: string;
+            /** @description Optional; not populated by all transports. Prefer entity_id. */
             entity_ids?: string[];
             properties?: {
                 [key: string]: unknown;
@@ -1054,7 +1198,7 @@ export interface components {
             /** @description Optional. Create relationships between entities in this request. Indices refer to the entities array (0-based). */
             relationships?: {
                 /** @enum {string} */
-                relationship_type: "PART_OF" | "CORRECTS" | "REFERS_TO" | "SETTLES" | "DUPLICATE_OF" | "DEPENDS_ON" | "SUPERSEDES" | "EMBEDS";
+                relationship_type: "PART_OF" | "CORRECTS" | "REFERS_TO" | "SETTLES" | "DUPLICATE_OF" | "DEPENDS_ON" | "SUPERSEDES" | "EMBEDS" | "works_at" | "owns" | "manages" | "part_of" | "related_to" | "depends_on" | "references" | "transacted_with" | "member_of" | "reports_to" | "located_at" | "created_by" | "funded_by" | "acquired_by" | "subsidiary_of" | "partner_of" | "competitor_of" | "supplies_to" | "contracted_with" | "invested_in";
                 source_index: number;
                 target_index: number;
             }[];
@@ -1086,7 +1230,7 @@ export interface components {
              */
             relationships?: {
                 /** @enum {string} */
-                relationship_type: "PART_OF" | "CORRECTS" | "REFERS_TO" | "SETTLES" | "DUPLICATE_OF" | "DEPENDS_ON" | "SUPERSEDES" | "EMBEDS";
+                relationship_type: "PART_OF" | "CORRECTS" | "REFERS_TO" | "SETTLES" | "DUPLICATE_OF" | "DEPENDS_ON" | "SUPERSEDES" | "EMBEDS" | "works_at" | "owns" | "manages" | "part_of" | "related_to" | "depends_on" | "references" | "transacted_with" | "member_of" | "reports_to" | "located_at" | "created_by" | "funded_by" | "acquired_by" | "subsidiary_of" | "partner_of" | "competitor_of" | "supplies_to" | "contracted_with" | "invested_in";
                 /** @description Index into the entities array for the source entity */
                 source_index: number;
                 /** @description Index into the entities array for the target entity */
@@ -1116,6 +1260,7 @@ export interface components {
             mime_type: string;
             /** @description Optional idempotency key; if omitted, content hash is used */
             idempotency_key?: string;
+            /** @description Run AI interpretation after store */
             original_filename?: string;
             /** Format: uuid */
             user_id?: string;
@@ -1125,12 +1270,14 @@ export interface components {
             content_hash?: string;
             file_size?: number;
             deduplicated?: boolean;
-            entities_created?: number;
-            observations_created?: number;
+            interpretation?: {
+                [key: string]: unknown;
+            };
+            entity_ids?: string[];
         };
         GetRelationshipSnapshotRequest: {
             /** @enum {string} */
-            relationship_type: "PART_OF" | "CORRECTS" | "REFERS_TO" | "SETTLES" | "DUPLICATE_OF" | "DEPENDS_ON" | "SUPERSEDES" | "EMBEDS";
+            relationship_type: "PART_OF" | "CORRECTS" | "REFERS_TO" | "SETTLES" | "DUPLICATE_OF" | "DEPENDS_ON" | "SUPERSEDES" | "EMBEDS" | "works_at" | "owns" | "manages" | "part_of" | "related_to" | "depends_on" | "references" | "transacted_with" | "member_of" | "reports_to" | "located_at" | "created_by" | "funded_by" | "acquired_by" | "subsidiary_of" | "partner_of" | "competitor_of" | "supplies_to" | "contracted_with" | "invested_in";
             source_entity_id: string;
             target_entity_id: string;
         };
@@ -1500,6 +1647,206 @@ export interface operations {
             };
         };
     };
+    oauthServerMetadata: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authorization server metadata */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    oauthProtectedResource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Protected resource metadata */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    mcpOAuthCallback: {
+        parameters: {
+            query?: {
+                code?: string;
+                state?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Redirect after OAuth callback */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    mcpOAuthKeyAuthGet: {
+        parameters: {
+            query?: {
+                next?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Key auth HTML page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+        };
+    };
+    mcpOAuthKeyAuthPost: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/x-www-form-urlencoded": {
+                    next?: string;
+                    key?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Redirect after key auth */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    mcpOAuthLocalLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Redirect after local login */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    mcpOAuthRegister: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    client_name?: string;
+                    redirect_uris?: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description Client registered */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    mcpOAuthAuthorizationDetails: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authorization details */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    devSignIn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    email?: string;
+                    user_id?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Signed in */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
     queryEntities: {
         parameters: {
             query?: never;
@@ -1511,9 +1858,32 @@ export interface operations {
             content: {
                 "application/json": {
                     entity_type?: string;
+                    /** @description Canonical free-text query parameter for retrieval relevance. */
                     search?: string;
+                    /** @description Compatibility alias for `search`. */
+                    query?: string;
+                    /** @description Compatibility alias for `search`. */
+                    search_query?: string;
                     limit?: number;
                     offset?: number;
+                    /**
+                     * @description Non-default values cannot be combined with `search`.
+                     * @enum {string}
+                     */
+                    sort_by?: "entity_id" | "canonical_name" | "observation_count" | "last_observation_at";
+                    /**
+                     * @description `desc` cannot be combined with `search`.
+                     * @enum {string}
+                     */
+                    sort_order?: "asc" | "desc";
+                    /** @description Cannot be combined with `search`. */
+                    published?: boolean;
+                    /** @description Inclusive lower bound for snapshot.published_date (ISO date or datetime string). Cannot be combined with `search`. */
+                    published_after?: string;
+                    /** @description Inclusive upper bound for snapshot.published_date (ISO date or datetime string). Cannot be combined with `search`. */
+                    published_before?: string;
+                    /** @description When false, omit snapshot/provenance/raw_fragments payloads for lighter responses. */
+                    include_snapshots?: boolean;
                     include_merged?: boolean;
                     user_id?: string;
                 };
@@ -1867,6 +2237,8 @@ export interface operations {
                 user_id?: string;
                 limit?: number;
                 offset?: number;
+                /** @description Sort column descending. event_timestamp = dates from extracted data; created_at = when the timeline row was written (better for "recent activity"). */
+                order_by?: "event_timestamp" | "created_at";
             };
             header?: never;
             path?: never;
@@ -2388,7 +2760,7 @@ export interface operations {
             content: {
                 "application/json": {
                     /** @enum {string} */
-                    relationship_type: "PART_OF" | "CORRECTS" | "REFERS_TO" | "SETTLES" | "DUPLICATE_OF" | "DEPENDS_ON" | "SUPERSEDES" | "EMBEDS";
+                    relationship_type: "PART_OF" | "CORRECTS" | "REFERS_TO" | "SETTLES" | "DUPLICATE_OF" | "DEPENDS_ON" | "SUPERSEDES" | "EMBEDS" | "works_at" | "owns" | "manages" | "part_of" | "related_to" | "depends_on" | "references" | "transacted_with" | "member_of" | "reports_to" | "located_at" | "created_by" | "funded_by" | "acquired_by" | "subsidiary_of" | "partner_of" | "competitor_of" | "supplies_to" | "contracted_with" | "invested_in";
                     source_entity_id: string;
                     target_entity_id: string;
                     reason?: string;
@@ -2421,7 +2793,7 @@ export interface operations {
             content: {
                 "application/json": {
                     /** @enum {string} */
-                    relationship_type: "PART_OF" | "CORRECTS" | "REFERS_TO" | "SETTLES" | "DUPLICATE_OF" | "DEPENDS_ON" | "SUPERSEDES" | "EMBEDS";
+                    relationship_type: "PART_OF" | "CORRECTS" | "REFERS_TO" | "SETTLES" | "DUPLICATE_OF" | "DEPENDS_ON" | "SUPERSEDES" | "EMBEDS" | "works_at" | "owns" | "manages" | "part_of" | "related_to" | "depends_on" | "references" | "transacted_with" | "member_of" | "reports_to" | "located_at" | "created_by" | "funded_by" | "acquired_by" | "subsidiary_of" | "partner_of" | "competitor_of" | "supplies_to" | "contracted_with" | "invested_in";
                     source_entity_id: string;
                     target_entity_id: string;
                     reason?: string;

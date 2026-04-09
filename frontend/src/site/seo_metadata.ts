@@ -68,7 +68,10 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/": {
     title: "Your agents forget. Neotoma makes them remember.",
     description:
-      "Versioned records - contacts, tasks, decisions, finances - that persist across Claude, Cursor, ChatGPT, and every agent you run. Store once, query everywhere, stop re-prompting. Open-source and deterministic.",
+      "Stop being the human sync layer. Deterministic, versioned state for multi-agent builders and operators running Claude, Cursor, ChatGPT, and MCP-connected tools. Replay changes, trace provenance, and prove your agents aren\u2019t operating on bad state.",
+    /** Matches on-image copy and footer positioning; dev preview img uses this for alt/figcaption. */
+    ogImageAlt:
+      "Neotoma: the state layer for AI agents. Open-source and local-first. Large headline and supporting lines on warm brown with a Neotoma packrat holding a record.",
     robots: "index,follow",
     ogType: "website",
     jsonLdType: "WebSite",
@@ -207,69 +210,69 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     ],
   },
   "/operating": {
-    title: "Operating across tools | Neotoma",
+    title: "Context janitor | Neotoma",
     description:
-      "Every session starts from zero. Neotoma removes the re-prompting tax with persistent, cross-tool memory that survives session resets and makes corrections stick.",
+      "Every session starts from zero. You re-explain context, re-prompt corrections, re-establish what your agent already knew. Neotoma removes the re-prompting tax with persistent, cross-tool state.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
-      { name: "Operating across tools", path: "/operating" },
+      { name: "Context janitor", path: "/operating" },
     ],
   },
   "/building-pipelines": {
-    title: "Building pipelines | Neotoma",
+    title: "Inference variance | Neotoma",
     description:
-      "Your agent guesses entities every session. Neotoma gives pipelines persistent memory, entity resolution, and provenance so new features compound instead of regressing.",
+      "Your agent guesses entities every session. Corrections don\u2019t persist. Memory regressions ship because the architecture can\u2019t prevent them. Neotoma gives pipelines deterministic state.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
-      { name: "Building pipelines", path: "/building-pipelines" },
+      { name: "Inference variance", path: "/building-pipelines" },
     ],
   },
   "/debugging-infrastructure": {
-    title: "Debugging infrastructure | Neotoma",
+    title: "Log archaeology | Neotoma",
     description:
-      "Two runs, same inputs, different state. Neotoma replaces log archaeology with replayable timelines, state diffs, and full provenance.",
+      "Two runs. Same inputs. Different state. No replay, no diff, no explanation. Neotoma replaces log archaeology with replayable timelines, state diffs, and full provenance.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
-      { name: "Debugging infrastructure", path: "/debugging-infrastructure" },
+      { name: "Log archaeology", path: "/debugging-infrastructure" },
     ],
   },
   "/ai-native-operators": {
     title: "AI-native operators | Neotoma",
     description:
-      "Legacy path; redirects to operating across tools. Persistent cross-session memory for operators running agents in production.",
+      "Legacy path; redirects to context janitor. Persistent cross-session state for operators running agents in production.",
     robots: "noindex,nofollow",
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
-      { name: "Operating across tools", path: "/operating" },
+      { name: "Context janitor", path: "/operating" },
     ],
   },
   "/agentic-systems-builders": {
     title: "Agentic systems builders | Neotoma",
     description:
-      "Legacy path; redirects to building pipelines. Deterministic state and entity resolution for teams shipping agent features.",
+      "Legacy path; redirects to inference variance. Deterministic state and entity resolution for teams shipping agent features.",
     robots: "noindex,nofollow",
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
-      { name: "Building pipelines", path: "/building-pipelines" },
+      { name: "Inference variance", path: "/building-pipelines" },
     ],
   },
   "/ai-infrastructure-engineers": {
     title: "AI infrastructure engineers | Neotoma",
     description:
-      "Legacy path; redirects to debugging infrastructure. Replayable timelines and provenance for infra teams debugging agent state.",
+      "Legacy path; redirects to log archaeology. Replayable timelines and provenance for infra teams debugging agent state.",
     robots: "noindex,nofollow",
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
-      { name: "Debugging infrastructure", path: "/debugging-infrastructure" },
+      { name: "Log archaeology", path: "/debugging-infrastructure" },
     ],
   },
   "/neotoma-with-cursor": {
@@ -346,6 +349,18 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Home", path: "/" },
       { name: "Docs", path: "/docs" },
       { name: "Claude Code", path: "/neotoma-with-claude-code" },
+    ],
+  },
+  "/neotoma-with-claude-agent-sdk": {
+    title: "Memory infrastructure for Claude agents | Agent SDK and Managed Agents",
+    description:
+      "Schema-bound, append-only memory for agents built on the Claude Agent SDK and Managed Agents. Complements the Memory Tool via MCP.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Claude Agent SDK", path: "/neotoma-with-claude-agent-sdk" },
     ],
   },
   "/neotoma-with-chatgpt": {
@@ -915,6 +930,17 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Evaluate", path: "/evaluate" },
     ],
   },
+  "/meet": {
+    title: "Meet with the Creator | Neotoma",
+    description:
+      "Book time with Mark Hendrickson via Notion Calendar to discuss Neotoma, implementation, or product feedback.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Meet", path: "/meet" },
+    ],
+  },
   "/faq": {
     title: "Frequently Asked Questions | Neotoma",
     description:
@@ -1375,7 +1401,9 @@ const DEFAULT_SEO_KEYWORDS = [
 export function buildDefaultOgImageAlt(title: string, description: string): string {
   const snippet =
     description.length > 140 ? `${description.slice(0, 137).trimEnd()}...` : description;
-  const combined = `${title}. ${snippet}`.trim();
+  const titleTrim = title.trimEnd();
+  const head = titleTrim.replace(/[.!?…]+$/u, "").trimEnd() || titleTrim;
+  const combined = `${head}. ${snippet}`.trim();
   return combined.length > 200 ? `${combined.slice(0, 197)}...` : combined;
 }
 

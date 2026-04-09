@@ -113,7 +113,7 @@ export function SectionDotNav({
     <nav
       role="navigation"
       aria-label="Page sections"
-      className="fixed right-4 top-1/2 -translate-y-1/2 z-40 hidden md:flex flex-col items-end gap-1"
+      className="fixed right-4 top-1/2 -translate-y-1/2 z-40 hidden md:flex print:hidden flex-col items-end gap-1"
     >
       {sections.map((section, i) => (
         <div key={section.id} className="relative flex items-center">

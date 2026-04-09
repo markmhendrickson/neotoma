@@ -5,6 +5,7 @@
  */
 
 import { useState, useEffect } from "react";
+import { useHashSyncedTab } from "@/hooks/use_hash_synced_tab";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -12,7 +13,10 @@ import { useToast } from "@/components/ui/use-toast";
 import { Copy, ExternalLink, Download, Check } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
+const MCP_CONFIG_TAB_VALUES = ["cursor", "chatgpt", "claude"] as const;
+
 export function MCPConfigurationPage() {
+  const { tab: mcpConfigTab, setTab: setMcpConfigTab } = useHashSyncedTab("cursor", MCP_CONFIG_TAB_VALUES);
   const { toast } = useToast();
   const [serverInfo, setServerInfo] = useState<{ httpPort: number; mcpUrl: string } | null>(null);
 
@@ -194,7 +198,7 @@ export function MCPConfigurationPage() {
         </p>
       </div>
 
-      <Tabs defaultValue="cursor" className="w-full">
+      <Tabs value={mcpConfigTab} onValueChange={setMcpConfigTab} className="w-full">
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="cursor">Cursor</TabsTrigger>
           <TabsTrigger value="chatgpt">ChatGPT</TabsTrigger>

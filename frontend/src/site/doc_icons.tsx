@@ -143,6 +143,7 @@ export function getDocPageIcon(
   canonicalPath: string,
 ): React.ComponentType<DocPageIconProps> | null {
   const pathWithoutHash = (canonicalPath.split("#")[0] || "/").replace(/\/$/, "") || "/";
+  if (pathWithoutHash === "/meet") return CalendarClock;
   const brand = INTEGRATION_BRAND_ICONS[pathWithoutHash];
   if (brand) return brand as React.ComponentType<DocPageIconProps>;
 

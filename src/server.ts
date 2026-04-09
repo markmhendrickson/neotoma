@@ -123,6 +123,7 @@ export class NeotomaServer {
       "For reverted turns: optionally link the new message to the previous one with create_relationship(SUPERSEDES, new_message_entity_id, previous_message_entity_id).",
       'When you pull data from other MCPs (e.g. email, calendar, search), apply the same proactive storage: extract and store people, companies, locations, events, tasks, notifications, device status, and relationships from that data. Create tasks for action items (e.g. "replace battery", "share feedback", "review security alert", "reply about Madrid trip"). Store locations and link events or tasks to them. Store first, then respond.',
       "When confirming stored information, you MUST use memory-related language (e.g. “remember”, “recall”, “store in memory”) and include one of those phrases in the confirmation.",
+      "When any MCP action creates or updates Neotoma entities, the user-visible reply MUST include one markdown table per affected entity with action, entity_id, entity_type, and every stored or changed property available from the snapshot or store response.",
       'Extract and store all relevant entities from what the user says: people, tasks, events, commitments, preferences, possessions, relationships, places, and any other types that fit. Store every distinct entity (e.g. a person and a task and an event from the same message). When the user mentions a place, property, or location (e.g. "our home in Barcelona", "my office", "apartment in Madrid"), store it as an entity (e.g. location, property, or place) and link the task or other entities to it. Create relationships when implied (e.g. friend of, task for person, event attendee, task for location) using create_relationship or relationship fields per schema.',
       "Proactively create a task when the user expresses intent, obligation, debt, or a future action (e.g. “I need to”, “I have to”, “I owe”, “I should”, “I want to buy”, “remind me”, or any deadline). Unless the user explicitly says no reminders or no tasks, create a task with due date if available and relate it to the relevant person or entity.",
       'When entity type is not in the known list, use list_entity_types with a keyword (e.g. "device", "asset", "preference", "gift", "reminder") or store with a descriptive entity_type; the system will infer or create schema from the data. Be proactive about storing any type of relevant entity, including types not yet registered.',
@@ -131,7 +132,7 @@ export class NeotomaServer {
       "Check for existing records before storing to avoid duplicates.",
       "Include all fields from source data when storing entities. Unknown fields must be included.",
       "Omit user_id. It is inferred from authentication.",
-      "After any MCP action, summarize entities and relationships with all snapshot fields.",
+      "After any MCP action, summarize entities and relationships with all snapshot fields, and do not replace required per-entity tables with prose-only summary.",
       'If the prompt ends with "via mcp", use MCP actions only and do not read or write local files.',
     ].join("\n");
     const instructionsPath = join(this.mcpDocsPath(), "instructions.md");
@@ -1390,6 +1391,22 @@ export class NeotomaServer {
             },
           },
           {
+            name: "get_entity_type_counts",
+            description:
+              this.toolDescriptions.get("get_entity_type_counts") ??
+              "Return canonical entity counts by entity_type for the authenticated user, sorted by count descending. Use this when you need row counts by type; do not infer counts from list_entity_types field_count.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                user_id: {
+                  type: "string",
+                  description: "Optional. Inferred from authentication if omitted.",
+                },
+              },
+              required: [],
+            },
+          },
+          {
             name: "list_entity_types",
             description:
               this.toolDescriptions.get("list_entity_types") ??
@@ -1723,6 +1740,8 @@ export class NeotomaServer {
         return await this.retrieveRelatedEntities(args);
       case "retrieve_graph_neighborhood":
         return await this.retrieveGraphNeighborhood(args);
+      case "get_entity_type_counts":
+        return await this.getEntityTypeCounts(args);
       case "list_entity_types":
         return await this.listEntityTypes(args);
       case "analyze_schema_candidates":
@@ -2858,9 +2877,12 @@ export class NeotomaServer {
       );
     }
 
+    const orderColumn =
+      parsed.order_by === "created_at" ? "created_at" : "event_timestamp";
+
     // Get events with pagination
     const { data: events, error } = await query
-      .order("event_timestamp", { ascending: false })
+      .order(orderColumn, { ascending: false })
       .range(parsed.offset, parsed.offset + parsed.limit - 1);
 
     if (error) {
@@ -3195,6 +3217,40 @@ export class NeotomaServer {
     }
 
     return this.buildTextResponse(result);
+  }
+
+  // List entity types with optional keyword filtering (hybrid: keyword + vector search)
+  private async getEntityTypeCounts(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const schema = z.object({
+      user_id: z.string().optional(),
+    });
+
+    const parsed = schema.parse(args ?? {});
+    const userId = this.getAuthenticatedUserId(parsed.user_id);
+    const { getDashboardStats } = await import("./services/dashboard_stats.js");
+
+    try {
+      const stats = await getDashboardStats(userId);
+      const sortedEntries = Object.entries(stats.entities_by_type ?? {}).sort((a, b) => {
+        const diff = b[1] - a[1];
+        return diff !== 0 ? diff : a[0].localeCompare(b[0]);
+      });
+
+      return this.buildTextResponse({
+        entities_by_type: Object.fromEntries(sortedEntries),
+        total_entities: stats.total_entities ?? 0,
+        last_updated: stats.last_updated,
+        count_source: "dashboard_stats",
+        scope: "authenticated_user",
+      });
+    } catch (error: any) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to get entity type counts: ${error.message}`
+      );
+    }
   }
 
   // List entity types with optional keyword filtering (hybrid: keyword + vector search)

@@ -197,7 +197,7 @@ Neotoma includes project-specific instructions for Claude Code that ensure consi
 **Generated files:**
 - **`.claude/CLAUDE.md`** — Primary entrypoint with document loading order, core constraints, and quick reference
 - **`.claude/rules/`** — ~45 modular instruction files (foundation + repository rules)
-- **`.claude/skills/`** — Slash-invokable workflows (e.g. `/create_release`, `/fix_feature_bug`)
+- **`.claude/skills/`** — Slash-invokable workflows (e.g. `/release`, `/fix_feature_bug`)
 - **`.claude/settings.json`** — Permissions and autonomous execution config
 
 **Sources:**
@@ -261,7 +261,7 @@ Instructions are generated from sources via `scripts/setup_claude_instructions.s
 Claude Code supports skills that work like slash commands:
 
 **Available skills:**
-- `/create_release` — Create a new release following release workflow
+- `/release` — Create a new release following release workflow
 - `/fix_feature_bug` — Fix a bug in a feature unit with error classification
 - `/create_feature_unit` — Create a new feature unit with spec and manifest
 - `/setup_symlinks` — Set up project symlinks

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { useHashSyncedTab } from "@/hooks/use_hash_synced_tab";
 import { Check, Clock, Copy, RotateCcw } from "lucide-react";
 import { SiClaude, SiOpenai } from "react-icons/si";
 import { SITE_CODE_SNIPPETS } from "../../site/site_data";
@@ -113,6 +114,8 @@ function CodeBlock({
 }
 
 export function InstallPage() {
+  const { tab: installDockerTab, setTab: setInstallDockerTab } = useHashSyncedTab("agent", ["agent", "human"]);
+
   return (
     <DetailPage title="Install options">
       <div className="flex flex-wrap gap-2 mb-6">
@@ -371,7 +374,7 @@ export function InstallPage() {
       <h2 id="docker" className="text-[20px] font-medium tracking-[-0.01em] mt-10 mb-3">
         Docker
       </h2>
-      <Tabs defaultValue="agent" className="mb-4">
+      <Tabs value={installDockerTab} onValueChange={setInstallDockerTab} className="mb-4">
         <TabsList className="mb-3">
           <TabsTrigger value="agent">Agent</TabsTrigger>
           <TabsTrigger value="human">Human</TabsTrigger>

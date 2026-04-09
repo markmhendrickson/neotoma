@@ -60,7 +60,8 @@ describe("seo_metadata", () => {
     expect(metadata.title).toContain("Neotoma");
     expect(metadata.canonicalUrl).toBe("https://neotoma.io/");
     expect(metadata.robots).toBe("index,follow");
-    expect(metadata.ogImageAlt.length).toBeGreaterThan(10);
+    expect(metadata.ogImageAlt).toContain("state layer for AI agents");
+    expect(metadata.ogImageAlt).toContain("packrat");
     expect(metadata.keywords).toContain("Neotoma");
     expect(metadata.twitterCard).toBe("summary_large_image");
     const primary = metadata.jsonLd[0] as Record<string, unknown>;
@@ -72,6 +73,14 @@ describe("seo_metadata", () => {
     const alt = buildDefaultOgImageAlt("Title", long);
     expect(alt.length).toBeLessThanOrEqual(203);
     expect(alt.startsWith("Title.")).toBe(true);
+  });
+
+  it("buildDefaultOgImageAlt avoids double punctuation when title already ends with a period", () => {
+    const alt = buildDefaultOgImageAlt("Your agents forget. Neotoma makes them remember.", "Short desc.");
+    expect(alt).toBe(
+      "Your agents forget. Neotoma makes them remember. Short desc."
+    );
+    expect(alt).not.toMatch(/\.\./);
   });
 
   it("buildKeywords merges route keywords with defaults", () => {

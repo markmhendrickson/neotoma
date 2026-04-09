@@ -77,6 +77,6 @@ In those cases: ask a short, concrete question with 1–2 options or "proceed wi
 
 All rules in `.claude/rules/` apply; they are modular instructions loaded automatically by context.
 
-Skills in `.claude/skills/` are workflows invokable with `/skill-name` (e.g. `/create_release`, `/fix_feature_bug`).
+Skills live under `.claude/skills/<command_name>/SKILL.md` (Claude Code requirement). Invoke with `/command_name` for each foundation `cursor_commands` entry, plus repo-only skills from `.cursor/skills/*/SKILL.md` (hyphenated Cursor folders map to `_` in the directory name). Foundation wins on name collisions.
 
 For complete documentation map, reading strategies, and dependency graph, see `docs/context/index_rules.mdc`.

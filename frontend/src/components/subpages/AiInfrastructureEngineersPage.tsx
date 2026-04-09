@@ -79,7 +79,7 @@ export function AiInfrastructureEngineersPage() {
         { label: "Append-only log for complete state reconstruction after failure", href: "/reproducible-state-reconstruction", linkTerm: "Append-only log" },
       ]}
       keyDifferences={{
-        comparedTo: "Building pipelines",
+        comparedTo: "Inference variance",
         comparedToHref: "/building-pipelines",
         points: [
           "Focus: infrastructure and platform layer - below application agents, above compute",

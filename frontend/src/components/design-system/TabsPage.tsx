@@ -1,9 +1,14 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { useHashSyncedTab } from "@/hooks/use_hash_synced_tab";
 import { DesignSystemLayout } from "./DesignSystemLayout";
 
+const DS_TABS_DEMO_VALUES = ["snapshot", "observations", "relationships", "timeline"] as const;
+
 export function TabsPage() {
+  const { tab: dsTabsDemo, setTab: setDsTabsDemo } = useHashSyncedTab("snapshot", DS_TABS_DEMO_VALUES);
+
   return (
     <DesignSystemLayout currentSection="tabs" title="Tabs">
       <Card>
@@ -15,7 +20,7 @@ export function TabsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="snapshot" className="w-full">
+          <Tabs value={dsTabsDemo} onValueChange={setDsTabsDemo} className="w-full">
             <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="snapshot">Snapshot</TabsTrigger>
               <TabsTrigger value="observations">Observations</TabsTrigger>

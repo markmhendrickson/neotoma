@@ -4,13 +4,14 @@ import { BrowserRouter } from "react-router-dom";
 import * as ReactHelmetAsync from "react-helmet-async";
 import App from "./App";
 import { getSpaBasename } from "./site/spa_path";
-import { initSiteAnalytics } from "./utils/analytics";
+import { initSiteAnalytics, installOutboundLinkTracking } from "./utils/analytics";
 import { installViteChunkRecovery } from "./utils/vite_chunk_recovery";
 import { LocaleProvider } from "./i18n/LocaleContext";
 import { ThemeProvider } from "./hooks/useTheme";
 import "./index.css";
 
 initSiteAnalytics();
+installOutboundLinkTracking();
 
 // Initialize theme on app load
 function initializeTheme() {

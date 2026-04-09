@@ -2,13 +2,13 @@
 
 ## 7.0 Positioning canvas (Obviously Awesome)
 
-This section maps Neotoma to April Dunford’s five core positioning choices plus the extended canvas used in agent skill `foundation/.cursor/skills/neversight-learn-skills.dev-obviously-awesome/SKILL.md`. Supporting evidence and nuance live in §7.1–7.5.
+This section maps Neotoma to April Dunford’s five core positioning choices plus the extended canvas used in agent skill `foundation/agent_instructions/cursor_skills/evaluate_positioning/SKILL.md` (mirrored at `.cursor/skills/evaluate_positioning/SKILL.md`). Supporting evidence and nuance live in §7.1–7.5.
 
 | Component | Neotoma answer |
 |-----------|----------------|
 | **Competitive alternatives** | Homebrew SQLite/Postgres, git + markdown stacks, flat JSON/YAML, one-off agent memory implementations, and VC-funded retrieval memory (Mem0, Zep, LangChain-style patterns). Provider-native chat memory is a parallel alternative for conversation-only use cases. See §7.4. |
 | **Unique attributes** | Privacy-first user-controlled architecture; deterministic, schema-first extraction with hash-based IDs and reproducible state; cross-tool MCP access; versioned observations with field-level provenance and immutability guarantees. See §7.2. |
-| **Value themes** | **Tax removal** (not feature addition): removing re-prompting, glue code, and manual sync. **State integrity** (not just retrieval quality): trustworthy, replayable agent state. **Sovereignty**: data stays user-controlled. **Continuity**: one structured memory across tools. **Accountability**: reconstruct what an agent knew at decision time. Pain-forward phrasing in §7.3. |
+| **Value themes** | Two primary themes: (1) **Tax removal** — stop being the human sync layer; subsumes continuity (one memory across tools) and sovereignty (your data, your control). (2) **State integrity** — prove your agent isn't operating on bad data; subsumes accountability (reconstruct what an agent knew at decision time). All copy should clearly serve one of these two themes. Pain-forward phrasing in §7.3. |
 | **Best-fit customers** | One archetype — the **personal agentic OS builder/operator** — in three operational modes: debugging infrastructure, building pipelines, operating across tools. Not three separate personas. See `docs/icp/primary_icp.md`. Evaluator context in §7.5 (agents with tool use “get it” faster than search-only evals). |
 | **Market category** | Primary external frame: **cross-tool memory for AI agents** (ICP vocabulary). Architecture frame ("deterministic state layer," "DPME") used internally and after the fold. Previously: Named category hypothesis: **Deterministic Personal Memory Engine (DPME)** (§7.2) — a *new category* play with a higher education tax; use when the audience already grasps the stack diagram. |
 | **Relevant trends** | Proliferation of LLM apps that need private data + feedback loops; localhost / private-environment agents; agent evaluation and AEO as a discovery path (§7.1, §7.5). |
@@ -48,6 +48,8 @@ Neotoma positions as the substrate layer beneath the emerging "LLM app layer" (a
 - **Neotoma (State Layer)**: Provides structured personal data substrate—the private data that enables LLM apps to be effective
 
 **vs. Provider Memory:** ChatGPT, Claude, and Gemini offer conversation-only memory (platform-locked, provider-controlled). Neotoma provides structured personal data memory with entity resolution, timelines, and cross-platform access via MCP.
+
+**Hybrid retrieval:** Neotoma supports all three retrieval modes co-available: structured queries (primary, deterministic, the path agents should default to), entity semantic search (vector similarity over the structured entity store when a text query is provided), and graph traversal (relationship-typed walks across the Records → Entities → Events graph). The distinction from retrieval-only memory (Mem0, Zep, Penfield) is not the *absence* of semantic or graph retrieval — it is that structured, deterministic queries remain primary, and semantic/graph modes operate over a verifiable structured store rather than re-deriving structure every session.
 ## 7.2 Differentiation
 Neotoma is **not competing** with Notion, Evernote, Google Docs, or PKM systems.
 **Those tools store files. Neotoma understands files.**
@@ -99,11 +101,13 @@ These framings emerged from real evaluator conversations and resonate more immed
 
 | Framing | Origin | When to use |
 |---------|--------|-------------|
-| "State integrity, not retrieval quality" | Evaluator's Claude agent | Differentiating from RAG/Mem0/Zep. The crispest competitive framing in one phrase. |
+| "State integrity, not retrieval quality" | Evaluator's agent | Differentiating from RAG/Mem0/Zep. The crispest competitive framing in one phrase. |
 | "CI/CD for agent state" | Evaluator | Speaking to infra engineers. Powerful metaphor — they already understand CI/CD discipline. |
 | "System of record for AI agents" | Synthesis from feedback | Category creation. Use in the blog post and HN framing. |
 | "Your agents forget what they knew yesterday" | Action plan hero | Opening any conversation. Starts from universal pain. |
-| "Truth Layer" | Evaluator's Gemini 3 agent | Architecturally cleaner than "truth engine." Use in technical positioning. |
+| "Truth Layer" | Evaluator's agent | Architecturally cleaner than "truth engine." Use in technical positioning. |
+
+**Named attributions:** See `docs/private/icp/field_evidence.md`.
 
 ### Differentiator-to-pain translation
 
@@ -119,7 +123,7 @@ Not "schema-first field extraction with deterministic, explainable results." The
 Not "cross-platform access via MCP integration." The felt experience is continuity: store a contact in Claude Code, query it from Cursor, update it from ChatGPT. You stop being the human sync layer between tools.
 
 **Versioned history → "What did your agent know at decision time?"**
-Not "every state change creates a new version." The felt experience is accountability: when a decision was wrong, you can reconstruct exactly what the agent believed when it made the call. This is Evaluator's trigger question and the most powerful single framing for the personal agentic OS use case.
+Not "every state change creates a new version." The felt experience is accountability: when a decision was wrong, you can reconstruct exactly what the agent believed when it made the call. This trigger question is the most powerful single framing for the personal agentic OS use case.
 
 **Schema constraints → "No garbage in, no garbage out."**
 Not "entities conform to defined types and validation rules." The felt experience is reliability: your agent's contact records actually have email addresses and phone numbers, not free-text blobs that drift into nonsense across sessions.
@@ -157,6 +161,140 @@ The build-in-house explosion: 10+ independent implementations of agent memory id
 Retrieval-augmented memory: vector embeddings, semantic search, probabilistic matching. Different paradigm from deterministic state.
 
 **What Neotoma provides that they don't:** State integrity, not retrieval quality. Deterministic state evolution (same inputs → same state). Versioned history with temporal queries. Schema constraints with write-time validation. Field-level provenance. Cross-tool access via MCP. Local-first with no cloud dependency.
+
+## 7.6 Wedge Assessment
+
+Neotoma's market wedge is a dual entry point, not a single hook.
+
+### Dual wedge structure
+
+**Chronic pain (drives adoption):** Fragmented, disposable memory across tools. The user is the human sync layer — re-prompting, re-correcting, manually carrying context between sessions and tools. Cost is diffuse: attention, repetition, low-grade frustration.
+
+**Acute pain (drives conversion):** Agent acts confidently on wrong, stale, or lossy-compressed state. The user cannot reconstruct what the agent believed when it made the decision. Cost is concrete: lost work, bad decisions, eroded trust in agent autonomy.
+
+The chronic tax creates latent demand. The acute crisis creates urgency. Both are required: continuity opens the door; state integrity closes the sale.
+
+### Core insight
+
+The problem is not memory retrieval. The problem is **state integrity over time**.
+
+Neotoma provides deterministic, versioned, schema-bound state with full provenance — which enables reconstruction of what the agent believed at decision time.
+
+### What Neotoma guarantees (and does not)
+
+Neotoma does **not** guarantee correct agent decisions or perfect inference.
+
+Neotoma guarantees:
+- Deterministic state evolution (same inputs → same state)
+- Versioned history (no silent overwrite)
+- Full provenance of all data
+- Replayable timelines
+- Schema-constrained structure
+
+### Value chain
+
+```
+Chronic path:
+  Fragmentation → re-prompting → manual sync → inefficiency
+  → Neotoma: persistent cross-tool state → continuity → tax removed
+
+Acute path:
+  Wrong decision → cannot explain → loss of trust
+  → Neotoma: versioned, inspectable state → reconstructable decisions → trust restored
+
+Expansion:
+  Continuity + trust → ability to scale agent usage → new domains → unattended execution
+```
+
+### Competitive positioning (wedge framing)
+
+| Alternative | Why it fails at the wedge | Neotoma's response |
+|---|---|---|
+| **Platform memory** (Claude, ChatGPT) | Provides continuity within one tool; not versioned, not inspectable, not cross-tool | Cross-tool state via MCP; versioned and auditable |
+| **RAG / retrieval** (Mem0, Zep, LangChain) | Optimizes recall; no state evolution, no provenance, re-derives structure every session | State integrity, not retrieval quality |
+| **Homebrew** (SQLite, git+markdown, flat JSON, custom systems) | No enforced invariants; silent overwrites; no deterministic evolution; maintenance burden grows | All guarantees without building and maintaining it yourself |
+| **Do nothing** (raw re-prompting) | Attention tax compounds daily; context lost every session | Immediate relief from first session |
+
+### Differentiation from observability
+
+Observability tools (Langfuse, LangSmith, Helicone) answer: *"What happened?"*
+
+Neotoma answers: *"What was true (composed state) when it happened?"*
+
+The distinction: observability records events, logs, and traces. State integrity proves the deterministic composed entity state at any moment, with multi-writer conflict resolution and version-bound provenance. See `/build-vs-buy` for the full framework.
+
+### Messaging principles
+
+1. **Lead with failure.** Start from wrong decision, stale data, inability to explain — not from system properties.
+2. **Bridge to guarantees via felt experience.** Pair engineering vocabulary with felt-experience translations: "deterministic state" → "same input, same state, every time." Use both; don't replace engineering terms.
+3. **Preserve both value themes.** Every messaging surface should include continuity (tax removal) and state integrity (reconstruction). Dropping either loses half the wedge.
+4. **Preserve privacy as standalone differentiator.** "Your data stays on your machine" is a first-order concern for the ICP, not a secondary benefit.
+
+### Messaging anchors
+
+**Primary:** *Neotoma lets you reconstruct what your agent knew at decision time — with deterministic, versioned state.*
+
+**Supporting:** *Stop being the sync layer. Prove what your agent knew.*
+
+**Evaluator-validated phrases:** "State integrity, not retrieval quality." "CI/CD for agent state." "System of record for AI agents." "Your agents forget what they knew yesterday." "Truth Layer."
+
+### Catchphrase registry
+
+Consolidated inventory of short-form phrases. Use for hero copy, subheadlines, CTAs, social posts, HN comments, blog openers, and slide decks. Organized by value theme so each messaging surface can draw from both wedges.
+
+**Tax removal (chronic pain — continuity, sovereignty, sync burden):**
+
+| Phrase | Origin | Best slot |
+|--------|--------|-----------|
+| "Your agents forget. Neotoma makes them remember." | Hero headline | Hero h1, cold open |
+| "Your agents forget what they knew yesterday." | Hero variant | Blog openers, social |
+| "Stop being the human sync layer." | Hero subcopy | Subheadline, HN |
+| "Re-prompting costs time. Wrong state costs trust." | Footer CTA | CTA lead-in, consequence framing |
+| "One memory across all your AI tools." | Differentiator translation | Feature explanation, comparison pages |
+| "Your data stays on your machine." | Differentiator translation | Privacy-first audiences, install page |
+
+**State integrity (acute pain — corruption, auditability, reconstruction):**
+
+| Phrase | Origin | Best slot |
+|--------|--------|-----------|
+| "State integrity, not retrieval quality." | Evaluator | Competitive differentiation, technical audiences |
+| "CI/CD for agent state." | Evaluator (Tycho Onnasch) | Infra engineers, HN, technical blog |
+| "Most memory tools help agents retrieve information. None of them can prove it hasn't been silently corrupted." | Hero curiosity gap | Below-fold, long-form |
+| "Same input, same state, every time." | Differentiator translation | Guarantee claims, architecture page |
+| "What did your agent know at decision time?" | Differentiator translation | Accountability framing, blog, demos |
+| "No garbage in, no garbage out." | Differentiator translation | Schema/validation audiences |
+| "Observability tells you what happened. State integrity proves what was true." | Build-vs-buy page | Technical positioning, comparison pages |
+
+**Category framing (what Neotoma is):**
+
+| Phrase | Origin | Best slot |
+|--------|--------|-----------|
+| "The state layer for AI agents." | Footer tagline | Tagline, meta descriptions |
+| "System of record for AI agents." | Synthesis from feedback | Category creation, blog, HN |
+| "Truth Layer." | Evaluator | Technical shorthand, architecture discussions |
+| "git for what your agents know." | Hero subcopy | Analogy for developers, social |
+| "Those tools store files. Neotoma understands files." | Positioning doc | Competitive contrast (PKM/notes tools) |
+| "Other memory solutions give your agents a notepad. Neotoma gives them a ledger." | Proposed | Competitive contrast (Mem0/Zep), social, blog |
+| "Memory is a feature. State is an invariant." | Proposed | Category distinction, technical audiences |
+| "Retrieval tells you what an agent found. State proves what it knew." | Proposed | Competitive contrast, below-fold |
+| "Your agents don't have a memory problem. They have a state problem." | Proposed | Reframing opener, blog, HN comments |
+
+Phrases marked "Proposed" are candidates awaiting field validation. Move to confirmed after use in a messaging surface with positive signal.
+
+### Strategic risks
+
+- Over-indexing on debugging → becomes observability tool (wrong category)
+- Dropping continuity → loses broad entry point (chronic demand)
+- Overclaiming correctness → loses credibility (Neotoma guarantees traceability, not correctness)
+- Over-abstracting guarantees → feels too infra-heavy (use felt-experience bridging)
+
+### Strategic advantages
+
+- Dual wedge (chronic + acute pain) creates both demand and urgency
+- Clear differentiation vs RAG, platform memory, and homebrew
+- Strong expansion path from personal workflows → production systems → unattended execution
+- High switching cost once adopted (becomes system of record)
+- Category creation opportunity ("state integrity layer" is new and defensible)
 
 ## 7.5 Agent Evaluation Optimization (AEO)
 

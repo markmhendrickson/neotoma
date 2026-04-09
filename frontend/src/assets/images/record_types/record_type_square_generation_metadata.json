@@ -1,0 +1,56 @@
+[
+  {
+    "file": "record_type_contacts_square.png",
+    "style": "line-art, accent-color outlines only, no fills",
+    "accent": "emerald (#059669, #34d399)",
+    "prompt": "Square 1:1 on SOLID WHITE (#FFFFFF). CLEAN LINE-ART ONLY: thin-to-medium outlines, no fills, no shading, no paper grain. All strokes emerald green. Subject: four person silhouettes in diamond around central circle, dashed connectors. Represents contacts, companies, roles, relationships.",
+    "post_processing": "magick input.png -fuzz 12% -transparent white output.png",
+    "model": "gpt-image-1",
+    "size": "1024x1024"
+  },
+  {
+    "file": "record_type_tasks_square.png",
+    "style": "line-art, accent-color outlines only, no fills",
+    "accent": "violet (#7c3aed, #a78bfa)",
+    "prompt": "Square 1:1 on SOLID WHITE (#FFFFFF). CLEAN LINE-ART ONLY: thin-to-medium outlines, no fills, no shading, no paper grain. All strokes violet purple. Subject: three rounded-rect checklist rows with checkboxes (top two checked), progress bar below. Represents tasks, obligations, deadlines, goals.",
+    "post_processing": "magick input.png -fuzz 12% -transparent white output.png",
+    "model": "gpt-image-1",
+    "size": "1024x1024"
+  },
+  {
+    "file": "record_type_transactions_square.png",
+    "style": "line-art, accent-color outlines only, no fills",
+    "accent": "teal (#0d9488, #2dd4bf)",
+    "prompt": "Square 1:1 on SOLID WHITE (#FFFFFF). CLEAN LINE-ART ONLY: thin-to-medium outlines, no fills, no shading, no paper grain. All strokes teal. Subject: tall receipt with wavy bottom, three line items, coin circle at lower-right, second receipt behind offset. Represents transactions, payments, receipts, invoices.",
+    "post_processing": "magick input.png -fuzz 12% -transparent white output.png",
+    "model": "gpt-image-1",
+    "size": "1024x1024"
+  },
+  {
+    "file": "record_type_contracts_square.png",
+    "style": "line-art, accent-color outlines only, no fills",
+    "accent": "indigo (#4f46e5, #818cf8)",
+    "prompt": "Square 1:1 on SOLID WHITE (#FFFFFF). CLEAN LINE-ART ONLY: thin-to-medium outlines, no fills, no shading, no paper grain. All strokes indigo. Subject: document outline with clause lines, wavy signature, seal with ribbon at lower-right. Represents contracts, agreements, clauses, amendments.",
+    "post_processing": "magick input.png -fuzz 12% -transparent white output.png",
+    "model": "gpt-image-1",
+    "size": "1024x1024"
+  },
+  {
+    "file": "record_type_decisions_square.png",
+    "style": "line-art, accent-color outlines only, no fills",
+    "accent": "amber (#d97706, #fbbf24)",
+    "prompt": "Square 1:1 on SOLID WHITE (#FFFFFF). CLEAN LINE-ART ONLY: thin-to-medium outlines, no fills, no shading, no paper grain. All strokes amber. Subject: vertical line splits at diamond node into three curved paths (one heavier), end dots. Represents decisions, choices, rationale, audit trails.",
+    "post_processing": "magick input.png -fuzz 12% -transparent white output.png",
+    "model": "gpt-image-1",
+    "size": "1024x1024"
+  },
+  {
+    "file": "record_type_events_square.png",
+    "style": "line-art, accent-color outlines only, no fills",
+    "accent": "sky (#0284c7, #38bdf8)",
+    "prompt": "Square 1:1 on SOLID WHITE (#FFFFFF). CLEAN LINE-ART ONLY: thin-to-medium outlines, no fills, no shading, no paper grain. All strokes sky blue. Subject: calendar outline with 3x3 grid, dot milestones, clock overlapping upper-right, dashed timeline below. Represents events, meetings, milestones, outcomes.",
+    "post_processing": "magick input.png -fuzz 12% -transparent white output.png",
+    "model": "gpt-image-1",
+    "size": "1024x1024"
+  }
+]

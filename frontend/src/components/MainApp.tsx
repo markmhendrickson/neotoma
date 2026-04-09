@@ -26,6 +26,7 @@ import { NeotomaWithClaudePage } from "@/components/subpages/NeotomaWithClaudePa
 import { ClaudeConnectDesktopPage } from "@/components/subpages/ClaudeConnectDesktopPage";
 import { ClaudeConnectRemoteMcpPage } from "@/components/subpages/ClaudeConnectRemoteMcpPage";
 import { NeotomaWithClaudeCodePage } from "@/components/subpages/NeotomaWithClaudeCodePage";
+import { NeotomaWithClaudeAgentSdkPage } from "@/components/subpages/NeotomaWithClaudeAgentSdkPage";
 import { ChatGptConnectCustomGptPage } from "@/components/subpages/ChatGptConnectCustomGptPage";
 import { ChatGptConnectRemoteMcpPage } from "@/components/subpages/ChatGptConnectRemoteMcpPage";
 import { NeotomaWithChatGPTPage } from "@/components/subpages/NeotomaWithChatGPTPage";
@@ -76,6 +77,7 @@ import { PersonalDataLandingPage } from "@/components/subpages/PersonalDataLandi
 import { VerticalsIndexPage } from "@/components/subpages/VerticalsIndexPage";
 import { BuildVsBuyPage } from "@/components/subpages/BuildVsBuyPage";
 import { EvaluatePage } from "@/components/subpages/EvaluatePage";
+import { MeetPage } from "@/components/subpages/MeetPage";
 import { FaqPage } from "@/components/subpages/FaqPage";
 import {
   NeotomaVsMem0Page,
@@ -131,6 +133,7 @@ const APP_ROUTES: readonly AppRoute[] = [
   { path: "/neotoma-with-claude-connect-desktop", element: <ClaudeConnectDesktopPage /> },
   { path: "/neotoma-with-claude-connect-remote-mcp", element: <ClaudeConnectRemoteMcpPage /> },
   { path: "/neotoma-with-claude-code", element: <NeotomaWithClaudeCodePage /> },
+  { path: "/neotoma-with-claude-agent-sdk", element: <NeotomaWithClaudeAgentSdkPage /> },
   { path: "/neotoma-with-chatgpt", element: <NeotomaWithChatGPTPage /> },
   { path: "/neotoma-with-chatgpt-connect-remote-mcp", element: <ChatGptConnectRemoteMcpPage /> },
   { path: "/neotoma-with-chatgpt-connect-custom-gpt", element: <ChatGptConnectCustomGptPage /> },
@@ -177,6 +180,7 @@ const APP_ROUTES: readonly AppRoute[] = [
   { path: "/verticals", element: <VerticalsIndexPage /> },
   { path: "/build-vs-buy", element: <BuildVsBuyPage /> },
   { path: "/evaluate", element: <EvaluatePage /> },
+  { path: "/meet", element: <MeetPage /> },
   { path: "/faq", element: <FaqPage /> },
   { path: "/neotoma-vs-platform-memory", element: <NeotomaVsPlatformMemoryPage /> },
   { path: "/neotoma-vs-mem0", element: <NeotomaVsMem0Page /> },

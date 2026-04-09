@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { exec, execSync, spawn } from "node:child_process";
+import { exec, execFileSync, execSync, spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
@@ -1152,10 +1152,47 @@ function formatCliError(err: unknown): string {
   return human;
 }
 
+function inferCliRecoveryEnvHint(): "dev" | "prod" {
+  const envFlag = (program.opts() as { env?: string }).env;
+  if (envFlag === "dev" || envFlag === "prod") return envFlag;
+  return (process.env.NEOTOMA_ENV || "development") === "production" ? "prod" : "dev";
+}
+
+export function getSqliteRecoveryHint(
+  err: unknown,
+  envHint: "dev" | "prod" = inferCliRecoveryEnvHint()
+): string | null {
+  const msg = formatCliError(err).toLowerCase();
+  const patterns = [
+    "database disk image is malformed",
+    "sqlite_corrupt",
+    "btreeinitpage",
+    "rowid out of order",
+    "integrity_check",
+  ];
+  const matches = patterns.some((pattern) => msg.includes(pattern));
+  if (!matches) return null;
+  const checkCommand =
+    envHint === "prod" ? "neotoma prod storage recover-db" : "neotoma storage recover-db";
+  const recoverCommand =
+    envHint === "prod"
+      ? "neotoma prod storage recover-db --recover"
+      : "neotoma storage recover-db --recover";
+  return (
+    "SQLite may be corrupted. Run " +
+    `\`${checkCommand}\`` +
+    " first, then " +
+    `\`${recoverCommand}\`` +
+    " after stopping Neotoma."
+  );
+}
+
 export function writeCliError(err: unknown): void {
   const msg = formatCliError(err);
+  const recoveryHint = getSqliteRecoveryHint(err);
   if (process.stdout.isTTY) process.stderr.write("\n");
   process.stderr.write(`neotoma: ${msg}\n`);
+  if (recoveryHint) process.stderr.write(`tip: ${recoveryHint}\n`);
 }
 
 function formatApiError(error: unknown): string {
@@ -1862,10 +1899,20 @@ program.hook("preAction", (_thisCommand, actionCommand) => {
     offline?: boolean;
     apiOnly?: boolean;
   };
+  const isTestEnv = process.env.NODE_ENV === "test";
   if (opts.offline && opts.apiOnly) {
     throw new Error("Choose one: --offline or --api-only");
   }
   if (opts.apiOnly) {
+    process.env.NEOTOMA_FORCE_LOCAL_TRANSPORT = "false";
+    process.env.NEOTOMA_DISABLE_OFFLINE_FALLBACK = "true";
+    return;
+  }
+
+  // In test runs, prefer the shared test API server unless --offline was explicitly
+  // requested. This avoids per-command local transport startup flakes across large
+  // CLI suites while preserving explicit offline coverage.
+  if (isTestEnv && !opts.offline) {
     process.env.NEOTOMA_FORCE_LOCAL_TRANSPORT = "false";
     process.env.NEOTOMA_DISABLE_OFFLINE_FALLBACK = "true";
     return;
@@ -2127,6 +2174,87 @@ function backupTimestamp(): string {
     pad(now.getMinutes()) +
     pad(now.getSeconds())
   );
+}
+
+type SqliteIntegrityCheckResult = {
+  healthy: boolean;
+  output: string;
+};
+
+function runSqliteIntegrityCheck(dbPath: string): SqliteIntegrityCheckResult {
+  try {
+    const raw = execFileSync("sqlite3", [dbPath, "PRAGMA integrity_check;"], {
+      encoding: "utf8",
+      maxBuffer: 32 * 1024 * 1024,
+    }).trim();
+    const lines = raw.split(/\r?\n/).filter((line) => line.trim().length > 0);
+    return {
+      healthy: lines.length === 1 && lines[0] === "ok",
+      output: raw,
+    };
+  } catch (error: unknown) {
+    const stdout =
+      error && typeof error === "object" && "stdout" in error
+        ? String((error as { stdout?: string | Buffer }).stdout ?? "")
+        : "";
+    const stderr =
+      error && typeof error === "object" && "stderr" in error
+        ? String((error as { stderr?: string | Buffer }).stderr ?? "")
+        : "";
+    const message = error instanceof Error ? error.message : String(error);
+    const combined = `${stdout}${stderr}`.trim();
+    return {
+      healthy: false,
+      output: combined.length > 0 ? combined : message,
+    };
+  }
+}
+
+function runSqliteRecover(sourceDbPath: string, outputDbPath: string): void {
+  const sourceUri = `file:${sourceDbPath}?mode=ro`;
+  const recoveredSql = execFileSync("sqlite3", [sourceUri, ".recover"], {
+    encoding: "utf8",
+    maxBuffer: 512 * 1024 * 1024,
+  });
+  execFileSync("sqlite3", [outputDbPath], {
+    input: recoveredSql,
+    encoding: "utf8",
+    maxBuffer: 512 * 1024 * 1024,
+  });
+}
+
+async function resolveStorageDbPathForCurrentEnv(): Promise<{
+  preferredEnv: "dev" | "prod";
+  dataDir: string;
+  sqlitePath: string;
+}> {
+  const envFlag = (program.opts() as { env?: string }).env;
+  const preferredEnv: "dev" | "prod" =
+    envFlag === "dev" || envFlag === "prod"
+      ? envFlag
+      : (process.env.NEOTOMA_ENV || "development") === "production"
+        ? "prod"
+        : "dev";
+  const { repoRoot } = await resolveRepoRootFromInitContext();
+  await hydrateDataDirFromConfiguredEnv(repoRoot);
+  let projectRoot: string | undefined = process.env.NEOTOMA_PROJECT_ROOT;
+  if (!projectRoot) {
+    try {
+      const pkgPath = path.join(process.cwd(), "package.json");
+      const pkg = JSON.parse(await fs.readFile(pkgPath, "utf-8")) as { name?: string };
+      if (pkg.name === "neotoma") projectRoot = process.cwd();
+    } catch {
+      // not in neotoma repo
+    }
+  }
+  const baseDir =
+    process.env.NEOTOMA_DATA_DIR || (projectRoot ? path.join(projectRoot, "data") : "data");
+  const dataDir = resolvePathInput(baseDir, process.cwd());
+  const sqlitePath = path.join(
+    dataDir,
+    preferredEnv === "prod" ? "neotoma.prod.db" : "neotoma.db"
+  );
+  return { preferredEnv, dataDir, sqlitePath };
 }
 
 async function pathExists(p: string): Promise<boolean> {
@@ -7938,6 +8066,125 @@ storageCommand
   });
 
 storageCommand
+  .command("recover-db")
+  .description("Check SQLite integrity and optionally write a recovered copy via sqlite3 .recover")
+  .option("--recover", "Write a new recovered DB file instead of check-only", false)
+  .option("--output <path>", "Recovered DB output path (default: sibling file with timestamp)")
+  .action(async (opts: { recover?: boolean; output?: string }) => {
+    const outputMode = resolveOutputMode();
+    const { preferredEnv, sqlitePath } = await resolveStorageDbPathForCurrentEnv();
+    const envLabel = preferredEnv === "prod" ? "production" : "development";
+    const dbExists = await pathExists(sqlitePath);
+    if (!dbExists) {
+      writeCliError(`SQLite database not found at ${sqlitePath}`);
+      process.exitCode = 1;
+      return;
+    }
+
+    let sqliteVersion: string | null = null;
+    try {
+      sqliteVersion = execFileSync("sqlite3", ["--version"], { encoding: "utf8" }).trim();
+    } catch {
+      writeCliError(
+        "sqlite3 CLI not found in PATH. Install SQLite command-line tools to use storage recover-db."
+      );
+      process.exitCode = 1;
+      return;
+    }
+
+    const check = runSqliteIntegrityCheck(sqlitePath);
+    const result: Record<string, unknown> = {
+      environment: envLabel,
+      sqlite_db: sqlitePath,
+      sqlite3_version: sqliteVersion,
+      integrity_ok: check.healthy,
+      integrity_output: check.output,
+      recover_requested: opts.recover === true,
+    };
+
+    if (opts.recover !== true) {
+      result.next_step =
+        check.healthy
+          ? null
+          : `Stop Neotoma, then run: neotoma ${preferredEnv} storage recover-db --recover`;
+      if (outputMode === "json") {
+        writeOutput(result, outputMode);
+      } else if (check.healthy) {
+        process.stdout.write(heading("SQLite integrity check") + nl() + nl());
+        process.stdout.write(keyValue("Environment", envLabel) + "\n");
+        process.stdout.write(keyValue("Database", sqlitePath, true) + "\n");
+        process.stdout.write(keyValue("Result", "ok") + "\n");
+      } else {
+        process.stdout.write(heading("SQLite integrity check") + nl() + nl());
+        process.stdout.write(keyValue("Environment", envLabel) + "\n");
+        process.stdout.write(keyValue("Database", sqlitePath, true) + "\n");
+        process.stdout.write(keyValue("Result", "not ok") + "\n");
+        process.stdout.write(nl() + check.output + nl());
+        process.stdout.write(
+          nl() +
+            warn(
+              "Corruption detected. Stop Neotoma before recovery, then run " +
+                pathStyle(`neotoma ${preferredEnv} storage recover-db --recover`) +
+                "."
+            ) +
+            nl()
+        );
+        process.stdout.write(
+          dim("The recover command writes a new file and does not replace the live DB automatically.") +
+            nl()
+        );
+      }
+      process.exitCode = check.healthy ? 0 : 2;
+      return;
+    }
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const defaultOutput = path.join(
+      path.dirname(sqlitePath),
+      `${path.basename(sqlitePath, ".db")}.recovered-${timestamp}.db`
+    );
+    const outputDbPath = opts.output
+      ? resolvePathInput(opts.output, process.cwd())
+      : defaultOutput;
+
+    await fs.mkdir(path.dirname(outputDbPath), { recursive: true });
+    runSqliteRecover(sqlitePath, outputDbPath);
+    const verify = runSqliteIntegrityCheck(outputDbPath);
+    result.output_db = outputDbPath;
+    result.recovered_integrity_ok = verify.healthy;
+    result.recovered_integrity_output = verify.output;
+    result.next_step = verify.healthy
+      ? "Stop Neotoma, archive the live .db/.db-wal/.db-shm, then replace the live DB manually."
+      : "Recovered output failed integrity_check; keep the source DB and restore from backup instead.";
+
+    if (outputMode === "json") {
+      writeOutput(result, outputMode);
+      process.exitCode = verify.healthy ? 0 : 4;
+      return;
+    }
+
+    process.stdout.write(heading("SQLite recovery") + nl() + nl());
+    process.stdout.write(keyValue("Environment", envLabel) + "\n");
+    process.stdout.write(keyValue("Source DB", sqlitePath, true) + "\n");
+    process.stdout.write(keyValue("Recovered DB", outputDbPath, true) + "\n");
+    process.stdout.write(keyValue("Recovered integrity", verify.healthy ? "ok" : "not ok") + "\n");
+    if (!verify.healthy) {
+      process.stdout.write(nl() + verify.output + nl());
+      process.exitCode = 4;
+      return;
+    }
+    process.stdout.write(
+      nl() +
+        bullet("Stop Neotoma (MCP/API) before replacing the live DB.") +
+        nl() +
+        bullet("Archive the live .db, .db-wal, and .db-shm before swapping files.") +
+        nl() +
+        bullet("Replace the live DB manually; this command never auto-swaps or deletes the source DB.") +
+        nl()
+    );
+  });
+
+storageCommand
   .command("set-data-dir <dir>")
   .description("Set NEOTOMA_DATA_DIR and optionally copy/merge DB files into the new directory")
   .option("--move-db-files", "Copy DB files from current data dir into the new directory")
@@ -9957,6 +10204,11 @@ timelineCommand
   .option("--user-id <userId>", "Filter by user ID (default: authenticated user)")
   .option("--limit <n>", "Limit", "100")
   .option("--offset <n>", "Offset", "0")
+  .option(
+    "--order-by <column>",
+    "Sort descending: event_timestamp (document dates) or created_at (index time)",
+    "event_timestamp"
+  )
   .action(async (opts) => {
     const outputMode = resolveOutputMode();
     const config = await readConfig();
@@ -9965,6 +10217,8 @@ timelineCommand
       baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
       token,
     });
+    const orderBy =
+      opts.orderBy === "created_at" ? "created_at" : "event_timestamp";
     const { data, error } = await api.GET("/timeline", {
       params: {
         query: {
@@ -9975,6 +10229,7 @@ timelineCommand
           user_id: opts.userId,
           limit: Number(opts.limit),
           offset: Number(opts.offset),
+          order_by: orderBy,
         },
       },
     });

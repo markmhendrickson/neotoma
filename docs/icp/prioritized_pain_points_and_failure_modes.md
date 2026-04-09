@@ -1,42 +1,42 @@
 # ICP-Prioritized Pain Points and Failure Modes
 
 ## Source of Truth
-- ICP priority order: `docs/icp/primary_icp.md`
-- ICP pain points: `docs/icp/profiles.md`
+
+- ICP definition: [`docs/icp/primary_icp.md`](./primary_icp.md)
+- ICP profiles: [`docs/icp/profiles.md`](./profiles.md)
+- Developer release targeting: [`docs/icp/developer_release_targeting.md`](./developer_release_targeting.md)
 - Platform-level failure modes: `docs/developer/agent_memory_failure_modes.md`
 - Schema-level failure interactions: `docs/developer/agent_memory_failure_interactions_by_schema.md`
 
 ## Mapping Method
-- Priority order follows ICP tiers (Tier 1 before Tier 2)
-- Each ICP maps to:
-  - top user pain points
-  - highest-risk platform failure modes
-  - schema hot spots for QA and incident review
 
-## Tier 1 (MVP): Immediate Activation and Early Revenue
+The primary ICP is one archetype (personal agentic OS builder/operator) in three operational modes. Each mode maps to top pain points, highest-risk failure modes, and schema hot spots.
 
-| ICP | Top pain points (from ICP profile) | Priority failure modes to prevent first | Schema hot spots to test first |
-| --- | --- | --- | --- |
-| AI-Native Individual Operators | No memory across sessions; fragmented document sources; repetitive context-setting | Lost commitments; tool-to-tool context loss; silent memory drift; weak correction loop | `conversation`, `message`, `agent_message`, `note`, `task` |
-| High-Context Knowledge Workers | Information overload; no entity unification; timeline fragmentation; search limitations | Duplicate entities; contradictory state; non-replayable decisions; opaque relationship logic | `person`, `contact`, `company`, `relationship`, `event`, `contract`, `note` |
-| AI-Native Founders and Small Teams (2-20) | Team knowledge fragmentation; onboarding friction; AI tool inconsistency; decision tracking gaps | Tool-to-tool context loss; contradictory state; non-replayable decisions; lost commitments | `project`, `task`, `goal`, `conversation`, `message`, `company`, `contract` |
-| Builders of Agentic Systems (bridge ICP in profiles) | No shared memory for agents; no provenance; no deterministic layer | Non-replayable decisions; contradictory state; silent memory drift; weak correction loop | `flow`, `event`, `agent_message`, `conversation`, `task`, `relationship` |
+## Primary ICP: Operational Mode Mapping
 
-## Tier 2: Early B2B Expansion
+| Operational mode | Top pain points | Priority failure modes to prevent first | Schema hot spots to test first |
+|---|---|---|---|
+| **Operating across AI tools** | No memory across sessions; context fragmentation; repetitive re-prompting; broken handoffs between tools | Lost commitments; tool-to-tool context loss; silent memory drift; weak correction loop | `conversation`, `message`, `agent_message`, `note`, `task` |
+| **Building agent systems** | Drift across sessions; conflicting state across tool boundaries; no replay; no shared memory for agents | Duplicate entities; contradictory state; non-replayable decisions; entity resolution failures | `person`, `contact`, `company`, `relationship`, `event`, `task` |
+| **Infrastructure engineering** | Can't reproduce agent runs; state mutations invisible; debugging is log archaeology; no provenance | Non-replayable decisions; contradictory state; silent memory drift; weak correction loop | `flow`, `event`, `agent_message`, `conversation`, `task`, `relationship` |
 
-| ICP | Top pain points (from ICP profile) | Priority failure modes to prevent first | Schema hot spots to test first |
-| --- | --- | --- | --- |
-| Hybrid Product Teams | Siloed information; context loss; AI tool fragmentation; onboarding friction | Tool-to-tool context loss; contradictory state; non-replayable decisions; opaque relationship logic | `project`, `task`, `goal`, `conversation`, `message`, `note`, `event` |
-| Cross-Functional Operational Teams | SOP and workflow fragmentation; knowledge loss; inconsistent execution; compliance tracking gaps | Lost commitments; non-replayable decisions; contradictory state; unbounded schema drift | `task`, `flow`, `event`, `contract`, `note`, `conversation` |
-| Developer Integrators | No stable truth API; API inconsistency; limited programmatic access; integration complexity | Contradictory state; non-replayable decisions; weak correction loop; unbounded schema drift | `task`, `event`, `relationship`, `conversation`, `agent_message` |
-| AI Tool Integrators (Cursor/Raycast/VSCode/Claude tools) | Tool-specific memory silos; context loss on tool switch; no unified memory | Tool-to-tool context loss; silent memory drift; contradictory state | `conversation`, `message`, `agent_message`, `note`, `task` |
+## Secondary Motion: B2B-by-Vertical
 
-## Prioritization Rubric (for backlog and QA ordering)
-- P0: Failure mode directly blocks Tier 1 activation or trust
-- P1: Failure mode degrades daily use but has a workaround
-- P2: Failure mode matters mostly at team scale (Tier 2+)
+These emerge downstream from personal adoption when the primary ICP brings Neotoma into team contexts.
+
+| Context | Top pain points | Priority failure modes to prevent first | Schema hot spots to test first |
+|---|---|---|---|
+| Team agent workflows | Siloed information; context loss; AI tool fragmentation; onboarding friction | Tool-to-tool context loss; contradictory state; non-replayable decisions; opaque relationship logic | `project`, `task`, `goal`, `conversation`, `message`, `note`, `event` |
+| Toolchain integrators | No stable truth API; API inconsistency; limited programmatic access | Contradictory state; non-replayable decisions; weak correction loop; unbounded schema drift | `task`, `event`, `relationship`, `conversation`, `agent_message` |
+
+## Prioritization Rubric
+
+- **P0:** Failure mode directly blocks primary ICP activation or trust
+- **P1:** Failure mode degrades daily use but has a workaround
+- **P2:** Failure mode matters mostly at team scale (B2B downstream)
 
 ## Immediate QA Focus by Priority
+
 - P0:
   - stale conversation/message replay
   - duplicate entity resolution failures

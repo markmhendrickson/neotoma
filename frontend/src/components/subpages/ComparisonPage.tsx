@@ -279,25 +279,29 @@ export function NeotomaVsPlatformMemoryPage() {
   return (
     <ComparisonPage
       title="Neotoma vs platform memory"
-      answerBlock="Platform memory is the built-in memory layer inside products like Claude, ChatGPT, Gemini, and Copilot. It is optimized for convenience inside one vendor surface. Neotoma is a deterministic state layer optimized for portability, auditability, and exact state reconstruction across tools."
+      answerBlock="Platform memory covers two different things: conversation-level memory inside products like Claude, ChatGPT, Gemini, and Copilot, and file-level primitives like Anthropic's Memory Tool that give agents a /memories directory. Both are optimized for convenience inside one vendor surface. Neotoma is a deterministic state layer optimized for portability, auditability, and exact state reconstruction across tools."
       question="How does Neotoma compare to platform memory?"
       competitorLabel="Platform memory"
       competitorColumn="platform"
-      intro="Both platform memory and Neotoma help agents remember across sessions. They target very different reliability and control requirements."
-      competitorDescription="Platform memory is controlled by the model provider. It may remember preferences, summaries, or user details inside that product, but the storage model is opaque. Users typically cannot inspect lineage, replay state transitions, or export a deterministic observation log."
-      neotomaDescription="Neotoma stores append-only structured observations with deterministic reducers, schema validation, and provenance. Memory remains user-controlled, cross-tool, and reconstructable at any point in time."
+      intro="Platform memory and Neotoma both help agents remember across sessions, but they target different reliability and control requirements. This comparison covers both conversation-level memory and newer file-based primitives like the Claude Memory Tool."
+      competitorDescription="Platform memory is controlled by the model provider. Conversation-level memory may remember preferences, summaries, or user details inside that product, but the storage model is opaque. File-based primitives like the Claude Memory Tool give agents CRUD access to a /memories directory, but there is no schema validation, no append-only guarantee, no entity resolution, and no field-level provenance. Users typically cannot inspect lineage, replay state transitions, or export a deterministic observation log."
+      neotomaDescription="Neotoma stores append-only structured observations with deterministic reducers, schema validation, and provenance. Memory remains user-controlled, cross-tool, and reconstructable at any point in time. It can run alongside both conversation memory and the Memory Tool via MCP."
       whenToUse={{
-        competitor: "You want the fastest possible setup inside a single AI product, and convenience matters more than portability, versioning, or auditability.",
+        competitor: "You want the fastest possible setup inside a single AI product, you are using the Memory Tool as a lightweight scratchpad, and convenience matters more than portability, versioning, or auditability.",
         neotoma: "You need memory that survives tool changes, supports exact historical reconstruction, exposes provenance, and gives multiple agents a shared state layer with formal guarantees.",
       }}
       faqItems={[
         {
           question: "Can I use platform memory and Neotoma together?",
-          answer: "Yes. Platform memory can hold lightweight in-product preferences or convenience context, while Neotoma stores durable structured state that must persist across tools and sessions.",
+          answer: "Yes. Platform memory can hold lightweight in-product preferences or scratchpad state, while Neotoma stores durable structured state that must persist across tools and sessions. Both can run at the same time; the Memory Tool and Neotoma MCP tools are both available to agents built with the Agent SDK.",
+        },
+        {
+          question: "How does Neotoma compare to Claude's Memory Tool specifically?",
+          answer: "The Memory Tool (API beta) gives agents a /memories file directory for cross-session state. It is a useful primitive for lightweight, agent-specific scratchpad state, but any string can be written, files can be silently overwritten, and there is no schema validation or provenance tracking. Neotoma provides append-only observations, schema-bound entities, and field-level provenance. For a detailed side-by-side, see the Memory infrastructure for Claude agents integration page.",
         },
         {
           question: "Does platform memory provide auditable history?",
-          answer: "Not in the way production agent systems usually require. Platform products may expose some editable memory UI, but they generally do not provide append-only observation logs, deterministic replay, or field-level provenance.",
+          answer: "Not in the way production agent systems usually require. Platform products may expose some editable memory UI, but they generally do not provide append-only observation logs, deterministic replay, or field-level provenance. The Memory Tool in particular stores flat files with no built-in version history.",
         },
       ]}
     />

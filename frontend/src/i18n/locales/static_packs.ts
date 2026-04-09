@@ -17,15 +17,25 @@ export interface StaticLocalePack {
     summary: string;
     summaryRecordTypes: string[];
     ctaEvaluateWithAgent: string;
+    ctaEvaluateCompact: string;
     ctaViewGuarantees: string;
     ctaInstall: string;
+    /** Sticky home banner: second action → /meet (creator meetings). */
+    ctaMeetCreator: string;
+    ctaMeetCreatorCompact: string;
+    ctaOfficeHours: string;
+    ctaOfficeHoursSubtext: string;
     subcopy: string;
+    curiosityGap: string;
+    /** Hero micro-label below primary CTAs (displayed uppercase in UI) */
+    audienceTagline: string;
   };
   siteSections: {
     intro: string;
     personalOs: string;
     beforeAfter: string;
     who?: string;
+    demo?: string;
     recordTypes?: string;
     guarantees: string;
     evaluate?: string;
@@ -86,7 +96,7 @@ const EN_PACK: StaticLocalePack = {
       "You become the human sync layer — re-prompting what the agent should already know.",
     ],
     summary:
-      "Your {record} disappear between sessions and tools. Neotoma stores them once, versioned and queryable, across every agent you run — so you stop re-explaining your world.",
+      "Neotoma stores your {record} as versioned, auditable state — so every agent works from truth.",
     summaryRecordTypes: [
       "contacts",
       "tasks",
@@ -100,16 +110,26 @@ const EN_PACK: StaticLocalePack = {
       "health data",
     ],
     ctaEvaluateWithAgent: "Ask your agent to evaluate",
+    ctaEvaluateCompact: "Evaluate",
     ctaViewGuarantees: "View guarantees",
     ctaInstall: "Install in 5 minutes",
+    ctaMeetCreator: "Meet the creator",
+    ctaMeetCreatorCompact: "Meet",
+    ctaOfficeHours: "Talk to the founder",
+    ctaOfficeHoursSubtext:
+      "Building a multi-agent stack? Office hours for developers who want to talk architecture.",
     subcopy:
-      "Your data stays on your machine. One memory across Claude, Cursor, ChatGPT, OpenClaw, and more.",
+      "Neotoma is git for what your agents know. Versioned, diffable, replayable state across Claude, Cursor, ChatGPT, and everything else. Stop being the human sync layer.",
+    curiosityGap:
+      "Most memory tools help agents retrieve information. None of them can prove it hasn\u2019t been silently corrupted.",
+    audienceTagline: "Built for developers running agents across sessions and tools",
   },
   siteSections: {
     intro: "Intro",
-    personalOs: "Your OS",
+    personalOs: "Proof",
     beforeAfter: "Before / After",
     who: "Who",
+    demo: "Demo",
     recordTypes: "Record types",
     guarantees: "Guarantees",
     evaluate: "Evaluate",
@@ -150,7 +170,7 @@ const EN_PACK: StaticLocalePack = {
     home: {
       title: "Your agents forget. Neotoma makes them remember.",
       description:
-        "Versioned records — contacts, tasks, decisions, finances — that persist across Claude, Cursor, ChatGPT, and every agent you run. Store once, query everywhere, stop re-prompting. Open-source and deterministic.",
+        "Stop being the human sync layer. Deterministic, versioned state for multi-agent builders and operators running Claude, Cursor, ChatGPT, and MCP-connected tools. Replay changes, trace provenance, and prove your agents aren\u2019t operating on bad state.",
     },
     docs: {
       title: "Neotoma Documentation | Setup, API, MCP, CLI References",
@@ -212,8 +232,16 @@ function buildPack(locale: SupportedLocale): StaticLocalePack {
       ...EN_PACK.homeHero,
       ctaEvaluateWithAgent:
         locale === "es" ? "Pide a tu agente que evalúe" : EN_PACK.homeHero.ctaEvaluateWithAgent,
+      ctaEvaluateCompact: locale === "es" ? "Evaluar" : EN_PACK.homeHero.ctaEvaluateCompact,
       ctaViewGuarantees: locale === "es" ? "Ver garantías" : EN_PACK.homeHero.ctaViewGuarantees,
       ctaInstall: locale === "es" ? "Instalar en 5 minutos" : EN_PACK.homeHero.ctaInstall,
+      ctaMeetCreator: locale === "es" ? "Conocer al creador" : EN_PACK.homeHero.ctaMeetCreator,
+      ctaMeetCreatorCompact:
+        locale === "es" ? "Creador" : EN_PACK.homeHero.ctaMeetCreatorCompact,
+      audienceTagline:
+        locale === "es"
+          ? "Para desarrolladores que ejecutan agentes entre sesiones y herramientas"
+          : EN_PACK.homeHero.audienceTagline,
     },
     siteSections: {
       ...EN_PACK.siteSections,

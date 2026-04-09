@@ -3,15 +3,7 @@ name: pull
 description: pull
 ---
 
-<!-- Source: foundation/.cursor/skills/pull/SKILL.md -->
-
----
-name: pull
-description: Pull from origin; supports /pull <submodule>.
-triggers:
-  - pull
-  - /pull
----
+<!-- Source: foundation/agent_instructions/cursor_commands/pull.md -->
 
 # pull
 

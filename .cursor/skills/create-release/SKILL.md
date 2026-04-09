@@ -1,8 +1,10 @@
 ---
-name: create-release
-description: Create a new software release with planning, manifest, and execution schedule; when preparing a release, includes comprehensive GitHub/npm notes per release_workflow Step 5 and repo docs (e.g. Neotoma).
+name: release
+description: Canonical `/release` workflow for software releases with planning, full release-detail preview, manifest/schedule generation, and GitHub/npm preparation.
 triggers:
   - new release
+  - release
+  - /release
   - create release
   - plan release
   - create-release
@@ -13,7 +15,7 @@ triggers:
   - release preparation
 ---
 
-# Create New Release
+# Release
 
 Orchestrates multiple Feature Units into a cohesive release. Implements the Release workflow from `foundation/development/release_workflow.md`.
 
@@ -25,29 +27,42 @@ Orchestrates multiple Feature Units into a cohesive release. Implements the Rele
 
 This is a foundation command. If installed, it will be available in `.cursor/commands/` via symlink.
 
-## Prepare a release (comprehensive GitHub and npm notes)
+## Prepare a release (dev vs `main`, npm, GitHub)
 
-**Always follow this section when the user asks to prepare a release, prepare release, prep a release, or release preparation** — including when those phrases appear alongside versioning or shipping. Auto-generated commit lists alone are **not** sufficient.
+**Always follow this section when the user asks to prepare a release, prepare release, prep a release, or release preparation** — including with versioning or shipping. Canonical command text: `foundation/agent_instructions/cursor_commands/release.md` and `foundation/agent_instructions/cursor_commands/create_release.md` (legacy alias implementation). Auto-generated commit lists alone are **not** sufficient for the GitHub Release body, and the preview must include uncommitted changes separately.
+
+### Mandatory preflight: unmerged dev work
+
+Run **before** version bumps, `github_release_supplement.md`, or `release-notes:render`:
+
+1. **`git fetch origin`** (and other remotes). Default: integration **`dev`**, target **`main`** unless repo config says otherwise.
+2. **Commits not on `main`:** `git log origin/main..origin/dev --oneline` or `origin/main..HEAD` on the integration branch — default narrative scope once merged.
+3. **Uncommitted:** `git status --short` — preview these separately by default. Describe the actual pending work by area/impact, not just that a dirty tree exists. If the user confirms they should ship, commit them before final release-note rendering; otherwise mark them explicitly excluded.
+4. **Submodules:** `git submodule status` — surface ahead/behind vs recorded SHAs.
+5. **Compare range:** Prefer tag on **`main`** after merge, then `<prev_tag>..<new_tag>`. Before merge, use `<prev_tag>..origin/dev` and re-render after tag on merged release commit (provisional OK if labeled).
+6. **npm:** Match `package.json` (and workspaces) to `TAG`; use `--compare-base` when last npm publish ≠ last git tag (see `github_release_process.md`).
 
 ### Mandatory documents
 
 | Document | Role |
 |----------|------|
-| `foundation/development/release_workflow.md` | **Step 5 (GitHub Release):** human-authored notes, full coverage of `previous_tag..current_tag`, required sections, block completion if anything in range is missing |
+| `foundation/agent_instructions/cursor_commands/release.md` | Canonical `/release` command |
+| `foundation/agent_instructions/cursor_commands/create_release.md` | Legacy alias implementation and full workflow details |
+| `foundation/development/release_workflow.md` | Release lifecycle and deployment checkpoints |
+| `docs/developer/github_release_process.md` | **When present:** wrap + supplement + `release-notes:render`, `gh release create/edit` |
 
-**If this repository documents a GitHub/npm release pipeline, follow it.** Example (Neotoma): `docs/developer/github_release_process.md` (wrap + supplement + `release-notes:render`) and `docs/developer/github_release_supplement.example.md` (shape of `github_release_supplement.md`).
+**If this repository documents a GitHub/npm release pipeline, follow it.** Example (Neotoma): `docs/developer/github_release_process.md` and `docs/developer/github_release_supplement.example.md`.
 
 ### Agent checklist
 
 1. **Target version:** Resolve `TAG` (`vX.Y.Z`) from context, `package.json`, or ask once if ambiguous.
-2. **Supplement / narrative:** Per **Step 5**, include at least: grouped **What changed**, **Behavior changes**, **Internal changes**, **Fixes**, **Tests and validation**, **Breaking changes** (or explicit none). Walk commits in range (`git log <prev>..<ref>`) and ensure coverage; do not omit refactors or test-only work from **Internal** / **Tests**. If the repo uses `github_release_supplement.md`, create or update `docs/releases/in_progress/<TAG>/github_release_supplement.md` following the repo’s example file.
-   - Write for a human reader deciding whether to upgrade: open with a plain-English summary, explain why notable changes matter, and keep bullets concise.
-   - Keep the public release notes focused on shipped behavior, operator impact, fixes, and validation. Move exhaustive inventories, raw prep notes, and deeper narrative to a separate internal note or blog post.
-3. **Wrap + render:** When the repo provides `release-notes:render` (or equivalent), run it after the tag exists on the release commit. If the tag does not exist yet, draft the supplement first and note that render may require the tag for an accurate commit list.
-4. **GitHub Release:** Create or update the GitHub Release with curated notes (not auto-only), per Step 5.
-5. **Quality bar:** If narrative would not pass Step 5 validation, expand before treating the release as prepared.
+2. **Supplement / narrative:** Grouped **What changed**, **Behavior changes**, **Internal changes**, **Fixes**, **Tests and validation**, **Breaking changes** (or explicit none). Walk commits in the chosen range; do not omit refactors or test-only work from **Internal** / **Tests**. If the working tree is dirty, add **Uncommitted changes pending inclusion** during preview with descriptive bullets for the actual pending work. If the repo uses `github_release_supplement.md`, create or update `docs/releases/in_progress/<TAG>/github_release_supplement.md` following the repo’s example file.
+   - Write for a human reader deciding whether to upgrade: plain-English summary first; keep public notes focused on shipped behavior, operator impact, fixes, validation.
+3. **Wrap + render:** Run `release-notes:render` after the tag exists on the release commit when possible; if not, draft supplement first, then re-render after tagging.
+4. **GitHub Release:** Create or update with curated notes (not auto-only).
+5. **Quality bar:** Expand narrative until it passes human upgrade-decision quality, not commit-dump quality.
 
-The full multi-FU orchestration below can run **after** or **in parallel** with this notes path when scope requires it; do not skip the notes path when the user asked to **prepare** a release.
+The full multi-FU orchestration below can run **after** or **in parallel** with this path when scope requires it; do not skip **preflight** or the notes path when the user asked to **prepare** a release.
 
 ## Prerequisites
 
@@ -61,7 +76,7 @@ The full multi-FU orchestration below can run **after** or **in parallel** with 
 
 Load required documents:
 - `foundation/development/release_workflow.md` (primary workflow)
-- If the user asked to prepare a release: **Prepare a release (comprehensive GitHub and npm notes)** (this skill); if `docs/developer/github_release_process.md` exists, load it (Neotoma and similar repos)
+- If the user asked to prepare a release: **Prepare a release (dev vs main, npm, GitHub)** (this skill) plus `foundation/agent_instructions/cursor_commands/release.md` and `foundation/agent_instructions/cursor_commands/create_release.md`; if `docs/developer/github_release_process.md` exists, load it
 - `docs/feature_units/standards/creating_feature_units.md` (FU creation)
 - `docs/feature_units/standards/execution_instructions.md` (FU execution)
 - `docs/specs/MVP_FEATURE_UNITS.md` (if working on MVP)
@@ -440,7 +455,7 @@ Agent: Monitoring: [dashboard links]
 ### Load Order
 
 1. `foundation/development/release_workflow.md` (primary)
-2. If preparing a release: **Prepare a release (comprehensive GitHub and npm notes)** (this skill); plus `docs/developer/github_release_process.md` when present
+2. If preparing a release: **Prepare a release (dev vs main, npm, GitHub)** (this skill) plus `foundation/agent_instructions/cursor_commands/release.md` and `foundation/agent_instructions/cursor_commands/create_release.md`; plus `docs/developer/github_release_process.md` when present
 3. `docs/feature_units/standards/creating_feature_units.md` (for FU creation)
 4. `docs/feature_units/standards/execution_instructions.md` (for FU execution)
 5. `docs/specs/MVP_FEATURE_UNITS.md` (if release_id is v1.0.0 / MVP)

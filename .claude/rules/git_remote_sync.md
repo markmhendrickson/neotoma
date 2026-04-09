@@ -1,10 +1,4 @@
----
-description: "Pull and merge remote changes before pushing; handle non-fast-forward and diverged branches. Load when pushing, or when push fails or branch is behind origin."
-alwaysApply: false
----
-
-<!-- Source: foundation/.cursor/rules/git_remote_sync.mdc -->
-
+<!-- Source: foundation/agent_instructions/cursor_rules/git_remote_sync.mdc -->
 
 # Git Remote Sync Rule
 
@@ -238,6 +232,8 @@ $ git push origin HEAD
 
 ## Related Documents
 
-- Skill `pull` (`.cursor/skills/pull/SKILL.md` or `foundation/agent_instructions/cursor_skills/pull/SKILL.md`)
-- Skill `commit` (`.cursor/skills/commit/SKILL.md` or `foundation/agent_instructions/cursor_skills/commit/SKILL.md`)
+- `foundation/agent_instructions/cursor_commands/pull.md` - Pull command workflow
+- `foundation/agent_instructions/cursor_commands/commit.md` - Commit command workflow
 - `foundation/development/workflow.md` - Git workflow documentation
+
+

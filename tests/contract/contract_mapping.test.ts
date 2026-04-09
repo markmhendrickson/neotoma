@@ -81,6 +81,7 @@ describe("contract mappings", () => {
   it("ensures no data operations use mcp-only placeholders", () => {
     // Data operation tools that should have CLI equivalents
     const dataOperationTools = [
+      "get_entity_type_counts",
       "retrieve_entity_by_identifier",
       "retrieve_related_entities",
       "retrieve_graph_neighborhood",
@@ -106,6 +107,7 @@ describe("contract mappings", () => {
   it("ensures bidirectional mapping between MCP and CLI for data operations", () => {
     // Verify that all implemented CLI commands have corresponding MCP tools
     const cliToMcpExpectedMappings = {
+      "stats entities": "get_entity_type_counts",
       "entities search": "retrieve_entity_by_identifier",
       "entities related": "retrieve_related_entities",
       "entities neighborhood": "retrieve_graph_neighborhood",

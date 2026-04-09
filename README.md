@@ -256,7 +256,7 @@ Full documentation is organized at [neotoma.io/docs](https://neotoma.io/docs) an
 
 **Foundational:** [Core identity](docs/foundation/core_identity.md), [Philosophy](docs/foundation/philosophy.md), [Problem statement](docs/foundation/problem_statement.md)
 
-**Operations:** [Runbook](docs/operations/runbook.md), [Health check](docs/operations/health_check.md) (`npm run doctor`), [Troubleshooting](https://neotoma.io/troubleshooting)
+**Operations:** [Runbook](docs/operations/runbook.md), [Health check](docs/operations/health_check.md) (`npm run doctor`), SQLite salvage (`neotoma storage recover-db`, `npm run recover:db`, `npm run recover:db:prod`), [Troubleshooting](https://neotoma.io/troubleshooting)
 
 ## Contributing
 

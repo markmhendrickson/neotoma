@@ -136,6 +136,7 @@ export function DocsSidebar({ siteName: _siteName, belowHeader }: DocsSidebarPro
   const navContent = (
     <>
       {orderedCategories.map((cat) => {
+        const groupLabel = cat.sidebarTitle ?? cat.title;
         const isCategoryOpen = openCategories.has(cat.title);
         const needsMoreToggle = cat.items.length > DOC_SIDEBAR_ITEMS_BEFORE_MORE;
         const isNavExpanded = navExpandedByCategory[cat.title] ?? false;
@@ -162,7 +163,7 @@ export function DocsSidebar({ siteName: _siteName, belowHeader }: DocsSidebarPro
                   )}
                   aria-hidden
                 />
-                {cat.title}
+                {groupLabel}
               </button>
             </SidebarGroupLabel>
             <SidebarGroupContent className={cn(!isCategoryOpen && "hidden")}>

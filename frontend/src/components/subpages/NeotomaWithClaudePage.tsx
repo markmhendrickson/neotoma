@@ -33,6 +33,10 @@ export function NeotomaWithClaudePage() {
           <Link to="/neotoma-with-claude-code" className={extLink}>
             Neotoma with Claude Code
           </Link>
+          . Building with the Agent SDK or Managed Agents? See{" "}
+          <Link to="/neotoma-with-claude-agent-sdk" className={extLink}>
+            Memory infrastructure for Claude agents
+          </Link>
           .
         </p>
       </section>
@@ -257,6 +261,24 @@ export function NeotomaWithClaudePage() {
               and claude.ai (remote MCP)
             </span>
           </li>
+          <li className="text-[15px] leading-7 flex items-start gap-2">
+            <span className="text-emerald-500 mt-0.5 shrink-0" aria-hidden>
+              &rarr;
+            </span>
+            <span>
+              The{" "}
+              <a
+                href="https://docs.claude.com/en/docs/build-with-claude/memory-tool"
+                target="_blank"
+                rel="noopener noreferrer"
+                className={extLink}
+              >
+                Memory Tool
+              </a>{" "}
+              (API beta) for agents built with the Agent SDK, which exposes a client-side{" "}
+              <code>/memories</code> file directory for lightweight cross-session state
+            </span>
+          </li>
         </ul>
       </IntegrationSection>
 
@@ -301,6 +323,20 @@ export function NeotomaWithClaudePage() {
             </span>
             <span className="text-muted-foreground">
               Deterministic state reconstruction from recorded observations
+            </span>
+          </li>
+          <li className="text-[15px] leading-7 flex items-start gap-2">
+            <span className="text-rose-400 shrink-0" aria-hidden>
+              &times;
+            </span>
+            <span className="text-muted-foreground">
+              Schema validation or append-only guarantees for the Memory Tool's{" "}
+              <code>/memories</code> files. It is a useful scratchpad, but files can be silently
+              overwritten and there is no field-level provenance. See{" "}
+              <Link to="/neotoma-with-claude-agent-sdk" className={extLink}>
+                Memory infrastructure for Claude agents
+              </Link>{" "}
+              for the comparison in detail.
             </span>
           </li>
         </ul>

@@ -1,6 +1,7 @@
 /**
  * Site analytics: GA4 (gtag) and/or Umami. Each backend loads only when its env vars are set.
  * Page views fire on SPA navigations via MainApp. Typed event helpers mirror the same schema to both.
+ * Outbound `<a href>` clicks are tracked via delegated listeners from `installOutboundLinkTracking()` (main.tsx).
  *
  * Umami (no in-repo defaults): `import.meta.env.DEV` uses VITE_UMAMI_WEBSITE_ID_DEV and optional
  * VITE_UMAMI_URL_DEV; production bundles use VITE_UMAMI_WEBSITE_ID and VITE_UMAMI_URL. Dev falls
@@ -113,6 +114,39 @@ export function initSiteAnalytics(): void {
   initUmami();
 }
 
+function isAnyAnalyticsBackendConfigured(): boolean {
+  return Boolean(trimViteEnv("VITE_GA_MEASUREMENT_ID")) || isUmamiConfigured();
+}
+
+function rawHrefFromAnchor(anchor: HTMLAnchorElement): string | null {
+  const href = anchor.getAttribute("href");
+  if (!href) return null;
+  const t = href.trim();
+  if (!t || t.toLowerCase().startsWith("javascript:")) return null;
+  return t;
+}
+
+function anchorOutboundResolvedUrl(raw: string, loc: Location): string | null {
+  try {
+    const url = new URL(raw, loc.href);
+    const proto = url.protocol.toLowerCase();
+    if (proto === "mailto:" || proto === "tel:" || proto === "sms:") {
+      return url.href;
+    }
+    if (proto !== "http:" && proto !== "https:") return null;
+    const sameHost = url.hostname === loc.hostname && url.port === loc.port;
+    if (sameHost) return null;
+    return url.href;
+  } catch {
+    return null;
+  }
+}
+
+function linkLabelFromAnchor(anchor: HTMLAnchorElement): string {
+  const t = anchor.textContent?.replace(/\s+/g, " ").trim() ?? "";
+  return t.length > 200 ? `${t.slice(0, 200)}…` : t;
+}
+
 function isGaReady(): boolean {
   return !!(import.meta.env.VITE_GA_MEASUREMENT_ID && window.gtag);
 }
@@ -202,6 +236,10 @@ export type CtaName =
   | "docs_install_reference"
   | "evaluate_copy_prompt"
   | "evaluate_prompt_install"
+  | "founder_office_hours"
+  | "meet_with_creator_banner"
+  | "meet_page_notion_interview"
+  | "demo_inspector_github"
   | "section_evaluate";
 
 /** Track a CTA button/link click with the CTA name and current page. */
@@ -241,6 +279,36 @@ export function sendOutboundClick(url: string, linkText?: string): void {
     });
     flushUmamiQueue();
   }
+}
+
+let outboundLinkTrackingInstalled = false;
+
+/**
+ * Delegates outbound link tracking for all native `<a href>` navigations (including mailto/tel and
+ * middle-click). Skips when no analytics env is set. Opt out per link: `data-analytics-no-outbound`.
+ */
+export function installOutboundLinkTracking(): void {
+  if (typeof document === "undefined") return;
+  if (!isAnyAnalyticsBackendConfigured()) return;
+  if (outboundLinkTrackingInstalled) return;
+  outboundLinkTrackingInstalled = true;
+
+  const onPointerActivation = (ev: MouseEvent) => {
+    if (ev.button !== 0 && ev.button !== 1) return;
+    const target = ev.target;
+    if (!(target instanceof Node)) return;
+    const anchor = (target as Node).closest?.("a[href]");
+    if (!(anchor instanceof HTMLAnchorElement)) return;
+    if (anchor.hasAttribute("data-analytics-no-outbound")) return;
+    const raw = rawHrefFromAnchor(anchor);
+    if (!raw) return;
+    const resolved = anchorOutboundResolvedUrl(raw, window.location);
+    if (!resolved) return;
+    sendOutboundClick(resolved, linkLabelFromAnchor(anchor));
+  };
+
+  document.addEventListener("click", onPointerActivation, true);
+  document.addEventListener("auxclick", onPointerActivation, true);
 }
 
 /** Track documentation navigation clicks (header nav dropdown, docs index). */
@@ -285,6 +353,8 @@ export const PRODUCT_NAV_SOURCES = {
   neotomaWithCursorTailInstall: "neotoma_with_cursor_tail_install",
   neotomaWithClaudeCodeTailEvaluate: "neotoma_with_claude_code_tail_evaluate",
   neotomaWithClaudeCodeTailInstall: "neotoma_with_claude_code_tail_install",
+  neotomaWithClaudeAgentSdkTailEvaluate: "neotoma_with_claude_agent_sdk_tail_evaluate",
+  neotomaWithClaudeAgentSdkTailInstall: "neotoma_with_claude_agent_sdk_tail_install",
   neotomaWithCodexTailEvaluate: "neotoma_with_codex_tail_evaluate",
   neotomaWithCodexTailInstall: "neotoma_with_codex_tail_install",
   neotomaWithChatgptTailEvaluate: "neotoma_with_chatgpt_tail_evaluate",

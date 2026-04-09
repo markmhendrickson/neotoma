@@ -3,30 +3,15 @@ name: commit
 description: commit
 ---
 
-<!-- Source: foundation/.cursor/skills/commit/SKILL.md -->
-
----
-name: commit
-description: Commit submodules and/or main repo with structured messages; supports /commit repo, /commit <submodule>.
-triggers:
-  - commit
-  - commit repo
-  - commit foundation
-  - submodule commit
-  - /commit
----
+<!-- Source: foundation/agent_instructions/cursor_commands/commit.md -->
 
 # commit
-
-**CRITICAL REQUIREMENT:** All submodule commits MUST use the same comprehensive change analysis and detailed commit message format as the main repository. Generic commit messages like "Update submodule changes" are FORBIDDEN. Each submodule commit must analyze changes, categorize by type/area, and generate structured commit messages with detailed sections.
 
 **PARAMETER MODES:**
 
 1. **No parameter** (default): Commit ALL submodules first, then the main repository
 2. **"repo" parameter** (e.g., `/commit repo`): Commit ONLY the main repository, skip all submodules
 3. **Submodule name parameter** (e.g., `/commit foundation`): Commit ONLY that specific submodule, skip main repository
-
-**PUSH RECONCILIATION:** Whenever a push is rejected because the remote has commits you do not have, always: (1) pull to reconcile: `git pull --rebase origin <branch>` or `git pull origin <branch> --no-rebase --no-edit`, (2) resolve any merge/rebase conflicts, (3) push again: `git push origin HEAD`. Do not report push failure without attempting reconciliation.
 
 ---
 
@@ -38,12 +23,12 @@ triggers:
 # Check if parameter provided
 if [ -n "$1" ]; then
   PARAM="$1"
-
+  
   # Case 1: "repo" parameter - commit main repository only
   if [ "$PARAM" = "repo" ]; then
     echo "📦 REPO-ONLY MODE: Committing main repository only (skipping submodules)"
     # Proceed to main repository commit workflow (skip to line after submodule processing)
-
+  
   # Case 2: Submodule name parameter - commit that submodule only
   else
     echo "📦 SUBMODULE MODE: Checking for submodule '$PARAM'"
@@ -99,65 +84,18 @@ fi
    git add -A
    ```
 
-5. **Generate comprehensive commit message** - **CRITICAL: MUST follow same detailed analysis as main repo:**
-   
-   **MANDATORY:** Analyze changes using the same comprehensive workflow as main repository:
-   
-   a. **Categorize changes by type:**
-      - Run `git diff --cached --name-status` to get all changed files with status (A/M/D)
-      - Group files by status: Added (A), Modified (M), Deleted (D)
-      - Count files in each category
-   
-   b. **Categorize changes by functional area:**
-      - Group files by directory/domain (documentation, source code, tests, configuration, etc.)
-      - Identify major functional areas affected
-   
-   c. **Analyze change magnitude:**
-      - Run `git diff --cached --stat` to get line counts
-      - Identify files with significant changes (>100 lines)
-      - Note new vs. modified vs. deleted files
-   
-   d. **Extract key themes:**
-      - Review file names and paths to identify common themes
-      - Look for patterns: new features, refactoring, documentation, bug fixes, tests
-      - Identify if changes span multiple areas
-   
-   e. **Generate structured commit message:**
-      - **Summary line** (50-72 chars): High-level description of PRIMARY change
-      - **Detailed sections** organized by priority:
-        - **New Features** (if new functionality added)
-        - **Testing Infrastructure** (if tests/coverage added)
-        - **Code Improvements** (if code refactored/enhanced)
-        - **Documentation** (if docs updated)
-        - **Configuration** (if config files modified)
-        - **Bug Fixes** (if bugs fixed)
-        - **Other Changes** (miscellaneous)
-      - **For each section**, list:
-        - Files added/modified/deleted
-        - Key changes or new capabilities
-        - Rationale if significant architectural changes
-   
-   f. **Validation:**
-      - Ensure commit message covers ALL staged files
-      - If any file category missing, add it
-      - Message must be as detailed as main repository commits
+5. **Generate commit message** (analyze changes in submodule context - follow same comprehensive analysis as main repo)
 
 6. **Commit and push submodule:**
    ```bash
    echo "💾 Committing submodule..."
    git commit -m "$COMMIT_MSG"
-
+   
    if git remote | grep -q .; then
      echo "📤 Pushing submodule to remote..."
-     git push origin HEAD || {
-       echo "📥 Push rejected: reconciling with remote..."
-       BRANCH=$(git branch --show-current)
-       git pull --rebase origin "$BRANCH"  # resolve conflicts if any, then:
-       git push origin HEAD
-     }
+     git push origin HEAD
    fi
    ```
-   **Push reconciliation:** If push is rejected (remote has commits you do not have), always: (1) pull to reconcile: `git pull --rebase origin <branch>` or `git pull origin <branch> --no-rebase --no-edit`, (2) resolve any conflicts, (3) push again. Do not report push failure without attempting reconciliation.
 
 7. **Display commit message:**
    ```bash
@@ -181,7 +119,7 @@ fi
 2. **Get list of all submodules:**
    ```bash
    SUBMODULES=$(git config --file .gitmodules --get-regexp path | awk '{ print $2 }')
-
+   
    if [ -z "$SUBMODULES" ]; then
      echo "ℹ️  No submodules found"
    else
@@ -198,20 +136,20 @@ fi
      if [ -n "$submodule" ] && [ -d "$submodule/.git" ]; then
        echo ""
        echo "🔄 Processing submodule: $submodule"
-
+       
        # Save current directory
        ORIGINAL_DIR=$(pwd)
-
+       
        # Change to submodule directory
        cd "$submodule" || {
          echo "  ❌ Failed to change to directory: $submodule"
          exit 1
        }
-
+       
        # Check if there are changes
        if git status --porcelain | grep -q .; then
          echo "  📝 Found changes, committing..."
-
+         
          # Run security audit
          echo "  🔒 Running security audit..."
          if [ -f "foundation/security/pre-commit-audit.sh" ]; then
@@ -219,24 +157,14 @@ fi
          elif [ -f "../foundation/security/pre-commit-audit.sh" ]; then
            ../foundation/security/pre-commit-audit.sh
          fi
-
+         
          # Stage all changes
          echo "  📝 Staging changes..."
          git add -A
          
-         # Generate comprehensive commit message - CRITICAL: MUST follow same detailed analysis as main repo
+         # Generate commit message (analyze changes in submodule context)
          echo "  📝 Generating commit message..."
-         # MANDATORY: Follow the same comprehensive change analysis workflow as main repository:
-         # 1. Categorize changes by type (A/M/D) and count files
-         # 2. Categorize by functional area (docs, code, tests, config, etc.)
-         # 3. Analyze change magnitude (git diff --cached --stat)
-         # 4. Extract key themes (features, refactoring, tests, etc.)
-         # 5. Generate structured commit message with:
-         #    - Summary line (50-72 chars) describing PRIMARY change
-         #    - Detailed sections (New Features, Testing, Code Improvements, Documentation, etc.)
-         #    - List files and key changes for each section
-         # 6. Validate message covers ALL staged files
-         # Commit message MUST be as detailed as main repository commits - no generic messages allowed
+         # (Follow comprehensive change analysis workflow)
          
          # Commit submodule
          echo "  💾 Committing changes..."
@@ -245,23 +173,20 @@ fi
            cd "$ORIGINAL_DIR"
            exit 1
          }
-
-         # Push submodule (if remote exists); reconcile and retry if rejected
+         
+         # Push submodule (if remote exists)
          if git remote | grep -q .; then
            echo "  📤 Pushing to remote..."
            git push origin HEAD || {
-             echo "  📥 Push rejected: reconciling with remote..."
-             BRANCH=$(git branch --show-current)
-             git pull --rebase origin "$BRANCH"
-             git push origin HEAD || echo "  ⚠️  Warning: Failed to push submodule: $submodule"
+             echo "  ⚠️  Warning: Failed to push submodule: $submodule"
            }
          fi
-
+         
          echo "  ✓ Successfully committed submodule: $submodule"
        else
          echo "  ✓ No changes in $submodule"
        fi
-
+       
        # Return to original directory
        cd "$ORIGINAL_DIR" || exit 1
      fi
@@ -388,17 +313,12 @@ Nested repositories must be committed BEFORE the main repository to maintain con
              exit 1
            }
 
-           # Push nested repo (if remote exists); reconcile and retry if rejected
+           # Push nested repo (if remote exists and configured)
            if git remote | grep -q .; then
              echo "  📤 Pushing to remote..."
              git push || {
-               echo "  📥 Push rejected: reconciling with remote..."
-               BRANCH=$(git branch --show-current)
-               git pull --rebase origin "$BRANCH"
-               git push || {
-                 echo "  ⚠️  Warning: Failed to push nested repository: $repo_path"
-                 echo "  Continuing with main repository commit..."
-               }
+               echo "  ⚠️  Warning: Failed to push nested repository: $repo_path"
+               echo "  Continuing with main repository commit..."
              }
            else
              echo "  ℹ️  No remote configured, skipping push"
@@ -499,55 +419,7 @@ development:
 
 **COMPREHENSIVE CHANGE ANALYSIS**: Before generating the commit message, perform comprehensive analysis of all staged changes:
 
-**CRITICAL: File Status Categorization (Perform First - REQUIRED):**
-
-**MANDATORY:** Before analyzing content, categorize files by git status to ensure accurate commit message verbs:
-
-1. **Get file status codes:**
-   ```bash
-   # Get staged changes with status codes (A/M/D/R/C)
-   git diff --cached --name-status > /tmp/staged_status.txt
-
-   # Get all changes (staged + unstaged) with status codes
-   git diff HEAD --name-status > /tmp/all_status.txt
-
-   # Extract files by status
-   ADDED_FILES=$(grep "^A" /tmp/staged_status.txt /tmp/all_status.txt 2>/dev/null | cut -f2 | sort -u)
-   MODIFIED_FILES=$(grep "^M" /tmp/staged_status.txt /tmp/all_status.txt 2>/dev/null | cut -f2 | sort -u)
-   DELETED_FILES=$(grep "^D" /tmp/staged_status.txt /tmp/all_status.txt 2>/dev/null | cut -f2 | sort -u)
-   RENAMED_FILES=$(grep "^R" /tmp/staged_status.txt /tmp/all_status.txt 2>/dev/null | cut -f2 | sort -u)
-   ```
-
-2. **Map status codes to commit message verbs:**
-   - **Added (A)**: New files → use "Add", "Implement", "Create", "Introduce"
-   - **Modified (M)**: Existing files → use "Refactor", "Modify", "Update", "Improve", "Enhance"
-   - **Deleted (D)**: Removed files → use "Remove", "Delete", "Drop"
-   - **Renamed (R)**: Moved files → use "Move", "Rename", "Reorganize"
-
-3. **CRITICAL VALIDATION RULES:**
-   - **NEVER say "Add X" for files with status M (Modified)**
-   - **NEVER say "Refactor X" for files with status A (Added)**
-   - **NEVER say "Remove X" for files with status M (Modified)**
-   - **Match commit message verbs to actual git status codes**
-
-4. **Verify feature claims against file status:**
-   ```bash
-   # Example: If analyzing WhatsApp MCP server changes
-   WHATSAPP_FILES=$(echo "$ADDED_FILES $MODIFIED_FILES" | grep -i whatsapp || true)
-   if [ -n "$WHATSAPP_FILES" ]; then
-     # Check status of WhatsApp files
-     WHATSAPP_STATUS=$(git diff --cached --name-status | grep -i whatsapp | cut -f1 | head -1)
-     if [ "$WHATSAPP_STATUS" = "M" ]; then
-       # Files are modified → use "Refactor" or "Modify", NOT "Add"
-       FEATURE_VERB="Refactor"
-     elif [ "$WHATSAPP_STATUS" = "A" ]; then
-       # Files are added → use "Add" or "Implement"
-       FEATURE_VERB="Add"
-     fi
-   fi
-   ```
-
-**CRITICAL: Release-Aware Analysis (Perform After Status Categorization):**
+**CRITICAL: Release-Aware Analysis (Perform First):**
 
 1. **Check for Release Status Changes:**
    ```bash
@@ -572,13 +444,12 @@ development:
    - Documentation-only changes = **Documentation work**
    - If both exist, **implementation is primary, documentation is supporting context**
 
-**Standard Change Analysis (After Release Context and Status Categorization):**
+**Standard Change Analysis (After Release Context):**
 
-1. **Categorize Changes by Type (Using Status Codes):**
-   - Use the status codes already extracted in "File Status Categorization" step
-   - Group files by status: Added (A), Modified (M), Deleted (D), Renamed (R)
+1. **Categorize Changes by Type:**
+   - Run `git diff --cached --name-status` to get all changed files with their status (A/M/D)
+   - Group files by status: Added (A), Modified (M), Deleted (D)
    - Count files in each category
-   - **Reference the ADDED_FILES, MODIFIED_FILES, DELETED_FILES variables from status categorization**
 
 2. **Categorize Changes by Functional Area:**
    - Group files by directory/domain (customize per repository):
@@ -615,18 +486,11 @@ development:
        pattern: "{id}: {description}"  # or custom pattern
    ```
 
-   **CRITICAL: Use correct verbs based on file status:**
-   - For files with status **A (Added)**: Use "Add", "Implement", "Create", "Introduce"
-   - For files with status **M (Modified)**: Use "Refactor", "Modify", "Update", "Improve", "Enhance"
-   - For files with status **D (Deleted)**: Use "Remove", "Delete", "Drop"
-   - For files with status **R (Renamed)**: Use "Move", "Rename", "Reorganize"
-
    **Default structure** (if no custom format configured):
    - **Summary line** (50-72 chars): High-level description of the PRIMARY change
      - **If release execution detected**: "Execute v{version}: {Release Name}"
      - **If release status changed to ready_for_deployment**: Lead with release execution
      - **Otherwise**: Describe the most impactful change (implementation > documentation)
-     - **MUST use correct verb based on file status** (see above)
    - **Detailed sections** organized by priority:
      - **Release Execution** (if release status changed or release work detected):
        - Release version and name
@@ -636,74 +500,48 @@ development:
        - Test results
        - Status: ready_for_deployment, deployed, etc.
      - **Database Schema Changes** (if migrations present):
-       - Migration files added/modified (use correct verb based on status)
+       - Migration files added
        - Schema changes (tables, columns, RLS policies)
        - Impact on existing data
      - **Implementation Changes** (if source code modified):
-       - Services created/modified (use correct verb: "Add" for A, "Refactor" for M)
-       - MCP tools added/modified (use correct verb based on status)
+       - Services created/modified
+       - MCP tools added
        - API changes
        - Core functionality changes
      - **Documentation Changes** (secondary):
-       - Release documentation added/updated (use correct verb based on status)
+       - Release documentation added
        - Guides updated
        - API documentation
      - **Configuration Changes** (if config files modified)
      - **Bug Fixes** (if bug fixes detected)
      - **Other Changes** (miscellaneous)
    - **For each section**, list:
-     - Files added/modified/deleted (with correct status indicators)
+     - Files added/modified/deleted
      - Key changes or new capabilities
      - Rationale if significant architectural changes
 
-6. **Validation (REQUIRED):**
-   - **File Status Validation**: Verify commit message verbs match actual git status codes
-     ```bash
-     # Validate message accuracy
-     if echo "$COMMIT_MSG" | grep -qi "add.*server\|new.*server\|implement.*server"; then
-       # Check if files are actually added (status A)
-       if ! echo "$ADDED_FILES" | grep -qi "server"; then
-         echo "⚠️  WARNING: Commit message claims 'add server' but files show status M (modified)"
-         echo "   Correct to: 'Refactor server' or 'Modify server'"
-         # If validation_strictness is "error", abort here
-       fi
-     fi
-     ```
+6. **Validation:**
    - Ensure commit message covers ALL staged files (verify with `git diff --cached --name-only`)
    - If any file category is missing from the message, add it
    - If message seems incomplete, analyze diffs more deeply using `git diff --cached --stat` and `git diff --cached <file>` for key files
-   - **Cross-check**: For each feature/component mentioned, verify the verb matches the file status
 
 **COMMIT MESSAGE GENERATION PROCESS:**
 
-1. **Categorize files by git status FIRST (REQUIRED):**
-   ```bash
-   # Get file status codes (A/M/D/R)
-   git diff --cached --name-status > /tmp/staged_status.txt
-   git diff HEAD --name-status > /tmp/all_status.txt
-
-   # Extract files by status
-   ADDED_FILES=$(grep "^A" /tmp/staged_status.txt /tmp/all_status.txt 2>/dev/null | cut -f2 | sort -u)
-   MODIFIED_FILES=$(grep "^M" /tmp/staged_status.txt /tmp/all_status.txt 2>/dev/null | cut -f2 | sort -u)
-   DELETED_FILES=$(grep "^D" /tmp/staged_status.txt /tmp/all_status.txt 2>/dev/null | cut -f2 | sort -u)
-   ```
-   - **This step is MANDATORY** - commit message verbs must match file status
-
-2. **Check for release status changes:**
+1. **Check for release status changes FIRST:**
    ```bash
    git diff --cached --name-only | grep -E "docs/releases/.*/status\.md"
    ```
    - If found, read the status file(s) to understand what release is being executed
    - This determines the PRIMARY focus of the commit
 
-3. **Analyze migrations and schema changes:**
+2. **Analyze migrations and schema changes:**
    ```bash
-   git diff --cached --name-status | grep -E "migrations|schema\.sql"
+   git diff --cached --name-only | grep -E "migrations|schema\.sql"
    ```
-   - Check status of migration files (A = new migration, M = modified migration)
    - Migrations indicate release execution or major schema work
    - Read migration files to understand what's being built
 
+3. Run `git diff --cached --name-status` to get all changes
 4. Run `git diff --cached --stat` to get change statistics
 5. **Determine primary vs secondary work:**
    - Primary: Release execution, major features, schema changes, core services
@@ -712,12 +550,8 @@ development:
    - Lead with the most impactful work (release execution > implementation > documentation)
    - Group related changes together
    - Ensure release work is prominently featured if present
-   - **Use correct verbs based on file status** (Add for A, Refactor/Modify for M, Remove for D)
-7. **Validate message accuracy:**
-   - Cross-check each feature/component claim against actual file status
-   - Verify verbs match status codes (never say "Add" for status M files)
-8. Verify all files are represented in the message
-9. Proceed with commit
+7. Verify all files are represented in the message
+8. Proceed with commit
 
 **FINAL PRE-COMMIT SECURITY CHECK**: Immediately before executing `git commit`, run one final security audit:
 
@@ -734,7 +568,7 @@ fi
 # (Same check as above if nested repos are configured)
 ```
 
-If final security check passes, proceed to git commit with the comprehensive commit message and push to origin. **If push is rejected** (remote has new commits): run `git pull --rebase origin <current_branch>` (or `git pull origin <current_branch> --no-rebase --no-edit`), resolve any conflicts, then `git push origin HEAD` again. Always reconcile and retry before reporting push failure.
+If final security check passes, proceed to git commit with the comprehensive commit message and push to origin.
 
 **WORKTREE DETECTION:** Follow the Worktree Rule (`.claude/rules/foundation_worktree_env.md` or `foundation/agent_instructions/cursor_rules/worktree_env.md`) to restrict all commit activity to the current worktree.
 
@@ -768,9 +602,6 @@ development:
     branch_renaming:
       enabled: false
       patterns: []
-    validate_message_accuracy: true  # Validate commit message verbs match git status codes
-    require_status_verification: true  # Require explicit status check before making claims
-    validation_strictness: "warn"  # "warn" (show warning) or "error" (block commit if invalid)
   commit_format:
     require_id: false
     pattern: "{description}"  # or "{id}: {description}"
@@ -783,7 +614,5 @@ development:
 3. **`/commit <submodule-name>`** - Commits only the specified submodule, skips main repository
 
 All modes follow the same security audit, change analysis, and commit message generation workflows appropriate to their scope.
-
-**MANDATORY:** Submodule commits MUST use the same comprehensive analysis and detailed commit message format as main repository commits. Generic messages like "Update submodule changes" are FORBIDDEN.
 
 

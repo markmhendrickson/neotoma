@@ -10,3 +10,9 @@
 [submodule "frontend/src/shared"]
 	path = frontend/src/shared
 	url = git@github.com:markmhendrickson/react-components.git
+[submodule "inspector"]
+	path = inspector
+	url = https://github.com/markmhendrickson/neotoma-inspector.git
+[submodule "writ"]
+	path = writ
+	url = https://github.com/markmhendrickson/writ.git

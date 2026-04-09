@@ -523,6 +523,7 @@ export const MCP_TOOL_TO_OPERATION_ID: Record<string, string> = {
 export const MCP_ONLY_TOOLS: string[] = [];
 
 export const MCP_TOOL_TO_CLI_COMMAND: Record<string, string> = {
+  get_entity_type_counts: "stats entities",
   get_authenticated_user: "auth whoami",
   health_check_snapshots: "snapshots check",
   retrieve_entity_by_identifier: "entities search <identifier>",

@@ -347,37 +347,36 @@ At that point, Neotoma becomes the reference implementation for **deterministic 
 
 ## Assessment: Current Homepage vs Guidelines
 
-*Last assessed: 2026-03-05 after foundations audit restructuring.*
+*Last assessed: 2026-04-07 after gap-closure pass (curiosity-gap isolation, integrity-first proof, transformation beat, category-level guarantees copy).*
 
-### Current slide structure (7 slides)
+### Current slide structure (7 sections)
 
-1. Hero (#intro) — headline, failure bullets, guarantee pills, invariant, CTAs, proof points
-2. Memory Guarantees (#memory-guarantees) — 9-row comparison table (retrieval vs file vs Neotoma)
-3. Architecture + Foundations (#architecture) — three foundations cards (privacy, deterministic, cross-platform) + pipeline diagram
-4. Quick Start (#quick-start) — merged install prompt + post-install simulation
-5. Use Cases (#use-cases) — 6 curated vertical cards + "See all" link
-6. Interfaces (#interfaces) — MCP/CLI/API summary cards with links
-7. Learn More (#learn-more) — repo, docs index, blog posts
+1. Hero (#intro) — headline ("Your agents forget. Neotoma makes them remember."), curiosity gap line, summary, CTAs
+2. Proof (#proof) — founder story blockquote with usage stats, evaluator quotes, proof strip, tool chips
+3. Before / After (#outcomes) — concrete demo comparing agent responses with and without Neotoma
+4. Who This Is For (#who) — three ICP mode cards with identity-led titles and role transformation language
+5. Memory Guarantees (#memory-guarantees) — six guarantee preview cards, each pairing a failure mode with the guarantee that prevents it
+6. Evaluate (#evaluate) — transformation lead-in + agent-driven evaluation prompt + link to /evaluate
+7. Common Questions (#common-questions) — FAQ accordion
 
 ### Fulfilled well
 
 | Guideline | Current state |
 |-----------|----------------|
-| **§1 Primary goal** | Page answers category (deterministic state layer via guarantees table + architecture), who it's for (ICP cards), and what guarantee (three foundations + guarantee pills). |
-| **§2 Hero purpose** | Failure mode (headline + bullets), memory guarantee (pills + invariant line), ICP (qualifier line), abstraction (subheadline). All four present. |
-| **§3 Core hero structure** | Headline, subheadline, failure bullets, system properties (pills), invariant declaration, ICP qualifier, CTAs, proof points. Visually distinct blocks. |
-| **§4 Headline** | "Your production agent has amnesia." — Names failure mode; operational diagnosis. |
-| **§5 Subheadline** | "Neotoma enforces deterministic, inspectable memory for long-running agents." — State/determinism, concise. |
-| **§6 Failure bullets** | "Without a memory invariant" + three bullets. Real operational failures. |
-| **§7 System property block** | "Neotoma makes memory" + Versioned, Schema-bound, Replayable, Auditable. |
-| **§8 Invariant declaration** | Hero contains "Memory evolves deterministically. No silent mutation." as standalone monospace line. Reinforced in architecture slide. |
-| **§9 Category contrast** | Hero contains "RAG retrieves documents. Neotoma enforces state evolution." Guarantees table (slide 2) provides full category map comparing retrieval, file-based, and Neotoma. |
-| **§10 ICP qualification** | "For AI-native operators, high-context knowledge workers, and builders of agentic systems." with ICP detail cards in slide 5. |
-| **§11 CTA principles** | Primary: "View guarantees" (in-page #memory-guarantees). Secondary: "Install in 5 minutes." Inspection before install. |
-| **§13 Language** | Engineering language throughout: deterministic, replayable, versioned, auditable, schema-bound, provenance. |
-| **§14 Category framing** | Guarantees table compares memory models by guarantee properties, not vendors vs features. Architecture slide leads with three foundations. |
-| **§16 Constraints** | No consumer framing; no "AI memory tool"; lead with guarantees; no over-promise. Developer preview banner moved to persistent nav header. |
-| **§17 Success criteria** | Page supports "deterministic state," "prevents drift," "infrastructure" recognition by builders. |
+| **§1 Primary goal** | Page answers category ("The state layer for AI agents" in proof strip), who it's for (identity-framed ICP cards), and what guarantee (guarantee cards with failure/save pairing). |
+| **§2 Hero purpose** | Failure mode (headline + curiosity gap), memory guarantee (summary shifts to "truth, not guesses"), ICP (identity-led who section), abstraction (state layer tagline). |
+| **§3 Core hero structure** | Headline, curiosity gap, summary with rotating types, CTAs, testimonials, proof strip. Visually distinct blocks. |
+| **§4 Headline** | "Your agents forget. Neotoma makes them remember." — Names failure mode accessibly; curiosity gap line below adds the Unexpected hook ("None of them can prove it hasn't been silently corrupted"). |
+| **§5 Subheadline** | Summary shifts payoff from convenience ("stop re-explaining") to trust ("works from truth, not guesses"). Category signal via "versioned, auditable state." |
+| **§6 Failure bullets** | Rotating testimonials include failure-mode framing; "Who" section body connects chronic tax to acute risk ("agent acts confidently on wrong state"). |
+| **§8 Invariant declaration** | Curiosity gap line establishes the integrity differentiator above the fold. Guarantee cards reinforce with concrete failure/save pairs. |
+| **§9 Category contrast** | Proof strip: "The state layer for AI agents" (replaces generic "Cross-tool memory"). Guarantees section heading: "state integrity, not just storage." |
+| **§10 ICP qualification** | Identity-led card titles: "You're the context janitor," "You're babysitting inference variance," "You're the log archaeologist." Section heading: "pay the tax for missing state." |
+| **§11 CTA principles** | Primary: "Ask your agent to evaluate." Secondary: "Install in 5 minutes." Evaluation-first, install-second. |
+| **§13 Language** | Engineering language throughout: deterministic, versioned, auditable, state layer, provenance, schema-bound. "Memory" replaced with "state layer" in tagline and subcopy. |
+| **§14 Category framing** | Guarantee cards compare failure modes to guarantees. Full guarantee comparison page linked. |
+| **§16 Constraints** | No consumer framing; tagline signals infrastructure ("state layer"); no over-promise. |
+| **§17 Success criteria** | Page supports "deterministic state," "prevents drift," "infrastructure," and "state layer" recognition. Founder story grounds claims in daily production use. |
 
 ### Partially fulfilled
 
@@ -385,17 +384,17 @@ At that point, Neotoma becomes the reference implementation for **deterministic 
 |-----------|-----|--------|
 | **§12 Visual design** | Right-side illustration emphasizes failure, not inspection. | ForgetfulAgentIllustration reinforces the problem; a future iteration could add state-timeline or replay visuals. Demo videos (separate workstream) would address this when ready. |
 
-### New elements added in restructuring
+### New elements added in positioning overhaul
 
-- **Persistent header nav** (SiteHeaderNav) with shadcn NavigationMenu, developer preview badge, and links to key sections and subpages.
-- **Memory Guarantees table** (slide 2) comparing memory model categories across 9 guarantee properties.
-- **Three Foundations block** (slide 3) with privacy-first, deterministic, and cross-platform cards.
-- **Proof points** in hero: version, release count, MIT license, GitHub/npm links.
-- **Tool coexistence guides**: /neotoma-with-cursor, /neotoma-with-claude, /neotoma-with-codex.
-- **Documentation index page** (/docs) organizing all subpages by category.
-- **Merged Quick Start slide** combining install prompt and post-install flow.
-- **"How agents remember" content** moved to Architecture subpage.
+- **Curiosity gap line** after headline: "Most memory tools help agents retrieve information. None of them can prove it hasn't been silently corrupted."
+- **"How It's Used" section** (#how-i-use-it): Founder blockquote with concrete usage stats, linking to full blog post. Provides the Sinatra test / social proof from daily production use.
+- **Identity-led ICP card titles**: "You're the context janitor," "You're babysitting inference variance," "You're the log archaeologist" — surfacing the `escaping` role from ICP profiles.
+- **Failure-mode lines on guarantee cards**: Each guarantee now pairs a concrete failure scenario with the guarantee that prevents it (failure → save pattern from Made to Stick audit).
+- **Tagline shift**: "Cross-tool memory for AI agents" → "The state layer for AI agents" in hero proof strip and footer.
+- **Summary payoff shift**: "stop re-explaining your world" → "works from truth, not guesses" — moves emotional register from convenience to trust.
+- **Who section body**: Connects chronic tax to acute risk ("The real risk is when your agent acts confidently on wrong state").
+- **SEO metadata**: Description updated to lead with "Deterministic, versioned state for AI agents that can't afford to guess."
 
 ### Summary
 
-The homepage now explicitly surfaces all three differentiating foundations (privacy-first, deterministic, cross-platform) and includes a guarantee comparison table for instant category recognition. The slide count reduced from 8 to 7 by merging install + quick start and moving internal implementation detail (agent loop) to a subpage. Navigation was restored via a persistent header with NavigationMenu. Proof points and an open-source signal reinforce developer trust.
+The positioning overhaul shifts the homepage from "convenient cross-tool memory" to "foundational state layer for reliable AI agents." The changes are informed by three inputs: the updated primary ICP document (which defines the archetype as someone paying a state integrity tax), a positioning critique (identifying under-claiming as the core issue), and a Made to Stick audit (identifying missing Unexpected and Emotional elements). The overhaul preserves the existing headline (Simple, recognizable) while adding a curiosity gap, founder credibility, identity-level ICP language, and failure-mode grounding on guarantee cards.

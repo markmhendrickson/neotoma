@@ -163,6 +163,8 @@ Scripts that start servers use the port(s) above when free; if a port is in use,
 | `schema:init:dry-run`   | Schema init dry run                       |
 | `schema:icons:generate` | Generate schema icons                     |
 | `schema:cleanup:test`   | Cleanup test schemas                      |
+| `recover:db`            | Check dev SQLite integrity / recover copy |
+| `recover:db:prod`       | Check prod SQLite integrity / recover copy |
 | `wipe:dev`              | Wipe dev database                         |
 | `wipe:prod`             | Wipe prod database                        |
 | `wipe:local`            | Wipe local database                       |
@@ -381,6 +383,7 @@ See `docs/developer/agent_cli_configuration.md` for the rule text and strategy.
   - `--user-id <userId>`: Filter by user ID (default: authenticated user)
   - `--limit <n>`
   - `--offset <n>`
+  - `--order-by <column>`: `event_timestamp` (default, document dates) or `created_at` (when the timeline row was written)
 
 ### Schemas
 
@@ -469,6 +472,15 @@ For chat persistence recipes, MCP and CLI use the same underlying store contract
     - Default mode is safety-first (`safe`) to avoid silent row loss on conflicts.
     - Post-merge recomputation rebuilds `entity_snapshots` and `relationship_snapshots` when those tables exist.
     - This command merges DB rows only; it does not copy `sources/` files or log directories. Use backup/restore or storage migration workflows when file assets must move with DB content.
+- `neotoma storage recover-db`: Check SQLite integrity and optionally write a recovered copy via `sqlite3 .recover`.
+  - Default: check only. Exits non-zero when corruption is detected.
+  - `--recover`: write a new sibling file such as `neotoma.prod.recovered-<timestamp>.db`.
+  - `--output <path>`: explicit recovered DB path.
+  - Behavior notes:
+    - Requires `sqlite3` on `PATH`.
+    - Does not replace the live DB automatically.
+    - Stop Neotoma (MCP/API) before running `--recover`.
+    - After a successful recover, manually archive the live `.db` / `-wal` / `-shm` and then copy the recovered file into place.
 
 ### Backup and restore
 

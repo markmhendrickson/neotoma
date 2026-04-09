@@ -1915,7 +1915,8 @@ app.get("/entities/:id", async (req, res) => {
       return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
     }
 
-    return res.json({ entity: entityWithProvenance });
+    // OpenAPI + clients expect `EntitySnapshot` at the root (not `{ entity: ... }`).
+    return res.json(entityWithProvenance);
   } catch (error) {
     if (error instanceof Error && error.message.includes("Not authenticated")) {
       return sendError(res, 401, "AUTH_REQUIRED", error.message);
@@ -2446,6 +2447,11 @@ app.get("/timeline", async (req, res) => {
     const entityId = req.query.entity_id as string | undefined;
     const limit = parseInt(req.query.limit as string) || 100;
     const offset = parseInt(req.query.offset as string) || 0;
+    const rawOrderBy = String(req.query.order_by ?? "event_timestamp")
+      .trim()
+      .toLowerCase();
+    const orderByColumn =
+      rawOrderBy === "created_at" ? "created_at" : "event_timestamp";
 
     // Get source IDs for this user first (timeline_events doesn't have user_id)
     const { data: userSources, error: sourcesError } = await db
@@ -2491,8 +2497,8 @@ app.get("/timeline", async (req, res) => {
       query = query.eq("entity_id", entityId);
     }
 
-    // Sort by event timestamp (chronological)
-    query = query.order("event_timestamp", { ascending: false });
+    // Default: sort by event_timestamp (document dates). Use order_by=created_at for "what changed recently".
+    query = query.order(orderByColumn, { ascending: false });
 
     // Pagination
     query = query.range(offset, offset + limit - 1);
@@ -2525,8 +2531,40 @@ app.get("/timeline", async (req, res) => {
       });
     }
 
+    // Enrich events with entity canonical names and types
+    const events = data || [];
+    const entityIds = [
+      ...new Set(events.map((e: any) => e.entity_id).filter(Boolean)),
+    ];
+    const entityLookup = new Map<
+      string,
+      { canonical_name: string; entity_type: string }
+    >();
+    if (entityIds.length > 0) {
+      const { data: entities } = await db
+        .from("entities")
+        .select("id, canonical_name, entity_type")
+        .in("id", entityIds);
+      if (entities) {
+        for (const ent of entities) {
+          entityLookup.set(ent.id, {
+            canonical_name: ent.canonical_name,
+            entity_type: ent.entity_type,
+          });
+        }
+      }
+    }
+    const enrichedEvents = events.map((ev: any) => {
+      const entity = ev.entity_id ? entityLookup.get(ev.entity_id) : undefined;
+      return {
+        ...ev,
+        entity_name: entity?.canonical_name || undefined,
+        entity_type: entity?.entity_type || undefined,
+      };
+    });
+
     return res.json({
-      events: data || [],
+      events: enrichedEvents,
       total: count || 0,
       limit,
       offset,

@@ -43,6 +43,7 @@ const INFRA_ONLY_CLI_TOOLS = [
 
 // All data operation MCP tools that must have CLI equivalents
 const DATA_OPERATION_MCP_TOOLS = [
+  "get_entity_type_counts",
   "store",
   "store_structured",
   "store_unstructured",
@@ -129,6 +130,7 @@ describe("MCP-CLI Parity", () => {
     // These tools are NOT in MCP_TOOL_TO_OPERATION_ID, so they use MCP_TOOL_TO_CLI_COMMAND
     // as their primary mapping path. Verify the CLI command prefix is correct for each.
     const expectedCliMappedTools: Record<string, string> = {
+      "stats entities": "get_entity_type_counts",
       "entities search": "retrieve_entity_by_identifier",
       "entities related": "retrieve_related_entities",
       "entities neighborhood": "retrieve_graph_neighborhood",

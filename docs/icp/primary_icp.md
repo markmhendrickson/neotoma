@@ -2,11 +2,333 @@
 
 ## Scope
 
-The primary ICP for the developer release: people constructing an operating system for their own AI agents across personal and professional life domains.
+The primary ICP: people constructing an operating system for their own AI agents across personal and professional life domains.
 
-**For detailed ICP profiles (pain points, use cases, workflows), see [`profiles.md`](./profiles.md).**
-**For secondary ICPs, see [`secondary_icps.md`](./secondary_icps.md).**
-**For future ICPs and product layers, see [`future_icps.md`](./future_icps.md).**
+**Related docs:** [`profiles.md`](./profiles.md) (detailed profiles) · [`secondary_icps.md`](./secondary_icps.md) · [`future_icps.md`](./future_icps.md) · [`developer_release_targeting.md`](./developer_release_targeting.md) (release-scoped targeting, activation risks, and status tracking)
+
+---
+
+## The Archetype
+
+The primary ICP spends significant effort, attention, and emotional energy compensating for the absence of reliable agent state. Neotoma does not add a capability — it removes the tax.
+
+They wire together multi-agent stacks (Claude Code, Cursor, ChatGPT, custom scripts) to manage finances, contacts, content, health, code, BD pipelines, and other domains — building infrastructure primarily for themselves, secondarily for systems they ship to others.
+
+The same person is an operator when running their contact CRM, a builder when creating a new agent pipeline, and an infrastructure engineer when debugging state drift. The three Tier 1 personas (AI Infrastructure Engineers, Agent System Builders, AI-native Operators) describe moments in this person's workflow, not separate personas.
+
+### Pain triggers
+
+**Chronic (the tax):** State drifts between sessions and tools; they become the human sync layer across every AI tool. Cost is diffuse — attention, repetition, low-grade frustration.
+
+**Acute (the crisis):** Agent acts confidently on wrong, stale, or lossy-compressed state. User discovers damage downstream — a reverted decision built on, a nuanced choice flattened and misapplied, contradictory observations silently overwriting each other. Cost is concrete — lost work, bad decisions, eroded trust in agent autonomy.
+
+The chronic tax is what the ICP tolerates daily. The acute crisis is what converts them. Messaging should connect both: *"You're already paying the re-prompting tax every day. But the real risk isn't the time you waste — it's the time you don't notice your agent is operating on bad state."*
+
+### Characteristics
+
+- Agents persist across sessions (not one-shot)
+- State coordinated across multiple tools or agents
+- Evolving personal/professional context over time
+- Experiencing drift, conflicts, or unreproducible decisions
+- Comfortable with infrastructure-level abstractions
+- Using AI as autonomous pipeline, not just thought partner
+
+### Success state
+
+Cross-tool state is consistent; context persists across sessions; facts stored once are available everywhere; decisions are traceable.
+
+### Adoption pattern
+
+Install for personal use, expand as the personal OS matures across life domains. B2B opportunities emerge downstream when personal builders bring Neotoma into team/professional contexts — not a separate ICP, but a secondary motion from personal adoption.
+
+---
+
+## Operational Modes
+
+Three modes — not separate personas, but facets of one person's workflow. For full narrative profiles, see [`profiles.md`](./profiles.md).
+
+| Mode | Current pain | Adoption trigger | Comparison set |
+|------|-------------|-----------------|----------------|
+| **Infrastructure engineering** | Can't reproduce agent runs; state mutations invisible; debugging is log archaeology | Reliability failure: same inputs, different state, no explanation | Event sourcing, state machines, append-only logs, provenance DBs |
+| **Building agent systems** | Drift across sessions; conflicting state across tool boundaries; no replay | Memory inconsistency breaks a workflow | RAG memory (Mem0, Zep), LangChain/LangGraph memory, file-based memory |
+| **Operating across AI tools** | Context fragmentation; repeated explanations; broken handoffs | Multi-tool workflow debt becomes intolerable | Platform memory (Claude, ChatGPT), PKM tools (Obsidian, Notion), manual sync |
+
+### Tax and role transformation
+
+| Mode | Tax they pay | Escaping | Into |
+|------|-------------|----------|------|
+| Operating | Re-prompting, context re-establishment, manual cross-tool sync | Context janitor — human sync layer | Operator with continuity — steering, not driving |
+| Infrastructure debugging | Checkpoint logic, custom diffing, state serialization glue | Log archaeologist — reverse-engineering truth | Platform engineer with replayable state |
+| Building pipelines | Prompt engineering workarounds, dedup hacks, memory regression fixes | Inference babysitter — absorbing variance | Builder on solid ground |
+
+### Adoption ecosystem
+
+- **Operating → Building:** Personal workflows that work become the basis for more ambitious agent pipelines.
+- **Building → Infrastructure debugging:** Production pipelines surface state integrity needs.
+- **Infrastructure validation → Toolchain adoption:** When the ICP standardizes on Neotoma, framework maintainers see adoption signal.
+- **B2B downstream:** Personal adoption creates the entry point for team contexts.
+
+---
+
+## Adoption Triggers
+
+### Pain-driven triggers
+
+The chronic and acute pain triggers are defined in [The Archetype](#pain-triggers). In summary: the chronic tax (re-prompting, manual sync) creates latent demand; the acute crisis (corrupted state, bad decisions from wrong data) creates urgency.
+
+### Capability-unlock triggers
+
+Not all adoption is pain-driven. Some triggers are aspirational — the ICP wants to do something they currently *can't* because they don't trust the state layer.
+
+- **Unattended agent execution:** "I want to run agents overnight / on a cron / without watching every action, but I can't until I trust what they write." Neotoma's integrity guarantees are the precondition for removing human supervision.
+- **Multi-agent coordination:** "I want Agent A's output to feed Agent B, but I can't guarantee Agent A wrote clean data." Schema constraints and provenance tracing make multi-agent pipelines trustworthy.
+- **Cross-tool unification:** "I want one source of truth across Claude, Cursor, and ChatGPT." MCP-based access turns fragmented tool-specific memory into a shared substrate.
+- **Scaling domains:** "I've been managing contacts manually; now I want to add financial data, health data, and project tracking without the system becoming a mess." Schema-bound entities make each new domain additive rather than chaotic.
+
+### External event triggers
+
+Moments that create receptivity windows — the ICP didn't change, but the environment did.
+
+- **Tool releases that increase MCP visibility:** A new Claude Code or Cursor release that foregrounds MCP server configuration lowers Neotoma's adoption friction and increases discoverability.
+- **Viral agent memory failure posts:** An AI Twitter thread or blog post describing agent memory failures creates a "that's me" moment for latent ICP members.
+- **Competitor public failures:** A prominent failure of a fuzzy memory tool (data loss, hallucinated memories, privacy breach) makes the integrity-first pitch land harder.
+- **Peer adoption / social proof:** A respected builder posts a walkthrough of their Neotoma setup, or mentions it in a tools thread. For solo founders and indie hackers, peer validation is often the final push.
+
+### Scale threshold triggers
+
+The tax becomes impossible to ignore at certain thresholds. Approximate markers:
+
+- **3+ agents** operating across sessions — manual state coordination becomes untenable
+- **5+ life/work domains** managed through agents — context fragmentation compounds
+- **Daily use** sustained over 2+ weeks — re-prompting tax becomes viscerally annoying
+- **First unattended agent run** — the moment they stop watching every action, state integrity becomes non-optional
+
+### Competitor migration paths
+
+Structured paths from current tools to Neotoma, organized by what the ICP tried, why it failed, and what makes them receptive.
+
+| Currently using | Why it fails | Receptive to |
+|---|---|---|
+| **Platform memory** (Claude, ChatGPT) | Tool-specific, non-auditable, opaque, doesn't cross tool boundaries | Cross-tool state via MCP; transparency and inspectability |
+| **Markdown / flat files** (CLAUDE.md, SOUL.md) | Doesn't scale; agents write Python scripts to manage files; no schema enforcement | Schema-constrained entities that scale without compensatory engineering |
+| **Notion / Airtable** | Fine for human editing; breaks when adding agent reviewers; insufficient hooks for inter-agent validation | MCP-native data layer purpose-built for agent read/write |
+| **JSON / CSV files** | Any real size triggers compensatory tooling; no versioning; last-write-wins | Append-only writes with versioning; no silent overwrites |
+| **RAG / vector memory** (Mem0, Zep, LangChain) | Re-derives structure every session; entity resolution inconsistent; no provenance | Persistent canonical state; traceable observations; schema-bound entities |
+| **Custom Postgres / SQLite** | Works initially; no versioning, conflict detection, provenance, or cross-tool sync out of the box; maintenance burden grows | All the above, without building and maintaining it yourself |
+| **Nothing (raw re-prompting)** | Attention tax compounds daily; context lost every session | Immediate relief — Priority 1 data stores automatically from first session |
+
+---
+
+### Diagnostic questions
+
+**Primary:** "What are you currently doing to compensate for unreliable agent state?"
+
+**Pre-qualifier:** "Does your agent operate autonomously across sessions, or is it a thought partner you drive?"
+
+### Qualification criteria
+
+A person meeting **3+** is likely qualified; **5+** is strongly qualified.
+
+| # | Criterion | Observable evidence |
+|---|-----------|-------------------|
+| Q1 | **Uses 3+ AI tools in regular workflow** | Names specific tools and uses them weekly or daily |
+| Q2 | **Runs agents that operate across sessions** | Agents persist state, resume work, or execute autonomously |
+| Q3 | **Coordinates state across multiple tools or agents** | Has experienced broken handoffs or context loss when switching |
+| Q4 | **Has built personal automation around AI tools** | Scripts, MCP configs, agent pipelines, cron-triggered workflows |
+| Q5 | **Actively compensates for missing state** | Re-prompts, copy-pastes between tools, maintains manual notes/docs |
+| Q6 | **Has built or is building their own memory/state system** | Git+markdown, flat JSON, SQLite, custom scripts, or homegrown state layer |
+| Q7 | **Experiences non-reproducible agent behavior** | Same inputs produce different outputs across sessions |
+| Q8 | **Needs to debug, trace, or audit agent decisions** | Reconstructs what an agent did; writes defensive checkpoint code |
+| Q9 | **Manages evolving context over time** | Contacts, tasks, financial data, projects, health — domains that accumulate and change |
+| Q10 | **Comfortable with infrastructure-level tooling** | Willing to install via npm/CLI; reads API docs |
+| Q11 | **Has experienced a failure caused by unreliable agent state** | Lost real work, made a bad decision, or discovered the agent operating on wrong/stale/hallucinated state. Strongest single qualifier — a concrete loss event creates urgency. |
+
+**Strongest qualifier combinations:**
+- Q1 + Q2 + Q5 → operational mode (context janitor paying the re-prompting tax)
+- Q2 + Q7 + Q8 → infra mode (log archaeologist who can't replay agent state)
+- Q2 + Q4 + Q6 → builder mode (building on unreliable memory, compensating with custom state)
+- Q11 + Q2 + Q10 → burned adopter (experienced concrete failure — highest conversion likelihood)
+
+### Disqualification criteria
+
+**Hard disqualifiers** (any one is sufficient):
+
+| # | Criterion | Why |
+|---|-----------|-----|
+| D1 | **No agent or AI-tool workflows** | No surface area for the problem |
+| D2 | **Human drives every turn** (thought-partner pattern) | Human is the state layer by design |
+| D3 | **Building their own state layer as a product** | Won't adopt external dependency for core value prop |
+| D4 | **Requires zero-install, no-config onboarding** | Neotoma requires npm + CLI/MCP configuration |
+
+**Soft disqualifiers** (3+ together indicate poor fit):
+
+| # | Criterion | Signal |
+|---|-----------|--------|
+| D5 | **Uses only one AI tool** | Limited cross-tool pain; platform memory may suffice |
+| D6 | **Satisfied with platform memory** | No trust collapse or cross-tool fragmentation |
+| D7 | **"AI remembering things"** without concern for determinism/versioning | Looking for convenience, not guarantees |
+| D8 | **Looking for a PKM tool** | Obsidian/Notion/Roam is the right category |
+| D9 | **No debugging, tracing, or compliance needs** | Core value props have no pull |
+| D10 | **Single-session usage pattern** | No state evolution to manage |
+| D11 | **Occasional AI use** (weekly or less) | Insufficient frequency for pain to compound |
+| D12 | **Willing and able to build and maintain their own state infrastructure** | Capable DIY builders who roll their own MCP + Postgres (or equivalent) for personal use. They validate the problem space but prefer custom solutions. Not the same as D3 (building state as product) — these are personal-infra builders. They may convert later when maintenance burden exceeds adoption cost, but are not near-term adopters. |
+
+### Deepening follow-ups
+
+- "Which tools are you moving between, and where does context break?"
+- "When a production agent produces wrong output, what does debugging look like today?"
+- "When your agent gets memory wrong, how do you trace and fix it?"
+- "What does your current memory/state system look like?"
+
+**Full qualification survey:** [`qualification_survey.md`](./qualification_survey.md)
+
+### Agentic evaluation
+
+The [`/evaluate`](https://neotoma.io/evaluate) page is the canonical source for agent-driven evaluation — all qualification criteria and scoring in one page.
+
+**User-facing prompt:**
+> "Read neotoma.io/evaluate and assess whether Neotoma fits my workflow based on what you know about me."
+
+**Internal single-shot analysis** (from a bio, transcript, or call notes):
+> "Read neotoma.io/evaluate for the qualification criteria, then analyze the following context and produce a full evaluation scorecard: [paste context]"
+
+---
+
+## Non-ICP Boundaries
+
+**Platform builders:** People with engineering teams who build their own state layer as product. State management is their core value prop. However, custom layers eventually hit the same pain Neotoma solves — silent overwrites, no conflict detection, manual schema migrations, no cross-tool sync. When maintenance cost exceeds adoption cost, they re-enter the funnel.
+
+**Capable DIY builders:** Technically strong individuals who build their own state infra for personal use (custom MCP + Postgres, homegrown validation layers). They validate the problem space strongly — often independently arriving at the same architectural conclusions (schema constraints, multi-agent review hooks, deterministic validation). But they prefer to own and control the full stack. They are later adopters, not early ones. The people who can build their own are not the ones who adopt first.
+
+**Thought-partner users:** Heavy AI users whose continuity needs are about context and voice, not deterministic state versioning. The human drives every turn; they are not running autonomous pipelines.
+
+---
+
+## Watering Holes
+
+Where the ICP discovers tools, discusses problems, and shares workflows.
+
+### Primary channels
+
+- **AI/agent Twitter/X:** Threads about agent memory failures, Claude Code workflows, MCP configurations, "how I use AI" posts. Key accounts to QT and engage: AI infrastructure builders, Claude Code power users, agentic workflow posters. Note: the Neotoma founder's existing X following skews crypto-era — requires gradual audience replacement through strategic engagement with AI/agent accounts.
+- **Claude Code / Cursor communities:** Discord servers, GitHub discussions, and forums where power users troubleshoot agent memory, share CLAUDE.md patterns, and discuss MCP setups.
+- **Indie hacker forums:** Hacker News, Indie Hackers, relevant subreddits (r/LocalLLaMA, r/ClaudeAI). Solo founders and freelancers discuss AI tooling pragmatically.
+- **LinkedIn:** More effective for reaching AI-native consultants, senior ICs, and founders who post about their workflows. Different content register than X — longer, more structured, professional framing.
+
+### Secondary channels
+
+- **Open source agent tooling repos:** GitHub issues and discussions on repos like Beads, OpenClaw, LangChain, CrewAI — where people surface memory pain in the context of concrete tooling problems.
+- **"How I use AI" blog posts and newsletters:** The ICP reads and writes these. A well-placed walkthrough of a personal Neotoma setup is both content and distribution.
+- **AI meetups and developer events:** In-person or virtual events where builders demo their stacks. Neotoma fits naturally as a "here's what I use for state" component of a workflow talk.
+
+### Content that resonates
+
+- Personal workflow walkthroughs ("here's my setup and why")
+- Failure stories ("my agent made a bad decision because...")
+- Before/after comparisons (re-prompting vs. persistent state)
+- QTs of posts describing agent memory frustration with a concrete alternative
+- Technical deep-dives on state integrity for the infra-minded subset
+
+---
+
+## Adoption Funnel
+
+How the ICP discovers, evaluates, adopts, expands, and advocates.
+
+### Discovery
+
+How they first encounter Neotoma. Likely paths:
+
+- See a peer's workflow post mentioning Neotoma on X or LinkedIn
+- Find neotoma.io via search for "AI agent memory," "MCP state layer," or similar
+- Encounter it in a GitHub discussion, tools thread, or agent tooling list
+- Receive a direct referral from someone in their network
+
+### First contact (0–5 minutes)
+
+What they do immediately after discovery:
+
+- Read neotoma.io homepage — does the pain-first headline resonate?
+- Scan the README on GitHub — is it credible? Is the architecture clear?
+- Check stars, contributors, recent commits — is this actively maintained?
+- **Key decision point:** "Is this worth 30 minutes of my Saturday?" If the answer is no, they bounce. The homepage must make the pain/solution connection in under 60 seconds.
+
+### Evaluation (5–30 minutes)
+
+What they do if first contact passed:
+
+- Run the agentic evaluation prompt against neotoma.io/evaluate
+- Or: npm install and run `bd init` (or equivalent) in a test project
+- First observation stored — do they get feedback that it worked?
+- **Key blocker:** Cognitive cold-start ("what should I store?") and UX friction (MCP restart, no success confirmation). See activation risks in [`developer_release_targeting.md`](./developer_release_targeting.md).
+
+### Activation (first session)
+
+What makes the first session successful:
+
+- Priority 1 data stores automatically without manual configuration
+- Agent demonstrates it can recall context from the new state layer
+- User sees the provenance trail — "I can trace why this is here"
+- **Activation signal:** User stores a second entity type beyond the default (e.g., adds a contact after conversations auto-stored)
+
+### Expansion (first week)
+
+What makes them deepen usage:
+
+- Add a second domain (contacts → tasks, or contacts → financial data)
+- Use Neotoma from a second tool (e.g., set up MCP in Cursor after starting in Claude)
+- First cross-session recall that saves real time — the "it just knew" moment
+- **Expansion signal:** 3+ entity types in use; MCP configured in 2+ tools
+
+### Advocacy
+
+What makes them tell someone else:
+
+- A concrete "this saved me" story — the agent recalled something that would have been lost
+- Enough trust to recommend it publicly (post, tweet, mention in a tools discussion)
+- **Advocacy signal:** Unsolicited mention in a public forum; DM recommending to a peer
+
+---
+
+## Retention and Churn Signals
+
+### Healthy usage indicators
+
+- Observation volume growing or steady week-over-week
+- New entity types being added over time (expanding domains)
+- Cross-tool access (MCP configured in 2+ tools)
+- Agent proactively storing without user prompting
+- User querying state history or provenance (using the audit/replay capabilities)
+
+### Early churn signals
+
+- **Observation plateau:** No new observations for 3+ days after active first week. May indicate cognitive cold-start stall — user doesn't know what else to store.
+- **Single entity type stagnation:** User stores contacts but never expands to tasks, decisions, or other domains. The OS isn't maturing.
+- **Reversion to workarounds:** User starts a new project with markdown files or Notion instead of storing in Neotoma. The strongest churn signal — they've decided Neotoma isn't the default.
+- **No cross-tool setup:** MCP configured in only one tool after 2+ weeks. Cross-tool state consistency — a core value prop — isn't being experienced.
+- **Silent errors:** User encounters a bug or unexpected behavior and doesn't report it — they quietly stop using instead. Requires proactive outreach during dev release.
+
+### Intervention points
+
+- **Day 1:** Confirm successful first observation; suggest next entity type to store
+- **Day 3:** Check if MCP is configured in a second tool; surface cross-tool value prop
+- **Week 1:** Ask what domains they've added; suggest Priority 2 data types if stalled
+- **Week 2:** If observation volume has plateaued, check whether they've reverted to workarounds and diagnose why
+- **Ongoing:** Surface provenance/replay capabilities — many users may not discover these without prompting
+
+| Pattern | Evidence |
+|---|---|
+| Multi-agent stacks, personal OS | Evaluators running 25+ autonomous loops, markdown CRMs, heartbeat BD pipelines, subagent coordination systems |
+| Re-prompting / context-janitor tax | Universal cold-start question ("what counts as a fact worth remembering?"); agents with session amnesia between cron runs |
+| Build-in-house state workarounds | Multiple evaluators independently building Claude memory systems using flat files (SOUL.md, HEARTBEAT.md), JSON heartbeats, markdown + embeddings |
+| Advanced DIY state workarounds | Evaluator migrated from JSON → CSV → Notion → custom MCP + Postgres; independently arrived at schema constraints and multi-agent review hooks; validates problem space but likely a later adopter |
+| Cross-tool state fragmentation | Ghostwriting pipelines losing context across sessions; platform memory coexistence questions; Notion breaking when adding a second agent as reviewer |
+| JSON/file scaling limits | Files of any real size trigger agents to write Python scripts to manage them — a code smell indicating the wrong abstraction |
+| State integrity as differentiator | Evaluator agents independently identifying "state integrity, not retrieval quality" and "deterministic guarantees" as the differentiated layer; one described it as "CI/CD for agent state" |
+| Non-ICP self-selection | Platform builder who correctly said "I don't have the problem" (state management is their product); thought-partner user whose agent self-selected out |
+| ICP boundary (capable DIY) | Evaluator who validates the problem strongly but is mid-build on custom infra: "I see potential value but this isn't my biggest problem." |
+
+---
 
 ## Category Contrast
 
@@ -17,72 +339,84 @@ Neotoma is not retrieval memory. Retrieval memory (RAG, vector DB, LangChain-sty
 
 ---
 
+## Objection-to-Framing Map
+
+Objections mapped to framing layers (core incentive, role transformation, tax removal) rather than feature comparison.
+
+### Architecture-mode objections
+
+- *"We already have event sourcing / custom state management"* → Does your current system close the feedback loop on agent state? Can you diff entities between runs and replay to a specific point? If debugging is still log archaeology, you have state management but not feedback loop integrity.
+- *"Not production-ready"* → The dev release fits the evaluation motion: validate guarantees locally, then propose for staging.
+
+### Building-mode objections
+
+- *"How is this different from RAG memory?"* → RAG re-derives structure every session. Neotoma persists it. If entity names resolve differently across sessions, your memory layer is approximating, not holding canonical state.
+- *"We use LangChain/LangGraph memory"* → Can you trace a wrong answer to a specific observation? Can you replay to last Tuesday? If not, you're absorbing variance your memory layer doesn't handle.
+
+### Operating-mode objections
+
+- *"Platform memory is good enough"* → Does it follow you across tools? Can you verify a correction from last week is still held? Platform memory is tool-specific and non-auditable.
+- *"Another tool to manage"* → Runs as an MCP server behind your existing tools — no new UI or workflow.
+- *"I tried [Mem0 / native memory / custom memory] and it made things worse"* → That's exactly the failure mode Neotoma prevents. Fuzzy memory approximates recall; Neotoma enforces write integrity. Every observation is append-only, schema-constrained, and provenance-traced. The question isn't whether your agent should remember — it's whether you can verify that what it remembers is true.
+
+### Field-validated objections
+
+- *"How is this better than SQLite?"* → SQLite is a valid starting point. What it lacks: versioning (UPDATE overwrites), conflict detection (last-write-wins silently), provenance, cross-tool sync, entity resolution, and schema evolution. Neotoma uses SQLite internally but adds the architecture for memory guarantees on top.
+
+- *"Should I use this alongside platform memory?"* → Complementary. Platform memory stores conversational preferences within one tool. Neotoma stores durable structured state with versioning, entity resolution, and cross-tool access via MCP. Both run simultaneously.
+
+- *"How does ingestion work?"* → Agent-driven. Your agent decides what to observe, fills the parameters, Neotoma versions it. No background scanning, no passive data collection.
+
+- *"What counts as a fact worth remembering?"* → Start with conversations, contacts, tasks, decisions. The heuristic: if it benefits from recall, audit, replay, or linking to other entities, store it.
+
+- *"This feels like a solution looking for a problem"* → Start from the failure mode: "What breaks when your agent forgets last week?" If the answer involves re-explaining context, debugging unreproducible behavior, or manually syncing state, the problem is real. If the answer is "nothing," this person is not the ICP.
+
+---
+
 ## ICP Vocabulary Bridge
 
-The ICP describes their problems in everyday language. Neotoma has precise internal terminology. This table maps between the two — use the ICP's language in qualification, messaging, and onboarding, then introduce Neotoma terms as they adopt.
+The ICP describes problems in everyday language. This table maps their vocabulary to Neotoma's internal terminology. Lead with the ICP's language in outreach and qualification; introduce Neotoma terms during onboarding. Never correct a user's vocabulary — bridge from it.
 
 | What the ICP says | What Neotoma calls it | Notes |
 |---|---|---|
-| "fact", "thing I told it", "piece of info" | **Entity** (or observation on an entity) | Users think in facts; Neotoma stores typed, schema-bound entities. An entity accumulates observations over time. |
+| "fact", "thing I told it", "piece of info" | **Entity** / observation | Users think in facts; Neotoma stores typed, schema-bound entities that accumulate observations. |
 | "memory", "what it knows" | **State** (deterministic state layer) | "Memory" implies fuzzy recall; Neotoma provides versioned, auditable state. |
-| "context" | **Entity graph** / persisted state | Users mean "what the agent should already know"; Neotoma structures this as related entities. |
-| "remembering", "saving" | **Observing** / storing | Neotoma records observations; snapshots are computed from them. |
-| "forgetting", "losing things" | **State drift** / silent reversion | The ICP's core pain — state changes or disappears without trace. |
+| "context" | **Entity graph** / persisted state | "What the agent should already know" — Neotoma structures this as related entities. |
+| "remembering", "saving" | **Observing** / storing | Observations are recorded; snapshots are computed from them. |
+| "forgetting", "losing things" | **State drift** / silent reversion | State changes or disappears without trace. |
 | "contradiction", "it said something different" | **Conflicting state** / merge conflict | Two observations disagree; Neotoma detects and surfaces this. |
 | "history", "what happened" | **Timeline** / observation log | Append-only, replayable sequence of all state changes. |
 | "debugging what went wrong" | **Provenance tracing** / state replay | Tracing an output back through the observation that produced it. |
 | "syncing between tools" | **Cross-tool state consistency** (via MCP) | The ICP manually carries context; Neotoma provides a shared substrate. |
-| "schema", "structure" | **Schema** (same term) | Rare overlap — technical ICP users already use this word correctly. |
-| "AI memory tool" | **Deterministic state layer** | The framing Neotoma avoids externally but must bridge from; many ICP users arrive searching for "AI memory." |
-| "notes", "docs I keep for the agent" | **Entities** with observations | Users maintain markdown/Notion docs as workarounds; these map to structured entities. |
+| "schema", "structure" | **Schema** (same term) | Rare overlap — technical users already use this word correctly. |
+| "AI memory tool" | **Deterministic state layer** | The framing Neotoma avoids but must bridge from; many users arrive searching for "AI memory." |
+| "notes", "docs I keep for the agent" | **Entities** with observations | Markdown/Notion docs as workarounds map to structured entities. |
 | "it worked last time but not now" | **Non-reproducible state evolution** | The reproducibility gap that triggers infra-mode adoption. |
-
-**Usage guidance:** Lead with the ICP's language in outreach and early qualification. Introduce Neotoma terms during onboarding as the user encounters the concepts. Never correct a user's vocabulary — bridge from it.
+| "it made a decision based on old info" | **State supersession failure** | A later observation should have replaced an earlier one but didn't. Agent builds on a reverted decision. |
+| "it contradicted what I told it last week" | **Conflicting state** / undetected merge conflict | Observations disagree across sessions with no detection mechanism. |
+| "I can't tell if what it remembers is real" | **Missing provenance** / hallucinated memory | No audit trail connecting a referenced "fact" to an actual observation. |
+| "it remembered the what but not the why" | **Lossy compression** / summary degradation | Fuzzy memory flattens nuanced decisions into bare facts, stripping reasoning context. |
 
 ---
 
-## The Archetype
+## Data and Workflow Priority
 
-The primary ICP is spending a significant portion of their effort, attention, and emotional energy compensating for the absence of reliable agent state. Neotoma does not add a capability — it removes the tax. What they get back is the time, attention, and confidence that the tax was consuming.
-
-They are people constructing an operating system for their own AI agents across personal and professional life domains. They wire together multi-agent stacks (Claude Code, Cursor, OpenClaw, ChatGPT, custom scripts) to manage finances, contacts, content, health, code, BD pipelines, and other domains. They are building infrastructure primarily for themselves, and secondarily for systems they ship to others.
-
-The same person is an operator when running their contact CRM, a builder when creating a new agent pipeline, and an infrastructure engineer when debugging state drift across agents. The previously defined three Tier 1 personas (AI Infrastructure Engineers, Agent System Builders, AI-native Operators) describe moments in this person's workflow, not separate personas.
-
-- **Pain trigger:** State drifts between sessions and tools; decisions execute without a reproducible trail; they become the human sync layer across every AI tool
-- **Characteristics:** Building/operating agents that persist across sessions (not one-shot); coordinating state across multiple tools or agents; managing evolving personal/professional context over time; experiencing drift, conflicts, or unreproducible decisions; comfortable with infrastructure-level abstractions; using AI as autonomous pipeline, not just thought partner
-- **Success:** Cross-tool memory is consistent; context persists across sessions; facts stored once are available everywhere; decisions are traceable
-- **Adoption pattern:** Install for personal use, expand as the personal OS matures across life domains
-
-### Field evidence
-
-| Characteristic | Evaluator evidence |
-|---|---|
-| Multi-agent stacks, personal OS | Evaluator: 25 autonomous loops, 112-person markdown CRM. One evaluator: heartbeat BD pipeline in production. Evaluator: heartbeat checks + subagent coordination + darkmesh. |
-| Re-prompting / context-janitor tax | Evaluator: "What counts as a fact worth remembering?" — universal cold-start. Evaluator: OpenClaw agent Timmy has session amnesia between crons. |
-| Build-in-house state workarounds | Evaluator: building own Claude memory system ("everyone is doing the same"). Andre: SOUL.md/HEARTBEAT.md flat files. Anand: JSON heartbeat files. Evaluator: Markdown memory + Ollama embeddings. |
-| Cross-tool state fragmentation | Evaluator: ghostwriting pipeline across sessions. Evaluator: asked about Claude Code memory coexistence. Evaluator: OpenClaw agent backfill reversed abandon pattern. |
-| State integrity as differentiator | Evaluator's Claude: "State integrity, not retrieval quality." Evaluator's Claude Opus 4.6: "deterministic guarantees are the differentiated part." Evaluator: "CI/CD for agent state." |
-| Non-ICP self-selection | Evaluator: platform builder, "I don't have the problem." Evaluator: thought-partner user, agent said "not for you." Both correctly excluded. |
-
-### Data and workflow priority
-
-Ordered by how quickly each data type delivers value. Priority 1 is what the agent should store from day one; Priority 4 is what emerges after the OS matures.
+Ordered by how quickly each data type delivers value.
 
 **Priority 1 — Entry point (first session, zero config):**
-- Conversations + agent messages — automatic, lowest friction store, creates audit trail
-- Contacts / people / companies — every conversation mentions people, compounds fast
-- Tasks + commitments — agent hears "I need to" / "remind me" / "follow up with"
+- Conversations + agent messages — automatic, lowest friction, creates audit trail
+- Contacts / people / companies — compounds fast
+- Tasks + commitments
 - Notes + decisions — capture reasoning that drifts between sessions
 
 **Priority 2 — Personal domains (first week):**
-- Financial data (transactions, accounts, statements, recurring expenses)
+- Financial data (transactions, accounts, recurring expenses)
 - Calendar events, meetings, scheduling context
 - Email triage and correspondence tracking
 - Health and wellness data
 
-**Priority 3 — OS maturation (weeks 2-4):**
-- Content pipeline (posts, blog drafts, ideas, publishing state)
+**Priority 3 — OS maturation (weeks 2–4):**
+- Content pipeline (posts, drafts, ideas, publishing state)
 - Project context and codebase entities
 - Agent session state and configuration
 
@@ -92,307 +426,66 @@ Ordered by how quickly each data type delivers value. Priority 1 is what the age
 - Habits, routines, and preference evolution
 - Documents and artifact management
 
-### Non-ICP boundaries
-
-**Platform builders (for now):** People with engineering teams who build their own state layer. Storage is part of their product, not an external dependency. They have the resources and motivation to build custom. Example: a founder building an identity/auth platform who said "I don't have the problem" because state management is their core product. However, custom state layers eventually hit the same pain Neotoma solves — versioning that silently overwrites, conflict detection that doesn't exist, schema evolution via manual migrations, no cross-tool sync. When the maintenance cost of their custom approach exceeds the cost of adopting an external dependency, they re-enter the ICP funnel.
-
-**Thought-partner users:** Heavy AI users whose continuity needs are about context and voice, not deterministic state versioning. The human drives every turn; they are not running autonomous pipelines. Example: an executive coach whose agent self-selected out, noting the need was "more about context and voice than deterministic state versioning."
-
-**Qualifying filter:** Does your agent operate autonomously across sessions, or is it a thought partner you drive? The latter is not the ICP even if technically sophisticated.
-
-### B2B downstream motion
-
-B2B opportunities emerge when personal agentic OS builders bring Neotoma into team/professional contexts. Not a separate ICP — a downstream motion from the primary. Examples: personal interest leading to healthcare agentic AI for a team; personal BD pipeline that could become a team BD tool; personal evaluation leading to compliance use case for a company.
-
----
-
-## Operational Modes
-
-The primary ICP operates in three modes — not separate personas, but facets of the same person's workflow. The cross-cutting analysis below captures how the modes relate; for full narrative profiles (core incentive, psychological trigger, role transformation, lifestyle improvement, interaction pattern shift), see [`profiles.md`](./profiles.md).
-
-| Mode | Stack position | Current pain | Adoption trigger | Comparison set |
-|------|---------------|-------------|-----------------|----------------|
-| **Infrastructure engineering** | Infrastructure layer — below application agents, above compute | Can't reproduce agent runs; state mutations invisible; debugging is log archaeology | Reliability failure: same inputs, different state, no explanation | Event sourcing, state machines, append-only logs, provenance DBs |
-| **Building agent systems** | Application layer — above orchestration, consuming infrastructure | Drift across sessions; conflicting state across tool boundaries; no replay | Memory inconsistency breaks a workflow: agent contradicts itself or drops context | RAG memory (Mem0, Zep), LangChain/LangGraph memory, file-based memory |
-| **Operating across AI tools** | End of tool chain — power user with technical fluency | Context fragmentation; repeated explanations; broken handoffs between tools | Multi-tool workflow debt becomes intolerable | Platform memory (Claude, ChatGPT), PKM tools (Obsidian, Notion), manual sync |
-
----
-
-## Cross-Cutting Analysis
-
-### Why this ICP
-
-- Highest alignment with the developer release: deterministic state, MCP/CLI/API interfaces, local-first architecture
-- Validates the core invariants: state evolution, versioning, replayability, schema constraints
-- Generates high-signal feedback on infrastructure-grade concerns (reliability, reproducibility, debuggability)
-- The same person provides activation volume (operating), integration depth (building), and guarantee validation (debugging infra)
-
-### Common thread
-
-The personal agentic OS builder is spending a significant portion of their effort, attention, and emotional energy compensating for the absence of reliable state. When operating, they compensate by re-prompting. When building pipelines, they compensate by engineering around memory regressions. When debugging infrastructure, they compensate by writing glue.
-
-In each mode, Neotoma does not add a capability — it removes the tax. What they get back is the time, attention, and confidence that the tax was consuming.
-
-This framing — removing the tax, not adding a feature — should be the through-line in all messaging, onboarding conversations, and qualification interviews. When evaluating a potential user, the diagnostic question is: "What are you currently doing to compensate for unreliable agent state?" If the answer is substantial, they are ICP-qualified. If they don't compensate because they don't feel the pain, they are not the current target.
-
-A sharper pre-qualifier: "Does your agent operate autonomously across sessions, or is it a thought partner you drive?" The latter is not the ICP even if technically sophisticated.
-
-#### Tax summary
-
-| Mode | Tax they pay | What they get back |
-|------|-------------|-------------------|
-| Operating | Re-prompting, context re-establishment, manual cross-tool sync | Attention, continuity, trust in their tools |
-| Infrastructure debugging | Writing glue (checkpoint logic, custom diffing, state serialization) | Debugging speed, platform design time, sleep |
-| Building pipelines | Prompt engineering workarounds, dedup hacks, memory regression fixes | Product velocity, shipping confidence, roadmap ambition |
-
-### Role transformation summary
-
-| Mode | Escaping | Into | Interaction pattern shift |
-|------|----------|------|--------------------------|
-| Operating | Context janitor — human sync layer between tools | Operator with continuity — steering, not driving | Turn-by-turn prompting → review-and-steer |
-| Infrastructure debugging | Log archaeologist — reverse-engineering truth from logs | Platform engineer with replayable state | Manual orchestration → declarative trust |
-| Building pipelines | Inference babysitter — absorbing variance the architecture doesn't handle | Builder who ships on solid ground | Compensating for memory → building on top of it |
-
-### Adoption ecosystem
-
-The three operational modes reinforce each other and feed downstream adoption:
-
-- **Operating → Building:** Personal workflows that work become the basis for more ambitious agent pipelines. The operator's experience ("context actually persists") becomes confidence to build on top of it.
-
-- **Building → Infrastructure debugging:** Production pipelines surface state integrity needs. When something breaks, the builder traces it through the state layer, validating the infrastructure guarantees.
-
-- **Infrastructure validation → Toolchain adoption (Tier 2):** When the ICP standardizes on Neotoma and references its guarantees, framework maintainers see adoption signal. The ICP's recommendation creates the toolchain integrator's evaluation context.
-
-- **B2B downstream:** The same person who adopts for personal use brings Neotoma into team contexts (healthcare, BD, compliance), creating the secondary B2B-by-vertical motion.
-
----
-
-## ICP Qualification
-
-### Diagnostic questions
-
-The primary qualifying question:
-
-> "What are you currently doing to compensate for unreliable or missing agent state?"
-
-A sharper pre-qualifier:
-
-> "Does your agent operate autonomously across sessions, or is it a thought partner you drive?"
-
-### Qualification criteria (objective)
-
-Observable conditions that indicate ICP fit. A person meeting **3+ of these** is likely qualified; meeting **5+** is strongly qualified.
-
-| # | Criterion | Observable evidence |
-|---|-----------|-------------------|
-| Q1 | **Uses 3+ AI tools in regular workflow** | Names specific tools (Claude, Cursor, ChatGPT, Copilot, custom MCP setups, etc.) and uses them weekly or daily |
-| Q2 | **Runs agents that operate across sessions** | Agents persist state, resume work, or execute autonomously — not single-turn Q&A |
-| Q3 | **Coordinates state across multiple tools or agents** | Moves context between tools; has experienced broken handoffs or context loss when switching |
-| Q4 | **Has built personal automation around AI tools** | Scripts, MCP configs, custom prompts, agent pipelines, cron-triggered workflows, or similar |
-| Q5 | **Actively compensates for missing state** | Re-prompts context each session, copy-pastes between tools, maintains manual notes/docs as workaround |
-| Q6 | **Has built or is building their own memory/state system** | Git+markdown memory, flat JSON, SQLite store, custom scripts, or homegrown state layer |
-| Q7 | **Experiences non-reproducible agent behavior** | Same inputs produce different outputs across sessions; can't explain why an agent decision changed |
-| Q8 | **Needs to debug, trace, or audit agent decisions** | Spends time reconstructing what an agent did and why; writes defensive checkpoint or logging code |
-| Q9 | **Manages evolving personal/professional context over time** | Contacts, tasks, financial data, projects, health data, or other domains that accumulate and change |
-| Q10 | **Comfortable with infrastructure-level tooling** | Willingness to install via npm/CLI; reads API docs; not blocked by developer-oriented interfaces |
-
-**Strongest qualifier combinations:**
-- Q1 + Q2 + Q5 → operational mode (context janitor paying the re-prompting tax)
-- Q2 + Q7 + Q8 → infra mode (log archaeologist who can't replay agent state)
-- Q2 + Q4 + Q6 → builder mode (building on unreliable memory, compensating with custom state)
-
-### Disqualification criteria (objective)
-
-Observable conditions that indicate someone is **not** the current target. A person meeting **any one** of the hard disqualifiers or **3+ soft** disqualifiers should not be prioritized.
-
-**Hard disqualifiers** (any one is sufficient):
-
-| # | Criterion | Why it disqualifies |
-|---|-----------|-------------------|
-| D1 | **No agent or AI-tool workflows** | No surface area for the problem Neotoma solves |
-| D2 | **Human drives every turn** (thought-partner pattern) | State persistence has no leverage when there is no autonomous operation; the human is the state layer by design |
-| D3 | **Building their own state layer as a product** | State management is their core value prop; they won't adopt an external dependency for it |
-| D4 | **Requires zero-install, no-config onboarding** | Developer release requires npm install and CLI/MCP configuration; if that's a blocker, timing is wrong |
-
-**Soft disqualifiers** (3+ together indicate poor fit):
-
-| # | Criterion | What it signals |
-|---|-----------|----------------|
-| D5 | **Uses only one AI tool** | Limited cross-tool state pain; platform memory may be sufficient |
-| D6 | **Satisfied with platform memory** (Claude memory, ChatGPT memory) | No experienced trust collapse or cross-tool fragmentation |
-| D7 | **Describes need as "AI remembering things"** without concern for determinism, versioning, or reproducibility | Looking for convenience, not guarantees |
-| D8 | **Looking for a note-taking or PKM tool** | Obsidian/Notion/Roam is the right category; Neotoma is infrastructure, not a PKM |
-| D9 | **No debugging, tracing, or compliance needs** | Core value props (replayability, provenance, audit) have no pull |
-| D10 | **Single-session usage pattern** | Agents don't persist across sessions; no state evolution to manage |
-| D11 | **Occasional AI use** (weekly or less) | Insufficient frequency for memory pain to compound |
-
-### Deepening follow-ups
-
-- "Which tools are you moving between, and where does context break when you switch?"
-- "When a production agent produces wrong output, what does your debugging process look like today?"
-- "When your agent gets entity resolution or memory wrong, how do you trace and fix it?"
-- "What does your current memory/state system look like? (Files, database, custom-built, nothing?)"
-
-**For a full qualification survey, see [`qualification_survey.md`](./qualification_survey.md).**
-
-### Agentic evaluation
-
-The [`/evaluate`](https://neotoma.io/evaluate) page on neotoma.io is the canonical source for agent-driven evaluation. It contains all qualification criteria, evaluation instructions, and scoring framework in a format optimized for both humans and agents.
-
-**User-facing prompt (one line):**
-
-> "Read neotoma.io/evaluate and assess whether Neotoma fits my workflow based on what you know about me."
-
-The agent reads the page, uses its existing context about the user (tools, workflow, conversation history), asks 1-2 natural questions to fill gaps, and delivers an honest assessment in the user's language. A structured scorecard for sharing with the Neotoma team is secondary and optional.
-
-**For internal single-shot analysis** (qualifying from a bio, transcript, or call notes without live Q&A):
-
-> "Read neotoma.io/evaluate for the qualification criteria, then analyze the following context and produce a full evaluation scorecard: [paste context]"
-
-Both modes use the same canonical criteria from the site — no stale inline copies to maintain.
-
----
-
-## Objection-to-Framing Map
-
-Common objections mapped to the framing layers (core incentive, role transformation, tax removal) rather than feature comparison.
-
-### Architecture-mode objections
-
-- *"We already have event sourcing / custom state management"* → Does your current system close the feedback loop on agent state? Can you diff entities between runs and replay to a specific point? If debugging is still log archaeology, you have state management but not feedback loop integrity. (Core incentive: feedback loop integrity)
-- *"Not production-ready"* → The dev release fits the evaluation motion: validate guarantees locally, then propose for staging. Local npm + SQLite is the right shape for this evaluation.
-
-### Building-mode objections
-
-- *"How is this different from RAG memory?"* → RAG re-derives structure every session. Neotoma persists it. If "Acme Corp" and "ACME CORP" resolve differently across sessions, your memory layer is approximating entities, not holding canonical state. (Core incentive: canonical state, not re-derived)
-- *"We use LangChain/LangGraph memory"* → Can you trace a wrong answer to a specific observation? Can you replay to last Tuesday? If not, you're absorbing the variance your memory layer doesn't handle. (Role transformation: inference babysitter → builder on solid ground)
-
-### Operating-mode objections
-
-- *"Platform memory (Claude, ChatGPT) is good enough"* → Does it follow you across tools? Can you verify a correction from last week is still held? If you're re-explaining context every session, you're paying the context-janitor tax. Platform memory is tool-specific and non-auditable. (Tax framing: attention tax)
-- *"Another tool to manage"* → Runs as an MCP server behind your existing tools — no new UI, no new workflow. The question is whether you want to keep being the human sync layer between Claude, Cursor, and ChatGPT, or let a state layer do it. (Role transformation: context janitor → operator with continuity)
-
-### Field-validated objections (from real evaluator conversations)
-
-- *"How is this better than SQLite?"* → SQLite is a valid starting point. It provides strong consistency and column types. What it lacks: versioning (UPDATE overwrites state), conflict detection (last-write-wins silently), provenance (no audit trail for who changed what and when), cross-tool sync (single-file, no MCP), entity resolution (you build it yourself), and schema evolution (migrations are manual). Neotoma uses SQLite internally but adds the architecture that delivers memory guarantees on top. (Framing: acknowledge the incumbent, show what breaks at scale)
-
-- *"Should I use this alongside Claude Code's built-in memory?"* → Complementary. Platform memory stores conversational preferences and project-specific notes within one tool. Neotoma stores durable structured state — contacts, tasks, decisions, financial data — with versioning, entity resolution, and cross-tool access via MCP. Platform memory is short-term context ("I prefer TypeScript"); Neotoma is long-term structured state ("Clayton owes us $5,000 since March 15"). Both run simultaneously. (Framing: coexistence, not replacement)
-
-- *"How does ingestion work — is it automatic?"* → Agent-driven. Neotoma is a store, not an extractor. Your agent decides what to observe, fills the parameters, Neotoma versions it. No background scanning, no regex extraction, no passive data collection. This is deliberate: the agent has the context to know what matters. (Framing: agent agency, not passive surveillance)
-
-- *"What counts as a fact worth remembering?"* → Start with what your agent already produces: conversations, contacts, tasks, decisions. These store automatically from day one. The heuristic: if it benefits from recall, audit, replay, or linking to other entities, store it. Priority 1 is conversations + contacts + tasks + decisions; everything else grows organically. (Framing: concrete starting point, not abstract philosophy)
-
-- *"This feels like a solution looking for a problem"* → Start from the failure mode: "What breaks when your agent forgets last week?" If the answer is "nothing," this person is not the ICP. If the answer involves re-explaining context, debugging unreproducible behavior, or manually syncing state across tools, the problem is real and specific. Lead with the pain, not the architecture. (Framing: pitch from failure mode, not architecture description)
-
----
-
-## Activation Risks
-
-Activation is the primary risk for the developer release. The docs historically treated activation as a success metric, not a risk. Field evidence shows three blocker classes that must be addressed alongside the adoption patterns above.
-
-**1. Cognitive cold-start:** "What should I remember?" The agent does not proactively store, and the user does not know what is worth storing. This is the universal first-session problem.
-
-| Mitigation | Status |
-|---|---|
-| Agent rules that make proactive storage the default (not opt-in) | **Done** — MCP instructions include store-first rule and entity extraction from every turn |
-| Priority 1 data (conversations, contacts, tasks, decisions) stores automatically from day one | **Done** — agent rules enforce automatic capture |
-| Concrete before/after examples in the "what to store" guide | **Pending** — `what_to_store.md` exists but lacks worked examples |
-| Onboarding discovery flow that proposes high-value local files | **Done** — install flow includes discover → propose → preview → confirm |
-
-**2. UX friction:** The product works but the path to working is rough.
-
-| Friction point | Status |
-|---|---|
-| MCP not available until the AI tool is restarted after install | **Mitigated** — install guide documents restart requirement; no technical fix available (host-tool limitation) |
-| Generic error messages that do not guide recovery | **Pending** — error messages need actionable context and recovery hints |
-| No feedback on successful storage (user does not know it worked) | **Pending** — agent should confirm what was stored after each operation |
-| Stale data when observations write without updating snapshots consistently | **Patched** — snapshot computation consistency improved |
-| Duplicate entities from slight name variations across sessions | **Partially addressed** — entity resolution improved; canonical_name normalization added; edge cases remain |
-
-**3. Trust barrier:** Supply chain and dependency security concerns block security-conscious developers before they ever reach the product. This is a different class of blocker from UX friction — it prevents installation entirely.
-
-| Mitigation | Status |
-|---|---|
-| Audit dependency tree for unnecessary transitive dependencies and known CVEs | **Done** — dependency hardening pass completed; CVEs patched |
-| Publish SBOM or dependency audit | **Pending** — not yet published |
-| Address concerns proactively in install documentation | **Pending** — install page does not yet surface supply chain posture |
-
-**Evidence:**
-- Cognitive: Evaluator installed and worked successfully but asked "what counts as a fact worth remembering?" — universal cold-start
-- UX: One evaluator discovered MCP required restart; One evaluator hitting stale data and duplicate entities at 20% capability utilization
-- Trust: Evaluator blocked by supply chain/dependency security concerns before installing, despite having need and interest
-- Abandon pattern: Evaluator never finished setup; Evaluator went silent after initial inbound interest; Evaluator reversed only when agent proactively backfilled data
-
----
-
-## Non-goals for the Developer Release
-
-The developer release is **not** targeting:
-
-- **Casual prompt users** — people who use ChatGPT occasionally and do not feel memory pain
-- **Note-taking / PKM users** — people looking for Obsidian, Notion, or Roam alternatives
-- **Broad productivity audiences** — anyone seeking a general "AI memory tool" rather than a deterministic state layer
-
-For detailed objective disqualification criteria, see [Disqualification criteria](#disqualification-criteria-objective) under ICP Qualification.
-
 ---
 
 ## Summary
 
-### Primary ICP (Developer Release)
-- Personal agentic OS builders/operators (one archetype operating in infra, builder, and operator modes)
+**Primary ICP:** Personal agentic OS builders/operators (one archetype, three operational modes)
 
-### Non-ICP Boundaries
-- Platform builders who build their own state layer
-- Thought-partner users whose need is context and voice, not deterministic state
+**Adoption triggers:** Chronic tax (re-prompting, manual sync) creates latent demand; acute crisis (corrupted state) creates urgency; capability unlocks (unattended execution, multi-agent coordination) create aspiration; external events and scale thresholds create receptivity windows.
 
-### Secondary Motion
-- B2B-by-vertical (downstream from personal adoption)
+**Non-ICP boundaries:** Platform builders (state is their product); capable DIY builders (will build their own, may convert later); thought-partner users (human is the state layer)
 
-### One-Line GTM Summary
+**Adoption path:** Discovery via peer posts and AI communities → first contact (homepage/README) → evaluation (install or agentic eval) → activation (first successful recall) → expansion (new domains, second tool) → advocacy (public mention)
 
-**Start with personal agentic OS builders/operators; expand to toolchain integrators and B2B-by-vertical as personal adoption creates team demand; defer knowledge workers and small teams until post-dev release.**
+**Retention risk:** Observation plateau, single entity type stagnation, reversion to workarounds, no cross-tool setup
+
+**Secondary motion:** B2B-by-vertical, downstream from personal adoption
+
+**One-line GTM:** Start with personal agentic OS builders/operators; expand to toolchain integrators and B2B-by-vertical as personal adoption creates team demand.
 
 ---
 
 ## Agent Instructions
 
-### When to Load This Document
+### When to Load
 
-Load when:
-- Planning GTM strategy or product roadmap for the developer release
+- Planning GTM strategy or product roadmap
 - Prioritizing feature development
-- Evaluating whether a feature serves the primary ICP
-- Deciding between infrastructure-grade and consumer-grade product decisions
-- Understanding primary ICP operational modes, qualification, or objection handling
+- Evaluating ICP fit for a feature or user
+- Understanding qualification, objection handling, or operational modes
 
 ### Required Co-Loaded Documents
 
 - `docs/NEOTOMA_MANIFEST.md` (always)
-- `docs/specs/MVP_OVERVIEW.md` (for MVP scope alignment)
-- `docs/icp/profiles.md` (for detailed ICP profiles)
+- `docs/specs/MVP_OVERVIEW.md` (for MVP scope)
+- `docs/icp/profiles.md` (for detailed profiles)
+- `docs/icp/developer_release_targeting.md` (for release-specific targeting and activation risks)
 
-### Constraints Agents Must Enforce
+### Constraints
 
-1. Developer release MUST directly serve the primary ICP: personal agentic OS builders/operators
-2. All product decisions must align with primary ICP prioritization
-3. Language must use infrastructure/guarantees framing (deterministic, versioned, replayable, auditable, schema-bound) — not "AI memory tool"
-4. Messaging must lead with felt experience and role transformation, then ground in infrastructure/guarantees vocabulary (per constraint 3) — not the reverse
-5. The "removing the tax" framing takes priority over "adding a feature" framing in all GTM and onboarding content
-6. Qualification conversations should use the diagnostic question: "What are you currently doing to compensate for unreliable agent state?" and the pre-qualifier: "Does your agent operate autonomously across sessions, or is it a thought partner you drive?"
-7. Each operational mode's interaction pattern shift (driving→steering, glue→invariants, compensating→compounding) should be referenced in onboarding and activation materials
-8. Non-ICP boundaries (platform builders, thought-partner users) must be respected in outreach and qualification
-9. Data priority tiers (Priority 1-4) should guide what the agent stores from day one vs what grows organically
-10. For secondary and future ICPs, see [`secondary_icps.md`](./secondary_icps.md) and [`future_icps.md`](./future_icps.md)
+1. Language uses infrastructure/guarantees framing — not "AI memory tool"
+2. Messaging leads with felt experience and role transformation, then grounds in guarantees
+3. "Removing the tax" takes priority over "adding a feature"
+4. Messaging connects chronic tax (convenience) to acute crisis (corrupted state) — convenience opens the door, integrity closes the sale
+5. Qualification uses the diagnostic question and pre-qualifier
+6. Each operational mode's interaction pattern shift is referenced in onboarding
+7. Non-ICP boundaries (platform builders, capable DIY builders, thought-partner users) are respected in outreach and qualification
+8. Data priority tiers guide what stores from day one vs. grows organically
+9. Adoption triggers (pain, capability unlock, external events, scale thresholds) inform content and outreach timing
+10. Competitor migration paths inform positioning — lead with what failed in their current tool, not Neotoma's feature list
+11. Retention signals (observation plateau, workaround reversion) guide proactive outreach during dev release
+12. For secondary and future ICPs, see [`secondary_icps.md`](./secondary_icps.md) and [`future_icps.md`](./future_icps.md)
 
 ### Validation Checklist
 
-- [ ] Feature serves the primary ICP: personal agentic OS builders/operators
-- [ ] GTM roadmap follows primary ICP first
+- [ ] Feature serves the primary ICP
 - [ ] Messaging uses state integrity vocabulary, not consumer memory framing
-- [ ] ICP messaging includes role transformation (escaping → into)
-- [ ] ICP messaging includes interaction pattern shift, not just data layer improvement
-- [ ] Qualification criteria reference the diagnostic question, pre-qualifier, and tax framework
+- [ ] ICP messaging includes role transformation (escaping → into) and interaction pattern shift
 - [ ] Content leads with felt experience before architectural description
-- [ ] Non-ICP boundaries (platform builders, thought-partner users) are respected
-- [ ] Data priority tiers guide onboarding (Priority 1 from day one)
+- [ ] Messaging connects chronic tax to acute crisis
+- [ ] Non-ICP boundaries respected (including capable DIY builders)
+- [ ] Data priority tiers guide onboarding
+- [ ] Content distributed through identified watering holes (AI Twitter, Claude Code communities, indie hacker forums)
+- [ ] Adoption funnel stages addressed (discovery → first contact → evaluation → activation → expansion → advocacy)
+- [ ] Retention signals monitored and intervention points actioned

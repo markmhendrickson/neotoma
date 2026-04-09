@@ -22,7 +22,7 @@ Merge dev commits into main, create a release (planned or incremental), and depl
 **Planned Releases (Milestones)**:
 - Use semantic versioning: `vX.Y.0` (major.minor.0)
 - Examples: `v1.0.0`, `v1.1.0`, `v2.0.0`
-- Created via `/create_release` command with full workflow
+- Created via `/release` command with full workflow (`/create_release` remains a legacy alias)
 - Control major and minor version numbers
 
 **Incremental Releases (Continuous Deployments)**:

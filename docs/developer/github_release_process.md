@@ -2,7 +2,9 @@
 
 Every **version tag** published to GitHub MUST have a matching **[GitHub Release](https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository)** with human-readable notes. Tags alone are not enough for subscribers and npm users scanning changes.
 
-**Agent workflow:** When the user asks to **prepare a release** (or equivalent), follow `.cursor/skills/create-release/SKILL.md` → **Prepare a release (comprehensive GitHub and npm notes)** and `foundation/development/release_workflow.md` Step 5 — do not use commit lists alone as the narrative.
+**Before notes or `release-notes:render`:** Run the **Mandatory preflight: unmerged dev work** in `foundation/agent_instructions/cursor_commands/create_release.md` (canonical command entry: `foundation/agent_instructions/cursor_commands/release.md`) — `git fetch`, `git log origin/main..origin/dev`, `git status`, submodules, and choose compare range (prefer tag on `main` after merge; provisional draft from `dev` OK if re-rendered after tag). If the working tree is dirty, preview those local changes separately and commit them before final rendering if the user confirms they should ship.
+
+**Agent workflow:** When the user asks to **prepare a release** (or equivalent), follow `.cursor/skills/create-release/SKILL.md` and the canonical `/release` command (`foundation/agent_instructions/cursor_commands/release.md`, backed by `create_release.md`) — do not use commit lists alone as the narrative.
 
 ## Template layout
 

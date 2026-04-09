@@ -82,7 +82,7 @@ import { CursorIcon } from "@/components/icons/CursorIcon";
 import { OpenClawIcon } from "@/components/icons/OpenClawIcon";
 import { getLocalizedDocNavCategories } from "@/site/site_data_localized";
 import { VERTICAL_LANDING_PATHS } from "@/site/site_data";
-import { sendCtaClick, sendOutboundClick, sendDocsNavClick } from "@/utils/analytics";
+import { sendCtaClick, sendDocsNavClick } from "@/utils/analytics";
 import {
   useSiteAppNavBarVisibleSetter,
   useSiteHomeEvaluateScrollBannerVisible,
@@ -342,12 +342,7 @@ function NavLink({
         asChild
         className={`${navigationMenuTriggerStyle()} ${sidebarNavItemClass}`}
       >
-        <a
-          href={href}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={() => sendOutboundClick(href)}
-        >
+        <a href={href} target="_blank" rel="noopener noreferrer">
           {children}
         </a>
       </NavigationMenuLink>
@@ -397,6 +392,7 @@ interface SearchablePageItem {
 const SITE_SEARCH_TOP_PAGE_HREFS = [
   "/docs",
   "/evaluate",
+  "/meet",
   "/install",
   "/faq",
   "/memory-guarantees",
@@ -659,6 +655,8 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
   return (
     <header
       className={`fixed top-0 inset-x-0 z-50 flex h-12 items-center justify-between pl-2 pr-4 transition-transform duration-300 ease-out md:pr-6 ${
+        isMarketingHomeChrome ? "print:hidden " : ""
+      }${
         headerScrollVisible ? "translate-y-0" : "-translate-y-full pointer-events-none"
       } bg-sidebar/90 text-sidebar-foreground backdrop-blur-sm shadow-[inset_0_-10px_20px_-10px_rgba(0,0,0,0.05)]`}
     >
@@ -685,12 +683,6 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
               target="_blank"
               rel="noopener noreferrer"
               className="min-w-0 truncate text-sidebar-foreground/80 no-underline hover:text-sidebar-accent-foreground transition-colors"
-              onClick={() =>
-                sendOutboundClick(
-                  "https://markmhendrickson.com/posts/neotoma-developer-release",
-                  dict.developerPreview
-                )
-              }
             >
               {dict.developerPreview}
             </a>
@@ -700,26 +692,26 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
 
       {/* Mobile: Evaluate + Architecture in header */}
       <nav
-        className="md:hidden flex items-center gap-1"
+        className="md:hidden flex min-w-0 items-center gap-0.5"
         aria-label={`${dict.evaluate}, ${dict.install}, and ${dict.architecture}`}
       >
         <Link
           to={localizePath("/evaluate", locale)}
-          className="rounded-md px-2 py-1.5 text-[13px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          className="rounded-md px-1.5 py-1.5 text-[13px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
           onClick={() => sendCtaClick("header_evaluate")}
         >
           {dict.evaluate}
         </Link>
         <Link
           to={localizePath("/install", locale)}
-          className="rounded-md px-2 py-1.5 text-[13px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          className="rounded-md px-1.5 py-1.5 text-[13px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
           onClick={() => sendCtaClick("header_install")}
         >
           {dict.install}
         </Link>
         <Link
           to={localizePath("/architecture", locale)}
-          className="rounded-md px-2 py-1.5 text-[13px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          className="hidden rounded-md px-1.5 py-1.5 text-[13px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground sm:inline-flex"
           onClick={() => sendCtaClick("view_architecture")}
         >
           {dict.architecture}
@@ -855,7 +847,7 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
               onClick={() => setMobileMenuOpen((open) => !open)}
               aria-label={mobileMenuOpen ? "Close navigation menu" : "Open navigation menu"}
               tabIndex={mobileNavFabVisible ? 0 : -1}
-              className={`fixed bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-[max(1.25rem,env(safe-area-inset-right))] z-[60] md:hidden flex h-12 w-12 items-center justify-center rounded-full border border-sidebar-border bg-sidebar text-sidebar-foreground shadow-lg transition-[transform,opacity] duration-300 ease-out motion-reduce:transition-none hover:bg-sidebar-accent focus:outline-none focus:ring-2 focus:ring-sidebar-accent focus:ring-offset-2 ${
+              className={`print:hidden fixed bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-[max(1.25rem,env(safe-area-inset-right))] z-[60] md:hidden flex h-12 w-12 items-center justify-center rounded-full border border-sidebar-border bg-sidebar text-sidebar-foreground shadow-lg transition-[transform,opacity] duration-300 ease-out motion-reduce:transition-none hover:bg-sidebar-accent focus:outline-none focus:ring-2 focus:ring-sidebar-accent focus:ring-offset-2 ${
                 mobileNavFabVisible
                   ? "translate-y-0 opacity-100"
                   : "pointer-events-none translate-y-[calc(100%+1.5rem)] opacity-0"
@@ -947,10 +939,7 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
                   target="_blank"
                   rel="noopener noreferrer"
                   className="rounded-md px-3 py-2 text-[14px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                  onClick={() => {
-                    sendOutboundClick("https://github.com/markmhendrickson/neotoma");
-                    setMobileMenuOpen(false);
-                  }}
+                  onClick={() => setMobileMenuOpen(false)}
                 >
                   GitHub
                 </a>
@@ -959,10 +948,7 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
                   target="_blank"
                   rel="noopener noreferrer"
                   className="rounded-md px-3 py-2 text-[14px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                  onClick={() => {
-                    sendOutboundClick("https://www.npmjs.com/package/neotoma");
-                    setMobileMenuOpen(false);
-                  }}
+                  onClick={() => setMobileMenuOpen(false)}
                 >
                   npm
                 </a>
