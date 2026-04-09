@@ -73,6 +73,19 @@ adapt_mdc_for_claude() {
     fi
 }
 
+# Drop leading YAML frontmatter (--- ... ---) so Claude skill output has a single frontmatter block
+strip_leading_yaml_frontmatter() {
+    awk '
+        BEGIN { in_fm = 0; delim = 0 }
+        /^---$/ {
+            if (delim == 0) { in_fm = 1; delim = 1; next }
+            if (in_fm == 1) { in_fm = 0; next }
+        }
+        in_fm == 1 { next }
+        { print }
+    ' "$1"
+}
+
 # Helper function to adapt command file to Claude skill format
 adapt_command_to_skill() {
     local source_file="$1"
@@ -247,6 +260,35 @@ done
 
 print_info "Adapted $SKILLS_COPIED foundation command(s) to skills"
 
+# Process .cursor/skills/*/SKILL.md → .claude/skills (repo-only; skip if foundation already emitted same basename)
+CURSOR_SKILLS_DIR=".cursor/skills"
+CURSOR_SKILLS_COPIED=0
+if [ -d "$CURSOR_SKILLS_DIR" ]; then
+    print_info "Processing Cursor Agent Skills → Claude skills..."
+    for skill_md in "$CURSOR_SKILLS_DIR"/*/SKILL.md; do
+        if [ ! -f "$skill_md" ]; then
+            continue
+        fi
+        folder_name=$(basename "$(dirname "$skill_md")")
+        # Align with foundation underscore names when the skill is the same workflow (fix-feature-bug → fix_feature_bug)
+        norm_name=${folder_name//-/_}
+        target_file=".claude/skills/${norm_name}.md"
+        if [ -f "$target_file" ]; then
+            print_info "  ⊘ Skipped Cursor skill (foundation already provides): $folder_name → ${norm_name}.md"
+            continue
+        fi
+        tmp_stripped=$(mktemp)
+        strip_leading_yaml_frontmatter "$skill_md" > "$tmp_stripped"
+        adapt_command_to_skill "$tmp_stripped" "$skill_md" "$norm_name" > "$target_file"
+        rm -f "$tmp_stripped"
+        print_info "  ✓ Adapted Cursor skill $folder_name → ${norm_name}.md"
+        CURSOR_SKILLS_COPIED=$((CURSOR_SKILLS_COPIED + 1))
+    done
+    print_info "Adapted $CURSOR_SKILLS_COPIED repo-only Cursor skill(s) to Claude skills"
+fi
+
+SKILLS_TOTAL=$((SKILLS_COPIED + CURSOR_SKILLS_COPIED))
+
 # Process repository rules from docs/
 print_info "Processing repository rules from docs/..."
 REPO_RULES_COPIED=0
@@ -381,7 +423,7 @@ In those cases: ask a short, concrete question with 1–2 options or "proceed wi
 
 All rules in `.claude/rules/` apply; they are modular instructions loaded automatically by context.
 
-Skills in `.claude/skills/` are workflows invokable with `/command_name` matching each foundation command file (e.g. `/analyze`, `/release`, `/fix_feature_bug`).
+Skills in `.claude/skills/` are workflows invokable with `/command_name`: each foundation `cursor_commands` file, plus repo-only skills from `.cursor/skills/*/SKILL.md` (folder names with `-` become `_` in the slash name). Foundation wins on name collisions.
 
 For complete documentation map, reading strategies, and dependency graph, see `docs/context/index_rules.mdc`.
 EOF
@@ -425,7 +467,7 @@ print_info "Generated files:"
 print_info "  - .claude/CLAUDE.md (entrypoint)"
 print_info "  - .claude/settings.json (minimal; permissions in ~/.claude/settings.json)"
 print_info "  - .claude/rules/ ($RULES_COPIED rules)"
-print_info "  - .claude/skills/ ($SKILLS_COPIED skills)"
+print_info "  - .claude/skills/ ($SKILLS_TOTAL skills: $SKILLS_COPIED foundation + $CURSOR_SKILLS_COPIED repo-only)"
 print_info ""
 print_info "Next steps:"
 print_info "  1. Configure permissions in ~/.claude/settings.json if needed"
