@@ -13,3 +13,6 @@
 [submodule "inspector"]
 	path = inspector
 	url = https://github.com/markmhendrickson/neotoma-inspector.git
+[submodule "writ"]
+	path = writ
+	url = https://github.com/markmhendrickson/writ.git
