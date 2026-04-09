@@ -87,6 +87,8 @@ import {
   useSiteAppNavBarVisibleSetter,
   useSiteHomeEvaluateScrollBannerVisible,
 } from "@/context/SiteAppNavContext";
+import { HOME_DEMO_INSTALL_CTA_CLASS } from "@/components/code_block_copy_button_classes";
+import { cn } from "@/lib/utils";
 
 const sidebarNavItemClass =
   "!bg-transparent text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus:bg-sidebar-accent focus:text-sidebar-accent-foreground data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground";
@@ -704,7 +706,10 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
         </Link>
         <Link
           to={localizePath("/install", locale)}
-          className="rounded-md px-1.5 py-1.5 text-[13px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          className={cn(
+            HOME_DEMO_INSTALL_CTA_CLASS,
+            "px-2 py-1 text-[13px] focus-visible:ring-offset-sidebar",
+          )}
           onClick={() => sendCtaClick("header_install")}
         >
           {dict.install}
@@ -735,7 +740,10 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
             <NavigationMenuLink asChild>
               <Link
                 to={localizePath("/install", locale)}
-                className={`${navigationMenuTriggerStyle()} ${sidebarNavItemClass}`}
+                className={cn(
+                  HOME_DEMO_INSTALL_CTA_CLASS,
+                  "px-2.5 py-1 text-sm focus-visible:ring-offset-sidebar",
+                )}
                 onClick={() => sendCtaClick("header_install")}
               >
                 {dict.install}
@@ -901,7 +909,10 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
                   </Link>
                   <Link
                     to={localizePath("/install", locale)}
-                    className="rounded-md px-3 py-2 text-[14px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                    className={cn(
+                      HOME_DEMO_INSTALL_CTA_CLASS,
+                      "w-full justify-center px-3 py-2 text-[14px] focus-visible:ring-offset-sidebar",
+                    )}
                     onClick={() => {
                       sendCtaClick("header_install");
                       setMobileMenuOpen(false);

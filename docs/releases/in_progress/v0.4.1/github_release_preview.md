@@ -7,11 +7,13 @@ npm install -g neotoma@0.4.1
 | | |
 |:--|:--|
 | **npm** | https://www.npmjs.com/package/neotoma/v/0.4.1 |
-| **Compare** | `v0.4.0` → `v0.4.1-provisional` — [view diff](https://github.com/markmhendrickson/neotoma/compare/v0.4.0...e91cacd0) |
+| **Compare** | `v0.4.0` → `v0.4.1` — [view diff](https://github.com/markmhendrickson/neotoma/compare/v0.4.0...v0.4.1) |
 
-**Draft scope note:** This release note draft is pinned to the committed range **`v0.4.0..e91cacd0`**. Newer unstaged local edits were intentionally excluded from the `v0.4.1` candidate.
+**Shipped scope:** Git tag **`v0.4.1`** is at **`8081ee5`** (`Release v0.4.1: incremental deploy (marketing site)`). Narrative and `release-notes:render --tag v0.4.1` use range **`v0.4.0..v0.4.1`**.
 
-Neotoma `0.4.1` tightens the release-prep workflow, adds a safer SQLite recovery path for local installs, improves MCP/CLI contract parity around entity counts, and continues the evaluation-first site refresh with clearer product positioning, install guidance, and homepage demos.
+**Post-tag `dev` (not in the `v0.4.1` tag):** `5258b9f3` — `fix(site): keep record-types headline tail on one line`. Ship as **`v0.4.2`** (or cherry-pick) if that fix should ride with npm/GitHub users on the same semver.
+
+Neotoma `0.4.1` tightens the release-prep workflow, adds a safer SQLite recovery path for local installs, improves MCP/CLI contract parity around entity counts, ships FU-301 marketing-site refresh with incremental Pages deploy, syncs foundation commands into Claude Code skills, adds the `writ` submodule for WRIT benchmarking, and continues the evaluation-first site refresh with clearer product positioning, install guidance, and homepage demos.
 
 ## What changed for npm package users
 
@@ -45,6 +47,7 @@ Neotoma `0.4.1` tightens the release-prep workflow, adds a safer SQLite recovery
 
 ## Docs site & CI / tooling
 
+- **FU-301:** Marketing site refresh, SEO, and v0.4.1 prep docs; **incremental GitHub Pages deploy** for the marketing site (`Release v0.4.1: incremental deploy`).
 - Refreshed public positioning, ICP, and release-targeting material across `docs/foundation/`, `docs/icp/`, and homepage design guidance.
 - Expanded the `evaluate_positioning` skill and related reference material so release prep, positioning review, and site iteration share the same framework.
 - Kept site coverage current with Playwright updates for hash navigation and other homepage regressions, plus ongoing route/SEO/localization maintenance in the frontend site layer.
@@ -52,6 +55,8 @@ Neotoma `0.4.1` tightens the release-prep workflow, adds a safer SQLite recovery
 ## Internal changes
 
 - Renamed the canonical release command to `/release` while keeping `/create_release` as a legacy alias, and updated synced command/rule/skill copies accordingly.
+- Emit foundation commands as **Claude Code skills** (`.claude/skills/<name>/SKILL.md`), with Cursor skill sync when not sourced from foundation.
+- Added **`writ` submodule** (WRIT write-integrity benchmark).
 - Synced generated Cursor/Claude instruction surfaces with the updated release workflow, positioning material, and rule set.
 - Added the focused test-only transport behavior in `src/cli/index.ts` to remove flaky per-command local transport startup during CLI test runs.
 
@@ -65,7 +70,7 @@ Neotoma `0.4.1` tightens the release-prep workflow, adds a safer SQLite recovery
 
 - The committed `v0.4.1` candidate passed the full pre-commit gate used during release prep: `tsc --noEmit`, `eslint src --ext .ts`, `npm run lint:site-copy`, `npm test`, `npm run test:e2e`, `npm run validate:coverage`, `npm run check:pw-coverage`, and `npm run validate:doc-deps`.
 - Release prep also included focused reruns of the previously failing CLI correction test and the homepage hash-update Playwright test after the fixes landed.
-- Before publishing the actual GitHub Release, re-render notes after the final `v0.4.1` tag exists so the compare link and commit list reflect the exact tagged commit.
+- The `v0.4.1` tag exists on `8081ee5`; re-run `npm run -s release-notes:render -- --tag v0.4.1` after any tag movement before publishing or editing the GitHub Release.
 
 ## Breaking changes
 
@@ -73,8 +78,15 @@ Neotoma `0.4.1` tightens the release-prep workflow, adds a safer SQLite recovery
 
 ---
 
-## Commits (`v0.4.0` → `v0.4.1-provisional`)
+## Commits (`v0.4.0` → `v0.4.1`)
 
+- `80203f2` Release v0.4.1: incremental deploy (marketing site)
+- `5a95524` Merge dev into main for release v0.4.1 (marketing site)
+- `9c62ea4` FU-301: Marketing site refresh, SEO, and v0.4.1 prep docs
+- `56d4b50` chore: add writ submodule (WRIT write-integrity benchmark)
+- `2665395` fix(claude): emit skills as .claude/skills/<name>/SKILL.md
+- `5e816a2` Sync .cursor/skills into Claude skills when not in foundation
+- `8034a9b` Emit all foundation commands as Claude Code skills
 - `e91cacd` chore(release): prepare main-repo v0.4.1 candidate
 - `e3b99e5` Dev: CLI/API contracts, site UI, docs, cursor rules, inspector submodule
 - `0da9e28` docs(icp): refresh primary ICP, dev release targeting, general release criteria; anonymize evaluator PII in public docs; add private field_evidence submodule ref
@@ -273,4 +285,5 @@ Neotoma `0.4.1` tightens the release-prep workflow, adds a safer SQLite recovery
 - `79285c8` WIP: CSV uploader with normalization and LLM transforms
 - `dc11c6d` Initial commit: MCP server for extensible record storage with semantic search, ChatGPT Actions, and Supabase backend
 
-**Full compare:** [`v0.4.0...v0.4.1-provisional`](https://github.com/markmhendrickson/neotoma/compare/v0.4.0...e91cacd0)
+**Full compare:** [`v0.4.0...v0.4.1`](https://github.com/markmhendrickson/neotoma/compare/v0.4.0...v0.4.1)
+
