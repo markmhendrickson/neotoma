@@ -1836,7 +1836,8 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                       What to store
                     </p>
                     <h2 className={HOME_SECTION_H2_CLASS}>
-                      Not sure where to start? Pick three.
+                      Not sure where to start?{" "}
+                      <span className="whitespace-nowrap">Pick three.</span>
                     </h2>
                     <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl mx-auto">
                       Your contacts, tasks, and events disappear between sessions and tools.
