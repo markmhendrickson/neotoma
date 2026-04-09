@@ -58,6 +58,7 @@ import founderPhoto from "@/assets/images/people/mark_hendrickson.jpg";
 
 import { useLocale } from "@/i18n/LocaleContext";
 import { localizePath } from "@/i18n/routing";
+import { cn } from "@/lib/utils";
 import { useSiteHomeEvaluateScrollBannerVisibleSetter } from "@/context/SiteAppNavContext";
 import { sendCtaClick } from "@/utils/analytics";
 interface SitePageProps {
@@ -1467,11 +1468,11 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                           {pack.homeHero.curiosityGap}
                         </p>
 
-                        <p className="text-[15px] md:text-[17px] leading-7 text-foreground/80 max-w-xl mx-auto lg:mx-0">
+                        <p className="mb-4 text-[15px] md:text-[17px] leading-7 text-foreground/80 max-w-xl mx-auto lg:mx-0">
                           {pack.homeHero.subcopy}
                         </p>
 
-                        <div className="flex flex-col sm:flex-row sm:flex-wrap justify-center gap-3 pt-1 lg:justify-start">
+                        <div className="mt-10 flex flex-col sm:flex-row sm:flex-wrap justify-center gap-3 lg:justify-start">
                           <a
                             href="/evaluate"
                             className={`${HOME_EVALUATE_CTA_CLASS} w-full sm:w-auto`}
@@ -2003,7 +2004,11 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                   </a>
                   <Link
                     to={localizePath("/meet", locale)}
-                    className={`${HOME_SCROLL_BANNER_SPLIT_CELL_CLASS} ${HOME_SCROLL_BANNER_SECONDARY_CELL_CLASS}`}
+                    className={cn(
+                      HOME_SCROLL_BANNER_SPLIT_CELL_CLASS,
+                      HOME_SCROLL_BANNER_SECONDARY_CELL_CLASS,
+                      "hidden md:flex",
+                    )}
                     onClick={() => sendCtaClick("meet_with_creator_banner")}
                   >
                     <CalendarClock className="h-4 w-4 shrink-0" aria-hidden />
