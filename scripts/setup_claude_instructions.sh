@@ -169,7 +169,6 @@ print_info "Foundation directory: $FOUNDATION_DIR"
 # Remove existing generated files
 print_info "Removing existing generated files..."
 RULES_REMOVED=0
-SKILLS_REMOVED=0
 
 if [ -d ".claude/rules" ]; then
     for existing_file in .claude/rules/*.md .claude/rules/*.mdc; do
@@ -180,20 +179,15 @@ if [ -d ".claude/rules" ]; then
     done
 fi
 
+# Claude Code discovers skills only at .claude/skills/<name>/SKILL.md (not flat .md in skills/).
 if [ -d ".claude/skills" ]; then
-    for existing_file in .claude/skills/*.md; do
-        if [ -f "$existing_file" ] && head -10 "$existing_file" | grep -q "<!-- Source:"; then
-            rm "$existing_file"
-            SKILLS_REMOVED=$((SKILLS_REMOVED + 1))
-        fi
-    done
+    rm -rf .claude/skills/*
+    print_info "Cleared .claude/skills/ for regeneration (nested SKILL.md layout)"
 fi
+mkdir -p .claude/skills
 
 if [ $RULES_REMOVED -gt 0 ]; then
     print_info "Removed $RULES_REMOVED existing rule file(s)"
-fi
-if [ $SKILLS_REMOVED -gt 0 ]; then
-    print_info "Removed $SKILLS_REMOVED existing skill file(s)"
 fi
 
 # Process foundation rules
@@ -251,9 +245,11 @@ for cmd_file in "$COMMANDS_DIR"/*.md "$COMMANDS_DIR"/*/SKILL.md; do
             cmd_name=$(basename "$(dirname "$cmd_file")")
         fi
 
-        target_file=".claude/skills/${cmd_name}.md"
+        skill_dir=".claude/skills/${cmd_name}"
+        mkdir -p "$skill_dir"
+        target_file="${skill_dir}/SKILL.md"
         adapt_command_to_skill "$cmd_file" "$cmd_file" "$cmd_name" > "$target_file"
-        print_info "  ✓ Adapted $cmd_name.md → skill"
+        print_info "  ✓ Adapted $cmd_name → ${cmd_name}/SKILL.md"
         SKILLS_COPIED=$((SKILLS_COPIED + 1))
     fi
 done
@@ -272,16 +268,18 @@ if [ -d "$CURSOR_SKILLS_DIR" ]; then
         folder_name=$(basename "$(dirname "$skill_md")")
         # Align with foundation underscore names when the skill is the same workflow (fix-feature-bug → fix_feature_bug)
         norm_name=${folder_name//-/_}
-        target_file=".claude/skills/${norm_name}.md"
-        if [ -f "$target_file" ]; then
-            print_info "  ⊘ Skipped Cursor skill (foundation already provides): $folder_name → ${norm_name}.md"
+        if [ -d ".claude/skills/${norm_name}" ]; then
+            print_info "  ⊘ Skipped Cursor skill (foundation already provides): $folder_name → ${norm_name}/"
             continue
         fi
+        skill_dir=".claude/skills/${norm_name}"
+        mkdir -p "$skill_dir"
+        target_file="${skill_dir}/SKILL.md"
         tmp_stripped=$(mktemp)
         strip_leading_yaml_frontmatter "$skill_md" > "$tmp_stripped"
         adapt_command_to_skill "$tmp_stripped" "$skill_md" "$norm_name" > "$target_file"
         rm -f "$tmp_stripped"
-        print_info "  ✓ Adapted Cursor skill $folder_name → ${norm_name}.md"
+        print_info "  ✓ Adapted Cursor skill $folder_name → ${norm_name}/SKILL.md"
         CURSOR_SKILLS_COPIED=$((CURSOR_SKILLS_COPIED + 1))
     done
     print_info "Adapted $CURSOR_SKILLS_COPIED repo-only Cursor skill(s) to Claude skills"
@@ -423,7 +421,7 @@ In those cases: ask a short, concrete question with 1–2 options or "proceed wi
 
 All rules in `.claude/rules/` apply; they are modular instructions loaded automatically by context.
 
-Skills in `.claude/skills/` are workflows invokable with `/command_name`: each foundation `cursor_commands` file, plus repo-only skills from `.cursor/skills/*/SKILL.md` (folder names with `-` become `_` in the slash name). Foundation wins on name collisions.
+Skills live under `.claude/skills/<command_name>/SKILL.md` (Claude Code requirement). Invoke with `/command_name` for each foundation `cursor_commands` entry, plus repo-only skills from `.cursor/skills/*/SKILL.md` (hyphenated Cursor folders map to `_` in the directory name). Foundation wins on name collisions.
 
 For complete documentation map, reading strategies, and dependency graph, see `docs/context/index_rules.mdc`.
 EOF
@@ -473,7 +471,7 @@ print_info "Next steps:"
 print_info "  1. Configure permissions in ~/.claude/settings.json if needed"
 print_info "  2. Open Claude Code in this project"
 print_info "  3. Claude will load CLAUDE.md and rules automatically"
-print_info "  4. Use skills like /analyze, /release, /fix_feature_bug (see .claude/skills/)"
+print_info "  4. Use skills like /analyze, /release, /fix_feature_bug (see .claude/skills/*/SKILL.md)"
 print_info ""
 print_info "To update after editing sources: ./scripts/setup_claude_instructions.sh"
 print_info ""
