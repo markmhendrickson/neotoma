@@ -153,7 +153,7 @@ Schema is flexible — store any entity type with whatever fields the message im
 
 ## Current status
 
-**Version:** v0.4.0 · **Releases:** 12 · **License:** MIT
+**Version:** v0.4.2 · **Releases:** 13 · **License:** MIT
 
 ### What is guaranteed (even in preview)
 

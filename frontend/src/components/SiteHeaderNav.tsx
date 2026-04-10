@@ -65,6 +65,7 @@ import {
 } from "@/i18n/routing";
 import { useEffectiveRoutePath } from "@/hooks/useEffectiveRoutePath";
 import { isMarketingFullPageRoute } from "@/site/full_page_paths";
+import { FAQ_ITEMS, faqQuestionToSectionId } from "@/site/faq_items";
 import {
   NavigationMenu,
   NavigationMenuContent,
@@ -389,6 +390,13 @@ interface SearchablePageItem {
   label: string;
   href: string;
   category: string;
+  /** Matched by site search in addition to label, href, and category (e.g. FAQ answer body). */
+  searchText?: string;
+}
+
+function siteSearchResultPathDisplay(href: string): string {
+  const i = href.indexOf("#");
+  return i >= 0 ? href.slice(0, i) : href;
 }
 
 const SITE_SEARCH_TOP_PAGE_HREFS = [
@@ -439,6 +447,19 @@ function SiteNavSearch({
         byHref.set(item.href, { label: item.label, href: item.href, category: category.title });
       }
     }
+    for (const item of FAQ_ITEMS) {
+      const href = `/faq#${faqQuestionToSectionId(item.question)}`;
+      const searchText = [item.question, item.answer, item.detail]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      byHref.set(href, {
+        label: item.question,
+        href,
+        category: "FAQ",
+        searchText,
+      });
+    }
     return [...byHref.values()];
   }, [localizedDocCategories, verticalPathSet]);
 
@@ -452,14 +473,14 @@ function SiteNavSearch({
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return [];
-    return pages
-      .filter(
-        (item) =>
-          item.label.toLowerCase().includes(q) ||
-          item.href.toLowerCase().includes(q) ||
-          item.category.toLowerCase().includes(q)
-      )
-      .slice(0, 8);
+    const matches = (item: SearchablePageItem) => {
+      const hay = `${item.label} ${item.href} ${item.category} ${item.searchText ?? ""}`.toLowerCase();
+      if (hay.includes(q)) return true;
+      const tokens = q.split(/\s+/).filter((t) => t.length >= 2);
+      if (tokens.length < 2) return false;
+      return tokens.every((t) => hay.includes(t));
+    };
+    return pages.filter(matches).slice(0, 8);
   }, [pages, query]);
 
   const hasQuery = query.trim().length > 0;
@@ -584,7 +605,7 @@ function SiteNavSearch({
                   >
                     <div className="text-[13px] text-sidebar-foreground">{item.label}</div>
                     <div className="text-[11px] text-sidebar-foreground/70">
-                      {item.category} · {item.href}
+                      {item.category} · {siteSearchResultPathDisplay(item.href)}
                     </div>
                   </button>
                 </li>

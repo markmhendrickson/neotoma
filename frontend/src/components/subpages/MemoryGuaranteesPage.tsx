@@ -45,7 +45,6 @@ export function MemoryGuaranteesPage() {
         production load. Each guarantee addresses a specific failure mode; together they form the
         invariant stack that Neotoma enforces.
       </p>
-
       <div className="md:hidden mb-8 space-y-2 overflow-x-hidden">
         <TooltipProvider delayDuration={200}>
           <Collapsible

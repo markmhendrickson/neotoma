@@ -31,4 +31,8 @@ describe("isPathUnderDocsSidebarNav", () => {
     expect(isPathUnderDocsSidebarNav("/neotoma-with-claude-code")).toBe(true);
     expect(isPathUnderDocsSidebarNav("/neotoma-with-claude")).toBe(true);
   });
+
+  it("matches docs shell paths that are not doc-nav links", () => {
+    expect(isPathUnderDocsSidebarNav("/neotoma-with-claude-agent-sdk")).toBe(true);
+  });
 });
