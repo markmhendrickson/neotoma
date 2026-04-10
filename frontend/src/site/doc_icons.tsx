@@ -118,6 +118,7 @@ export const INTEGRATION_BRAND_ICONS: Record<
   React.ComponentType<{ className?: string; "aria-hidden"?: boolean; size?: number }>
 > = {
   "/neotoma-with-claude-code": SiClaude,
+  "/neotoma-with-claude-agent-sdk": SiClaude,
   "/neotoma-with-claude": SiClaude,
   "/neotoma-with-claude-connect-desktop": SiClaude,
   "/neotoma-with-claude-connect-remote-mcp": SiClaude,

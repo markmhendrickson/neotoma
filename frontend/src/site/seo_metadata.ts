@@ -1,5 +1,5 @@
 import { GLOSSARY_ROWS, REPO_VERSION, SITE_METADATA } from "./site_data";
-import { FAQ_ITEMS } from "@/components/subpages/FaqPage";
+import { FAQ_ITEMS } from "@/site/faq_items";
 import {
   DEFAULT_LOCALE,
   LOCALE_TO_OG,
