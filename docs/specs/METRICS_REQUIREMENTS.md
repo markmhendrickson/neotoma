@@ -10,6 +10,10 @@ This document covers:
 - Acceptance criteria (required thresholds for MVP launch)
 This document does NOT cover:
 - Implementation details (see `docs/observability/metrics_standard.md`)
+- Phase-appropriate metric *prioritization* (which metrics to optimize for during developer release vs. general release) — see [`docs/private/strategy/metrics_measurement_strategy.md`](../private/strategy/metrics_measurement_strategy.md) and [`docs/private/strategy/business_model.md`](../private/strategy/business_model.md) Key Metrics section
+
+**Phase distinction:** This document defines the full metrics surface (what to *instrument*). During the developer release phase (pre-revenue, <10 users), the metrics that matter for decision-making are a narrow subset — entity count growth per user, activation rate, per-user binary retention, organic pull-through, and ICP qualification accuracy. Traditional SaaS metrics (DAU/WAU percentages, retention cohorts) become meaningful at general release scale. Instrument everything here; optimize for the phase-appropriate subset.
+
 **Metric Collection Infrastructure:**
 - **Technical metrics** (latency, errors, system health): Prometheus + Grafana
 - **Product analytics** (activation, retention, funnels): PostHog (recommended) or Mixpanel

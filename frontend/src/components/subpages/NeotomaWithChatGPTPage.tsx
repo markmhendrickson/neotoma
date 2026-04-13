@@ -4,6 +4,7 @@ import { DetailPage } from "../DetailPage";
 import { TrackedProductLink } from "../TrackedProductNav";
 import { GettingStartedEvaluateInstallLinks } from "../GettingStartedEvaluateInstallLinks";
 import { IntegrationSection } from "../IntegrationSection";
+import { IntegrationBeforeAfter, IntegrationActivation, IntegrationLimitations } from "../IntegrationExtras";
 import { TableScrollWrapper } from "../ui/table-scroll-wrapper";
 
 const extLink = "text-foreground underline underline-offset-2 hover:no-underline";
@@ -330,6 +331,10 @@ export function NeotomaWithChatGPTPage() {
           </li>
         </ul>
       </IntegrationSection>
+
+      <IntegrationBeforeAfter toolName="ChatGPT" />
+      <IntegrationActivation toolName="ChatGPT" />
+      <IntegrationLimitations />
 
       <p className="text-[14px] leading-6 text-muted-foreground">
         Start with{" "}

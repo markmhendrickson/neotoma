@@ -41,7 +41,7 @@ const DOC_CATEGORIES = [
       { label: "Install", href: "/install", desc: "Install and initialize Neotoma locally" },
       {
         label: "Walkthrough",
-        href: "/developer-walkthrough",
+        href: "/walkthrough",
         desc: "End-to-end example across operating, building, and debugging",
       },
     ],

@@ -1,4 +1,11 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import {
+  useState,
+  useCallback,
+  useRef,
+  useEffect,
+  useMemo,
+  type PointerEvent as DomPointerEvent,
+} from "react";
 import {
   Terminal,
   Bot,
@@ -9,6 +16,7 @@ import {
   Table2,
   Network,
   Download,
+  MessageSquare,
   User,
   Box,
   Eye,
@@ -37,7 +45,16 @@ interface DemoScenario {
   steps: DemoStep[];
 }
 
-type DemoMode = "cli" | "agentic" | "api" | "inspector";
+type DemoMode = "chat" | "cli" | "agentic" | "api" | "inspector";
+
+/**
+ * Inserts a zero-width non-joiner before each `@` so iOS/macOS Data Detectors do not
+ * promote demo email literals to mailto links. Source strings stay unchanged (lengths
+ * for typing animation and layout estimates use raw `step.command` / output).
+ */
+function breakEmailAutoLinks(text: string): string {
+  return text.replace(/@/g, "\u200c@");
+}
 
 const CLI_SCENARIOS: DemoScenario[] = [
   {
@@ -242,6 +259,127 @@ const API_SCENARIOS: DemoScenario[] = [
     ],
   },
 ];
+
+/* ------------------------------------------------------------------ */
+/*  Chat UX demo                                                       */
+/* ------------------------------------------------------------------ */
+
+interface ChatMsg {
+  role: "user" | "assistant" | "tool" | "divider";
+  content: string;
+  toolName?: string;
+  toolLines?: string[];
+}
+
+interface ChatScenario {
+  label: string;
+  messages: ChatMsg[];
+}
+
+const CHAT_SCENARIOS: ChatScenario[] = [
+  {
+    label: "Cross-tool sync",
+    messages: [
+      { role: "divider", content: "Cursor" },
+      {
+        role: "user",
+        content:
+          "I just spoke with Sarah Chen \u2014 she moved to a new startup. Her new email is sarah@newstartup.io",
+      },
+      {
+        role: "tool",
+        content: "",
+        toolName: "store_structured",
+        toolLines: ["Stored 1 entity: contact \u00b7 sarah-chen \u00b7 v1"],
+      },
+      {
+        role: "assistant",
+        content: "Done \u2014 I\u2019ve saved Sarah Chen\u2019s updated contact info.",
+      },
+      { role: "divider", content: "Claude Code" },
+      {
+        role: "user",
+        content:
+          "Can you find Sarah Chen\u2019s email? I need to send her the contract.",
+      },
+      {
+        role: "tool",
+        content: "",
+        toolName: "retrieve_entity_by_identifier",
+        toolLines: [
+          "contact \u00b7 sarah-chen \u00b7 v3 \u00b7 updated 2h ago",
+          "  email: sarah@newstartup.io <changed>(changed from sarah@oldcompany.com in v2)</changed>",
+        ],
+      },
+      {
+        role: "assistant",
+        content:
+          "Sarah\u2019s email is sarah@newstartup.io \u2014 updated from sarah@oldcompany.com. The change was recorded in your Cursor session 2 hours ago.",
+      },
+    ],
+  },
+  {
+    label: "Replay & debug",
+    messages: [
+      { role: "divider", content: "Codex" },
+      {
+        role: "user",
+        content:
+          "Pipeline run #47 gave wrong results for Acme Corp. What did the agent see at that point?",
+      },
+      {
+        role: "tool",
+        content: "",
+        toolName: "retrieve_entity_snapshot",
+        toolLines: [
+          "State at 2025-03-15 14:30:00:",
+          "  company \u00b7 acme-corp \u00b7 v4",
+          "  status: active_client  \u00b7  revenue: $48,000",
+        ],
+      },
+      {
+        role: "assistant",
+        content:
+          "At the time of run #47, Acme Corp was still an active client with $48K revenue.",
+      },
+      { role: "divider", content: "ChatGPT" },
+      {
+        role: "user",
+        content: "Something changed with Acme Corp since March. Can you diff the versions?",
+      },
+      {
+        role: "tool",
+        content: "",
+        toolName: "diff_entity",
+        toolLines: [
+          "<changed>\u2212 status: active_client</changed>",
+          "<added>\u002B status: churned</added>",
+          "<changed>\u2212 revenue: $48,000</changed>",
+          "<added>\u002B revenue: $0</added>",
+          "  Changed by: Codex session #318 \u00b7 3d ago",
+        ],
+      },
+      {
+        role: "assistant",
+        content:
+          "Found it \u2014 Codex session #318 changed status from active_client to churned and zeroed revenue 3 days ago. That\u2019s your regression.",
+      },
+    ],
+  },
+];
+
+const CHAT_MSG_FADE_MS = 200;
+
+const CHAT_MSG_HOLD_MS: Record<string, number> = {
+  user: 1000,
+  assistant: 1200,
+  tool: 700,
+  divider: 600,
+};
+
+function chatMsgDurationMs(msg: ChatMsg): number {
+  return CHAT_MSG_FADE_MS + (CHAT_MSG_HOLD_MS[msg.role] ?? 800);
+}
 
 /** Inner content width (px) for estimating wrapped monospace lines inside max-w-3xl terminal (padding subtracted). */
 const CLI_DEMO_ESTIMATE_INNER_WIDTH_PX = 688;
@@ -529,16 +667,135 @@ function InspectorPreview() {
 }
 
 /** After the last output line of a step, pause before advancing to the next command. */
-const CLI_DEMO_AFTER_STEP_MS = 450;
-/** After all steps in a scenario finish, pause before auto-advancing to the next scenario. */
-const HOLD_AFTER_SCENARIO_COMPLETE_MS = 5000;
+const CLI_DEMO_AFTER_STEP_MS = 380;
 
 /** Delay before command typing starts (after comment is visible). */
-const CLI_DEMO_AFTER_COMMENT_MS = 200;
+const CLI_DEMO_AFTER_COMMENT_MS = 140;
 /** Milliseconds per character for simulated command typing. */
-const CLI_DEMO_TYPING_CHAR_MS = 12;
+const CLI_DEMO_TYPING_CHAR_MS = 9;
 /** Delay between each output line appearing after the command finishes. */
-const CLI_DEMO_OUTPUT_STAGGER_MS = 72;
+const CLI_DEMO_OUTPUT_STAGGER_MS = 52;
+
+interface CliDemoStepSegment {
+  stepIdx: number;
+  startMs: number;
+  durationMs: number;
+}
+
+function demoStepDurationMs(step: DemoStep): number {
+  const typing = step.command.length * CLI_DEMO_TYPING_CHAR_MS;
+  const outputPhase =
+    step.output.length === 0
+      ? CLI_DEMO_AFTER_STEP_MS
+      : CLI_DEMO_OUTPUT_STAGGER_MS * step.output.length + CLI_DEMO_AFTER_STEP_MS;
+  return CLI_DEMO_AFTER_COMMENT_MS + typing + outputPhase;
+}
+
+/** Timeline for one scenario tab (Cross-tool sync or Replay & debug). */
+function buildStepsTimeline(steps: DemoStep[]): {
+  segments: CliDemoStepSegment[];
+  totalMs: number;
+} {
+  const segments: CliDemoStepSegment[] = [];
+  let startMs = 0;
+  for (let i = 0; i < steps.length; i++) {
+    const durationMs = demoStepDurationMs(steps[i]);
+    segments.push({ stepIdx: i, startMs, durationMs });
+    startMs += durationMs;
+  }
+  return { segments, totalMs: startMs };
+}
+
+function buildChatTimeline(messages: ChatMsg[]): {
+  segments: CliDemoStepSegment[];
+  totalMs: number;
+} {
+  const segments: CliDemoStepSegment[] = [];
+  let startMs = 0;
+  for (let i = 0; i < messages.length; i++) {
+    const durationMs = chatMsgDurationMs(messages[i]);
+    segments.push({ stepIdx: i, startMs, durationMs });
+    startMs += durationMs;
+  }
+  return { segments, totalMs: startMs };
+}
+
+function computeDemoStepFrame(
+  step: DemoStep,
+  tMs: number,
+  reduceMotion: boolean
+): { cmdLen: number; outCount: number } {
+  if (reduceMotion) {
+    return {
+      cmdLen: step.command.length,
+      outCount: step.output.length,
+    };
+  }
+  const dur = demoStepDurationMs(step);
+  const t = Math.max(0, Math.min(dur, tMs));
+
+  if (t < CLI_DEMO_AFTER_COMMENT_MS) {
+    return { cmdLen: 0, outCount: 0 };
+  }
+  let rem = t - CLI_DEMO_AFTER_COMMENT_MS;
+  const typingDuration = step.command.length * CLI_DEMO_TYPING_CHAR_MS;
+  if (rem < typingDuration) {
+    const nChars = Math.min(
+      step.command.length,
+      Math.floor(rem / CLI_DEMO_TYPING_CHAR_MS)
+    );
+    return { cmdLen: nChars, outCount: 0 };
+  }
+  rem -= typingDuration;
+  if (step.output.length === 0) {
+    return { cmdLen: step.command.length, outCount: 0 };
+  }
+  const outCount = Math.min(
+    step.output.length,
+    Math.floor(rem / CLI_DEMO_OUTPUT_STAGGER_MS)
+  );
+  return { cmdLen: step.command.length, outCount };
+}
+
+function mapElapsedToStepPosition(
+  elapsed: number,
+  segments: CliDemoStepSegment[],
+  totalMs: number
+): {
+  segmentIndex: number;
+  localT: number;
+  atEnd: boolean;
+} {
+  if (segments.length === 0 || totalMs <= 0) {
+    return { segmentIndex: 0, localT: 0, atEnd: true };
+  }
+  if (elapsed >= totalMs) {
+    const last = segments[segments.length - 1];
+    return {
+      segmentIndex: segments.length - 1,
+      localT: last.durationMs,
+      atEnd: true,
+    };
+  }
+  const e = Math.max(0, elapsed);
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i];
+    const end = seg.startMs + seg.durationMs;
+    if (e < end) {
+      return {
+        segmentIndex: i,
+        localT: Math.max(0, e - seg.startMs),
+        atEnd: false,
+      };
+    }
+  }
+  const last = segments[segments.length - 1];
+  return {
+    segmentIndex: segments.length - 1,
+    localT: last.durationMs,
+    atEnd: true,
+  };
+}
 
 function usePrefersReducedMotion(): boolean {
   const [reduce, setReduce] = useState(false);
@@ -558,20 +815,22 @@ function OutputLine({ line, className }: { line: string; className?: string }) {
     <p className={className ? `text-slate-400 ${className}` : "text-slate-400"}>
       {line.includes("<changed>") ? (
         <>
-          {line.split("<changed>")[0]}
+          {breakEmailAutoLinks(line.split("<changed>")[0] ?? "")}
           <span className="text-red-400/80">
-            {line.split("<changed>")[1]?.replace("</changed>", "")}
+            {breakEmailAutoLinks(
+              line.split("<changed>")[1]?.replace("</changed>", "") ?? ""
+            )}
           </span>
         </>
       ) : line.includes("<added>") ? (
         <>
-          {line.split("<added>")[0]}
+          {breakEmailAutoLinks(line.split("<added>")[0] ?? "")}
           <span className="text-emerald-400/80">
-            {line.split("<added>")[1]?.replace("</added>", "")}
+            {breakEmailAutoLinks(line.split("<added>")[1]?.replace("</added>", "") ?? "")}
           </span>
         </>
       ) : (
-        line
+        breakEmailAutoLinks(line)
       )}
     </p>
   );
@@ -588,9 +847,10 @@ function DemoStepBlock({
 }) {
   return (
     <>
-      <p className="text-slate-500 select-none"># {step.comment}</p>
+      <p className="text-slate-500 select-none"># {breakEmailAutoLinks(step.comment)}</p>
       <p>
-        <span className={promptColor}>{promptChar}</span> {step.command}
+        <span className={promptColor}>{promptChar}</span>{" "}
+        {breakEmailAutoLinks(step.command)}
       </p>
       {step.output.map((line, j) => (
         <OutputLine key={j} line={line} />
@@ -599,87 +859,26 @@ function DemoStepBlock({
   );
 }
 
-function AnimatedDemoStepBlock({
+function DemoStepLiveBlock({
   step,
   promptChar,
   promptColor,
-  animToken,
-  onStepComplete,
+  cmdLen,
+  outCount,
 }: {
   step: DemoStep;
   promptChar: string;
   promptColor: string;
-  animToken: string;
-  onStepComplete?: () => void;
+  cmdLen: number;
+  outCount: number;
 }) {
-  const reduceMotion = usePrefersReducedMotion();
-  const onCompleteRef = useRef(onStepComplete);
-  onCompleteRef.current = onStepComplete;
-
-  const [cmdLen, setCmdLen] = useState(() => (reduceMotion ? step.command.length : 0));
-  const [outCount, setOutCount] = useState(() => (reduceMotion ? step.output.length : 0));
-
-  useEffect(() => {
-    const fireComplete = () => {
-      onCompleteRef.current?.();
-    };
-
-    if (reduceMotion) {
-      setCmdLen(step.command.length);
-      setOutCount(step.output.length);
-      const t = window.setTimeout(fireComplete, 0);
-      return () => window.clearTimeout(t);
-    }
-
-    setCmdLen(0);
-    setOutCount(0);
-    let cancelled = false;
-    const timeouts: number[] = [];
-    const queue = (fn: () => void, ms: number) => {
-      timeouts.push(
-        window.setTimeout(() => {
-          if (!cancelled) fn();
-        }, ms)
-      );
-    };
-
-    queue(() => {
-      let n = 0;
-      const typeChar = () => {
-        if (cancelled) return;
-        n += 1;
-        setCmdLen(n);
-        if (n < step.command.length) queue(typeChar, CLI_DEMO_TYPING_CHAR_MS);
-        else if (step.output.length === 0) {
-          queue(fireComplete, CLI_DEMO_AFTER_STEP_MS);
-        } else {
-          let line = 0;
-          const addLine = () => {
-            if (cancelled) return;
-            line += 1;
-            setOutCount(line);
-            if (line < step.output.length) queue(addLine, CLI_DEMO_OUTPUT_STAGGER_MS);
-            else queue(fireComplete, CLI_DEMO_AFTER_STEP_MS);
-          };
-          queue(addLine, CLI_DEMO_OUTPUT_STAGGER_MS);
-        }
-      };
-      typeChar();
-    }, CLI_DEMO_AFTER_COMMENT_MS);
-
-    return () => {
-      cancelled = true;
-      timeouts.forEach(clearTimeout);
-    };
-  }, [animToken, reduceMotion, step.command, step.output]);
-
-  const cmdVisible = step.command.slice(0, cmdLen);
+  const cmdVisible = breakEmailAutoLinks(step.command.slice(0, cmdLen));
   const typingCommand = cmdLen < step.command.length;
 
   return (
     <>
       <p className="text-slate-500 select-none motion-reduce:opacity-100 cli-demo-comment-in">
-        # {step.comment}
+        # {breakEmailAutoLinks(step.comment)}
       </p>
       <p>
         <span className={promptColor}>{promptChar}</span>{" "}
@@ -693,7 +892,7 @@ function AnimatedDemoStepBlock({
       </p>
       {step.output.slice(0, outCount).map((line, j) => (
         <OutputLine
-          key={`${animToken}-out-${j}`}
+          key={`out-${j}`}
           line={line}
           className="motion-reduce:opacity-100 cli-demo-output-line-in"
         />
@@ -702,21 +901,128 @@ function AnimatedDemoStepBlock({
   );
 }
 
+function ChatMsgBlock({ msg, opacity }: { msg: ChatMsg; opacity: number }) {
+  const style: React.CSSProperties | undefined =
+    opacity < 1 ? { opacity } : undefined;
+
+  if (msg.role === "divider") {
+    return (
+      <div className="flex items-center gap-3 py-1" style={style}>
+        <div className="flex-1 border-t border-dashed border-slate-700/40" />
+        <span className="whitespace-nowrap text-[10px] font-medium text-slate-500">
+          {msg.content}
+        </span>
+        <div className="flex-1 border-t border-dashed border-slate-700/40" />
+      </div>
+    );
+  }
+
+  if (msg.role === "user") {
+    return (
+      <div className="flex justify-end" style={style}>
+        <div className="max-w-[80%] rounded-2xl rounded-br-md bg-blue-600/80 px-3.5 py-2 text-[12.5px] leading-relaxed text-white">
+          {breakEmailAutoLinks(msg.content)}
+        </div>
+      </div>
+    );
+  }
+
+  if (msg.role === "tool") {
+    return (
+      <div className="ml-8" style={style}>
+        <div className="rounded-lg border border-slate-700/50 bg-slate-900/60 px-3 py-2 font-mono text-[11px]">
+          <p className="mb-1 text-[10px] font-medium text-violet-400/70">
+            {msg.toolName}
+          </p>
+          {(msg.toolLines ?? []).map((line, j) => (
+            <OutputLine key={j} line={line} />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-start gap-2.5" style={style}>
+      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-slate-700/60 bg-slate-800">
+        <Bot className="h-3 w-3 text-slate-400" />
+      </div>
+      <p className="pt-0.5 text-[12.5px] leading-relaxed text-slate-300">
+        {breakEmailAutoLinks(msg.content)}
+      </p>
+    </div>
+  );
+}
+
+function scenarioCountForMode(m: DemoMode): number {
+  if (m === "inspector") return 0;
+  if (m === "chat") return CHAT_SCENARIOS.length;
+  return m === "cli"
+    ? CLI_SCENARIOS.length
+    : m === "agentic"
+      ? AGENTIC_SCENARIOS.length
+      : API_SCENARIOS.length;
+}
+
 export function CliDemoInteractive() {
-  const [mode, setMode] = useState<DemoMode>("cli");
-  const [scenarioIdx, setScenarioIdx] = useState(0);
-  const [visibleSteps, setVisibleSteps] = useState(0);
+  const [mode, setMode] = useState<DemoMode>("chat");
+  const [scenarioIndex, setScenarioIndex] = useState(0);
+  const [elapsedByScenario, setElapsedByScenario] = useState<number[]>(() =>
+    new Array(scenarioCountForMode("chat")).fill(0)
+  );
+  const [playing, setPlaying] = useState(true);
+  const [dragging, setDragging] = useState(false);
   const [isInView, setIsInView] = useState(false);
-  const [autoPlay, setAutoPlay] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
+  const barRef = useRef<HTMLDivElement>(null);
   const wasInViewRef = useRef(false);
+  const playingRef = useRef(playing);
+  const reduceMotion = usePrefersReducedMotion();
+
+  playingRef.current = playing;
+
   const scenarios =
     mode === "cli" ? CLI_SCENARIOS : mode === "agentic" ? AGENTIC_SCENARIOS : API_SCENARIOS;
-  const scenario = scenarios[scenarioIdx];
+
+  useEffect(() => {
+    const n = scenarioCountForMode(mode);
+    setElapsedByScenario(new Array(n).fill(0));
+    setScenarioIndex(0);
+  }, [mode]);
+
+  const currentScenario = scenarios[scenarioIndex] ?? scenarios[0];
+  const { segments, totalMs } = useMemo(() => {
+    if (mode === "chat") {
+      return buildChatTimeline(
+        CHAT_SCENARIOS[scenarioIndex]?.messages ?? [],
+      );
+    }
+    if (mode === "inspector") {
+      return { segments: [] as CliDemoStepSegment[], totalMs: 0 };
+    }
+    const modeScenarios =
+      mode === "cli"
+        ? CLI_SCENARIOS
+        : mode === "agentic"
+          ? AGENTIC_SCENARIOS
+          : API_SCENARIOS;
+    return buildStepsTimeline(modeScenarios[scenarioIndex]?.steps ?? []);
+  }, [mode, scenarioIndex]);
+
+  const elapsed = elapsedByScenario[scenarioIndex] ?? 0;
 
   const promptChar = mode === "agentic" ? "\u25b8" : "$";
   const promptColor =
     mode === "cli" ? "text-emerald-400" : mode === "agentic" ? "text-blue-400" : "text-amber-400";
+
+  const timelinePos = useMemo(
+    () => mapElapsedToStepPosition(elapsed, segments, totalMs),
+    [elapsed, segments, totalMs]
+  );
+
+  const activeSeg = segments[timelinePos.segmentIndex];
+  const activeStepIdx = activeSeg?.stepIdx ?? 0;
+  const scenario = currentScenario;
 
   useEffect(() => {
     const node = containerRef.current;
@@ -726,9 +1032,10 @@ export function CliDemoInteractive() {
         const nowInView = entry.isIntersecting;
         setIsInView(nowInView);
         if (nowInView && !wasInViewRef.current) {
-          setAutoPlay(true);
-          setScenarioIdx(0);
-          setVisibleSteps(0);
+          setPlaying(true);
+          const n = scenarioCountForMode(mode);
+          setElapsedByScenario(new Array(n).fill(0));
+          setScenarioIndex(0);
         }
         wasInViewRef.current = nowInView;
       },
@@ -736,48 +1043,138 @@ export function CliDemoInteractive() {
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, []);
-
-  const handleStepComplete = useCallback(() => {
-    setVisibleSteps((v) => v + 1);
-  }, []);
+  }, [mode]);
 
   useEffect(() => {
-    if (!isInView || !autoPlay || mode === "inspector") return;
-    if (visibleSteps < scenario.steps.length) return;
+    if (!playing || dragging || !isInView || mode === "inspector" || totalMs <= 0) return;
 
-    const id = window.setTimeout(() => {
-      setScenarioIdx((i) => (i + 1) % scenarios.length);
-      setVisibleSteps(0);
-    }, HOLD_AFTER_SCENARIO_COMPLETE_MS);
+    let rafId = 0;
+    let prev = performance.now();
 
-    return () => window.clearTimeout(id);
-  }, [
-    isInView,
-    autoPlay,
-    mode,
-    visibleSteps,
-    scenario.steps.length,
-    scenarios.length,
-  ]);
+    const tick = (now: number) => {
+      if (!playingRef.current) return;
 
-  const switchScenario = useCallback((idx: number) => {
-    setAutoPlay(false);
-    setScenarioIdx(idx);
-    setVisibleSteps(0);
+      const dt = Math.min(48, Math.max(0, now - prev));
+      prev = now;
+
+      let continuePlaying = true;
+
+      setElapsedByScenario((arr) => {
+        const idx = scenarioIndex;
+        const cur = arr[idx] ?? 0;
+        if (cur >= totalMs) {
+          continuePlaying = false;
+          return arr;
+        }
+        const n = cur + dt;
+        if (n >= totalMs) {
+          continuePlaying = false;
+          playingRef.current = false;
+          queueMicrotask(() => setPlaying(false));
+          const next = [...arr];
+          next[idx] = totalMs;
+          return next;
+        }
+        const next = [...arr];
+        next[idx] = n;
+        return next;
+      });
+
+      if (continuePlaying && playingRef.current) {
+        rafId = requestAnimationFrame(tick);
+      }
+    };
+
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, [playing, dragging, isInView, mode, scenarioIndex, totalMs]);
+
+  const seekToMs = useCallback(
+    (ms: number) => {
+      setElapsedByScenario((arr) => {
+        if (arr.length === 0) return arr;
+        const next = [...arr];
+        next[scenarioIndex] = Math.max(0, Math.min(ms, totalMs));
+        return next;
+      });
+    },
+    [scenarioIndex, totalMs]
+  );
+
+  const seekTo = useCallback(
+    (clientX: number) => {
+      const rect = barRef.current?.getBoundingClientRect();
+      if (!rect || totalMs <= 0) return;
+      const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      seekToMs(ratio * totalMs);
+    },
+    [seekToMs, totalMs]
+  );
+
+  const onBarPointerDown = useCallback(
+    (e: DomPointerEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      barRef.current?.setPointerCapture(e.pointerId);
+      setDragging(true);
+      setPlaying(false);
+      seekTo(e.clientX);
+    },
+    [seekTo]
+  );
+
+  const onBarPointerMove = useCallback(
+    (e: DomPointerEvent<HTMLDivElement>) => {
+      if (!dragging) return;
+      seekTo(e.clientX);
+    },
+    [dragging, seekTo]
+  );
+
+  const onBarPointerUp = useCallback(() => {
+    setDragging(false);
   }, []);
+
+  const selectScenario = useCallback((idx: number) => {
+    setScenarioIndex(idx);
+    setElapsedByScenario((arr) => {
+      const next = [...arr];
+      if (idx >= 0 && idx < next.length) next[idx] = 0;
+      return next;
+    });
+    setPlaying(true);
+  }, []);
+
+  const handlePlayPause = useCallback(() => {
+    if (playing) {
+      setPlaying(false);
+      return;
+    }
+    const cur = elapsedByScenario[scenarioIndex] ?? 0;
+    if (totalMs > 0 && cur >= totalMs) {
+      seekToMs(0);
+    }
+    setPlaying(true);
+  }, [playing, elapsedByScenario, scenarioIndex, totalMs, seekToMs]);
 
   const switchMode = useCallback((m: DemoMode) => {
-    setAutoPlay(m !== "inspector");
     setMode(m);
-    setScenarioIdx(0);
-    setVisibleSteps(0);
+    setPlaying(m !== "inspector");
   }, []);
+
+  const progress = totalMs > 0 ? Math.min(1, elapsed / totalMs) : 0;
 
   return (
     <div ref={containerRef} className="max-w-3xl mx-auto">
       <div className="flex items-center justify-center mb-4">
         <div className="inline-flex rounded-lg bg-slate-900 border border-slate-800 p-0.5 gap-0.5">
+          <button
+            type="button"
+            className={modeTabClass(mode === "chat")}
+            onClick={() => switchMode("chat")}
+          >
+            <MessageSquare className="h-3.5 w-3.5" aria-hidden />
+            Chat
+          </button>
           <button
             type="button"
             className={modeTabClass(mode === "cli")}
@@ -792,7 +1189,7 @@ export function CliDemoInteractive() {
             onClick={() => switchMode("agentic")}
           >
             <Bot className="h-3.5 w-3.5" aria-hidden />
-            Agent (MCP)
+            MCP
           </button>
           <button
             type="button"
@@ -816,63 +1213,175 @@ export function CliDemoInteractive() {
       {mode === "inspector" ? (
         <InspectorPreview />
       ) : (
-        <div
-          className="box-border w-full min-w-0 max-w-3xl rounded-xl border border-border/60 bg-slate-950 p-4 md:p-5 font-mono text-[12px] leading-6 text-slate-300 overflow-x-auto dark:bg-slate-950 dark:border-slate-800"
-          style={{ minHeight: CLI_DEMO_TERMINAL_MIN_HEIGHT_PX }}
-        >
-          <div className="flex items-center justify-between mb-3 -mt-1">
-            <div className="flex items-center gap-1.5">
-              <span className="inline-block w-2.5 h-2.5 rounded-full bg-red-500/70" />
-              <span className="inline-block w-2.5 h-2.5 rounded-full bg-yellow-500/70" />
-              <span className="inline-block w-2.5 h-2.5 rounded-full bg-green-500/70" />
+        <>
+          {mode === "chat" ? (
+            <div
+              className="box-border flex w-full min-w-0 max-w-3xl flex-col rounded-xl border border-border/60 bg-slate-950 p-4 md:p-5 dark:border-slate-800 dark:bg-slate-950"
+              style={{ minHeight: CLI_DEMO_TERMINAL_MIN_HEIGHT_PX }}
+            >
+              <div className="mb-4 flex items-center justify-between -mt-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-block w-2.5 h-2.5 rounded-full bg-red-500/70" />
+                  <span className="inline-block w-2.5 h-2.5 rounded-full bg-yellow-500/70" />
+                  <span className="inline-block w-2.5 h-2.5 rounded-full bg-green-500/70" />
+                </div>
+                <div className="flex items-center gap-1">
+                  {CHAT_SCENARIOS.map((s, i) => (
+                    <button
+                      key={s.label}
+                      type="button"
+                      className={scenarioTabClass(i === scenarioIndex)}
+                      onClick={() => selectScenario(i)}
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex-1 space-y-3">
+                {(CHAT_SCENARIOS[scenarioIndex]?.messages ?? []).map(
+                  (msg, i) => {
+                    if (i > activeStepIdx) return null;
+                    const opacity =
+                      i === activeStepIdx && !reduceMotion
+                        ? Math.min(1, timelinePos.localT / CHAT_MSG_FADE_MS)
+                        : 1;
+                    return (
+                      <ChatMsgBlock
+                        key={`chat-${scenarioIndex}-${i}`}
+                        msg={msg}
+                        opacity={opacity}
+                      />
+                    );
+                  },
+                )}
+              </div>
+
+              <div className="mt-3 flex items-center gap-2 rounded-lg border border-slate-800/50 bg-slate-900/30 px-3 py-2">
+                <span className="flex-1 select-none text-[12px] text-slate-600">
+                  Ask anything...
+                </span>
+              </div>
             </div>
-            <div className="flex items-center gap-1">
-              {scenarios.map((s, i) => (
-                <button
-                  key={s.label}
-                  type="button"
-                  className={scenarioTabClass(i === scenarioIdx)}
-                  onClick={() => switchScenario(i)}
-                >
-                  {s.label}
-                </button>
-              ))}
+          ) : (
+          <div
+            className="box-border w-full min-w-0 max-w-3xl rounded-xl border border-border/60 bg-slate-950 p-4 md:p-5 font-mono text-[12px] leading-6 text-slate-300 overflow-x-auto dark:bg-slate-950 dark:border-slate-800"
+            style={{ minHeight: CLI_DEMO_TERMINAL_MIN_HEIGHT_PX }}
+          >
+            <div className="flex items-center justify-between mb-3 -mt-1">
+              <div className="flex items-center gap-1.5">
+                <span className="inline-block w-2.5 h-2.5 rounded-full bg-red-500/70" />
+                <span className="inline-block w-2.5 h-2.5 rounded-full bg-yellow-500/70" />
+                <span className="inline-block w-2.5 h-2.5 rounded-full bg-green-500/70" />
+              </div>
+              <div className="flex items-center gap-1">
+                {scenarios.map((s, i) => (
+                  <button
+                    key={s.label}
+                    type="button"
+                    className={scenarioTabClass(i === scenarioIndex)}
+                    onClick={() => selectScenario(i)}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {scenario.steps.map((step, i) => {
+              const key = `${mode}-${scenarioIndex}-${i}`;
+              const stepGap = i > 0 ? "mt-3" : "";
+
+              if (i < activeStepIdx) {
+                return (
+                  <div key={key} className={stepGap}>
+                    <DemoStepBlock
+                      step={step}
+                      promptChar={promptChar}
+                      promptColor={promptColor}
+                    />
+                  </div>
+                );
+              }
+
+              if (i === activeStepIdx) {
+                const { cmdLen, outCount } = computeDemoStepFrame(
+                  step,
+                  timelinePos.localT,
+                  reduceMotion
+                );
+                return (
+                  <div key={key} className={stepGap}>
+                    <DemoStepLiveBlock
+                      step={step}
+                      promptChar={promptChar}
+                      promptColor={promptColor}
+                      cmdLen={cmdLen}
+                      outCount={outCount}
+                    />
+                  </div>
+                );
+              }
+
+              return null;
+            })}
+          </div>
+          )}
+
+          <div className="max-w-3xl mx-auto mt-3 w-full px-0">
+            <div className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/80 px-3 py-2 dark:bg-slate-950/90">
+              <button
+                type="button"
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-slate-500 hover:text-slate-300"
+                onClick={handlePlayPause}
+                aria-label={playing ? "Pause demo" : "Play demo"}
+              >
+                {playing ? (
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden>
+                    <rect x="1" y="1" width="3" height="8" rx="0.5" />
+                    <rect x="6" y="1" width="3" height="8" rx="0.5" />
+                  </svg>
+                ) : (
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden>
+                    <polygon points="2,1 9,5 2,9" />
+                  </svg>
+                )}
+              </button>
+              <div
+                ref={barRef}
+                className="relative h-5 flex-1 cursor-pointer touch-none select-none"
+                onPointerDown={onBarPointerDown}
+                onPointerMove={onBarPointerMove}
+                onPointerUp={onBarPointerUp}
+                onPointerCancel={onBarPointerUp}
+                onLostPointerCapture={onBarPointerUp}
+              >
+                <div className="pointer-events-none absolute inset-y-0 left-0 right-0 my-auto h-1.5 overflow-hidden rounded-full bg-slate-700/45 dark:bg-slate-600/30" />
+                <div className="pointer-events-none absolute inset-y-0 left-0 right-0 my-auto h-1.5 overflow-hidden rounded-full">
+                  <div
+                    className="h-full rounded-full bg-emerald-500/90 dark:bg-emerald-400/90"
+                    style={{ width: `${progress * 100}%` }}
+                  />
+                </div>
+                {segments.slice(1).map((seg) => (
+                  <div
+                    key={`tick-step-${seg.stepIdx}`}
+                    className="pointer-events-none absolute inset-y-0 w-px bg-slate-950/80 shadow-[0_0_0_0.5px_rgba(255,255,255,0.12)] dark:bg-slate-950 dark:shadow-[0_0_0_0.5px_rgba(255,255,255,0.08)]"
+                    style={{
+                      left: `${totalMs > 0 ? (seg.startMs / totalMs) * 100 : 0}%`,
+                    }}
+                    aria-hidden
+                  />
+                ))}
+                <div
+                  className="pointer-events-none absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-slate-950 bg-emerald-500 shadow dark:border-slate-900 dark:bg-emerald-400"
+                  style={{ left: `${progress * 100}%` }}
+                />
+              </div>
             </div>
           </div>
-
-          {scenario.steps.map((step, i) => {
-            const key = `${mode}-${scenarioIdx}-${i}`;
-            const stepGap = i > 0 ? "mt-3" : "";
-
-            if (i < visibleSteps) {
-              return (
-                <div key={key} className={stepGap}>
-                  <DemoStepBlock
-                    step={step}
-                    promptChar={promptChar}
-                    promptColor={promptColor}
-                  />
-                </div>
-              );
-            }
-
-            if (i === visibleSteps && visibleSteps < scenario.steps.length) {
-              return (
-                <div key={key} className={stepGap}>
-                  <AnimatedDemoStepBlock
-                    step={step}
-                    promptChar={promptChar}
-                    promptColor={promptColor}
-                    animToken={key}
-                    onStepComplete={handleStepComplete}
-                  />
-                </div>
-              );
-            }
-
-            return null;
-          })}
-        </div>
+        </>
       )}
 
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 mt-3">

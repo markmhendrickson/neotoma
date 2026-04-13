@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useHashSyncedTab } from "@/hooks/use_hash_synced_tab";
-import { Check, Clock, Copy, RotateCcw } from "lucide-react";
+import { Check, ChevronDown, Clock, Copy, RotateCcw } from "lucide-react";
 import { SiClaude, SiOpenai } from "react-icons/si";
 import { SITE_CODE_SNIPPETS } from "../../site/site_data";
 import { useCopyFeedback } from "../../lib/copy_feedback";
@@ -109,6 +109,131 @@ function CodeBlock({
         <span className="float-right h-8 w-20 shrink-0" aria-hidden />
         <code>{code}</code>
       </pre>
+    </div>
+  );
+}
+
+const INSTALL_IMPACT_ROWS = [
+  {
+    what: "Global npm package",
+    path: "neotoma (global node_modules)",
+    scope: "Global",
+    reset: "npm uninstall -g neotoma",
+  },
+  {
+    what: "Config directory",
+    path: "~/.config/neotoma/",
+    scope: "User",
+    reset: "Backed up, then removed",
+  },
+  {
+    what: "Environment file",
+    path: "~/.config/neotoma/.env or <project>/.env",
+    scope: "User / Project",
+    reset: "Backed up, then removed",
+  },
+  {
+    what: "SQLite databases",
+    path: "<data-dir>/neotoma.db, neotoma.prod.db",
+    scope: "Local",
+    reset: "Backed up, then removed",
+  },
+  {
+    what: "Data directories",
+    path: "<data-dir>/sources/, <data-dir>/logs/",
+    scope: "Local",
+    reset: "Backed up, then removed",
+  },
+  {
+    what: "MCP config entries (optional)",
+    path: ".cursor/mcp.json, claude.json, etc.",
+    scope: "User / Project",
+    reset: "Entries stripped from configs",
+  },
+  {
+    what: "CLI instruction rules (optional)",
+    path: ".cursor/rules/, .claude/rules/",
+    scope: "User / Project",
+    reset: "Backed up, then removed",
+  },
+] as const;
+
+function WhatChangesSection() {
+  const [open, setOpen] = useState(true);
+
+  return (
+    <div className="mb-8">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-2 text-left group"
+      >
+        <h2 className="text-[20px] font-medium tracking-[-0.01em]">
+          What changes on your system
+        </h2>
+        <ChevronDown
+          className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
+          aria-hidden
+        />
+      </button>
+      <p className="text-[14px] leading-6 text-muted-foreground mt-2 mb-3">
+        <code className="text-[13px] bg-muted px-1.5 py-0.5 rounded">npm install -g neotoma</code>{" "}
+        adds a CLI binary.{" "}
+        <code className="text-[13px] bg-muted px-1.5 py-0.5 rounded">neotoma init</code>{" "}
+        creates a config directory, a local SQLite database, and an env file.
+        Optional prompts during init can add MCP config entries and CLI
+        instruction files; you choose at each step. Nothing runs in the
+        background unless you start it. No telemetry, no phone-home.
+      </p>
+
+      {open && (
+        <div className="rounded-lg border border-border overflow-x-auto mb-3">
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="border-b border-border bg-muted/40">
+                <th className="px-3 py-2 text-left font-medium text-foreground">Created</th>
+                <th className="px-3 py-2 text-left font-medium text-foreground">Path</th>
+                <th className="px-3 py-2 text-left font-medium text-foreground">Scope</th>
+                <th className="px-3 py-2 text-left font-medium text-foreground whitespace-nowrap">
+                  <code className="text-[12px] bg-muted px-1 py-0.5 rounded">neotoma reset</code>
+                </th>
+              </tr>
+            </thead>
+            <tbody className="text-muted-foreground">
+              {INSTALL_IMPACT_ROWS.map((row) => (
+                <tr key={row.what} className="border-b border-border/50 last:border-0">
+                  <td className="px-3 py-2 text-foreground whitespace-nowrap">{row.what}</td>
+                  <td className="px-3 py-2 font-mono text-[12px]">{row.path}</td>
+                  <td className="px-3 py-2 whitespace-nowrap">{row.scope}</td>
+                  <td className="px-3 py-2">{row.reset}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <p className="text-[13px] leading-5 text-muted-foreground">
+        {open ? (
+          <>
+            <code className="text-[12px] bg-muted px-1 py-0.5 rounded">neotoma reset</code>{" "}
+            backs up every item to a timestamped directory before removing it,
+            then runs{" "}
+            <code className="text-[12px] bg-muted px-1 py-0.5 rounded">npm uninstall -g neotoma</code>.
+            If your <code className="text-[12px] bg-muted px-1 py-0.5 rounded">.env</code>{" "}
+            sets <code className="text-[12px] bg-muted px-1 py-0.5 rounded">NEOTOMA_DATA_DIR</code>,
+            that directory is protected and not removed.
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="underline underline-offset-2 hover:no-underline text-foreground"
+          >
+            See full breakdown of files, paths, and how reset reverses each →
+          </button>
+        )}
+      </p>
     </div>
   );
 }
@@ -262,6 +387,8 @@ export function InstallPage() {
         </Link>
       </p>
 
+      <WhatChangesSection />
+
       <h2 className="text-[20px] font-medium tracking-[-0.01em] mt-10 mb-4">Direct integration docs</h2>
       <ul className="list-none pl-0 grid grid-cols-1 sm:grid-cols-2 auto-rows-fr gap-3 mb-10 [&_a]:!no-underline [&_a]:hover:!no-underline">
         {INTEGRATIONS.map(({ label, href, desc, Icon }) => (
@@ -351,6 +478,43 @@ export function InstallPage() {
         </li>
       </ol>
 
+      <h2 className="text-[20px] font-medium tracking-[-0.01em] mt-10 mb-3">Try it now</h2>
+      <p className="text-[15px] leading-7 mb-4">
+        Once Neotoma is running, try these prompts in any connected tool to see
+        it working:
+      </p>
+      <div className="space-y-3 mb-8">
+        <div className="rounded-lg border border-border p-4">
+          <p className="text-[14px] font-medium text-foreground mb-1">Store a contact</p>
+          <p className="text-[13px] leading-6 text-muted-foreground mb-2">
+            &ldquo;Remember that Sarah Chen&apos;s email is sarah@newstartup.io. She started there
+            in March.&rdquo;
+          </p>
+          <p className="text-[12px] text-muted-foreground/70">
+            Then in a different session or tool: &ldquo;What&apos;s Sarah Chen&apos;s email?&rdquo;
+          </p>
+        </div>
+        <div className="rounded-lg border border-border p-4">
+          <p className="text-[14px] font-medium text-foreground mb-1">Track a commitment</p>
+          <p className="text-[13px] leading-6 text-muted-foreground mb-2">
+            &ldquo;I told Nick I&apos;d send the architecture doc by Friday.&rdquo;
+          </p>
+          <p className="text-[12px] text-muted-foreground/70">
+            Later: &ldquo;What did I commit to this week?&rdquo;
+          </p>
+        </div>
+        <div className="rounded-lg border border-border p-4">
+          <p className="text-[14px] font-medium text-foreground mb-1">Test a correction</p>
+          <p className="text-[13px] leading-6 text-muted-foreground mb-2">
+            &ldquo;Actually, Sarah&apos;s email changed to sarah@acme.co.&rdquo;
+          </p>
+          <p className="text-[12px] text-muted-foreground/70">
+            Then: &ldquo;What&apos;s Sarah&apos;s email? Show me the history.&rdquo;
+            Both old and new are preserved with timestamps.
+          </p>
+        </div>
+      </div>
+
       <h2 className="text-[20px] font-medium tracking-[-0.01em] mt-10 mb-3">Start the API server</h2>
       <p className="text-[15px] leading-7 mb-4">
         The API server provides the HTTP interface that MCP and the CLI communicate through.
@@ -370,6 +534,13 @@ export function InstallPage() {
         copyFeedbackId="install-copy-stdio-mcp"
         installBlock="stdio_mcp"
       />
+      <div className="mb-6 rounded-lg border border-amber-500/30 bg-amber-50/70 p-3 text-amber-950 dark:border-amber-400/25 dark:bg-amber-500/10 dark:text-amber-50">
+        <p className="text-[14px] leading-6 mb-0">
+          <strong>After adding MCP config:</strong> restart your AI tool
+          (Claude Code, Cursor, Claude Desktop, etc.) so it picks up the new
+          server. MCP servers are loaded at startup.
+        </p>
+      </div>
 
       <h2 id="docker" className="text-[20px] font-medium tracking-[-0.01em] mt-10 mb-3">
         Docker
@@ -428,6 +599,12 @@ export function InstallPage() {
             copyFeedbackId="install-copy-docker-mcp"
             installBlock="docker_mcp"
           />
+          <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-50/70 p-3 text-amber-950 dark:border-amber-400/25 dark:bg-amber-500/10 dark:text-amber-50">
+            <p className="text-[14px] leading-6 mb-0">
+              <strong>After adding MCP config:</strong> restart your AI tool
+              so it picks up the new server.
+            </p>
+          </div>
           <h3 className="text-[16px] font-medium tracking-[-0.01em] mt-8 mb-2">
             Use the CLI from Docker
           </h3>

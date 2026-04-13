@@ -12,7 +12,7 @@ export interface StaticLocalePack {
     titleAccent: string;
     titleMid: string;
     titleFocus: string;
-    withoutStateLayer: string;
+    withoutSharedMemory: string;
     bullets: [string, string, string];
     summary: string;
     summaryRecordTypes: string[];
@@ -29,6 +29,10 @@ export interface StaticLocalePack {
     curiosityGap: string;
     /** Hero micro-label below primary CTAs (displayed uppercase in UI) */
     audienceTagline: string;
+    /** Compact hero reinforcing paragraph -- outcome line */
+    heroReinforcement: string;
+    /** Second hero paragraph -- mechanism/how line */
+    heroReinforcementSecondary: string;
   };
   siteSections: {
     intro: string;
@@ -89,7 +93,7 @@ const EN_PACK: StaticLocalePack = {
     titleAccent: "Neotoma",
     titleMid: "makes them",
     titleFocus: "remember.",
-    withoutStateLayer: "Without shared memory across your AI tools:",
+    withoutSharedMemory: "Without shared memory across your AI tools:",
     bullets: [
       "Context drifts between Claude, Cursor, ChatGPT, and everything else.",
       "Decisions vanish when the session ends.",
@@ -122,7 +126,11 @@ const EN_PACK: StaticLocalePack = {
       "Neotoma is git for what your agents know. Versioned, diffable, replayable state across Claude, Cursor, ChatGPT, and everything else. Stop being the human sync layer.",
     curiosityGap:
       "Most memory tools help agents retrieve information. None of them can prove it hasn\u2019t been silently corrupted.",
-    audienceTagline: "Built for developers running agents across sessions and tools",
+    audienceTagline: "Durable memory for agents that persists across sessions and tools",
+    heroReinforcement:
+      "Your agents pick up where they left off and coordinate across Claude, Cursor, ChatGPT, and everything else. No re-explaining, no lost context, no conflicting answers.",
+    heroReinforcementSecondary:
+      "Git for agentic knowledge \u2014 every fact is versioned and accumulates over months, so corrections stick, history is preserved, and nothing silently drifts.",
   },
   siteSections: {
     intro: "Intro",

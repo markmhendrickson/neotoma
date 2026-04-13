@@ -24,12 +24,15 @@ This document does NOT cover:
 
 ## Total Addressable Market Summary
 
-### Tier 1 (Developer Release — Primary) - ~2-7M individuals
-- **AI Infrastructure Engineers:** 200K-500K
-- **Agent System Builders:** 200K-500K (overlap with AI Infrastructure Engineers ~20-30%)
-- **AI-native Operators (builder-grade):** 2-5M (overlap with Agent System Builders ~20-30%)
-- **Note:** Significant overlap between Operators and Builders (~20-30% estimated)
-- **Deduplicated Tier 1:** ~2-5M individuals
+Population estimates distinguish between **total role population** (everyone matching the archetype) and **topology-qualified addressable** (the subset at Topology 2+ who experience write-integrity pain today). Total role population is the long-term TAM as the market matures through topology stages. Topology-qualified addressable is the population Neotoma can convert today. See [`strategic_market_analysis.md`](../private/strategy/strategic_market_analysis.md) for the topology framework.
+
+### Tier 1 (Developer Release — Primary): One Archetype, Three Modes
+
+The Tier 1 ICP is one person — the personal agentic OS builder/operator — who shifts between three operational modes (infrastructure engineering, building agent systems, operating across AI tools). These are not separate populations to size independently. See [`primary_icp.md`](./primary_icp.md) for the full archetype definition.
+
+- **Total role population (deduplicated):** ~200K–600K individuals
+- **Topology-qualified (Topology 2+, deduplicated):** ~15K–60K individuals
+- **Acute segment (can name the write-integrity problem):** ~1K–5K individuals
 
 ### Tier 2 (Developer Release — Secondary) - ~100K-300K
 - **Toolchain Integrators:** 100K-300K (framework/SDK maintainers who would add Neotoma as a dependency)
@@ -77,14 +80,23 @@ This document does NOT cover:
 - **Deduplicated Enterprise:** ~12K-25K companies
 
 ### Developer Release Target Market Summary
-- **Developer Release Target (Tier 1, deduplicated):** ~2-5M individuals
-- **Developer Release Addressable (with purchasing power, ~70-80%):** ~1.5-4M individuals
-- **Key constraint:** Developer release serves infrastructure-adjacent builders, not broad consumer or knowledge-worker audiences
-# TIER 1 — Primary ICPs (Developer Release)
+- **Developer Release Target (Tier 1 total role population, deduplicated):** ~200K–600K individuals
+- **Topology-qualified addressable (Topology 2+, deduplicated):** ~15K–60K individuals
+- **Acute segment (experiencing write-integrity pain, can name it):** ~1K–5K individuals
+- **Key constraint:** Developer release serves the topology-qualified subset — developers at Topology 2+ who have felt write-integrity pain. The broader role population enters the addressable market as they progress through topology stages over 12–24 months.
+# TIER 1 — Primary ICP: Personal Agentic OS Builder/Operator
 
-These ICPs align directly with Neotoma's developer release: a deterministic state layer distributed as a local npm package with MCP, CLI, and API interfaces. They experience immediate pain from non-deterministic agent state and are willing to adopt infrastructure-grade tooling.
+One archetype, three operational modes. The same person is an operator when running their contact CRM, a builder when creating a new agent pipeline, and an infrastructure engineer when debugging state drift. These are moments in one person's workflow, not separate personas. See [`primary_icp.md`](./primary_icp.md) for the full archetype definition, qualification criteria, and adoption funnel.
 
-## Tier 1 Key Acquisition Channels Summary
+## Estimated Worldwide Population
+
+- **Total role population:** 200K–600K (deduplicated across modes — power users building and operating multi-agent workflows with automation habits, structurally understanding memory limitations)
+- **Topology-qualified (Topology 2+):** 15K–60K (coordinating persistent state across multiple tools/sessions/agents where write-integrity pain surfaces)
+- **Acute segment:** 1K–5K (can name the write-integrity problem, actively compensating with homebrew state systems, searching for solutions)
+
+**Topology distribution:** Most of this population is at Topology 1 (single agent, human drives each session). The topology-qualified subset has progressed to functional Topology 2+ — pipeline handoffs, cross-tool state coordination, or multiple MCP servers feeding shared memory. The MCP ecosystem's growth is the primary accelerant; each new MCP server a user configures moves them closer to functional multi-agent shared state. This population expands as developers progress through topology stages over 12–24 months. See [`primary_icp.md`](./primary_icp.md) ICP Growth Trajectory for the topology-to-ICP mapping.
+
+## Key Acquisition Channels
 
 ### Community Channels (Highest Priority)
 - **Infrastructure and AI engineering communities:** GitHub, Hacker News, AI/ML Discord servers, agent framework communities (LangChain, CrewAI, AutoGen)
@@ -102,466 +114,218 @@ These ICPs align directly with Neotoma's developer release: a deterministic stat
 - **AI tool integrations:** Cursor, Claude, ChatGPT integration marketplace listings
 
 ### SEO Keywords
-- **Infrastructure:** "deterministic agent memory", "agent state management", "memory invariant"
-- **Builder:** "MCP memory server", "persistent agent memory", "agent memory backend"
-- **Operator:** "AI memory across tools", "persistent AI context", "cross-tool memory"
+- **Infrastructure mode:** "deterministic agent memory", "agent state management", "memory invariant"
+- **Building mode:** "MCP memory server", "persistent agent memory", "agent memory backend"
+- **Operating mode:** "AI memory across tools", "persistent AI context", "cross-tool memory"
 
 ### Priority Ranking
 1. **GitHub + Hacker News** — highest-signal builder communities
-2. **Agent framework communities** — direct access to agent system builders
+2. **Agent framework communities** — direct access during building mode
 3. **MCP server directories** — direct integration with target tools
-4. **AI tool communities** (Reddit, Discord) — reach builder-grade operators
+4. **AI tool communities** (Reddit, Discord) — reach during operating mode
 5. **Content marketing** — SEO and thought leadership on state integrity
 6. **Product Hunt** — early adopter visibility
 
-## 1. AI Infrastructure Engineers
+## Key Visible Criteria (Across All Modes)
 
-### Profile
-Engineers building the runtimes, orchestration layers, evaluation harnesses, and observability pipelines that agents run on. They evaluate Neotoma as a dependency that provides state integrity guarantees their own systems lack. Adoption is evaluation-first: they assess Neotoma's guarantees, then adopt in development workflows before recommending to downstream builders.
+- **Job titles:** Software Engineer, AI Engineer, Platform Engineer, ML Infrastructure Engineer, Agent Developer, Full-Stack Developer, solo founders, indie hackers, AI-native consultants
+- **Activity signals:** Builds or maintains agent systems, orchestration frameworks, or multi-tool MCP configurations; posts about agent reliability, memory, or state management
+- **Tool usage:** Claude Code, Cursor, ChatGPT, Raycast, agent frameworks (CrewAI, LangGraph, AutoGen), MCP servers, observability tools
+- **Behavior:** Automation habits (scripts, MCP server configs, custom prompts), tool-calling workflows, 3+ AI tools in regular use
+- **Proxy indicators:** GitHub repos with agent/automation/MCP projects, conference talks, framework contributions, Product Hunt early adopter
+- **Content consumption:** Agent architecture, MCP, AI productivity, distributed systems, infrastructure engineering
 
-### Key Visible Criteria
-- **Job titles:** Platform Engineer, ML Infrastructure Engineer, AI/ML Engineer, Agent Infrastructure Lead, Reliability Engineer
-- **Activity signals:** Builds or maintains agent runtimes, orchestration frameworks, evaluation pipelines; posts about agent reliability, state management, observability
-- **Tool usage:** Kubernetes, Ray, Temporal, event sourcing frameworks, state machines, observability tools (Datadog, Grafana)
-- **Proxy indicators:** GitHub repos with agent infrastructure projects, conference talks on agent reliability, contributions to orchestration frameworks
-- **Content consumption:** Engages with infrastructure engineering content, distributed systems content, agent reliability content
+## Operational Mode 1: Infrastructure Engineering
 
-### Key Acquisition Channels
-- **Developer communities:** GitHub, Hacker News, AI/ML infrastructure Discord servers
-- **Content marketing:** Blog posts on agent state management, deterministic memory patterns, state integrity architecture
-- **Conferences:** AI infrastructure conferences, MLOps conferences, distributed systems meetups
-- **Partnerships:** Agent framework maintainers, MLOps vendors, observability tool integrations
-- **SEO:** "agent state management", "deterministic agent memory", "agent observability", "agent reliability" keywords
+The person is debugging, evaluating, or building the platform layer that agents run on. They evaluate Neotoma as a dependency that provides state integrity guarantees their own systems lack.
 
-### Estimated Worldwide Population
-**200K-500K** (engineers working on agent infrastructure, MLOps, and agent platform engineering globally)
-
-### Pain Points
+### Pain Points (Infrastructure Mode)
 - **Cannot reproduce agent runs:** Same inputs produce different outputs; no way to trace why
 - **State mutations invisible:** Agent state changes without audit trail; debugging requires manual log archaeology
 - **No provenance trail:** Cannot trace agent decisions back to source observations
 - **Evaluation is non-deterministic:** Cannot replay agent state to validate behavior changes
 - **Infrastructure fragmentation:** Each agent system invents its own state management
 
-### Use Cases
+### Use Cases (Infrastructure Mode)
 - **State management dependency:** Integrate Neotoma as the state layer in agent runtime infrastructure
 - **Evaluation harnesses:** Use replayable timeline for agent evaluation and regression testing
 - **Observability pipelines:** Feed Neotoma's versioned history into observability and debugging tools
 - **Production debugging:** Replay agent state to reproduce and diagnose production failures
 
-### Workflows
+### Workflows (Infrastructure Mode)
 1. **Evaluate guarantees** → Review Neotoma's invariants (determinism, versioning, replayability)
 2. **Integrate in dev environment** → Wire Neotoma into agent runtime via MCP or API
 3. **Validate reproducibility** → Run agent workflows and verify state is deterministic
 4. **Recommend to team** → Propose Neotoma as standard state layer for agent infrastructure
 
-### Value Proposition
-- **Deterministic state evolution:** Same observations always produce the same entity state
-- **Replayable timeline:** Full state reconstruction from observation log enables debugging and evaluation
-- **Schema constraints:** Reject malformed data rather than silently accepting garbage
-- **Append-only observation log:** Complete provenance trail for every state change
-
-### A-ha Moment
-When they replay an agent's state history from the observation log and can pinpoint exactly which observation introduced a bug — something their current state management makes impossible.
-
-### Ready-to-Pay Threshold
-After successfully integrating Neotoma into an agent runtime and demonstrating reproducible state across runs. They've validated the guarantees and are ready to recommend and pay for ongoing usage.
-
-### Adoption Characteristics
-- **Activation:** Medium (evaluation-first, need to validate guarantees)
-- **Willingness to pay:** High (infrastructure dependency, expense-able)
-- **Retention:** Very strong (becomes core infrastructure)
-- **Expansion:** Pull Neotoma into team/org through infrastructure standardization
-
-### Pricing Sensitivity & Price Points
-- **Current spend:** $100-1000/month on infrastructure tools, monitoring, state management
-- **Price sensitivity:** Low (infrastructure expense, values reliability)
-- **Acceptable range:** $50-200/month for individual, $500-5000/month for team
-- **Value anchor:** Compares to event sourcing tools, state management infrastructure, observability platforms
-- **Payment method:** Company credit card, annual contracts, enterprise billing
-
-### Competitive Alternatives
-- **Current solutions:** Custom state management, event sourcing frameworks, ad-hoc logging, no unified agent state layer
-- **Workarounds:** Building custom state management per agent, manual logging, log archaeology for debugging
-- **Why they'd switch:** No current solution provides deterministic agent state with replayability; custom solutions are expensive to maintain
-- **Switching barriers:** Low-medium (adopting a dependency, not replacing existing tool)
-
-### Sales Cycle & Decision Process
-- **Sales cycle:** 14-60 days (evaluation → integration → validation → adoption)
-- **Decision maker:** Tech lead / infrastructure lead (may need manager approval for team adoption)
-- **Decision process:** Discover → evaluate guarantees → integrate in dev → validate → propose to team → adopt
-- **Touchpoints:** GitHub, Hacker News, infrastructure communities, conference talks
-- **Sales model:** Self-serve with developer documentation, evaluation guides
-
-### Key Objections
-- **"Not production-ready"** → Open-source, MIT-licensed, deterministic guarantees are testable; dev release is suitable for evaluation and dev-environment integration
-- **"API surface stability"** → Versioned MCP protocol, API versioning policy, changelog
-- **"Local-only limitation"** → Local-first suits evaluation; hosted deployment planned for later
-- **"Integration complexity"** → MCP standard protocol, clear API docs, integration examples
-- **"Lock-in concerns"** → MIT license, open-source, append-only log is portable
-
-### Buying Signals
-- **Strong signals:** Building agent infrastructure, posts about state management problems, evaluating agent reliability tools
-- **Medium signals:** ML/AI infrastructure role, agent framework contributions, observability tool usage
-- **Weak signals:** General infrastructure interest, agent development questions
-
-### Expansion Path
-- **Individual → Team:** After successful evaluation, proposes as team standard
-- **Expansion trigger:** Successful integration in dev environment, reproducibility validation
-- **Expansion mechanics:** Team-wide adoption as infrastructure dependency, standardization
-- **Expansion timeline:** 1-3 months from evaluation to team adoption
-
-### Key Barriers & Product Solutions
-**Acquisition Barriers:**
-- **Barrier:** Don't know Neotoma exists; framing as "AI memory" obscures infrastructure value
-- **Solution:** Infrastructure-first messaging: "deterministic state layer for agents" with guarantee comparison table
-- **Barrier:** Assume they need to build custom state management
-- **Solution:** Blog posts comparing custom vs Neotoma state management; open-source evaluation path
-
-**Activation Barriers:**
-- **Barrier:** Evaluation overhead (need to validate guarantees before adopting)
-- **Solution:** Clear guarantee documentation, evaluation guide, reproducibility tests, integration examples
-- **Barrier:** Local-only deployment limits production evaluation
-- **Solution:** Local-first suits dev/evaluation; document roadmap for hosted deployment
-
-**Retention Barriers:**
-- **Barrier:** API changes break integration
-- **Solution:** API versioning, deprecation policy, changelog, backward compatibility
-- **Barrier:** Performance at scale concerns
-- **Solution:** Performance benchmarks, SQLite optimization, scaling documentation
-
-### Core Incentive
+### Core Incentive (Infrastructure Mode)
 
 Restoring the ability to iterate on agent state. You can't debug what you can't replay. You can't iterate on what you can't inspect. Non-reproducible runs mean the debugging cycle is log archaeology instead of tight feedback loops — and infrastructure engineers already know that tight cycles are how good systems get built. The incentive is not "state management" — it is feedback loop integrity at the platform layer.
 
-### Psychological Trigger
+### Role Transformation (Infrastructure Mode)
 
-Two runs, same inputs, different state — and no way to diff what changed. This is the moment the infrastructure engineer recognizes they're operating on narrative ("it probably works") rather than evidence. It produces the same feeling as a test suite you can't trust: you know there are failure modes you can't see, and every deployment carries unquantifiable risk. The crystallizing moment shifts every subsequent evaluation of production readiness from "the system works" to "can I prove the system works?"
+**Escaping: Log archaeologist.** Reconstructing what happened from scattered logs, guessing at state transitions, reverse-engineering truth from artifacts instead of querying it directly.
 
-### Role Transformation
+**Into: Platform engineer with replayable state.** Diff any entity between versions. Replay any run to a specific point in time. Trace any output back to the observation that produced it. Debugging becomes querying a timeline, not reading tea leaves.
 
-**Escaping: Log archaeologist.** A production agent fails or produces wrong output and the debugging process is reconstructing what happened from scattered logs, guessing at state transitions, and hoping to reproduce the issue. The engineer is reverse-engineering truth from artifacts instead of querying it directly. Their observability stack watches everything except the thing that actually matters: what the agent believed and why.
+## Operational Mode 2: Building Agent Systems
 
-**Into: Platform engineer with replayable state.** Diff any entity between versions. Replay any run to a specific point in time. Trace any output back to the observation that produced it. Debugging becomes querying a timeline, not reading tea leaves. The engineer builds confidence in the system the same way they build confidence in a codebase with good tests — through reproducibility.
+The person is building agents that execute multi-step workflows with tool calling. They wire Neotoma into systems they ship to others and need memory that does not drift, conflict, or silently mutate.
 
-### Lifestyle Improvement
-
-Less time writing defensive infrastructure — checkpoint logic, state serialization, custom diffing, retry handlers that try to reconstruct what was true before a failure. Less time in war rooms reconstructing state. Post-mortems take thirty minutes because provenance answers "what changed and when" directly. More time designing the platform's actual capabilities. The engineering work becomes more interesting because the boring-but-critical part is no longer hand-rolled every time. The emotional register shifts too: infrastructure engineers carry the weight of reliability, and when the state layer is opaque and non-reproducible, that weight is constant low-level anxiety. When the state layer is replayable and auditable, the anxiety has somewhere to discharge. You can verify. You can prove. You sleep better.
-
-### Interaction Pattern Shift
-
-The shift is from manual orchestration to declarative trust. The infrastructure engineer stops writing glue — the guarantees they've been hand-rolling become primitives. They declare invariants ("this entity type has these fields, this schema constraint, this merge rule") and the system enforces them. Replays work because state evolution is deterministic by construction, not because someone wrote a careful checkpoint-and-restore pipeline. The observability story shifts from "instrument everything and hope the logs line up" to "query the timeline directly." The team stops treating agent state as a black box and starts treating it like any other part of the stack they can reason about.
-
-### Technical Requirements
-- Stable MCP and API interface
-- Deterministic state guarantees (verifiable)
-- Append-only observation log with replay
-- Schema validation and constraints
-- Local-first deployment for evaluation
-
-## 2. Agent System Builders
-
-### Profile
-Developers and teams building agents that execute multi-step workflows with tool calling. They wire Neotoma into systems they ship to others and need memory that does not drift, conflict, or silently mutate. They sit at the application layer, consuming infrastructure.
-
-### Key Visible Criteria
-- **Activity signals:** Builds or integrates with CrewAI, LangGraph, AutoGPT, or similar; posts about agent memory, agent orchestration, MCP
-- **Job titles:** Software Engineer, AI Engineer, Agent Developer, Full-Stack Developer building agent products
-- **Company signals:** Agent-powered SaaS, AI automation companies, agent infrastructure startups
-- **Proxy indicators:** GitHub repos with agent/automation/MCP projects, multiple AI agent deployments
-- **Content consumption:** Engages with agent architecture content, MCP content, agent memory content, LLM workflow content
-
-### Key Acquisition Channels
-- **Developer communities:** GitHub, Hacker News, AI/ML Discord servers, MCP and agent framework communities
-- **Content marketing:** Agent memory case studies, deterministic memory content, MCP integration tutorials
-- **Partnerships:** Agent framework maintainers (LangChain, CrewAI, AutoGen), AI Ops vendors
-- **SEO:** "agent memory", "deterministic memory for agents", "MCP memory backend", "persistent agent state"
-- **Conferences:** AI/ML developer conferences, agent architecture meetups
-
-### Estimated Worldwide Population
-**200K–500K** (developers building agent systems, multi-step AI workflows, and agent-powered products globally)
-
-### Pain Points
+### Pain Points (Building Mode)
 - **Drift across sessions:** Agent memory changes unpredictably between runs
 - **Conflicting facts:** Multiple agents or tools write contradictory state; no conflict detection
 - **No reproducibility:** Cannot replay a failed run to find root cause
 - **Silent mutation:** State changes without audit trail; impossible to know what changed or when
 - **Garbage-in-garbage-out:** No schema validation means malformed data propagates across agents
 
-### Use Cases
+### Use Cases (Building Mode)
 - **Agent memory backend:** Neotoma as MCP-backed memory for agent frameworks
 - **Multi-step workflow state:** Structured memory and versioned history for multi-step agent pipelines
 - **Cross-agent coordination:** Shared state substrate for multi-agent systems
 - **Debugging and evaluation:** Replay agent state to reproduce bugs and validate behavior changes
 - **Provenance and audit:** Trace agent decisions back to source observations
 
-### Workflows
+### Workflows (Building Mode)
 1. **Integrate via MCP** → Wire Neotoma as memory backend for agent framework
 2. **Store structured entities** → Agents write observations; Neotoma produces deterministic state
 3. **Query across sessions** → Agents retrieve prior state for continuity
 4. **Debug failures** → Replay observation log to identify where state diverged
 
-### Value Proposition
-- **Deterministic state:** Same input observations always produce the same entity state
-- **Schema-bound entities:** Prevent garbage-in-garbage-out across agents
-- **Versioned history:** Every state change creates a new version; nothing is silently lost
-- **Replayable timeline:** Reconstruct any historical state from the observation log
-- **Cross-platform MCP:** One memory layer for any agent or toolchain
-
-### A-ha Moment
-When an agent or pipeline queries Neotoma for structured context and gets deterministic, traceable results — enabling reliable multi-step reasoning and auditability that their previous memory solution could not provide.
-
-### Ready-to-Pay Threshold
-After integrating Neotoma as memory backend for an agent framework or pipeline and seeing deterministic recall and provenance in production or eval workflows. Debugging time drops measurably.
-
-### Adoption Characteristics
-- **Activation:** Low friction (developers understand APIs and MCP)
-- **Willingness to pay:** Medium-high (infrastructure dependency, may be company-expensed)
-- **Retention:** Very strong (becomes core agent infrastructure)
-- **Expansion:** Natural expansion as they build more agents
-
-### Pricing Sensitivity & Price Points
-- **Current spend:** $0-200/month on agent tools, memory solutions, API services
-- **Price sensitivity:** Medium (values reliable infrastructure, but cost-conscious early)
-- **Acceptable range:** $20-100/month for individual, $100-500/month for team
-- **Value anchor:** Compares to RAG memory services, agent framework memory modules, custom state management cost
-- **Payment method:** Credit card, company expense, usage-based pricing preferred
-
-### Competitive Alternatives
-- **Current solutions:** RAG memory (Mem0, Zep), LangChain/LangGraph memory, file-based memory (Markdown/JSON), vector DB memory, custom state management
-- **Workarounds:** Building custom memory per agent, manual context injection, no persistent state
-- **Why they'd switch:** Existing memory solutions lack deterministic guarantees; custom solutions are expensive; debugging is impossible without versioned history
-- **Switching barriers:** Low (adopting new memory backend, not replacing entire stack)
-
-### Sales Cycle & Decision Process
-- **Sales cycle:** 7-30 days (API exploration → integration → validation → adoption)
-- **Decision maker:** Developer (individual decision for personal projects; may need lead approval for team)
-- **Decision process:** Discover → test MCP integration → see deterministic results → adopt
-- **Touchpoints:** GitHub, agent framework communities, MCP server directories, Hacker News
-- **Sales model:** Self-serve with developer documentation
-
-### Key Objections
-- **"How is this different from RAG memory?"** → Neotoma enforces deterministic state evolution; RAG does context lookup. Different guarantees.
-- **"API stability concerns"** → Versioned MCP protocol, API versioning, changelog, backward compatibility
-- **"Local-only limitation"** → Local-first suits dev and small-scale agent deployments; hosted planned
-- **"Integration effort"** → Standard MCP protocol, clear docs, integration examples, SDK
-- **"Lock-in"** → MIT license, open-source, portable observation log
-
-### Buying Signals
-- **Strong signals:** Building agent systems, posts about agent memory problems, MCP integrations, agent debugging frustration
-- **Medium signals:** Developer with agent/automation projects, agent framework usage, multi-step workflow development
-- **Weak signals:** General agent development interest, LLM workflow questions
-
-### Expansion Path
-- **Individual → Team:** After successful agent integration, team adopts as standard memory backend
-- **Expansion trigger:** Agent ships with Neotoma; team standardizes on it for new agents
-- **Expansion mechanics:** Team-wide adoption, shared memory substrate, standardized integration
-- **Expansion timeline:** 1-2 months from individual integration to team adoption
-
-### Key Barriers & Product Solutions
-**Acquisition Barriers:**
-- **Barrier:** Assume RAG/vector memory is sufficient for agents
-- **Solution:** Guarantee comparison table showing what RAG lacks (determinism, versioning, replayability, schema constraints)
-- **Barrier:** Don't know Neotoma exists
-- **Solution:** Presence in agent framework communities, MCP directories, agent architecture blog posts
-
-**Activation Barriers:**
-- **Barrier:** Integration effort with existing agent framework
-- **Solution:** MCP standard protocol, framework-specific integration guides, code examples
-- **Barrier:** Empty state (no existing data to query)
-- **Solution:** Quick start guide, sample data, store_structured examples, instant feedback loop
-
-**Retention Barriers:**
-- **Barrier:** Memory not useful if agent architecture changes
-- **Solution:** Schema flexibility, entity type evolution, migration guides
-- **Barrier:** Performance concerns at scale
-- **Solution:** Performance benchmarks, SQLite optimization, query optimization guides
-
-### Core Incentive
+### Core Incentive (Building Mode)
 
 Canonical state that doesn't have to be re-derived every session. Retrieval re-infers entity resolution, timelines, and relationships from scratch each time. That works until it doesn't — and when it doesn't, the builder can't trace why the agent got it wrong. The incentive is not "better retrieval" — it is the recognition that retrieval and state are different paradigms, and the builder's agents need the one they don't have.
 
-### Psychological Trigger
+### Role Transformation (Building Mode)
 
-The agent treats "Acme Corp" and "ACME CORP" as the same entity in one session and different entities in the next. Or: a multi-step pipeline silently drops context between steps and the builder can't reproduce the failure because the state wasn't versioned. This is the moment the builder realizes retrieval is approximating structure, not providing it — and the approximation is non-reproducible. It reframes every prior "it works in demos" experience as survivorship bias.
+**Escaping: Inference babysitter.** Debugging probabilistic behavior in a system that should have deterministic state — absorbing the variance their architecture doesn't handle.
 
-### Role Transformation
+**Into: Builder who ships on solid ground.** Entities resolve once and persist. State evolves through versioned, auditable transitions. When something breaks, trace it to a specific observation, not a vague inference.
 
-**Escaping: Inference babysitter.** The builder ships an agent that works in demos but silently degrades in production because entity resolution, memory, and state management are all re-derived per session by the LLM. When it gets something wrong, the builder can't trace why. When they fix it, the fix doesn't persist. They're debugging probabilistic behavior in a system that should have deterministic state — absorbing the variance their architecture doesn't handle.
+## Operational Mode 3: Operating Across AI Tools
 
-**Into: Builder who ships on solid ground.** Entities resolve once and persist. State evolves through versioned, auditable transitions. When something breaks, the builder traces it to a specific observation, not a vague inference. Agents get more reliable as they accumulate more data, instead of more fragile. The builder stops compensating for their memory layer and starts building on top of it.
+The person is using Claude, Cursor, ChatGPT, and other AI tools for their own workflows and feels the memory gap across every tool switch.
 
-### Lifestyle Improvement
-
-The builder's engineering effort is currently split. Half goes toward the product — capabilities, UX, logic. The other half goes toward working around a memory layer that doesn't hold its shape: prompt engineering to re-inject context, deduplication hacks, retry logic for when the agent forgets. With canonical entities, versioned state, and provenance, new features compound instead of regressing. The roadmap shifts from memory regression fixes to new capabilities. Sprint planning stops allocating a third of capacity to state management workarounds. A customer reports an issue and the builder traces it to a specific observation in thirty seconds. Shipping stops feeling like hoping and starts feeling like deploying. The builder starts trusting their own system enough to build ambitiously on it.
-
-### Interaction Pattern Shift
-
-The shift is from compensating for memory to building on top of it. The builder adds a capability and it works across sessions because the state it depends on persists. They ship to more users and the entity graph gets richer, not messier, because schema constraints and merge rules handle what used to be manual cleanup. Framework switching no longer means rebuilding state management from scratch — Neotoma is portable via MCP. The builder's relationship with their own product changes from vigilance to momentum: less time watching for regressions, more time extending what works.
-
-### Technical Requirements
-- MCP integration (primary interface)
-- Deterministic state evolution (core guarantee)
-- Schema validation and entity resolution
-- Versioned history and replayable timeline
-- Provenance and audit trail
-- Local or self-hosted deployment
-
-### Side-by-Side: AI Infrastructure Engineers vs Agent System Builders
-
-- **Primary layer:** Infrastructure engineers build runtimes, orchestration, and observability foundations; agent system builders build application-layer agents and shipped workflows on top.
-- **Adoption motion:** Infrastructure engineers are evaluation-first (validate guarantees before rollout); agent system builders are integration-first (wire via MCP and iterate quickly).
-- **Decision owner:** Infrastructure adoption is usually led by platform/reliability leads; builder adoption is often led by individual developers or product engineering teams.
-- **Cycle length:** Infrastructure cycles are typically longer (14-60 days) because standardization risk is higher; builder cycles are faster (7-30 days) because scope is narrower.
-- **Success metric:** Infrastructure teams optimize for platform reproducibility and auditability; builders optimize for reliable multi-step execution, lower debugging time, and stable shipped behavior.
-- **Budget profile:** Infrastructure engineers generally have larger infra-tool budgets and lower price sensitivity; builders are more cost-sensitive, especially at individual or early-team stages.
-
-## 3. AI-native Operators (builder-grade)
-
-### Profile
-Power users of Claude, Cursor, ChatGPT, and other AI tools who have automation habits and feel the memory gap across every tool switch. They adopt Neotoma for their own cross-tool workflows, not for systems they ship to others. Distinguished from Agent System Builders by adoption motion: operators use Neotoma for personal workflow continuity; builders wire it into products.
-
-### Key Visible Criteria
-- **Tool usage:** Active ChatGPT Plus/Pro subscriber, Claude Pro user, Cursor user, Raycast user — uses 3+ AI tools daily
-- **Activity signals:** Posts in AI tool communities (Reddit, Discord), follows AI tool creators on Twitter/X, shares MCP configs
-- **Behavior:** Automation habits (scripts, MCP server configs, custom prompts), tool-calling workflows
-- **Proxy indicators:** GitHub profile with automation/AI projects, Product Hunt early adopter, MCP server usage
-- **Content consumption:** Engages with AI tool comparison content, MCP content, AI productivity content
-
-### Key Acquisition Channels
-- **AI tool communities:** Reddit (r/ChatGPT, r/ClaudeAI, r/Cursor), Discord servers for AI tools
-- **Developer communities:** GitHub, Hacker News, Indie Hackers, Product Hunt
-- **Content marketing:** AI tool comparison blogs, MCP integration guides, cross-tool memory content
-- **Partnerships:** Integration marketplace listings (Cursor, Raycast), MCP server directories
-- **SEO:** "AI memory across tools", "persistent AI context", "MCP memory server" keywords
-
-### Estimated Worldwide Population
-**2-5 million** (heavy AI tool users with automation habits who use 3+ tools daily and understand memory limitations)
-
-### Pain Points
+### Pain Points (Operating Mode)
 - **Context fragmentation across tools:** Each AI tool has its own memory; switching tools loses context
 - **Repetitive context-setting:** Must re-explain the same project context to Claude, Cursor, ChatGPT separately
 - **Lost commitments and decisions:** Decisions made in a ChatGPT session three days ago are gone
 - **Broken handoffs:** Starting a task in Claude and continuing in Cursor requires manual context transfer
 - **No cross-session continuity:** Every new session starts from zero unless you manually paste context
 
-### Use Cases
+### Use Cases (Operating Mode)
 - **Cross-tool memory:** Store context once, query from any MCP-compatible tool
 - **Project continuity:** Maintain project state across sessions and tools
 - **Decision tracking:** Record decisions and commitments that persist across conversations
 - **Research synthesis:** Accumulate findings across multiple AI research sessions
 - **Workflow automation:** Use MCP to give all AI tools access to structured personal data
 
-### Workflows
+### Workflows (Operating Mode)
 1. **Install and configure MCP** → Connect Neotoma to Claude, Cursor, and other tools
 2. **Store context via conversations** → AI tools write observations to Neotoma during normal use
 3. **Query across tools** → Ask Claude about something stored via Cursor; context persists
 4. **Review and manage** → Use CLI to inspect, query, or correct stored entities
 
-### Value Proposition
-- **Unified memory across tools:** Single state layer that persists across all MCP-compatible tools
-- **No repeated context:** Facts stored once are available everywhere
-- **Versioned and auditable:** Nothing is silently lost or overwritten
-- **Schema-bound consistency:** Prevents contradictory state across tools
-- **Privacy-first:** Data stays local; no provider access
-
-### A-ha Moment
-When they switch from Cursor to Claude and ask about the same project, and Claude has the context from their Cursor session — without re-explaining anything. They realize memory is truly unified across tools.
-
-### Ready-to-Pay Threshold
-After successfully using cross-tool memory for 1-2 weeks and seeing context persist where it previously did not. They've experienced the value and are willing to pay to maintain this capability.
-
-### Adoption Characteristics
-- **Activation:** Immediate (understand value proposition instantly; MCP setup is familiar)
-- **Willingness to pay:** High (already paying for AI tools)
-- **Retention:** Strong (daily use, core workflow dependency)
-- **Expansion:** Natural champions for team adoption; vocal in tool communities
-
-### Pricing Sensitivity & Price Points
-- **Current spend:** $20-60/month on AI tools (ChatGPT Plus $20, Claude Pro $20, Cursor $20)
-- **Price sensitivity:** Low (already paying for tools, understand value of developer tools)
-- **Acceptable range:** $10-30/month for individual, $50-200/month for team
-- **Value anchor:** Compares to AI tool subscriptions and developer tool subscriptions
-- **Payment method:** Credit card, comfortable with subscription model
-
-### Competitive Alternatives
-- **Current solutions:** Platform memory (Claude memory, ChatGPT memory), notes/PKM tools (Obsidian, Notion), manual context management
-- **Workarounds:** Re-uploading documents, copy-pasting context between tools, no cross-tool memory
-- **Why they'd switch:** Platform memory is tool-specific and non-deterministic; PKM lacks MCP integration; no current solution provides cross-tool deterministic state
-- **Switching barriers:** Low (new capability, not replacing existing tool)
-
-### Sales Cycle & Decision Process
-- **Sales cycle:** 0-7 days (self-serve, no sales team needed)
-- **Decision maker:** Individual (no approval needed)
-- **Decision process:** Discover → install → configure MCP → see cross-tool value → pay
-- **Touchpoints:** AI tool communities, MCP directories, Product Hunt, tool comparison content
-- **Sales model:** Self-serve with clear setup docs
-
-### Key Objections
-- **"Another tool to manage"** → Runs as MCP server behind your existing tools; no new UI required
-- **"How is this different from ChatGPT memory?"** → ChatGPT memory is tool-specific and non-deterministic; Neotoma is cross-tool, versioned, schema-bound
-- **"Setup complexity"** → `npx neotoma` install, MCP config in 5 minutes
-- **"Privacy concerns"** → Local-first, data stays on your machine, no cloud sync required
-- **"Will it work with my tools?"** → MCP standard protocol; works with Claude, Cursor, ChatGPT, any MCP-compatible tool
-
-### Buying Signals
-- **Strong signals:** Uses 3+ AI tools daily, posts about context loss or "AI amnesia", mentions MCP servers, automation habits
-- **Medium signals:** Multiple AI tool subscriptions, developer with automation projects, early adopter behavior
-- **Weak signals:** General AI tool interest, productivity tool usage
-
-### Expansion Path
-- **Individual → Team:** After 2-3 weeks of use, recommends to colleagues and team members
-- **Expansion trigger:** Shares a query result that pulls context from multiple tools; others want the same capability
-- **Expansion mechanics:** Simple install recommendation, MCP config sharing, team workspace (future)
-- **Expansion timeline:** 2-4 weeks from individual to team adoption
-
-### Key Barriers & Product Solutions
-**Acquisition Barriers:**
-- **Barrier:** Don't know Neotoma exists; platform memory seems "good enough"
-- **Solution:** Guarantee comparison table showing what platform memory lacks (cross-tool, versioned, schema-bound, replayable)
-- **Barrier:** Skeptical of "another tool" to manage
-- **Solution:** Runs as background MCP server; no new UI; works inside tools they already use
-
-**Activation Barriers:**
-- **Barrier:** MCP configuration friction
-- **Solution:** `npx neotoma` one-line install, auto-generated MCP config, tool-specific setup guides
-- **Barrier:** Empty state after install (no data yet)
-- **Solution:** Instant feedback on first store; onboarding flow that demonstrates cross-tool persistence
-
-**Retention Barriers:**
-- **Barrier:** MCP connection issues
-- **Solution:** Reliable MCP server, clear error messages, auto-reconnect, health check CLI command
-- **Barrier:** Not seeing enough value (memory not queried often enough)
-- **Solution:** Proactive memory retrieval in agent instructions; periodic "did you know" prompts via CLI
-
-### Core Incentive
+### Core Incentive (Operating Mode)
 
 Escape from experienced dependency. Not ideological sovereignty — the concrete daily cost of provider-bound memory that drifts, loses corrections, and can't follow you across tools. Every session that starts from scratch is time spent re-explaining what the system should already know. The incentive is not "better memory" — it is reclaiming the attention currently consumed by compensating for the absence of persistent state.
 
-### Psychological Trigger
+### Role Transformation (Operating Mode)
 
-The moment you get a different answer to the same question across sessions and realize there's no way to tell which one was right. Or: the moment a correction you made last week has silently reverted because the provider compressed or discarded it. This is not a feature request. It is a trust collapse. Once experienced, it reframes every subsequent interaction with the tool as unreliable until proven otherwise. For operators who have invested heavily in building personal workflows around AI tools, this trust collapse is particularly acute — it threatens the productivity gains that justified the tool investment.
+**Escaping: Context janitor.** The human sync layer between Claude, Cursor, and ChatGPT — manually carrying context that the system keeps dropping.
 
-### Role Transformation
+**Into: Operator with continuity.** The agent accumulates what it learns. Corrections hold. Tool switches preserve context. The role shifts from re-establishing context to acting on it.
 
-**Escaping: Context janitor.** Every session, the operator re-explains their projects, preferences, contacts, and commitments to a tool that should already know. They are the human sync layer between Claude, Cursor, and ChatGPT — manually carrying context that the system keeps dropping. Their job becomes maintaining the agent's memory instead of doing their actual work.
+## Unified Value Proposition
 
-**Into: Operator with continuity.** The agent accumulates what it learns. Corrections hold. Tool switches preserve context. The operator's role shifts from re-establishing context to acting on it — the difference between setting up the workspace every morning and walking in and starting.
+Across all three modes, Neotoma provides the same guarantees:
 
-### Lifestyle Improvement
+- **Deterministic state evolution:** Same observations always produce the same entity state
+- **Schema-bound entities:** Reject malformed data; prevent garbage-in-garbage-out
+- **Versioned history:** Every state change creates a new version; nothing is silently lost
+- **Replayable timeline:** Reconstruct any historical state from the observation log
+- **Cross-platform MCP:** One memory layer accessible from any agent or tool
+- **Append-only observation log:** Complete provenance trail for every state change
+- **Privacy-first:** Data stays local; no provider access
 
-The daily texture changes: less typing, fewer prompts, shorter sessions that accomplish more. The cognitive load of remembering what each tool knows and doesn't know disappears. The low-grade anxiety of not trusting that the agent actually saved what you told it resolves. You stop thinking about whether the system remembers and start thinking about what you're actually trying to do. You get back the part of your attention that was being spent on babysitting.
+## A-ha Moments (By Mode)
 
-### Interaction Pattern Shift
+- **Infrastructure:** Replay an agent's state history and pinpoint exactly which observation introduced a bug — something current state management makes impossible
+- **Building:** Agent queries Neotoma for structured context and gets deterministic, traceable results — enabling reliable multi-step reasoning their previous memory couldn't provide
+- **Operating:** Switch from Cursor to Claude and ask about the same project — Claude has the context from the Cursor session without re-explaining anything
 
-Without persistent state, the operator must be the driver on every turn. Every prompt carries the full weight of what came before because the system won't hold it. With a persistent state layer, the interaction pattern shifts from turn-by-turn prompting to review-and-steer. The agent arrives at each session already knowing what it knew last time. The operator's role moves from composing detailed instructions to reviewing what the agent already knows and course-correcting when it's off. This is the shift from operating a tool to leading a team member who remembers last week's conversation. Less driving, more steering.
+## Adoption Characteristics
 
-### Technical Requirements
-- Single-user (no multi-user features needed for dev release)
-- MCP integration (primary access method)
-- CLI for inspection and management
+| Dimension | Infrastructure Mode | Building Mode | Operating Mode |
+|-----------|-------------------|---------------|----------------|
+| Activation friction | Medium (evaluation-first) | Low (API/MCP familiar) | Immediate (MCP setup familiar) |
+| Willingness to pay | High (infrastructure expense) | Medium-high (may be company-expensed) | High (already paying for AI tools) |
+| Retention | Very strong (core infrastructure) | Very strong (core agent dependency) | Strong (daily workflow dependency) |
+| Expansion path | Team standardization | More agents on same backend | Champions team adoption |
+| Sales cycle | 14–60 days | 7–30 days | 0–7 days |
+| Decision maker | Tech/infra lead | Individual developer | Individual |
+
+## Pricing Sensitivity
+
+| Mode Context | Current Spend | Acceptable Range (Individual) | Acceptable Range (Team) | Value Anchor |
+|-------------|---------------|------------------------------|------------------------|--------------|
+| Infrastructure | $100–1000/mo on infra tools | $50–200/mo | $500–5000/mo | Event sourcing, observability platforms |
+| Building | $0–200/mo on agent tools | $20–100/mo | $100–500/mo | RAG memory services, framework memory modules |
+| Operating | $20–60/mo on AI tools | $10–30/mo | $50–200/mo | AI tool subscriptions |
+
+**Note:** These are the same person at different times. Pricing should target the mode they're in when they adopt — likely operating mode (lowest friction, $10–30/mo) — with expansion to infrastructure/building budgets as usage deepens.
+
+## Competitive Alternatives (By Mode)
+
+| Mode | Current Solutions | Why They'd Switch |
+|------|------------------|-------------------|
+| Infrastructure | Custom state management, event sourcing frameworks, ad-hoc logging | No current solution provides deterministic agent state with replayability; custom is expensive to maintain |
+| Building | RAG memory (Mem0, Zep), LangChain/LangGraph memory, file-based memory, custom state | Existing memory lacks deterministic guarantees; debugging impossible without versioned history |
+| Operating | Platform memory (Claude, ChatGPT), PKM tools (Obsidian, Notion), manual sync | Platform memory is tool-specific and non-deterministic; PKM lacks MCP integration |
+
+## Key Objections (Unified)
+
+- **"Not production-ready"** → Open-source, MIT-licensed, deterministic guarantees are testable; dev release suits evaluation
+- **"How is this different from RAG memory?"** → RAG does context lookup; Neotoma enforces deterministic state evolution. Different guarantees.
+- **"How is this different from ChatGPT memory?"** → ChatGPT memory is tool-specific, non-deterministic, non-auditable; Neotoma is cross-tool, versioned, schema-bound
+- **"Another tool to manage"** → Runs as MCP server behind existing tools; no new UI required
+- **"Lock-in concerns"** → MIT license, open-source, portable append-only log
+- **"Setup complexity"** → `npx neotoma` install, MCP config in 5 minutes
+- **"Privacy concerns"** → Local-first, data stays on your machine
+
+## Key Barriers & Product Solutions
+
+### Acquisition
+- **Barrier:** Don't know Neotoma exists; framing as "AI memory" obscures infrastructure value
+- **Solution:** Infrastructure-first messaging with guarantee comparison table; presence in MCP directories, agent framework communities, AI tool communities
+- **Barrier:** Assume existing solution (RAG, platform memory, custom state) is sufficient
+- **Solution:** Blog posts and comparison content showing what existing solutions lack (determinism, versioning, replayability, cross-tool)
+
+### Activation
+- **Barrier:** Cognitive cold-start ("what should I store?")
+- **Solution:** Priority 1 data stores automatically from first session; instant feedback on first observation
+- **Barrier:** MCP configuration friction
+- **Solution:** `npx neotoma` one-line install, auto-generated MCP config, tool-specific setup guides
+- **Barrier:** Evaluation overhead (infrastructure mode needs to validate guarantees)
+- **Solution:** Clear guarantee documentation, evaluation guide, reproducibility tests, integration examples
+
+### Retention
+- **Barrier:** Observation plateau (user doesn't know what else to store)
+- **Solution:** Suggest Priority 2 data types; surface provenance/replay capabilities
+- **Barrier:** API/MCP connection issues
+- **Solution:** Reliable server, clear error messages, auto-reconnect, health check CLI
+- **Barrier:** Performance concerns at scale
+- **Solution:** Performance benchmarks, SQLite optimization, scaling documentation
+
+## Technical Requirements
+- MCP integration (primary interface across all modes)
+- Deterministic state evolution (core guarantee)
+- Schema validation and entity resolution
+- Versioned history and replayable timeline
+- Append-only observation log with provenance
 - Local-first architecture (privacy, no cloud dependency)
-- Deterministic state (trust in stored data)
+- CLI for inspection and management
+- Stable API interface
 
 # TIER 2 — Secondary ICPs (Adjacent / Later in Dev Release)
 

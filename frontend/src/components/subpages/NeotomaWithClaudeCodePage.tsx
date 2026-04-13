@@ -6,6 +6,7 @@ import { CopyableCodeBlock } from "../CopyableCodeBlock";
 import { DetailPage } from "../DetailPage";
 import { GettingStartedEvaluateInstallLinks } from "../GettingStartedEvaluateInstallLinks";
 import { IntegrationSection } from "../IntegrationSection";
+import { IntegrationBeforeAfter, IntegrationActivation, IntegrationLimitations } from "../IntegrationExtras";
 import { TableScrollWrapper } from "../ui/table-scroll-wrapper";
 
 const extLink = "text-foreground underline underline-offset-2 hover:no-underline";
@@ -181,6 +182,13 @@ export function NeotomaWithClaudeCodePage() {
         This is a local integration. Neotoma runs on the same machine via stdio. No API server
         or remote access is required. The agent writes to <code>.mcp.json</code> at your project root.
         </p>
+        <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-50/70 p-3 text-amber-950 dark:border-amber-400/25 dark:bg-amber-500/10 dark:text-amber-50">
+          <p className="text-[14px] leading-6 mb-0">
+            <strong>After MCP config is written:</strong> exit and restart Claude
+            Code (<code>/exit</code> then <code>claude</code>) so it loads the new
+            MCP server. Claude Code reads <code>.mcp.json</code> at startup.
+          </p>
+        </div>
         <p className="text-[14px] leading-6 text-muted-foreground mb-2">
         When MCP is not available, agents can use the <code>neotoma</code> CLI directly from the
         terminal as a fallback.
@@ -226,6 +234,10 @@ export function NeotomaWithClaudeCodePage() {
         </li>
         </ul>
       </IntegrationSection>
+
+      <IntegrationBeforeAfter toolName="Claude Code" />
+      <IntegrationActivation toolName="Claude Code" />
+      <IntegrationLimitations />
 
       <p className="text-[14px] leading-6 text-muted-foreground">
         Start with{" "}

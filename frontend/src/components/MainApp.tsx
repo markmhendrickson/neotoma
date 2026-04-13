@@ -78,6 +78,7 @@ import { VerticalsIndexPage } from "@/components/subpages/VerticalsIndexPage";
 import { BuildVsBuyPage } from "@/components/subpages/BuildVsBuyPage";
 import { EvaluatePage } from "@/components/subpages/EvaluatePage";
 import { MeetPage } from "@/components/subpages/MeetPage";
+
 import { FaqPage } from "@/components/subpages/FaqPage";
 import {
   NeotomaVsMem0Page,
@@ -115,8 +116,9 @@ const APP_ROUTES: readonly AppRoute[] = [
   { path: "/mcp", element: <McpReferencePage /> },
   { path: "/cli", element: <CliReferencePage /> },
   { path: "/install", element: <InstallPage /> },
-  { path: "/developer-walkthrough", element: <DeveloperWalkthroughPage /> },
-  { path: "/data-model", element: <Navigate to="/developer-walkthrough" replace /> },
+  { path: "/walkthrough", element: <DeveloperWalkthroughPage /> },
+  { path: "/developer-walkthrough", element: <Navigate to="/walkthrough" replace /> },
+  { path: "/data-model", element: <Navigate to="/walkthrough" replace /> },
   { path: "/architecture", element: <ArchitecturePage /> },
   { path: "/schema-management", element: <SchemaManagementPage /> },
   { path: "/troubleshooting", element: <TroubleshootingPage /> },
@@ -180,6 +182,7 @@ const APP_ROUTES: readonly AppRoute[] = [
   { path: "/verticals", element: <VerticalsIndexPage /> },
   { path: "/build-vs-buy", element: <BuildVsBuyPage /> },
   { path: "/evaluate", element: <EvaluatePage /> },
+
   { path: "/meet", element: <MeetPage /> },
   { path: "/faq", element: <FaqPage /> },
   { path: "/neotoma-vs-platform-memory", element: <NeotomaVsPlatformMemoryPage /> },

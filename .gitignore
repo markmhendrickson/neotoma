@@ -27,6 +27,16 @@ data.backup.*/
 data_backups/
 # Vite build output (outDir: public/); source is frontend/
 public/
+!frontend/public/
+!frontend/public/favicon.ico
+!frontend/public/favicon.svg
+!frontend/public/favicon-16x16.png
+!frontend/public/favicon-32x32.png
+!frontend/public/favicon-48x48.png
+!frontend/public/apple-touch-icon.png
+!frontend/public/android-chrome-192x192.png
+!frontend/public/android-chrome-512x512.png
+!frontend/public/site.webmanifest
 # Build output from build:pages:site (CI regenerates on deploy)
 site_pages/assets/
 site_pages/neotoma-hero.png

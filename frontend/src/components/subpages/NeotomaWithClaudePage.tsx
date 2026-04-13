@@ -5,6 +5,7 @@ import { TrackedProductLink } from "../TrackedProductNav";
 import { DetailPage } from "../DetailPage";
 import { IntegrationLinkCard } from "../IntegrationLinkCard";
 import { IntegrationSection } from "../IntegrationSection";
+import { IntegrationBeforeAfter, IntegrationActivation, IntegrationLimitations } from "../IntegrationExtras";
 import { TableScrollWrapper } from "../ui/table-scroll-wrapper";
 
 const extLink = "text-foreground underline underline-offset-2 hover:no-underline";
@@ -469,6 +470,10 @@ export function NeotomaWithClaudePage() {
           </li>
         </ul>
       </IntegrationSection>
+
+      <IntegrationBeforeAfter toolName="Claude" />
+      <IntegrationActivation toolName="Claude" />
+      <IntegrationLimitations />
 
       <p className="text-[14px] leading-6 text-muted-foreground">
         Start with{" "}

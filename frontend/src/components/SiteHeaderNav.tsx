@@ -629,6 +629,8 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
   const { pathname } = useLocation();
   const effectivePath = useEffectiveRoutePath();
   const routeBase = normalizeToDefaultRoute(effectivePath);
+  const hideHeaderEvaluateInstallNav =
+    routeBase === "/install" || routeBase === "/evaluate";
   const isMarketingHomeChrome =
     effectivePath === "/" && !isProductBasePath();
   const { locale, dict } = useLocale();
@@ -713,31 +715,42 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
         )}
       </div>
 
-      {/* Mobile: Evaluate + Architecture in header */}
+      {/* Mobile: Evaluate + Install + Architecture in header (funnel CTAs hidden on those pages) */}
       <nav
         className="md:hidden flex min-w-0 items-center gap-0.5"
-        aria-label={`${dict.evaluate}, ${dict.install}, and ${dict.architecture}`}
+        aria-label={
+          hideHeaderEvaluateInstallNav
+            ? dict.architecture
+            : `${dict.evaluate}, ${dict.install}, and ${dict.architecture}`
+        }
       >
-        <Link
-          to={localizePath("/evaluate", locale)}
-          className="rounded-md px-1.5 py-1.5 text-[13px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-          onClick={() => sendCtaClick("header_evaluate")}
-        >
-          {dict.evaluate}
-        </Link>
-        <Link
-          to={localizePath("/install", locale)}
-          className={cn(
-            HOME_DEMO_INSTALL_CTA_CLASS,
-            "px-2 py-1 text-[13px] focus-visible:ring-offset-sidebar",
-          )}
-          onClick={() => sendCtaClick("header_install")}
-        >
-          {dict.install}
-        </Link>
+        {!hideHeaderEvaluateInstallNav && (
+          <Link
+            to={localizePath("/evaluate", locale)}
+            className="rounded-md px-1.5 py-1.5 text-[13px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            onClick={() => sendCtaClick("header_evaluate")}
+          >
+            {dict.evaluate}
+          </Link>
+        )}
+        {!hideHeaderEvaluateInstallNav && (
+          <Link
+            to={localizePath("/install", locale)}
+            className={cn(
+              HOME_DEMO_INSTALL_CTA_CLASS,
+              "px-2 py-1 text-[13px] focus-visible:ring-offset-sidebar",
+            )}
+            onClick={() => sendCtaClick("header_install")}
+          >
+            {dict.install}
+          </Link>
+        )}
         <Link
           to={localizePath("/architecture", locale)}
-          className="hidden rounded-md px-1.5 py-1.5 text-[13px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground sm:inline-flex"
+          className={cn(
+            "rounded-md px-1.5 py-1.5 text-[13px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+            hideHeaderEvaluateInstallNav ? "inline-flex" : "hidden sm:inline-flex",
+          )}
           onClick={() => sendCtaClick("view_architecture")}
         >
           {dict.architecture}
@@ -746,31 +759,35 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
 
       <NavigationMenu className="hidden md:block">
         <NavigationMenuList>
-          <NavigationMenuItem>
-            <NavigationMenuLink asChild>
-              <Link
-                to={localizePath("/evaluate", locale)}
-                className={`${navigationMenuTriggerStyle()} ${sidebarNavItemClass}`}
-                onClick={() => sendCtaClick("header_evaluate")}
-              >
-                {dict.evaluate}
-              </Link>
-            </NavigationMenuLink>
-          </NavigationMenuItem>
-          <NavigationMenuItem className="hidden md:flex">
-            <NavigationMenuLink asChild>
-              <Link
-                to={localizePath("/install", locale)}
-                className={cn(
-                  HOME_DEMO_INSTALL_CTA_CLASS,
-                  "px-2.5 py-1 text-sm focus-visible:ring-offset-sidebar",
-                )}
-                onClick={() => sendCtaClick("header_install")}
-              >
-                {dict.install}
-              </Link>
-            </NavigationMenuLink>
-          </NavigationMenuItem>
+          {!hideHeaderEvaluateInstallNav && (
+            <NavigationMenuItem>
+              <NavigationMenuLink asChild>
+                <Link
+                  to={localizePath("/evaluate", locale)}
+                  className={`${navigationMenuTriggerStyle()} ${sidebarNavItemClass}`}
+                  onClick={() => sendCtaClick("header_evaluate")}
+                >
+                  {dict.evaluate}
+                </Link>
+              </NavigationMenuLink>
+            </NavigationMenuItem>
+          )}
+          {!hideHeaderEvaluateInstallNav && (
+            <NavigationMenuItem className="hidden md:flex">
+              <NavigationMenuLink asChild>
+                <Link
+                  to={localizePath("/install", locale)}
+                  className={cn(
+                    HOME_DEMO_INSTALL_CTA_CLASS,
+                    "px-2.5 py-1 text-sm focus-visible:ring-offset-sidebar",
+                  )}
+                  onClick={() => sendCtaClick("header_install")}
+                >
+                  {dict.install}
+                </Link>
+              </NavigationMenuLink>
+            </NavigationMenuItem>
+          )}
           <NavigationMenuItem className="hidden md:flex">
             <NavigationMenuLink asChild>
               <Link
@@ -918,29 +935,33 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
             >
               <nav className="flex flex-col gap-1">
                 <>
-                  <Link
-                    to={localizePath("/evaluate", locale)}
-                    className="rounded-md px-3 py-2 text-[14px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                    onClick={() => {
-                      sendCtaClick("header_evaluate");
-                      setMobileMenuOpen(false);
-                    }}
-                  >
-                    {dict.evaluate}
-                  </Link>
-                  <Link
-                    to={localizePath("/install", locale)}
-                    className={cn(
-                      HOME_DEMO_INSTALL_CTA_CLASS,
-                      "w-full justify-center px-3 py-2 text-[14px] focus-visible:ring-offset-sidebar",
-                    )}
-                    onClick={() => {
-                      sendCtaClick("header_install");
-                      setMobileMenuOpen(false);
-                    }}
-                  >
-                    {dict.install}
-                  </Link>
+                  {!hideHeaderEvaluateInstallNav && (
+                    <Link
+                      to={localizePath("/evaluate", locale)}
+                      className="rounded-md px-3 py-2 text-[14px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                      onClick={() => {
+                        sendCtaClick("header_evaluate");
+                        setMobileMenuOpen(false);
+                      }}
+                    >
+                      {dict.evaluate}
+                    </Link>
+                  )}
+                  {!hideHeaderEvaluateInstallNav && (
+                    <Link
+                      to={localizePath("/install", locale)}
+                      className={cn(
+                        HOME_DEMO_INSTALL_CTA_CLASS,
+                        "w-full justify-center px-3 py-2 text-[14px] focus-visible:ring-offset-sidebar",
+                      )}
+                      onClick={() => {
+                        sendCtaClick("header_install");
+                        setMobileMenuOpen(false);
+                      }}
+                    >
+                      {dict.install}
+                    </Link>
+                  )}
                   <Link
                     to={localizePath("/architecture", locale)}
                     className="rounded-md px-3 py-2 text-[14px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"

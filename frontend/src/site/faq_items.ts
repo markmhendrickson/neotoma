@@ -23,6 +23,10 @@ export function faqQuestionToSectionId(question: string): string {
 /** Shared with MemoryGuaranteesPage and site search slug derivation. */
 export const FAQ_QUESTION_GIT_LIKE_AGENT_MEMORY =
   "How does Neotoma compare to tools that offer Git-like version control for agent memory?";
+export const FAQ_QUESTION_BUILDING_YOUR_OWN_MEMORY_SYSTEM =
+  "I'm already building my own memory system. Why would I use Neotoma?";
+export const FAQ_QUESTION_NOT_FOR_THOUGHT_PARTNER =
+  "Is Neotoma a note-taking app or thought-partner tool?";
 
 export const FAQ_ITEMS: FaqItem[] = [
   {
@@ -70,6 +74,14 @@ export const FAQ_ITEMS: FaqItem[] = [
     link: { href: "/neotoma-vs-database", label: "Neotoma vs database memory" },
   },
   {
+    question: FAQ_QUESTION_BUILDING_YOUR_OWN_MEMORY_SYSTEM,
+    answer:
+      "That is the normal starting point. Most developers begin with SQLite, JSON, markdown, or a custom MCP server, then discover they still need versioning, conflict detection, schema evolution, replayable history, and cross-tool consistency. Neotoma ships those guarantees as the state layer so you do not have to keep rebuilding them around every new agent workflow.",
+    detail:
+      "The point is not that your current setup is wrong. It is that once agents write across sessions and tools, the missing guarantees become infrastructure work. Neotoma gives you the append-only history, reducer model, provenance, and deterministic state reconstruction that homemade memory stacks usually grow toward.",
+    link: { href: "/memory-guarantees", label: "Memory guarantees" },
+  },
+  {
     question: "What does Neotoma add on top of a database?",
     answer:
       "Neotoma adds an append-only observation log, deterministic reducers, a schema registry with write-time validation, field-level provenance tracking, content-addressed entity identity, and idempotent observation handling. The database stores the data; these architectural patterns deliver the guarantees.",
@@ -102,10 +114,18 @@ export const FAQ_ITEMS: FaqItem[] = [
   {
     question: "What should my agent remember? How do I get started?",
     answer:
-      "Start with what your agent already produces: conversations, contacts mentioned in chat, tasks and commitments (\"I need to\", \"remind me\"), and decisions. These store automatically with zero configuration once the agent rules are active. Within the first week, add financial data, calendar events, and project context as your personal OS grows.",
+      'Start with what your agent already produces: conversations, contacts mentioned in chat, tasks and commitments ("I need to", "remind me"), and decisions. These store automatically with zero configuration once the agent rules are active. Within the first week, add financial data, calendar events, and project context as your personal OS grows.',
     detail:
       "Priority 1 (day one): conversations, contacts, tasks, decisions - lowest friction, highest compound value. Priority 2 (first week): financial data, calendar, email, health. Priority 3 (as the OS matures): content pipeline, project context, agent session state. The heuristic: if it benefits from recall, audit, replay, or linking to other entities, store it.",
     link: { href: "/docs", label: "Documentation" },
+  },
+  {
+    question: FAQ_QUESTION_NOT_FOR_THOUGHT_PARTNER,
+    answer:
+      "No. Neotoma is a deterministic state layer — infrastructure for agents that accumulate structured state across sessions and tools. It is not a note-taking app, journaling tool, or conversational thought-partner. If your workflow is one-off brainstorming or freeform note capture, a tool built for that (Obsidian, Notion, Apple Notes) is a better fit.",
+    detail:
+      "Neotoma stores structured entities with schema validation, versioned history, and cross-tool consistency. That architecture is overhead for casual note-taking but essential when agents need reproducible, auditable state that compounds over time.",
+    link: { href: "/architecture", label: "Architecture" },
   },
   {
     question: "How do I install Neotoma?",
@@ -134,6 +154,14 @@ export const FAQ_ITEMS: FaqItem[] = [
     question: "What are Neotoma's memory guarantees?",
     answer:
       "Neotoma provides nine guarantees: deterministic state evolution, versioned history, replayable timeline, auditable change log, schema constraints, silent mutation prevention, conflicting facts detection, reproducible state reconstruction, and human inspectability.",
+    link: { href: "/memory-guarantees", label: "Memory guarantees" },
+  },
+  {
+    question: "Does the memory degrade or drift over time?",
+    answer:
+      "No. Neotoma uses an append-only observation log with deterministic reducers. Nothing is overwritten or silently dropped. Facts stored six months ago are as retrievable and verifiable as facts stored today \u2014 with full version history and provenance intact. The memory compounds; it never decays.",
+    detail:
+      "Platform memory (ChatGPT, Claude) can silently forget or overwrite facts over time. Retrieval systems lose relevance as embeddings age. File-based stores accumulate silent conflicts. Neotoma\u2019s architecture prevents all three failure modes: observations are immutable, snapshots are deterministically recomputed, and provenance traces every value to its source regardless of age.",
     link: { href: "/memory-guarantees", label: "Memory guarantees" },
   },
   {

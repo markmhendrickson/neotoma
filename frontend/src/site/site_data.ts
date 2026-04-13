@@ -209,6 +209,28 @@ export const MEMORY_GUARANTEE_ROWS: MemoryGuaranteeRow[] = [
     database: "not-provided",
     neotoma: "not-provided",
   },
+  {
+    property: "Privacy-first local storage",
+    slug: "privacy-first-local-storage",
+    tooltip:
+      "Whether your data stays on your machine by default with no cloud sync, telemetry, or third-party access. Neotoma runs entirely locally \u2014 your data never leaves your machine unless you explicitly configure remote access. Platform memory is stored on vendor servers subject to their privacy policies.",
+    platform: "not-provided",
+    retrieval: "not-provided",
+    file: "guaranteed",
+    database: "guaranteed",
+    neotoma: "guaranteed",
+  },
+  {
+    property: "Full data export and portability",
+    slug: "full-data-export-portability",
+    tooltip:
+      "Whether you can export all stored data in standard formats and move it to another system. Neotoma stores everything in a local SQLite database you own, with CLI export commands and a REST API. Platform memory may offer limited or no export capabilities.",
+    platform: "not-provided",
+    retrieval: "partial",
+    file: "guaranteed",
+    database: "guaranteed",
+    neotoma: "guaranteed",
+  },
 ];
 
 export const MEMORY_MODEL_VENDORS: Record<string, string> = {
@@ -326,7 +348,7 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
       { label: "Evaluate", href: "/evaluate", icon: "ClipboardCheck" },
       { label: "Meet the creator", href: "/meet", icon: "CalendarClock" },
       { label: "Install", href: "/install", icon: "Download" },
-      { label: "Walkthrough", href: "/developer-walkthrough", icon: "Waypoints" },
+      { label: "Walkthrough", href: "/walkthrough", icon: "Waypoints" },
     ],
   },
   {
@@ -1214,7 +1236,7 @@ export interface IcpProfile {
   name: string;
   shortName: string;
   tagline: string;
-  /** Homepage-only second paragraph that expresses the role shift in normal prose. */
+  /** Homepage-only second paragraph: imperative "Stop …" then the positive shift (see cards on home). */
   homepageTransition: string;
   /** Operational mode label (e.g. "Operating", "Building", "Debugging"). */
   modeLabel: string;
@@ -1244,7 +1266,7 @@ export const ICP_PROFILES: IcpProfile[] = [
     shortName: "Context janitor",
     tagline: "Every session starts from zero. You re-explain context, re-prompt corrections, re-establish what the agent already knew.",
     homepageTransition:
-      "You stop acting as the human sync layer between tools and start operating with continuity, steering instead of re-explaining.",
+      "Stop acting as the human sync layer between tools. Start operating with continuity — steering instead of re-explaining.",
     modeLabel: "Cross-tool sync",
     iconName: "ArrowLeftRight",
     escaping: "Context janitor — human sync layer between tools",
@@ -1288,7 +1310,7 @@ export const ICP_PROFILES: IcpProfile[] = [
     shortName: "Inference variance",
     tagline: "Your agent guesses entities every run. Corrections don\u2019t persist. Regressions ship because the architecture can\u2019t prevent them.",
     homepageTransition:
-      "You stop babysitting inference variance and start building on solid ground, with state that stays corrected from run to run.",
+      "Stop babysitting inference variance. Build on solid ground — state that stays corrected from run to run.",
     modeLabel: "Pipeline state",
     iconName: "Workflow",
     escaping: "Babysitting inference — absorbing variance the architecture doesn't handle",
@@ -1340,7 +1362,7 @@ export const ICP_PROFILES: IcpProfile[] = [
     shortName: "Log archaeology",
     tagline: "Two runs. Same inputs. Different state. No replay, no diff, no explanation.",
     homepageTransition:
-      "You stop reverse-engineering truth from logs and start debugging from replayable state you can inspect, diff, and trust.",
+      "Stop reverse-engineering truth from logs. Debug from replayable state you can inspect, diff, and trust.",
     modeLabel: "Replay & debug",
     iconName: "Bug",
     escaping: "Log archaeologist — reverse-engineering truth from logs",

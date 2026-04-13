@@ -3,9 +3,13 @@
  * Keep Tailwind class strings literal here so the JIT picks them up.
  */
 
-/** Light emerald panel for evaluate prompts (home section + /evaluate CopyableCodeBlock). */
-export const CODE_BLOCK_EMERALD_PANEL =
-  "border border-emerald-200/70 bg-emerald-50/90 text-foreground dark:border-emerald-800/50 dark:bg-emerald-950/35";
+/** Outer shell for evaluate prompt cards (`HomeEvaluatePromptBlock`, `CopyableCodeBlock` emerald). */
+export const EVALUATE_PROMPT_CARD_SHELL_CLASS =
+  "rounded-2xl border border-emerald-200/60 bg-gradient-to-br from-emerald-50/90 via-background to-emerald-50/50 p-3 shadow-sm shadow-emerald-900/5 supports-[backdrop-filter]:from-emerald-50/80 dark:border-emerald-900/50 dark:from-emerald-950/40 dark:via-background dark:to-emerald-950/25";
+
+/** Pill label above the prompt body (paired with dot in markup). */
+export const EVALUATE_PROMPT_PILL_CLASS =
+  "inline-flex w-fit max-w-full items-center gap-2 rounded-full border border-emerald-200/70 bg-emerald-100/90 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-900/85 dark:border-emerald-800/60 dark:bg-emerald-950/55 dark:text-emerald-200/90";
 
 export const CODE_BLOCK_COPY_BUTTON_ABSOLUTE =
   "absolute top-2 right-2 z-10 min-w-[88px] h-8 justify-center gap-1.5 shrink-0 border-emerald-600 bg-emerald-600 px-2.5 text-white shadow-sm shadow-emerald-600/30 hover:border-emerald-500 hover:bg-emerald-500 hover:text-white focus-visible:ring-emerald-500 dark:border-emerald-500 dark:bg-emerald-500 dark:text-emerald-950 dark:shadow-emerald-500/30 dark:hover:border-emerald-400 dark:hover:bg-emerald-400 dark:hover:text-emerald-950 after:text-[11px] after:font-semibold after:tracking-wide after:content-[attr(aria-label)]";
@@ -15,7 +19,7 @@ export const CODE_BLOCK_COPY_BUTTON_FLOAT =
 
 /** Primary emerald CTA — hero evaluate links, home evaluate copy control, banners (SitePage). */
 export const HOME_EVALUATE_CTA_CLASS =
-  "inline-flex justify-center items-center gap-1.5 rounded-md border border-emerald-700 bg-emerald-700 px-5 py-2.5 text-[15px] font-medium text-white no-underline shadow-sm shadow-emerald-700/30 hover:border-emerald-600 hover:bg-emerald-600 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 dark:border-emerald-500 dark:bg-emerald-500 dark:text-emerald-950 dark:shadow-emerald-500/30 dark:hover:border-emerald-400 dark:hover:bg-emerald-400 dark:hover:text-emerald-950 transition-colors";
+  "inline-flex justify-center items-center gap-1.5 rounded-md border border-emerald-700 bg-emerald-700 px-5 py-3 text-[15px] font-medium text-white no-underline shadow-sm shadow-emerald-700/30 hover:border-emerald-600 hover:bg-emerald-600 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 dark:border-emerald-500 dark:bg-emerald-500 dark:text-emerald-950 dark:shadow-emerald-500/30 dark:hover:border-emerald-400 dark:hover:bg-emerald-400 dark:hover:text-emerald-950 transition-colors";
 
 /**
  * Shared layout for the home sticky banner CTA pair. Pair with the primary/secondary variants below
@@ -37,14 +41,14 @@ export const HOME_SCROLL_BANNER_SECONDARY_CELL_CLASS =
  * and sticky banner on the same scroll view.
  */
 export const HOME_DEMO_INSTALL_CTA_CLASS =
-  "inline-flex justify-center items-center gap-1.5 rounded-md border border-blue-700 bg-blue-700 px-5 py-2.5 text-[15px] font-medium text-white no-underline shadow-sm shadow-blue-700/30 hover:border-blue-600 hover:bg-blue-600 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 dark:border-blue-500 dark:bg-blue-500 dark:text-white dark:shadow-blue-500/30 dark:hover:border-blue-400 dark:hover:bg-blue-400 dark:hover:text-white transition-colors";
+  "inline-flex justify-center items-center gap-1.5 rounded-md border border-blue-700 bg-blue-700 px-5 py-3 text-[15px] font-medium text-white no-underline shadow-sm shadow-blue-700/30 hover:border-blue-600 hover:bg-blue-600 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 dark:border-blue-500 dark:bg-blue-500 dark:text-white dark:shadow-blue-500/30 dark:hover:border-blue-400 dark:hover:bg-blue-400 dark:hover:text-white transition-colors";
 
 /**
  * Compact emerald evaluate CTA — SiteTailpiece: full width below sm, content width from sm up.
  */
 export const FOOTER_EVALUATE_CTA_CLASS =
-  "inline-flex w-full sm:w-auto sm:shrink-0 justify-center items-center gap-2 rounded-md border border-emerald-700 bg-emerald-700 px-4 py-2.5 text-[13px] font-medium text-white no-underline shadow-sm shadow-emerald-700/30 hover:border-emerald-600 hover:bg-emerald-600 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-50 dark:border-emerald-500 dark:bg-emerald-500 dark:text-emerald-950 dark:shadow-emerald-500/30 dark:hover:border-emerald-400 dark:hover:bg-emerald-400 dark:hover:text-emerald-950 dark:focus-visible:ring-offset-zinc-950 transition-colors";
+  "inline-flex w-full sm:w-auto sm:shrink-0 justify-center items-center gap-2 rounded-md border border-emerald-700 bg-emerald-700 px-4 py-3 text-[13px] font-medium text-white no-underline shadow-sm shadow-emerald-700/30 hover:border-emerald-600 hover:bg-emerald-600 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-50 dark:border-emerald-500 dark:bg-emerald-500 dark:text-emerald-950 dark:shadow-emerald-500/30 dark:hover:border-emerald-400 dark:hover:bg-emerald-400 dark:hover:text-emerald-950 dark:focus-visible:ring-offset-zinc-950 transition-colors";
 
 /** Secondary footer CTA paired with evaluate in `SiteTailpiece`. */
 export const FOOTER_SECONDARY_CTA_CLASS =
-  "inline-flex w-full sm:w-auto sm:shrink-0 justify-center items-center gap-2 rounded-md border border-border bg-background px-4 py-2.5 text-[13px] font-medium text-foreground no-underline shadow-sm transition-colors hover:bg-muted/70 hover:border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-50 dark:focus-visible:ring-offset-zinc-950";
+  "inline-flex w-full sm:w-auto sm:shrink-0 justify-center items-center gap-2 rounded-md border border-border bg-background px-4 py-3 text-[13px] font-medium text-foreground no-underline shadow-sm transition-colors hover:bg-muted/70 hover:border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-50 dark:focus-visible:ring-offset-zinc-950";

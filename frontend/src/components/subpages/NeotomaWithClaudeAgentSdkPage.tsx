@@ -6,6 +6,7 @@ import { CopyableCodeBlock } from "../CopyableCodeBlock";
 import { DetailPage } from "../DetailPage";
 import { GettingStartedEvaluateInstallLinks } from "../GettingStartedEvaluateInstallLinks";
 import { IntegrationSection } from "../IntegrationSection";
+import { IntegrationBeforeAfter, IntegrationActivation, IntegrationLimitations } from "../IntegrationExtras";
 import { TableScrollWrapper } from "../ui/table-scroll-wrapper";
 
 const extLink = "text-foreground underline underline-offset-2 hover:no-underline";
@@ -336,6 +337,10 @@ export function NeotomaWithClaudeAgentSdkPage() {
           </li>
         </ul>
       </IntegrationSection>
+
+      <IntegrationBeforeAfter toolName="Claude Agent SDK" />
+      <IntegrationActivation toolName="Claude Agent SDK" />
+      <IntegrationLimitations />
 
       <p className="text-[14px] leading-6 text-muted-foreground">
         Start with{" "}

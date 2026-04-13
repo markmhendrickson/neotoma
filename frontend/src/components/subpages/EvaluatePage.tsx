@@ -17,6 +17,20 @@ export function EvaluatePage() {
         agent-driven sequence regardless of which tool you start in. Ask your
         agent to visit this page first.
       </p>
+      <p className="text-[15px] leading-7 mb-4 text-muted-foreground">
+        If you already plan to install and want to skip this evaluation flow,
+        go straight to the{" "}
+        <TrackedProductLink
+          to="/install"
+          navTarget="install"
+          navSource={PRODUCT_NAV_SOURCES.evaluatePageBodyInstall}
+          className="underline"
+        >
+          install page
+        </TrackedProductLink>{" "}
+        for agent-assisted setup, manual commands, Docker, and integration
+        docs.
+      </p>
       <div className="mb-8">
         <p className="text-[15px] leading-7 mb-2 text-muted-foreground">
           <strong>Prompt to use</strong>
@@ -30,18 +44,19 @@ export function EvaluatePage() {
       </div>
 
       <section>
-        <h2 className="text-xl font-medium mb-4">What Neotoma is</h2>
+        <h2 className="text-xl font-medium mb-4">What Neotoma does for you</h2>
         <p className="text-[15px] leading-7 mb-4">
-          Neotoma is a deterministic state layer for AI agents. It gives your
-          agents versioned, schema-bound, auditable memory that persists across
-          sessions and tools. Distributed as a local npm package with MCP, CLI,
-          and API interfaces.
+          Neotoma lets your agents pick up where they left off: across
+          sessions, across tools, without you re-explaining anything. Store a
+          fact once and every agent works from the same truth. Correct
+          something once and the correction sticks everywhere.
         </p>
         <p className="text-[15px] leading-7 mb-4">
-          Not retrieval memory (RAG, vector search, semantic lookup). Neotoma
-          enforces deterministic state evolution: every change is versioned,
-          every entity is schema-bound, every state can be replayed from the
-          observation log.
+          Under the hood, Neotoma is a deterministic state layer: every change
+          is versioned, every entity is schema-bound, and every state can be
+          replayed from the observation log. It runs locally as an npm package
+          with MCP, CLI, and API interfaces. Not retrieval memory (RAG
+          or vector search), but structured, auditable state you control.
         </p>
       </section>
 

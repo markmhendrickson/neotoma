@@ -697,7 +697,7 @@ function EntityTypeGuideContent({ guide }: { guide: EntityTypeGuide }) {
         </li>
         <li>
           <Link
-            to="/developer-walkthrough"
+            to="/walkthrough"
             className="text-[15px] text-foreground underline underline-offset-2 hover:no-underline"
           >
             Walkthrough

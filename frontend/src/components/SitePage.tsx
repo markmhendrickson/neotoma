@@ -3,9 +3,9 @@ import {
   Bug,
   CalendarClock,
   Check,
-  AlertCircle,
   ChevronDown,
   ChevronUp,
+  CircleOff,
   ExternalLink,
   Eye,
   ListChecks,
@@ -17,6 +17,8 @@ import {
   MessageSquare,
   Users,
   Waypoints,
+  AlertTriangle,
+  Wrench,
   Workflow,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -30,6 +32,14 @@ import {
   MEMORY_GUARANTEE_ROWS,
   ICP_PROFILES,
 } from "../site/site_data";
+import {
+  FAQ_QUESTION_BUILDING_YOUR_OWN_MEMORY_SYSTEM,
+  FAQ_QUESTION_NOT_FOR_THOUGHT_PARTNER,
+  faqQuestionToSectionId,
+} from "../site/faq_items";
+
+const WHO_CALLOUT_FAQ_LINK_CLASS =
+  "font-medium text-foreground underline decoration-emerald-600/35 underline-offset-2 hover:decoration-emerald-600/70";
 import { useRepoMetaClient } from "../hooks/useRepoMetaClient";
 import {
   HOME_EVALUATE_CTA_CLASS,
@@ -68,11 +78,11 @@ interface SitePageProps {
 /** Full home scroll order (edge indicators, sidebar hash targets). FAQ block is not a dot-nav stop. */
 const SECTION_ORDER: readonly string[] = [
   "intro",
-  "proof",
+  "who",
   "outcomes",
   "demo",
-  "who",
   "memory-guarantees",
+  "proof",
   "record-types",
   "evaluate",
   "common-questions",
@@ -93,11 +103,11 @@ function getHomeInitialNavSectionId(): string | null {
 function getLocalizedDotNavSections(pack: ReturnType<typeof useLocale>["pack"]) {
   return [
     { id: "intro", label: pack.siteSections.intro },
-    { id: "proof", label: pack.siteSections.personalOs },
+    { id: "who", label: pack.siteSections.who ?? "Who" },
     { id: "outcomes", label: pack.siteSections.beforeAfter },
     { id: "demo", label: pack.siteSections.demo ?? "Demo" },
-    { id: "who", label: pack.siteSections.who ?? "Who" },
     { id: "memory-guarantees", label: pack.siteSections.guarantees },
+    { id: "proof", label: pack.siteSections.personalOs },
     { id: "record-types", label: pack.siteSections.recordTypes ?? "Record types" },
     { id: "evaluate", label: pack.siteSections.evaluate ?? "Evaluate" },
   ];
@@ -113,7 +123,8 @@ const GUARANTEE_PREVIEW_CARDS: {
   {
     slug: "deterministic-state-evolution",
     property: "Deterministic state",
-    failure: "Same pipeline, different outputs \u2014 ordering bugs you can\u2019t trace.",
+    failure:
+      "You run the same pipeline twice and get different results \u2014 no way to trace why.",
     status: "guaranteed",
     illus: guaranteeDeterministicStateIllus,
   },
@@ -127,28 +138,29 @@ const GUARANTEE_PREVIEW_CARDS: {
   {
     slug: "auditable-change-log",
     property: "Auditable change log",
-    failure: "Your agent made a bad call. You can\u2019t trace what it was working from.",
+    failure: "Your agent makes a bad call. You can\u2019t trace what data it relied on.",
     status: "guaranteed",
     illus: guaranteeAuditableChangeLogIllus,
   },
   {
     slug: "silent-mutation-risk",
     property: "Silent mutation prevention",
-    failure: "Data changes without your knowledge. You discover it downstream.",
+    failure: "Data changes without your knowledge. You find out when something breaks.",
     status: "prevented",
     illus: guaranteeSilentMutationPreventionIllus,
   },
   {
     slug: "schema-constraints",
     property: "Schema constraints",
-    failure: "Agents write malformed data. Garbage in, garbage out \u2014 silently.",
+    failure:
+      "An agent writes a malformed record. Nothing rejects it \u2014 errors compound silently.",
     status: "guaranteed",
     illus: guaranteeSchemaConstraintsIllus,
   },
   {
     slug: "reproducible-state-reconstruction",
     property: "Reproducible reconstruction",
-    failure: "Database corrupts. No way to rebuild state from source.",
+    failure: "Your database corrupts. There\u2019s no path back to a known-good state.",
     status: "guaranteed",
     illus: guaranteeReproducibleReconstructionIllus,
   },
@@ -157,7 +169,7 @@ const GUARANTEE_PREVIEW_CARDS: {
 const GUARANTEE_QA: { q: string; a: string }[] = [
   {
     q: "Platform memory (Claude, ChatGPT) is good enough - why add another tool?",
-    a: "Platform memory stores what one vendor decides to remember, in a format you can't inspect or export. It doesn't version, doesn't detect conflicts, and vanishes if you switch tools. Neotoma gives you structured, cross-tool state you control.",
+    a: "Platform memory stores what one vendor decides to remember, in a format you can't inspect or export. It doesn't version, doesn't detect conflicts, and vanishes if you switch tools. Neotoma gives you structured, cross-tool memory you control.",
   },
   {
     q: "Can't I just build this with SQLite or a JSON file?",
@@ -165,7 +177,7 @@ const GUARANTEE_QA: { q: string; a: string }[] = [
   },
   {
     q: "Is this production-ready?",
-    a: "Neotoma is in developer preview - used daily by real agent workflows. The core guarantees (deterministic state, versioned history, append-only log) are stable. Install in 5 minutes and let your agent evaluate the fit.",
+    a: "Neotoma is in developer preview \u2014 used daily by real agent workflows. The core guarantees (deterministic memory, versioned history, append-only change log) are stable. Install in 5 minutes and let your agent evaluate the fit.",
   },
 ];
 
@@ -173,12 +185,20 @@ const GUARANTEE_QA: { q: string; a: string }[] = [
 const HOME_FAQ_PREVIEW_ITEMS: { q: string; a: string }[] = [
   ...GUARANTEE_QA,
   {
+    q: "Does Neotoma replace Claude's memory or ChatGPT's?",
+    a: "No \u2014 it works alongside them. Platform memory stores what one vendor decides to remember within that vendor's tool. Neotoma stores facts you control across all your tools. Keep using platform memory for quick context; use Neotoma when you need versioning, auditability, and cross-tool consistency.",
+  },
+  {
     q: "Does Neotoma send my data to the cloud?",
     a: "No. Neotoma runs locally by default. Your data stays on your machine in a local SQLite database. There is no cloud sync, no telemetry, and no training on your data unless you choose to expose the API (for example for remote MCP clients).",
   },
   {
     q: "What's the difference between RAG memory and deterministic memory?",
-    a: "RAG stores text chunks and retrieves them by similarity for prompts. Neotoma stores structured observations and composes entity state with reducers; the same observations always yield the same snapshot. RAG optimizes relevance; deterministic memory optimizes integrity, versioning, and auditability.",
+    a: "RAG stores text chunks and retrieves them by similarity. Neotoma stores structured facts and builds a versioned history for each one; the same inputs always produce the same result. RAG optimizes relevance; deterministic memory optimizes integrity, versioning, and auditability.",
+  },
+  {
+    q: "Does the memory degrade or drift over time?",
+    a: "No. Neotoma uses an append-only observation log with deterministic reducers. Nothing is overwritten or silently dropped. Facts stored six months ago are as retrievable and verifiable as facts stored today \u2014 with full version history and provenance intact. The memory compounds; it never decays.",
   },
 ];
 
@@ -217,10 +237,11 @@ const SCENARIOS = [
     version: "conversation\u00B7v7",
   },
   {
-    left: "What's the status of my Modelo 720 filing?",
-    fail: "No tax filing data found.",
-    succeed: "Draft complete, 14 assets declared, due Mar 31.",
-    version: "tax_filing\u00B7v4",
+    left: "What did we originally agree with Acme Corp back in October?",
+    fail: "No records from October found.",
+    succeed:
+      "Original terms from Oct 12: 18-month engagement, $4,200/mo, with a 90-day exit clause. Amended Jan 8 to $4,800/mo.",
+    version: "contract\u00B7v3",
   },
   {
     left: "Which agent session updated my contact list?",
@@ -271,7 +292,7 @@ const OUTCOME_CARDS: {
       "You corrected a contact's email last week. A different agent session overwrote it with the old address. Your agent sends to the wrong person, and nobody notices until it's too late.",
     successTitle: "Every version preserved, corrections verified",
     successDescription:
-      "Both the old and new email exist as versioned observations. Your agent works from the verified current state, and you can inspect exactly when and why each value changed.",
+      "Both the old and new email are preserved in versioned history. Your agent works from the verified current facts, and you can inspect exactly when and why each value changed.",
     scenarioIndex: 0,
   },
   {
@@ -293,7 +314,7 @@ const OUTCOME_CARDS: {
       "You asked about last month's spending. Your agent has no memory of the transactions you tracked two weeks ago in a different tool. You start over.",
     successTitle: "Versioned transactions, consistent totals",
     successDescription:
-      "Every transaction is stored with provenance and version history. Ask from any tool and the numbers match - no re-entry, no conflicting snapshots.",
+      "Every transaction is stored with full history and source tracking. Ask from any tool and the numbers match \u2014 no re-entry, no conflicting answers.",
     scenarioIndex: 2,
   },
   {
@@ -304,7 +325,7 @@ const OUTCOME_CARDS: {
       "Your agent posted a tweet, sent an email, or made a recommendation. When you ask why, there's no record of the reasoning or the data it used.",
     successTitle: "Full audit trail for every action",
     successDescription:
-      'Every decision is stored with its inputs, rationale, and the session that produced it. When you ask "why did you do that?", the agent can show you exactly.',
+      'Every decision is stored with its inputs, reasoning, and the session that produced it. When you ask "why did you do that?", the agent can show you exactly.',
     scenarioIndex: 3,
   },
 ];
@@ -348,7 +369,8 @@ const RECORD_TYPE_CARDS: {
   {
     label: "Transactions",
     href: "/types/transactions",
-    description: "Payments, receipts, invoices, and ledger entries versioned instead of overwritten.",
+    description:
+      "Payments, receipts, invoices, and ledger entries versioned instead of overwritten.",
     entities: ["transaction", "invoice", "receipt"],
     accent: "text-amber-600 dark:text-amber-400",
     icon: Receipt,
@@ -444,6 +466,19 @@ function ForgetfulAgentIllustration({
   const viewportRef = useRef<HTMLDivElement>(null);
   const wasInViewRef = useRef(false);
   const prevElapsedWithinRunRef = useRef(0);
+  const wasPlayingRef = useRef(false);
+
+  /** After pause + scrub, `elapsed` can be 0 while the monotonic ref still holds the pre-scrub time; resuming would clamp forward and freeze. Sync ref to `elapsed` on every play transition. */
+  useLayoutEffect(() => {
+    if (playing) {
+      if (!wasPlayingRef.current) {
+        prevElapsedWithinRunRef.current = elapsed;
+      }
+      wasPlayingRef.current = true;
+    } else {
+      wasPlayingRef.current = false;
+    }
+  }, [playing, elapsed]);
 
   useEffect(() => {
     const node = viewportRef.current;
@@ -793,6 +828,8 @@ function ForgetfulAgentIllustration({
               onPointerDown={onBarPointerDown}
               onPointerMove={onBarPointerMove}
               onPointerUp={onBarPointerUp}
+              onPointerCancel={onBarPointerUp}
+              onLostPointerCapture={onBarPointerUp}
             >
               <div className="pointer-events-none absolute inset-y-0 left-0 right-0 my-auto h-1.5 overflow-hidden rounded-full">
                 {ANIM_SCENARIOS.map((_, i) => {
@@ -967,8 +1004,8 @@ function OutcomesSlide({
               </p>
               <h2 className={HOME_SECTION_H2_CLASS}>Same question, different outcome</h2>
               <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl mx-auto">
-                Without a state layer, agents act on state they can&rsquo;t verify. With Neotoma,
-                every response reads from versioned, schema-bound state.
+                Without shared memory, agents act on facts they can&rsquo;t verify. With Neotoma,
+                every response reads from versioned, structured history.
               </p>
             </div>
 
@@ -995,9 +1032,9 @@ function OutcomesSlide({
 }
 
 const SLIDE_CLASS =
-  "min-h-[100svh] md:snap-start flex items-center justify-center relative print:min-h-0 print:[scroll-snap-align:unset]";
-/** Extra md+ vertical padding so SectionEdgeIndicators (absolute top-6/bottom-6) do not overlap copy. */
-const SLIDE_INNER = "w-full max-w-6xl mx-auto px-6 md:px-12 lg:px-16 py-12 md:pt-16 md:pb-16";
+  "min-h-[auto] md:min-h-[100svh] md:snap-start flex items-center justify-center relative print:min-h-0 print:[scroll-snap-align:unset]";
+/** Reduced mobile padding; md+ keeps generous vertical padding so SectionEdgeIndicators do not overlap copy. */
+const SLIDE_INNER = "w-full max-w-6xl mx-auto px-4 md:px-12 lg:px-16 py-8 md:pt-16 md:pb-16";
 
 const ICP_ICON_MAP: Record<string, LucideIcon> = {
   Server,
@@ -1125,8 +1162,8 @@ function HomeAgentToolChips({
   compact?: boolean;
 }) {
   const chipClass = compact
-    ? "inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-[13px] font-medium text-foreground/90 no-underline transition-colors hover:bg-muted"
-    : "inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3.5 py-2 text-[14px] font-medium text-foreground/90 no-underline transition-colors hover:bg-muted";
+    ? "inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-[13px] font-medium text-foreground/90 no-underline transition-colors hover:bg-muted"
+    : "inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3.5 py-2.5 text-[14px] font-medium text-foreground/90 no-underline transition-colors hover:bg-muted";
   const alignmentClass = align === "start" ? "justify-center lg:justify-start" : "justify-center";
   const rowClass = compact ? "gap-2.5" : "gap-3";
   const labelClass = compact
@@ -1213,11 +1250,8 @@ function HeroStatePreview() {
 
 function EvaluateSectionCta() {
   return (
-    <div className="flex flex-col items-center gap-8">
-      <div className="flex flex-col items-center gap-4 text-center max-w-lg">
-        <HomeEvaluatePromptBlock copyFeedbackId="evaluate-section-prompt" />
-        <HomeAgentToolChips compact />
-      </div>
+    <div className="flex w-full max-w-lg flex-col items-stretch gap-4 text-left">
+      <HomeEvaluatePromptBlock copyFeedbackId="evaluate-section-prompt" hideIntro />
     </div>
   );
 }
@@ -1301,6 +1335,88 @@ const HERO_QUOTES: { text: string; attribution: string; attributionHref?: string
     attributionHref: "https://x.com/TychoOnnasch",
   },
 ];
+
+function HeroQuotesCarousel() {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [activeIdx, setActiveIdx] = useState(0);
+
+  const handleScroll = useCallback(() => {
+    const el = trackRef.current;
+    if (!el) return;
+    const idx = Math.round(el.scrollLeft / el.offsetWidth);
+    setActiveIdx(Math.min(idx, HERO_QUOTES.length - 1));
+  }, []);
+
+  const scrollTo = useCallback((idx: number) => {
+    const el = trackRef.current;
+    if (!el) return;
+    el.scrollTo({ left: idx * el.offsetWidth, behavior: "smooth" });
+  }, []);
+
+  const quoteCard = (q: (typeof HERO_QUOTES)[number], i: number) => (
+    <div
+      key={i}
+      className="flex flex-col rounded-xl border border-border/60 bg-card/30 p-3 sm:p-5 text-left"
+    >
+      <Quote className="h-4 w-4 sm:h-5 sm:w-5 shrink-0 text-emerald-500/40 mb-2 sm:mb-3" aria-hidden />
+      <p className="text-[14px] sm:text-[16px] md:text-[18px] leading-6 sm:leading-7 text-foreground/90 italic flex-1">
+        &ldquo;{q.text}&rdquo;
+      </p>
+      <p className="mt-2 sm:mt-3 text-[11px] sm:text-[12px] text-muted-foreground">
+        {q.attributionHref ? (
+          <a
+            href={q.attributionHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline-offset-2 hover:underline text-muted-foreground"
+          >
+            {q.attribution}
+          </a>
+        ) : (
+          q.attribution
+        )}
+      </p>
+    </div>
+  );
+
+  return (
+    <>
+      {/* Mobile carousel */}
+      <div className="sm:hidden max-w-3xl mx-auto">
+        <div
+          ref={trackRef}
+          onScroll={handleScroll}
+          className="flex snap-x snap-mandatory overflow-x-auto scrollbar-hide -mx-4 px-4 gap-3"
+        >
+          {HERO_QUOTES.map((q, i) => (
+            <div key={i} className="snap-center shrink-0 w-[85vw] max-w-[340px]">
+              {quoteCard(q, i)}
+            </div>
+          ))}
+        </div>
+        <div className="flex justify-center gap-1.5 mt-3">
+          {HERO_QUOTES.map((_, i) => (
+            <button
+              key={i}
+              aria-label={`Go to quote ${i + 1}`}
+              onClick={() => scrollTo(i)}
+              className={`h-1.5 rounded-full transition-all ${
+                i === activeIdx
+                  ? "w-4 bg-emerald-500"
+                  : "w-1.5 bg-border hover:bg-muted-foreground/40"
+              }`}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Desktop grid */}
+      <div className="hidden sm:grid gap-4 sm:grid-cols-2 max-w-3xl mx-auto">
+        {HERO_QUOTES.map((q, i) => quoteCard(q, i))}
+      </div>
+    </>
+  );
+}
 
 export function SitePage({ staticMode = false }: SitePageProps) {
   const { pack, locale } = useLocale();
@@ -1458,18 +1574,16 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                               {pack.homeHero.titleAccent}
                             </span>{" "}
                             {pack.homeHero.titleMid}{" "}
-                            <span className={`whitespace-nowrap ${HERO_TITLE_TOOLS_EMPHASIS_CLASS}`}>
+                            <span
+                              className={`whitespace-nowrap ${HERO_TITLE_TOOLS_EMPHASIS_CLASS}`}
+                            >
                               {pack.homeHero.titleFocus}
                             </span>
                           </span>
                         </h1>
 
                         <p className="text-[15px] md:text-[17px] leading-7 text-foreground/80 max-w-xl mx-auto lg:mx-0">
-                          {pack.homeHero.curiosityGap}
-                        </p>
-
-                        <p className="mb-4 text-[15px] md:text-[17px] leading-7 text-foreground/80 max-w-xl mx-auto lg:mx-0">
-                          {pack.homeHero.subcopy}
+                          {pack.homeHero.heroReinforcement}
                         </p>
 
                         <div className="mt-10 flex flex-col sm:flex-row sm:flex-wrap justify-center gap-3 lg:justify-start">
@@ -1488,7 +1602,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                           </a>
                           <a
                             href="/install"
-                            className="inline-flex w-full sm:w-auto justify-center items-center gap-1.5 rounded-md border border-border bg-card px-5 py-2.5 text-[15px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
+                            className="inline-flex w-full sm:w-auto justify-center items-center gap-1.5 rounded-md border border-border bg-card px-5 py-3 text-[15px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
                             onClick={(e) => {
                               sendCtaClick("hero_install");
                               if (isModifiedClick(e)) return;
@@ -1501,12 +1615,12 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                           </a>
                         </div>
 
-                        <div className="flex min-w-0 max-w-full flex-row items-baseline justify-center gap-2 pt-4 lg:justify-start">
+                        <div className="flex max-w-full flex-row items-baseline justify-center gap-2 pt-4 lg:justify-start">
                           <Workflow
                             className="h-3.5 w-3.5 shrink-0 translate-y-[2px] text-muted-foreground/60"
                             aria-hidden
                           />
-                          <p className="min-w-0 max-w-xl break-words text-center text-[12px] font-mono leading-snug tracking-wide text-muted-foreground/60 uppercase lg:text-left">
+                          <p className="min-w-0 text-center text-[10.5px] font-mono leading-snug tracking-[0.04em] text-muted-foreground/60 uppercase lg:text-left">
                             {pack.homeHero.audienceTagline}
                           </p>
                         </div>
@@ -1515,13 +1629,222 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                       <HeroStatePreview />
                     </div>
                   </div>
+                  <div className="mx-auto mt-12 flex w-full max-w-6xl justify-center lg:mt-14">
+                    <div className="rounded-2xl bg-background/80 px-4 py-3 backdrop-blur-sm">
+                      <HomeAgentToolChips compact />
+                    </div>
+                  </div>
                 </div>
                 <SectionEdgeIndicators sectionId="intro" />
               </FadeSection>
             </div>
           </section>
 
-          {/* Slide 2: Proof - founder story, evaluator quotes, stats */}
+          {/* Slide 2: Who -- identity anchoring */}
+          <section id="who" className={SLIDE_CLASS}>
+            <FadeSection scrollContainerRef={scrollContainerRef} staticMode={staticMode}>
+              <div className={SLIDE_INNER}>
+                <div className="space-y-6 md:space-y-8 max-w-5xl mx-auto">
+                  <div className="space-y-2 text-center">
+                    <p className="text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
+                      Who this is for
+                    </p>
+                    <h2 className={HOME_SECTION_H2_CLASS}>
+                      You run AI agents seriously...
+                      <span className="mt-1.5 block text-muted-foreground sm:mt-2">
+                        ...and pay the tax for missing memory
+                      </span>
+                    </h2>
+                    <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl mx-auto">
+                      The re-prompting wastes your time and tokens. The deeper risk is when your
+                      agent acts confidently on wrong facts, and you don&rsquo;t find out until the
+                      damage is done.
+                    </p>
+                  </div>
+
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {ICP_PROFILES.map((profile, index) => {
+                      const Icon = ICP_ICON_MAP[profile.iconName] ?? Server;
+                      return (
+                        <Link
+                          key={profile.slug}
+                          to={`/${profile.slug}`}
+                          className="group flex flex-col rounded-xl border border-border bg-card/50 p-4 no-underline transition-colors hover:bg-muted/60 hover:border-border/80 sm:p-5"
+                        >
+                          <ScrollRevealOnce
+                            scrollContainerRef={scrollContainerRef}
+                            staticMode={staticMode}
+                            staggerMs={index * ILLUS_REVEAL_STAGGER_MS}
+                          >
+                            <WhoProfileCardVisual
+                              profileSlug={profile.slug}
+                              modeLabel={profile.modeLabel}
+                              Icon={Icon}
+                            />
+                          </ScrollRevealOnce>
+                          <div className="flex min-h-0 flex-1 flex-col px-1 pt-4">
+                            <p className="text-[15px] font-medium text-foreground">
+                              {profile.name}
+                            </p>
+                            <p className="mt-2 text-[13px] leading-6 text-muted-foreground">
+                              {profile.tagline}
+                            </p>
+                            {profile.homepageTransition ? (
+                              <p className="mt-2 text-[13px] leading-6 text-muted-foreground">
+                                {profile.homepageTransition}
+                              </p>
+                            ) : null}
+                          </div>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                  <div className="mx-auto max-w-xl rounded-lg border border-emerald-500/20 bg-emerald-50/50 dark:bg-emerald-950/20 px-4 py-3 text-left">
+                    <div className="flex items-start gap-2">
+                      <Wrench
+                        className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/75"
+                        aria-hidden
+                      />
+                      <p className="text-[13px] leading-5 text-muted-foreground">
+                        <span className="font-medium text-foreground">
+                          Already building your own memory system?
+                        </span>{" "}
+                        Most developers start with SQLite, JSON, markdown, or a custom MCP server.
+                        Neotoma ships{" "}
+                        <Link
+                          to={`/faq#${faqQuestionToSectionId(FAQ_QUESTION_BUILDING_YOUR_OWN_MEMORY_SYSTEM)}`}
+                          className={WHO_CALLOUT_FAQ_LINK_CLASS}
+                        >
+                          the guarantees you&rsquo;d otherwise build and maintain yourself
+                        </Link>
+                        : versioning, conflict detection, schema evolution, and cross-tool sync.
+                      </p>
+                    </div>
+                    <div className="mt-2 flex items-start gap-2 border-t border-emerald-500/15 pt-2 text-[12px] leading-5 text-muted-foreground">
+                      <CircleOff
+                        className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/75"
+                        aria-hidden
+                      />
+                      <p>
+                        Not for{" "}
+                        <Link
+                          to={`/faq#${faqQuestionToSectionId(FAQ_QUESTION_NOT_FOR_THOUGHT_PARTNER)}`}
+                          className={WHO_CALLOUT_FAQ_LINK_CLASS}
+                        >
+                          one-off thought-partner workflows or note-taking apps
+                        </Link>
+                        .
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <SectionEdgeIndicators sectionId="who" />
+            </FadeSection>
+          </section>
+
+          {/* Slide 3: Before / After */}
+          <OutcomesSlide scrollContainerRef={scrollContainerRef} staticMode={staticMode} />
+
+          {/* Slide 4: Product demo */}
+          <section id="demo" className={SLIDE_CLASS}>
+            <FadeSection scrollContainerRef={scrollContainerRef} staticMode={staticMode}>
+              <div className={SLIDE_INNER}>
+                <div className="space-y-6 md:space-y-8 max-w-5xl mx-auto">
+                  <div className="space-y-2 text-center">
+                    <p className="text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
+                      Product demo
+                    </p>
+                    <h2 className={HOME_SECTION_H2_CLASS}>
+                      Inspect, version, diff, and replay what your agents remember
+                    </h2>
+                    <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl mx-auto">
+                      The same operations work from the CLI, the REST API, the Inspector app, or
+                      through any MCP-connected agent. Toggle between views to try each interface.
+                    </p>
+                  </div>
+                  <CliDemoInteractive />
+                </div>
+              </div>
+              <SectionEdgeIndicators sectionId="demo" />
+            </FadeSection>
+          </section>
+
+          {/* Slide 5: Memory Guarantees + compressed proof strip */}
+          <section id="memory-guarantees" className={SLIDE_CLASS}>
+            <FadeSection scrollContainerRef={scrollContainerRef} staticMode={staticMode}>
+              <div className={SLIDE_INNER}>
+                <div className="space-y-6 md:space-y-8 max-w-5xl mx-auto">
+                  <div className="space-y-2 text-center">
+                    <p className="text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
+                      Guarantees
+                    </p>
+                    <h2 className={HOME_SECTION_H2_CLASS}>
+                      Memory that stays correct from session one to month twelve
+                    </h2>
+                    <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl mx-auto">
+                      Chat memory fades. RAG drifts. Markdown and JSON files accumulate silent
+                      conflicts. Neotoma enforces versioning, provenance, and tamper detection that
+                      hold over months and years: not just between recent sessions.
+                    </p>
+                  </div>
+
+                  <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+                    {GUARANTEE_PREVIEW_CARDS.map((card, index) => (
+                      <Link
+                        key={card.slug}
+                        to={`/memory-guarantees#${card.slug}`}
+                        className="group flex flex-row items-center gap-4 overflow-hidden rounded-xl border border-border bg-card/50 p-4 no-underline transition-colors hover:bg-muted/60 hover:border-border/80"
+                      >
+                        <ScrollRevealOnce
+                          scrollContainerRef={scrollContainerRef}
+                          staticMode={staticMode}
+                          staggerMs={index * ILLUS_REVEAL_STAGGER_MS}
+                          className="relative shrink-0 w-[72px] h-[72px] sm:w-[88px] sm:h-[88px] bg-gradient-to-br from-muted/30 to-transparent rounded-lg"
+                        >
+                          <img
+                            src={card.illus}
+                            alt=""
+                            width={1024}
+                            height={1024}
+                            className="absolute inset-0 h-full w-full rounded-lg object-contain object-center p-1 opacity-[0.95] dark:opacity-100 transition-transform duration-300 group-hover:scale-[1.05]"
+                            loading="lazy"
+                            decoding="async"
+                          />
+                        </ScrollRevealOnce>
+                        <div className="flex min-h-0 min-w-0 flex-1 items-start gap-2.5">
+                          <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400">
+                            <Check className="h-3 w-3 stroke-[2.5]" aria-hidden />
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-[14px] font-medium text-foreground leading-5">
+                              {card.property}
+                            </p>
+                            <p className="text-[12px] italic leading-5 text-muted-foreground/70 mt-0.5">
+                              {card.failure}
+                            </p>
+                          </div>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+
+                  <div className="flex justify-center pt-2">
+                    <Link
+                      to="/memory-guarantees"
+                      className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-4 py-2 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
+                    >
+                      <Eye className="h-4 w-4 shrink-0" aria-hidden />
+                      See all {MEMORY_GUARANTEE_ROWS.length} guarantees compared
+                    </Link>
+                  </div>
+                </div>
+              </div>
+              <SectionEdgeIndicators sectionId="memory-guarantees" />
+            </FadeSection>
+          </section>
+
+          {/* Slide 6: Proof - founder story, evaluator quotes, stats, works-with pills */}
           <section id="proof" className={SLIDE_CLASS}>
             <FadeSection scrollContainerRef={scrollContainerRef} staticMode={staticMode}>
               <div className={SLIDE_INNER}>
@@ -1543,10 +1866,11 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                     <div className="min-w-0 flex-1">
                       <p className="text-[17px] md:text-[19px] leading-8 text-foreground/90 italic">
                         Running daily for 5+ months across Claude Code, Cursor, ChatGPT, and CLI.
-                        Every morning I ask my agents what I worked on yesterday, what&rsquo;s due
-                        this week, and what I told a specific investor. Zero re-prompting for
-                        cross-session context. This isn&rsquo;t a demo, it&rsquo;s my actual
-                        operating system.
+                        Same state graph from day one: every version preserved, every
+                        correction traceable. Contacts evolve, contracts get amended, tasks close
+                        and reopen. I ask my agents what changed on a deal since October or what I
+                        originally told an investor three months ago. The memory compounds; nothing
+                        silently drifts.
                       </p>
                       <footer className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 text-[13px] text-muted-foreground">
                         <img
@@ -1614,220 +1938,14 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                     </div>
                   </div>
 
-                  <div className="grid gap-4 sm:grid-cols-2 max-w-3xl mx-auto">
-                    {HERO_QUOTES.map((q, i) => (
-                      <div
-                        key={i}
-                        className="flex flex-col rounded-xl border border-border/60 bg-card/30 p-5 text-left"
-                      >
-                        <Quote className="h-5 w-5 shrink-0 text-emerald-500/40 mb-3" aria-hidden />
-                        <p className="text-[16px] md:text-[18px] leading-7 text-foreground/90 italic flex-1">
-                          &ldquo;{q.text}&rdquo;
-                        </p>
-                        <p className="mt-3 text-[12px] text-muted-foreground">
-                          {q.attributionHref ? (
-                            <a
-                              href={q.attributionHref}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="underline-offset-2 hover:underline text-muted-foreground"
-                            >
-                              {q.attribution}
-                            </a>
-                          ) : (
-                            q.attribution
-                          )}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="flex justify-center pt-2">
-                    <HomeAgentToolChips />
-                  </div>
+                  <HeroQuotesCarousel />
                 </div>
               </div>
               <SectionEdgeIndicators sectionId="proof" />
             </FadeSection>
           </section>
 
-          {/* Slide 3: Before / After */}
-          <OutcomesSlide scrollContainerRef={scrollContainerRef} staticMode={staticMode} />
-
-          {/* Slide 3b: Product demo */}
-          <section id="demo" className={SLIDE_CLASS}>
-            <FadeSection scrollContainerRef={scrollContainerRef} staticMode={staticMode}>
-              <div className={SLIDE_INNER}>
-                <div className="space-y-6 md:space-y-8 max-w-5xl mx-auto">
-                  <div className="space-y-2 text-center">
-                    <p className="text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
-                      Product demo
-                    </p>
-                    <h2 className={HOME_SECTION_H2_CLASS}>
-                      Inspectable state you can version, diff, and replay
-                    </h2>
-                    <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl mx-auto">
-                      The same operations work from the CLI, the REST API, the Inspector app, or
-                      through any MCP-connected agent. Toggle between views to try each interface.
-                    </p>
-                  </div>
-                  <CliDemoInteractive />
-                </div>
-              </div>
-              <SectionEdgeIndicators sectionId="demo" />
-            </FadeSection>
-          </section>
-
-          {/* One archetype, three operational modes */}
-          <section id="who" className={SLIDE_CLASS}>
-            <FadeSection scrollContainerRef={scrollContainerRef} staticMode={staticMode}>
-              <div className={SLIDE_INNER}>
-                <div className="space-y-6 md:space-y-8 max-w-5xl mx-auto">
-                  <div className="space-y-2 text-center">
-                    <p className="text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
-                      Who this is for
-                    </p>
-                    <h2 className={HOME_SECTION_H2_CLASS}>
-                      You run AI agents seriously...
-                      <span className="mt-1.5 block text-muted-foreground sm:mt-2">
-                        ...and pay the tax for missing state
-                      </span>
-                    </h2>
-                    <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl mx-auto">
-                      The re-prompting tax is annoying. The real risk is when your agent acts
-                      confidently on wrong state, and you don&rsquo;t find out until the damage is
-                      done.
-                    </p>
-                  </div>
-
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    {ICP_PROFILES.map((profile, index) => {
-                      const Icon = ICP_ICON_MAP[profile.iconName] ?? Server;
-                      return (
-                        <Link
-                          key={profile.slug}
-                          to={`/${profile.slug}`}
-                          className="group flex flex-col rounded-xl border border-border bg-card/50 p-4 no-underline transition-colors hover:bg-muted/60 hover:border-border/80 sm:p-5"
-                        >
-                          <ScrollRevealOnce
-                            scrollContainerRef={scrollContainerRef}
-                            staticMode={staticMode}
-                            staggerMs={index * ILLUS_REVEAL_STAGGER_MS}
-                          >
-                            <WhoProfileCardVisual
-                              profileSlug={profile.slug}
-                              modeLabel={profile.modeLabel}
-                              Icon={Icon}
-                            />
-                          </ScrollRevealOnce>
-                          <div className="flex min-h-0 flex-1 flex-col px-1 pt-4">
-                            <p className="text-[15px] font-medium text-foreground">
-                              {profile.name}
-                            </p>
-                            <p className="mt-2 text-[13px] leading-6 text-muted-foreground">
-                              {profile.tagline}
-                            </p>
-                            {profile.homepageTransition ? (
-                              <p className="mt-2 text-[13px] leading-6 text-muted-foreground">
-                                {profile.homepageTransition}
-                              </p>
-                            ) : null}
-                          </div>
-                        </Link>
-                      );
-                    })}
-                  </div>
-                  <div className="mx-auto flex max-w-xl items-start gap-2.5 rounded-lg border border-border/40 bg-muted/30 px-4 py-2.5 text-left text-[13px] leading-5 text-muted-foreground">
-                    <AlertCircle
-                      className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground/75"
-                      aria-hidden
-                    />
-                    <p>
-                      If your AI is a thought partner you drive every turn, or you&rsquo;re looking
-                      for a note-taking app, this isn&rsquo;t built for you.
-                    </p>
-                  </div>
-
-                </div>
-              </div>
-              <SectionEdgeIndicators sectionId="who" />
-            </FadeSection>
-          </section>
-
-          {/* Slide 3: Memory Guarantees - concise card preview */}
-          <section id="memory-guarantees" className={SLIDE_CLASS}>
-            <FadeSection scrollContainerRef={scrollContainerRef} staticMode={staticMode}>
-              <div className={SLIDE_INNER}>
-                <div className="space-y-6 md:space-y-8 max-w-5xl mx-auto">
-                  <div className="space-y-2 text-center">
-                    <p className="text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
-                      Guarantees
-                    </p>
-                    <h2 className={HOME_SECTION_H2_CLASS}>
-                      Neotoma provides state integrity, not just storage
-                    </h2>
-                    <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl mx-auto">
-                      Chat memory, RAG retrieval, ad-hoc JSON, rolling your own DB: they optimize
-                      recall. None of them enforce versioning, provenance, or tamper detection.
-                    </p>
-                  </div>
-
-                  <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
-                    {GUARANTEE_PREVIEW_CARDS.map((card, index) => (
-                      <Link
-                        key={card.slug}
-                        to={`/memory-guarantees#${card.slug}`}
-                        className="group flex flex-row items-center gap-4 overflow-hidden rounded-xl border border-border bg-card/50 p-4 no-underline transition-colors hover:bg-muted/60 hover:border-border/80"
-                      >
-                        <ScrollRevealOnce
-                          scrollContainerRef={scrollContainerRef}
-                          staticMode={staticMode}
-                          staggerMs={index * ILLUS_REVEAL_STAGGER_MS}
-                          className="relative shrink-0 w-[72px] h-[72px] sm:w-[88px] sm:h-[88px] bg-gradient-to-br from-muted/30 to-transparent rounded-lg"
-                        >
-                          <img
-                            src={card.illus}
-                            alt=""
-                            width={1024}
-                            height={1024}
-                            className="absolute inset-0 h-full w-full rounded-lg object-contain object-center p-1 opacity-[0.95] dark:opacity-100 transition-transform duration-300 group-hover:scale-[1.05]"
-                            loading="lazy"
-                            decoding="async"
-                          />
-                        </ScrollRevealOnce>
-                        <div className="flex min-h-0 min-w-0 flex-1 items-start gap-2.5">
-                          <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400">
-                            <Check className="h-3 w-3 stroke-[2.5]" aria-hidden />
-                          </span>
-                          <div className="min-w-0">
-                            <p className="text-[14px] font-medium text-foreground leading-5">
-                              {card.property}
-                            </p>
-                            <p className="text-[12px] italic leading-5 text-muted-foreground/70 mt-0.5">
-                              {card.failure}
-                            </p>
-                          </div>
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
-
-                  <div className="flex justify-center pt-2">
-                    <Link
-                      to="/memory-guarantees"
-                      className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-4 py-2 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
-                    >
-                      <Eye className="h-4 w-4 shrink-0" aria-hidden />
-                      See all {MEMORY_GUARANTEE_ROWS.length} guarantees compared
-                    </Link>
-                  </div>
-                </div>
-              </div>
-              <SectionEdgeIndicators sectionId="memory-guarantees" />
-            </FadeSection>
-          </section>
-
-          {/* Slide 3c: What to store: cold-start guidance */}
+          {/* Slide 7: What to store - cold-start guidance */}
           <section id="record-types" className={SLIDE_CLASS}>
             <FadeSection scrollContainerRef={scrollContainerRef} staticMode={staticMode}>
               <div className={SLIDE_INNER}>
@@ -1841,9 +1959,9 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                       <span className="whitespace-nowrap">Pick three.</span>
                     </h2>
                     <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl mx-auto">
-                      Your contacts, tasks, and events disappear between sessions and tools.
-                      Store them once, versioned and queryable across every agent you run, and
-                      stop re-explaining your world.
+                      Your contacts, tasks, and events disappear between sessions and tools. Store
+                      them once, versioned and queryable across every agent you run, and stop
+                      re-explaining your world.
                     </p>
                   </div>
 
@@ -1895,32 +2013,45 @@ export function SitePage({ staticMode = false }: SitePageProps) {
             </FadeSection>
           </section>
 
-          {/* Slide 4: Evaluate - agent-led evaluation CTA with transformation lead-in */}
+          {/* Slide 8: Evaluate - agent-led evaluation CTA with transformation lead-in */}
           <section id="evaluate" className={SLIDE_CLASS}>
             <FadeSection scrollContainerRef={scrollContainerRef} staticMode={staticMode}>
               <div className={SLIDE_INNER}>
-                <div className="space-y-6 md:space-y-8 max-w-5xl mx-auto">
-                  <div className="space-y-3 text-center flex flex-col items-center">
-                    <img
-                      src={heroEvaluateIllus}
-                      alt="Neotoma evaluate page preview"
-                      width={1536}
-                      height={1024}
-                      className="w-full max-w-[200px] sm:max-w-[240px] rounded-lg h-auto object-contain mx-auto"
-                      loading="lazy"
-                      decoding="async"
-                    />
-                    <p className="text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
-                      Evaluate it
-                    </p>
-                    <h2 className={HOME_SECTION_H2_CLASS}>Let your agent decide if Neotoma fits</h2>
-                    <p className="text-[15px] leading-7 text-muted-foreground max-w-lg mx-auto">
-                      Your agent can read the docs, inspect the evaluation criteria, and tell you
-                      whether Neotoma fits your actual workflow before you install anything.
-                    </p>
-                  </div>
+                <div className="max-w-5xl mx-auto">
+                  <div className="flex flex-col lg:flex-row lg:items-center lg:gap-12 xl:gap-16 space-y-6 lg:space-y-0">
+                    <div className="space-y-3 text-center lg:text-left flex flex-col items-center lg:items-start lg:flex-1 lg:min-w-0">
+                      <img
+                        src={heroEvaluateIllus}
+                        alt="Neotoma evaluate page preview"
+                        width={1536}
+                        height={1024}
+                        className="w-full max-w-[200px] sm:max-w-[240px] rounded-lg h-auto object-contain"
+                        loading="lazy"
+                        decoding="async"
+                      />
+                      <p className="text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
+                        Evaluate it
+                      </p>
+                      <h2 className={HOME_SECTION_H2_CLASS}>
+                        Let your agent decide if Neotoma fits
+                      </h2>
+                      <p className="text-[15px] leading-7 text-muted-foreground max-w-lg">
+                        Your agent can read the docs, inspect the evaluation criteria, and tell you
+                        whether Neotoma fits your actual workflow before you install anything.
+                      </p>
+                      <p className="text-[13px] leading-6 text-muted-foreground/80 max-w-lg">
+                        Copy this prompt into any AI agent. It reads the evaluation page, inspects
+                        your context, and judges whether Neotoma fits.
+                      </p>
+                    </div>
 
-                  <EvaluateSectionCta />
+                    <div className="lg:flex-1 lg:min-w-0">
+                      <EvaluateSectionCta />
+                    </div>
+                  </div>
+                  <div className="mt-12 lg:mt-14 flex w-full justify-center">
+                    <HomeAgentToolChips compact />
+                  </div>
                 </div>
               </div>
               <SectionEdgeIndicators sectionId="evaluate" hideNext />
@@ -1938,7 +2069,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                   <div className="divide-y divide-border/40 rounded-xl border border-border/60 bg-card/30 px-4 py-1 sm:px-5">
                     {HOME_FAQ_PREVIEW_ITEMS.map((qa) => (
                       <details key={qa.q} className="group py-3 text-left first:pt-2">
-                        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[13px] font-normal leading-snug text-muted-foreground transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden">
+                        <summary className="flex min-h-[44px] cursor-pointer list-none items-center justify-between gap-3 text-[13px] font-normal leading-snug text-muted-foreground transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden">
                           {qa.q}
                           <ChevronDown
                             className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60 transition-transform group-open:rotate-180"
@@ -2007,7 +2138,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                     className={cn(
                       HOME_SCROLL_BANNER_SPLIT_CELL_CLASS,
                       HOME_SCROLL_BANNER_SECONDARY_CELL_CLASS,
-                      "hidden md:flex",
+                      "hidden md:flex"
                     )}
                     onClick={() => sendCtaClick("meet_with_creator_banner")}
                   >

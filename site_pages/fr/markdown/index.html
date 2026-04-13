@@ -1,9 +1,15 @@
 <!DOCTYPE html>
 <!DOCTYPE html><html lang="fr" dir="ltr"><head>
     <meta charset="UTF-8">
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='1' x2='1' y2='0'%3E%3Cstop offset='0' stop-color='%23000'/%3E%3Cstop offset='1' stop-color='%234c1d95'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='16' height='16' rx='3' fill='url(%23g)'/%3E%3Ctext x='8' y='11' text-anchor='middle' font-family='Arial' font-size='9' fill='white'%3EN%3C/text%3E%3C/svg%3E">
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Markdown export of the rendered / page. Versioned records - contacts, tasks, decisions, finances - that persist across Claude, Cursor, ChatGPT, and every agent you run. Store once, query everywhere, stop re-prompting. Open-source and deterministic.">
+    <meta name="application-name" content="Neotoma">
+    <meta name="theme-color" content="#130918">
+    <meta name="description" content="Markdown export of the rendered / page. Persistent, versioned memory for AI agents across Claude, Cursor, ChatGPT, and MCP-connected tools. Every fact is versioned, every change is traceable, and every agent works from the same truth. Open-source, local-first, installs in 5 minutes.">
     <meta name="author" content="Neotoma">
     <meta name="robots" content="noindex,nofollow">
     <link rel="canonical" href="https://neotoma.io/fr/markdown">
@@ -11,32 +17,34 @@
     <meta property="og:site_name" content="Neotoma">
     <meta property="og:locale" content="fr_FR">
     <meta property="og:title" content="Your agents forget. Neotoma makes them remember. (Markdown) | Neotoma">
-    <meta property="og:description" content="Markdown export of the rendered / page. Versioned records - contacts, tasks, decisions, finances - that persist across Claude, Cursor, ChatGPT, and every agent you run. Store once, query everywhere, stop re-prompting. Open-source and deterministic.">
+    <meta property="og:description" content="Markdown export of the rendered / page. Persistent, versioned memory for AI agents across Claude, Cursor, ChatGPT, and MCP-connected tools. Every fact is versioned, every change is traceable, and every agent works from the same truth. Open-source, local-first, installs in 5 minutes.">
     <meta property="og:url" content="https://neotoma.io/fr/markdown">
     <meta property="og:image" content="https://neotoma.io/neotoma-og-1200x630.png">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
-    <meta property="og:image:alt" content="Your agents forget. Neotoma makes them remember. (Markdown) | Neotoma. Markdown export of the rendered / page. Versioned records - contacts, tasks, decisions, finances - that persist across Claude,...">
+    <meta property="og:image:alt" content="Neotoma: the state layer for AI agents. Open-source and local-first. Large headline and supporting lines on warm brown with a Neotoma packrat holding a record.">
     <meta name="keywords" content="Your agents forget. Neotoma makes them remember. (Markdown), Neotoma, MCP, Model Context Protocol, AI agents, agent memory, deterministic state">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:site" content="@markmhendrickson">
     <meta name="twitter:title" content="Your agents forget. Neotoma makes them remember. (Markdown) | Neotoma">
-    <meta name="twitter:description" content="Markdown export of the rendered / page. Versioned records - contacts, tasks, decisions, finances - that persist across Claude, Cursor, ChatGPT, and every agent you run. Store once, query everywhere, stop re-prompting. Open-source and deterministic.">
+    <meta name="twitter:description" content="Markdown export of the rendered / page. Persistent, versioned memory for AI agents across Claude, Cursor, ChatGPT, and MCP-connected tools. Every fact is versioned, every change is traceable, and every agent works from the same truth. Open-source, local-first, installs in 5 minutes.">
     <meta name="twitter:image" content="https://neotoma.io/neotoma-og-1200x630.png">
     <meta name="twitter:image:width" content="1200">
     <meta name="twitter:image:height" content="630">
-    <meta name="twitter:image:alt" content="Your agents forget. Neotoma makes them remember. (Markdown) | Neotoma. Markdown export of the rendered / page. Versioned records - contacts, tasks, decisions, finances - that persist across Claude,...">
-    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","name":"Your agents forget. Neotoma makes them remember. (Markdown) | Neotoma","description":"Markdown export of the rendered / page. Versioned records - contacts, tasks, decisions, finances - that persist across Claude, Cursor, ChatGPT, and every agent you run. Store once, query everywhere, stop re-prompting. Open-source and deterministic.","url":"https://neotoma.io/fr/markdown","publisher":{"@type":"Organization","name":"Neotoma"},"image":{"@type":"ImageObject","url":"https://neotoma.io/neotoma-og-1200x630.png","width":1200,"height":630,"caption":"Your agents forget. Neotoma makes them remember. (Markdown) | Neotoma. Markdown export of the rendered / page. Versioned records - contacts, tasks, decisions, finances - that persist across Claude,..."},"potentialAction":{"@type":"SearchAction","target":"https://neotoma.io/docs?q={search_term_string}","query-input":"required name=search_term_string"}}</script>
-    <script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Neotoma","description":"Markdown export of the rendered / page. Versioned records - contacts, tasks, decisions, finances - that persist across Claude, Cursor, ChatGPT, and every agent you run. Store once, query everywhere, stop re-prompting. Open-source and deterministic.","url":"https://neotoma.io/fr/markdown","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows (WSL)","softwareVersion":"0.4.0","license":"https://opensource.org/licenses/MIT","codeRepository":"https://github.com/markmhendrickson/neotoma","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"installUrl":"https://neotoma.io/install","featureList":["Deterministic state evolution","Versioned entity history","Append-only observation log","Schema-bound entity validation","Field-level provenance tracking","Cross-tool access via MCP","Entity resolution with canonical IDs","Temporal state queries","Privacy-first local storage","CLI, REST API, and MCP interfaces"]}</script>
+    <meta name="twitter:image:alt" content="Neotoma: the state layer for AI agents. Open-source and local-first. Large headline and supporting lines on warm brown with a Neotoma packrat holding a record.">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","name":"Your agents forget. Neotoma makes them remember. (Markdown) | Neotoma","description":"Markdown export of the rendered / page. Persistent, versioned memory for AI agents across Claude, Cursor, ChatGPT, and MCP-connected tools. Every fact is versioned, every change is traceable, and every agent works from the same truth. Open-source, local-first, installs in 5 minutes.","url":"https://neotoma.io/fr/markdown","publisher":{"@type":"Organization","name":"Neotoma"},"image":{"@type":"ImageObject","url":"https://neotoma.io/neotoma-og-1200x630.png","width":1200,"height":630,"caption":"Neotoma: the state layer for AI agents. Open-source and local-first. Large headline and supporting lines on warm brown with a Neotoma packrat holding a record."},"potentialAction":{"@type":"SearchAction","target":"https://neotoma.io/docs?q={search_term_string}","query-input":"required name=search_term_string"}}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does Neotoma replace Claude's memory or ChatGPT's?","acceptedAnswer":{"@type":"Answer","text":"No — it works alongside them. Platform memory stores what one vendor decides to remember within that vendor's tool. Neotoma stores facts you control across all your tools. Keep using platform memory for quick context; use Neotoma when you need versioning, auditability, and cross-tool consistency."}},{"@type":"Question","name":"Can't I just build this with SQLite or a JSON file?","acceptedAnswer":{"@type":"Answer","text":"You can start there — many teams do. But you'll eventually need versioning, conflict detection, schema evolution, and cross-tool sync. That's months of infrastructure work. Neotoma ships those guarantees on day one."}},{"@type":"Question","name":"Platform memory (Claude, ChatGPT) is good enough — why add another tool?","acceptedAnswer":{"@type":"Answer","text":"Platform memory stores what one vendor decides to remember, in a format you can't inspect or export. It doesn't version, doesn't detect conflicts, and vanishes if you switch tools. Neotoma gives you structured, cross-tool memory you control."}},{"@type":"Question","name":"Is this production-ready?","acceptedAnswer":{"@type":"Answer","text":"Neotoma is in developer preview — used daily by real agent workflows. The core guarantees (deterministic memory, versioned history, append-only change log) are stable. Install in 5 minutes and let your agent evaluate the fit."}},{"@type":"Question","name":"Does Neotoma send my data to the cloud?","acceptedAnswer":{"@type":"Answer","text":"No. Neotoma runs locally by default. Your data stays on your machine in a local SQLite database. There is no cloud sync, no telemetry, and no training on your data unless you choose to expose the API."}}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Neotoma","description":"Markdown export of the rendered / page. Persistent, versioned memory for AI agents across Claude, Cursor, ChatGPT, and MCP-connected tools. Every fact is versioned, every change is traceable, and every agent works from the same truth. Open-source, local-first, installs in 5 minutes.","url":"https://neotoma.io/fr/markdown","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows (WSL)","softwareVersion":"0.4.2","license":"https://opensource.org/licenses/MIT","codeRepository":"https://github.com/markmhendrickson/neotoma","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"installUrl":"https://neotoma.io/install","featureList":["Deterministic state evolution","Versioned entity history","Append-only observation log","Schema-bound entity validation","Field-level provenance tracking","Cross-tool access via MCP","Entity resolution with canonical IDs","Temporal state queries","Privacy-first local storage","CLI, REST API, and MCP interfaces"]}</script>
     <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"Neotoma","url":"https://neotoma.io","founder":{"@type":"Person","name":"Mark Hendrickson","url":"https://markmhendrickson.com"},"sameAs":["https://github.com/markmhendrickson/neotoma","https://www.npmjs.com/package/neotoma","https://x.com/markmhendrickson"]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"Your agents forget. Neotoma makes them remember. (Markdown) | Neotoma","url":"https://neotoma.io/fr/markdown","speakable":{"@type":"SpeakableSpecification","cssSelector":["h1","#intro p","#who h2","#who p","#common-questions summary","#common-questions p"]}}</script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
     <title>Your agents forget. Neotoma makes them remember. (Markdown) | Neotoma</title>
-    <script type="module" crossorigin="" src="../../assets/main-DxVKJUI6.js"></script>
-    <link rel="stylesheet" crossorigin="" href="../../assets/main-DUcwN7CH.css">
+    <script type="module" crossorigin="" src="../../assets/main-Jf-itxVT.js"></script>
+    <link rel="stylesheet" crossorigin="" href="../../assets/main-DWQ-Fl-1.css">
   
-    <!-- build: local-1775039455392 -->
+    <!-- build: local-1776078353914 -->
       <link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown">
     <link rel="alternate" hreflang="en" href="https://neotoma.io/markdown">
     <link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown">
@@ -51,30 +59,20 @@
     <link rel="alternate" hreflang="ur" href="https://neotoma.io/ur/markdown">
     <link rel="alternate" hreflang="id" href="https://neotoma.io/id/markdown">
     <link rel="alternate" hreflang="de" href="https://neotoma.io/de/markdown">
-  <link rel="canonical" href="https://neotoma.io/fr/markdown" data-rh="true"><link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown" data-rh="true"><link rel="alternate" hreflang="en" href="https://neotoma.io/markdown" data-rh="true"><link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown" data-rh="true"><link rel="alternate" hreflang="ca" href="https://neotoma.io/ca/markdown" data-rh="true"><link rel="alternate" hreflang="zh" href="https://neotoma.io/zh/markdown" data-rh="true"><link rel="alternate" hreflang="hi" href="https://neotoma.io/hi/markdown" data-rh="true"><link rel="alternate" hreflang="ar" href="https://neotoma.io/ar/markdown" data-rh="true"><link rel="alternate" hreflang="fr" href="https://neotoma.io/fr/markdown" data-rh="true"><link rel="alternate" hreflang="pt" href="https://neotoma.io/pt/markdown" data-rh="true"><link rel="alternate" hreflang="ru" href="https://neotoma.io/ru/markdown" data-rh="true"><link rel="alternate" hreflang="bn" href="https://neotoma.io/bn/markdown" data-rh="true"><link rel="alternate" hreflang="ur" href="https://neotoma.io/ur/markdown" data-rh="true"><link rel="alternate" hreflang="id" href="https://neotoma.io/id/markdown" data-rh="true"><link rel="alternate" hreflang="de" href="https://neotoma.io/de/markdown" data-rh="true"><meta name="description" content="Markdown export of the rendered / page. Versioned records - contacts, tasks, decisions, finances - that persist across Claude, Cursor, ChatGPT, and every agent you run. Store once, query everywhere, stop re-prompting. Open-source and deterministic." data-rh="true"><meta name="author" content="Neotoma" data-rh="true"><meta name="robots" content="noindex,nofollow" data-rh="true"><meta property="og:type" content="website" data-rh="true"><meta property="og:site_name" content="Neotoma" data-rh="true"><meta property="og:locale" content="fr_FR" data-rh="true"><meta property="og:title" content="Your agents forget. Neotoma makes them remember. (Markdown) | Neotoma" data-rh="true"><meta property="og:description" content="Markdown export of the rendered / page. Versioned records - contacts, tasks, decisions, finances - that persist across Claude, Cursor, ChatGPT, and every agent you run. Store once, query everywhere, stop re-prompting. Open-source and deterministic." data-rh="true"><meta property="og:url" content="https://neotoma.io/fr/markdown" data-rh="true"><meta property="og:image" content="https://neotoma.io/neotoma-og-1200x630.png" data-rh="true"><meta property="og:image:width" content="1200" data-rh="true"><meta property="og:image:height" content="630" data-rh="true"><meta property="og:image:alt" content="Your agents forget. Neotoma makes them remember. (Markdown) | Neotoma. Markdown export of the rendered / page. Versioned records - contacts, tasks, decisions, finances - that persist across Claude,..." data-rh="true"><meta name="keywords" content="Your agents forget. Neotoma makes them remember. (Markdown), Neotoma, MCP, Model Context Protocol, AI agents, agent memory, deterministic state" data-rh="true"><meta name="twitter:card" content="summary_large_image" data-rh="true"><meta name="twitter:site" content="@markmhendrickson" data-rh="true"><meta name="twitter:title" content="Your agents forget. Neotoma makes them remember. (Markdown) | Neotoma" data-rh="true"><meta name="twitter:description" content="Markdown export of the rendered / page. Versioned records - contacts, tasks, decisions, finances - that persist across Claude, Cursor, ChatGPT, and every agent you run. Store once, query everywhere, stop re-prompting. Open-source and deterministic." data-rh="true"><meta name="twitter:image" content="https://neotoma.io/neotoma-og-1200x630.png" data-rh="true"><meta name="twitter:image:width" content="1200" data-rh="true"><meta name="twitter:image:height" content="630" data-rh="true"><meta name="twitter:image:alt" content="Your agents forget. Neotoma makes them remember. (Markdown) | Neotoma. Markdown export of the rendered / page. Versioned records - contacts, tasks, decisions, finances - that persist across Claude,..." data-rh="true"><script type="application/ld+json" data-rh="true">{"@context":"https://schema.org","@type":"WebSite","name":"Your agents forget. Neotoma makes them remember. (Markdown) | Neotoma","description":"Markdown export of the rendered / page. Versioned records - contacts, tasks, decisions, finances - that persist across Claude, Cursor, ChatGPT, and every agent you run. Store once, query everywhere, stop re-prompting. Open-source and deterministic.","url":"https://neotoma.io/fr/markdown","publisher":{"@type":"Organization","name":"Neotoma"},"image":{"@type":"ImageObject","url":"https://neotoma.io/neotoma-og-1200x630.png","width":1200,"height":630,"caption":"Your agents forget. Neotoma makes them remember. (Markdown) | Neotoma. Markdown export of the rendered / page. Versioned records - contacts, tasks, decisions, finances - that persist across Claude,..."},"potentialAction":{"@type":"SearchAction","target":"https://neotoma.io/docs?q={search_term_string}","query-input":"required name=search_term_string"}}</script><script type="application/ld+json" data-rh="true">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Neotoma","description":"Markdown export of the rendered / page. Versioned records - contacts, tasks, decisions, finances - that persist across Claude, Cursor, ChatGPT, and every agent you run. Store once, query everywhere, stop re-prompting. Open-source and deterministic.","url":"https://neotoma.io/fr/markdown","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows (WSL)","softwareVersion":"0.4.0","license":"https://opensource.org/licenses/MIT","codeRepository":"https://github.com/markmhendrickson/neotoma","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"installUrl":"https://neotoma.io/install","featureList":["Deterministic state evolution","Versioned entity history","Append-only observation log","Schema-bound entity validation","Field-level provenance tracking","Cross-tool access via MCP","Entity resolution with canonical IDs","Temporal state queries","Privacy-first local storage","CLI, REST API, and MCP interfaces"]}</script><script type="application/ld+json" data-rh="true">{"@context":"https://schema.org","@type":"Organization","name":"Neotoma","url":"https://neotoma.io","founder":{"@type":"Person","name":"Mark Hendrickson","url":"https://markmhendrickson.com"},"sameAs":["https://github.com/markmhendrickson/neotoma","https://www.npmjs.com/package/neotoma","https://x.com/markmhendrickson"]}</script></head>
+  <link rel="icon" href="/favicon.ico" sizes="any" data-rh="true"><link rel="icon" type="image/svg+xml" href="/favicon.svg" data-rh="true"><link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png" data-rh="true"><link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" data-rh="true"><link rel="manifest" href="/site.webmanifest" data-rh="true"><link rel="canonical" href="https://neotoma.io/fr/markdown" data-rh="true"><link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown" data-rh="true"><link rel="alternate" hreflang="en" href="https://neotoma.io/markdown" data-rh="true"><link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown" data-rh="true"><link rel="alternate" hreflang="ca" href="https://neotoma.io/ca/markdown" data-rh="true"><link rel="alternate" hreflang="zh" href="https://neotoma.io/zh/markdown" data-rh="true"><link rel="alternate" hreflang="hi" href="https://neotoma.io/hi/markdown" data-rh="true"><link rel="alternate" hreflang="ar" href="https://neotoma.io/ar/markdown" data-rh="true"><link rel="alternate" hreflang="fr" href="https://neotoma.io/fr/markdown" data-rh="true"><link rel="alternate" hreflang="pt" href="https://neotoma.io/pt/markdown" data-rh="true"><link rel="alternate" hreflang="ru" href="https://neotoma.io/ru/markdown" data-rh="true"><link rel="alternate" hreflang="bn" href="https://neotoma.io/bn/markdown" data-rh="true"><link rel="alternate" hreflang="ur" href="https://neotoma.io/ur/markdown" data-rh="true"><link rel="alternate" hreflang="id" href="https://neotoma.io/id/markdown" data-rh="true"><link rel="alternate" hreflang="de" href="https://neotoma.io/de/markdown" data-rh="true"><meta name="description" content="Markdown export of the rendered / page. Persistent, versioned memory for AI agents across Claude, Cursor, ChatGPT, and MCP-connected tools. Every fact is versioned, every change is traceable, and every agent works from the same truth. Open-source, local-first, installs in 5 minutes." data-rh="true"><meta name="author" content="Neotoma" data-rh="true"><meta name="application-name" content="Neotoma" data-rh="true"><meta name="robots" content="noindex,nofollow" data-rh="true"><meta name="theme-color" content="#130918" data-rh="true"><meta property="og:type" content="website" data-rh="true"><meta property="og:site_name" content="Neotoma" data-rh="true"><meta property="og:locale" content="fr_FR" data-rh="true"><meta property="og:title" content="Your agents forget. Neotoma makes them remember. (Markdown) | Neotoma" data-rh="true"><meta property="og:description" content="Markdown export of the rendered / page. Persistent, versioned memory for AI agents across Claude, Cursor, ChatGPT, and MCP-connected tools. Every fact is versioned, every change is traceable, and every agent works from the same truth. Open-source, local-first, installs in 5 minutes." data-rh="true"><meta property="og:url" content="https://neotoma.io/fr/markdown" data-rh="true"><meta property="og:image" content="https://neotoma.io/neotoma-og-1200x630.png" data-rh="true"><meta property="og:image:width" content="1200" data-rh="true"><meta property="og:image:height" content="630" data-rh="true"><meta property="og:image:alt" content="Neotoma: the state layer for AI agents. Open-source and local-first. Large headline and supporting lines on warm brown with a Neotoma packrat holding a record." data-rh="true"><meta name="keywords" content="Your agents forget. Neotoma makes them remember. (Markdown), Neotoma, MCP, Model Context Protocol, AI agents, agent memory, deterministic state" data-rh="true"><meta name="twitter:card" content="summary_large_image" data-rh="true"><meta name="twitter:site" content="@markmhendrickson" data-rh="true"><meta name="twitter:title" content="Your agents forget. Neotoma makes them remember. (Markdown) | Neotoma" data-rh="true"><meta name="twitter:description" content="Markdown export of the rendered / page. Persistent, versioned memory for AI agents across Claude, Cursor, ChatGPT, and MCP-connected tools. Every fact is versioned, every change is traceable, and every agent works from the same truth. Open-source, local-first, installs in 5 minutes." data-rh="true"><meta name="twitter:image" content="https://neotoma.io/neotoma-og-1200x630.png" data-rh="true"><meta name="twitter:image:width" content="1200" data-rh="true"><meta name="twitter:image:height" content="630" data-rh="true"><meta name="twitter:image:alt" content="Neotoma: the state layer for AI agents. Open-source and local-first. Large headline and supporting lines on warm brown with a Neotoma packrat holding a record." data-rh="true"><script type="application/ld+json" data-rh="true">{"@context":"https://schema.org","@type":"WebSite","name":"Your agents forget. Neotoma makes them remember. (Markdown) | Neotoma","description":"Markdown export of the rendered / page. Persistent, versioned memory for AI agents across Claude, Cursor, ChatGPT, and MCP-connected tools. Every fact is versioned, every change is traceable, and every agent works from the same truth. Open-source, local-first, installs in 5 minutes.","url":"https://neotoma.io/fr/markdown","publisher":{"@type":"Organization","name":"Neotoma"},"image":{"@type":"ImageObject","url":"https://neotoma.io/neotoma-og-1200x630.png","width":1200,"height":630,"caption":"Neotoma: the state layer for AI agents. Open-source and local-first. Large headline and supporting lines on warm brown with a Neotoma packrat holding a record."},"potentialAction":{"@type":"SearchAction","target":"https://neotoma.io/docs?q={search_term_string}","query-input":"required name=search_term_string"}}</script><script type="application/ld+json" data-rh="true">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does Neotoma replace Claude's memory or ChatGPT's?","acceptedAnswer":{"@type":"Answer","text":"No — it works alongside them. Platform memory stores what one vendor decides to remember within that vendor's tool. Neotoma stores facts you control across all your tools. Keep using platform memory for quick context; use Neotoma when you need versioning, auditability, and cross-tool consistency."}},{"@type":"Question","name":"Can't I just build this with SQLite or a JSON file?","acceptedAnswer":{"@type":"Answer","text":"You can start there — many teams do. But you'll eventually need versioning, conflict detection, schema evolution, and cross-tool sync. That's months of infrastructure work. Neotoma ships those guarantees on day one."}},{"@type":"Question","name":"Platform memory (Claude, ChatGPT) is good enough — why add another tool?","acceptedAnswer":{"@type":"Answer","text":"Platform memory stores what one vendor decides to remember, in a format you can't inspect or export. It doesn't version, doesn't detect conflicts, and vanishes if you switch tools. Neotoma gives you structured, cross-tool memory you control."}},{"@type":"Question","name":"Is this production-ready?","acceptedAnswer":{"@type":"Answer","text":"Neotoma is in developer preview — used daily by real agent workflows. The core guarantees (deterministic memory, versioned history, append-only change log) are stable. Install in 5 minutes and let your agent evaluate the fit."}},{"@type":"Question","name":"Does Neotoma send my data to the cloud?","acceptedAnswer":{"@type":"Answer","text":"No. Neotoma runs locally by default. Your data stays on your machine in a local SQLite database. There is no cloud sync, no telemetry, and no training on your data unless you choose to expose the API."}}]}</script><script type="application/ld+json" data-rh="true">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Neotoma","description":"Markdown export of the rendered / page. Persistent, versioned memory for AI agents across Claude, Cursor, ChatGPT, and MCP-connected tools. Every fact is versioned, every change is traceable, and every agent works from the same truth. Open-source, local-first, installs in 5 minutes.","url":"https://neotoma.io/fr/markdown","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows (WSL)","softwareVersion":"0.4.2","license":"https://opensource.org/licenses/MIT","codeRepository":"https://github.com/markmhendrickson/neotoma","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"installUrl":"https://neotoma.io/install","featureList":["Deterministic state evolution","Versioned entity history","Append-only observation log","Schema-bound entity validation","Field-level provenance tracking","Cross-tool access via MCP","Entity resolution with canonical IDs","Temporal state queries","Privacy-first local storage","CLI, REST API, and MCP interfaces"]}</script><script type="application/ld+json" data-rh="true">{"@context":"https://schema.org","@type":"Organization","name":"Neotoma","url":"https://neotoma.io","founder":{"@type":"Person","name":"Mark Hendrickson","url":"https://markmhendrickson.com"},"sameAs":["https://github.com/markmhendrickson/neotoma","https://www.npmjs.com/package/neotoma","https://x.com/markmhendrickson"]}</script><script type="application/ld+json" data-rh="true">{"@context":"https://schema.org","@type":"WebPage","name":"Your agents forget. Neotoma makes them remember. (Markdown) | Neotoma","url":"https://neotoma.io/fr/markdown","speakable":{"@type":"SpeakableSpecification","cssSelector":["h1","#intro p","#who h2","#who p","#common-questions summary","#common-questions p"]}}</script></head>
   <body>
     <div id="root"><iframe title="Markdown capture" aria-hidden="true" width="1280" height="900" class="pointer-events-none fixed left-[-9999px] top-0 z-[-1] border-0 opacity-0" sandbox="allow-same-origin allow-scripts allow-forms"></iframe><div class="min-h-screen bg-background text-foreground"><pre class="whitespace-pre-wrap break-words p-4 font-mono text-[13px] leading-relaxed text-foreground">&lt;!--
   Full-page Markdown export (rendered HTML → GFM).
   Source: https://neotoma.io/fr
-  Generated: 2026-04-01T10:33:08.467Z
+  Generated: 2026-04-13T11:07:20.686Z
 --&gt;
-Mémoire multi-outils pour les agents IA·[9 sur GitHub](https://github.com/markmhendrickson/neotoma)·12 versions expédiées
+# Vos agents oublient.Néotome les rend souviens-toi.
 
-# Vos agents oublient. Néotome les rend souviens-toi.
-
-Ton contactstâchesdécisionsconversationremarquespréférencestransactionsnotes de réunionentreprisesdonnées de santé disparaître entre les sessions et les outils. Neotoma les stocke une seule fois, versionnés et interrogeables, sur chaque agent que vous exécutez – vous arrêtez ainsi de réexpliquer votre monde.
+Neotoma est un git pour ce que savent vos agents. Chaque fait est versionné, chaque changement est traçable et chaque agent travaille à partir de la même vérité – à travers Claude, Cursor, ChatGPT et tout le reste.
 
 [Demandez à votre agent d'évaluer](/evaluate)[Installer en 5 minutes](/install)
 
-“Intégrité de l’état, pas qualité de la récupération.”, Générateur d'applications agent
-
-“Problème très pertinent, la plupart des gens roulent le leur.”, Fondateur d'outils de développement
-
-“Véritablement utile pour les agents de production, excessif pour les chatbots amateurs.”, Évaluateur d'agent de production
-
-“CI/CD pour l’état de l’agent.”, Ingénieur infrastructures
-
-[Claude](/neotoma-with-claude)[ChatGPT](/neotoma-with-chatgpt)[Curseur](/neotoma-with-cursor)[Griffe Ouverte](/neotoma-with-openclaw)
+Pour les développeurs exécutant des agents qui persistent au fil des sessions
 
 Vous dites à OpenClaw
 
@@ -94,75 +92,105 @@ Récupéré des factures et des relations stockées
 
 Les faits sont stockés en privé sous votre contrôle. N’importe quel agent peut récupérer exactement ce dont il a besoin, avec une gestion complète des versions et de la provenance.
 
-[](#outcomes)
+Fonctionne avec[Claude](/neotoma-with-claude)[ChatGPT](/neotoma-with-chatgpt)[Curseur](/neotoma-with-cursor)[Griffe Ouverte](/neotoma-with-openclaw)
+
+[](#who)
+
+Pour qui c'est
+
+## Vous dirigez des agents IA sérieusement......et payer la taxe pour la mémoire manquante
+
+La nouvelle invite vous fait perdre du temps et des jetons. Le risque le plus important survient lorsque votre agent agit avec confiance sur la base de faits erronés et que vous ne le découvrez que lorsque le mal est fait.
+
+[
+
+Synchronisation entre outils
+
+![](/assets/who_icp_operating_square-BdmpQNg0.png)
+
+Vous êtes le concierge du contexte entre les outils
+
+Chaque séance repart de zéro. Vous réexpliquez le contexte, proposez à nouveau des corrections, rétablissez ce que l'agent savait déjà.
+
+Arrêtez de jouer le rôle de couche de synchronisation humaine entre les outils. Commencez à fonctionner avec continuité – en dirigeant au lieu de réexpliquer.
+
+](/operating)[
+
+État du pipeline
+
+![](/assets/who_icp_building_pipelines_square-C4oggNm6.png)
+
+Vous gardez la variance d'inférence
+
+Votre agent devine les entités à chaque exécution. Les corrections ne persistent pas. Les régressions surviennent parce que l’architecture ne peut pas les empêcher.
+
+Arrêtez de garder la variance d’inférence. Construire sur des bases solides – un état qui reste corrigé d’une exécution à l’autre.
+
+](/building-pipelines)[
+
+Rejouer et déboguer
+
+![](/assets/who_icp_debugging_infrastructure_square-ESMbcH6i.png)
+
+Vous êtes l'archéologue du journal
+
+Deux courses. Mêmes entrées. État différent. Pas de rediffusion, pas de différence, pas d'explication.
+
+Arrêtez la rétro-ingénierie de la vérité à partir des journaux. Déboguez à partir d'un état rejouable que vous pouvez inspecter, comparer et approuver.
+
+](/debugging-infrastructure)
+
+Vous construisez déjà votre propre système de mémoire&nbsp;? La plupart des développeurs commencent par [SQLite](/faq#why-can-t-i-just-use-sqlite-or-postgres-for-agent-memory), [JSON](/faq#why-can-t-i-just-use-sqlite-or-postgres-for-agent-memory), [réduction](/faq#why-can-t-i-just-use-markdown-files-for-agent-memory), ou un [serveur MCP personnalisé](/faq#how-does-neotoma-compare-to-tools-that-offer-git-like-version-control-for-agent-memory). Navires Neotoma [les garanties que vous auriez autrement construites vous-même](/faq#what-are-neotoma-s-memory-guarantees): versioning, détection de conflits, évolution de schéma et synchronisation multi-outils.
+
+Pas pour [flux de travail ponctuels avec les partenaires de réflexion](/faq#what-s-the-difference-between-rag-memory-and-deterministic-memory) ou [applications de prise de notes](/faq#why-can-t-i-just-use-markdown-files-for-agent-memory).
+
+[](/)[](#outcomes)
 
 Avant et après
 
 ## Même question, résultat différent
 
-Sans couche d'état, les agents renvoient des données obsolètes ou erronées. Avec Neotoma, chaque réponse est lue à partir d'un état versionné et lié au schéma.
+Sans mémoire partagée, les agents agissent sur la base de faits qu’ils ne peuvent pas vérifier. Avec Neotoma, chaque réponse est lue à partir d'un historique versionné et structuré.
 
 Contacts et personnes
 
-### Contact perdu, transfert interrompu
+### Écrasé silencieusement, faux en toute confiance
 
-Vous avez mentionné quelqu'un lors d'un appel la semaine dernière. Votre agent dans Cursor n’a aucune idée de qui il est. Vous réexpliquez chaque personne, chaque session, à travers chaque outil.
+Vous avez corrigé l'e-mail d'un contact la semaine dernière. Une autre session d'agent l'a remplacé par l'ancienne adresse. Votre agent envoie à la mauvaise personne et personne ne le remarque jusqu'à ce qu'il soit trop tard.
 
 sans Néotome
 
 séance d'agents · sans Néotome
 
-$Send that update to Sarah from the call last week.|
+$Use the new email I gave you for Sarah.|
 
 1234
 
-[](/)[](#who)
+[](#who)[](#demo)
 
-Pour qui c'est
+Démo du produit
 
-## Vous exécutez des agents IA à travers des outils et des sessions......devenant la couche de synchronisation humaine.
+## Inspectez, versionnez, comparez et rejouez ce dont vos agents se souviennent
 
-Arrêtez de consacrer de réels efforts à réinviter le contexte, à corriger les lacunes d’état et à compenser la mémoire qui ne persiste pas dans les outils d’IA et les scripts personnalisés. Le coût apparaît différemment selon ce que vous faites.
+Les mêmes opérations fonctionnent à partir de la CLI, de l'API REST, de l'application Inspector ou via n'importe quel agent connecté à MCP. Basculez entre les vues pour essayer chaque interface.
 
-[
+CLIAgent (MCP)APIInspecteur
 
-Fonctionnement
+Synchronisation entre outilsRejouer et déboguer
 
-![](/assets/who_icp_operating_square-BsW4__wL.png)
+\# Stocker un contact de n'importe quelle session d'agent
 
-Lorsque vous travaillez sur plusieurs outils
+$
 
-Chaque séance repart de zéro. Vous réexpliquez le contexte, proposez à nouveau des corrections, rétablissez ce que votre agent savait déjà.
-
-](/operating)[
-
-Bâtiment
-
-![](/assets/who_icp_building_pipelines_square-B2Td-JDZ.png)
-
-Lorsque vous construisez des pipelines
-
-Votre agent devine les entités à chaque session. Les corrections ne persistent pas. Les régressions de mémoire surviennent parce que l'architecture ne peut pas les empêcher.
-
-](/building-pipelines)[
-
-Débogage
-
-![](/assets/who_icp_debugging_infrastructure_square-vm-gd7hN.png)
-
-Lorsque vous déboguez l'infrastructure
-
-Deux courses. Mêmes entrées. État différent. Pas de rediffusion, pas de différence, pas d'explication.
-
-](/debugging-infrastructure)
+[Installer en 5 minutes](/install)
 
 [](#outcomes)[](#memory-guarantees)
 
 Garanties
 
-## Neotoma assure l'intégrité de l'état, pas seulement le stockage
+## Une mémoire qui prouve qu’elle n’a pas été corrompue en silence
 
-Des systèmes comme Mem0, Zep, la mémoire Claude et la mémoire ChatGPT optimisent la récupération. Neotoma applique des garanties que ces systèmes ne fournissent pas.
+Mémoire de chat, récupération RAG, JSON ad hoc, déploiement de votre propre solution : ils optimisent le rappel. Aucun d’entre eux n’impose la détection des versions, de la provenance ou des falsifications. Néotome le fait.
 
 [
 
@@ -170,7 +198,7 @@ Des systèmes comme Mem0, Zep, la mémoire Claude et la mémoire ChatGPT optimis
 
 État déterministe
 
-Les mêmes observations produisent toujours le même état d'entité - pas de bugs de classement.
+Même pipeline, résultats différents – classement des bogues que vous ne pouvez pas retracer.
 
 ](/memory-guarantees#deterministic-state-evolution)[
 
@@ -178,7 +206,7 @@ Les mêmes observations produisent toujours le même état d'entité - pas de bu
 
 Historique versionné
 
-Chaque changement crée une nouvelle version. Rien n'est écrasé.
+Une nouvelle tentative écrase silencieusement une préférence. L'original a disparu.
 
 ](/memory-guarantees#versioned-history)[
 
@@ -186,7 +214,7 @@ Chaque changement crée une nouvelle version. Rien n'est écrasé.
 
 Journal des modifications vérifiable
 
-Qui a changé quoi, quand et à partir de quelle source.
+Votre agent a fait un mauvais appel. Vous ne pouvez pas savoir à partir de quoi cela fonctionnait.
 
 ](/memory-guarantees#auditable-change-log)[
 
@@ -194,7 +222,7 @@ Qui a changé quoi, quand et à partir de quelle source.
 
 Prévention des mutations silencieuses
 
-Pas d'écrasements cachés ni de suppressions de données silencieuses.
+Les données changent à votre insu. Vous le découvrez en aval.
 
 ](/memory-guarantees#silent-mutation-risk)[
 
@@ -202,7 +230,7 @@ Pas d'écrasements cachés ni de suppressions de données silencieuses.
 
 Contraintes de schéma
 
-Écritures non valides rejetées au moment du stockage.
+Les agents écrivent des données mal formées. Les déchets entrent, les déchets sortent – ​​en silence.
 
 ](/memory-guarantees#schema-constraints)[
 
@@ -210,21 +238,59 @@ Contraintes de schéma
 
 Reconstruction reproductible
 
-Reconstruisez l'état complet à partir des seules observations.
+La base de données est corrompue. Aucun moyen de reconstruire l'état à partir de la source.
 
 ](/memory-guarantees#reproducible-state-reconstruction)
 
-[Voir tout 12 garanties comparées](/memory-guarantees)
+[Voir tout 14 garanties comparées](/memory-guarantees)
 
-[](#who)[](#record-types)
+[](#demo)[](#proof)
 
-Ce que vous stockez
+Comment il est utilisé
 
-## Vous méritez des enregistrements structurés, pas du texte brut
+État digne de confiance pour les agents IA·[13 on GitHub](https://github.com/markmhendrickson/neotoma)·15 versions expédiées
 
-Neotoma stocke les entités typées avec un historique et une provenance versionnés. Chaque guide montre comment stocker et récupérer ce type via CLI, MCP et API.
+&gt; Fonctionnant quotidiennement pendant plus de 5 mois sur Claude Code, Cursor, ChatGPT et CLI. Chaque matin, je demande à mes agents sur quoi j'ai travaillé hier, ce qui est dû cette semaine et ce que j'ai dit à un investisseur en particulier. Aucune nouvelle invite pour le contexte intersessions. Ce n'est pas une démo, c'est mon véritable système d'exploitation.
+&gt; 
+&gt; ![Mark Hendrickson](/assets/mark_hendrickson-Ch9qk0bs.jpg)
+&gt; 
+&gt; Marc Hendrickson·Créateur de néotome·[Lire l'article complet](https://markmhendrickson.com/posts/what-my-agentic-stack-actually-does/)
 
-[
+1,100+contacts
+
+16,000+tâches
+
+900+conversations
+
+2,000+messages des agents
+
+380+types d'entités
+
+“Intégrité de l’État, pas qualité de la récupération.”
+
+Générateur d'applications agent
+
+“Problème très pertinent, la plupart des gens roulent le leur.”
+
+Laurie Voss, co-fondatrice de npm
+
+“Véritablement utile pour les agents de production, excessif pour les chatbots amateurs.”
+
+Évaluateur d'agent de production
+
+“CI/CD pour l’état de l’agent.”
+
+[Tycho Onnasch, co-fondateur, Zest Protocol](https://x.com/TychoOnnasch)
+
+[](#memory-guarantees)[](#record-types)
+
+Que stocker
+
+## Vous ne savez pas par où commencer ? Choisissez-en trois.
+
+Vos contacts, tâches et événements disparaissent entre les sessions et les outils. Stockez-les une seule fois, versionnés et interrogeables sur chaque agent que vous exécutez, et arrêtez de réexpliquer votre monde.
+
+[Commencez ici
 
 Contacts
 
@@ -232,39 +298,15 @@ Les personnes, les entreprises, les rôles et les relations entre eux.
 
 `contact``company``account`
 
-](/types/contacts)[
+](/types/contacts)[Commencez ici
 
 Tâches
 
-Obligations, délais, habitudes et objectifs – suivis au fil des sessions.
+Obligations, délais, habitudes et objectifs suivis au fil des sessions.
 
 `task``habit``goal`
 
-](/types/tasks)[
-
-Transactions
-
-Paiements, reçus, factures et écritures comptables – versionnés et non écrasés.
-
-`transaction``invoice``receipt`
-
-](/types/transactions)[
-
-Contrats
-
-Accords, clauses et amendements&nbsp;: quels étaient les termes à n'importe quelle date.
-
-`contract``clause``amendment`
-
-](/types/contracts)[
-
-Décisions
-
-Choix, justification et piste d’audit qui prouve pourquoi.
-
-`decision``assessment``review`
-
-](/types/decisions)[
+](/types/tasks)[Commencez ici
 
 Événements
 
@@ -272,9 +314,33 @@ Réunions, jalons et résultats qui y sont attachés.
 
 `event``meeting``milestone`
 
-](/types/events)
+](/types/events)[
 
-[](#memory-guarantees)[](#evaluate)
+Transactions
+
+Paiements, reçus, factures et écritures comptables versionnés au lieu d'être écrasés.
+
+`transaction``invoice``receipt`
+
+](/types/transactions)[
+
+Contrats
+
+Accords, clauses et amendements avec les termes exacts préservés au fil du temps.
+
+`contract``clause``amendment`
+
+](/types/contracts)[
+
+Décisions
+
+Choix, justification et piste d'audit qui prouvent pourquoi un agent a agi.
+
+`decision``assessment``review`
+
+](/types/decisions)
+
+[](#proof)[](#evaluate)
 
 ![Neotoma evaluate page preview](/assets/hero_illus_evaluate_agent_page-B8tTomV1.png)
 
@@ -282,15 +348,21 @@ Réunions, jalons et résultats qui y sont attachés.
 
 ## Laissez votre agent décider si Neotoma convient
 
-Nous fournissons une page d'évaluation que votre agent IA peut lire. Un agent puissant doit inspecter votre outil et le contexte de votre flux de travail, poser une ou deux questions ciblées, puis vous dire clairement si Neotoma convient.
+Votre agent peut lire la documentation, inspecter les critères d'évaluation et vous dire si Neotoma correspond à votre flux de travail actuel avant d'installer quoi que ce soit.
 
 Copiez cette invite dans n'importe quel agent IA pour lui faire lire la page d'évaluation, inspecter votre outil, votre espace de travail et le contexte de configuration, puis juger si Neotoma correspond à votre flux de travail réel et ce qu'il faut conserver en premier.
 
-`Read https://neotoma.io/evaluate. Before you answer, inspect any broader tool, workspace, and configuration context you can access so you assess my real workflow rather than just this chat. Then assess whether Neotoma fits my workflow, what data would be highest value to persist first, and what I should do next.`Copie
+Invite d'évaluation
+
+Lit la page, puis évalue l'adéquation à votre flux de travail réel.
+
+Copie
+
+`Read https://neotoma.io/evaluate. Before you answer, inspect any broader tool, workspace, and configuration context you can access so you assess my real workflow rather than just this chat. Then assess whether Neotoma fits my workflow, what data would be highest value to persist first, and what I should do next.`
 
 [Voir la page d'évaluation](/evaluate)
 
-[Claude](/neotoma-with-claude)[ChatGPT](/neotoma-with-chatgpt)[Curseur](/neotoma-with-cursor)[Griffe Ouverte](/neotoma-with-openclaw)
+Fonctionne avec[Claude](/neotoma-with-claude)[ChatGPT](/neotoma-with-chatgpt)[Curseur](/neotoma-with-cursor)[Griffe Ouverte](/neotoma-with-openclaw)
 
 [](#record-types)
 
@@ -298,7 +370,7 @@ Copiez cette invite dans n'importe quel agent IA pour lui faire lire la page d'�
 
 La mémoire de la plateforme (Claude, ChatGPT) est suffisante – pourquoi ajouter un autre outil&nbsp;?
 
-La mémoire de la plateforme stocke ce qu'un fournisseur décide de retenir, dans un format que vous ne pouvez ni inspecter ni exporter. Il ne gère pas de version, ne détecte pas les conflits et disparaît si vous changez d'outil. Neotoma vous offre un état structuré et multi-outils que vous contrôlez.
+La mémoire de la plateforme stocke ce qu'un fournisseur décide de retenir, dans un format que vous ne pouvez ni inspecter ni exporter. Il ne gère pas de version, ne détecte pas les conflits et disparaît si vous changez d'outil. Neotoma vous offre une mémoire structurée et multi-outils que vous contrôlez.
 
 Ne puis-je pas simplement construire cela avec SQLite ou un fichier JSON&nbsp;?
 
@@ -306,7 +378,11 @@ Vous pouvez commencer par là – de nombreuses équipes le font. Mais vous aure
 
 Est-ce prêt pour la production ?
 
-Neotoma est en version préliminaire pour les développeurs - utilisé quotidiennement par les flux de travail des agents réels. Les garanties de base (état déterministe, historique versionné, journal en ajout uniquement) sont stables. Installez en 5 minutes et laissez votre agent évaluer l'ajustement.
+Neotoma est en version développeur et est utilisé quotidiennement par les flux de travail des agents réels. Les garanties de base (mémoire déterministe, historique versionné, journal des modifications en ajout uniquement) sont stables. Installez en 5 minutes et laissez votre agent évaluer l'ajustement.
+
+Neotoma remplace-t-il la mémoire de Claude ou celle de ChatGPT ?
+
+Non, cela fonctionne à leurs côtés. La mémoire de la plate-forme stocke ce qu'un fournisseur décide de mémoriser dans l'outil de ce fournisseur. Neotoma stocke les informations que vous contrôlez sur tous vos outils. Continuez à utiliser la mémoire de la plateforme pour un contexte rapide&nbsp;; utilisez Neotoma lorsque vous avez besoin de gestion de versions, d'auditabilité et de cohérence entre outils.
 
 Neotoma envoie-t-il mes données vers le cloud ?
 
@@ -314,7 +390,7 @@ Non. Neotoma s'exécute localement par défaut. Vos données restent sur votre m
 
 Quelle est la différence entre la mémoire RAG et la mémoire déterministe ?
 
-RAG stocke des morceaux de texte et les récupère par similarité pour les invites. Neotoma stocke les observations structurées et compose l'état de l'entité avec des réducteurs&nbsp;; les mêmes observations donnent toujours le même instantané. RAG optimise la pertinence&nbsp;; la mémoire déterministe optimise l’intégrité, la gestion des versions et l’auditabilité.
+RAG stocke des morceaux de texte et les récupère par similarité. Neotoma stocke des faits structurés et crée un historique versionné pour chacun d'entre eux&nbsp;; les mêmes entrées produisent toujours le même résultat. RAG optimise la pertinence&nbsp;; la mémoire déterministe optimise l’intégrité, la gestion des versions et l’auditabilité.
 
 [D'autres questions ? Voir la FAQ](/faq)
 
@@ -322,13 +398,11 @@ RAG stocke des morceaux de texte et les récupère par similarité pour les invi
 
 Néotome
 
-Mémoire multi-outils pour les agents IA. Open source et local d’abord.
+La couche d'état pour les agents IA. Open source et local d’abord.
 
 Produit
 
 [Installer](/install)[Architecture](/architecture)[Garanties de mémoire](/memory-guarantees)[FAQ](/faq)
-
-[Demandez à votre agent d'évaluer](/evaluate)
 
 Documentation
 
@@ -338,7 +412,11 @@ Externe
 
 [GitHub](https://github.com/markmhendrickson/neotoma)[npm](https://www.npmjs.com/package/neotoma)[Blogue](https://markmhendrickson.com/blog)
 
-© 2026 Néotome · v0.3.10 · 12 sorties · Sous licence MIT · Construit par [Marc Hendrickson](https://markmhendrickson.com)
+La ré-invite coûte du temps. Un mauvais état coûte la confiance. Découvrez si Neotoma s’adapte avant l’un ou l’autre des composés.
+
+[Demandez à votre agent d'évaluer](/evaluate)[Rencontrez le créateur](/meet)
+
+© 2026 Néotome · v0.4.2 · 15 sorties · Sous licence MIT · Construit par [Marc Hendrickson](https://markmhendrickson.com)
 
 [Réduction](/fr/markdown "Réduction")</pre></div><div role="region" aria-label="Notifications (F8)" tabindex="-1" style="pointer-events: none;"><ol tabindex="-1" class="fixed top-0 z-[100] flex w-full flex-col-reverse p-4 sm:bottom-4 sm:right-4 sm:top-auto sm:flex-col sm:max-h-[calc(100vh-1rem)] sm:overflow-y-auto md:max-w-[420px]"></ol></div></div>
   

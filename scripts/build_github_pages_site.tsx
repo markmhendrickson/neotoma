@@ -18,7 +18,6 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { FAVICON_SVG } from "../frontend/src/site/site_data";
 import {
   DEFAULT_LOCALE,
   NON_DEFAULT_LOCALES,
@@ -39,7 +38,7 @@ const repoRoot = path.resolve(__dirname, "..");
 const outputDir = path.join(repoRoot, "site_pages");
 const outputFile = path.join(outputDir, "index.html");
 const noJekyllFile = path.join(outputDir, ".nojekyll");
-const faviconFile = path.join(outputDir, "favicon.svg");
+const publicRootDir = path.join(repoRoot, "frontend", "public");
 const heroImageSrc = path.join(repoRoot, "frontend", "public", "neotoma-hero.png");
 const heroImageDest = path.join(outputDir, "neotoma-hero.png");
 const ogImageSrc = path.join(repoRoot, "frontend", "public", "neotoma-og-1200x630.png");
@@ -51,6 +50,17 @@ const llmsTxtDest = path.join(outputDir, "llms.txt");
 const notFoundFile = path.join(outputDir, "404.html");
 const publicIndex = path.join(repoRoot, "public", "index.html");
 const publicAssetsDir = path.join(repoRoot, "public", "assets");
+const publicRootAssets = [
+  "favicon.ico",
+  "favicon.svg",
+  "favicon-16x16.png",
+  "favicon-32x32.png",
+  "favicon-48x48.png",
+  "apple-touch-icon.png",
+  "android-chrome-192x192.png",
+  "android-chrome-512x512.png",
+  "site.webmanifest",
+] as const;
 
 const buildId =
   process.env.GITHUB_SHA?.slice(0, 7) ||
@@ -126,6 +136,7 @@ function getContentType(filePath: string): string {
   if (filePath.endsWith(".html")) return "text/html; charset=utf-8";
   if (filePath.endsWith(".js")) return "application/javascript; charset=utf-8";
   if (filePath.endsWith(".css")) return "text/css; charset=utf-8";
+  if (filePath.endsWith(".webmanifest")) return "application/manifest+json; charset=utf-8";
   if (filePath.endsWith(".svg")) return "image/svg+xml";
   if (filePath.endsWith(".png")) return "image/png";
   if (filePath.endsWith(".xml")) return "application/xml; charset=utf-8";
@@ -403,7 +414,14 @@ async function main() {
   fs.writeFileSync(notFoundFile, buildHtmlForRoute(rootHtml, "/404"), "utf-8");
 
   fs.writeFileSync(noJekyllFile, "", "utf-8");
-  fs.writeFileSync(faviconFile, FAVICON_SVG.trim(), "utf-8");
+  for (const assetName of publicRootAssets) {
+    const src = path.join(publicRootDir, assetName);
+    const dest = path.join(outputDir, assetName);
+    if (fs.existsSync(src)) {
+      fs.copyFileSync(src, dest);
+      console.log(`Copied root asset: ${path.relative(repoRoot, dest)}`);
+    }
+  }
   if (fs.existsSync(heroImageSrc)) {
     fs.copyFileSync(heroImageSrc, heroImageDest);
     console.log(`Copied hero image: ${path.relative(repoRoot, heroImageDest)}`);
@@ -424,7 +442,6 @@ async function main() {
   console.log(`Built ${routeCount} route pages (fully pre-rendered HTML)`);
   console.log(`Built 404.html (pre-rendered fallback)`);
   console.log(`Copied assets: ${path.relative(repoRoot, outputAssetsDir)}`);
-  console.log(`Built favicon: ${path.relative(repoRoot, faviconFile)}`);
   console.log(`Built robots: ${path.relative(repoRoot, robotsFile)}`);
   console.log(`Built sitemap: ${path.relative(repoRoot, sitemapFile)}`);
 }

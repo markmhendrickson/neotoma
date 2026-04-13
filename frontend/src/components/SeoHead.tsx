@@ -14,9 +14,16 @@ export function SeoHead({ routePath }: SeoHeadProps) {
   return (
     <Helmet>
       <title>{metadata.title}</title>
+      <link rel="icon" href="/favicon.ico" sizes="any" />
+      <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+      <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png" />
+      <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+      <link rel="manifest" href="/site.webmanifest" />
       <meta name="description" content={metadata.description} />
       <meta name="author" content={SEO_DEFAULTS.author} />
+      <meta name="application-name" content={SEO_DEFAULTS.siteName} />
       <meta name="robots" content={metadata.robots} />
+      <meta name="theme-color" content="#130918" />
       <link rel="canonical" href={metadata.canonicalUrl} />
       <meta property="og:type" content={metadata.ogType} />
       <meta property="og:site_name" content={SEO_DEFAULTS.siteName} />

@@ -50,6 +50,8 @@ export interface SeoRouteMetadata {
     founderUrl?: string;
     sameAs: string[];
   };
+  /** Speakable schema: CSS selectors identifying content suitable for TTS / agent reading. */
+  speakable?: string[];
 }
 
 export const SEO_DEFAULTS = {
@@ -68,7 +70,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/": {
     title: "Your agents forget. Neotoma makes them remember.",
     description:
-      "Stop being the human sync layer. Deterministic, versioned state for multi-agent builders and operators running Claude, Cursor, ChatGPT, and MCP-connected tools. Replay changes, trace provenance, and prove your agents aren\u2019t operating on bad state.",
+      "Persistent, versioned memory for AI agents across Claude, Cursor, ChatGPT, and MCP-connected tools. Every fact is versioned, every change is traceable, and every agent works from the same truth. Open-source, local-first, installs in 5 minutes.",
     /** Matches on-image copy and footer positioning; dev preview img uses this for alt/figcaption. */
     ogImageAlt:
       "Neotoma: the state layer for AI agents. Open-source and local-first. Large headline and supporting lines on warm brown with a Neotoma packrat holding a record.",
@@ -105,12 +107,37 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
         "https://x.com/markmhendrickson",
       ],
     },
+    faqItems: [
+      {
+        question: "Does Neotoma replace Claude's memory or ChatGPT's?",
+        answer: "No \u2014 it works alongside them. Platform memory stores what one vendor decides to remember within that vendor's tool. Neotoma stores facts you control across all your tools. Keep using platform memory for quick context; use Neotoma when you need versioning, auditability, and cross-tool consistency.",
+      },
+      {
+        question: "Can't I just build this with SQLite or a JSON file?",
+        answer: "You can start there \u2014 many teams do. But you'll eventually need versioning, conflict detection, schema evolution, and cross-tool sync. That's months of infrastructure work. Neotoma ships those guarantees on day one.",
+      },
+      {
+        question: "Platform memory (Claude, ChatGPT) is good enough \u2014 why add another tool?",
+        answer: "Platform memory stores what one vendor decides to remember, in a format you can't inspect or export. It doesn't version, doesn't detect conflicts, and vanishes if you switch tools. Neotoma gives you structured, cross-tool memory you control.",
+      },
+      {
+        question: "Is this production-ready?",
+        answer: "Neotoma is in developer preview \u2014 used daily by real agent workflows. The core guarantees (deterministic memory, versioned history, append-only change log) are stable. Install in 5 minutes and let your agent evaluate the fit.",
+      },
+      {
+        question: "Does Neotoma send my data to the cloud?",
+        answer: "No. Neotoma runs locally by default. Your data stays on your machine in a local SQLite database. There is no cloud sync, no telemetry, and no training on your data unless you choose to expose the API.",
+      },
+    ],
+    speakable: ["h1", "#intro p", "#who h2", "#who p", "#common-questions summary", "#common-questions p"],
   },
   "/install": {
     title: "Install | Neotoma",
     description:
       "Install Neotoma in 5 minutes. Agent-assisted and manual install, Docker setup, API server startup, and MCP configuration.",
     robots: "index,follow",
+    ogImageUrl: "https://neotoma.io/og/neotoma-og-install-1200x630.png",
+    ogImageAlt: "Install Neotoma in 5 minutes. npm install -g neotoma. Agent-assisted setup for Cursor, Claude, ChatGPT, and MCP-connected tools.",
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
@@ -281,6 +308,8 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       "Use Neotoma as persistent structured memory alongside Cursor context for cross-session AI development.",
     robots: "index,follow",
     jsonLdType: "WebPage",
+    ogImageUrl: "https://neotoma.io/og/neotoma-og-cursor-1200x630.png",
+    ogImageAlt: "Neotoma + Cursor: persistent structured memory for cross-session AI development. Install in 5 minutes via MCP.",
     breadcrumb: [
       { name: "Home", path: "/" },
       { name: "Docs", path: "/docs" },
@@ -925,6 +954,8 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       "Ask your AI agent to read this page and assess whether Neotoma fits your workflow. Structured for both human and agent evaluation of deterministic agent memory.",
     robots: "index,follow",
     jsonLdType: "WebPage",
+    ogImageUrl: "https://neotoma.io/og/neotoma-og-evaluate-1200x630.png",
+    ogImageAlt: "Let your agent decide if Neotoma fits. Copy the evaluation prompt into Claude, Cursor, or ChatGPT and let your agent assess the fit.",
     breadcrumb: [
       { name: "Home", path: "/" },
       { name: "Evaluate", path: "/evaluate" },
@@ -959,6 +990,8 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       "How does Neotoma compare to platform memory? Built-in AI product memory is convenient but opaque and vendor-bound. Neotoma provides deterministic state, versioned history, and auditable provenance across tools.",
     robots: "index,follow",
     jsonLdType: "WebPage",
+    ogImageUrl: "https://neotoma.io/og/neotoma-og-vs-platform-1200x630.png",
+    ogImageAlt: "Neotoma vs platform memory: side-by-side comparison of Claude Memory, ChatGPT Memory, and Neotoma across versioning, auditability, and portability.",
     breadcrumb: [
       { name: "Home", path: "/" },
       { name: "Memory Models", path: "/memory-models" },
@@ -976,6 +1009,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
           "Yes. Platform memory can hold lightweight in-product context, while Neotoma stores durable structured state that must persist across tools, sessions, and audits.",
       },
     ],
+    speakable: ["h1", "h2", "main p", "main summary", "main table"],
   },
   "/neotoma-vs-mem0": {
     title: "Neotoma vs Mem0 | Memory System Comparison",
@@ -1176,14 +1210,21 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     keywords: ["events", "meetings", "milestones", "calendar", "entity type"],
   },
   "/data-model": {
-    title: "Developer Walkthrough | Neotoma",
+    title: "Walkthrough | Neotoma",
     description:
       "See how contacts, tasks, and decisions persist across Cursor, Claude, and ChatGPT with versioned history and full provenance.",
     robots: "noindex,follow",
     jsonLdType: "WebPage",
   },
   "/developer-walkthrough": {
-    title: "Developer Walkthrough | Neotoma",
+    title: "Walkthrough | Neotoma",
+    description:
+      "See how contacts, tasks, and decisions persist across Cursor, Claude, and ChatGPT with versioned history and full provenance.",
+    robots: "noindex,follow",
+    jsonLdType: "WebPage",
+  },
+  "/walkthrough": {
+    title: "Walkthrough | Neotoma",
     description:
       "See how contacts, tasks, and decisions persist across Cursor, Claude, and ChatGPT with versioned history and full provenance.",
     robots: "index,follow",
@@ -1191,7 +1232,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     breadcrumb: [
       { name: "Home", path: "/" },
       { name: "Docs", path: "/docs" },
-      { name: "Developer Walkthrough", path: "/developer-walkthrough" },
+      { name: "Walkthrough", path: "/walkthrough" },
     ],
   },
   "/schema-management": {
@@ -1235,6 +1276,8 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       "Memory properties that determine reliability under production load: deterministic state evolution, versioned history, replayable timeline, auditable change log, schema constraints, and more.",
     robots: "index,follow",
     jsonLdType: "WebPage",
+    ogImageUrl: "https://neotoma.io/og/neotoma-og-guarantees-1200x630.png",
+    ogImageAlt: "Neotoma memory guarantees compared: versioned history, append-only audit log, schema-bound validation, cross-tool sync, and privacy-first local storage.",
     breadcrumb: [
       { name: "Home", path: "/" },
       { name: "Memory Guarantees", path: "/memory-guarantees" },
@@ -1556,6 +1599,19 @@ function buildJsonLd(
         ...(org.founderUrl ? { url: org.founderUrl } : {}),
       },
       sameAs: org.sameAs,
+    });
+  }
+
+  if (metadata.speakable && metadata.speakable.length > 0) {
+    items.push({
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      name: metadata.title,
+      url: canonicalUrl,
+      speakable: {
+        "@type": "SpeakableSpecification",
+        cssSelector: metadata.speakable,
+      },
     });
   }
 

@@ -4,7 +4,7 @@
 
 The primary ICP: people constructing an operating system for their own AI agents across personal and professional life domains.
 
-**Related docs:** [`profiles.md`](./profiles.md) (detailed profiles) · [`secondary_icps.md`](./secondary_icps.md) · [`future_icps.md`](./future_icps.md) · [`developer_release_targeting.md`](./developer_release_targeting.md) (release-scoped targeting, activation risks, and status tracking)
+**Related docs:** [`profiles.md`](./profiles.md) (detailed profiles) · [`secondary_icps.md`](./secondary_icps.md) · [`future_icps.md`](./future_icps.md) · [`developer_release_targeting.md`](./developer_release_targeting.md) (release-scoped targeting, activation risks, and status tracking) · [`business_model.md`](../private/strategy/business_model.md) (canonical business model, pricing, revenue mechanics) · [`strategic_market_analysis.md`](../private/strategy/strategic_market_analysis.md) (industry evolution and topology framework) · [`distribution_financing_strategy.md`](../private/strategy/distribution_financing_strategy.md) (B2D distribution and financing)
 
 ---
 
@@ -39,7 +39,7 @@ Cross-tool state is consistent; context persists across sessions; facts stored o
 
 ### Adoption pattern
 
-Install for personal use, expand as the personal OS matures across life domains. B2B opportunities emerge downstream when personal builders bring Neotoma into team/professional contexts — not a separate ICP, but a secondary motion from personal adoption.
+Install for personal use, expand as the personal OS matures across life domains. B2B opportunities emerge downstream when personal builders bring Neotoma into team/professional contexts — not a separate ICP, but a secondary motion from personal adoption. See [B2B Pull-Through Mechanics](#b2b-pull-through-mechanics) for the operational sequence.
 
 ---
 
@@ -67,6 +67,94 @@ Three modes — not separate personas, but facets of one person's workflow. For 
 - **Building → Infrastructure debugging:** Production pipelines surface state integrity needs.
 - **Infrastructure validation → Toolchain adoption:** When the ICP standardizes on Neotoma, framework maintainers see adoption signal.
 - **B2B downstream:** Personal adoption creates the entry point for team contexts.
+
+---
+
+## ICP Growth Trajectory
+
+The ICP as described is real but the addressable portion today is a small subset of the total role population. See [`profiles.md`](./profiles.md) for topology-qualified estimates: ~15K–60K developers at Topology 2+ who experience write-integrity pain, of which ~1K–5K are in the acute segment (can name the problem and are actively searching for solutions). The total role population across Tier 1 (~200K–600K) enters the addressable market as developers progress through topology stages.
+
+The addressable ICP expands as developers progress through multi-agent topology stages. See [`strategic_market_analysis.md`](../private/strategy/strategic_market_analysis.md) for the full topology framework.
+
+### Topology-to-ICP mapping
+
+| Topology | Pattern | ICP Qualification | Estimated Timeline |
+|----------|---------|------------------|--------------------|
+| 1: Hub-and-spoke | One primary agent, stateless tool calls | Pre-ICP — pain is latent, platform memory suffices | Current dominant |
+| 2: Pipeline agents | Sequential handoffs, each reads/appends state | Qualifying — errors propagate through chain, debugging becomes real work | Next 12 months |
+| 3: Event-driven shared context | Multiple agents, shared store, no orchestrator | Strongly qualified — concurrent writes, contradiction amplification, cascade failures | 12–24 months |
+| 4: Persistent autonomous agents | Long-running state, periodic sync | Critical need — context windows can't serve as memory, provenance is non-optional | 18–36 months |
+
+### Expansion signals
+
+The ICP population is expanding when:
+
+- Developers at Topology 2 start posting about pipeline debugging pain (state propagation errors, agent-to-agent handoff failures)
+- Framework maintainers (LangChain, CrewAI, OpenClaw) add shared-state primitives — signals that multi-agent coordination is moving from niche to mainstream
+- High-profile agent failures on corrupted state surface publicly — creates "that's me" moments for latent ICP members
+- Enterprise buyers begin demanding audit trails for autonomous agent decisions
+- Regulatory pressure (finance, healthcare) surfaces for deterministic provenance
+
+### Developer release implication
+
+The developer release serves today's narrow ICP and builds the infrastructure/content that catches each expanding cohort. The comparison is Supabase or PlanetScale in their early days — a small number of developers building real things on the platform, each representing a production dependency.
+
+---
+
+## Distribution Channels and Integration Priorities
+
+The ICP uses specific tools. Those tools are distribution channels, not just context. See [`distribution_financing_strategy.md`](../private/strategy/distribution_financing_strategy.md) for full distribution analysis.
+
+### Channel priority
+
+| Priority | Channel | Mechanism | Why |
+|----------|---------|-----------|-----|
+| 1 | MCP ecosystem | Neotoma MCP tools in registries and directories | Where the ICP already configures agent memory; lowest-friction discovery |
+| 2 | Cursor / Claude Code | Integration docs, workflow examples, `.cursor/rules` patterns | Where the ICP spends their workday; in-context adoption |
+| 3 | Open source repo | GitHub discoverability, README, stars, recent commits | Trust signal; where they evaluate tools before installing |
+| 4 | Content | Pain-point blog posts, competitive comparisons, write-integrity deep dives | Catches developers searching for solutions to problems they just felt |
+| 5 | OpenClaw ecosystem | Plugin when Topology 2+ power users start complaining about state management | Est. Q3 2026; tied to multi-agent framework adoption |
+
+### Integration surface framing
+
+The winning architecture is not "replace your database" but "sit between your agents and your database." Agent-generated state (observations, inferences, entity resolutions, decisions) lives in a purpose-built layer. The developer's existing Postgres remains the system of record for business data. This framing avoids triggering the "just use Postgres" reflex.
+
+### Content-to-channel mapping
+
+| Watering hole (from above) | Content type that resonates | Distribution channel |
+|---|---|---|
+| AI/agent Twitter/X | QTs of agent memory frustration posts; before/after comparisons | Organic, founder account |
+| Claude Code / Cursor communities | Workflow walkthroughs with Neotoma MCP setup | Integration docs, community posts |
+| Indie hacker forums (HN, r/ClaudeAI) | Failure stories, "here's my setup" posts | Content, repo README |
+| LinkedIn | Structured posts on multi-agent state integrity | Content, professional framing |
+| Open source agent tooling repos | Issues/discussions surfacing memory pain | GitHub presence, cross-references |
+
+---
+
+## B2B Pull-Through Mechanics
+
+The primary adoption path is personal (B2D). B2B revenue emerges downstream when a personal adopter brings Neotoma into a team context where state corruption costs are measurable in dollars.
+
+### The pull-through sequence
+
+1. **Individual adopts for personal use.** Installs Neotoma for their own agent workflows — contacts, tasks, decisions, code context. Uses it across Claude Code and Cursor. Experiences the value: cross-session recall, provenance, no re-prompting tax.
+
+2. **Individual encounters team pain.** Their team or company runs multi-agent workflows where state integrity matters — a pipeline that hands off between agents, a shared context store, or agents making decisions that affect revenue/customers. The individual recognizes the pattern: "this is the same problem I solved personally."
+
+3. **Individual proposes Neotoma for team use.** The proposal is credible because they already use it. The cost of state corruption is quantifiable: a bad agent decision that lost a customer, a pipeline failure that required manual reconstruction, an audit question nobody could answer.
+
+4. **Team adopts on a team plan.** Higher ACV (€500–€2,500/mo). The individual becomes the internal champion. Neotoma transitions from personal tool to team infrastructure.
+
+### Facilitating pull-through
+
+- **Team plan activation:** Make it frictionless for an individual user to upgrade to a team plan and invite colleagues — no re-onboarding, no data migration, same MCP configuration pattern
+- **Team-visible value:** Shared entity graphs, cross-user provenance, team-level audit trails — features that only matter in team context but are immediately legible
+- **Business case ammunition:** Templates or examples the individual champion can use to justify the purchase: "here's what state corruption cost us last month," "here's what we can't audit today"
+- **Timeline:** First B2B pull-through expected during Phase 2 (angel-funded growth, Dec 2026–mid 2027) as early individual adopters encounter team-scale problems
+
+### Revenue implication
+
+Team plans drive majority of revenue by M12 (see [`business_model.md`](../private/strategy/business_model.md)). The individual plan is the activation channel; the team plan is the revenue channel. Individual-to-team upgrade target: 20% within 2–3 months.
 
 ---
 

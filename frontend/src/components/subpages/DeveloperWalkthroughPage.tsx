@@ -60,7 +60,7 @@ function ChatPrelude({ children }: { children: string }) {
 
 export function DeveloperWalkthroughPage() {
   return (
-    <DetailPage title="Developer walkthrough">
+    <DetailPage title="Walkthrough">
       <section className="mb-6">
         <p className="text-[15px] leading-7 font-medium text-foreground mb-4">
           You use Claude, Cursor, and ChatGPT throughout the day. By the third tool switch, you're

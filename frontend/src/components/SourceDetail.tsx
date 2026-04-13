@@ -33,6 +33,35 @@ interface Source {
   user_id: string;
 }
 
+type SourceContentPreview =
+  | { status: "idle" | "loading" }
+  | { status: "error"; message: string }
+  | { status: "ready"; kind: "text"; text: string; mimeType: string }
+  | { status: "ready"; kind: "pdf" | "image" | "download"; url: string; mimeType: string };
+
+function normalizeMimeType(mimeType?: string): string {
+  return (mimeType || "").split(";")[0]?.trim().toLowerCase() || "";
+}
+
+function isTextPreviewMimeType(mimeType: string): boolean {
+  const normalized = normalizeMimeType(mimeType);
+  return (
+    normalized.startsWith("text/") ||
+    normalized === "application/json" ||
+    normalized === "application/xml" ||
+    normalized === "application/javascript" ||
+    normalized === "image/svg+xml"
+  );
+}
+
+function getReadyPreviewKind(mimeType: string): "text" | "pdf" | "image" | "download" {
+  const normalized = normalizeMimeType(mimeType);
+  if (isTextPreviewMimeType(normalized)) return "text";
+  if (normalized === "application/pdf") return "pdf";
+  if (normalized.startsWith("image/")) return "image";
+  return "download";
+}
+
 interface Interpretation {
   id: string;
   source_id: string;
@@ -73,6 +102,7 @@ export function SourceDetail({ sourceId, onClose }: SourceDetailProps) {
   const [source, setSource] = useState<Source | null>(null);
   const [interpretations, setInterpretations] = useState<Interpretation[]>([]);
   const [observations, setObservations] = useState<Observation[]>([]);
+  const [contentPreview, setContentPreview] = useState<SourceContentPreview>({ status: "idle" });
   const [loading, setLoading] = useState(true);
 
   const { settings } = useSettings();
@@ -142,6 +172,88 @@ export function SourceDetail({ sourceId, onClose }: SourceDetailProps) {
 
     fetchSourceDetail();
   }, [sourceId, bearerToken, keysLoading, sessionToken, settings.bearerToken]);
+
+  useEffect(() => {
+    if (!source) {
+      setContentPreview({ status: "idle" });
+      return;
+    }
+
+    if (source.raw_text) {
+      setContentPreview({
+        status: "ready",
+        kind: "text",
+        text: source.raw_text,
+        mimeType: normalizeMimeType(source.mime_type) || "text/plain",
+      });
+      return;
+    }
+
+    let isCancelled = false;
+    let objectUrl: string | null = null;
+
+    async function fetchSourceContent() {
+      setContentPreview({ status: "loading" });
+
+      try {
+        const headers: HeadersInit = {};
+        if (bearerToken) {
+          headers.Authorization = `Bearer ${bearerToken}`;
+        }
+
+        const response = await fetch(`/sources/${sourceId}/content`, { headers });
+        if (!response.ok) {
+          if (response.status === 404) {
+            setContentPreview({ status: "error", message: "No raw source content available." });
+            return;
+          }
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const mimeType = normalizeMimeType(response.headers.get("Content-Type") || source.mime_type);
+        const previewKind = getReadyPreviewKind(mimeType);
+
+        if (previewKind === "text") {
+          const text = await response.text();
+          if (!isCancelled) {
+            setContentPreview({
+              status: "ready",
+              kind: "text",
+              text,
+              mimeType: mimeType || "text/plain",
+            });
+          }
+          return;
+        }
+
+        const blob = await response.blob();
+        objectUrl = URL.createObjectURL(blob);
+
+        if (!isCancelled) {
+          setContentPreview({
+            status: "ready",
+            kind: previewKind,
+            url: objectUrl,
+            mimeType: mimeType || blob.type || "application/octet-stream",
+          });
+        }
+      } catch (error) {
+        if (!isCancelled) {
+          console.error("Failed to fetch raw source content:", error);
+          setContentPreview({ status: "error", message: "Failed to load raw source content." });
+        }
+      }
+    }
+
+    fetchSourceContent();
+
+    return () => {
+      isCancelled = true;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [source, sourceId, bearerToken]);
 
   // Add real-time subscription for source updates
   const { subscribe } = useRealtime();
@@ -370,15 +482,66 @@ export function SourceDetail({ sourceId, onClose }: SourceDetailProps) {
           <TabsContent value="content">
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Raw Content</CardTitle>
-                <CardDescription>
-                  Extracted text from source
-                </CardDescription>
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <CardTitle className="text-base">Raw Content</CardTitle>
+                    <CardDescription>
+                      Inline preview when available
+                    </CardDescription>
+                  </div>
+                  {contentPreview.status === "ready" &&
+                    contentPreview.kind !== "text" && (
+                      <Button variant="outline" size="sm" asChild>
+                        <a
+                          data-testid="open-raw-source"
+                          href={contentPreview.url}
+                          download={source.original_filename || source.file_name || `source-${source.id}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Open raw source
+                          <ExternalLink className="ml-2 h-4 w-4" />
+                        </a>
+                      </Button>
+                    )}
+                </div>
               </CardHeader>
               <CardContent>
-                <pre className="text-xs whitespace-pre-wrap font-mono bg-muted p-4 rounded-md overflow-auto max-h-96">
-                  {source.raw_text || "No raw text available"}
-                </pre>
+                {contentPreview.status === "loading" ? (
+                  <div className="flex min-h-48 items-center justify-center">
+                    <Loader2 className="h-6 w-6 animate-spin" />
+                  </div>
+                ) : contentPreview.status === "error" ? (
+                  <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+                    {contentPreview.message}
+                  </div>
+                ) : contentPreview.status === "ready" && contentPreview.kind === "text" ? (
+                  <pre className="text-xs whitespace-pre-wrap font-mono bg-muted p-4 rounded-md overflow-auto max-h-96">
+                    {contentPreview.text || "No raw text available"}
+                  </pre>
+                ) : contentPreview.status === "ready" && contentPreview.kind === "pdf" ? (
+                  <iframe
+                    data-testid="raw-source-pdf"
+                    title={source.original_filename || source.file_name || `source-${source.id}`}
+                    src={contentPreview.url}
+                    className="h-[32rem] w-full rounded-md border bg-muted"
+                  />
+                ) : contentPreview.status === "ready" && contentPreview.kind === "image" ? (
+                  <img
+                    data-testid="raw-source-image"
+                    src={contentPreview.url}
+                    alt={source.original_filename || source.file_name || `source-${source.id}`}
+                    className="max-h-[32rem] w-full rounded-md border bg-muted object-contain"
+                  />
+                ) : contentPreview.status === "ready" ? (
+                  <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+                    This file type cannot be previewed inline. Use &quot;Open raw source&quot; to inspect it.
+                  </div>
+                ) : (
+                  <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+                    No raw content available.
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

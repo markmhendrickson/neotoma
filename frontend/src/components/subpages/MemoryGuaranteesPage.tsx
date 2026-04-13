@@ -436,6 +436,26 @@ neotoma store --json='[{"entity_type":"person","name":"Ana Rivera","age":30}]'`}
           </a>
           .
         </p>
+        <h3 className="text-[18px] font-medium tracking-[-0.01em] mt-6 mb-3">Schema extensibility</h3>
+        <p className="text-[15px] leading-7 mb-4">
+          Schemas are not fixed at deploy time. Store any entity with a descriptive{" "}
+          <code>entity_type</code> and Neotoma infers the schema from the first observation. New fields
+          are added automatically (minor version bump); unused fields can be pruned via{" "}
+          <code>update_schema_incremental</code> (major version bump). Removed fields are excluded
+          from snapshots but all observation data is preserved; re-adding a field restores it.
+        </p>
+        <pre className="rounded-lg border code-block-palette p-4 overflow-x-auto font-mono text-[14px] whitespace-pre-wrap break-words mb-6">{`# Store a new entity type: schema is created automatically
+neotoma store --json='[{"entity_type":"project","name":"Acme Redesign","status":"active","lead":"Ana"}]'
+
+# Later, add a new field: schema evolves
+neotoma store --json='[{"entity_type":"project","name":"Acme Redesign","priority":"P0"}]'
+
+# View the current schema
+neotoma schemas get project`}</pre>
+        <p className="text-[15px] leading-7 mb-4">
+          This means you never need to define schemas upfront or run migrations. Your agent workflows
+          define entity types organically, and the schema hardens over time as observations accumulate.
+        </p>
       </section>
 
       {/* Silent mutation risk */}

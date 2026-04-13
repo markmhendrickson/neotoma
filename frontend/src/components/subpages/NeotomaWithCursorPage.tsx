@@ -6,6 +6,7 @@ import { CopyableCodeBlock } from "../CopyableCodeBlock";
 import { DetailPage } from "../DetailPage";
 import { GettingStartedEvaluateInstallLinks } from "../GettingStartedEvaluateInstallLinks";
 import { IntegrationSection } from "../IntegrationSection";
+import { IntegrationBeforeAfter, IntegrationActivation, IntegrationLimitations } from "../IntegrationExtras";
 import { TableScrollWrapper } from "../ui/table-scroll-wrapper";
 
 const extLink = "text-foreground underline underline-offset-2 hover:no-underline";
@@ -204,6 +205,10 @@ export function NeotomaWithCursorPage() {
           the user also wants Neotoma available in hosted tools.
         </p>
       </IntegrationSection>
+
+      <IntegrationBeforeAfter toolName="Cursor" />
+      <IntegrationActivation toolName="Cursor" />
+      <IntegrationLimitations />
 
       <IntegrationSection sectionKey="cursor-documentation" title="Cursor documentation">
         <ul className="list-none pl-0 space-y-1.5 mb-2">

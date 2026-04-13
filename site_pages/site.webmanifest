@@ -1,0 +1,22 @@
+{
+  "name": "Neotoma",
+  "short_name": "Neotoma",
+  "description": "Persistent, versioned memory for AI agents across Claude, Cursor, ChatGPT, and MCP-connected tools.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#130918",
+  "theme_color": "#130918",
+  "icons": [
+    {
+      "src": "/android-chrome-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/android-chrome-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

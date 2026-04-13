@@ -17,6 +17,7 @@
   <url><loc>https://neotoma.io/neotoma-with-claude-connect-desktop</loc></url>
   <url><loc>https://neotoma.io/neotoma-with-claude-connect-remote-mcp</loc></url>
   <url><loc>https://neotoma.io/neotoma-with-claude-code</loc></url>
+  <url><loc>https://neotoma.io/neotoma-with-claude-agent-sdk</loc></url>
   <url><loc>https://neotoma.io/neotoma-with-chatgpt</loc></url>
   <url><loc>https://neotoma.io/neotoma-with-chatgpt-connect-remote-mcp</loc></url>
   <url><loc>https://neotoma.io/neotoma-with-chatgpt-connect-custom-gpt</loc></url>
@@ -46,6 +47,7 @@
   <url><loc>https://neotoma.io/build-vs-buy</loc></url>
   <url><loc>https://neotoma.io/troubleshooting</loc></url>
   <url><loc>https://neotoma.io/evaluate</loc></url>
+  <url><loc>https://neotoma.io/meet</loc></url>
   <url><loc>https://neotoma.io/faq</loc></url>
   <url><loc>https://neotoma.io/neotoma-vs-platform-memory</loc></url>
   <url><loc>https://neotoma.io/neotoma-vs-mem0</loc></url>
@@ -59,7 +61,7 @@
   <url><loc>https://neotoma.io/types/contracts</loc></url>
   <url><loc>https://neotoma.io/types/decisions</loc></url>
   <url><loc>https://neotoma.io/types/events</loc></url>
-  <url><loc>https://neotoma.io/developer-walkthrough</loc></url>
+  <url><loc>https://neotoma.io/walkthrough</loc></url>
   <url><loc>https://neotoma.io/schema-management</loc></url>
   <url><loc>https://neotoma.io/changelog</loc></url>
   <url><loc>https://neotoma.io/memory-models</loc></url>
@@ -85,6 +87,7 @@
   <url><loc>https://neotoma.io/es/neotoma-with-claude-connect-desktop</loc></url>
   <url><loc>https://neotoma.io/es/neotoma-with-claude-connect-remote-mcp</loc></url>
   <url><loc>https://neotoma.io/es/neotoma-with-claude-code</loc></url>
+  <url><loc>https://neotoma.io/es/neotoma-with-claude-agent-sdk</loc></url>
   <url><loc>https://neotoma.io/es/neotoma-with-chatgpt</loc></url>
   <url><loc>https://neotoma.io/es/neotoma-with-chatgpt-connect-remote-mcp</loc></url>
   <url><loc>https://neotoma.io/es/neotoma-with-chatgpt-connect-custom-gpt</loc></url>
@@ -114,6 +117,7 @@
   <url><loc>https://neotoma.io/es/build-vs-buy</loc></url>
   <url><loc>https://neotoma.io/es/troubleshooting</loc></url>
   <url><loc>https://neotoma.io/es/evaluate</loc></url>
+  <url><loc>https://neotoma.io/es/meet</loc></url>
   <url><loc>https://neotoma.io/es/faq</loc></url>
   <url><loc>https://neotoma.io/es/neotoma-vs-platform-memory</loc></url>
   <url><loc>https://neotoma.io/es/neotoma-vs-mem0</loc></url>
@@ -127,7 +131,7 @@
   <url><loc>https://neotoma.io/es/types/contracts</loc></url>
   <url><loc>https://neotoma.io/es/types/decisions</loc></url>
   <url><loc>https://neotoma.io/es/types/events</loc></url>
-  <url><loc>https://neotoma.io/es/developer-walkthrough</loc></url>
+  <url><loc>https://neotoma.io/es/walkthrough</loc></url>
   <url><loc>https://neotoma.io/es/schema-management</loc></url>
   <url><loc>https://neotoma.io/es/changelog</loc></url>
   <url><loc>https://neotoma.io/es/memory-models</loc></url>
@@ -153,6 +157,7 @@
   <url><loc>https://neotoma.io/ca/neotoma-with-claude-connect-desktop</loc></url>
   <url><loc>https://neotoma.io/ca/neotoma-with-claude-connect-remote-mcp</loc></url>
   <url><loc>https://neotoma.io/ca/neotoma-with-claude-code</loc></url>
+  <url><loc>https://neotoma.io/ca/neotoma-with-claude-agent-sdk</loc></url>
   <url><loc>https://neotoma.io/ca/neotoma-with-chatgpt</loc></url>
   <url><loc>https://neotoma.io/ca/neotoma-with-chatgpt-connect-remote-mcp</loc></url>
   <url><loc>https://neotoma.io/ca/neotoma-with-chatgpt-connect-custom-gpt</loc></url>
@@ -182,6 +187,7 @@
   <url><loc>https://neotoma.io/ca/build-vs-buy</loc></url>
   <url><loc>https://neotoma.io/ca/troubleshooting</loc></url>
   <url><loc>https://neotoma.io/ca/evaluate</loc></url>
+  <url><loc>https://neotoma.io/ca/meet</loc></url>
   <url><loc>https://neotoma.io/ca/faq</loc></url>
   <url><loc>https://neotoma.io/ca/neotoma-vs-platform-memory</loc></url>
   <url><loc>https://neotoma.io/ca/neotoma-vs-mem0</loc></url>
@@ -195,7 +201,7 @@
   <url><loc>https://neotoma.io/ca/types/contracts</loc></url>
   <url><loc>https://neotoma.io/ca/types/decisions</loc></url>
   <url><loc>https://neotoma.io/ca/types/events</loc></url>
-  <url><loc>https://neotoma.io/ca/developer-walkthrough</loc></url>
+  <url><loc>https://neotoma.io/ca/walkthrough</loc></url>
   <url><loc>https://neotoma.io/ca/schema-management</loc></url>
   <url><loc>https://neotoma.io/ca/changelog</loc></url>
   <url><loc>https://neotoma.io/ca/memory-models</loc></url>
@@ -221,6 +227,7 @@
   <url><loc>https://neotoma.io/zh/neotoma-with-claude-connect-desktop</loc></url>
   <url><loc>https://neotoma.io/zh/neotoma-with-claude-connect-remote-mcp</loc></url>
   <url><loc>https://neotoma.io/zh/neotoma-with-claude-code</loc></url>
+  <url><loc>https://neotoma.io/zh/neotoma-with-claude-agent-sdk</loc></url>
   <url><loc>https://neotoma.io/zh/neotoma-with-chatgpt</loc></url>
   <url><loc>https://neotoma.io/zh/neotoma-with-chatgpt-connect-remote-mcp</loc></url>
   <url><loc>https://neotoma.io/zh/neotoma-with-chatgpt-connect-custom-gpt</loc></url>
@@ -250,6 +257,7 @@
   <url><loc>https://neotoma.io/zh/build-vs-buy</loc></url>
   <url><loc>https://neotoma.io/zh/troubleshooting</loc></url>
   <url><loc>https://neotoma.io/zh/evaluate</loc></url>
+  <url><loc>https://neotoma.io/zh/meet</loc></url>
   <url><loc>https://neotoma.io/zh/faq</loc></url>
   <url><loc>https://neotoma.io/zh/neotoma-vs-platform-memory</loc></url>
   <url><loc>https://neotoma.io/zh/neotoma-vs-mem0</loc></url>
@@ -263,7 +271,7 @@
   <url><loc>https://neotoma.io/zh/types/contracts</loc></url>
   <url><loc>https://neotoma.io/zh/types/decisions</loc></url>
   <url><loc>https://neotoma.io/zh/types/events</loc></url>
-  <url><loc>https://neotoma.io/zh/developer-walkthrough</loc></url>
+  <url><loc>https://neotoma.io/zh/walkthrough</loc></url>
   <url><loc>https://neotoma.io/zh/schema-management</loc></url>
   <url><loc>https://neotoma.io/zh/changelog</loc></url>
   <url><loc>https://neotoma.io/zh/memory-models</loc></url>
@@ -289,6 +297,7 @@
   <url><loc>https://neotoma.io/hi/neotoma-with-claude-connect-desktop</loc></url>
   <url><loc>https://neotoma.io/hi/neotoma-with-claude-connect-remote-mcp</loc></url>
   <url><loc>https://neotoma.io/hi/neotoma-with-claude-code</loc></url>
+  <url><loc>https://neotoma.io/hi/neotoma-with-claude-agent-sdk</loc></url>
   <url><loc>https://neotoma.io/hi/neotoma-with-chatgpt</loc></url>
   <url><loc>https://neotoma.io/hi/neotoma-with-chatgpt-connect-remote-mcp</loc></url>
   <url><loc>https://neotoma.io/hi/neotoma-with-chatgpt-connect-custom-gpt</loc></url>
@@ -318,6 +327,7 @@
   <url><loc>https://neotoma.io/hi/build-vs-buy</loc></url>
   <url><loc>https://neotoma.io/hi/troubleshooting</loc></url>
   <url><loc>https://neotoma.io/hi/evaluate</loc></url>
+  <url><loc>https://neotoma.io/hi/meet</loc></url>
   <url><loc>https://neotoma.io/hi/faq</loc></url>
   <url><loc>https://neotoma.io/hi/neotoma-vs-platform-memory</loc></url>
   <url><loc>https://neotoma.io/hi/neotoma-vs-mem0</loc></url>
@@ -331,7 +341,7 @@
   <url><loc>https://neotoma.io/hi/types/contracts</loc></url>
   <url><loc>https://neotoma.io/hi/types/decisions</loc></url>
   <url><loc>https://neotoma.io/hi/types/events</loc></url>
-  <url><loc>https://neotoma.io/hi/developer-walkthrough</loc></url>
+  <url><loc>https://neotoma.io/hi/walkthrough</loc></url>
   <url><loc>https://neotoma.io/hi/schema-management</loc></url>
   <url><loc>https://neotoma.io/hi/changelog</loc></url>
   <url><loc>https://neotoma.io/hi/memory-models</loc></url>
@@ -357,6 +367,7 @@
   <url><loc>https://neotoma.io/ar/neotoma-with-claude-connect-desktop</loc></url>
   <url><loc>https://neotoma.io/ar/neotoma-with-claude-connect-remote-mcp</loc></url>
   <url><loc>https://neotoma.io/ar/neotoma-with-claude-code</loc></url>
+  <url><loc>https://neotoma.io/ar/neotoma-with-claude-agent-sdk</loc></url>
   <url><loc>https://neotoma.io/ar/neotoma-with-chatgpt</loc></url>
   <url><loc>https://neotoma.io/ar/neotoma-with-chatgpt-connect-remote-mcp</loc></url>
   <url><loc>https://neotoma.io/ar/neotoma-with-chatgpt-connect-custom-gpt</loc></url>
@@ -386,6 +397,7 @@
   <url><loc>https://neotoma.io/ar/build-vs-buy</loc></url>
   <url><loc>https://neotoma.io/ar/troubleshooting</loc></url>
   <url><loc>https://neotoma.io/ar/evaluate</loc></url>
+  <url><loc>https://neotoma.io/ar/meet</loc></url>
   <url><loc>https://neotoma.io/ar/faq</loc></url>
   <url><loc>https://neotoma.io/ar/neotoma-vs-platform-memory</loc></url>
   <url><loc>https://neotoma.io/ar/neotoma-vs-mem0</loc></url>
@@ -399,7 +411,7 @@
   <url><loc>https://neotoma.io/ar/types/contracts</loc></url>
   <url><loc>https://neotoma.io/ar/types/decisions</loc></url>
   <url><loc>https://neotoma.io/ar/types/events</loc></url>
-  <url><loc>https://neotoma.io/ar/developer-walkthrough</loc></url>
+  <url><loc>https://neotoma.io/ar/walkthrough</loc></url>
   <url><loc>https://neotoma.io/ar/schema-management</loc></url>
   <url><loc>https://neotoma.io/ar/changelog</loc></url>
   <url><loc>https://neotoma.io/ar/memory-models</loc></url>
@@ -425,6 +437,7 @@
   <url><loc>https://neotoma.io/fr/neotoma-with-claude-connect-desktop</loc></url>
   <url><loc>https://neotoma.io/fr/neotoma-with-claude-connect-remote-mcp</loc></url>
   <url><loc>https://neotoma.io/fr/neotoma-with-claude-code</loc></url>
+  <url><loc>https://neotoma.io/fr/neotoma-with-claude-agent-sdk</loc></url>
   <url><loc>https://neotoma.io/fr/neotoma-with-chatgpt</loc></url>
   <url><loc>https://neotoma.io/fr/neotoma-with-chatgpt-connect-remote-mcp</loc></url>
   <url><loc>https://neotoma.io/fr/neotoma-with-chatgpt-connect-custom-gpt</loc></url>
@@ -454,6 +467,7 @@
   <url><loc>https://neotoma.io/fr/build-vs-buy</loc></url>
   <url><loc>https://neotoma.io/fr/troubleshooting</loc></url>
   <url><loc>https://neotoma.io/fr/evaluate</loc></url>
+  <url><loc>https://neotoma.io/fr/meet</loc></url>
   <url><loc>https://neotoma.io/fr/faq</loc></url>
   <url><loc>https://neotoma.io/fr/neotoma-vs-platform-memory</loc></url>
   <url><loc>https://neotoma.io/fr/neotoma-vs-mem0</loc></url>
@@ -467,7 +481,7 @@
   <url><loc>https://neotoma.io/fr/types/contracts</loc></url>
   <url><loc>https://neotoma.io/fr/types/decisions</loc></url>
   <url><loc>https://neotoma.io/fr/types/events</loc></url>
-  <url><loc>https://neotoma.io/fr/developer-walkthrough</loc></url>
+  <url><loc>https://neotoma.io/fr/walkthrough</loc></url>
   <url><loc>https://neotoma.io/fr/schema-management</loc></url>
   <url><loc>https://neotoma.io/fr/changelog</loc></url>
   <url><loc>https://neotoma.io/fr/memory-models</loc></url>
@@ -493,6 +507,7 @@
   <url><loc>https://neotoma.io/pt/neotoma-with-claude-connect-desktop</loc></url>
   <url><loc>https://neotoma.io/pt/neotoma-with-claude-connect-remote-mcp</loc></url>
   <url><loc>https://neotoma.io/pt/neotoma-with-claude-code</loc></url>
+  <url><loc>https://neotoma.io/pt/neotoma-with-claude-agent-sdk</loc></url>
   <url><loc>https://neotoma.io/pt/neotoma-with-chatgpt</loc></url>
   <url><loc>https://neotoma.io/pt/neotoma-with-chatgpt-connect-remote-mcp</loc></url>
   <url><loc>https://neotoma.io/pt/neotoma-with-chatgpt-connect-custom-gpt</loc></url>
@@ -522,6 +537,7 @@
   <url><loc>https://neotoma.io/pt/build-vs-buy</loc></url>
   <url><loc>https://neotoma.io/pt/troubleshooting</loc></url>
   <url><loc>https://neotoma.io/pt/evaluate</loc></url>
+  <url><loc>https://neotoma.io/pt/meet</loc></url>
   <url><loc>https://neotoma.io/pt/faq</loc></url>
   <url><loc>https://neotoma.io/pt/neotoma-vs-platform-memory</loc></url>
   <url><loc>https://neotoma.io/pt/neotoma-vs-mem0</loc></url>
@@ -535,7 +551,7 @@
   <url><loc>https://neotoma.io/pt/types/contracts</loc></url>
   <url><loc>https://neotoma.io/pt/types/decisions</loc></url>
   <url><loc>https://neotoma.io/pt/types/events</loc></url>
-  <url><loc>https://neotoma.io/pt/developer-walkthrough</loc></url>
+  <url><loc>https://neotoma.io/pt/walkthrough</loc></url>
   <url><loc>https://neotoma.io/pt/schema-management</loc></url>
   <url><loc>https://neotoma.io/pt/changelog</loc></url>
   <url><loc>https://neotoma.io/pt/memory-models</loc></url>
@@ -561,6 +577,7 @@
   <url><loc>https://neotoma.io/ru/neotoma-with-claude-connect-desktop</loc></url>
   <url><loc>https://neotoma.io/ru/neotoma-with-claude-connect-remote-mcp</loc></url>
   <url><loc>https://neotoma.io/ru/neotoma-with-claude-code</loc></url>
+  <url><loc>https://neotoma.io/ru/neotoma-with-claude-agent-sdk</loc></url>
   <url><loc>https://neotoma.io/ru/neotoma-with-chatgpt</loc></url>
   <url><loc>https://neotoma.io/ru/neotoma-with-chatgpt-connect-remote-mcp</loc></url>
   <url><loc>https://neotoma.io/ru/neotoma-with-chatgpt-connect-custom-gpt</loc></url>
@@ -590,6 +607,7 @@
   <url><loc>https://neotoma.io/ru/build-vs-buy</loc></url>
   <url><loc>https://neotoma.io/ru/troubleshooting</loc></url>
   <url><loc>https://neotoma.io/ru/evaluate</loc></url>
+  <url><loc>https://neotoma.io/ru/meet</loc></url>
   <url><loc>https://neotoma.io/ru/faq</loc></url>
   <url><loc>https://neotoma.io/ru/neotoma-vs-platform-memory</loc></url>
   <url><loc>https://neotoma.io/ru/neotoma-vs-mem0</loc></url>
@@ -603,7 +621,7 @@
   <url><loc>https://neotoma.io/ru/types/contracts</loc></url>
   <url><loc>https://neotoma.io/ru/types/decisions</loc></url>
   <url><loc>https://neotoma.io/ru/types/events</loc></url>
-  <url><loc>https://neotoma.io/ru/developer-walkthrough</loc></url>
+  <url><loc>https://neotoma.io/ru/walkthrough</loc></url>
   <url><loc>https://neotoma.io/ru/schema-management</loc></url>
   <url><loc>https://neotoma.io/ru/changelog</loc></url>
   <url><loc>https://neotoma.io/ru/memory-models</loc></url>
@@ -629,6 +647,7 @@
   <url><loc>https://neotoma.io/bn/neotoma-with-claude-connect-desktop</loc></url>
   <url><loc>https://neotoma.io/bn/neotoma-with-claude-connect-remote-mcp</loc></url>
   <url><loc>https://neotoma.io/bn/neotoma-with-claude-code</loc></url>
+  <url><loc>https://neotoma.io/bn/neotoma-with-claude-agent-sdk</loc></url>
   <url><loc>https://neotoma.io/bn/neotoma-with-chatgpt</loc></url>
   <url><loc>https://neotoma.io/bn/neotoma-with-chatgpt-connect-remote-mcp</loc></url>
   <url><loc>https://neotoma.io/bn/neotoma-with-chatgpt-connect-custom-gpt</loc></url>
@@ -658,6 +677,7 @@
   <url><loc>https://neotoma.io/bn/build-vs-buy</loc></url>
   <url><loc>https://neotoma.io/bn/troubleshooting</loc></url>
   <url><loc>https://neotoma.io/bn/evaluate</loc></url>
+  <url><loc>https://neotoma.io/bn/meet</loc></url>
   <url><loc>https://neotoma.io/bn/faq</loc></url>
   <url><loc>https://neotoma.io/bn/neotoma-vs-platform-memory</loc></url>
   <url><loc>https://neotoma.io/bn/neotoma-vs-mem0</loc></url>
@@ -671,7 +691,7 @@
   <url><loc>https://neotoma.io/bn/types/contracts</loc></url>
   <url><loc>https://neotoma.io/bn/types/decisions</loc></url>
   <url><loc>https://neotoma.io/bn/types/events</loc></url>
-  <url><loc>https://neotoma.io/bn/developer-walkthrough</loc></url>
+  <url><loc>https://neotoma.io/bn/walkthrough</loc></url>
   <url><loc>https://neotoma.io/bn/schema-management</loc></url>
   <url><loc>https://neotoma.io/bn/changelog</loc></url>
   <url><loc>https://neotoma.io/bn/memory-models</loc></url>
@@ -697,6 +717,7 @@
   <url><loc>https://neotoma.io/ur/neotoma-with-claude-connect-desktop</loc></url>
   <url><loc>https://neotoma.io/ur/neotoma-with-claude-connect-remote-mcp</loc></url>
   <url><loc>https://neotoma.io/ur/neotoma-with-claude-code</loc></url>
+  <url><loc>https://neotoma.io/ur/neotoma-with-claude-agent-sdk</loc></url>
   <url><loc>https://neotoma.io/ur/neotoma-with-chatgpt</loc></url>
   <url><loc>https://neotoma.io/ur/neotoma-with-chatgpt-connect-remote-mcp</loc></url>
   <url><loc>https://neotoma.io/ur/neotoma-with-chatgpt-connect-custom-gpt</loc></url>
@@ -726,6 +747,7 @@
   <url><loc>https://neotoma.io/ur/build-vs-buy</loc></url>
   <url><loc>https://neotoma.io/ur/troubleshooting</loc></url>
   <url><loc>https://neotoma.io/ur/evaluate</loc></url>
+  <url><loc>https://neotoma.io/ur/meet</loc></url>
   <url><loc>https://neotoma.io/ur/faq</loc></url>
   <url><loc>https://neotoma.io/ur/neotoma-vs-platform-memory</loc></url>
   <url><loc>https://neotoma.io/ur/neotoma-vs-mem0</loc></url>
@@ -739,7 +761,7 @@
   <url><loc>https://neotoma.io/ur/types/contracts</loc></url>
   <url><loc>https://neotoma.io/ur/types/decisions</loc></url>
   <url><loc>https://neotoma.io/ur/types/events</loc></url>
-  <url><loc>https://neotoma.io/ur/developer-walkthrough</loc></url>
+  <url><loc>https://neotoma.io/ur/walkthrough</loc></url>
   <url><loc>https://neotoma.io/ur/schema-management</loc></url>
   <url><loc>https://neotoma.io/ur/changelog</loc></url>
   <url><loc>https://neotoma.io/ur/memory-models</loc></url>
@@ -765,6 +787,7 @@
   <url><loc>https://neotoma.io/id/neotoma-with-claude-connect-desktop</loc></url>
   <url><loc>https://neotoma.io/id/neotoma-with-claude-connect-remote-mcp</loc></url>
   <url><loc>https://neotoma.io/id/neotoma-with-claude-code</loc></url>
+  <url><loc>https://neotoma.io/id/neotoma-with-claude-agent-sdk</loc></url>
   <url><loc>https://neotoma.io/id/neotoma-with-chatgpt</loc></url>
   <url><loc>https://neotoma.io/id/neotoma-with-chatgpt-connect-remote-mcp</loc></url>
   <url><loc>https://neotoma.io/id/neotoma-with-chatgpt-connect-custom-gpt</loc></url>
@@ -794,6 +817,7 @@
   <url><loc>https://neotoma.io/id/build-vs-buy</loc></url>
   <url><loc>https://neotoma.io/id/troubleshooting</loc></url>
   <url><loc>https://neotoma.io/id/evaluate</loc></url>
+  <url><loc>https://neotoma.io/id/meet</loc></url>
   <url><loc>https://neotoma.io/id/faq</loc></url>
   <url><loc>https://neotoma.io/id/neotoma-vs-platform-memory</loc></url>
   <url><loc>https://neotoma.io/id/neotoma-vs-mem0</loc></url>
@@ -807,7 +831,7 @@
   <url><loc>https://neotoma.io/id/types/contracts</loc></url>
   <url><loc>https://neotoma.io/id/types/decisions</loc></url>
   <url><loc>https://neotoma.io/id/types/events</loc></url>
-  <url><loc>https://neotoma.io/id/developer-walkthrough</loc></url>
+  <url><loc>https://neotoma.io/id/walkthrough</loc></url>
   <url><loc>https://neotoma.io/id/schema-management</loc></url>
   <url><loc>https://neotoma.io/id/changelog</loc></url>
   <url><loc>https://neotoma.io/id/memory-models</loc></url>
@@ -833,6 +857,7 @@
   <url><loc>https://neotoma.io/de/neotoma-with-claude-connect-desktop</loc></url>
   <url><loc>https://neotoma.io/de/neotoma-with-claude-connect-remote-mcp</loc></url>
   <url><loc>https://neotoma.io/de/neotoma-with-claude-code</loc></url>
+  <url><loc>https://neotoma.io/de/neotoma-with-claude-agent-sdk</loc></url>
   <url><loc>https://neotoma.io/de/neotoma-with-chatgpt</loc></url>
   <url><loc>https://neotoma.io/de/neotoma-with-chatgpt-connect-remote-mcp</loc></url>
   <url><loc>https://neotoma.io/de/neotoma-with-chatgpt-connect-custom-gpt</loc></url>
@@ -862,6 +887,7 @@
   <url><loc>https://neotoma.io/de/build-vs-buy</loc></url>
   <url><loc>https://neotoma.io/de/troubleshooting</loc></url>
   <url><loc>https://neotoma.io/de/evaluate</loc></url>
+  <url><loc>https://neotoma.io/de/meet</loc></url>
   <url><loc>https://neotoma.io/de/faq</loc></url>
   <url><loc>https://neotoma.io/de/neotoma-vs-platform-memory</loc></url>
   <url><loc>https://neotoma.io/de/neotoma-vs-mem0</loc></url>
@@ -875,7 +901,7 @@
   <url><loc>https://neotoma.io/de/types/contracts</loc></url>
   <url><loc>https://neotoma.io/de/types/decisions</loc></url>
   <url><loc>https://neotoma.io/de/types/events</loc></url>
-  <url><loc>https://neotoma.io/de/developer-walkthrough</loc></url>
+  <url><loc>https://neotoma.io/de/walkthrough</loc></url>
   <url><loc>https://neotoma.io/de/schema-management</loc></url>
   <url><loc>https://neotoma.io/de/changelog</loc></url>
   <url><loc>https://neotoma.io/de/memory-models</loc></url>
