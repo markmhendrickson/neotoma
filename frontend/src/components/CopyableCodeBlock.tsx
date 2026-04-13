@@ -66,65 +66,65 @@ export function CopyableCodeBlock({
   };
 
   if (variant === "emerald") {
+    const copyButtonClass = cn(
+      HOME_EVALUATE_CTA_CLASS,
+      "order-3 w-full min-h-11 shrink-0 justify-center px-5 py-3.5 text-sm sm:order-none sm:h-8 sm:w-auto sm:min-h-0 sm:justify-center sm:!px-3 sm:!py-1.5 sm:text-xs",
+    );
     return (
       <div className={cn("relative w-full text-left", EVALUATE_PROMPT_CARD_SHELL_CLASS)}>
-        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="w-full min-w-0 space-y-2 px-1">
+        <div className="mb-3 flex flex-col gap-3 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-x-3 sm:gap-y-3">
+          <div className="order-1 w-full min-w-0 space-y-2 px-1 sm:order-none sm:col-start-1 sm:row-start-1">
             <div className={EVALUATE_PROMPT_PILL_CLASS}>
               <span className="h-2 w-2 rounded-full bg-emerald-500/80 dark:bg-emerald-400/80" aria-hidden />
               {evaluateChromeTitle}
             </div>
             <div className="text-[12px] leading-5 text-muted-foreground">{evaluateChromeSubtitle}</div>
           </div>
-          <button
-            type="button"
-            className={cn(HOME_EVALUATE_CTA_CLASS, "h-8 shrink-0 !px-3 !py-1.5 text-xs")}
-            onClick={onCopy}
-          >
+          <button type="button" className={copyButtonClass} onClick={onCopy}>
             {copied ? (
               <>
-                <Check className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                <Check className="h-4 w-4 shrink-0 sm:h-3.5 sm:w-3.5" aria-hidden />
                 {dict.copied}
               </>
             ) : (
               <>
-                <Copy className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                <Copy className="h-4 w-4 shrink-0 sm:h-3.5 sm:w-3.5" aria-hidden />
                 {dict.copy}
               </>
             )}
           </button>
-        </div>
-        <pre
-          className={cn(
-            "rounded-xl border border-border/80 bg-muted/35 text-foreground shadow-inner shadow-black/5 code-block-shell p-4 overflow-x-auto overflow-y-auto font-mono text-[13px] leading-6 whitespace-pre-wrap break-words",
-            canExpand && !showFullCode && "max-h-60 md:max-h-none",
-            className,
-          )}
-        >
-          <code>{displayCode}</code>
-        </pre>
-        {canExpand ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="mt-2 px-2 h-8 text-[12px] text-muted-foreground hover:text-foreground"
-            onClick={() => setShowFullCode((prev) => !prev)}
-            aria-label={showFullCode ? dict.showLess : dict.showMore}
-          >
-            {showFullCode ? (
-              <>
-                <ChevronUp className="h-3.5 w-3.5 mr-1" />
-                {dict.showLess}
-              </>
-            ) : (
-              <>
-                <ChevronDown className="h-3.5 w-3.5 mr-1" />
-                {dict.showMore}
-              </>
+          <pre
+            className={cn(
+              "order-2 mb-0 rounded-xl border border-border/80 bg-muted/35 text-foreground shadow-inner shadow-black/5 code-block-shell p-4 overflow-x-auto overflow-y-auto font-mono text-[13px] leading-6 whitespace-pre-wrap break-words sm:order-none sm:col-span-2 sm:row-start-2",
+              canExpand && !showFullCode && "max-h-60 md:max-h-none",
+              className,
             )}
-          </Button>
-        ) : null}
+          >
+            <code>{displayCode}</code>
+          </pre>
+          {canExpand ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="order-4 mt-0 px-2 h-10 w-full justify-center text-[12px] text-muted-foreground hover:text-foreground sm:order-none sm:col-span-2 sm:row-start-3 sm:mt-2 sm:h-8 sm:w-auto sm:justify-start"
+              onClick={() => setShowFullCode((prev) => !prev)}
+              aria-label={showFullCode ? dict.showLess : dict.showMore}
+            >
+              {showFullCode ? (
+                <>
+                  <ChevronUp className="h-3.5 w-3.5 mr-1" />
+                  {dict.showLess}
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="h-3.5 w-3.5 mr-1" />
+                  {dict.showMore}
+                </>
+              )}
+            </Button>
+          ) : null}
+        </div>
       </div>
     );
   }

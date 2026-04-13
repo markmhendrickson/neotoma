@@ -106,7 +106,10 @@ export function HomeEvaluatePromptBlock({
         </code>
         <button
           type="button"
-          className={`${HOME_EVALUATE_CTA_CLASS} sm:hidden mt-3 w-full h-10 !py-2 text-sm`}
+          className={cn(
+            HOME_EVALUATE_CTA_CLASS,
+            "sm:hidden mt-3 w-full min-h-11 shrink-0 justify-center py-3.5 text-sm",
+          )}
           onClick={async () => {
             const ok = await copyTextToClipboard(prompt);
             if (!ok) return;

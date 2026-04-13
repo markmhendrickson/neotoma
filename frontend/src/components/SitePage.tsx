@@ -1166,16 +1166,24 @@ function HomeAgentToolChips({
     : "inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3.5 py-2.5 text-[14px] font-medium text-foreground/90 no-underline transition-colors hover:bg-muted";
   const alignmentClass = align === "start" ? "justify-center lg:justify-start" : "justify-center";
   const rowClass = compact ? "gap-2.5" : "gap-3";
+  const stackGap = compact ? "gap-2 md:gap-2.5" : "gap-2 md:gap-3";
   const labelClass = compact
     ? "text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70"
     : "text-[12px] font-medium uppercase tracking-wide text-muted-foreground/70";
   const iconClass = compact ? "h-3.5 w-3.5 shrink-0" : "h-4 w-4 shrink-0";
   return (
     <div
-      className={`flex flex-wrap items-center pt-1 ${rowClass} ${alignmentClass}`}
+      className={`flex flex-col items-center pt-1 ${stackGap} md:flex-row md:flex-wrap md:items-center ${alignmentClass}`}
       aria-label="AI agents and tools"
     >
-      <span className={labelClass}>Works with</span>
+      <span
+        className={`${labelClass} w-full shrink-0 text-center md:w-auto ${align === "start" ? "lg:text-left" : ""}`}
+      >
+        Works with
+      </span>
+      <div
+        className={`flex w-full max-w-full flex-wrap items-center justify-center ${rowClass} md:contents`}
+      >
       <Link to="/neotoma-with-claude" className={chipClass}>
         <SiClaude className={iconClass} aria-hidden />
         Claude
@@ -1192,6 +1200,7 @@ function HomeAgentToolChips({
         <OpenClawIcon className={iconClass} aria-hidden />
         OpenClaw
       </Link>
+      </div>
     </div>
   );
 }
@@ -1564,7 +1573,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
             <div className="relative z-10 flex w-full min-w-0 flex-col justify-center self-stretch">
               <FadeSection scrollContainerRef={scrollContainerRef} staticMode={staticMode}>
                 <div className={SLIDE_INNER}>
-                  <div className="mx-auto max-w-6xl pt-10 md:pt-20 lg:pt-12">
+                  <div className="mx-auto max-w-6xl pt-16 md:pt-20 lg:pt-12">
                     <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(340px,0.92fr)] lg:items-center">
                       <div className="space-y-6 text-center lg:text-left">
                         <h1 className="text-[36px] md:text-[48px] font-semibold tracking-[-0.035em] leading-[1.1]">
@@ -1615,14 +1624,16 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                           </a>
                         </div>
 
-                        <div className="flex max-w-full flex-row items-baseline justify-center gap-2 pt-4 lg:justify-start">
-                          <Workflow
-                            className="h-3.5 w-3.5 shrink-0 translate-y-[2px] text-muted-foreground/60"
-                            aria-hidden
-                          />
-                          <p className="min-w-0 text-center text-[10.5px] font-mono leading-snug tracking-[0.04em] text-muted-foreground/60 uppercase lg:text-left">
-                            {pack.homeHero.audienceTagline}
-                          </p>
+                        <div className="flex justify-center pt-4 lg:justify-start">
+                          <div className="inline-flex max-w-full items-start gap-2">
+                            <Workflow
+                              className="mt-[0.35em] h-3.5 w-3.5 shrink-0 text-muted-foreground/60"
+                              aria-hidden
+                            />
+                            <p className="min-w-0 text-left text-[10.5px] font-mono leading-snug tracking-[0.04em] text-muted-foreground/60 uppercase">
+                              {pack.homeHero.audienceTagline}
+                            </p>
+                          </div>
                         </div>
                       </div>
 

@@ -67,10 +67,18 @@
   },
   "sitePage": {
     "description": "Public site landing page coverage.",
-    "components": ["SitePage", "Layout", "SiteHeaderNav", "VerticalsIndexPage"],
+    "components": [
+      "SitePage",
+      "Layout",
+      "SiteHeaderNav",
+      "VerticalsIndexPage",
+      "HomeEvaluatePromptBlock",
+      "CopyableCodeBlock"
+    ],
     "states": [
       "render hero and install guidance",
-      "vertical marketing full-page shell without docs sidebar"
+      "vertical marketing full-page shell without docs sidebar",
+      "mobile evaluate copy controls span usable width"
     ],
     "specFile": "site-page.spec.ts"
   },

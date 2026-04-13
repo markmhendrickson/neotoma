@@ -164,6 +164,37 @@ test.describe("sitePage coverage", () => {
     await expect(page.locator('a[href="/neotoma-with-cursor"]').first()).toBeVisible();
   });
 
+  test("mobile evaluate copy controls span usable width", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+    await page.locator("#evaluate").scrollIntoViewIfNeeded();
+
+    const homeSection = page.locator("#evaluate");
+    const homeCopy = homeSection.getByRole("button", { name: /copy prompt/i });
+    await expect(homeCopy).toBeVisible();
+    const homeSectionBox = await homeSection.boundingBox();
+    const homeCopyBox = await homeCopy.boundingBox();
+    expect(homeSectionBox).not.toBeNull();
+    expect(homeCopyBox).not.toBeNull();
+    expect(homeCopyBox!.width).toBeGreaterThanOrEqual(homeSectionBox!.width * 0.82);
+
+    await page.goto("/evaluate");
+    await page.waitForLoadState("networkidle");
+
+    const promptShell = page
+      .getByText("Evaluation prompt", { exact: true })
+      .locator("xpath=ancestor::div[contains(@class,'border-emerald')][1]");
+    const evaluateCopy = promptShell.getByRole("button", { name: /^copy$/i });
+    await expect(evaluateCopy).toBeVisible();
+    const shellBox = await promptShell.boundingBox();
+    const evaluateCopyBox = await evaluateCopy.boundingBox();
+    expect(shellBox).not.toBeNull();
+    expect(evaluateCopyBox).not.toBeNull();
+    expect(evaluateCopyBox!.width).toBeGreaterThanOrEqual(shellBox!.width * 0.82);
+  });
+
   test("evaluate page tells agents to inspect broader context before recommending fit", async ({
     page,
   }) => {
