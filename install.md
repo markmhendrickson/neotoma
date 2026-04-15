@@ -40,7 +40,8 @@ Start by deciding whether Neotoma is a fit and what the first successful path sh
 - **ChatGPT hosted**: If the user lacks the plan/features for strong MCP support, recommend more robust options such as Cursor, Claude, Claude Code, or Codex for primary Neotoma usage.
 - **ChatGPT with suitable support**: Plan for either remote MCP or a Custom GPT, depending on the user's account and preference.
 - **Claude**: Plan for Project-based usage plus connector configuration and project instructions.
-- **Local tools** (Cursor, Claude Code, Codex, OpenClaw): prioritize local install and activation first; after activation, offer help configuring additional remote access points if useful.
+- **Cursor / Claude Code / Codex**: prioritize local install and activation first; after activation, offer help configuring additional remote access points if useful.
+- **OpenClaw**: prioritize the native plugin install path first (`openclaw plugins install clawhub:neotoma`). Use manual MCP wiring only as fallback when the plugin path is unavailable or unsuitable.
 
 Data evaluation can happen here before installation if the user already has enough context available in the current tool. If not, perform that evaluation during activation after installation. Do not ingest anything before explicit confirmation.
 
@@ -48,9 +49,11 @@ Data evaluation can happen here before installation if the user already has enou
 
 If the user is not already installed:
 
-1. Install Neotoma with `npm install -g neotoma`.
-2. Initialize Neotoma with `neotoma init`.
-3. Report what changed after install/init (data directory, env, MCP config, CLI instructions).
+1. Choose the install path that matches the current tool:
+   - OpenClaw: install via `openclaw plugins install clawhub:neotoma`
+   - Other tools: install with `npm install -g neotoma`
+2. If the chosen path is the standard CLI route, initialize Neotoma with `neotoma init`.
+3. Report what changed after installation (plugin registration or install/init effects such as data directory, env, MCP config, CLI instructions).
 
 If the user is already installed:
 
@@ -192,7 +195,8 @@ After the user has reached activation, configure the current tool for the most r
 **Examples:**
 - **ChatGPT**: prefer a Custom GPT or remote MCP path when supported.
 - **Claude**: create or use a Project, connect Neotoma, and add routing instructions.
-- **Cursor / Claude Code / Codex / OpenClaw**: complete local MCP wiring first, then offer additional remote access points where relevant.
+- **Cursor / Claude Code / Codex**: complete local MCP wiring first, then offer additional remote access points where relevant.
+- **OpenClaw**: prefer the native plugin install and configuration path first; fall back to manual MCP wiring only when necessary.
 
 ## Migration from existing tools
 

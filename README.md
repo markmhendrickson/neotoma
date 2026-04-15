@@ -225,7 +225,7 @@ Neotoma exposes state via MCP. Local storage only in preview. Local built-in aut
 Neotoma ships as a native OpenClaw plugin with `kind: "memory"`, so it can fill the dedicated memory slot. All 30+ MCP tools are registered as agent tools.
 
 ```bash
-openclaw plugins install neotoma
+openclaw plugins install clawhub:neotoma
 ```
 
 Then assign it to the memory slot in your OpenClaw config:

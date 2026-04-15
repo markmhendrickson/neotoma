@@ -216,7 +216,13 @@ test.describe("sitePage coverage", () => {
   });
 
   test("install and integration pages funnel users to evaluation first", async ({ page }) => {
-    const routes = ["/install", "/neotoma-with-chatgpt", "/neotoma-with-claude", "/neotoma-with-cursor"];
+    const routes = [
+      "/install",
+      "/neotoma-with-chatgpt",
+      "/neotoma-with-claude",
+      "/neotoma-with-cursor",
+      "/neotoma-with-openclaw",
+    ];
 
     for (const path of routes) {
       await page.goto(path);

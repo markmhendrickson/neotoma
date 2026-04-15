@@ -1,14 +1,86 @@
+import { Check, Copy } from "lucide-react";
 import { Link } from "react-router-dom";
 import { PRODUCT_NAV_SOURCES } from "@/utils/analytics";
+import { cn } from "@/lib/utils";
+import { useCopyFeedback } from "../../lib/copy_feedback";
+import { copyTextToClipboard } from "../../lib/copy_to_clipboard";
 import { TrackedProductLink } from "../TrackedProductNav";
+import {
+  CODE_BLOCK_CHROME_STACK_CLASS,
+  CODE_BLOCK_CHROME_SUBTITLE_CLASS,
+  INTEGRATION_SNIPPET_CARD_SHELL_CLASS,
+  INTEGRATION_SNIPPET_COPY_BUTTON_INLINE,
+  INTEGRATION_SNIPPET_INNER_CLASS,
+  INTEGRATION_SNIPPET_PILL_CLASS,
+} from "../code_block_copy_button_classes";
 import { DetailPage } from "../DetailPage";
 import { GettingStartedEvaluateInstallLinks } from "../GettingStartedEvaluateInstallLinks";
 import { IntegrationLinkCard } from "../IntegrationLinkCard";
 import { IntegrationSection } from "../IntegrationSection";
-import { IntegrationBeforeAfter, IntegrationActivation, IntegrationLimitations } from "../IntegrationExtras";
+import { IntegrationBeforeAfter, IntegrationActivation } from "../IntegrationExtras";
+import { Button } from "../ui/button";
 import { TableScrollWrapper } from "../ui/table-scroll-wrapper";
 
 const extLink = "text-foreground underline underline-offset-2 hover:no-underline";
+
+const OPENCLAW_NATIVE_PLUGIN_INSTALL_CMD = "openclaw plugins install clawhub:neotoma";
+const OPENCLAW_MEMORY_SLOT_YAML = `plugins:
+  slots:
+    memory: neotoma
+  entries:
+    neotoma:
+      enabled: true
+      config:
+        dataDir: ~/.local/share/neotoma
+        environment: production`;
+
+function CopyableSnippetPre({
+  title,
+  subtitle,
+  code,
+  copyFeedbackId,
+  className,
+}: {
+  title: string;
+  subtitle: string;
+  code: string;
+  copyFeedbackId: string;
+  className?: string;
+}) {
+  const [copied, markCopied] = useCopyFeedback(copyFeedbackId, 0);
+  return (
+    <div className={cn("relative w-full text-left", INTEGRATION_SNIPPET_CARD_SHELL_CLASS, className)}>
+      <div className="mb-3 flex flex-col gap-3 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-x-3 sm:gap-y-3">
+        <div className={CODE_BLOCK_CHROME_STACK_CLASS}>
+          <div className={INTEGRATION_SNIPPET_PILL_CLASS}>
+            <span className="h-2 w-2 rounded-full bg-stone-500/80 dark:bg-stone-400/75" aria-hidden />
+            {title}
+          </div>
+          <div className={CODE_BLOCK_CHROME_SUBTITLE_CLASS}>{subtitle}</div>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={INTEGRATION_SNIPPET_COPY_BUTTON_INLINE}
+          aria-label={copied ? "Copied" : "Copy"}
+          onClick={async () => {
+            const ok = await copyTextToClipboard(code);
+            if (!ok) return;
+            markCopied();
+          }}
+        >
+          {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+        </Button>
+      </div>
+      <pre
+        className={`${INTEGRATION_SNIPPET_INNER_CLASS} m-0 p-4 overflow-x-auto font-mono text-[13px] leading-6 whitespace-pre-wrap break-words`}
+      >
+        <code>{code}</code>
+      </pre>
+    </div>
+  );
+}
 
 export function NeotomaWithOpenClawPage() {
   return (
@@ -158,27 +230,48 @@ export function NeotomaWithOpenClawPage() {
       <IntegrationSection sectionKey="getting-started" title="Getting started">
         <GettingStartedEvaluateInstallLinks agentTargetPhrase="an AI coding agent such as Claude Code, Cursor, or Codex" />
         <p className="text-[15px] leading-7 text-muted-foreground mb-3">
-          Once Neotoma has been evaluated, installed if needed, and activated
-          with your first data, choose an integration path:
+          The evaluation flow handles install, activation, and OpenClaw
+          connection (including the native plugin path) automatically. If you
+          prefer to configure the connection yourself, use one of these options:
         </p>
         <div className="mb-4 rounded-lg border border-border bg-muted/30 p-4">
           <p className="text-[15px] leading-7 font-medium text-foreground mb-2">
-            Native plugin install (recommended)
+            Native plugin
           </p>
           <p className="text-[14px] leading-6 text-muted-foreground mb-2">
-            Neotoma ships as a native OpenClaw plugin with <code className="text-[13px]">kind: &quot;memory&quot;</code>.
+            Neotoma is published on{" "}
+            <a href="https://clawhub.ai" target="_blank" rel="noopener noreferrer" className={extLink}>
+              ClawHub
+            </a>{" "}
+            as a native OpenClaw plugin with <code className="text-[13px]">kind: &quot;memory&quot;</code>.
             All 30+ MCP tools are registered as agent tools with zero extra configuration.
           </p>
-          <pre className="text-[13px] bg-background border border-border rounded px-3 py-2 overflow-x-auto mb-0">
-            <code>openclaw plugins install neotoma</code>
-          </pre>
+          <CopyableSnippetPre
+            title="ClawHub install"
+            subtitle="Register Neotoma from ClawHub on the machine where OpenClaw runs."
+            code={OPENCLAW_NATIVE_PLUGIN_INSTALL_CMD}
+            copyFeedbackId="openclaw-native-plugin-install-cmd"
+            className="mb-3"
+          />
+          <CopyableSnippetPre
+            title="Memory slot"
+            subtitle="Assign the plugin to the memory slot in your OpenClaw configuration."
+            code={OPENCLAW_MEMORY_SLOT_YAML}
+            copyFeedbackId="openclaw-native-plugin-memory-yaml"
+            className="mb-0"
+          />
+          <p className="mt-4 text-[14px] leading-6 text-muted-foreground mb-0">
+            Verify with <code className="text-[13px]">openclaw plugins inspect neotoma</code> to
+            confirm <code className="text-[13px]">Format: native</code> and{" "}
+            <code className="text-[13px]">Kind: memory</code>.
+          </p>
         </div>
         <p className="text-[14px] leading-6 text-muted-foreground mb-3">
-          Or use a manual MCP integration:
+          Or use manual MCP configuration:
         </p>
         <IntegrationLinkCard
           title="Local setup (stdio)"
-          preview="Install with an agent prompt and add Neotoma to OpenClaw local configuration."
+          preview="Install Neotoma and add it to OpenClaw local configuration."
           to="/neotoma-with-openclaw-connect-local-stdio"
         />
         <IntegrationLinkCard
@@ -218,13 +311,18 @@ export function NeotomaWithOpenClawPage() {
           </a>
           <span className="text-muted-foreground"> (extensible skill folders and ClawHub registry)</span>
         </li>
+        <li className="text-[14px] leading-6 flex items-start gap-2">
+          <span className="text-muted-foreground mt-0.5 shrink-0" aria-hidden>&rarr;</span>
+          <a href="https://docs.openclaw.ai/tools/clawhub" target="_blank" rel="noopener noreferrer" className={extLink}>
+            ClawHub
+          </a>
+          <span className="text-muted-foreground"> (plugin and skill registry where Neotoma is published)</span>
+        </li>
         </ul>
       </IntegrationSection>
 
       <IntegrationBeforeAfter toolName="OpenClaw" />
       <IntegrationActivation toolName="OpenClaw" />
-      <IntegrationLimitations />
-
       <p className="text-[14px] leading-6 text-muted-foreground">
         Start with{" "}
         <TrackedProductLink

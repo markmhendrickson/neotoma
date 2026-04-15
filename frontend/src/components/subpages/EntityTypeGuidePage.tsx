@@ -2,6 +2,13 @@ import { Link, useParams, Navigate } from "react-router-dom";
 import { PRODUCT_NAV_SOURCES } from "@/utils/analytics";
 import { DetailPage } from "../DetailPage";
 import { TrackedProductLink } from "../TrackedProductNav";
+import {
+  CODE_BLOCK_CARD_INNER_CLASS,
+  CODE_BLOCK_CARD_SHELL_CLASS,
+  CODE_BLOCK_CHROME_STACK_CLASS,
+  CODE_BLOCK_CHROME_SUBTITLE_CLASS,
+  EVALUATE_PROMPT_PILL_CLASS,
+} from "../code_block_copy_button_classes";
 
 interface EntityTypeGuide {
   slug: string;
@@ -533,11 +540,23 @@ retrieve_related_entities({
 function CodeBlock({ label, children }: { label: string; children: string }) {
   return (
     <div className="mb-4">
-      <p className="text-[12px] font-mono uppercase tracking-wider text-muted-foreground mb-1.5">
-        {label}
-      </p>
-      <div className="rounded-lg border code-block-palette p-4 font-mono text-[13px] leading-6 overflow-x-auto whitespace-pre">
-        {children}
+      <div className={CODE_BLOCK_CARD_SHELL_CLASS}>
+        <div className="mb-3 flex flex-col gap-3">
+          <div className={CODE_BLOCK_CHROME_STACK_CLASS}>
+            <div className={EVALUATE_PROMPT_PILL_CLASS}>
+              <span className="h-2 w-2 rounded-full bg-emerald-500/80 dark:bg-emerald-400/80" aria-hidden />
+              {label}
+            </div>
+            <div className={CODE_BLOCK_CHROME_SUBTITLE_CLASS}>
+              Equivalent {label} example for this entity type.
+            </div>
+          </div>
+        </div>
+        <div
+          className={`${CODE_BLOCK_CARD_INNER_CLASS} p-4 font-mono text-[13px] leading-6 overflow-x-auto whitespace-pre`}
+        >
+          {children}
+        </div>
       </div>
     </div>
   );

@@ -2,7 +2,7 @@
   "id": "neotoma",
   "name": "Neotoma",
   "description": "Structured personal data memory with append-only observations, schema evolution, and provenance tracking",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "kind": "memory",
   "skills": ["skills"],
   "configSchema": {

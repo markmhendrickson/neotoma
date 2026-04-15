@@ -3,6 +3,13 @@ import { Link } from "react-router-dom";
 import { PRODUCT_NAV_SOURCES } from "@/utils/analytics";
 import { DetailPage } from "../DetailPage";
 import { TrackedProductLink } from "../TrackedProductNav";
+import {
+  CODE_BLOCK_CARD_INNER_CLASS,
+  CODE_BLOCK_CARD_SHELL_CLASS,
+  CODE_BLOCK_CHROME_STACK_CLASS,
+  CODE_BLOCK_CHROME_SUBTITLE_CLASS,
+  EVALUATE_PROMPT_PILL_CLASS,
+} from "../code_block_copy_button_classes";
 import { SectionDivider } from "../ui/section_divider";
 
 function SectionHeading({ id, children }: { id: string; children: string }) {
@@ -22,8 +29,23 @@ function SectionHeading({ id, children }: { id: string; children: string }) {
 
 function CodeBlock({ children }: { children: string }) {
   return (
-    <div className="rounded-lg border code-block-palette p-4 md:p-5 font-mono text-[13px] leading-6 overflow-x-auto mb-6 whitespace-pre">
-      {children}
+    <div className={`mb-6 w-full text-left ${CODE_BLOCK_CARD_SHELL_CLASS}`}>
+      <div className="mb-3 flex flex-col gap-3">
+        <div className={CODE_BLOCK_CHROME_STACK_CLASS}>
+          <div className={EVALUATE_PROMPT_PILL_CLASS}>
+            <span className="h-2 w-2 rounded-full bg-emerald-500/80 dark:bg-emerald-400/80" aria-hidden />
+            Example operation
+          </div>
+          <div className={CODE_BLOCK_CHROME_SUBTITLE_CLASS}>
+            Representative MCP or CLI payload from the walkthrough.
+          </div>
+        </div>
+      </div>
+      <div
+        className={`${CODE_BLOCK_CARD_INNER_CLASS} p-4 md:p-5 font-mono text-[13px] leading-6 overflow-x-auto whitespace-pre`}
+      >
+        {children}
+      </div>
     </div>
   );
 }

@@ -5,7 +5,11 @@ import { copyTextToClipboard } from "../lib/copy_to_clipboard";
 import { useLocale } from "@/i18n/LocaleContext";
 import { cn } from "@/lib/utils";
 import {
-  CODE_BLOCK_COPY_BUTTON_ABSOLUTE,
+  CODE_BLOCK_CARD_INNER_CLASS,
+  CODE_BLOCK_CARD_SHELL_CLASS,
+  CODE_BLOCK_CHROME_STACK_CLASS,
+  CODE_BLOCK_CHROME_SUBTITLE_CLASS,
+  CODE_BLOCK_COPY_BUTTON_INLINE,
   EVALUATE_PROMPT_CARD_SHELL_CLASS,
   EVALUATE_PROMPT_PILL_CLASS,
   HOME_EVALUATE_CTA_CLASS,
@@ -57,6 +61,8 @@ export function CopyableCodeBlock({
     typeof previewLineCount === "number" && previewLineCount > 0 && lines.length > previewLineCount;
   const displayCode =
     canExpand && !showFullCode ? `${lines.slice(0, previewLineCount).join("\n")}\n...` : code;
+  const defaultChromeTitle = "Code snippet";
+  const defaultChromeSubtitle = "Copy the exact snippet shown below.";
 
   const onCopy = async () => {
     const ok = await copyTextToClipboard(sanitizeCodeForCopy(code));
@@ -130,25 +136,35 @@ export function CopyableCodeBlock({
   }
 
   return (
-    <div className="relative">
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className={CODE_BLOCK_COPY_BUTTON_ABSOLUTE}
-        aria-label={copied ? dict.copied : dict.copy}
-        onClick={onCopy}
-      >
-        {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-      </Button>
+    <div className={cn("relative w-full text-left", CODE_BLOCK_CARD_SHELL_CLASS)}>
+      <div className="mb-3 flex flex-col gap-3 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-x-3 sm:gap-y-3">
+        <div className={CODE_BLOCK_CHROME_STACK_CLASS}>
+          <div className={EVALUATE_PROMPT_PILL_CLASS}>
+            <span className="h-2 w-2 rounded-full bg-emerald-500/80 dark:bg-emerald-400/80" aria-hidden />
+            {defaultChromeTitle}
+          </div>
+          <div className={CODE_BLOCK_CHROME_SUBTITLE_CLASS}>{defaultChromeSubtitle}</div>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={CODE_BLOCK_COPY_BUTTON_INLINE}
+          aria-label={copied ? dict.copied : dict.copy}
+          onClick={onCopy}
+        >
+          {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+        </Button>
+      </div>
       <pre
         className={cn(
-          "rounded-lg border code-block-shell code-block-palette p-4 overflow-x-auto overflow-y-auto font-mono text-[13px] leading-6 whitespace-pre-wrap break-words",
+          CODE_BLOCK_CARD_INNER_CLASS,
+          "p-4 overflow-x-auto overflow-y-auto font-mono text-[13px] leading-6 whitespace-pre-wrap break-words",
           canExpand && !showFullCode && "max-h-60 md:max-h-none",
+          "sm:col-span-2 sm:row-start-2",
           className,
         )}
       >
-        <span className="float-right h-8 w-20 shrink-0" aria-hidden />
         <code>{displayCode}</code>
       </pre>
       {canExpand ? (

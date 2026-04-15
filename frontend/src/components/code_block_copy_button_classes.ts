@@ -7,12 +7,43 @@
 export const EVALUATE_PROMPT_CARD_SHELL_CLASS =
   "rounded-2xl border border-emerald-200/60 bg-gradient-to-br from-emerald-50/90 via-background to-emerald-50/50 p-3 shadow-sm shadow-emerald-900/5 supports-[backdrop-filter]:from-emerald-50/80 dark:border-emerald-900/50 dark:from-emerald-950/40 dark:via-background dark:to-emerald-950/25";
 
+/** Shared emerald shell for site code blocks. */
+export const CODE_BLOCK_CARD_SHELL_CLASS = EVALUATE_PROMPT_CARD_SHELL_CLASS;
+
+/** Shared inner surface for code content inside the emerald shell. */
+export const CODE_BLOCK_CARD_INNER_CLASS =
+  "mb-0 rounded-xl border border-border/80 bg-muted/35 text-foreground shadow-inner shadow-black/5 code-block-shell";
+
+/**
+ * Beige / stone integration snippet chrome — sits beside emerald evaluate UI and muted
+ * callouts (e.g. OpenClaw native plugin steps). Warm neutral, not brand green or blue.
+ */
+export const INTEGRATION_SNIPPET_CARD_SHELL_CLASS =
+  "rounded-2xl border border-stone-200/70 bg-gradient-to-br from-stone-100/85 via-background to-amber-50/40 p-3 shadow-sm shadow-stone-900/5 supports-[backdrop-filter]:from-stone-100/70 dark:border-stone-700/60 dark:from-stone-900/50 dark:via-background dark:to-stone-900/35";
+
+export const INTEGRATION_SNIPPET_PILL_CLASS =
+  "inline-flex w-fit max-w-full items-center gap-2 rounded-full border border-stone-300/70 bg-stone-200/80 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-stone-800/95 dark:border-stone-600/70 dark:bg-stone-800/70 dark:text-stone-200/90";
+
+export const INTEGRATION_SNIPPET_INNER_CLASS =
+  "mb-0 rounded-xl border border-stone-200/60 bg-stone-50/70 text-foreground shadow-inner shadow-black/5 code-block-shell dark:border-stone-700/50 dark:bg-stone-900/35";
+
+export const INTEGRATION_SNIPPET_COPY_BUTTON_INLINE =
+  "order-3 min-w-[88px] h-8 justify-center gap-1.5 shrink-0 border-stone-700 bg-stone-800 px-2.5 text-stone-50 shadow-sm shadow-stone-900/20 hover:border-stone-600 hover:bg-stone-700 hover:text-stone-50 focus-visible:ring-stone-500 dark:border-stone-500 dark:bg-stone-600 dark:text-stone-50 dark:shadow-stone-950/40 dark:hover:border-stone-400 dark:hover:bg-stone-500 dark:hover:text-stone-50 after:text-[11px] after:font-semibold after:tracking-wide after:content-[attr(aria-label)] sm:order-none sm:h-8 sm:w-auto";
+
+export const CODE_BLOCK_CHROME_STACK_CLASS =
+  "order-1 w-full min-w-0 space-y-2 px-1 sm:order-none sm:col-start-1 sm:row-start-1";
+
+export const CODE_BLOCK_CHROME_SUBTITLE_CLASS = "text-[12px] leading-5 text-muted-foreground";
+
 /** Pill label above the prompt body (paired with dot in markup). */
 export const EVALUATE_PROMPT_PILL_CLASS =
   "inline-flex w-fit max-w-full items-center gap-2 rounded-full border border-emerald-200/70 bg-emerald-100/90 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-900/85 dark:border-emerald-800/60 dark:bg-emerald-950/55 dark:text-emerald-200/90";
 
 export const CODE_BLOCK_COPY_BUTTON_ABSOLUTE =
   "absolute top-2 right-2 z-10 min-w-[88px] h-8 justify-center gap-1.5 shrink-0 border-emerald-600 bg-emerald-600 px-2.5 text-white shadow-sm shadow-emerald-600/30 hover:border-emerald-500 hover:bg-emerald-500 hover:text-white focus-visible:ring-emerald-500 dark:border-emerald-500 dark:bg-emerald-500 dark:text-emerald-950 dark:shadow-emerald-500/30 dark:hover:border-emerald-400 dark:hover:bg-emerald-400 dark:hover:text-emerald-950 after:text-[11px] after:font-semibold after:tracking-wide after:content-[attr(aria-label)]";
+
+export const CODE_BLOCK_COPY_BUTTON_INLINE =
+  "order-3 min-w-[88px] h-8 justify-center gap-1.5 shrink-0 border-emerald-600 bg-emerald-600 px-2.5 text-white shadow-sm shadow-emerald-600/30 hover:border-emerald-500 hover:bg-emerald-500 hover:text-white focus-visible:ring-emerald-500 dark:border-emerald-500 dark:bg-emerald-500 dark:text-emerald-950 dark:shadow-emerald-500/30 dark:hover:border-emerald-400 dark:hover:bg-emerald-400 dark:hover:text-emerald-950 after:text-[11px] after:font-semibold after:tracking-wide after:content-[attr(aria-label)] sm:order-none sm:h-8 sm:w-auto";
 
 export const CODE_BLOCK_COPY_BUTTON_FLOAT =
   "float-right relative z-10 ml-2 mb-2 min-w-[88px] h-8 justify-center gap-1.5 shrink-0 border-emerald-600 bg-emerald-600 px-2.5 text-white shadow-sm shadow-emerald-600/30 hover:border-emerald-500 hover:bg-emerald-500 hover:text-white focus-visible:ring-emerald-500 dark:border-emerald-500 dark:bg-emerald-500 dark:text-emerald-950 dark:shadow-emerald-500/30 dark:hover:border-emerald-400 dark:hover:bg-emerald-400 dark:hover:text-emerald-950 after:text-[11px] after:font-semibold after:tracking-wide after:content-[attr(aria-label)]";
