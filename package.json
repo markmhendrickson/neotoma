@@ -1,6 +1,6 @@
 {
   "name": "neotoma",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "MCP server for structured personal data memory with unified source ingestion",
   "main": "dist/index.js",
   "type": "module",
@@ -149,7 +149,9 @@
     "url": "https://github.com/markmhendrickson/neotoma/issues"
   },
   "openclaw": {
-    "extensions": ["./dist/openclaw_entry.js"]
+    "extensions": [
+      "./dist/openclaw_entry.js"
+    ]
   },
   "files": [
     "dist",
