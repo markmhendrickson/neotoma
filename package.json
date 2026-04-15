@@ -148,9 +148,14 @@
   "bugs": {
     "url": "https://github.com/markmhendrickson/neotoma/issues"
   },
+  "openclaw": {
+    "extensions": ["./dist/openclaw_entry.js"]
+  },
   "files": [
     "dist",
     "openapi.yaml",
+    "openclaw.plugin.json",
+    "skills",
     "LICENSE",
     "README.md"
   ],
@@ -257,5 +262,13 @@
     "typescript": "^5.3.3",
     "vite": "^7.3.1",
     "vitest": "^4.0.17"
+  },
+  "peerDependencies": {
+    "openclaw": ">=2026.3.0"
+  },
+  "peerDependenciesMeta": {
+    "openclaw": {
+      "optional": true
+    }
   }
 }

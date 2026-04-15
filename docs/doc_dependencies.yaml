@@ -475,14 +475,6 @@ docs/feature_units/standards/feature_unit_spec.md:
       type: explicit
       reason: Release plans reference feature unit spec
 
-docs/feature_units/standards/release_workflow.md:
-  downstream:
-    - path: docs/releases/*/release_plan.md
-      type: explicit
-      reason: Release plans follow workflow
-    - path: docs/releases/*/manifest.yaml
-      type: implicit
-      reason: Manifests follow workflow structure
 # Conventions Layer
 docs/conventions/native_browser_debugging_rules.mdc:
   downstream:

@@ -312,18 +312,22 @@ export function NeotomaVsFilePage() {
   return (
     <ComparisonPage
       title="Neotoma vs file-based memory"
-      answerBlock="File-based memory stores state in Markdown, JSON, or similar artifacts. It is portable and human-editable, but provides no schema enforcement, conflict detection, or auditable provenance unless layered on manually. Neotoma stores structured observations and composes entity state via deterministic reducers with formal guarantees."
+      answerBlock="File-based memory stores state in Markdown, JSON, or similar artifacts. Three production-scale agent platforms, Manus, Claude Code, and OpenClaw, independently converged on this pattern. It is portable, human-editable, and cache-friendly, but provides no schema enforcement, conflict detection, or auditable provenance unless layered on manually. Neotoma stores structured observations and composes entity state via deterministic reducers with formal guarantees."
       question="Why not just use markdown files for agent memory?"
       competitorLabel="File-based memory"
       competitorColumn="file"
-      intro="Markdown and JSON files are the simplest possible memory store for AI agents. They work well for lightweight, single-writer workflows. The question is what happens when requirements grow."
-      competitorDescription="File-based memory stores facts as plain text artifacts on disk. Agents read and write files directly, or commit them to git. The format is maximally portable and human-readable. Versioning comes from git, but conflict detection, schema validation, and provenance are not built in."
-      neotomaDescription="Neotoma stores append-only observations about entities. Deterministic reducers compose all observations into a single entity snapshot. Every field traces to its source observation, schema validation rejects malformed writes, and conflicting facts are resolved deterministically."
+      intro="Markdown and JSON files are the most common memory store for AI agents in production. Manus ($100M ARR), Claude Code ($2.5B run-rate revenue), and OpenClaw (310K GitHub stars) all independently converged on file-based memory, a convergent evolution driven by LLM economics and simplicity. They work well for single-writer workflows. The question is what happens when requirements grow beyond what files can guarantee."
+      competitorDescription="File-based memory stores facts as plain text artifacts on disk. Agents read and write files directly, or commit them to git. The format is maximally portable, human-readable, and friendly to LLM KV-cache economics. Production patterns include todo.md for attention shaping (Manus), hierarchical CLAUDE.md files for progressive context loading (Claude Code), and MEMORY.md with optional sqlite-vec vector indexing (OpenClaw). Versioning comes from git, but conflict detection, schema validation, and provenance are not built in."
+      neotomaDescription="Neotoma stores append-only observations about entities. Deterministic reducers compose all observations into a single entity snapshot. Every field traces to its source observation, schema validation rejects malformed writes, and conflicting facts are resolved deterministically. MCP-based retrieval of entity snapshots is equally cache-friendly to LLMs, structured text injected into context with the same KV-cache benefits as files, but with state integrity guarantees."
       whenToUse={{
         competitor: "You have a single agent, simple state, and value being able to open memory in a text editor. Git-based versioning is sufficient for your audit needs, and you do not need conflict resolution or schema enforcement.",
-        neotoma: "Multiple agents or tools write to the same entities. You need schema validation, conflict detection, reproducible state reconstruction, or auditable provenance that goes beyond git commit history.",
+        neotoma: "Multiple agents or tools write to the same entities. You need schema validation, conflict detection, reproducible state reconstruction, or auditable provenance that goes beyond git commit history. You have outgrown what files can guarantee but do not want to build and maintain memory infrastructure yourself.",
       }}
       faqItems={[
+        {
+          question: "If Manus and Claude Code use markdown files, why would I need Neotoma?",
+          answer: "Those systems document the same failure modes Neotoma solves: concurrent writes corrupt state, there is no conflict detection, no entity resolution across files, no schema validation, and no provenance. Claude Code caps always-loaded memory at 200 lines because files get bloated and contradictory. OpenClaw implements automatic memory flush when context limits approach, losing information. Neotoma's observation model and deterministic reducers are the engineering answers to these documented limitations.",
+        },
         {
           question: "Can git replace versioned history?",
           answer: "Git versions file snapshots, not entity observations. It can tell you what a file looked like at a commit, but not which observation changed which field, or how conflicting writes from different agents were resolved. Git versions the output; Neotoma versions the inputs.",
@@ -334,7 +338,7 @@ export function NeotomaVsFilePage() {
         },
         {
           question: "Can I use file-based memory alongside Neotoma?",
-          answer: "Yes. You can use files for human-editable configuration and notes while using Neotoma for entity state that needs formal guarantees. They address different layers of the problem.",
+          answer: "Yes. You can use files for human-editable configuration and notes while using Neotoma for entity state that needs formal guarantees. They address different layers of the problem, and this layered approach mirrors what production systems like OpenClaw already do by indexing files with sqlite-vec for retrieval.",
         },
       ]}
     />
@@ -349,9 +353,9 @@ export function NeotomaVsDatabasePage() {
       question="Why not just use SQLite or Postgres for agent memory?"
       competitorLabel="Database (CRUD)"
       competitorColumn="database"
-      intro="Relational databases are the default tool for structured data. The question is not whether a database can store agent state - it can. The question is whether standard CRUD patterns deliver the guarantees that production agent memory requires."
+      intro="Relational databases are the default tool for structured data. The question is not whether a database can store agent state\u2014it can. The question is whether standard CRUD patterns deliver the guarantees that production agent memory requires. The distinction that matters: your database is the system of record for human-written business data (customer records, transactions, product catalog). Agent-written observational state\u2014observations, inferences, entity resolutions, decisions\u2014is a category of data that did not exist before agents started writing autonomously, and it needs different architectural properties."
       competitorDescription="A database with standard CRUD operations stores the current state of each entity as a row. UPDATEs overwrite previous values. There is no built-in audit trail, no observation log, and no mechanism to reconstruct historical state or detect conflicting writes from multiple agents."
-      neotomaDescription="Neotoma uses SQLite (or Postgres) as its storage backend but imposes an append-only observation log, deterministic reducers, schema validation, and field-level provenance on top. The database stores the data; the architecture delivers the guarantees."
+      neotomaDescription="Neotoma sits between your agents and your database. It uses SQLite (or Postgres) as its storage backend but imposes an append-only observation log, deterministic reducers, schema validation, and field-level provenance on top. Your existing database stays as the system of record for business data. Neotoma adds a layer for agent-generated state that needs write integrity."
       whenToUse={{
         competitor: "You have a single writer, do not need historical state reconstruction, and are comfortable with last-write-wins semantics. Standard application development patterns are sufficient for your use case.",
         neotoma: "Multiple agents write to the same entities. You need to know what was true at any past moment, resolve conflicts deterministically, enforce schemas across writers, or prove provenance for audits. You want the guarantees without building the architecture yourself.",

@@ -7,6 +7,9 @@
  *   npx tsx scripts/render_github_release_notes.ts --tag v0.3.11 --supplement path/to/custom.md
  *   npx tsx scripts/render_github_release_notes.ts --tag v0.4.0 --compare-base v0.3.10
  *     # when the previous git tag was not published to npm; overrides compare + commit list base
+ *   npx tsx scripts/render_github_release_notes.ts --tag v0.4.3 --head-ref HEAD
+ *     # preview the final GitHub Release body before the tag exists; compare/install use v0.4.3,
+ *     # commit list is generated from the chosen head ref
  *
  * Supplement resolution (first hit wins):
  *   1) --supplement path
@@ -38,10 +41,29 @@ function listVersionTagsDescending(): string[] {
   return out ? out.split("\n").filter(Boolean) : [];
 }
 
+function parseVersionTag(tag: string): [number, number, number] | null {
+  const m = tag.match(/^v(\d+)\.(\d+)\.(\d+)$/);
+  if (!m) return null;
+  return [Number(m[1]), Number(m[2]), Number(m[3])];
+}
+
+function compareVersionTags(a: string, b: string): number {
+  const av = parseVersionTag(a);
+  const bv = parseVersionTag(b);
+  if (!av || !bv) return a.localeCompare(b);
+  for (let i = 0; i < 3; i++) {
+    if (av[i] !== bv[i]) return av[i] - bv[i];
+  }
+  return 0;
+}
+
 function previousTag(current: string): string {
   const all = listVersionTagsDescending();
   const i = all.indexOf(current);
   if (i >= 0 && i + 1 < all.length) return all[i + 1]!;
+  for (const tag of all) {
+    if (compareVersionTags(tag, current) < 0) return tag;
+  }
   return "";
 }
 
@@ -64,11 +86,11 @@ function resolveSupplement(tag: string, explicit?: string): string {
   return `_Add narrative before publishing: create \`docs/releases/in_progress/${tag}/github_release_supplement.md\` (see \`docs/developer/github_release_supplement.example.md\`)._`;
 }
 
-function gitLogMarkdown(prev: string, tag: string): string {
+function gitLogMarkdown(prev: string, rangeEnd: string): string {
   if (!prev) {
-    return `_No previous tag found; use [compare on GitHub](https://github.com/${getRepoSlug()}/compare/${tag}^...${tag}) for history._`;
+    return `_No previous tag found; use [compare on GitHub](https://github.com/${getRepoSlug()}/compare/${rangeEnd}^...${rangeEnd}) for history._`;
   }
-  const out = execSync(`git log ${prev}..${tag} --oneline`, {
+  const out = execSync(`git log ${prev}..${rangeEnd} --oneline`, {
     cwd: repoRoot,
     encoding: "utf-8",
   }).trim();
@@ -87,10 +109,12 @@ function parseArgs(argv: string[]): {
   tag: string;
   supplement?: string;
   compareBase?: string;
+  headRef?: string;
 } {
   let tag = "";
   let supplement: string | undefined;
   let compareBase: string | undefined;
+  let headRef: string | undefined;
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--tag" && argv[i + 1]) {
       tag = argv[++i]!;
@@ -98,11 +122,13 @@ function parseArgs(argv: string[]): {
       supplement = argv[++i]!;
     } else if (argv[i] === "--compare-base" && argv[i + 1]) {
       compareBase = argv[++i]!;
+    } else if (argv[i] === "--head-ref" && argv[i + 1]) {
+      headRef = argv[++i]!;
     }
   }
   if (!tag || !/^v\d+\.\d+\.\d+$/.test(tag)) {
     console.error(
-      "Usage: render_github_release_notes.ts --tag vX.Y.Z [--supplement path.md] [--compare-base vA.B.C]",
+      "Usage: render_github_release_notes.ts --tag vX.Y.Z [--supplement path.md] [--compare-base vA.B.C] [--head-ref ref]",
     );
     process.exit(1);
   }
@@ -114,20 +140,21 @@ function parseArgs(argv: string[]): {
     console.error("--compare-base must differ from --tag");
     process.exit(1);
   }
-  return { tag, supplement, compareBase };
+  return { tag, supplement, compareBase, headRef };
 }
 
 function main(): void {
-  const { tag, supplement, compareBase } = parseArgs(process.argv.slice(2));
+  const { tag, supplement, compareBase, headRef } = parseArgs(process.argv.slice(2));
   const prev = (compareBase ?? "").trim() || previousTag(tag);
   const npmVersion = tag.replace(/^v/, "");
   const slug = getRepoSlug();
+  const rangeEnd = (headRef ?? "").trim() || tag;
   const compareUrl = prev
     ? `https://github.com/${slug}/compare/${prev}...${tag}`
     : `https://github.com/${slug}/releases/tag/${tag}`;
 
   const manualBody = resolveSupplement(tag, supplement);
-  const gitLog = gitLogMarkdown(prev, tag);
+  const gitLog = gitLogMarkdown(prev, rangeEnd);
 
   let out = readWrap();
   out = out

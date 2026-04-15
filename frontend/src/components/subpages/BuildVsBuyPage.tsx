@@ -201,6 +201,82 @@ export function BuildVsBuyPage() {
             </p>
           </section>
 
+          {/* ── Where are you? ── */}
+          <section className="py-20 border-b border-border space-y-8">
+            <div className="space-y-2">
+              <p className="text-[11px] font-mono uppercase tracking-widest text-muted-foreground">
+                Where are you?
+              </p>
+              <h2 className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
+                How agent memory infrastructure evolves
+              </h2>
+            </div>
+            <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl">
+              Most teams follow the same progression. The pain that drives
+              adoption of a write-integrity layer is invisible at first and
+              unavoidable later.
+            </p>
+            <div className="grid gap-3">
+              {[
+                {
+                  phase: "1",
+                  label: "Just use the database",
+                  desc: "Memory bolted onto Postgres, Redis, or a vector store. Works for simple use cases. Nobody can answer what the agent learned, when, from what source, or whether it contradicted last week\u2019s state\u2014but the system doesn\u2019t visibly break.",
+                  accent: "border-emerald-500/20 bg-emerald-500/[0.03]",
+                  accentText: "text-emerald-600 dark:text-emerald-400",
+                },
+                {
+                  phase: "2",
+                  label: "Retrieval-optimization layer",
+                  desc: "Dedicated memory abstraction focused on retrieval quality: right context, right time. Solves legible pain (bad recall, bloated context). Leaves the write path unaudited\u2014LLM-mediated summaries treated as ground truth with no provenance.",
+                  accent: "border-amber-500/20 bg-amber-500/[0.03]",
+                  accentText: "text-amber-600 dark:text-amber-400",
+                },
+                {
+                  phase: "3",
+                  label: "The trust crisis",
+                  desc: "Agents move from low-stakes assistants to high-stakes actors: money, procurement, compliance, long-running autonomy. The question shifts from \u201Cdid the agent retrieve the right thing?\u201D to \u201Ccan I prove what the agent knew, when, and whether that knowledge was legitimate?\u201D",
+                  accent: "border-orange-500/20 bg-orange-500/[0.03]",
+                  accentText: "text-orange-600 dark:text-orange-400",
+                },
+                {
+                  phase: "4",
+                  label: "Write integrity or retrofit",
+                  desc: "Teams that adopted append-only, schema-constrained state early have a compounding advantage: every agent write is traceable from day one. Teams that retrofit have a gap in their audit history\u2014everything before the migration is a black box.",
+                  accent: "border-rose-500/20 bg-rose-500/[0.03]",
+                  accentText: "text-rose-600 dark:text-rose-400",
+                },
+              ].map(({ phase, label, desc, accent, accentText }) => (
+                <div
+                  key={phase}
+                  className={`rounded-lg border ${accent} p-5 space-y-2`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className={`text-[12px] font-mono ${accentText}`}>
+                      Phase {phase}
+                    </span>
+                    <span className="text-[14px] font-medium text-foreground">
+                      {label}
+                    </span>
+                  </div>
+                  <p className="text-[13px] leading-6 text-muted-foreground">
+                    {desc}
+                  </p>
+                </div>
+              ))}
+            </div>
+            <p className="text-[13px] leading-6 text-muted-foreground">
+              Building multi-agent systems?{" "}
+              <Link
+                to="/multi-agent-state"
+                className="text-foreground underline underline-offset-2 hover:no-underline"
+              >
+                See how shared state accelerates the inflection point
+              </Link>
+              .
+            </p>
+          </section>
+
           {/* ── What's solved ── */}
           <section className="py-20 border-b border-border space-y-8">
             <div className="space-y-2">
@@ -573,18 +649,41 @@ export function BuildVsBuyPage() {
             </div>
           </section>
 
+          {/* ── Integration framing ── */}
+          <section className="py-20 border-b border-border space-y-8">
+            <div className="space-y-2">
+              <p className="text-[11px] font-mono uppercase tracking-widest text-muted-foreground">
+                Integration model
+              </p>
+              <h2 className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
+                Between your agents and your database{" "}
+                <span className="text-muted-foreground">
+                  (not instead of it)
+                </span>
+              </h2>
+            </div>
+            <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl">
+              Your existing Postgres, MySQL, or managed database stays as the
+              system of record for business data. Neotoma adds a layer for a
+              category of data that did not exist before agents started writing
+              autonomously: observations, inferences, entity resolutions, and
+              decisions{"\u2014"}with append-only provenance, schema constraints,
+              and deterministic reduction.
+            </p>
+          </section>
+
           {/* ── CTA ── */}
           <section className="pt-20 text-center space-y-8">
             <div className="space-y-4 max-w-xl mx-auto">
               <h2 className="text-[28px] md:text-[32px] font-medium tracking-[-0.02em]">
-                Past the threshold?
+                Every day without write integrity is a gap in your audit history
               </h2>
               <p className="text-[15px] md:text-[17px] leading-7 text-muted-foreground">
                 Neotoma is an open-source state integrity layer: deterministic
                 temporal reconstruction, multi-writer consistency, and
-                version-bound provenance. Install it in five minutes and see
-                composed entity state for the types you already store-contacts,
-                tasks, money movement, and the rest of your agent OS.
+                version-bound provenance. Install in five minutes. Everything
+                your agents write from that point forward is traceable,
+                auditable, and consistent. Everything before is a black box.
               </p>
             </div>
             <div className="flex flex-col sm:flex-row justify-center gap-3">

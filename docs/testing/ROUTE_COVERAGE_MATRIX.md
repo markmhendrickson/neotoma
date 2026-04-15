@@ -3,6 +3,8 @@
 **Date**: 2026-01-23  
 **Purpose**: Track E2E test coverage for all application routes
 
+> Update (2026-04-15): Operational routes such as `/sources`, `/entities`, `/observations`, `/relationships`, and `/schemas` have moved to the Inspector app. This matrix is historical for the legacy in-repo operational UI. Current operational UI lives in the Inspector submodule/repo: [neotoma-inspector](https://github.com/markmhendrickson/neotoma-inspector).
+
 ## Coverage Summary
 
 **Current Coverage: 16/16 routes (100%)**

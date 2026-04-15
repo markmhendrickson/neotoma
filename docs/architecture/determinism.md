@@ -761,6 +761,65 @@ for (const batch of chunk(files.sort(), 100)) {
 11. **MUST NOT hide nondeterminism** (document if unavoidable)
 12. **MUST NOT modify existing observations** (immutability invariant)
 13. **MUST NOT merge entities across users** (user isolation)
+
+## 11. Deterministic Retrieval vs Similarity-Based Retrieval
+
+### 11.1 The Read/Write Nondeterminism Split
+
+Neotoma's determinism guarantee applies asymmetrically across the read and write paths:
+
+| Path | Deterministic? | Notes |
+|------|----------------|-------|
+| **Read path** (retrieval, queries) | **Yes** | Same query + same DB state → same results, same order, every execution |
+| **Write path** (AI interpretation) | **No** | LLM extraction is stochastic; mitigated by canonicalization + hashing + deduplication |
+| **Write path** (agent tool selection) | **No** | LLM chooses entity types, fields, relationships stochastically; see Section 1.6 |
+| **Query formulation** (agent constructs query) | **No** | LLM decides which MCP tool to call and with what parameters; see Section 11.3 |
+
+**Key insight:** Once data enters the graph, all retrieval operations are fully deterministic. Nondeterminism is confined to the write path and query formulation layer, never the retrieval mechanism itself.
+
+### 11.2 Why Structured Retrieval Differs from Vector Retrieval
+
+Common retrieval systems (RAG, vector databases) use similarity-based search: embed the query into a vector, return the k nearest neighbors. Neotoma uses predicate-based queries over typed entities. These produce categorically different failure modes:
+
+**Property 1: Discrete vs continuous query space**
+
+Vector search projects a query into a continuous embedding space where small perturbations shift results. Structured retrieval operates over a discrete, schema-constrained space: entity types, field names, relationship types, sort orders. Two differently-phrased queries that target the same entity type and fields return identical results.
+
+**Property 2: Exact vs approximate execution**
+
+Vector search returns approximate results ranked by distance. A relevant result at position k+1 is silently excluded. Structured retrieval returns every record matching the predicate — no threshold, no top-k cutoff, no relevance score that might exclude a valid result. If the query is correct, the results are complete.
+
+**Property 3: Detectable vs silent failures**
+
+When vector retrieval returns 8 out of 10 relevant results, the output looks identical to 10 out of 10 — the missing 2 are invisible. When structured retrieval targets the wrong entity type, it returns zero results or obviously wrong results. The failure is visible and correctable.
+
+**Property 4: Stable vs drift-prone ordering**
+
+Vector retrieval rankings shift with embedding model updates, index rebuilds, or quantization settings. Structured retrieval returns results in a deterministic sort order with explicit tiebreakers (e.g., `created_at DESC, entity_id ASC`). The order is a property of the data, not of a scoring function.
+
+**Summary:** Vector retrieval is a *search* operation (approximate, ranked, threshold-dependent). Structured retrieval is a *query* operation (exact, predicate-based, sort-stable). Queries against stable data are deterministic by construction. Searches against projected representations are not.
+
+### 11.3 Query Formulation Stochasticity
+
+When an LLM agent retrieves data from Neotoma, it constructs the query stochastically — choosing which MCP tool to call and with what parameters. This is real nondeterminism, but it differs from vector retrieval nondeterminism in important ways:
+
+**Schema constrains the query space.** MCP tool definitions specify exactly which parameters are available (`entity_type`, filters, limits, relationship types). The LLM selects from a finite menu of valid query formulations, not a continuous embedding space.
+
+**Execution adds zero variance.** Once the query is formed — however it was formed — the system returns every matching record in deterministic order. The retrieval mechanism contributes no additional nondeterminism. In vector systems, both query formulation AND retrieval are nondeterministic (two compounding sources).
+
+**Errors are visible.** A malformed or misdirected structured query produces zero results, an error, or obviously wrong results. A slightly-off embedding query silently returns plausible but incomplete results.
+
+**Equivalent queries converge.** `retrieve_entities(entity_type="task", status="open")` and `retrieve_entities(entity_type="task", filters={status: "open"})` execute identically despite different formulations. The discrete query space has many-to-one mappings from formulation to execution.
+
+**Policy:** Neotoma does not claim zero nondeterminism in the agent-memory interaction. The claim is variance concentration: all nondeterminism resides in the query formulation layer (discrete, schema-bounded, detectable on failure) and is eliminated from the retrieval layer (where in similarity-based systems it is continuous and silent).
+
+### 11.4 Nondeterminism Location Summary
+
+| System | Query formulation | Retrieval mechanism | Failure mode |
+|--------|-------------------|---------------------|--------------|
+| **Vector/RAG** | Stochastic (embedding) | Approximate (top-k similarity) | Silent incompleteness |
+| **Neotoma** | Stochastic (tool selection) | Deterministic (predicate match) | Visible errors |
+
 ## Agent Instructions
 ### When to Load This Document
 Load `docs/architecture/determinism.md` when:

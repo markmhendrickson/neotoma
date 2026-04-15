@@ -220,6 +220,35 @@ Neotoma exposes state via MCP. Local storage only in preview. Local built-in aut
 
 **Representative actions:** `store`, `retrieve_entities`, `retrieve_entity_snapshot`, `merge_entities`, `list_observations`, `create_relationship`, `list_relationships`, `list_timeline_events`, `retrieve_graph_neighborhood`. Full list: [MCP spec](docs/specs/MCP_SPEC.md).
 
+### OpenClaw native plugin
+
+Neotoma ships as a native OpenClaw plugin with `kind: "memory"`, so it can fill the dedicated memory slot. All 30+ MCP tools are registered as agent tools.
+
+```bash
+openclaw plugins install neotoma
+```
+
+Then assign it to the memory slot in your OpenClaw config:
+
+```json5
+{
+  plugins: {
+    slots: { memory: "neotoma" },
+    entries: {
+      neotoma: {
+        enabled: true,
+        config: {
+          dataDir: "~/.local/share/neotoma",
+          environment: "production"
+        }
+      }
+    }
+  }
+}
+```
+
+Verify installation: `openclaw plugins inspect neotoma` shows `Format: native`, `Kind: memory`, and all registered tool contracts.
+
 ## Common questions
 
 **Platform memory (Claude, ChatGPT) is good enough — why add another tool?**

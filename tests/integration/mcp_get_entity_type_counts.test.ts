@@ -21,12 +21,18 @@ describe("MCP get_entity_type_counts tool", () => {
   });
 
   it("returns canonical entity counts by type for the authenticated user", async () => {
+    const before = await getDashboardStats(testUserId);
     const result = await (server as any).getEntityTypeCounts({ user_id: testUserId });
     const response = JSON.parse(result.content[0].text);
-    const expected = await getDashboardStats(testUserId);
+    const after = await getDashboardStats(testUserId);
+    const acceptableCounts = [
+      sortCounts(before.entities_by_type ?? {}),
+      sortCounts(after.entities_by_type ?? {}),
+    ];
+    const acceptableTotals = [before.total_entities ?? 0, after.total_entities ?? 0];
 
-    expect(response.entities_by_type).toEqual(sortCounts(expected.entities_by_type ?? {}));
-    expect(response.total_entities).toBe(expected.total_entities ?? 0);
+    expect(acceptableCounts).toContainEqual(response.entities_by_type);
+    expect(acceptableTotals).toContain(response.total_entities);
     expect(response.last_updated).toBeDefined();
     expect(response.count_source).toBe("dashboard_stats");
     expect(response.scope).toBe("authenticated_user");

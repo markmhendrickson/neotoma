@@ -202,6 +202,18 @@ export const VERTICALS: VerticalCard[] = [
     accentBg: "bg-violet-500/5",
     accentBorder: "border-violet-500/20",
   },
+  {
+    href: "/trading",
+    icon: TrendingUp,
+    label: "Trading",
+    title: "Autonomous trading agents",
+    tagline: "Reconstructable decision chains for multi-agent trading systems",
+    entityExamples: ["trade_decision", "strategy", "analysis", "risk_state", "portfolio_snapshot"],
+    thenQuestion: "What did each analyst recommend, and what were the risk limits when this trade was placed?",
+    accent: "text-emerald-600 dark:text-emerald-400",
+    accentBg: "bg-emerald-500/5",
+    accentBorder: "border-emerald-500/20",
+  },
 ];
 
 export function VerticalsIndexPage() {

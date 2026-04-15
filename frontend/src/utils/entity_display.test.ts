@@ -6,12 +6,12 @@
 
 import { describe, it, expect } from "vitest";
 import { getEntityDisplayName } from "./entity_display";
-import type { Entity } from "@/components/EntityList";
+import type { EntityDisplayInput } from "./entity_display";
 
 describe("getEntityDisplayName", () => {
   describe("Priority 1: Title field", () => {
     it("uses title field when available for task", () => {
-      const entity: Entity = {
+      const entity: EntityDisplayInput = {
         entity_type: "task",
         canonical_name: "task-123",
         snapshot: { title: "Complete project", status: "todo" },
@@ -20,7 +20,7 @@ describe("getEntityDisplayName", () => {
     });
 
     it("uses title field when available for goal", () => {
-      const entity: Entity = {
+      const entity: EntityDisplayInput = {
         entity_type: "goal",
         canonical_name: "goal-456",
         snapshot: { title: "Increase revenue by 20%", status: "active" },
@@ -29,7 +29,7 @@ describe("getEntityDisplayName", () => {
     });
 
     it("uses title field when available for event", () => {
-      const entity: Entity = {
+      const entity: EntityDisplayInput = {
         entity_type: "event",
         canonical_name: "event-789",
         snapshot: { title: "Team Meeting", start_time: "2024-01-15T10:00:00Z" },
@@ -38,7 +38,7 @@ describe("getEntityDisplayName", () => {
     });
 
     it("uses title field when available for note", () => {
-      const entity: Entity = {
+      const entity: EntityDisplayInput = {
         entity_type: "note",
         canonical_name: "note-abc",
         snapshot: { title: "Project Notes", content: "Some content..." },
@@ -49,7 +49,7 @@ describe("getEntityDisplayName", () => {
 
   describe("Priority 2: Name field", () => {
     it("uses name field when title not available for company", () => {
-      const entity: Entity = {
+      const entity: EntityDisplayInput = {
         entity_type: "company",
         canonical_name: "acme corp",
         snapshot: { name: "Acme Corporation" },
@@ -58,7 +58,7 @@ describe("getEntityDisplayName", () => {
     });
 
     it("uses name field when title not available for person", () => {
-      const entity: Entity = {
+      const entity: EntityDisplayInput = {
         entity_type: "person",
         canonical_name: "john doe",
         snapshot: { name: "John Doe", email: "john@example.com" },
@@ -67,7 +67,7 @@ describe("getEntityDisplayName", () => {
     });
 
     it("uses name field when title not available for project", () => {
-      const entity: Entity = {
+      const entity: EntityDisplayInput = {
         entity_type: "project",
         canonical_name: "website redesign",
         snapshot: { name: "Website Redesign", status: "active" },
@@ -76,7 +76,7 @@ describe("getEntityDisplayName", () => {
     });
 
     it("uses name field when title not available for location", () => {
-      const entity: Entity = {
+      const entity: EntityDisplayInput = {
         entity_type: "location",
         canonical_name: "san francisco",
         snapshot: { name: "San Francisco", country: "USA" },
@@ -87,7 +87,7 @@ describe("getEntityDisplayName", () => {
 
   describe("Priority 3: Type-specific fields", () => {
     it("uses invoice_number for invoice", () => {
-      const entity: Entity = {
+      const entity: EntityDisplayInput = {
         entity_type: "invoice",
         canonical_name: "invoice-123",
         snapshot: { invoice_number: "INV-2024-001", vendor_name: "Acme Corp" },
@@ -96,7 +96,7 @@ describe("getEntityDisplayName", () => {
     });
 
     it("uses merchant_name for receipt", () => {
-      const entity: Entity = {
+      const entity: EntityDisplayInput = {
         entity_type: "receipt",
         canonical_name: "receipt-456",
         snapshot: { merchant_name: "Whole Foods", amount_total: 45.50 },
@@ -105,7 +105,7 @@ describe("getEntityDisplayName", () => {
     });
 
     it("uses subject for email", () => {
-      const entity: Entity = {
+      const entity: EntityDisplayInput = {
         entity_type: "email",
         canonical_name: "email-789",
         snapshot: { subject: "Q4 Planning Meeting", from: "boss@example.com" },
@@ -114,7 +114,7 @@ describe("getEntityDisplayName", () => {
     });
 
     it("uses subject for message", () => {
-      const entity: Entity = {
+      const entity: EntityDisplayInput = {
         entity_type: "message",
         canonical_name: "message-abc",
         snapshot: { subject: "Quick question", sender: "alice@example.com" },
@@ -123,7 +123,7 @@ describe("getEntityDisplayName", () => {
     });
 
     it("uses asset_name for holding", () => {
-      const entity: Entity = {
+      const entity: EntityDisplayInput = {
         entity_type: "holding",
         canonical_name: "holding-def",
         snapshot: { asset_name: "Apple Inc.", asset_symbol: "AAPL", quantity: 100 },
@@ -132,7 +132,7 @@ describe("getEntityDisplayName", () => {
     });
 
     it("uses counterparty for transaction", () => {
-      const entity: Entity = {
+      const entity: EntityDisplayInput = {
         entity_type: "transaction",
         canonical_name: "transaction-ghi",
         snapshot: { counterparty: "Grocery Store", amount: 45.50 },
@@ -141,7 +141,7 @@ describe("getEntityDisplayName", () => {
     });
 
     it("uses expense_name for fixed_cost", () => {
-      const entity: Entity = {
+      const entity: EntityDisplayInput = {
         entity_type: "fixed_cost",
         canonical_name: "fixed-cost-jkl",
         snapshot: { expense_name: "Netflix Subscription", merchant: "Netflix" },
@@ -150,7 +150,7 @@ describe("getEntityDisplayName", () => {
     });
 
     it("uses item_name for purchase", () => {
-      const entity: Entity = {
+      const entity: EntityDisplayInput = {
         entity_type: "purchase",
         canonical_name: "purchase-mno",
         snapshot: { item_name: "Standing Desk", status: "completed" },
@@ -161,7 +161,7 @@ describe("getEntityDisplayName", () => {
 
   describe("Priority 4: Fallback to canonical_name", () => {
     it("falls back to canonical_name when no other fields available", () => {
-      const entity: Entity = {
+      const entity: EntityDisplayInput = {
         entity_type: "unknown_type",
         canonical_name: "fallback-name",
         snapshot: {},
@@ -170,7 +170,7 @@ describe("getEntityDisplayName", () => {
     });
 
     it("falls back to canonical_name when snapshot is undefined", () => {
-      const entity: Entity = {
+      const entity: EntityDisplayInput = {
         entity_type: "company",
         canonical_name: "test company",
       };
@@ -178,7 +178,7 @@ describe("getEntityDisplayName", () => {
     });
 
     it("falls back to canonical_name when all fields are empty", () => {
-      const entity: Entity = {
+      const entity: EntityDisplayInput = {
         entity_type: "task",
         canonical_name: "task-empty",
         snapshot: { title: "", name: "", description: "" },
@@ -189,7 +189,7 @@ describe("getEntityDisplayName", () => {
 
   describe("Edge cases", () => {
     it("trims whitespace from title", () => {
-      const entity: Entity = {
+      const entity: EntityDisplayInput = {
         entity_type: "task",
         canonical_name: "task-123",
         snapshot: { title: "  Complete project  " },
@@ -198,7 +198,7 @@ describe("getEntityDisplayName", () => {
     });
 
     it("trims whitespace from name", () => {
-      const entity: Entity = {
+      const entity: EntityDisplayInput = {
         entity_type: "company",
         canonical_name: "acme",
         snapshot: { name: "  Acme Corp  " },
@@ -207,7 +207,7 @@ describe("getEntityDisplayName", () => {
     });
 
     it("handles non-string values in snapshot gracefully", () => {
-      const entity: Entity = {
+      const entity: EntityDisplayInput = {
         entity_type: "task",
         canonical_name: "task-123",
         snapshot: { title: 12345 as any }, // Invalid type
@@ -216,7 +216,7 @@ describe("getEntityDisplayName", () => {
     });
 
     it("handles null values in snapshot", () => {
-      const entity: Entity = {
+      const entity: EntityDisplayInput = {
         entity_type: "task",
         canonical_name: "task-123",
         snapshot: { title: null as any, name: null as any },
@@ -225,7 +225,7 @@ describe("getEntityDisplayName", () => {
     });
 
     it("handles array fields in type-specific mapping", () => {
-      const entity: Entity = {
+      const entity: EntityDisplayInput = {
         entity_type: "contract",
         canonical_name: "contract-123",
         snapshot: { parties: ["Acme Corp", "Beta Inc"] },
@@ -236,7 +236,7 @@ describe("getEntityDisplayName", () => {
     });
 
     it("returns fallback when canonical_name is empty", () => {
-      const entity: Entity = {
+      const entity: EntityDisplayInput = {
         entity_type: "unknown",
         canonical_name: "",
         snapshot: {},
@@ -245,7 +245,7 @@ describe("getEntityDisplayName", () => {
     });
 
     it("prioritizes title over name when both exist", () => {
-      const entity: Entity = {
+      const entity: EntityDisplayInput = {
         entity_type: "task",
         canonical_name: "task-123",
         snapshot: { title: "Task Title", name: "Task Name" },
@@ -254,7 +254,7 @@ describe("getEntityDisplayName", () => {
     });
 
     it("prioritizes name over type-specific fields", () => {
-      const entity: Entity = {
+      const entity: EntityDisplayInput = {
         entity_type: "invoice",
         canonical_name: "invoice-123",
         snapshot: { 
@@ -267,7 +267,7 @@ describe("getEntityDisplayName", () => {
     });
 
     it("uses second type-specific field if first is empty", () => {
-      const entity: Entity = {
+      const entity: EntityDisplayInput = {
         entity_type: "invoice",
         canonical_name: "invoice-123",
         snapshot: { 
@@ -281,7 +281,7 @@ describe("getEntityDisplayName", () => {
 
   describe("Schema-specific behavior", () => {
     it("handles email with subject and from", () => {
-      const entity: Entity = {
+      const entity: EntityDisplayInput = {
         entity_type: "email",
         canonical_name: "email-123",
         snapshot: { 
@@ -294,7 +294,7 @@ describe("getEntityDisplayName", () => {
     });
 
     it("handles transaction with counterparty", () => {
-      const entity: Entity = {
+      const entity: EntityDisplayInput = {
         entity_type: "transaction",
         canonical_name: "transaction-123",
         snapshot: { 
@@ -307,7 +307,7 @@ describe("getEntityDisplayName", () => {
     });
 
     it("handles holding with asset information", () => {
-      const entity: Entity = {
+      const entity: EntityDisplayInput = {
         entity_type: "holding",
         canonical_name: "holding-123",
         snapshot: { 
@@ -320,7 +320,7 @@ describe("getEntityDisplayName", () => {
     });
 
     it("handles account with wallet_name", () => {
-      const entity: Entity = {
+      const entity: EntityDisplayInput = {
         entity_type: "account",
         canonical_name: "account-123",
         snapshot: { 

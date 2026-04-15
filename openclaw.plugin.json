@@ -1,0 +1,87 @@
+{
+  "id": "neotoma",
+  "name": "Neotoma",
+  "description": "Structured personal data memory with append-only observations, schema evolution, and provenance tracking",
+  "version": "0.4.2",
+  "kind": "memory",
+  "skills": ["skills"],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "dataDir": {
+        "type": "string",
+        "description": "Directory for Neotoma data storage (SQLite DB, raw files, logs)"
+      },
+      "environment": {
+        "type": "string",
+        "enum": ["development", "production"],
+        "description": "Runtime environment (affects DB filename, port defaults, log paths)"
+      },
+      "openaiApiKey": {
+        "type": "string",
+        "description": "OpenAI API key for embedding generation and icon matching"
+      },
+      "encryptionEnabled": {
+        "type": "boolean",
+        "description": "Enable at-rest encryption for stored data"
+      }
+    }
+  },
+  "uiHints": {
+    "dataDir": {
+      "label": "Data directory",
+      "placeholder": "~/.local/share/neotoma",
+      "help": "Where Neotoma stores its SQLite database and raw files"
+    },
+    "environment": {
+      "label": "Environment",
+      "placeholder": "production"
+    },
+    "openaiApiKey": {
+      "label": "OpenAI API key",
+      "placeholder": "sk-...",
+      "sensitive": true,
+      "help": "Used for embedding generation and schema icon matching"
+    },
+    "encryptionEnabled": {
+      "label": "Enable encryption",
+      "help": "Encrypt data at rest using local key file"
+    }
+  },
+  "contracts": {
+    "tools": [
+      "neotoma__store",
+      "neotoma__store_structured",
+      "neotoma__store_unstructured",
+      "neotoma__retrieve_entities",
+      "neotoma__retrieve_entity_by_identifier",
+      "neotoma__retrieve_entity_snapshot",
+      "neotoma__retrieve_related_entities",
+      "neotoma__retrieve_graph_neighborhood",
+      "neotoma__retrieve_file_url",
+      "neotoma__retrieve_field_provenance",
+      "neotoma__list_observations",
+      "neotoma__list_relationships",
+      "neotoma__list_timeline_events",
+      "neotoma__list_entity_types",
+      "neotoma__get_relationship_snapshot",
+      "neotoma__get_entity_type_counts",
+      "neotoma__get_authenticated_user",
+      "neotoma__get_schema_recommendations",
+      "neotoma__create_relationship",
+      "neotoma__correct",
+      "neotoma__merge_entities",
+      "neotoma__delete_entity",
+      "neotoma__delete_relationship",
+      "neotoma__restore_entity",
+      "neotoma__restore_relationship",
+      "neotoma__parse_file",
+      "neotoma__analyze_schema_candidates",
+      "neotoma__update_schema_incremental",
+      "neotoma__register_schema",
+      "neotoma__health_check_snapshots",
+      "neotoma__npm_check_update"
+    ]
+  }
+}

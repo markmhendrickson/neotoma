@@ -596,6 +596,18 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Conflicting Facts Risk", path: "/conflicting-facts-risk" },
     ],
   },
+  "/false-closure-risk": {
+    title: "False Closure Risk | Neotoma",
+    description:
+      "How Neotoma prevents agents from confidently answering with stale or superseded context by preserving versioned history and provenance for every state change.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Guarantees", path: "/#memory-guarantees" },
+      { name: "False Closure Risk", path: "/false-closure-risk" },
+    ],
+  },
   "/reproducible-state-reconstruction": {
     title: "Reproducible State Reconstruction | Neotoma",
     description:
@@ -870,6 +882,17 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Agent Authorization", path: "/agent-auth" },
     ],
   },
+  "/trading": {
+    title: "Neotoma for Autonomous Trading | Reconstructable Decision State for Trading Agents",
+    description:
+      "Version control for every analyst assessment, debate resolution, and trade decision. Neotoma provides strategy version history, risk state time travel, and analyst attribution for multi-agent trading systems.",
+    robots: "noindex,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Autonomous Trading", path: "/trading" },
+    ],
+  },
   "/verticals": {
     title: "Use Cases | State Integrity for AI-Driven Verticals | Neotoma",
     description:
@@ -906,6 +929,35 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
         question: "Is observability enough for my agent system?",
         answer:
           "If 0-1 of these conditions apply: multiple entity writers, temporal state queries, changing rules, delegation chains, full-context explanations. At 4-5 conditions, you need a state integrity layer.",
+      },
+    ],
+  },
+  "/multi-agent-state": {
+    title: "Multi-Agent Shared State | Write Integrity for Multi-Agent Systems | Neotoma",
+    description:
+      "When multiple agents write to shared state, one bad observation propagates at machine speed. Learn how write integrity prevents cascade failures across multi-agent topologies: contradiction amplification, silent overwrites, and trust boundary collapse.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Compare", path: "/build-vs-buy" },
+      { name: "Multi-Agent State", path: "/multi-agent-state" },
+    ],
+    faqItems: [
+      {
+        question: "Why is multi-agent shared state different from single-agent memory?",
+        answer:
+          "Single-agent write corruption degrades quality gradually. Multi-agent shared state creates cascade failures: one bad write propagates at machine speed, triggering downstream actions before any human can intervene.",
+      },
+      {
+        question: "What are the main failure modes of multi-agent shared state?",
+        answer:
+          "Contradiction amplification (conflicting facts with no adjudication), silent overwrite cascades (stale reads reverting other agents' changes), and trust boundary collapse (different agents with different capabilities having equal write authority).",
+      },
+      {
+        question: "Does Neotoma replace my existing database for multi-agent systems?",
+        answer:
+          "No. Your existing database remains the system of record for business data. Neotoma sits between your agents and your database as a write-integrity layer for agent-generated observational state: observations, inferences, entity resolutions, and decisions.",
       },
     ],
   },
@@ -1086,7 +1138,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/neotoma-vs-files": {
     title: "Neotoma vs File-Based Memory | Markdown, JSON vs Deterministic State",
     description:
-      "Why not just use markdown files for agent memory? File-based memory is portable and editable but lacks schema enforcement, conflict detection, and auditable provenance. Neotoma provides deterministic state guarantees.",
+      "Manus, Claude Code, and OpenClaw all use markdown files for agent memory. Here is where that pattern breaks, and what Neotoma provides beyond it: schema enforcement, conflict detection, versioned history, and auditable provenance with deterministic state guarantees.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [

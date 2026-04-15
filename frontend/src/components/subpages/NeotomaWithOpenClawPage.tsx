@@ -161,6 +161,21 @@ export function NeotomaWithOpenClawPage() {
           Once Neotoma has been evaluated, installed if needed, and activated
           with your first data, choose an integration path:
         </p>
+        <div className="mb-4 rounded-lg border border-border bg-muted/30 p-4">
+          <p className="text-[15px] leading-7 font-medium text-foreground mb-2">
+            Native plugin install (recommended)
+          </p>
+          <p className="text-[14px] leading-6 text-muted-foreground mb-2">
+            Neotoma ships as a native OpenClaw plugin with <code className="text-[13px]">kind: &quot;memory&quot;</code>.
+            All 30+ MCP tools are registered as agent tools with zero extra configuration.
+          </p>
+          <pre className="text-[13px] bg-background border border-border rounded px-3 py-2 overflow-x-auto mb-0">
+            <code>openclaw plugins install neotoma</code>
+          </pre>
+        </div>
+        <p className="text-[14px] leading-6 text-muted-foreground mb-3">
+          Or use a manual MCP integration:
+        </p>
         <IntegrationLinkCard
           title="Local setup (stdio)"
           preview="Install with an agent prompt and add Neotoma to OpenClaw local configuration."

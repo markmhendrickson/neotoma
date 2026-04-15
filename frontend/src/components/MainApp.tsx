@@ -45,6 +45,7 @@ import { AuditableChangeLogPage } from "@/components/subpages/AuditableChangeLog
 import { SchemaConstraintsPage } from "@/components/subpages/SchemaConstraintsPage";
 import { SilentMutationRiskPage } from "@/components/subpages/SilentMutationRiskPage";
 import { ConflictingFactsRiskPage } from "@/components/subpages/ConflictingFactsRiskPage";
+import { FalseClosureRiskPage } from "@/components/subpages/FalseClosureRiskPage";
 import { ReproducibleStateReconstructionPage } from "@/components/subpages/ReproducibleStateReconstructionPage";
 import { HumanInspectabilityPage } from "@/components/subpages/HumanInspectabilityPage";
 import { ZeroSetupOnboardingPage } from "@/components/subpages/ZeroSetupOnboardingPage";
@@ -74,8 +75,10 @@ import { GovTechLandingPage } from "@/components/subpages/GovTechLandingPage";
 import { CustomerOpsLandingPage } from "@/components/subpages/CustomerOpsLandingPage";
 import { LogisticsLandingPage } from "@/components/subpages/LogisticsLandingPage";
 import { PersonalDataLandingPage } from "@/components/subpages/PersonalDataLandingPage";
+import { TradingLandingPage } from "@/components/subpages/TradingLandingPage";
 import { VerticalsIndexPage } from "@/components/subpages/VerticalsIndexPage";
 import { BuildVsBuyPage } from "@/components/subpages/BuildVsBuyPage";
+import { MultiAgentStatePage } from "@/components/subpages/MultiAgentStatePage";
 import { EvaluatePage } from "@/components/subpages/EvaluatePage";
 import { MeetPage } from "@/components/subpages/MeetPage";
 
@@ -153,6 +156,7 @@ const APP_ROUTES: readonly AppRoute[] = [
   { path: "/schema-constraints", element: <SchemaConstraintsPage /> },
   { path: "/silent-mutation-risk", element: <SilentMutationRiskPage /> },
   { path: "/conflicting-facts-risk", element: <ConflictingFactsRiskPage /> },
+  { path: "/false-closure-risk", element: <FalseClosureRiskPage /> },
   { path: "/reproducible-state-reconstruction", element: <ReproducibleStateReconstructionPage /> },
   { path: "/human-inspectability", element: <HumanInspectabilityPage /> },
   { path: "/zero-setup-onboarding", element: <ZeroSetupOnboardingPage /> },
@@ -179,8 +183,10 @@ const APP_ROUTES: readonly AppRoute[] = [
   { path: "/customer-ops", element: <CustomerOpsLandingPage /> },
   { path: "/logistics", element: <LogisticsLandingPage /> },
   { path: "/personal-data", element: <PersonalDataLandingPage /> },
+  { path: "/trading", element: <TradingLandingPage /> },
   { path: "/verticals", element: <VerticalsIndexPage /> },
   { path: "/build-vs-buy", element: <BuildVsBuyPage /> },
+  { path: "/multi-agent-state", element: <MultiAgentStatePage /> },
   { path: "/evaluate", element: <EvaluatePage /> },
 
   { path: "/meet", element: <MeetPage /> },

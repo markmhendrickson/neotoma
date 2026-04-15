@@ -144,6 +144,8 @@ Route was missed because:
 
 ### Current Route Coverage
 
+> Update (2026-04-15): This section refers to the legacy in-repo operational UI routes. Operational pages have migrated to the Inspector app (`inspector/` submodule): [neotoma-inspector](https://github.com/markmhendrickson/neotoma-inspector). MainApp is now marketing/docs-focused.
+
 **After initial implementation:**
 - Routes covered: 4/16 (25%)
 - Routes missing: 12/16 (75%)

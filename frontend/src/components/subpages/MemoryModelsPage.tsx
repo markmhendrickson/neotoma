@@ -100,7 +100,10 @@ Operator: cannot inspect full lineage, replay state transitions, or export a det
         </h2>
         <p className="text-[15px] leading-7 mb-4">
           Retrieval memory reconstructs context at query time (RAG/vector search). It excels at relevance search,
-          but does not guarantee deterministic or complete state reconstruction.
+          but does not guarantee deterministic or complete state reconstruction. Retrieval pain is
+          legible{"\u2014"}developers notice when the agent forgets or retrieves the wrong thing. Write corruption
+          is not: the agent acts confidently on state that was corrupted at write time, and nobody realizes until
+          downstream consequences surface.
         </p>
         <p className="text-[15px] leading-7 mb-4">
           Similarity ranking is sensitive to embeddings, chunking, and index updates. The same intent can return

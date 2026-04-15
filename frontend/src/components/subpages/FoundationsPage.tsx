@@ -101,8 +101,13 @@ export function FoundationsPage() {
         </p>
         <p className="text-[15px] leading-7 mb-4">
           This matters because agents that read stale or conflicting state make wrong decisions.
-          When state evolution is deterministic, every downstream action inherits a known, auditable
-          basis. Debugging becomes reconstruction, not guesswork.
+          With a single agent, write corruption degrades quality gradually. With{" "}
+          <Link to="/multi-agent-state" className="text-foreground underline hover:text-foreground">
+            multiple agents sharing state
+          </Link>
+          , one bad observation propagates at machine speed{"\u2014"}triggering downstream actions
+          before any human can intervene. When state evolution is deterministic, every downstream
+          action inherits a known, auditable basis. Debugging becomes reconstruction, not guesswork.
         </p>
         <p className="text-[15px] leading-7 mb-4">
           See{" "}

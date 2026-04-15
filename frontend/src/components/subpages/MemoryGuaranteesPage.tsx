@@ -2,6 +2,7 @@ import {
   AlertTriangle,
   Box,
   ChevronDown,
+  Clock,
   Eye,
   Fingerprint,
   GitMerge,
@@ -224,6 +225,14 @@ export function MemoryGuaranteesPage() {
               className="text-foreground underline hover:text-foreground"
             >
               Conflicting facts risk
+            </a>
+          </li>
+          <li>
+            <a
+              href="#false-closure-risk"
+              className="text-foreground underline hover:text-foreground"
+            >
+              False closure risk
             </a>
           </li>
           <li>
@@ -529,6 +538,63 @@ neotoma entities search --query "Ana Rivera" --type contact`}</pre>
             deterministic state evolution
           </a>{" "}
           guarantees the same result on replay.
+        </p>
+      </section>
+
+      {/* False closure risk */}
+      <section id="false-closure-risk" className="scroll-mt-20 mb-12">
+        <h2 className={sectionH2Class}>
+          <Clock className={sectionIconClass} aria-hidden />
+          <span>False closure risk</span>
+        </h2>
+        <p className="text-[15px] leading-7 mb-4">
+          False closure risk is the likelihood that an agent confidently answers from stale or
+          superseded context because the system cannot distinguish resolved decisions from open
+          questions. The retrieval is technically correct, the fact exists, but the decision it
+          describes was revised months ago.
+        </p>
+        <h3 className="text-[18px] font-medium tracking-[-0.01em] mt-6 mb-3">Before vs after</h3>
+        <p className="text-[15px] leading-7 mb-4">
+          Before: an ops team asks &ldquo;What is our contractor access policy?&rdquo; The agent
+          retrieves the Q3 draft discussion instead of the November board-approved version and
+          answers confidently. The team acts on an outdated policy with no indication it was
+          superseded. After: Neotoma&rsquo;s versioned observations preserve both the draft and
+          the final decision with timestamps and provenance. The reducer surfaces the latest
+          resolved state; the observation trail shows when and why the policy changed.
+        </p>
+        <pre className="rounded-lg border code-block-palette p-4 overflow-x-auto font-mono text-[14px] whitespace-pre-wrap break-words mb-6">{`# View the full observation history for a policy entity
+neotoma observations list --entity-id <policy_entity_id>
+
+# The snapshot reflects the latest resolved state
+neotoma entities search --query "contractor access policy" --type policy`}</pre>
+        <p className="text-[15px] leading-7 mb-4">
+          False closure is prevented by the combination of{" "}
+          <a href="#versioned-history" className="text-foreground underline hover:text-foreground">
+            versioned history
+          </a>
+          ,{" "}
+          <a
+            href="#auditable-change-log"
+            className="text-foreground underline hover:text-foreground"
+          >
+            auditable change logs
+          </a>
+          , and{" "}
+          <a
+            href="#deterministic-state-evolution"
+            className="text-foreground underline hover:text-foreground"
+          >
+            deterministic state evolution
+          </a>
+          . Where{" "}
+          <a
+            href="#silent-mutation-risk"
+            className="text-foreground underline hover:text-foreground"
+          >
+            silent mutation
+          </a>{" "}
+          describes data changing without a trail, false closure describes stale data being served
+          as if it were current.
         </p>
       </section>
 

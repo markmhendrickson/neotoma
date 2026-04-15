@@ -155,6 +155,17 @@ export const MEMORY_GUARANTEE_ROWS: MemoryGuaranteeRow[] = [
     neotoma: "prevented",
   },
   {
+    property: "False closure risk",
+    slug: "false-closure-risk",
+    tooltip:
+      "The likelihood that an agent confidently answers from stale or superseded context because the system cannot distinguish resolved decisions from open questions. Without versioned history and provenance, a settled policy from six months ago looks identical to a current one.",
+    platform: "common",
+    retrieval: "common",
+    file: "common",
+    database: "common",
+    neotoma: "prevented",
+  },
+  {
     property: "Reproducible state reconstruction",
     slug: "reproducible-state-reconstruction",
     tooltip:
@@ -338,6 +349,7 @@ export const VERTICAL_LANDING_PATHS: readonly string[] = [
   "/customer-ops",
   "/logistics",
   "/personal-data",
+  "/trading",
 ];
 
 export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
@@ -409,6 +421,7 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
     title: "Compare",
     items: [
       { label: "Build vs buy", href: "/build-vs-buy", icon: "Scale" },
+      { label: "Multi-agent shared state", href: "/multi-agent-state", icon: "Layers" },
       { label: "Neotoma vs platform memory", href: "/neotoma-vs-platform-memory", icon: "Globe" },
       { label: "Neotoma vs Mem0", href: "/neotoma-vs-mem0", icon: "Boxes" },
       { label: "Neotoma vs Zep", href: "/neotoma-vs-zep", icon: "History" },
@@ -1286,6 +1299,7 @@ export const ICP_PROFILES: IcpProfile[] = [
       { label: "Context breaks when you switch tools", icon: "Unlink" },
       { label: "Facts silently drift over time", icon: "Activity" },
       { label: "Corrections don't stick", icon: "RefreshCw" },
+      { label: "Stale decisions resurface as if current", icon: "Clock" },
       { label: "Personal data in provider memory with no deletion control", icon: "ShieldAlert" },
       { label: "Memory locked to one vendor", icon: "Lock" },
     ],
@@ -1330,6 +1344,7 @@ export const ICP_PROFILES: IcpProfile[] = [
       { label: "Can't replay a pipeline to understand what went wrong", icon: "RotateCcw" },
       { label: "Context lost across orchestration steps", icon: "Hand" },
       { label: "No trail linking agent output to source facts", icon: "FileText" },
+      { label: "Resolved decisions retrieved as open questions", icon: "Clock" },
       { label: "Client data in third-party memory with no access audit", icon: "ShieldAlert" },
       { label: "Memory locked to one framework", icon: "Lock" },
     ],
@@ -1383,6 +1398,7 @@ export const ICP_PROFILES: IcpProfile[] = [
       { label: "State mutates invisibly between sessions", icon: "EyeOff" },
       { label: "Can't trace output back to source data", icon: "LinkOff" },
       { label: "State drifts depending on processing order", icon: "GitBranch" },
+      { label: "Stale state served confidently with no version trail", icon: "Clock" },
       { label: "No proof of data residency for compliance", icon: "ShieldAlert" },
       { label: "State layer locked to one vendor", icon: "Lock" },
     ],

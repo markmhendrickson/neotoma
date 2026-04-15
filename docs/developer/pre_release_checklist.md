@@ -116,4 +116,4 @@ npm run dev:api
 
 - Record pass/fail for each step in the release validation report: `docs/releases/vX.Y.Z/pre_release_validation_report.md`.
 - If any step fails: stop, fix, and re-run this checklist before proceeding to Checkpoint 2.
-- Reference: `foundation/development/release_workflow.md` Step 3.6.
+- Reference: `/release` skill (`.cursor/skills/release/SKILL.md`).

@@ -30,8 +30,12 @@ neotoma relationships list --entity-id <entity_id>`}</pre>
         . See{" "}
         <Link to="/conflicting-facts-risk" className="text-foreground underline hover:text-foreground">
           conflicting facts risk
-        </Link>{" "}
-        and{" "}
+        </Link>
+        ,{" "}
+        <Link to="/false-closure-risk" className="text-foreground underline hover:text-foreground">
+          false closure risk
+        </Link>
+        , and{" "}
         <Link to="/deterministic-memory" className="text-foreground underline hover:text-foreground">
           deterministic memory
         </Link>

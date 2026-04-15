@@ -142,7 +142,14 @@ The simplest local store. Strong consistency, column types, mature ecosystem.
 
 The most common incumbent for personal-infrastructure builders. Files in a repo, version-controlled via git, human-readable.
 
-**What breaks:** Files conflate observations with snapshots — when two agents write conflicting values, both edits land silently. No structured queries — finding "all contacts at Acme" requires grep, not a query. Merge conflicts on concurrent writes. Git versions file snapshots, not entity observations — it can tell you what a file looked like at a commit, but not which observation changed which field or how conflicting writes were resolved. No entity resolution across files. Scale limits hit quickly (one user's 112-person markdown CRM is already painful).
+**Production-scale convergent evolution (March 2026):** Three independent, production-scale agent platforms converged on file-based markdown memory without copying each other — confirming this is the dominant real-world pattern:
+- **Manus** ($100M ARR, acquired by Meta for ~$2-3B): Uses `todo.md` and filesystem as primary memory. Chose files for KV-cache economics: 100:1 input-to-output token ratio and 10x cost difference between cached/uncached tokens on Claude Sonnet make stable, append-only file context an optimization for unit economics.
+- **Claude Code** ($2.5B run-rate revenue): Uses hierarchical `CLAUDE.md` files with progressive directory-scoped loading and auto-memory with a 200-line cap. Anthropic documents that overly large files reduce adherence.
+- **OpenClaw** (310K GitHub stars): Uses `MEMORY.md` + dated memory files + optional `sqlite-vec` vector index with hybrid retrieval (vectorWeight 0.7, textWeight 0.3, temporal decay). Implements automatic memory flush on context window limits.
+
+This convergent evolution validates the problem: file-based memory is the natural starting point, and the failure modes these systems hit are exactly where Neotoma provides value. Source: [Micheal Lanham, "The Markdown File That Beat a $50M Vector Database"](https://medium.com/@Micheal-Lanham/the-markdown-file-that-beat-a-50m-vector-database-38e1f5113cbe), March 2026.
+
+**What breaks:** Files conflate observations with snapshots — when two agents write conflicting values, both edits land silently. No structured queries — finding "all contacts at Acme" requires grep, not a query. Merge conflicts on concurrent writes. Git versions file snapshots, not entity observations — it can tell you what a file looked like at a commit, but not which observation changed which field or how conflicting writes were resolved. No entity resolution across files. Scale limits hit quickly (one user's 112-person markdown CRM is already painful). Context budget pressure — files get bloated and internally contradictory as memory grows.
 
 ### Flat JSON/YAML files
 
@@ -156,9 +163,11 @@ The build-in-house explosion: 10+ independent implementations of agent memory id
 
 **What breaks:** Maintenance burden — every custom system needs its own schema evolution, entity resolution, conflict handling, and migration story. No community, no shared improvements. Fragile to the original builder's availability. Typically lacks provenance, versioning, and cross-tool access because those are hard to build right.
 
-### VC-funded competitors (Mem0, Zep, LangChain memory)
+### VC-funded competitors (Mem0, Zep, Letta, LangChain memory)
 
 Retrieval-augmented memory: vector embeddings, semantic search, probabilistic matching. Different paradigm from deterministic state.
+
+**Current landscape (Q1 2026):** Mem0 ($24M raised), Letta ($10M seed at $70M valuation, Graphiti project at 20K+ GitHub stars), Zep. Vector search is becoming a commodity feature — embedded in Postgres extensions, integrated database features, and managed services. The market is bifurcating: file-first for single-user/local agents, VC-funded infrastructure for enterprise/multi-user durability, governance, and scale.
 
 **What Neotoma provides that they don't:** State integrity, not retrieval quality. Deterministic state evolution (same inputs → same state). Versioned history with temporal queries. Schema constraints with write-time validation. Field-level provenance. Cross-tool access via MCP. Local-first with no cloud dependency.
 
