@@ -2,6 +2,13 @@ import { Link } from "react-router-dom";
 import { Check } from "lucide-react";
 import { PRODUCT_NAV_SOURCES } from "@/utils/analytics";
 import { TrackedProductLink } from "../TrackedProductNav";
+import {
+  CODE_BLOCK_CARD_INNER_CLASS,
+  CODE_BLOCK_CARD_SHELL_CLASS,
+  CODE_BLOCK_CHROME_STACK_CLASS,
+  CODE_BLOCK_CHROME_SUBTITLE_CLASS,
+  EVALUATE_PROMPT_PILL_CLASS,
+} from "../code_block_copy_button_classes";
 import { GLOSSARY_ROWS } from "../../site/site_data";
 import { DetailPage } from "../DetailPage";
 import { StateFlowDiagram } from "../illustrations/StateFlowDiagram";
@@ -181,14 +188,29 @@ export function ArchitecturePage() {
       <div className="mb-6 max-w-md">
         <StateFlowDiagram />
       </div>
-      <div className="rounded-lg border code-block-palette p-4 md:p-5 font-mono text-[13px] leading-6 overflow-x-auto mb-6">
-        <p className="mb-1">Structured payloads (entities JSON via MCP / CLI / REST)</p>
-        <p className="mb-1 text-muted-foreground pl-4">&darr; record observations</p>
-        <p className="mb-1">Observations (granular facts with provenance)</p>
-        <p className="mb-1 text-muted-foreground pl-4">&darr; reduce (deterministic)</p>
-        <p className="mb-1">Entity snapshots (current truth, versioned)</p>
-        <p className="mb-1 text-muted-foreground pl-4">&darr; relate</p>
-        <p>Memory graph (entities + relationships + timeline)</p>
+      <div className={`mb-6 w-full max-w-none text-left ${CODE_BLOCK_CARD_SHELL_CLASS}`}>
+        <div className="mb-3 flex flex-col gap-3">
+          <div className={CODE_BLOCK_CHROME_STACK_CLASS}>
+            <div className={EVALUATE_PROMPT_PILL_CLASS}>
+              <span className="h-2 w-2 rounded-full bg-emerald-500/80 dark:bg-emerald-400/80" aria-hidden />
+              State flow
+            </div>
+            <div className={CODE_BLOCK_CHROME_SUBTITLE_CLASS}>
+              How structured writes become durable entities, relationships, and timeline state.
+            </div>
+          </div>
+        </div>
+        <div
+          className={`${CODE_BLOCK_CARD_INNER_CLASS} p-4 md:p-5 font-mono text-[13px] leading-6 overflow-x-auto`}
+        >
+          <p className="mb-1">Structured payloads (entities JSON via MCP / CLI / REST)</p>
+          <p className="mb-1 text-muted-foreground pl-4">&darr; record observations</p>
+          <p className="mb-1">Observations (granular facts with provenance)</p>
+          <p className="mb-1 text-muted-foreground pl-4">&darr; reduce (deterministic)</p>
+          <p className="mb-1">Entity snapshots (current truth, versioned)</p>
+          <p className="mb-1 text-muted-foreground pl-4">&darr; relate</p>
+          <p>Memory graph (entities + relationships + timeline)</p>
+        </div>
       </div>
 
       <SectionDivider />

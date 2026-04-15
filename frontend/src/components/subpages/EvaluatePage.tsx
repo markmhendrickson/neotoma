@@ -286,7 +286,10 @@ export function EvaluatePage() {
             for the canonical end-to-end workflow.
           </li>
           <li>
-            If Neotoma is not installed, run{" "}
+            If Neotoma is not installed, choose the install path that matches the
+            current tool. For OpenClaw, prefer{" "}
+            <code className="text-sm bg-muted px-1.5 py-0.5 rounded">openclaw plugins install clawhub:neotoma</code>.
+            For other local tools, run{" "}
             <code className="text-sm bg-muted px-1.5 py-0.5 rounded">npm install -g neotoma</code>{" "}
             and{" "}
             <code className="text-sm bg-muted px-1.5 py-0.5 rounded">neotoma init</code>.
@@ -315,8 +318,9 @@ export function EvaluatePage() {
             After the first successful ingest and timeline reconstruction,
             configure the current tool for the strongest ongoing Neotoma usage:
             use a Custom GPT or remote MCP for ChatGPT when supported, a Project
-            plus connector and instructions for Claude, or local MCP wiring first
-            for Cursor, Claude Code, Codex, and OpenClaw.
+            plus connector and instructions for Claude, local MCP wiring first
+            for Cursor, Claude Code, and Codex, and the native plugin path first
+            for OpenClaw.
           </li>
           <li>
             If the current tool is too constrained for robust Neotoma usage

@@ -45,25 +45,6 @@ const STARTER_COMMANDS = [
   },
 ];
 
-const KNOWN_LIMITATIONS: { limitation: string; workaround: string }[] = [
-  {
-    limitation:
-      "MCP tool calls may time out for very large stores (100+ entities in one call).",
-    workaround: "Batch into groups of 20\u201350 entities per store call.",
-  },
-  {
-    limitation: "Neotoma runs locally \u2014 data is not synced across machines by default.",
-    workaround:
-      "Use the remote HTTP transport or deploy Neotoma as a remote MCP server for multi-machine access.",
-  },
-  {
-    limitation:
-      "Schema evolution is additive. Removing fields requires a major version bump.",
-    workaround:
-      "Plan schemas with future fields in mind. Use flexible entity types for exploratory data.",
-  },
-];
-
 export function IntegrationBeforeAfter({ toolName }: IntegrationExtrasProps) {
   return (
     <IntegrationSection
@@ -121,29 +102,6 @@ export function IntegrationActivation({ toolName }: IntegrationExtrasProps) {
             </p>
             <p className="text-[14px] leading-6 text-foreground/80 italic">
               &ldquo;{cmd.command}&rdquo;
-            </p>
-          </div>
-        ))}
-      </div>
-    </IntegrationSection>
-  );
-}
-
-export function IntegrationLimitations() {
-  return (
-    <IntegrationSection
-      sectionKey="known-limitations"
-      title="Known limitations"
-    >
-      <div className="space-y-3">
-        {KNOWN_LIMITATIONS.map((item) => (
-          <div key={item.limitation} className="text-[14px] leading-6">
-            <p className="text-foreground/80">{item.limitation}</p>
-            <p className="text-muted-foreground mt-0.5">
-              <span className="font-medium text-foreground/70">
-                Workaround:
-              </span>{" "}
-              {item.workaround}
             </p>
           </div>
         ))}

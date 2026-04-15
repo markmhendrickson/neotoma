@@ -1,6 +1,6 @@
 {
   "name": "neotoma",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "description": "MCP server for structured personal data memory with unified source ingestion",
   "main": "dist/index.js",
   "type": "module",
@@ -131,6 +131,7 @@
     "illustrations:guarantees:sym": "tsx scripts/generate_guarantee_sym_hero_pngs.ts",
     "illustrations:guarantees:sym:square": "tsx scripts/generate_guarantee_sym_square_icp_pngs.ts"
   },
+  "mcpName": "io.github.markmhendrickson/neotoma",
   "keywords": [
     "mcp",
     "model-context-protocol",
@@ -151,7 +152,13 @@
   "openclaw": {
     "extensions": [
       "./dist/openclaw_entry.js"
-    ]
+    ],
+    "compat": {
+      "pluginApi": "2026.3.24-beta.2"
+    },
+    "build": {
+      "openclawVersion": "2026.3.24-beta.2"
+    }
   },
   "files": [
     "dist",
@@ -266,7 +273,7 @@
     "vitest": "^4.0.17"
   },
   "peerDependencies": {
-    "openclaw": ">=2026.3.0"
+    "openclaw": "2026.3.24-beta.2"
   },
   "peerDependenciesMeta": {
     "openclaw": {

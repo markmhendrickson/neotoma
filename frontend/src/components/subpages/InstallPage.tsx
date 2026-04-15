@@ -1,7 +1,6 @@
-import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useHashSyncedTab } from "@/hooks/use_hash_synced_tab";
-import { Check, ChevronDown, Clock, Copy, RotateCcw } from "lucide-react";
+import { Check, Clock, Copy, RotateCcw } from "lucide-react";
 import { SiClaude, SiOpenai } from "react-icons/si";
 import { SITE_CODE_SNIPPETS } from "../../site/site_data";
 import { useCopyFeedback } from "../../lib/copy_feedback";
@@ -12,7 +11,14 @@ import {
   type InstallPromptCopyBlock,
 } from "@/utils/analytics";
 import { TrackedProductLink } from "../TrackedProductNav";
-import { CODE_BLOCK_COPY_BUTTON_ABSOLUTE } from "../code_block_copy_button_classes";
+import {
+  CODE_BLOCK_CARD_INNER_CLASS,
+  CODE_BLOCK_CARD_SHELL_CLASS,
+  CODE_BLOCK_CHROME_STACK_CLASS,
+  CODE_BLOCK_CHROME_SUBTITLE_CLASS,
+  CODE_BLOCK_COPY_BUTTON_INLINE,
+  EVALUATE_PROMPT_PILL_CLASS,
+} from "../code_block_copy_button_classes";
 import { DetailPage } from "../DetailPage";
 import { Button } from "../ui/button";
 import { Card, CardContent } from "../ui/card";
@@ -60,6 +66,69 @@ const INTEGRATIONS = [
   },
 ] as const;
 
+const INSTALL_BLOCK_CHROME: Record<InstallPromptCopyBlock, { title: string; subtitle: string }> = {
+  agent_assisted: {
+    title: "Agent prompt",
+    subtitle: "Paste this into an assistant to run the install-first Neotoma flow.",
+  },
+  manual_commands: {
+    title: "Manual install",
+    subtitle: "Run these commands yourself on the host machine.",
+  },
+  post_install_commands: {
+    title: "Start API",
+    subtitle: "Bring up the local API so MCP and CLI can connect.",
+  },
+  stdio_mcp: {
+    title: "MCP config",
+    subtitle: "Add this client config to connect Neotoma over stdio.",
+  },
+  docker_agent_prompt: {
+    title: "Docker prompt",
+    subtitle: "Use this when you want an assistant to handle the Docker path.",
+  },
+  docker_build: {
+    title: "Docker build",
+    subtitle: "Build the Neotoma image from the repository checkout.",
+  },
+  docker_run: {
+    title: "Docker run",
+    subtitle: "Start a persistent container with the data volume mounted.",
+  },
+  docker_init: {
+    title: "Docker init",
+    subtitle: "Initialize the Neotoma data directory inside the container.",
+  },
+  docker_mcp: {
+    title: "Docker MCP",
+    subtitle: "Point your MCP client at the containerized Neotoma server.",
+  },
+  docker_cli_example: {
+    title: "Docker CLI",
+    subtitle: "Run Neotoma commands inside the container with `docker exec`.",
+  },
+  doc_neotoma_with_cursor: {
+    title: "Cursor doc",
+    subtitle: "Cursor-specific install and connection example.",
+  },
+  doc_neotoma_with_claude_code: {
+    title: "Claude Code doc",
+    subtitle: "Claude Code-specific install and connection example.",
+  },
+  doc_claude_connect_desktop: {
+    title: "Claude Desktop doc",
+    subtitle: "Claude Desktop connection example for Neotoma.",
+  },
+  doc_codex_connect_local_stdio: {
+    title: "Codex doc",
+    subtitle: "Codex local stdio connection example for Neotoma.",
+  },
+  doc_openclaw_connect_local_stdio: {
+    title: "OpenClaw doc",
+    subtitle: "OpenClaw local stdio connection example for Neotoma.",
+  },
+};
+
 function sanitizeCodeForCopy(rawCode: string): string {
   return rawCode
     .split("\n")
@@ -85,6 +154,7 @@ function CodeBlock({
   installBlock: InstallPromptCopyBlock;
 }) {
   const [copied, markCopied] = useCopyFeedback(copyFeedbackId, 0);
+  const chrome = INSTALL_BLOCK_CHROME[installBlock];
 
   const onCopy = async () => {
     const ok = await copyTextToClipboard(sanitizeCodeForCopy(code));
@@ -94,19 +164,29 @@ function CodeBlock({
   };
 
   return (
-    <div className="relative mb-4">
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className={CODE_BLOCK_COPY_BUTTON_ABSOLUTE}
-        aria-label={copied ? "Copied" : "Copy"}
-        onClick={onCopy}
+    <div className={`relative mb-4 w-full text-left ${CODE_BLOCK_CARD_SHELL_CLASS}`}>
+      <div className="mb-3 flex flex-col gap-3 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-x-3 sm:gap-y-3">
+        <div className={CODE_BLOCK_CHROME_STACK_CLASS}>
+          <div className={EVALUATE_PROMPT_PILL_CLASS}>
+            <span className="h-2 w-2 rounded-full bg-emerald-500/80 dark:bg-emerald-400/80" aria-hidden />
+            {chrome.title}
+          </div>
+          <div className={CODE_BLOCK_CHROME_SUBTITLE_CLASS}>{chrome.subtitle}</div>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={CODE_BLOCK_COPY_BUTTON_INLINE}
+          aria-label={copied ? "Copied" : "Copy"}
+          onClick={onCopy}
+        >
+          {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+        </Button>
+      </div>
+      <pre
+        className={`${CODE_BLOCK_CARD_INNER_CLASS} code-block-palette p-4 overflow-x-auto font-mono text-[14px] whitespace-pre-wrap break-words`}
       >
-        {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-      </Button>
-      <pre className="rounded-lg border code-block-palette p-4 overflow-x-auto font-mono text-[14px] whitespace-pre-wrap break-words">
-        <span className="float-right h-8 w-20 shrink-0" aria-hidden />
         <code>{code}</code>
       </pre>
     </div>
@@ -159,23 +239,12 @@ const INSTALL_IMPACT_ROWS = [
 ] as const;
 
 function WhatChangesSection() {
-  const [open, setOpen] = useState(true);
-
   return (
     <div className="mb-8">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 text-left group"
-      >
-        <h2 className="text-[20px] font-medium tracking-[-0.01em]">
-          What changes on your system
-        </h2>
-        <ChevronDown
-          className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
-          aria-hidden
-        />
-      </button>
+      <hr className="mb-6 border-border" />
+      <h2 className="text-[20px] font-medium tracking-[-0.01em]">
+        What changes on your system
+      </h2>
       <p className="text-[14px] leading-6 text-muted-foreground mt-2 mb-3">
         <code className="text-[13px] bg-muted px-1.5 py-0.5 rounded">npm install -g neotoma</code>{" "}
         adds a CLI binary.{" "}
@@ -186,53 +255,39 @@ function WhatChangesSection() {
         background unless you start it. No telemetry, no phone-home.
       </p>
 
-      {open && (
-        <div className="rounded-lg border border-border overflow-x-auto mb-3">
-          <table className="w-full text-[13px]">
-            <thead>
-              <tr className="border-b border-border bg-muted/40">
-                <th className="px-3 py-2 text-left font-medium text-foreground">Created</th>
-                <th className="px-3 py-2 text-left font-medium text-foreground">Path</th>
-                <th className="px-3 py-2 text-left font-medium text-foreground">Scope</th>
-                <th className="px-3 py-2 text-left font-medium text-foreground whitespace-nowrap">
-                  <code className="text-[12px] bg-muted px-1 py-0.5 rounded">neotoma reset</code>
-                </th>
+      <div className="rounded-lg border border-border overflow-x-auto mb-3">
+        <table className="w-full text-[13px]">
+          <thead>
+            <tr className="border-b border-border bg-muted/40">
+              <th className="px-3 py-2 text-left font-medium text-foreground">Created</th>
+              <th className="px-3 py-2 text-left font-medium text-foreground">Path</th>
+              <th className="px-3 py-2 text-left font-medium text-foreground">Scope</th>
+              <th className="px-3 py-2 text-left font-medium text-foreground whitespace-nowrap">
+                <code className="text-[12px] bg-muted px-1 py-0.5 rounded">neotoma reset</code>
+              </th>
+            </tr>
+          </thead>
+          <tbody className="text-muted-foreground">
+            {INSTALL_IMPACT_ROWS.map((row) => (
+              <tr key={row.what} className="border-b border-border/50 last:border-0">
+                <td className="px-3 py-2 text-foreground whitespace-nowrap">{row.what}</td>
+                <td className="px-3 py-2 font-mono text-[12px]">{row.path}</td>
+                <td className="px-3 py-2 whitespace-nowrap">{row.scope}</td>
+                <td className="px-3 py-2">{row.reset}</td>
               </tr>
-            </thead>
-            <tbody className="text-muted-foreground">
-              {INSTALL_IMPACT_ROWS.map((row) => (
-                <tr key={row.what} className="border-b border-border/50 last:border-0">
-                  <td className="px-3 py-2 text-foreground whitespace-nowrap">{row.what}</td>
-                  <td className="px-3 py-2 font-mono text-[12px]">{row.path}</td>
-                  <td className="px-3 py-2 whitespace-nowrap">{row.scope}</td>
-                  <td className="px-3 py-2">{row.reset}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       <p className="text-[13px] leading-5 text-muted-foreground">
-        {open ? (
-          <>
-            <code className="text-[12px] bg-muted px-1 py-0.5 rounded">neotoma reset</code>{" "}
-            backs up every item to a timestamped directory before removing it,
-            then runs{" "}
-            <code className="text-[12px] bg-muted px-1 py-0.5 rounded">npm uninstall -g neotoma</code>.
-            If your <code className="text-[12px] bg-muted px-1 py-0.5 rounded">.env</code>{" "}
-            sets <code className="text-[12px] bg-muted px-1 py-0.5 rounded">NEOTOMA_DATA_DIR</code>,
-            that directory is protected and not removed.
-          </>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            className="underline underline-offset-2 hover:no-underline text-foreground"
-          >
-            See full breakdown of files, paths, and how reset reverses each →
-          </button>
-        )}
+        <code className="text-[12px] bg-muted px-1 py-0.5 rounded">neotoma reset</code>{" "}
+        backs up every item to a timestamped directory before removing it,
+        then runs{" "}
+        <code className="text-[12px] bg-muted px-1 py-0.5 rounded">npm uninstall -g neotoma</code>.
+        If your <code className="text-[12px] bg-muted px-1 py-0.5 rounded">.env</code>{" "}
+        sets <code className="text-[12px] bg-muted px-1 py-0.5 rounded">NEOTOMA_DATA_DIR</code>,
+        that directory is protected and not removed.
       </p>
     </div>
   );
@@ -307,7 +362,10 @@ export function InstallPage() {
         </li>
         <li className="text-[15px] leading-7 text-muted-foreground">
           <strong className="text-foreground">Install only if needed</strong> -
-          check whether Neotoma is already installed. If not, run{" "}
+          check whether Neotoma is already installed. If not, branch by tool:
+          for OpenClaw, prefer{" "}
+          <code className="text-sm bg-muted px-1.5 py-0.5 rounded">openclaw plugins install clawhub:neotoma</code>;
+          for other local tools, run{" "}
           <code className="text-sm bg-muted px-1.5 py-0.5 rounded">npm install -g neotoma</code>{" "}
           and{" "}
           <code className="text-sm bg-muted px-1.5 py-0.5 rounded">neotoma init</code>.
@@ -336,8 +394,10 @@ export function InstallPage() {
         <li className="text-[15px] leading-7 text-muted-foreground">
           <strong className="text-foreground">Configure the current tool</strong>{" "}
           - after first value is visible, set up the strongest ongoing Neotoma
-          workflow for the tool in use. If that tool is too constrained, say so
-          explicitly and recommend a better-supported primary environment.
+          workflow for the tool in use. For OpenClaw, keep the native plugin path
+          as the default and use manual MCP wiring only as fallback. If that tool
+          is too constrained, say so explicitly and recommend a better-supported
+          primary environment.
         </li>
       </ol>
       <p className="text-[14px] leading-6 text-muted-foreground mb-4">

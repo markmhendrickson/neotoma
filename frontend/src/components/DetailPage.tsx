@@ -100,7 +100,7 @@ export function DetailPage({
             ) : null}
             <span className="min-w-0">{title}</span>
           </h1>
-          <div className="post-prose [&_a:not([data-post-prose-cta])]:underline [&_a:not([data-post-prose-cta])]:hover:text-foreground [&_section[data-integration-section='getting-started']_a]:no-underline [&_section[data-integration-section='getting-started']_a]:hover:no-underline">
+          <div className="post-prose [&_a:not([data-post-prose-cta])]:underline [&_a:not([data-post-prose-cta])]:hover:text-foreground [&_a[class*='no-underline']]:!no-underline [&_a[class*='no-underline']]:hover:!no-underline [&_section[data-integration-section='getting-started']_a]:no-underline [&_section[data-integration-section='getting-started']_a]:hover:no-underline">
             {renderedChildren}
           </div>
         </div>
