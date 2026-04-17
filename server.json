@@ -3,7 +3,7 @@
   "name": "io.github.markmhendrickson/neotoma",
   "title": "Neotoma",
   "description": "MCP server for structured personal data memory with unified source ingestion",
-  "version": "0.4.3",
+  "version": "0.4.5",
   "websiteUrl": "https://neotoma.io",
   "repository": {
     "url": "https://github.com/markmhendrickson/neotoma",
@@ -14,7 +14,7 @@
     {
       "registryType": "npm",
       "identifier": "neotoma",
-      "version": "0.4.3",
+      "version": "0.4.5",
       "transport": {
         "type": "stdio"
       }
