@@ -306,6 +306,11 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         import_date: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
+      canonical_name_fields: ["invoice_number", "vendor_name", "invoice_date"],
+      temporal_fields: [
+        { field: "invoice_date", event_type: "InvoiceIssued" },
+        { field: "date_due", event_type: "InvoiceDue" },
+      ],
     },
     reducer_config: {
       merge_policies: {
@@ -350,6 +355,15 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         status: { type: "string", required: false },
         transaction_id: { type: "string", required: false },
       },
+      canonical_name_fields: [
+        "merchant_name",
+        "date_purchased",
+        "amount_total",
+      ],
+      temporal_fields: [
+        { field: "date_purchased", event_type: "ReceiptIssued" },
+        { field: "transaction_date", event_type: "TransactionDate" },
+      ],
     },
     reducer_config: {
       merge_policies: {
@@ -632,6 +646,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         import_date: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
+      canonical_name_fields: ["snapshot_date", "account_id"],
+      temporal_fields: [
+        { field: "snapshot_date", event_type: "BalanceSnapshot" },
+      ],
     },
     reducer_config: {
       merge_policies: {
@@ -920,6 +938,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         import_date: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
+      temporal_fields: [
+        { field: "due_date", event_type: "TaskDue" },
+        { field: "completed_date", event_type: "TaskCompleted" },
+      ],
     },
     reducer_config: {
       merge_policies: {
@@ -1147,6 +1169,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         row_index: { type: "number", required: false },
         source_file: { type: "string", required: false },
       },
+      canonical_name_fields: ["source_file", "row_index"],
     },
     reducer_config: {
       merge_policies: {},
@@ -1179,6 +1202,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         import_date: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
+      temporal_fields: [
+        { field: "start_time", event_type: "EventStart" },
+        { field: "end_time", event_type: "EventEnd" },
+      ],
     },
     reducer_config: {
       merge_policies: {
@@ -1273,6 +1300,16 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         bank_provider: { type: "string", required: false },
         amount_original: { type: "number", required: false },
       },
+      canonical_name_fields: [
+        "posting_date",
+        "category",
+        "amount_original",
+        "bank_provider",
+      ],
+      temporal_fields: [
+        { field: "posting_date", event_type: "TransactionPosted" },
+        { field: "transaction_date", event_type: "TransactionDate" },
+      ],
     },
     reducer_config: {
       merge_policies: {

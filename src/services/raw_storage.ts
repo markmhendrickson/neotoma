@@ -2,6 +2,9 @@
 // Content-addressed storage with SHA-256 hashing and local/cloud storage
 
 import crypto from "crypto";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { config } from "../config.js";
 import { db } from "../db.js";
 import { generateDeterministicSourceId } from "./source_identity.js";
 
@@ -263,5 +266,25 @@ export async function downloadRawContent(
   }
 
   return Buffer.from(await data.arrayBuffer());
+}
+
+/**
+ * Absolute filesystem path for a row's `storage_url` when using local raw storage
+ * (`sources` bucket → {@link config.rawStorageDir} + object key).
+ * Returns null for non-file keys (e.g. `internal://…`) or non-local backends.
+ */
+export function resolveLocalSourceFilePath(storageUrl: string | null | undefined): string | null {
+  if (storageUrl == null || typeof storageUrl !== "string") return null;
+  const u = storageUrl.trim();
+  if (!u || u.startsWith("internal://")) return null;
+  if (u.startsWith("file://")) {
+    try {
+      return fileURLToPath(u);
+    } catch {
+      return null;
+    }
+  }
+  if (config.storageBackend !== "local") return null;
+  return path.resolve(path.join(config.rawStorageDir, u));
 }
 

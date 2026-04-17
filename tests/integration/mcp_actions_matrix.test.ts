@@ -192,9 +192,10 @@ describe("MCP Actions Matrix - All 17 Actions", () => {
         createdEntityIds.push(entityId);
         createdSourceIds.push(storeData.source_id);
 
-        // Retrieve snapshot
+        // Retrieve snapshot (format: json for test parsing; markdown is the MCP default)
         const result = await callMCPAction(server, "retrieve_entity_snapshot", {
           entity_id: entityId,
+          format: "json",
         });
 
         const responseData = JSON.parse(result.content[0].text);
@@ -966,6 +967,7 @@ describe("MCP Actions Matrix - All 17 Actions", () => {
       // Immediately retrieve (strong consistency: read-after-write)
       const retrieveResult = await callMCPAction(server, "retrieve_entity_snapshot", {
         entity_id: entityId,
+        format: "json",
       });
 
       const retrieveData = JSON.parse(retrieveResult.content[0].text);

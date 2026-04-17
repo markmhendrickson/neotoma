@@ -86,6 +86,27 @@ describe("Cross-layer: CLI store commands → Database", () => {
       });
     });
 
+    it("should infer audio mime type for wav file via store --file-path", async () => {
+      const wavHeader = Buffer.from([
+        0x52, 0x49, 0x46, 0x46, 0x24, 0x00, 0x00, 0x00, 0x57, 0x41, 0x56, 0x45,
+        0x66, 0x6d, 0x74, 0x20, 0x10, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00,
+        0x44, 0xac, 0x00, 0x00, 0x88, 0x58, 0x01, 0x00, 0x02, 0x00, 0x10, 0x00,
+        0x64, 0x61, 0x74, 0x61, 0x00, 0x00, 0x00, 0x00,
+      ]);
+      const filePath = await files.createBinary("store-audio.wav", wavHeader);
+
+      const result = await execCliJson(
+        `store --file-path "${filePath}" --user-id "${TEST_USER_ID}"`
+      );
+
+      const sourceId = extractSourceId(result);
+      tracker.trackSource(sourceId);
+
+      await verifySourceExists(sourceId, {
+        mime_type: "audio/wav",
+      });
+    });
+
     it("should not create interpretation records for raw file store", async () => {
       const filePath = await files.createText(
         "store-no-interp.txt",
@@ -230,6 +251,27 @@ describe("Cross-layer: CLI store commands → Database", () => {
       tracker.trackSource(sourceId);
 
       await verifySourceExists(sourceId);
+    });
+  });
+
+  describe("upload command → sources table", () => {
+    it("should create source record for wav file without base64 transport limits", async () => {
+      const wavHeader = Buffer.from([
+        0x52, 0x49, 0x46, 0x46, 0x24, 0x00, 0x00, 0x00, 0x57, 0x41, 0x56, 0x45,
+        0x66, 0x6d, 0x74, 0x20, 0x10, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00,
+        0x44, 0xac, 0x00, 0x00, 0x88, 0x58, 0x01, 0x00, 0x02, 0x00, 0x10, 0x00,
+        0x64, 0x61, 0x74, 0x61, 0x00, 0x00, 0x00, 0x00,
+      ]);
+      const filePath = await files.createBinary("upload-audio.wav", wavHeader);
+
+      const result = await execCliJson(`upload "${filePath}" --idempotency-key "upload-wav-${Date.now()}"`);
+
+      const sourceId = extractSourceId(result);
+      tracker.trackSource(sourceId);
+
+      await verifySourceExists(sourceId, {
+        mime_type: "audio/wav",
+      });
     });
   });
 

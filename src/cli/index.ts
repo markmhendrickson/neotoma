@@ -19,6 +19,7 @@ import { createApiClient } from "../shared/api_client.js";
 import { getOpenApiOperationMapping } from "../shared/contract_mappings.js";
 import { getEntityDisplayName } from "../shared/entity_display_name.js";
 import { getRecordDisplaySummary } from "../shared/record_display_summary.js";
+import { getMimeTypeFromExtension } from "../services/file_text_extraction.js";
 import {
   CONFIG_DIR,
   CONFIG_PATH,
@@ -97,6 +98,11 @@ type SuggestionLinesRef = { current: number };
 export type SessionHistoryRef = { history: string[]; indexRef: { current: number } };
 
 const MAX_SESSION_HISTORY = 100;
+
+function inferMimeTypeForPath(filePath: string): string {
+  const ext = path.extname(filePath).toLowerCase();
+  return getMimeTypeFromExtension(ext) ?? "application/octet-stream";
+}
 
 export function getPromptPlaceholder(buffer: string, placeholderText = "/ for commands"): string {
   return placeholderText.length > 0 && buffer.length === 0 ? placeholderText : "";
@@ -4290,12 +4296,17 @@ const initCommand = program
     "For key_derived auth: create, existing, or skip (skip corresponding prompt when provided)"
   )
   .option("--key-path <path>", "Path to an existing key file for key_derived auth")
+  .option(
+    "--idempotent",
+    "If already initialized, exit 0 with a report instead of prompting or failing"
+  )
   .action(
     async (opts: {
       dataDir?: string;
       force?: boolean;
       skipDb?: boolean;
       skipEnv?: boolean;
+      idempotent?: boolean;
       yes?: boolean;
       interactive?: boolean;
       advanced?: boolean;
@@ -4312,6 +4323,26 @@ const initCommand = program
     }) => {
       try {
         const outputMode = resolveOutputMode();
+        if (opts.idempotent) {
+          try {
+            const { runDoctor } = await import("./doctor.js");
+            const report = await runDoctor({ cwd: process.cwd() });
+            if (report.data.initialized && !opts.force) {
+              writeOutput(
+                {
+                  ok: true,
+                  already_initialized: true,
+                  data: report.data,
+                  neotoma: { version: report.neotoma.version },
+                },
+                outputMode
+              );
+              return;
+            }
+          } catch {
+            // Fall through to normal init on any detection error.
+          }
+        }
         const interactiveRequested = Boolean(opts.interactive || opts.advanced);
         let useAdvancedPrompts = interactiveRequested;
         const applyDefaultsWithoutPrompts = Boolean(opts.yes || !interactiveRequested);
@@ -7957,6 +7988,139 @@ program
     }
   );
 
+program
+  .command("doctor")
+  .description(
+    "Consolidated diagnostics for agent-led onboarding (install/runtime/api/mcp/cli-instructions/permissions)"
+  )
+  .action(async () => {
+    const outputMode = resolveOutputMode();
+    const { runDoctor } = await import("./doctor.js");
+    const report = await runDoctor({ cwd: process.cwd() });
+    writeOutput(report, outputMode);
+  });
+
+program
+  .command("setup")
+  .description(
+    "One-shot setup: init (idempotent) + MCP + CLI instructions + permissions for the current harness"
+  )
+  .option("--tool <tool>", "Target harness (claude-code|cursor|codex|openclaw|claude-desktop)")
+  .option("--scope <scope>", "Permission scope (project|user|both)", "project")
+  .option("--dry-run", "Plan the setup without writing files", false)
+  .option("--yes", "Assume yes for prompts (currently unused; runners default to non-interactive)", false)
+  .option("--skip-permissions", "Skip permission-file writes", false)
+  .action(async (opts) => {
+    const outputMode = resolveOutputMode();
+    const { runSetup } = await import("./setup.js");
+    const report = await runSetup({
+      tool: opts.tool ?? null,
+      dryRun: Boolean(opts.dryRun),
+      yes: Boolean(opts.yes),
+      skipPermissions: Boolean(opts.skipPermissions),
+      scope: opts.scope ?? "project",
+      cwd: process.cwd(),
+    });
+    const exitCode = report.overall_ok ? 0 : 1;
+    writeOutput(report, outputMode);
+    process.exitCode = exitCode;
+  });
+
+// `neotoma hooks` — lifecycle hook install/uninstall/status. Deliberately
+// separate from `neotoma setup`: hooks are offered during activation (after
+// the first-Aha timeline) rather than at install time. See install.md.
+const hooksCommand = program
+  .command("hooks")
+  .description(
+    "Install Neotoma lifecycle hooks for a supported harness (cursor|claude-code|codex|opencode|claude-agent-sdk). Offered during activation, not setup."
+  );
+
+hooksCommand
+  .command("status")
+  .description("Print per-harness hook installation state (uses `neotoma doctor`).")
+  .action(async () => {
+    const outputMode = resolveOutputMode();
+    const { runHooksStatus } = await import("./hooks.js");
+    const status = await runHooksStatus({ cwd: process.cwd() });
+    writeOutput(status, outputMode);
+  });
+
+hooksCommand
+  .command("install")
+  .description("Install Neotoma hooks for the given harness after running guardrails.")
+  .requiredOption(
+    "--tool <tool>",
+    "Target harness (cursor|claude-code|codex|opencode|claude-agent-sdk)"
+  )
+  .option("--dry-run", "Plan the install without writing files", false)
+  .option("--yes", "Skip the confirmation prompt", false)
+  .option(
+    "--force",
+    "Proceed even when another hook plugin is already present",
+    false
+  )
+  .action(async (opts) => {
+    const outputMode = resolveOutputMode();
+    const { runHooksInstall } = await import("./hooks.js");
+    const { toHookHarness } = await import("./hooks_detect.js");
+    const tool = toHookHarness(opts.tool);
+    if (!tool) {
+      writeOutput(
+        {
+          ok: false,
+          action: "install",
+          message: `Unsupported --tool value: ${opts.tool}. Expected one of cursor|claude-code|codex|opencode|claude-agent-sdk.`,
+        },
+        outputMode
+      );
+      process.exitCode = 1;
+      return;
+    }
+    const result = await runHooksInstall({
+      tool,
+      cwd: process.cwd(),
+      dryRun: Boolean(opts.dryRun),
+      yes: Boolean(opts.yes),
+      force: Boolean(opts.force),
+    });
+    writeOutput(result, outputMode);
+    process.exitCode = result.ok ? 0 : 1;
+  });
+
+hooksCommand
+  .command("uninstall")
+  .description("Remove Neotoma hook entries for the given harness (leaves other plugins in place).")
+  .requiredOption(
+    "--tool <tool>",
+    "Target harness (cursor|claude-code|codex|opencode|claude-agent-sdk)"
+  )
+  .option("--dry-run", "Plan the uninstall without writing files", false)
+  .action(async (opts) => {
+    const outputMode = resolveOutputMode();
+    const { runHooksUninstall } = await import("./hooks.js");
+    const { toHookHarness } = await import("./hooks_detect.js");
+    const tool = toHookHarness(opts.tool);
+    if (!tool) {
+      writeOutput(
+        {
+          ok: false,
+          action: "uninstall",
+          message: `Unsupported --tool value: ${opts.tool}. Expected one of cursor|claude-code|codex|opencode|claude-agent-sdk.`,
+        },
+        outputMode
+      );
+      process.exitCode = 1;
+      return;
+    }
+    const result = await runHooksUninstall({
+      tool,
+      cwd: process.cwd(),
+      dryRun: Boolean(opts.dryRun),
+    });
+    writeOutput(result, outputMode);
+    process.exitCode = result.ok ? 0 : 1;
+  });
+
 const storageCommand = program.command("storage").description("Storage locations and file paths");
 
 storageCommand
@@ -8733,6 +8897,139 @@ backupCommand
     }
   });
 
+// ── Mirror ────────────────────────────────────────────────────────────────
+
+const mirrorCommand = program
+  .command("mirror")
+  .description(
+    "Filesystem markdown mirror of entities/relationships/sources/timeline/schemas"
+  );
+
+mirrorCommand
+  .command("enable")
+  .description("Enable the markdown mirror and optionally configure path/kinds/git")
+  .option("--path <dir>", "Mirror root directory (default: data/mirror)")
+  .option(
+    "--kinds <list>",
+    "Comma-separated kinds to mirror (entities,relationships,sources,timeline,schemas)"
+  )
+  .option("--git", "Enable git-backed mirror (Phase 3)")
+  .option("--no-git", "Disable git-backed mirror")
+  .action(
+    async (opts: { path?: string; kinds?: string; git?: boolean }) => {
+      const outputMode = resolveOutputMode();
+      try {
+        const { runMirrorEnable, formatMirrorConfig } = await import(
+          "./commands/mirror.js"
+        );
+        const cfg = await runMirrorEnable({
+          path: opts.path,
+          kinds: opts.kinds,
+          git: opts.git === true ? true : undefined,
+          noGit: opts.git === false ? true : undefined,
+        });
+        if (outputMode === "json") {
+          writeOutput(cfg, outputMode);
+        } else {
+          process.stdout.write(formatMirrorConfig(cfg) + "\n");
+          process.stdout.write(
+            "\nRun `neotoma mirror rebuild` to populate the mirror from the database.\n"
+          );
+        }
+      } catch (err) {
+        writeCliError(err instanceof Error ? err.message : String(err));
+        process.exitCode = 1;
+      }
+    }
+  );
+
+mirrorCommand
+  .command("disable")
+  .description("Disable the markdown mirror (existing files are left in place)")
+  .action(async () => {
+    const outputMode = resolveOutputMode();
+    try {
+      const { runMirrorDisable, formatMirrorConfig } = await import(
+        "./commands/mirror.js"
+      );
+      const cfg = await runMirrorDisable();
+      if (outputMode === "json") {
+        writeOutput(cfg, outputMode);
+      } else {
+        process.stdout.write(formatMirrorConfig(cfg) + "\n");
+      }
+    } catch (err) {
+      writeCliError(err instanceof Error ? err.message : String(err));
+      process.exitCode = 1;
+    }
+  });
+
+mirrorCommand
+  .command("rebuild")
+  .description("Regenerate markdown files for one or all mirror kinds from the database")
+  .option(
+    "--kind <kind>",
+    "One of: all, entities, relationships, sources, timeline, schemas",
+    "all"
+  )
+  .option("--entity-type <type>", "Restrict entity rebuild to a single entity_type")
+  .option("--entity-id <id>", "Restrict entity rebuild to a single entity_id")
+  .option(
+    "--clean",
+    "Remove stale files in the mirror that no longer correspond to database rows",
+    false
+  )
+  .action(
+    async (opts: {
+      kind?: string;
+      entityType?: string;
+      entityId?: string;
+      clean?: boolean;
+    }) => {
+      const outputMode = resolveOutputMode();
+      try {
+        const { runMirrorRebuild, formatRebuildReport } = await import(
+          "./commands/mirror.js"
+        );
+        const result = await runMirrorRebuild({
+          kind: opts.kind,
+          entityType: opts.entityType,
+          entityId: opts.entityId,
+          clean: Boolean(opts.clean),
+        });
+        if (outputMode === "json") {
+          writeOutput(result, outputMode);
+        } else {
+          process.stdout.write(formatRebuildReport(result) + "\n");
+        }
+      } catch (err) {
+        writeCliError(err instanceof Error ? err.message : String(err));
+        process.exitCode = 1;
+      }
+    }
+  );
+
+mirrorCommand
+  .command("status")
+  .description("Show mirror configuration and counts of mirrored files by kind")
+  .action(async () => {
+    const outputMode = resolveOutputMode();
+    try {
+      const { runMirrorStatus, formatMirrorStatus } = await import(
+        "./commands/mirror.js"
+      );
+      const status = await runMirrorStatus();
+      if (outputMode === "json") {
+        writeOutput(status, outputMode);
+      } else {
+        process.stdout.write(formatMirrorStatus(status) + "\n");
+      }
+    } catch (err) {
+      writeCliError(err instanceof Error ? err.message : String(err));
+      process.exitCode = 1;
+    }
+  });
+
 // ── Logs ──────────────────────────────────────────────────────────────────
 
 const logsCommand = program.command("logs").description("View and decrypt persistent log files");
@@ -9052,6 +9349,17 @@ apiCommand
       }
       process.stderr.write(`neotoma api start: ${error}\n`);
       return;
+    }
+    // Persist preferred_env so plain CLI commands (e.g. `neotoma store`) route to
+    // the same SQLite DB file as the running API, even when no --env flag or env
+    // var is set. Read by `resolveLocalTransportEnv` in src/shared/local_transport.ts.
+    try {
+      const existingConfig = await readConfig();
+      if (existingConfig.preferred_env !== envOpt) {
+        await writeConfig({ ...existingConfig, preferred_env: envOpt });
+      }
+    } catch {
+      // Non-fatal: preferred_env is an optimization, not required for api start.
     }
     const effectiveEnv = envOpt === "prod" ? "production" : "development";
     const apiLogsDir = path.join(CONFIG_DIR, effectiveEnv === "production" ? "logs_prod" : "logs");
@@ -10287,6 +10595,8 @@ schemasCommand
       params: {
         query: {
           entity_type: opts.entityType,
+          user_id: opts.userId,
+          user_specific: opts.userSpecific,
           limit: Number(opts.limit),
           offset: Number(opts.offset),
         } as any,
@@ -10461,14 +10771,82 @@ schemasCommand
         }
         fieldsToRemove = parsed;
       }
+      const { data: existingSchemaData, error: existingSchemaError } = await api.GET(
+        "/schemas/{entity_type}",
+        {
+          params: {
+            path: { entity_type: entityType },
+            query: { user_id: opts.userId } as any,
+          } as any,
+        }
+      );
+      const existingSchema =
+        !existingSchemaError && existingSchemaData
+          ? (existingSchemaData as Record<string, unknown>)
+          : null;
+      if (!existingSchema && fieldsToAdd && fieldsToAdd.length > 0) {
+        const removalSet = new Set(fieldsToRemove || []);
+        const bootstrapFields = Object.fromEntries(
+          fieldsToAdd
+            .filter((field) => !removalSet.has(field.field_name))
+            .map((field) => [
+              field.field_name,
+              { type: field.field_type, required: field.required ?? false },
+            ])
+        );
+        if (Object.keys(bootstrapFields).length === 0) {
+          throw new Error("at least one field must remain after removals");
+        }
+        const bootstrapPolicies = Object.fromEntries(
+          fieldsToAdd
+            .filter((field) => !removalSet.has(field.field_name))
+            .map((field) => [
+              field.field_name,
+              {
+                strategy: field.reducer_strategy || "last_write",
+                tie_breaker: "observed_at",
+              },
+            ])
+        );
+        const { data, error } = await api.POST("/register_schema", {
+          body: {
+            entity_type: entityType,
+            schema_definition: { fields: bootstrapFields },
+            reducer_config: { merge_policies: bootstrapPolicies },
+            schema_version: opts.schemaVersion,
+            activate: true,
+            user_id: opts.userId,
+            user_specific: opts.userSpecific,
+          },
+        });
+        if (error) throw new Error("Failed to update schema");
+        const registerResult = data as Record<string, unknown> | null;
+        if (
+          registerResult &&
+          typeof registerResult["schema"] === "object" &&
+          registerResult["schema"] !== null
+        ) {
+          const schemaObj = registerResult["schema"] as Record<string, unknown>;
+          const normalizedSchema = {
+            ...schemaObj,
+            fields:
+              (schemaObj["schema_definition"] as Record<string, unknown> | undefined)?.["fields"] ??
+              schemaObj["fields"],
+          };
+          writeOutput({ ...registerResult, schema: normalizedSchema }, outputMode);
+        } else {
+          writeOutput(data, outputMode);
+        }
+        return;
+      }
       const body: Record<string, unknown> = {
         entity_type: entityType,
         user_id: opts.userId,
-        activate: opts.activate,
         migrate_existing: opts.migrateExisting,
         schema_version: opts.schemaVersion,
         user_specific: opts.userSpecific,
       };
+      if (opts.activate) body.activate = true;
       if (fieldsToAdd) body.fields_to_add = fieldsToAdd;
       if (fieldsToRemove) body.fields_to_remove = fieldsToRemove;
       const { data, error } = await api.POST("/update_schema_incremental", {
@@ -10554,7 +10932,7 @@ schemasCommand
         );
       }
       const schemaDefinition = { fields: schemaFields };
-      const reducerConfig = {};
+      const reducerConfig = { merge_policies: {} };
       const { data, error } = await api.POST("/register_schema", {
         body: {
           entity_type: entityType,
@@ -10593,8 +10971,7 @@ program
   .option("--set <types>", "Comma-separated data types to prioritize (e.g. project_files,chat_transcripts,meeting_notes,notes,code,email,financial,custom)")
   .option("--show", "Show current preferences", false)
   .option("--reset", "Reset preferences to default", false)
-  .action(async (cmd: Command) => {
-    const opts = cmd.opts() as { set?: string; show?: boolean; reset?: boolean };
+  .action(async (opts: { set?: string; show?: boolean; reset?: boolean }) => {
     const config = await readConfig();
     const token = await getCliToken();
     const api = createApiClient({
@@ -10691,13 +11068,15 @@ program
   .option("--top <n>", "Number of top candidates to show", "20")
   .option("--mode <mode>", "Discovery mode: quick, guided, full", "quick")
   .option("--output <format>", "Output format: text, json", "text")
-  .action(async (paths: string[], cmd: Command) => {
-    const opts = cmd.opts() as {
+  .action(async (
+    paths: string[],
+    opts: {
       depth?: string;
       top?: string;
       mode?: string;
       output?: string;
-    };
+    },
+  ) => {
     const { discover, formatDiscoveryOutput, formatDiscoveryJson } = await import(
       "./discovery.js"
     );
@@ -10728,13 +11107,15 @@ program
   .option("--preview", "Preview extracted data without storing", false)
   .option("--limit <n>", "Process only the N most recent conversations")
   .option("--filter <term>", "Only process conversations containing this term")
-  .action(async (filePath: string, cmd: Command) => {
-    const opts = cmd.opts() as {
+  .action(async (
+    filePath: string,
+    opts: {
       source?: string;
       preview?: boolean;
       limit?: string;
       filter?: string;
-    };
+    },
+  ) => {
     const { parseTranscript, formatTranscriptPreview } = await import(
       "./transcript_parser.js"
     );
@@ -10796,38 +11177,31 @@ program
 
     let unstructuredBody: Record<string, unknown> = {};
     if (hasUnstructured) {
-      let fileBuffer: Buffer;
       let originalFilename: string | undefined;
       if (opts.filePath) {
         const resolvedPath = path.isAbsolute(opts.filePath)
           ? opts.filePath
           : path.resolve(process.cwd(), opts.filePath);
-        fileBuffer = await fs.readFile(resolvedPath);
+        await fs.access(resolvedPath);
         originalFilename = path.basename(resolvedPath);
+        unstructuredBody = {
+          file_path: resolvedPath,
+          mime_type: inferMimeTypeForPath(resolvedPath),
+          original_filename: originalFilename,
+        };
       } else {
-        fileBuffer = Buffer.from(opts.fileContent as string, "utf-8");
+        const fileBuffer = Buffer.from(opts.fileContent as string, "utf-8");
         originalFilename = undefined;
+        unstructuredBody = {
+          file_content: fileBuffer.toString("base64"),
+          mime_type: "text/plain",
+          original_filename: originalFilename,
+        };
       }
-
-      const ext = originalFilename ? path.extname(originalFilename).toLowerCase() : "";
-      const mimeMap: Record<string, string> = {
-        ".json": "application/json",
-        ".txt": "text/plain",
-        ".csv": "text/csv",
-        ".md": "text/markdown",
-        ".pdf": "application/pdf",
-      };
-      const mimeType = mimeMap[ext] ?? "application/octet-stream";
-      const contentBase64 = fileBuffer.toString("base64");
-      unstructuredBody = {
-        file_content: contentBase64,
-        mime_type: mimeType,
-        original_filename: originalFilename,
-      };
       if (opts.fileIdempotencyKey) {
         unstructuredBody.file_idempotency_key = opts.fileIdempotencyKey;
       } else if (!hasStructured && opts.idempotencyKey) {
-        unstructuredBody.idempotency_key = opts.idempotencyKey;
+        unstructuredBody.file_idempotency_key = opts.idempotencyKey;
       }
     }
 
@@ -11130,23 +11504,9 @@ program
         throw new Error(`File not found or not a file: ${resolvedPath}`);
       }
 
-      const fileBuffer = await fs.readFile(resolvedPath);
       const originalFilename = path.basename(resolvedPath);
-      const ext = path.extname(resolvedPath).toLowerCase();
-      const mimeMap: Record<string, string> = {
-        ".pdf": "application/pdf",
-        ".txt": "text/plain",
-        ".csv": "text/csv",
-        ".json": "application/json",
-        ".md": "text/markdown",
-        ".html": "text/html",
-        ".xml": "application/xml",
-        ".jpg": "image/jpeg",
-        ".jpeg": "image/jpeg",
-        ".png": "image/png",
-        ".gif": "image/gif",
-      };
-      const mimeType = opts.mimeType ?? mimeMap[ext] ?? "application/octet-stream";
+      const fileBuffer = await fs.readFile(resolvedPath);
+      const mimeType = opts.mimeType ?? inferMimeTypeForPath(resolvedPath);
 
       if (opts.local) {
         // Run the store+interpretation pipeline in-process without an API server.
@@ -11198,17 +11558,14 @@ program
         token,
       });
 
-      const base64 = fileBuffer.toString("base64");
       const body = {
-        file_content: base64,
+        file_path: resolvedPath,
         mime_type: mimeType,
         original_filename: originalFilename,
+        file_idempotency_key: opts.idempotencyKey,
       };
-      if (opts.idempotencyKey) {
-        (body as { idempotency_key?: string }).idempotency_key = opts.idempotencyKey;
-      }
 
-      const { data, error } = await api.POST("/store/unstructured", { body });
+      const { data, error } = await api.POST("/store", { body });
       if (error) throw new Error("Failed to upload file");
       writeOutput(data, outputMode);
     }
@@ -11384,6 +11741,384 @@ correctionsCommand
         { correction_id: correctionId, entity_id: entityId, success: result?.success ?? true },
         outputMode
       );
+    }
+  );
+
+// ---------------------------------------------------------------------------
+// neotoma edit <id>
+//
+// One-shot structured editor: opens $EDITOR on a YAML view of the entity
+// snapshot, diffs on save, and pushes an atomic batch correction through the
+// shared applyBatchCorrection service (same backend the Inspector Edit tab
+// uses). Conflicts surface as a resolvable prompt so the user can re-edit
+// against the rebased snapshot instead of overwriting blindly.
+// ---------------------------------------------------------------------------
+program
+  .command("edit")
+  .description("Edit an entity's fields in $EDITOR and save as a batch correction")
+  .argument("<id>", "Entity ID to edit")
+  .option("--user-id <userId>", "User ID")
+  .option("--overwrite", "Overwrite conflicting changes without prompting")
+  .option("--editor <cmd>", "Override editor command (defaults to $EDITOR)")
+  .action(
+    async (
+      entityId: string,
+      opts: { userId?: string; overwrite?: boolean; editor?: string }
+    ) => {
+      const outputMode = resolveOutputMode();
+      const config = await readConfig();
+      const token = await getCliToken();
+      const api = createApiClient({
+        baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+        token,
+      });
+
+      const yaml = await import("js-yaml");
+
+      async function fetchEntity(): Promise<{
+        entity_type: string;
+        snapshot: Record<string, unknown>;
+        last_observation_at: string | null;
+      }> {
+        const { data, error, response } = await api.GET("/entities/{id}", {
+          params: { path: { id: entityId } },
+        });
+        if (error) {
+          const status = response?.status;
+          throw new Error(
+            status
+              ? `Failed to load entity: ${status} ${formatApiError(error)}`
+              : `Failed to load entity: ${formatApiError(error)}`
+          );
+        }
+        const body = (data ?? {}) as Record<string, unknown>;
+        return {
+          entity_type:
+            (body.entity_type as string) ?? (body.type as string) ?? "unknown",
+          snapshot:
+            (body.snapshot as Record<string, unknown>) ??
+            (body.computed_snapshot as Record<string, unknown>) ??
+            {},
+          last_observation_at:
+            (body.last_observation_at as string | null | undefined) ?? null,
+        };
+      }
+
+      function buildEditorBuffer(
+        entity_type: string,
+        last_observation_at: string | null,
+        snapshot: Record<string, unknown>
+      ): string {
+        // Deterministic header plus alphabetized snapshot so repeated edits
+        // produce stable diffs. Trailing '---' is kept so the user sees where
+        // the editable region ends.
+        const sortedSnapshot = Object.fromEntries(
+          Object.keys(snapshot)
+            .sort()
+            .map((k) => [k, snapshot[k]])
+        );
+        const yamlBody = yaml.dump(sortedSnapshot, {
+          noRefs: true,
+          sortKeys: true,
+          lineWidth: 120,
+        });
+        return [
+          `# neotoma edit ${entityId}`,
+          `# entity_type: ${entity_type}`,
+          `# base_last_observation_at: ${last_observation_at ?? "null"}`,
+          "# Edit field values below. Lines starting with '#' are comments.",
+          "# Save and exit to apply changes; quit without saving to cancel.",
+          "---",
+          yamlBody.trimEnd(),
+          "",
+        ].join("\n");
+      }
+
+      function parseEditorBuffer(text: string): Record<string, unknown> {
+        // Strip comment-only lines before the first non-comment; yaml already
+        // skips blank lines and leading `---`.
+        const stripped = text
+          .split("\n")
+          .filter((l) => !l.startsWith("#"))
+          .join("\n");
+        const parsed = yaml.load(stripped);
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          return {};
+        }
+        return parsed as Record<string, unknown>;
+      }
+
+      async function runEditorOn(filePath: string): Promise<void> {
+        const editor = opts.editor ?? process.env.EDITOR ?? process.env.VISUAL ?? "vi";
+        // Let the editor inherit the TTY so the user gets an actual interactive
+        // session. spawnSync would block this process.
+        const [cmd, ...cmdArgs] = editor.split(" ");
+        await new Promise<void>((resolve, reject) => {
+          const child = spawn(cmd!, [...cmdArgs, filePath], { stdio: "inherit" });
+          child.on("error", reject);
+          child.on("exit", (code) =>
+            code === 0 ? resolve() : reject(new Error(`Editor exited with code ${code}`))
+          );
+        });
+      }
+
+      const first = await fetchEntity();
+
+      let current = first;
+      let buffer = buildEditorBuffer(
+        current.entity_type,
+        current.last_observation_at,
+        current.snapshot
+      );
+
+      // A modest loop to recover from conflicts: re-fetch, re-present the
+      // user's edits on top of the rebased snapshot, let them re-save.
+      let attempts = 0;
+      while (attempts < 5) {
+        attempts += 1;
+
+        const tmpPath = path.join(
+          os.tmpdir(),
+          `neotoma-edit-${entityId}-${Date.now()}-${attempts}.yaml`
+        );
+        await fs.writeFile(tmpPath, buffer, "utf-8");
+        try {
+          await runEditorOn(tmpPath);
+          const newText = await fs.readFile(tmpPath, "utf-8");
+          if (newText === buffer) {
+            writeOutput(
+              { success: true, status: "no_changes", entity_id: entityId },
+              outputMode
+            );
+            return;
+          }
+
+          let desired: Record<string, unknown>;
+          try {
+            desired = parseEditorBuffer(newText);
+          } catch (err) {
+            throw new Error(
+              `Failed to parse YAML: ${err instanceof Error ? err.message : String(err)}. ` +
+                `File left at ${tmpPath}.`
+            );
+          }
+
+          const changes: Array<{ field: string; value: unknown }> = [];
+          const desiredKeys = new Set(Object.keys(desired));
+          for (const field of Array.from(desiredKeys).sort()) {
+            const next = desired[field];
+            const prev = current.snapshot[field];
+            if (JSON.stringify(next) !== JSON.stringify(prev)) {
+              changes.push({ field, value: next });
+            }
+          }
+          if (changes.length === 0) {
+            writeOutput(
+              { success: true, status: "no_changes", entity_id: entityId },
+              outputMode
+            );
+            return;
+          }
+
+          // /entities/:id/batch_correct is not yet in the OpenAPI spec, so we
+          // call it via raw fetch. It returns a structured JSON body whose
+          // `status` discriminates `applied` / `conflict` / `validation_error`.
+          const baseUrl = (
+            await resolveBaseUrl(program.opts().baseUrl, config)
+          ).replace(/\/$/, "");
+          const headers: Record<string, string> = {
+            "Content-Type": "application/json",
+          };
+          if (token) headers["Authorization"] = `Bearer ${token}`;
+          const rawResponse = await fetch(
+            `${baseUrl}/entities/${encodeURIComponent(entityId)}/batch_correct`,
+            {
+              method: "POST",
+              headers,
+              body: JSON.stringify({
+                changes,
+                expected_last_observation_at: current.last_observation_at,
+                overwrite: opts.overwrite === true,
+                idempotency_prefix: `cli-edit-${entityId}-${Date.now()}`,
+                user_id: opts.userId,
+              }),
+            }
+          );
+          const status = rawResponse.status;
+          let resultBody: Record<string, unknown> = {};
+          try {
+            resultBody = (await rawResponse.json()) as Record<string, unknown>;
+          } catch {
+            /* empty body */
+          }
+          const resultStatus = (resultBody.status as string) ?? "";
+
+          if (status === 409 || resultStatus === "conflict") {
+            if (opts.overwrite) {
+              // Shouldn't happen (server skips conflict check with overwrite)
+              // but be defensive.
+              throw new Error(
+                `Server reported conflict despite --overwrite. Body: ${JSON.stringify(
+                  resultBody
+                )}`
+              );
+            }
+            process.stderr.write(
+              warn(
+                `Conflict: entity was modified since you started editing. Rebasing.\n`
+              )
+            );
+            // Rebase: refetch, rebuild the buffer with the latest snapshot but
+            // preserve the user's edits where they still differ.
+            const latest = await fetchEntity();
+            const merged: Record<string, unknown> = { ...latest.snapshot };
+            for (const { field, value } of changes) {
+              merged[field] = value;
+            }
+            current = latest;
+            buffer = buildEditorBuffer(
+              latest.entity_type,
+              latest.last_observation_at,
+              merged
+            );
+            continue;
+          }
+
+          if (status === 400 || resultStatus === "validation_error") {
+            const errs = ((resultBody.validation_errors as unknown[]) ?? []) as Array<{
+              field: string;
+              message: string;
+            }>;
+            throw new Error(
+              `Validation failed:\n${errs
+                .map((ve) => `  - ${ve.field}: ${ve.message}`)
+                .join("\n") || JSON.stringify(resultBody)}`
+            );
+          }
+
+          if (!rawResponse.ok) {
+            throw new Error(
+              `Batch correction failed: ${status} ${JSON.stringify(resultBody)}`
+            );
+          }
+
+          const applied = Array.isArray(resultBody.applied)
+            ? (resultBody.applied as unknown[]).length
+            : changes.length;
+          writeOutput(
+            {
+              success: true,
+              status: "applied",
+              entity_id: entityId,
+              fields_changed: changes.map((c) => c.field),
+              applied_count: applied,
+              last_observation_at: resultBody.last_observation_at ?? null,
+            },
+            outputMode
+          );
+          return;
+        } finally {
+          // Keep the file around on throw for debugging; clean up on success
+          // paths by attempting unlink.
+          try {
+            await fs.unlink(tmpPath);
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+
+      throw new Error("Exceeded maximum conflict-rebase attempts (5).");
+    }
+  );
+
+// ---------------------------------------------------------------------------
+// neotoma memory-export
+//
+// Writes a bounded single-file MEMORY.md using the same canonical renderer
+// that backs MCP `retrieve_entity_snapshot`. Shape and defaults match Phase 5
+// of the markdown-memory-ceiling plan.
+// ---------------------------------------------------------------------------
+program
+  .command("memory-export")
+  .description("Export a bounded MEMORY.md for agent harnesses that expect a single file")
+  .option("--path <path>", "Output path", "MEMORY.md")
+  .option("--limit-lines <n>", "Hard line cap (0 disables truncation)", "200")
+  .option(
+    "--include-types <list>",
+    "Comma-separated entity types to include (default: all non-bookkeeping)"
+  )
+  .option(
+    "--exclude-types <list>",
+    "Comma-separated entity types to exclude (applied in addition to bookkeeping filter)"
+  )
+  .option(
+    "--include-bookkeeping",
+    "Include chat bookkeeping (conversation, agent_message). Excluded by default."
+  )
+  .option(
+    "--order <strategy>",
+    "Ordering strategy: importance | recency",
+    "importance"
+  )
+  .option(
+    "--max-field-chars <n>",
+    "Per-field character cap for long string values (0 disables)",
+    "400"
+  )
+  .option("--user-id <userId>", "Scope export to a specific user")
+  .action(
+    async (opts: {
+      path: string;
+      limitLines: string;
+      includeTypes?: string;
+      excludeTypes?: string;
+      includeBookkeeping?: boolean;
+      order: string;
+      maxFieldChars: string;
+      userId?: string;
+    }) => {
+      const outputMode = resolveOutputMode();
+      const order = (opts.order ?? "importance").toLowerCase();
+      if (order !== "recency" && order !== "importance") {
+        throw new Error(
+          `Invalid --order: ${opts.order}. Allowed: importance, recency`
+        );
+      }
+      const limitLines = Number.parseInt(String(opts.limitLines ?? "200"), 10);
+      if (!Number.isFinite(limitLines)) {
+        throw new Error(`Invalid --limit-lines: ${opts.limitLines}`);
+      }
+      const maxFieldChars = Number.parseInt(
+        String(opts.maxFieldChars ?? "400"),
+        10
+      );
+      if (!Number.isFinite(maxFieldChars) || maxFieldChars < 0) {
+        throw new Error(`Invalid --max-field-chars: ${opts.maxFieldChars}`);
+      }
+      const splitCsv = (raw: string | undefined) =>
+        raw
+          ? raw
+              .split(",")
+              .map((s) => s.trim())
+              .filter((s) => s.length > 0)
+          : undefined;
+      const includeTypes = splitCsv(opts.includeTypes);
+      const excludeTypes = splitCsv(opts.excludeTypes);
+
+      const { exportMemory } = await import("../services/memory_export.js");
+      const result = await exportMemory({
+        path: opts.path,
+        limit_lines: limitLines,
+        include_types: includeTypes,
+        exclude_types: excludeTypes,
+        include_bookkeeping: opts.includeBookkeeping === true,
+        order: order as "recency" | "importance",
+        max_field_chars: maxFieldChars,
+        user_id: opts.userId,
+      });
+
+      writeOutput(result, outputMode);
     }
   );
 
@@ -14168,12 +14903,14 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
     "api",
     "backup",
     "dev",
+    "doctor",
     "entities",
     "logs",
     "mcp",
     "observations",
     "relationships",
     "schemas",
+    "setup",
     "sources",
     "storage",
     "timeline",

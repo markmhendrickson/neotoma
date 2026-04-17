@@ -1,6 +1,7 @@
 import { PRODUCT_NAV_SOURCES, sendFunnelEvaluatePromptCopy } from "@/utils/analytics";
 import { SITE_CODE_SNIPPETS } from "../../site/site_data";
 import { CopyableCodeBlock } from "../CopyableCodeBlock";
+import { PermissionsPreflight } from "../PermissionsPreflight";
 import { TrackedProductLink } from "../TrackedProductNav";
 import { DetailPage } from "../DetailPage";
 
@@ -31,6 +32,7 @@ export function EvaluatePage() {
         for agent-assisted setup, manual commands, Docker, and integration
         docs.
       </p>
+      <PermissionsPreflight />
       <div className="mb-8">
         <p className="text-[15px] leading-7 mb-2 text-muted-foreground">
           <strong>Prompt to use</strong>
@@ -286,14 +288,35 @@ export function EvaluatePage() {
             for the canonical end-to-end workflow.
           </li>
           <li>
-            If Neotoma is not installed, choose the install path that matches the
-            current tool. For OpenClaw, prefer{" "}
+            If Neotoma is not installed, choose the install path that matches
+            the current tool. For OpenClaw, prefer{" "}
             <code className="text-sm bg-muted px-1.5 py-0.5 rounded">openclaw plugins install clawhub:neotoma</code>.
             For other local tools, run{" "}
-            <code className="text-sm bg-muted px-1.5 py-0.5 rounded">npm install -g neotoma</code>{" "}
-            and{" "}
-            <code className="text-sm bg-muted px-1.5 py-0.5 rounded">neotoma init</code>.
-            If it is already installed, skip straight to activation.
+            <code className="text-sm bg-muted px-1.5 py-0.5 rounded">npm install -g neotoma</code>,
+            then collapse setup into two calls:{" "}
+            <code className="text-sm bg-muted px-1.5 py-0.5 rounded">neotoma doctor --json</code>{" "}
+            to inspect state and{" "}
+            <code className="text-sm bg-muted px-1.5 py-0.5 rounded">neotoma setup --tool &lt;tool&gt; --yes</code>{" "}
+            to apply init + MCP + CLI instructions + permissions idempotently.
+            If it is already installed, skip straight to activation. Run{" "}
+            <code className="text-sm bg-muted px-1.5 py-0.5 rounded">neotoma doctor --json</code>{" "}
+            to verify the setup first.
+          </li>
+          <li>
+            <strong>Do not improvise shell introspection</strong> (<code className="text-sm bg-muted px-1.5 py-0.5 rounded">python3 -c</code>,{" "}
+            <code className="text-sm bg-muted px-1.5 py-0.5 rounded">grep -r</code>,{" "}
+            <code className="text-sm bg-muted px-1.5 py-0.5 rounded">ls</code>,{" "}
+            <code className="text-sm bg-muted px-1.5 py-0.5 rounded">cat</code>,{" "}
+            <code className="text-sm bg-muted px-1.5 py-0.5 rounded">jq</code>,{" "}
+            <code className="text-sm bg-muted px-1.5 py-0.5 rounded">find</code>,{" "}
+            <code className="text-sm bg-muted px-1.5 py-0.5 rounded">which</code>,{" "}
+            <code className="text-sm bg-muted px-1.5 py-0.5 rounded">node -e</code>) during install or activation. Every field you
+            need is in <code className="text-sm bg-muted px-1.5 py-0.5 rounded">neotoma doctor --json</code>.
+            Do not run arbitrary <code className="text-sm bg-muted px-1.5 py-0.5 rounded">npm run</code>{" "}
+            scripts from the user's repositories. If a permission prompt
+            appears for anything other than <code className="text-sm bg-muted px-1.5 py-0.5 rounded">neotoma *</code> or{" "}
+            <code className="text-sm bg-muted px-1.5 py-0.5 rounded">npm install -g neotoma</code>, stop and ask the user to widen
+            their allowlist instead of substituting another command.
           </li>
           <li>
             If likely first data to store was already identified during

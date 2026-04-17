@@ -48,4 +48,89 @@ describe("timeline_events", () => {
     expect(iso).not.toBeNull();
     expect(iso!.startsWith("2024-01-02")).toBe(true);
   });
+
+  // Audit finding #2: postal codes and account-last-4 numbers were being
+  // parsed as calendar years (8036 -> 8036 AD), producing 36k+ junk timeline
+  // rows. Bare integer-looking strings and small numbers must be rejected.
+  it("toISODate rejects bare integer-looking strings (e.g. postal codes, masked digits)", () => {
+    expect(toISODate("8036")).toBeNull();
+    expect(toISODate("6560")).toBeNull();
+    expect(toISODate("1234")).toBeNull();
+    expect(toISODate("0001")).toBeNull();
+  });
+
+  it("toISODate rejects small numeric values that coerce to far-future years", () => {
+    expect(toISODate(6560)).toBeNull();
+    expect(toISODate(8036)).toBeNull();
+  });
+
+  it("toISODate accepts genuine ISO date strings", () => {
+    expect(toISODate("2024-01-15")).toMatch(/^2024-01-15/);
+    expect(toISODate("2024-01-15T10:30:00Z")).toMatch(/^2024-01-15T10:30:00/);
+  });
+
+  // Audit finding #2 + schema-driven temporal fields: a type like
+  // contact_list has a `postal_code` field that used to leak into the
+  // timeline. Without a schema declaration, postal_code must NOT produce
+  // a timeline row (generic heuristic operates on name shape only).
+  it("emits no timeline event for postal_code on an unseeded type", () => {
+    const rows = deriveTimelineEventsFromSnapshot(
+      "contact_list",
+      "ent_contact",
+      "src_1",
+      "user_1",
+      {
+        postal_code: "8036",
+        account_mask_last4: "6560",
+        name: "Alice",
+      },
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  // When a schema declares temporal_fields explicitly, emission is restricted
+  // to exactly those fields (schema-driven). Invoice declaring `invoice_date`
+  // must emit one event with event_type "InvoiceIssued" and nothing else.
+  it("emits only schema-declared temporal_fields with the declared event_type", () => {
+    const rows = deriveTimelineEventsFromSnapshot(
+      "invoice",
+      "ent_inv",
+      "src_1",
+      "user_1",
+      {
+        invoice_date: "2024-06-01T00:00:00.000Z",
+        // These two would be picked up by the heuristic path but must be
+        // ignored when a schema declares its own temporal_fields.
+        due_date: "2024-07-01T00:00:00.000Z",
+        issued_at: "2024-06-01T12:00:00.000Z",
+      },
+      {
+        temporal_fields: [
+          { field: "invoice_date", event_type: "InvoiceIssued" },
+        ],
+      },
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].source_field).toBe("invoice_date");
+    expect(rows[0].event_type).toBe("InvoiceIssued");
+  });
+
+  it("ignores snapshot fields not declared in schema.temporal_fields", () => {
+    const rows = deriveTimelineEventsFromSnapshot(
+      "transaction",
+      "ent_tx",
+      "src_1",
+      "user_1",
+      {
+        transaction_date: "2024-06-01T00:00:00.000Z",
+        account_mask_last4: "6560",
+        random_stamp: "2099-12-31T00:00:00.000Z",
+      },
+      {
+        temporal_fields: [{ field: "transaction_date" }],
+      },
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].source_field).toBe("transaction_date");
+  });
 });

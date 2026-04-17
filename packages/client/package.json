@@ -1,0 +1,64 @@
+{
+  "name": "@neotoma/client",
+  "version": "0.1.0",
+  "description": "TypeScript client for Neotoma — deterministic personal memory engine. Used by hook plugins (Claude Code, Cursor, OpenCode, Codex) and Agent SDK adapters.",
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./http": {
+      "types": "./dist/http.d.ts",
+      "import": "./dist/http.js"
+    },
+    "./local": {
+      "types": "./dist/local.d.ts",
+      "import": "./dist/local.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "keywords": [
+    "neotoma",
+    "memory",
+    "mcp",
+    "agent",
+    "state-layer",
+    "hooks"
+  ],
+  "author": "Mark Hendrickson",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/markmhendrickson/neotoma.git",
+    "directory": "packages/client"
+  },
+  "homepage": "https://neotoma.io",
+  "bugs": {
+    "url": "https://github.com/markmhendrickson/neotoma/issues"
+  },
+  "peerDependencies": {
+    "neotoma": ">=0.4.0"
+  },
+  "peerDependenciesMeta": {
+    "neotoma": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.6",
+    "typescript": "^5.3.3"
+  }
+}

@@ -13,16 +13,22 @@ describe("CLI command coverage guard", () => {
       "cli-instructions",
       "corrections",
       "dev",
+      "doctor",
+      "edit",
       "entities",
       "init",
       "interpretations",
       "logs",
       "mcp",
+      "memory-export",
+      "mirror",
       "observations",
       "options",
+      "preferences",
       "relationships",
       "schemas",
       "servers",
+      "setup",
       "snapshots",
       "sources",
       "stats",
@@ -32,6 +38,8 @@ describe("CLI command coverage guard", () => {
       "store-structured",
       "store-unstructured",
       "timeline",
+      "discover",
+      "ingest-transcript",
       "upload",
     ]);
 
@@ -41,9 +49,7 @@ describe("CLI command coverage guard", () => {
       "request", // generic operation dispatcher with broad input surface
       "reset", // destructive; covered by infra / manual flows
       "site", // recently introduced; behavior is env-file mutation and currently validated manually
-      "preferences", // onboarding data-type prefs; thin surface
-      "discover", // workspace file discovery; thin surface
-      "ingest-transcript", // transcript ingestion; manual or integration flows
+      "hooks", // harness lifecycle installer; per-harness paths covered by integration flows
     ]);
 
     const uncovered = commandNames.filter(

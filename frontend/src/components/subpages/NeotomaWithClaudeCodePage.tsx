@@ -166,6 +166,31 @@ export function NeotomaWithClaudeCodePage() {
         </TableScrollWrapper>
       </IntegrationSection>
 
+      <IntegrationSection sectionKey="neotoma-hooks-plugin" title="Neotoma hooks plugin (optional)">
+        <p className="text-[15px] leading-7 text-muted-foreground mb-4">
+          The{" "}
+          <a
+            href="https://github.com/markmhendrickson/neotoma/tree/main/packages/claude-code-plugin"
+            target="_blank"
+            rel="noopener noreferrer"
+            className={extLink}
+          >
+            Neotoma Claude Code plugin
+          </a>{" "}
+          runs alongside the MCP server. MCP stays the quality ceiling for
+          agent-driven structured writes; the plugin is the reliability floor:
+          it captures every session, user prompt, tool call, compaction event,
+          and assistant reply, even if the agent forgets to call a tool. It
+          also injects recent Neotoma context on every prompt via{" "}
+          <code>additionalContext</code>, so recall works without the agent
+          having to plan for it.
+        </p>
+        <p className="text-[14px] leading-6 text-muted-foreground mb-2">
+          The plugin shares idempotency keys with MCP, so the same logical
+          turn lands on one entity with layered observations, not duplicates.
+        </p>
+      </IntegrationSection>
+
       <IntegrationSection sectionKey="getting-started" title="Getting started">
         <GettingStartedEvaluateInstallLinks agentTargetPhrase="Claude Code" />
         <p className="text-[15px] leading-7 text-muted-foreground mb-4">

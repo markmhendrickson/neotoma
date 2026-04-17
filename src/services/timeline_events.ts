@@ -6,6 +6,7 @@
 import { createHash } from "node:crypto";
 import { db } from "../db.js";
 import { logger } from "../utils/logger.js";
+import type { SchemaDefinition } from "./schema_registry.js";
 
 /** Date-like field names that may appear in entity snapshots (order does not matter). */
 const DATE_FIELD_NAMES = new Set([
@@ -73,13 +74,44 @@ function mapFieldToEventType(entityType: string, fieldName: string): string {
 }
 
 /**
+ * Strings that look like dates. Used to reject arbitrary strings that
+ * `new Date(...)` happens to accept (e.g. "1.0", "unknown", URLs), which would
+ * otherwise create spurious timeline events. Each pattern must match the whole
+ * trimmed string.
+ *
+ * Covers: ISO 8601 dates and datetimes (with optional time and offset),
+ * RFC 2822, US/EU slash-separated dates, textual month forms.
+ */
+const DATE_LIKE_SHAPES: RegExp[] = [
+  // ISO date or datetime: 2024-01-15 or 2024-01-15T10:30:00Z or 2024-01-15 10:30:00
+  /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/,
+  // Slash-separated: 01/15/2024, 15/01/2024, 2024/01/15
+  /^\d{1,4}\/\d{1,2}\/\d{1,4}(?:\s+\d{1,2}:\d{2}(?::\d{2})?(?:\s*[AP]M)?)?$/i,
+  // Dot-separated date: 15.01.2024
+  /^\d{1,2}\.\d{1,2}\.\d{4}$/,
+  // Textual month: "Jan 15, 2024", "15 Jan 2024", "January 15, 2024"
+  /^(?:\d{1,2}\s+)?(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+\d{2,4}(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?$/i,
+  /^\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{2,4}$/i,
+  // RFC 2822: "Mon, 15 Jan 2024 10:30:00 GMT"
+  /^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun),\s+\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+[A-Z]+$/,
+  // Year-only: reject; too ambiguous to anchor a timeline event on.
+];
+
+/**
  * Normalize a value to an ISO date string for event_timestamp, or null if not a valid date.
+ *
+ * Strict: strings must match a known date-shape regex before being parsed with
+ * `new Date(...)`. This prevents arbitrary strings like "1.0", "usd", "unknown",
+ * or free-text descriptions from producing spurious timeline events.
  */
 export function toISODate(value: unknown): string | null {
   if (value == null) return null;
   if (typeof value === "string") {
     const trimmed = value.trim();
     if (!trimmed) return null;
+    // Shape-gate: reject strings that don't look like dates, even if
+    // `new Date(...)` would accept them.
+    if (!DATE_LIKE_SHAPES.some((re) => re.test(trimmed))) return null;
     const d = new Date(trimmed);
     return Number.isNaN(d.getTime()) ? null : d.toISOString();
   }
@@ -141,27 +173,65 @@ export function getDateLikeFields(fields: Record<string, unknown>): Record<strin
 }
 
 /**
+ * Build an allow-set of temporal field names from a schema definition.
+ * Returns null when the schema does not declare temporal_fields, signaling
+ * to callers that the legacy heuristic (DATE_FIELD_NAMES / parses-as-date)
+ * should be used.
+ */
+function schemaTemporalFieldAllowlist(
+  schema?: Pick<SchemaDefinition, "temporal_fields"> | null,
+): Map<string, string | undefined> | null {
+  if (!schema?.temporal_fields || schema.temporal_fields.length === 0) {
+    return null;
+  }
+  const out = new Map<string, string | undefined>();
+  for (const entry of schema.temporal_fields) {
+    if (entry?.field) out.set(entry.field, entry.event_type);
+  }
+  return out.size > 0 ? out : null;
+}
+
+/**
  * Derive timeline events from an entity snapshot.
- * Uses date-like fields: names in DATE_FIELD_NAMES, or any top-level value that parses as a date
- * (excluding TIMELINE_SNAPSHOT_FIELD_DENYLIST). Matches raw_fragments / getDateLikeFields semantics.
+ *
+ * Precedence:
+ * - When `schema.temporal_fields` is declared, only those fields emit timeline
+ *   events, and their declared `event_type` (if any) is used.
+ * - Otherwise, fall back to the heuristic: DATE_FIELD_NAMES or any top-level
+ *   value that parses as a date (excluding TIMELINE_SNAPSHOT_FIELD_DENYLIST).
  */
 export function deriveTimelineEventsFromSnapshot(
   entityType: string,
   entityId: string,
   sourceId: string,
   userId: string,
-  snapshot: Record<string, unknown>
+  snapshot: Record<string, unknown>,
+  schema?: Pick<SchemaDefinition, "temporal_fields"> | null,
 ): TimelineEventRow[] {
   const rows: TimelineEventRow[] = [];
   const now = new Date().toISOString();
-  const dateLike = getDateLikeFields(snapshot);
+  const allow = schemaTemporalFieldAllowlist(schema);
 
-  for (const [fieldName, value] of Object.entries(dateLike)) {
+  const candidateEntries: Array<[string, unknown, string | undefined]> = [];
+  if (allow) {
+    for (const [field, declaredEventType] of allow.entries()) {
+      if (!(field in snapshot)) continue;
+      candidateEntries.push([field, snapshot[field], declaredEventType]);
+    }
+  } else {
+    const dateLike = getDateLikeFields(snapshot);
+    for (const [fieldName, value] of Object.entries(dateLike)) {
+      candidateEntries.push([fieldName, value, undefined]);
+    }
+  }
+
+  for (const [fieldName, value, declaredEventType] of candidateEntries) {
     if (TIMELINE_SNAPSHOT_FIELD_DENYLIST.has(fieldName)) continue;
     const eventTimestamp = toISODate(value);
     if (!eventTimestamp) continue;
 
-    const eventType = mapFieldToEventType(entityType, fieldName);
+    const eventType =
+      declaredEventType ?? mapFieldToEventType(entityType, fieldName);
     const id = generateTimelineEventId(sourceId, entityId, fieldName, eventTimestamp);
 
     rows.push({
@@ -181,7 +251,11 @@ export function deriveTimelineEventsFromSnapshot(
 
 /**
  * Derive additional timeline events from raw_fragments (date-like keys not already in snapshot).
- * Use when there is exactly one entity of this type in the source so fragments can be attributed.
+ *
+ * When `schema.temporal_fields` is declared, only those fields are considered;
+ * otherwise the legacy heuristic (DATE_FIELD_NAMES / parses-as-date) applies.
+ * Use when there is exactly one entity of this type in the source so fragments
+ * can be attributed.
  */
 export function deriveTimelineEventsFromRawFragments(
   rawFragments: Array<{ fragment_key: string; fragment_value: unknown }>,
@@ -189,18 +263,25 @@ export function deriveTimelineEventsFromRawFragments(
   entityId: string,
   sourceId: string,
   userId: string,
-  snapshotFieldKeys: Set<string>
+  snapshotFieldKeys: Set<string>,
+  schema?: Pick<SchemaDefinition, "temporal_fields"> | null,
 ): TimelineEventRow[] {
   const rows: TimelineEventRow[] = [];
   const now = new Date().toISOString();
+  const allow = schemaTemporalFieldAllowlist(schema);
 
   for (const { fragment_key: fieldName, fragment_value: value } of rawFragments) {
     if (snapshotFieldKeys.has(fieldName)) continue;
-    if (!DATE_FIELD_NAMES.has(fieldName) && toISODate(value) === null) continue;
+    if (allow) {
+      if (!allow.has(fieldName)) continue;
+    } else if (!DATE_FIELD_NAMES.has(fieldName) && toISODate(value) === null) {
+      continue;
+    }
     const eventTimestamp = toISODate(value);
     if (!eventTimestamp) continue;
 
-    const eventType = mapFieldToEventType(entityType, fieldName);
+    const eventType =
+      allow?.get(fieldName) ?? mapFieldToEventType(entityType, fieldName);
     const id = generateTimelineEventId(sourceId, entityId, fieldName, eventTimestamp);
 
     rows.push({
@@ -229,6 +310,12 @@ export interface UpsertTimelineEventsForSnapshotParams {
    * Use &gt;1 when multiple entities of the same type share one source in the same batch (avoids mis-attribution).
    */
   sameTypeInSourceBatch: number;
+  /**
+   * Optional schema definition. When `temporal_fields` is declared, timeline
+   * emission is restricted to those fields (schema-driven). When absent, falls
+   * back to the legacy date-like-field heuristic.
+   */
+  schema?: Pick<SchemaDefinition, "temporal_fields"> | null;
 }
 
 /**
@@ -238,14 +325,23 @@ export interface UpsertTimelineEventsForSnapshotParams {
 export async function upsertTimelineEventsForEntitySnapshot(
   params: UpsertTimelineEventsForSnapshotParams
 ): Promise<void> {
-  const { entityType, entityId, sourceId, userId, snapshot, sameTypeInSourceBatch } = params;
+  const {
+    entityType,
+    entityId,
+    sourceId,
+    userId,
+    snapshot,
+    sameTypeInSourceBatch,
+    schema,
+  } = params;
   const snapshotFields = snapshot || {};
   let timelineRows = deriveTimelineEventsFromSnapshot(
     entityType,
     entityId,
     sourceId,
     userId,
-    snapshotFields
+    snapshotFields,
+    schema,
   );
 
   if (sameTypeInSourceBatch === 1 && sourceId) {
@@ -265,7 +361,8 @@ export async function upsertTimelineEventsForEntitySnapshot(
         entityId,
         sourceId,
         userId,
-        snapshotKeys
+        snapshotKeys,
+        schema,
       );
       timelineRows = timelineRows.concat(fromFragments);
     }

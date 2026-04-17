@@ -111,6 +111,7 @@ Data enters Neotoma from multiple sources. The decision heuristic above applies 
 | **Session context** | Current conversation, open files, git state, prior in-session messages. The richest passive source during install. | Medium |
 | **File-based knowledge** | Markdown notes, JSON stores, Obsidian vaults, exported CSVs (LinkedIn, etc.). | Medium |
 | **Project configuration** | `.cursor/memory/`, `.cursor/rules/`, `git config`, `package.json` — stable context about the user's tools and workflows. | Medium |
+| **Repository context** | Git history, ADRs, specs, `docs/`, `AGENTS.md`, issue/PR threads from a specific repo the user integrates Neotoma into as a memory substrate. Ingest only when the user confirms the developer / repo-integration branch of activation (see [`install.md`](../../install.md)). | High |
 | **External tools** | Email, calendar, web search, and other MCPs. Records pulled and stored per the store-first rule. | Medium |
 | **Direct input** | Facts the user states in conversation — commitments, preferences, corrections. | Varies |
 

@@ -1,0 +1,37 @@
+{
+  "name": "@neotoma/claude-agent-sdk-adapter",
+  "version": "0.1.0",
+  "description": "Reference adapter that wires the Neotoma state layer into agents built with the Claude Agent SDK via its hooks interface.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "files": [
+    "dist",
+    "examples",
+    "README.md"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@neotoma/client": "^0.1.0"
+  },
+  "peerDependencies": {
+    "@anthropic-ai/claude-agent-sdk": "*"
+  },
+  "peerDependenciesMeta": {
+    "@anthropic-ai/claude-agent-sdk": { "optional": true }
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/node": "^20.11.0"
+  }
+}

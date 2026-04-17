@@ -131,6 +131,12 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     ],
     speakable: ["h1", "#intro p", "#who h2", "#who p", "#common-questions summary", "#common-questions p"],
   },
+  "/home/x7k9m2vp": {
+    title: "Neotoma \u2014 structured state for AI agents",
+    description: "Alternative homepage variant (not indexed).",
+    robots: "noindex,nofollow",
+    ogType: "website",
+  },
   "/install": {
     title: "Install | Neotoma",
     description:

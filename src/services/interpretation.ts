@@ -591,6 +591,16 @@ export async function runInterpretation(
           );
 
           const sameTypeInBatch = entities.filter((e) => e.entityType === entity.entityType).length;
+          let timelineSchema: SchemaDefinition | null = null;
+          try {
+            const entry = await schemaRegistry.loadActiveSchema(
+              snapshot.entity_type,
+              snapshot.user_id || userId,
+            );
+            timelineSchema = entry?.schema_definition ?? null;
+          } catch {
+            timelineSchema = null;
+          }
           await upsertTimelineEventsForEntitySnapshot({
             entityType: snapshot.entity_type,
             entityId: snapshot.entity_id,
@@ -598,6 +608,7 @@ export async function runInterpretation(
             userId: snapshot.user_id || userId,
             snapshot: (snapshot.snapshot as Record<string, unknown>) || {},
             sameTypeInSourceBatch: sameTypeInBatch,
+            schema: timelineSchema,
           });
         }
       } catch (error) {

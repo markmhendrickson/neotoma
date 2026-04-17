@@ -61,7 +61,7 @@ export async function storeFragment(params: StoreFragmentParams): Promise<boolea
 
   const { data: existing } = await db
     .from("raw_fragments")
-    .select("id, frequency_count, entity_id")
+    .select("id, frequency_count")
     .eq("source_id", sourceId)
     .eq("fragment_key", key)
     .eq("user_id", userId)

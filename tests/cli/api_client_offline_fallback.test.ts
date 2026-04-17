@@ -102,4 +102,26 @@ describe("api_client transport modes", () => {
     expect(remoteClient.GET).not.toHaveBeenCalled();
     expect(localClient.GET).toHaveBeenCalledWith("/stats", {} as never);
   });
+
+  it("forwards baseUrl and token to local transport so env resolution respects NEOTOMA_ENV", async () => {
+    // NEOTOMA_ENV is consumed inside local_transport's resolveLocalTransportEnv,
+    // which is mocked here. What we verify at this layer is that the forced-local
+    // path forwards the exact baseUrl/token pair the local transport needs to
+    // (a) identify the API port and (b) read its own env precedence. This guards
+    // the original bug where dev/prod DB file selection depended only on baseUrl.
+    process.env.NEOTOMA_FORCE_LOCAL_TRANSPORT = "true";
+    process.env.NEOTOMA_ENV = "production";
+    localClient.POST.mockResolvedValueOnce({ data: { ok: true }, error: undefined });
+
+    const { createApiClient } = await import("../../src/shared/api_client.ts");
+    const api = createApiClient({ baseUrl: "http://localhost:3080", token: "tok-prod" });
+    await api.POST("/entities/query", { body: { limit: 1 } as never });
+
+    expect(getLocalTransportClientMock).toHaveBeenCalledWith({
+      baseUrl: "http://localhost:3080",
+      token: "tok-prod",
+    });
+    expect(remoteClient.POST).not.toHaveBeenCalled();
+    delete process.env.NEOTOMA_ENV;
+  });
 });

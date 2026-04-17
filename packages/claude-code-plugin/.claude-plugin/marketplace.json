@@ -1,0 +1,17 @@
+{
+  "name": "neotoma-marketplace",
+  "owner": {
+    "name": "Neotoma",
+    "url": "https://neotoma.io"
+  },
+  "plugins": [
+    {
+      "name": "neotoma",
+      "source": "./",
+      "description": "Deterministic state layer for Claude Code — retrieval injection, observation capture, compaction awareness, persistence safety net. Pairs with the Neotoma MCP server for agent-driven structured storage.",
+      "version": "0.1.0",
+      "category": "memory",
+      "tags": ["memory", "state", "observability", "provenance", "cross-tool"]
+    }
+  ]
+}

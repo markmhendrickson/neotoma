@@ -20,6 +20,7 @@ import {
   EVALUATE_PROMPT_PILL_CLASS,
 } from "../code_block_copy_button_classes";
 import { DetailPage } from "../DetailPage";
+import { PermissionsPreflight } from "../PermissionsPreflight";
 import { Button } from "../ui/button";
 import { Card, CardContent } from "../ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
@@ -325,6 +326,8 @@ export function InstallPage() {
         </TrackedProductLink>
       </div>
 
+      <PermissionsPreflight />
+
       <h2 className="text-[20px] font-medium tracking-[-0.01em] mb-3">Agent-assisted install</h2>
       <p className="text-[15px] leading-7 mb-4">
         If you want to skip the initial evaluation page and proceed directly from
@@ -366,11 +369,34 @@ export function InstallPage() {
           for OpenClaw, prefer{" "}
           <code className="text-sm bg-muted px-1.5 py-0.5 rounded">openclaw plugins install clawhub:neotoma</code>;
           for other local tools, run{" "}
-          <code className="text-sm bg-muted px-1.5 py-0.5 rounded">npm install -g neotoma</code>{" "}
-          and{" "}
-          <code className="text-sm bg-muted px-1.5 py-0.5 rounded">neotoma init</code>.
-          If it is already installed, skip re-installation unless something is
-          broken.
+          <code className="text-sm bg-muted px-1.5 py-0.5 rounded">npm install -g neotoma</code>.
+          Then collapse the rest of setup into two calls:{" "}
+          <code className="text-sm bg-muted px-1.5 py-0.5 rounded">neotoma doctor --json</code>{" "}
+          to inspect consolidated state and{" "}
+          <code className="text-sm bg-muted px-1.5 py-0.5 rounded">neotoma setup --tool &lt;tool&gt; --yes</code>{" "}
+          to apply init + MCP + CLI instructions + permission files idempotently.
+          If Neotoma is already installed, just run{" "}
+          <code className="text-sm bg-muted px-1.5 py-0.5 rounded">neotoma doctor --json</code>{" "}
+          to verify.
+        </li>
+        <li className="text-[15px] leading-7 text-muted-foreground">
+          <strong className="text-foreground">Do not improvise shell
+          introspection.</strong> Do not run{" "}
+          <code className="text-sm bg-muted px-1.5 py-0.5 rounded">python3 -c</code>,{" "}
+          <code className="text-sm bg-muted px-1.5 py-0.5 rounded">grep -r</code>,{" "}
+          <code className="text-sm bg-muted px-1.5 py-0.5 rounded">ls</code>,{" "}
+          <code className="text-sm bg-muted px-1.5 py-0.5 rounded">cat</code>,{" "}
+          <code className="text-sm bg-muted px-1.5 py-0.5 rounded">jq</code>,{" "}
+          <code className="text-sm bg-muted px-1.5 py-0.5 rounded">find</code>,{" "}
+          <code className="text-sm bg-muted px-1.5 py-0.5 rounded">which</code>, or{" "}
+          <code className="text-sm bg-muted px-1.5 py-0.5 rounded">node -e</code>{" "}
+          to introspect Neotoma, and do not run arbitrary{" "}
+          <code className="text-sm bg-muted px-1.5 py-0.5 rounded">npm run</code>{" "}
+          scripts from the user's repositories. If a permission prompt appears
+          for anything other than <code className="text-sm bg-muted px-1.5 py-0.5 rounded">neotoma *</code>{" "}
+          or <code className="text-sm bg-muted px-1.5 py-0.5 rounded">npm install -g neotoma</code>,
+          stop and ask the user to widen the allowlist (see the Permissions
+          pre-flight block above) rather than substituting another command.
         </li>
         <li className="text-[15px] leading-7 text-muted-foreground">
           <strong className="text-foreground">Set the first data target</strong>{" "}

@@ -1,6 +1,8 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { access, mkdir, open } from "node:fs/promises";
+import { existsSync, readFileSync } from "node:fs";
 import http from "node:http";
+import os from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import createClient from "openapi-fetch";
@@ -20,15 +22,93 @@ function resolveProjectRoot(): string {
     : join(__dirname, "..", "..");
 }
 
-function inferEnvFromBaseUrl(baseUrl?: string): "production" | "development" {
-  if (!baseUrl) return "development";
+function portFromBaseUrl(baseUrl?: string): number | null {
+  if (!baseUrl) return null;
   try {
     const parsed = new URL(baseUrl);
-    const port = parsed.port ? Number(parsed.port) : parsed.protocol === "https:" ? 443 : 80;
-    return port === 3180 ? "production" : "development";
+    if (parsed.port) return Number(parsed.port);
+    return parsed.protocol === "https:" ? 443 : 80;
   } catch {
-    return "development";
+    return null;
   }
+}
+
+/** Reads preferred_env from ~/.config/neotoma/config.json. Returns null on any error. */
+function readPreferredEnvFromCliConfig(): "production" | "development" | null {
+  try {
+    const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir();
+    if (!homeDir) return null;
+    const configPath = join(homeDir, ".config", "neotoma", "config.json");
+    if (!existsSync(configPath)) return null;
+    const parsed = JSON.parse(readFileSync(configPath, "utf-8")) as {
+      preferred_env?: string;
+    };
+    const value = parsed.preferred_env?.trim();
+    if (value === "prod" || value === "production") return "production";
+    if (value === "dev" || value === "development") return "development";
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolves the environment for the local transport child process, in priority order:
+ *   1. NEOTOMA_ENV ("production" | "development") — set by bootstrap (`neotoma dev`/`prod`)
+ *   2. NEOTOMA_SESSION_ENV ("prod" | "dev") — set by `--env` flag in runCli
+ *   3. NEOTOMA_CLI_PREFERRED_ENV ("prod" | "dev") — inherited from parent session
+ *   4. preferred_env in ~/.config/neotoma/config.json — sticky across invocations
+ *   5. Port inference from baseUrl (3180 → production, else development) — last resort
+ *
+ * Exported for unit tests. Do NOT call port inference first — that is the bug this
+ * function exists to prevent (silent dev/prod DB file split based on whichever API
+ * happens to be running).
+ */
+export function resolveLocalTransportEnv(baseUrl?: string): "production" | "development" {
+  const explicitEnv = process.env.NEOTOMA_ENV;
+  if (explicitEnv === "production" || explicitEnv === "development") return explicitEnv;
+
+  const sessionEnv = process.env.NEOTOMA_SESSION_ENV;
+  if (sessionEnv === "prod") return "production";
+  if (sessionEnv === "dev") return "development";
+
+  const preferredEnv = process.env.NEOTOMA_CLI_PREFERRED_ENV;
+  if (preferredEnv === "prod") return "production";
+  if (preferredEnv === "dev") return "development";
+
+  const configPreferred = readPreferredEnvFromCliConfig();
+  if (configPreferred) return configPreferred;
+
+  const port = portFromBaseUrl(baseUrl);
+  if (port === 3180) return "production";
+  return "development";
+}
+
+/**
+ * Checks whether the resolved env and baseUrl port disagree (e.g., env="development"
+ * but baseUrl points to :3180). Emits a warning to stderr so silent mismatches between
+ * the running API's DB file and the local transport's DB file are surfaced.
+ */
+function warnOnEnvBaseUrlMismatch(
+  resolvedEnv: "production" | "development",
+  baseUrl?: string,
+): void {
+  const port = portFromBaseUrl(baseUrl);
+  if (port == null) return;
+  const portSuggestsProd = port === 3180;
+  const portSuggestsDev = port === 3080;
+  if (!portSuggestsProd && !portSuggestsDev) return;
+  const envIsProd = resolvedEnv === "production";
+  const mismatch = (portSuggestsProd && !envIsProd) || (portSuggestsDev && envIsProd);
+  if (!mismatch) return;
+  const apiDb = portSuggestsProd ? "neotoma.prod.db (production)" : "neotoma.db (development)";
+  const localDb = envIsProd ? "neotoma.prod.db (production)" : "neotoma.db (development)";
+  const fix = portSuggestsProd ? "--env prod (or `neotoma prod`)" : "--env dev (or `neotoma dev`)";
+  process.stderr.write(
+    `Warning: local transport env mismatch. Running API at :${port} serves ${apiDb}, ` +
+      `but local transport will spawn with ${localDb}. Reads and writes may target different ` +
+      `SQLite files. Use ${fix} to align, or set NEOTOMA_ENV explicitly.\n`,
+  );
 }
 
 export async function getLocalTransportClient(options: {
@@ -37,7 +117,8 @@ export async function getLocalTransportClient(options: {
 }): Promise<LocalTransportClient> {
   if (!localClientPromise) {
     localClientPromise = (async () => {
-      const env = inferEnvFromBaseUrl(options.baseUrl);
+      const env = resolveLocalTransportEnv(options.baseUrl);
+      warnOnEnvBaseUrlMismatch(env, options.baseUrl);
       const projectRoot = resolveProjectRoot();
       const actionsPath = join(projectRoot, "dist", "actions.js");
       await access(actionsPath);

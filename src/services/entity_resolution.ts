@@ -7,6 +7,33 @@
 import { createHash } from "node:crypto";
 import { db } from "../db.js";
 import { logger } from "../utils/logger.js";
+import { schemaRegistry, type SchemaDefinition } from "./schema_registry.js";
+
+/**
+ * Values that must not be used as an entity's canonical_name. These are
+ * generic enum/status/category tokens that would silently collapse unrelated
+ * entities (e.g. every receipt priced in EUR becoming the same entity).
+ *
+ * Keep this list small and schema-agnostic: it catches common mistakes but
+ * does not encode per-type knowledge. The full fix is schema-declared
+ * canonical_name_fields.
+ */
+const REJECTED_CANONICAL_VALUES = new Set([
+  // ISO 4217 currency codes (small high-risk subset)
+  "usd", "eur", "gbp", "jpy", "cny", "inr", "cad", "aud", "chf", "mxn",
+  "brl", "zar", "nzd", "sek", "nok", "dkk", "krw", "sgd", "hkd", "twd",
+  // Common status/category tokens
+  "unknown", "null", "none", "n/a", "na", "tbd", "undefined", "other", "misc",
+  "active", "inactive", "pending", "complete", "completed", "cancelled",
+  "draft", "approved", "rejected", "open", "closed", "true", "false", "yes", "no",
+]);
+
+function isRejectedCanonicalValue(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return true;
+  if (REJECTED_CANONICAL_VALUES.has(normalized)) return true;
+  return false;
+}
 
 export interface Entity {
   id: string;
@@ -115,10 +142,48 @@ export function formatCanonicalNameForStorage(
   return s;
 }
 
+/**
+ * Derive a canonical_name for an entity from its fields.
+ *
+ * Precedence:
+ * 1. Schema-declared `canonical_name_fields` (composite key from stable fields).
+ * 2. Explicit name-like fields (canonical_name, name, full_name, title, email, url).
+ * 3. Stable IDs (message_id, turn_key, thread_id, external_id, etc.).
+ * 4. First non-metadata string field (warns when falling back to this, and
+ *    rejects common enum/status/currency tokens that would collapse unrelated
+ *    entities).
+ *
+ * Pass the active schema via `schema` when available to use (1). Callers that
+ * don't have schema context still get safe fallbacks.
+ */
 export function deriveCanonicalNameFromFields(
   entityType: string,
   fields: Record<string, unknown>,
+  schema?: Pick<SchemaDefinition, "canonical_name_fields"> | null,
 ): string {
+  // 1) Schema-declared composite canonical name. All declared fields must be
+  //    present and non-empty; otherwise fall through to the next rule so the
+  //    lookup stays deterministic but doesn't silently degrade.
+  if (schema?.canonical_name_fields && schema.canonical_name_fields.length > 0) {
+    const declared = schema.canonical_name_fields;
+    const parts: string[] = [];
+    let allPresent = true;
+    for (const key of declared) {
+      const value = fields[key];
+      if (value == null || String(value).trim() === "") {
+        allPresent = false;
+        break;
+      }
+      parts.push(String(value).trim());
+    }
+    if (allPresent && parts.length > 0) {
+      return formatCanonicalNameForStorage(
+        entityType,
+        `${entityType}:${parts.join("|")}`,
+      );
+    }
+  }
+
   const preferredNameKeys = [
     "canonical_name",
     "name",
@@ -128,7 +193,7 @@ export function deriveCanonicalNameFromFields(
     "url",
   ] as const;
 
-  // 1) Prefer explicit name-like fields
+  // 2) Prefer explicit name-like fields
   let nameField: unknown = fields.canonical_name ?? fields.name;
   if (nameField == null || String(nameField).trim() === "") {
     for (const key of preferredNameKeys) {
@@ -140,7 +205,7 @@ export function deriveCanonicalNameFromFields(
     }
   }
 
-  // 2) Prefer stable IDs over arbitrary string fields
+  // 3) Prefer stable IDs over arbitrary string fields
   if (nameField == null || String(nameField).trim() === "") {
     const idFields = [
       "message_id",
@@ -160,26 +225,6 @@ export function deriveCanonicalNameFromFields(
       if (idValue != null && String(idValue).trim() !== "") {
         nameField = `id:${idKey}:${String(idValue)}`;
         break;
-      }
-    }
-  }
-
-  // 3) For row-like finance entities, build a composite canonical name from stable row fields.
-  if (nameField == null || String(nameField).trim() === "") {
-    const compositeCandidates: Record<string, string[]> = {
-      transaction: ["posting_date", "category", "amount_original", "bank_provider"],
-      balance: ["snapshot_date", "account_id", "balance_usd"],
-      dataset_row: ["source_file", "row_index"],
-    };
-
-    const keys = compositeCandidates[entityType];
-    if (keys) {
-      const parts = keys
-        .map((key) => fields[key])
-        .filter((value) => value != null && String(value).trim() !== "")
-        .map((value) => String(value).trim());
-      if (parts.length > 0) {
-        nameField = `${entityType}:${parts.join("|")}`;
       }
     }
   }
@@ -204,6 +249,9 @@ export function deriveCanonicalNameFromFields(
       "import_date",
       "import_source_file",
       "source",
+      "currency",
+      "currency_code",
+      "category",
     ]);
 
     const sortedKeys = Object.keys(fields).sort();
@@ -214,15 +262,28 @@ export function deriveCanonicalNameFromFields(
       const s = v.trim();
       if (s === "") continue;
       if (rejectPatterns.some((re) => re.test(s))) continue;
+      // Guard: reject generic enum/currency/status tokens that would collapse
+      // unrelated entities (e.g. many receipts all priced in "EUR").
+      if (isRejectedCanonicalValue(s)) continue;
       nameField = s;
+      logger.warn(
+        `[ENTITY_RESOLUTION] Falling back to heuristic canonical_name for ${entityType} ` +
+          `using field "${key}"; declare canonical_name_fields on the schema to make this deterministic. ` +
+          `See docs/foundation/schema_agnostic_design_rules.md.`,
+      );
       break;
     }
   }
 
-  return formatCanonicalNameForStorage(
-    entityType,
-    String(nameField ?? "unknown"),
-  );
+  const resolved = String(nameField ?? "unknown");
+  if (resolved === "unknown") {
+    logger.warn(
+      `[ENTITY_RESOLUTION] No canonical_name found for ${entityType}; using "unknown". ` +
+        `Declare canonical_name_fields on the schema or provide a name/title/email field.`,
+    );
+  }
+
+  return formatCanonicalNameForStorage(entityType, resolved);
 }
 
 /**
@@ -234,7 +295,14 @@ export function deriveCanonicalNameFromFields(
  * @param options.userId - User ID for user-scoped resolution (optional for backwards compatibility)
  */
 export async function resolveEntity(
-  options: { entityType: string; fields: Record<string, unknown>; userId?: string } | string,
+  options:
+    | {
+        entityType: string;
+        fields: Record<string, unknown>;
+        userId?: string;
+        schema?: Pick<SchemaDefinition, "canonical_name_fields"> | null;
+      }
+    | string,
   rawValue?: string,
 ): Promise<string> {
   // Support both old and new signatures for backwards compatibility
@@ -250,11 +318,33 @@ export async function resolveEntity(
       rawValue || "",
     );
   } else {
-    // New signature: resolveEntity({ entityType, fields, userId })
+    // New signature: resolveEntity({ entityType, fields, userId, schema? })
     entityType = options.entityType;
     userId = options.userId;
 
-    canonicalName = deriveCanonicalNameFromFields(entityType, options.fields);
+    let schema = options.schema;
+    if (schema === undefined) {
+      // Load the active schema so canonical_name derivation is schema-driven.
+      // Failures here are non-fatal: we fall back to heuristics in
+      // deriveCanonicalNameFromFields so a missing registry row doesn't block
+      // ingestion.
+      try {
+        const entry = await schemaRegistry.loadActiveSchema(entityType, userId);
+        schema = entry?.schema_definition ?? null;
+      } catch (err) {
+        logger.warn(
+          `[ENTITY_RESOLUTION] Failed to load schema for ${entityType}; ` +
+            `falling back to heuristic canonical_name. Error: ${(err as Error).message}`,
+        );
+        schema = null;
+      }
+    }
+
+    canonicalName = deriveCanonicalNameFromFields(
+      entityType,
+      options.fields,
+      schema,
+    );
   }
 
   const entityId = generateEntityId(entityType, canonicalName);

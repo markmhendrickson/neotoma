@@ -220,6 +220,20 @@ Neotoma exposes state via MCP. Local storage only in preview. Local built-in aut
 
 **Representative actions:** `store`, `retrieve_entities`, `retrieve_entity_snapshot`, `merge_entities`, `list_observations`, `create_relationship`, `list_relationships`, `list_timeline_events`, `retrieve_graph_neighborhood`. Full list: [MCP spec](docs/specs/MCP_SPEC.md).
 
+## Using with AI tools (hooks)
+
+Neotoma also integrates into harnesses that expose lifecycle hooks. Hooks and MCP compose: hooks are the reliability floor (guaranteed capture, retrieval injection, compaction awareness, persistence safety net) and MCP remains the quality ceiling (agent-driven structured writes).
+
+| Harness | Package | Guide |
+| --- | --- | --- |
+| Claude Code | [`packages/claude-code-plugin`](packages/claude-code-plugin) | [docs/integrations/hooks/claude_code.md](docs/integrations/hooks/claude_code.md) |
+| Cursor | [`packages/cursor-hooks`](packages/cursor-hooks) | [docs/integrations/hooks/cursor.md](docs/integrations/hooks/cursor.md) |
+| OpenCode | [`packages/opencode-plugin`](packages/opencode-plugin) | [docs/integrations/hooks/opencode.md](docs/integrations/hooks/opencode.md) |
+| Codex CLI | [`packages/codex-hooks`](packages/codex-hooks) | [docs/integrations/hooks/codex_cli.md](docs/integrations/hooks/codex_cli.md) |
+| Claude Agent SDK | [`packages/claude-agent-sdk-adapter`](packages/claude-agent-sdk-adapter) | [docs/integrations/hooks/claude_agent_sdk.md](docs/integrations/hooks/claude_agent_sdk.md) |
+
+Shared client libraries: [`@neotoma/client`](packages/client) (TypeScript), [`neotoma-client`](packages/client-python) (Python).
+
 ### OpenClaw native plugin
 
 Neotoma ships as a native OpenClaw plugin with `kind: "memory"`, so it can fill the dedicated memory slot. All 30+ MCP tools are registered as agent tools.

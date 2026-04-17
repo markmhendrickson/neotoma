@@ -1,0 +1,46 @@
+{
+  "name": "neotoma",
+  "version": "0.1.0",
+  "description": "Neotoma state layer for Claude Code. Retrieval injection, observation capture, compaction awareness, and persistence safety net — complementing the Neotoma MCP server.",
+  "author": "Mark Hendrickson",
+  "homepage": "https://neotoma.io",
+  "repository": "https://github.com/markmhendrickson/neotoma",
+  "license": "MIT",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "type": "command",
+        "command": "python3 ${PLUGIN_DIR}/hooks/session_start.py"
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "type": "command",
+        "command": "python3 ${PLUGIN_DIR}/hooks/user_prompt_submit.py"
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "type": "command",
+        "command": "python3 ${PLUGIN_DIR}/hooks/post_tool_use.py"
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "*",
+        "type": "command",
+        "command": "python3 ${PLUGIN_DIR}/hooks/pre_compact.py"
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "type": "command",
+        "command": "python3 ${PLUGIN_DIR}/hooks/stop.py"
+      }
+    ]
+  }
+}

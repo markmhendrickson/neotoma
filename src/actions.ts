@@ -19,7 +19,12 @@ import {
 import { verifyRequest, parseAuthHeader } from "./crypto/auth.js";
 import { encryptResponseMiddleware } from "./middleware/encrypt_response.js";
 import { initServerKeys } from "./services/encryption_service.js";
-import { storeRawContent, downloadRawContent, SourceFileNotFoundError } from "./services/raw_storage.js";
+import {
+  storeRawContent,
+  downloadRawContent,
+  resolveLocalSourceFilePath,
+  SourceFileNotFoundError,
+} from "./services/raw_storage.js";
 import { attachSourceLabelsToObservations } from "./services/observation_source_label.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
@@ -59,6 +64,7 @@ import {
   StoreUnstructuredRequestSchema,
   UpdateSchemaIncrementalRequestSchema,
 } from "./shared/action_schemas.js";
+import { getMimeTypeFromExtension } from "./services/file_text_extraction.js";
 import { queryEntitiesWithCount } from "./shared/action_handlers/entity_handlers.js";
 import { retrieveEntityByIdentifierWithFallback } from "./shared/action_handlers/entity_identifier_handler.js";
 import {
@@ -1927,6 +1933,139 @@ app.get("/entities/:id", async (req, res) => {
   }
 });
 
+// GET /api/entities/:id/markdown - Canonical markdown rendering of an entity
+// snapshot (Phase 4). Backs Inspector's markdown preview panel and the
+// `neotoma memory-export` CLI. Deterministic: same inputs produce byte-for-byte
+// identical output across calls, matching the filesystem mirror.
+app.get("/entities/:id/markdown", async (req, res) => {
+  try {
+    const entityId = req.params.id;
+    const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+
+    const { data: entity, error: entityError } = await db
+      .from("entities")
+      .select("id, user_id")
+      .eq("id", entityId)
+      .eq("user_id", userId)
+      .single();
+
+    if (entityError || !entity) {
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
+    }
+
+    const { getEntityWithProvenance } = await import("./services/entity_queries.js");
+    const current = await getEntityWithProvenance(entityId);
+    if (!current) {
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
+    }
+
+    let schemaFieldOrder: string[] | undefined;
+    try {
+      const { schemaRegistry } = await import("./services/schema_registry.js");
+      const schema = await schemaRegistry.loadActiveSchema(current.entity_type, userId);
+      if (schema?.schema_definition?.fields) {
+        schemaFieldOrder = Object.keys(schema.schema_definition.fields);
+      }
+    } catch {
+      // Alphabetical fallback when schema is unavailable.
+    }
+
+    const { renderEntityMarkdown } = await import("./services/canonical_markdown.js");
+    const markdown = renderEntityMarkdown(
+      {
+        entity_id: current.entity_id ?? entityId,
+        entity_type: current.entity_type,
+        schema_version: current.schema_version ?? "1.0",
+        snapshot: (current.snapshot as Record<string, unknown>) ?? {},
+        computed_at: current.computed_at ?? null,
+        observation_count: current.observation_count ?? 0,
+        last_observation_at: current.last_observation_at ?? null,
+      },
+      schemaFieldOrder
+    );
+
+    // etag is derived from last_observation_at — any new observation moves it,
+    // which is exactly the Phase 4 optimistic concurrency boundary.
+    const etag = current.last_observation_at
+      ? `W/"${Buffer.from(current.last_observation_at).toString("base64")}"`
+      : undefined;
+    if (etag) res.setHeader("ETag", etag);
+    res.setHeader("Content-Type", "text/markdown; charset=utf-8");
+    return res.send(markdown);
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("Not authenticated")) {
+      return sendError(res, 401, "AUTH_REQUIRED", error.message);
+    }
+    logError("APIError:entity_markdown", req, error);
+    const message = error instanceof Error ? error.message : "Failed to render entity markdown";
+    return sendError(res, 500, "DB_QUERY_FAILED", message);
+  }
+});
+
+// POST /entities/:id/batch_correct - Atomic multi-field correction (Phase 4).
+// Shares the same backend as Phase 4b `neotoma edit` CLI; the Inspector Edit
+// tab issues one of these per save instead of N POST /correct calls so the
+// optimistic concurrency check and schema validation are atomic.
+app.post("/entities/:id/batch_correct", async (req, res) => {
+  try {
+    const entityId = req.params.id;
+    const userId = await getAuthenticatedUserId(req, req.body?.user_id as string | undefined);
+
+    const { data: entity, error: entityError } = await db
+      .from("entities")
+      .select("id, user_id")
+      .eq("id", entityId)
+      .eq("user_id", userId)
+      .single();
+
+    if (entityError || !entity) {
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
+    }
+
+    const body = req.body as
+      | {
+          changes?: Array<{ field: string; value: unknown }>;
+          expected_last_observation_at?: string | null;
+          overwrite?: boolean;
+          idempotency_prefix?: string;
+        }
+      | undefined;
+    if (!body?.changes || !Array.isArray(body.changes)) {
+      return sendError(
+        res,
+        400,
+        "VALIDATION_ERROR",
+        "`changes` array is required"
+      );
+    }
+
+    const { applyBatchCorrection } = await import("./services/batch_correction.js");
+    const result = await applyBatchCorrection({
+      entity_id: entityId,
+      user_id: userId,
+      expected_last_observation_at: body.expected_last_observation_at ?? null,
+      overwrite: body.overwrite === true,
+      changes: body.changes,
+      idempotency_prefix: body.idempotency_prefix,
+    });
+
+    if (result.status === "conflict") {
+      return res.status(409).json({ success: false, ...result });
+    }
+    if (result.status === "validation_error") {
+      return res.status(400).json({ success: false, ...result });
+    }
+    return res.json({ success: true, ...result });
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("Not authenticated")) {
+      return sendError(res, 401, "AUTH_REQUIRED", error.message);
+    }
+    logError("APIError:entity_batch_correct", req, error);
+    const message = error instanceof Error ? error.message : "Failed to apply batch correction";
+    return sendError(res, 500, "DB_QUERY_FAILED", message);
+  }
+});
+
 // GET /api/entities/:id/observations - Get observations for entity (FU-601)
 // REQUIRES AUTHENTICATION - verifies entity belongs to authenticated user
 app.get("/entities/:id/observations", async (req, res) => {
@@ -2649,19 +2788,25 @@ app.get("/sources", async (req, res) => {
     // Build query - ALWAYS filter by authenticated user_id
     let query = db.from("sources").select("*", { count: "exact" }).eq("user_id", userId); // SECURITY: Always filter by authenticated user
 
-    // Filter by MIME type
+    // Filter by MIME/type query.
+    // UX behavior: "wav" should match either MIME (audio/wav) OR filename extension (.wav).
     if (mimeType) {
-      query = query.eq("mime_type", mimeType);
+      const mimeNeedle = mimeType.trim();
+      if (mimeNeedle.includes("/")) {
+        query = query.ilike("mime_type", `%${mimeNeedle}%`);
+      } else {
+        query = query.or(`mime_type.ilike.%${mimeNeedle}%,original_filename.ilike.%${mimeNeedle}%`);
+      }
     }
 
-    // Filter by source type
+    // Filter by source type (partial match for UX consistency)
     if (sourceType) {
-      query = query.eq("source_type", sourceType);
+      query = query.ilike("source_type", `%${sourceType}%`);
     }
 
-    // Search in file names and raw text
+    // Search in filenames
     if (search) {
-      query = query.or(`file_name.ilike.%${search}%,original_filename.ilike.%${search}%`);
+      query = query.ilike("original_filename", `%${search}%`);
     }
 
     // Sort by created_at descending (most recent first)
@@ -2720,7 +2865,13 @@ app.get("/sources/:id", async (req, res) => {
       return sendError(res, 404, "RESOURCE_NOT_FOUND", "Source not found");
     }
 
-    return res.json(source);
+    const filesystemAbsolutePath = resolveLocalSourceFilePath(source.storage_url as string | null | undefined);
+    const payload =
+      filesystemAbsolutePath != null
+        ? { ...source, filesystem_absolute_path: filesystemAbsolutePath }
+        : { ...source };
+
+    return res.json(payload);
   } catch (error) {
     return handleApiError(
       req,
@@ -2787,9 +2938,25 @@ app.get("/sources/:id/content", async (req, res) => {
     }
 
     const buffer = await downloadRawContent(sourceToServe.storage_url);
-    const mimeType = sourceToServe.mime_type || "application/octet-stream";
     const filename = sourceToServe.original_filename || `source-${sourceId}`;
-    const inline = /^(application\/pdf|text\/|image\/)/.test(mimeType);
+    const rawMime = (sourceToServe.mime_type || "").trim().toLowerCase();
+    let mimeType = (sourceToServe.mime_type || "").trim() || "application/octet-stream";
+    if (!rawMime || rawMime === "application/octet-stream") {
+      const f = filename.toLowerCase();
+      if (f.endsWith(".wav")) mimeType = "audio/wav";
+      else if (f.endsWith(".mp3")) mimeType = "audio/mpeg";
+      else if (f.endsWith(".m4a")) mimeType = "audio/mp4";
+      else if (f.endsWith(".aac")) mimeType = "audio/aac";
+      else if (f.endsWith(".ogg") || f.endsWith(".oga")) mimeType = "audio/ogg";
+      else if (f.endsWith(".flac")) mimeType = "audio/flac";
+      else if (f.endsWith(".webm")) mimeType = "audio/webm";
+      else if (f.endsWith(".pdf")) mimeType = "application/pdf";
+      else if (f.endsWith(".png")) mimeType = "image/png";
+      else if (f.endsWith(".jpg") || f.endsWith(".jpeg")) mimeType = "image/jpeg";
+      else if (f.endsWith(".gif")) mimeType = "image/gif";
+      else if (f.endsWith(".webp")) mimeType = "image/webp";
+    }
+    const inline = /^(application\/pdf|text\/|image\/|audio\/)/i.test(mimeType);
 
     res.setHeader("Content-Type", mimeType);
     res.setHeader("Content-Length", buffer.length);
@@ -2997,6 +3164,22 @@ async function storeStructuredForApi(params: {
 }) {
   const { userId, entities, sourcePriority, idempotencyKey, originalFilename } = params;
   const { resolveEntity } = await import("./services/entity_resolution.js");
+  const { detectFlatPackedRows, FlatPackedRowsError } = await import(
+    "./services/flat_packed_detection.js"
+  );
+
+  // Reject flat-packed rows (whole tables smuggled into a single entity as
+  // `<prefix>_<index>_<suffix>` keys). These cannot produce per-row snapshots
+  // and are almost always a caller bug. The caller should split into one
+  // entity per row and retry.
+  for (const entityData of entities) {
+    const detection = detectFlatPackedRows(
+      entityData as Record<string, unknown>,
+    );
+    if (detection.detected) {
+      throw new FlatPackedRowsError(detection);
+    }
+  }
 
   const { data: existingSource, error: existingSourceError } = await db
     .from("sources")
@@ -3053,9 +3236,36 @@ async function storeStructuredForApi(params: {
   const createdEntities = [];
 
   for (const entityData of entities) {
-    const entity_type = entityData.entity_type as string;
+    let entity_type = entityData.entity_type as string;
     if (!entity_type) {
       throw new Error("entity_type is required for each entity");
+    }
+
+    // Schema-agnostic duplicate-type collapse (e.g. `places` -> `place`,
+    // aliased-type -> canonical). Applied before storing so the resolved
+    // entity_id hashes into the canonical type rather than a near-duplicate.
+    try {
+      const { schemaRegistry } = await import("./services/schema_registry.js");
+      const active = await schemaRegistry.loadActiveSchema(entity_type, userId);
+      if (!active) {
+        const { findEquivalentEntityType } = await import(
+          "./services/entity_type_equivalence.js"
+        );
+        const match = await findEquivalentEntityType(entity_type, { userId });
+        if (match) {
+          logger.warn(
+            `[STORE] Collapsing new entity_type "${entity_type}" -> existing ` +
+              `"${match.canonical_entity_type}" (reason: ${match.reason}).`,
+          );
+          entity_type = match.canonical_entity_type;
+        }
+      }
+    } catch (equivErr) {
+      logger.warn(
+        `Equivalence check failed for ${entity_type}: ${
+          equivErr instanceof Error ? equivErr.message : String(equivErr)
+        }`,
+      );
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars -- intentional omit
@@ -3086,6 +3296,37 @@ async function storeStructuredForApi(params: {
       logger.warn(`Snapshot recompute failed for ${entity_id}: ${snapshotErr}`);
     }
 
+    // Schema-driven auto-linking: if the entity's active schema declares
+    // reference_fields, create typed relationships to the referenced
+    // entities (REFERS_TO by default). Silent fallback when no schema or no
+    // match exists — never invent targets.
+    try {
+      const { schemaRegistry } = await import("./services/schema_registry.js");
+      const schemaEntry = await schemaRegistry.loadActiveSchema(
+        entity_type,
+        userId,
+      );
+      if (schemaEntry?.schema_definition?.reference_fields?.length) {
+        const { autoLinkReferenceFields } = await import(
+          "./services/schema_reference_linking.js"
+        );
+        await autoLinkReferenceFields({
+          entityId: entity_id,
+          entityType: entity_type,
+          fields,
+          schema: schemaEntry.schema_definition,
+          userId,
+          sourceId: storageResult.sourceId,
+        });
+      }
+    } catch (linkErr) {
+      logger.warn(
+        `Auto-link reference fields failed for ${entity_type}/${entity_id}: ${
+          linkErr instanceof Error ? linkErr.message : String(linkErr)
+        }`,
+      );
+    }
+
     createdEntities.push({
       entity_id,
       entity_type,
@@ -3104,26 +3345,32 @@ async function storeStructuredForApi(params: {
 
 async function storeUnstructuredForApi(params: {
   userId: string;
-  fileContent: string;
+  fileContent?: string;
+  fileBuffer?: Buffer;
   mimeType: string;
   idempotencyKey?: string;
   originalFilename?: string;
 }) {
   const {
     fileContent,
+    fileBuffer,
     mimeType,
     idempotencyKey,
     originalFilename,
     userId,
   } = params;
-  const fileBuffer = Buffer.from(fileContent, "base64");
+  const resolvedFileBuffer =
+    fileBuffer ?? (fileContent !== undefined ? Buffer.from(fileContent, "base64") : undefined);
+  if (!resolvedFileBuffer) {
+    throw new Error("fileContent or fileBuffer is required for unstructured storage");
+  }
   const resolvedIdempotencyKey =
     idempotencyKey ??
-    (await import("node:crypto")).createHash("sha256").update(fileBuffer).digest("hex");
+    (await import("node:crypto")).createHash("sha256").update(resolvedFileBuffer).digest("hex");
 
   const storageResult = await storeRawContent({
     userId,
-    fileBuffer,
+    fileBuffer: resolvedFileBuffer,
     mimeType,
     originalFilename: originalFilename?.trim() || undefined,
     idempotencyKey: resolvedIdempotencyKey,
@@ -3179,31 +3426,24 @@ app.post("/store", async (req, res) => {
     }
 
     if (hasUnstructured) {
-      let fileContent = parsed.data.file_content;
+      const fileContent = parsed.data.file_content;
       let mimeType = parsed.data.mime_type;
       let originalFilename = parsed.data.original_filename;
+      let resolvedFileBuffer: Buffer | undefined;
 
       if (hasFilePath) {
         const resolvedPath = path.isAbsolute(parsed.data.file_path as string)
           ? (parsed.data.file_path as string)
           : path.resolve(process.cwd(), parsed.data.file_path as string);
-        const fileBuffer = fs.readFileSync(resolvedPath);
-        fileContent = fileBuffer.toString("base64");
+        resolvedFileBuffer = fs.readFileSync(resolvedPath);
         if (!mimeType) {
           const ext = path.extname(resolvedPath).toLowerCase();
-          mimeType =
-            ext === ".pdf"
-              ? "application/pdf"
-              : ext === ".csv"
-                ? "text/csv"
-                : ext === ".json"
-                  ? "application/json"
-                  : "text/plain";
+          mimeType = getMimeTypeFromExtension(ext) || "application/octet-stream";
         }
         originalFilename = originalFilename || path.basename(resolvedPath);
       }
 
-      if (!fileContent || !mimeType) {
+      if ((!fileContent && !resolvedFileBuffer) || !mimeType) {
         return sendError(
           res,
           400,
@@ -3215,8 +3455,10 @@ app.post("/store", async (req, res) => {
       unstructuredResult = await storeUnstructuredForApi({
         userId,
         fileContent,
+        fileBuffer: resolvedFileBuffer,
         mimeType,
-        idempotencyKey: parsed.data.file_idempotency_key,
+        idempotencyKey:
+          parsed.data.file_idempotency_key ?? (!hasEntities ? parsed.data.idempotency_key : undefined),
         originalFilename,
       });
     }
@@ -3234,6 +3476,47 @@ app.post("/store", async (req, res) => {
   } catch (error) {
     if (error instanceof Error && error.message.includes("Not authenticated")) {
       return sendError(res, 401, "AUTH_REQUIRED", error.message);
+    }
+    const errCode =
+      error && typeof error === "object"
+        ? (error as { code?: string }).code
+        : undefined;
+    if (
+      errCode === "ERR_FORBIDDEN_ENTITY_TYPE" ||
+      errCode === "ERR_PLURAL_ENTITY_TYPE"
+    ) {
+      const message = error instanceof Error ? error.message : String(error);
+      logWarn("EntityTypeGuardError:store", req, { code: errCode, message });
+      return sendError(res, 400, errCode, message);
+    }
+    if (
+      error &&
+      typeof error === "object" &&
+      errCode === "ERR_FLAT_PACKED_ROWS"
+    ) {
+      const err = error as {
+        message: string;
+        detection: {
+          prefix?: string;
+          indices?: number[];
+          suggestedEntities?: Array<Record<string, unknown>>;
+          exampleKeys?: string[];
+        };
+      };
+      logWarn("FlatPackedRowsError:store", req, {
+        prefix: err.detection.prefix,
+        row_count: err.detection.indices?.length ?? 0,
+      });
+      return res.status(400).json({
+        error: {
+          code: "ERR_FLAT_PACKED_ROWS",
+          message: err.message,
+          prefix: err.detection.prefix,
+          row_count: err.detection.indices?.length ?? 0,
+          example_keys: err.detection.exampleKeys ?? [],
+          suggested_entities: err.detection.suggestedEntities ?? [],
+        },
+      });
     }
     logError("APIError:store", req, error);
     const message = error instanceof Error ? error.message : "Failed to store payload";
@@ -4187,6 +4470,13 @@ app.post("/get_schema_recommendations", async (req, res) => {
 });
 
 // POST /update_schema_incremental - Incrementally update schema by adding or removing fields
+//
+// Routes through SchemaRegistryService.updateSchemaIncremental so that:
+//   - Version bumps are consistent across CLI, MCP and HTTP.
+//   - Schema-level declarations (canonical_name_fields, temporal_fields,
+//     reference_fields, aliases) are preserved across incremental updates.
+//   - migrate_existing correctly backfills raw_fragments → observations.
+//   - Reducer policies track added/removed fields.
 app.post("/update_schema_incremental", async (req, res) => {
   const parsed = UpdateSchemaIncrementalRequestSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -4205,100 +4495,49 @@ app.post("/update_schema_incremental", async (req, res) => {
       schema_version,
       user_specific = false,
       activate = true,
+      migrate_existing = false,
+      force = false,
     } = parsed.data;
 
-    // Get current schema
-    let query = db
-      .from("schema_registry")
-      .select("*")
-      .eq("entity_type", entity_type)
-      .eq("active", true);
+    const { schemaRegistry } = await import("./services/schema_registry.js");
 
-    if (user_specific && userId) {
-      query = query.eq("user_id", userId);
-    } else {
-      query = query.is("user_id", null);
-    }
-
-    const { data: currentSchema, error: fetchError } = await query.single();
-
-    if (fetchError && fetchError.code !== "PGRST116") {
-      logError("DbError:update_schema_incremental", req, fetchError);
-      return sendError(res, 500, "DB_QUERY_FAILED", fetchError.message);
-    }
-
-    // Build new schema definition
-    const baseSchema = currentSchema?.schema_definition || { fields: {} };
-    const newFields: Record<string, any> = {};
-
-    (fields_to_add || []).forEach((field: any) => {
-      newFields[field.field_name] = {
-        type: field.field_type,
-        required: field.required || false,
-        reducer_strategy: field.reducer_strategy || "highest_priority",
-      };
-    });
-
-    const mergedFields = { ...baseSchema.fields, ...newFields };
-
-    // Remove fields (data preserved in observations, excluded from snapshots via reducer projection)
-    const removedFields: string[] = [];
-    for (const fieldName of fields_to_remove || []) {
-      if (mergedFields[fieldName]) {
-        delete mergedFields[fieldName];
-        removedFields.push(fieldName);
-      }
-    }
-
-    const updatedSchema = {
-      ...baseSchema,
-      fields: mergedFields,
-    };
-
-    // Determine version bump: major for removals, minor for additions only
-    const hasRemovals = removedFields.length > 0;
-    const defaultVersion = hasRemovals
-      ? (() => {
-          const parts = (currentSchema?.schema_version || "1.0.0").split(".");
-          return `${parseInt(parts[0] || "1") + 1}.0.0`;
-        })()
-      : `${parseInt(currentSchema?.schema_version || "1") + 1}`;
-
-    // Insert new schema version
-    const { data: newSchemaVersion, error: insertError } = await db
-      .from("schema_registry")
-      .insert({
+    let newSchema;
+    try {
+      newSchema = await schemaRegistry.updateSchemaIncremental({
         entity_type,
-        schema_version: schema_version || defaultVersion,
-        schema_definition: updatedSchema,
-        reducer_config: currentSchema?.reducer_config || {},
-        user_id: user_specific ? userId : null,
-        active: activate,
-        created_at: new Date().toISOString(),
-      })
-      .select()
-      .single();
-
-    if (insertError) {
-      logError("DbError:update_schema_incremental", req, insertError);
-      return sendError(res, 500, "DB_QUERY_FAILED", insertError.message);
-    }
-
-    // Deactivate old schema if activating new one
-    if (activate && currentSchema) {
-      await db.from("schema_registry").update({ active: false }).eq("id", currentSchema.id);
+        fields_to_add: (fields_to_add || []) as Parameters<
+          typeof schemaRegistry.updateSchemaIncremental
+        >[0]["fields_to_add"],
+        fields_to_remove: fields_to_remove || [],
+        schema_version,
+        user_specific,
+        user_id: userId,
+        activate,
+        migrate_existing,
+        force,
+      });
+    } catch (err) {
+      const code = (err as { code?: string })?.code;
+      if (
+        code === "ERR_FORBIDDEN_ENTITY_TYPE" ||
+        code === "ERR_PLURAL_ENTITY_TYPE"
+      ) {
+        return sendError(res, 400, code, (err as Error).message);
+      }
+      throw err;
     }
 
     logDebug("Success:update_schema_incremental", req, {
       entity_type,
       fields_added: (fields_to_add || []).length,
-      fields_removed: removedFields.length,
+      fields_removed: (fields_to_remove || []).length,
+      migrate_existing,
     });
     return res.json({
       success: true,
-      schema: newSchemaVersion,
-      schema_version: newSchemaVersion.schema_version,
-      fields_removed: removedFields,
+      schema: newSchema,
+      schema_version: newSchema.schema_version,
+      fields_removed: fields_to_remove || [],
     });
   } catch (error) {
     return handleApiError(
@@ -4313,6 +4552,11 @@ app.post("/update_schema_incremental", async (req, res) => {
 });
 
 // POST /register_schema - Register new schema or schema version
+//
+// Routes through SchemaRegistryService.register so that schema_definition and
+// reducer_config are validated consistently across CLI, MCP and HTTP, and
+// schema-level declarations (canonical_name_fields, temporal_fields,
+// reference_fields, aliases) are rejected early when malformed.
 app.post("/register_schema", async (req, res) => {
   const parsed = RegisterSchemaRequestSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -4331,38 +4575,47 @@ app.post("/register_schema", async (req, res) => {
       schema_version = "1.0",
       user_specific = false,
       activate = false,
+      force = false,
     } = parsed.data;
 
-    // Insert new schema
-    const { data: newSchema, error } = await db
-      .from("schema_registry")
-      .insert({
+    const { schemaRegistry } = await import("./services/schema_registry.js");
+
+    let newSchema;
+    try {
+      newSchema = await schemaRegistry.register({
         entity_type,
         schema_version,
-        schema_definition,
-        reducer_config,
-        user_id: user_specific ? userId : null,
-        active: activate,
-        created_at: new Date().toISOString(),
-      })
-      .select()
-      .single();
-
-    if (error) {
-      logError("DbError:register_schema", req, error);
-      return sendError(res, 500, "DB_QUERY_FAILED", error.message);
+        schema_definition: schema_definition as unknown as Parameters<
+          typeof schemaRegistry.register
+        >[0]["schema_definition"],
+        reducer_config: (reducer_config || { merge_policies: {} }) as unknown as Parameters<
+          typeof schemaRegistry.register
+        >[0]["reducer_config"],
+        user_id: userId,
+        user_specific,
+        activate,
+        force,
+      });
+    } catch (err) {
+      const code = (err as { code?: string })?.code;
+      const message = err instanceof Error ? err.message : String(err);
+      logWarn("ValidationError:register_schema", req, { error: message });
+      if (
+        code === "ERR_FORBIDDEN_ENTITY_TYPE" ||
+        code === "ERR_PLURAL_ENTITY_TYPE"
+      ) {
+        return sendError(res, 400, code, message);
+      }
+      return sendError(res, 400, "SCHEMA_VALIDATION_FAILED", message);
     }
 
-    // If activating, deactivate other schemas for this entity type
     if (activate) {
-      await db
-        .from("schema_registry")
-        .update({ active: false })
-        .eq("entity_type", entity_type)
-        .not("id", "eq", newSchema.id);
-
-      if (user_specific) {
-        await db.from("schema_registry").update({ active: false }).eq("user_id", userId);
+      try {
+        await schemaRegistry.activate(entity_type, newSchema.schema_version);
+      } catch (err) {
+        logWarn("ActivateError:register_schema", req, {
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }
 
@@ -4607,40 +4860,20 @@ app.post("/recompute_snapshots_by_type", async (req, res) => {
       });
     }
 
-    const { observationReducer } = await import("./reducers/observation_reducer.js");
+    // Use recomputeSnapshot so that:
+    //   - The active schema is loaded and applied (schema-driven canonical_name
+    //     and timeline events).
+    //   - Embedding preparation, snapshot upsert, and timeline event upsert
+    //     all run through the shared pipeline.
+    const { recomputeSnapshot } = await import("./services/snapshot_computation.js");
     let recomputed = 0;
     let errors = 0;
     const errorDetails: Array<{ entity_id: string; error: string }> = [];
 
     for (const entityId of entityIds) {
       try {
-        const { data: observations } = await db
-          .from("observations")
-          .select("*")
-          .eq("entity_id", entityId)
-          .order("observed_at", { ascending: false });
-
-        if (!observations || observations.length === 0) continue;
-
-        const newSnapshot = await observationReducer.computeSnapshot(
-          entityId,
-          observations as any,
-        );
-        if (!newSnapshot) continue;
-
-        const rowWithEmbedding = await prepareEntitySnapshotWithEmbedding({
-          entity_id: newSnapshot.entity_id,
-          entity_type: newSnapshot.entity_type,
-          schema_version: newSnapshot.schema_version,
-          snapshot: newSnapshot.snapshot,
-          computed_at: newSnapshot.computed_at,
-          observation_count: newSnapshot.observation_count,
-          last_observation_at: newSnapshot.last_observation_at,
-          provenance: newSnapshot.provenance,
-          user_id: newSnapshot.user_id,
-        });
-        await upsertEntitySnapshotWithEmbedding(rowWithEmbedding);
-        recomputed++;
+        const snapshot = await recomputeSnapshot(entityId, userId);
+        if (snapshot) recomputed++;
       } catch (err) {
         errors++;
         errorDetails.push({

@@ -957,6 +957,16 @@ paths:
               properties:
                 entity_id:
                   type: string
+                at:
+                  type: string
+                  description: ISO 8601 timestamp for historical snapshot reconstruction
+                format:
+                  type: string
+                  enum: [markdown, json]
+                  description: >-
+                    Response text format. `markdown` (default for MCP) returns canonical
+                    deterministic markdown for KV-cache stability. `json` returns the raw
+                    snapshot payload for programmatic callers.
       responses:
         '200':
           description: Entity snapshot

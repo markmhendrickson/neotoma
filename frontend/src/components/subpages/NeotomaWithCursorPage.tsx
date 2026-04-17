@@ -182,6 +182,30 @@ export function NeotomaWithCursorPage() {
         </TableScrollWrapper>
       </IntegrationSection>
 
+      <IntegrationSection sectionKey="neotoma-cursor-hooks" title="Neotoma Cursor hooks (optional)">
+        <p className="text-[15px] leading-7 text-muted-foreground mb-4">
+          The{" "}
+          <a
+            href="https://github.com/markmhendrickson/neotoma/tree/main/packages/cursor-hooks"
+            target="_blank"
+            rel="noopener noreferrer"
+            className={extLink}
+          >
+            Neotoma Cursor hooks
+          </a>{" "}
+          package installs into <code>.cursor/hooks.json</code> and runs
+          alongside the MCP server. MCP remains the path for agent-driven
+          structured writes; hooks guarantee capture of each prompt, tool
+          call, and assistant reply, and inject retrieved Neotoma context
+          into the prompt via <code>additionalContext</code>.
+        </p>
+        <p className="text-[14px] leading-6 text-muted-foreground mb-2">
+          Install with <code>npx @neotoma/cursor-hooks install</code>. Hooks
+          share idempotency keys with MCP, so combined use produces one
+          entity per logical turn, not duplicates.
+        </p>
+      </IntegrationSection>
+
       <IntegrationSection sectionKey="getting-started" title="Getting started">
         <GettingStartedEvaluateInstallLinks agentTargetPhrase="a Cursor agent chat" />
         <p className="text-[15px] leading-7 text-muted-foreground mb-4">

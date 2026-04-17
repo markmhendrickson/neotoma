@@ -484,3 +484,31 @@ export function sendFunnelInstallPromptCopy(block: InstallPromptCopyBlock): void
     flushUmamiQueue();
   }
 }
+
+/** Which permissions pre-flight snippet the user copied. */
+export type PreflightHarness = "claude-code" | "cursor" | "codex" | "openclaw" | "path-mise";
+
+/**
+ * Permissions pre-flight copy. Each harness snippet is tracked separately so
+ * we can see which harnesses benefit most from the pre-flight surface.
+ */
+export function sendFunnelPreflightCopy(harness: PreflightHarness): void {
+  const page_path = typeof window !== "undefined" ? window.location.pathname : "/";
+  if (isGaReady()) {
+    window.gtag!("event", "funnel_preflight_copy", {
+      funnel: "install_prompt",
+      preflight_harness: harness,
+      page_path,
+    });
+  }
+  if (isUmamiConfigured()) {
+    runWhenUmamiReady(() => {
+      window.umami!.track("funnel_preflight_copy", {
+        funnel: "install_prompt",
+        preflight_harness: harness,
+        page_path,
+      });
+    });
+    flushUmamiQueue();
+  }
+}

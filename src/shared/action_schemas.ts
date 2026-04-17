@@ -7,6 +7,12 @@ export const EntityIdSchema = z.object({
 export const EntitySnapshotRequestSchema = z.object({
   entity_id: z.string(),
   at: z.string().optional(),
+  /**
+   * Response text format. Defaults to `markdown` so MCP output is KV-cache
+   * stable for LLMs (see canonical_markdown renderer). Use `json` for
+   * machine-parseable output (e.g. CLI, tests, dashboards).
+   */
+  format: z.enum(["markdown", "json"]).optional(),
 });
 
 export const ListObservationsRequestSchema = z.object({
@@ -382,6 +388,7 @@ export const UpdateSchemaIncrementalRequestSchema = z.object({
   user_id: z.string().optional(),
   activate: z.boolean().default(true),
   migrate_existing: z.boolean().default(false),
+  force: z.boolean().default(false),
 }).refine(
   (data) =>
     (data.fields_to_add && data.fields_to_add.length > 0) ||
@@ -397,4 +404,5 @@ export const RegisterSchemaRequestSchema = z.object({
   user_specific: z.boolean().default(false),
   user_id: z.string().optional(),
   activate: z.boolean().default(false),
+  force: z.boolean().default(false),
 });

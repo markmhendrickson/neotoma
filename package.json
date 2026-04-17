@@ -5,11 +5,18 @@
   "main": "dist/index.js",
   "type": "module",
   "browser": false,
+  "exports": {
+    ".": "./dist/index.js",
+    "./core": "./dist/core/operations.js",
+    "./core/operations": "./dist/core/operations.js",
+    "./server": "./dist/server.js"
+  },
   "bin": {
     "neotoma": "dist/cli/bootstrap.js"
   },
   "scripts": {
     "pretest": "npm run build:server",
+    "build": "npm run build:server",
     "build:server": "tsc && node scripts/copy_pdf_worker_wrapper.js",
     "pack:local": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\" && npm run build:server && npm pack --pack-destination .",
     "prebuild:ui": "tsx scripts/repo_info.ts",
@@ -216,6 +223,7 @@
     "react-router-dom": "^7.12.0",
     "react-syntax-highlighter": "^16.1.0",
     "semver": "^7.7.4",
+    "simple-git": "^3.36.0",
     "sonner": "^2.0.7",
     "sqlite-vec": "^0.1.6",
     "tailwind-merge": "^2.2.0",

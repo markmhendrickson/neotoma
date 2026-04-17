@@ -1,0 +1,19 @@
+{
+  "name": "@neotoma/codex-hooks",
+  "version": "0.1.0",
+  "description": "Neotoma hooks for OpenAI Codex CLI — session markers and user-prompt capture against the Neotoma state layer.",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "neotoma-codex-hooks": "./scripts/install.mjs"
+  },
+  "scripts": {
+    "install:hooks": "node scripts/install.mjs",
+    "uninstall:hooks": "node scripts/install.mjs --uninstall"
+  },
+  "files": [
+    "hooks",
+    "scripts",
+    "README.md"
+  ]
+}

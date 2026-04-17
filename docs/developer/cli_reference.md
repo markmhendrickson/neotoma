@@ -441,6 +441,48 @@ For chat persistence recipes, MCP and CLI use the same underlying store contract
   - `--tail`: Only show changes from now (skip existing records).
   - When encryption is on, set `NEOTOMA_KEY_FILE_PATH` or `NEOTOMA_MNEMONIC`.
 
+### Mirror
+
+- `neotoma mirror enable`: Enable the markdown mirror under `<NEOTOMA_DATA_DIR>/mirror/` and run an initial rebuild.
+  - `--path <dir>`: Override mirror root.
+  - `--git`: Enable git-backed history (`git init` on the mirror path, one commit per write batch). Requires the optional `simple-git` dependency (installed by default).
+  - `--kinds <list>`: Comma-separated kinds to mirror (`entities,relationships,sources,timeline,schemas`, default all).
+- `neotoma mirror disable`: Disable mirror write-through. Does not delete existing files.
+- `neotoma mirror rebuild`: Regenerate the mirror from SQLite.
+  - `--kind <entities|relationships|sources|timeline|schemas|all>` (default `all`).
+  - `--entity-type <type>`, `--entity-id <id>`: Scope rebuild to a type or single record.
+  - `--clean`: Remove stale mirror files within the targeted scope that this rebuild did not produce.
+- `neotoma mirror status`: Print current mirror config, file counts per kind, and whether git is enabled.
+
+The mirror is a derived artifact: SQLite is the only source of truth. Mirror files carry a header warning that manual edits will be overwritten on the next write. To edit an entity, use `neotoma edit <id>` or the Inspector (see below). See `docs/subsystems/markdown_mirror.md` for layout, determinism, and git semantics.
+
+### Edit
+
+- `neotoma edit <id>`: Open the entity snapshot as YAML in `$EDITOR`, diff on save, and submit changed fields as one batch correction (one `correct()` observation per changed field, applied atomically).
+  - `--set field=value` (repeatable): Non-interactive edit. No editor invoked. Same batch backend, same concurrency prompt.
+  - `--force`: On optimistic-concurrency conflict, overwrite without prompting (non-interactive use).
+  - Editor fallback order: `$EDITOR`, then `$VISUAL`, then `vi`.
+  - Optimistic concurrency: captures `last_observation_at` on load. If a newer observation exists at save time, the CLI prints conflicting fields and prompts `[r]ebase / [o]verwrite / [a]bort`.
+  - On validation failure, the draft file is preserved under `~/.config/neotoma/edit-drafts/<entity_id>-<ts>.yaml` and the path is printed so the user can rerun `neotoma edit <id>`.
+
+The CLI and the Inspector share one `applyBatchCorrection` backend (`src/services/batch_correction.ts`), so both surfaces have identical semantics.
+
+### Memory export
+
+- `neotoma memory-export`: Write a single `MEMORY.md` file with bounded, deterministic contents for agent harnesses that consume file-based memory.
+  - `--path <path>` (default `MEMORY.md`): Output path.
+  - `--limit-lines <n>` (default 200): Hard line cap. When exceeded, output is truncated with a `<!-- fold: N entities not shown -->` marker. Set to `0` to include every entity with no line cap.
+  - `--include-types <list>`: Comma-separated entity types to include. Omit to include all types (minus bookkeeping).
+  - `--exclude-types <list>`: Comma-separated entity types to exclude. Applied on top of the default bookkeeping filter.
+  - `--include-bookkeeping`: Include chat bookkeeping (`conversation`, `agent_message`). Excluded by default because they are noise in a memory manifest and already live in conversation history.
+  - `--max-field-chars <n>` (default 400): Per-field character cap for long string values. Long bodies (posts, notes, transcripts) are truncated with a deterministic `… (<N> chars truncated)` suffix so one long entity cannot consume the entire line budget. Set to `0` to emit full values.
+  - `--order <importance|recency>` (default `importance`): Sort strategy.
+    - `importance`: type-weighted signal score `typeWeight × log2(observation_count + 2) × recency_decay` (half-life 30 days). Tier-1 types (`task`, `contact`, `event`, `transaction`, `product_feedback`, `business_opportunity`, `issue`, `user_persona_insight`, `life_tenets`, `architectural_decision`, `agent_decision`, `release`, `feature_unit`) rank above Tier-2 durable artifacts (`note`, `post`, `meeting_transcription`, `email_message`, `location`, `file_asset`, etc.). Bookkeeping types score 0 when included explicitly.
+    - `recency`: `last_observation_at desc`, ties broken by `entity_id asc`.
+  - `--user-id <id>`: Scope to a specific user. Defaults to the active local dev user when encryption is off.
+
+`MEMORY.md` is regenerated automatically after each mirror batch when `mirror.memory_export.enabled` is set in `~/.config/neotoma/config.json`.
+
 ### Storage
 
 - `neotoma storage info`: Show where CLI config and server data are stored (file paths and backend).

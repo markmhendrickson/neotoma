@@ -19,6 +19,14 @@ export type Config = {
   extra_api_ports?: number[];
   /** Ports learned from prior successful sessions. */
   known_api_ports?: number[];
+  /**
+   * Sticky preferred environment for the CLI. Written when the user runs
+   * `neotoma api start --env prod` or `--env dev`, or when a session starts
+   * with an explicit `--env` flag. Read by `resolveLocalTransportEnv` in
+   * `src/shared/local_transport.ts` so plain `neotoma store` and similar
+   * commands route to the correct SQLite DB file even when no env var is set.
+   */
+  preferred_env?: "prod" | "dev";
 };
 
 export const DEFAULT_BASE_URL = "http://localhost:3080";

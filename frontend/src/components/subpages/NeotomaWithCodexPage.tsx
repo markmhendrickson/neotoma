@@ -146,6 +146,31 @@ export function NeotomaWithCodexPage() {
         </TableScrollWrapper>
       </IntegrationSection>
 
+      <IntegrationSection sectionKey="neotoma-codex-hooks" title="Neotoma Codex hooks (optional)">
+        <p className="text-[15px] leading-7 text-muted-foreground mb-4">
+          The{" "}
+          <a
+            href="https://github.com/markmhendrickson/neotoma/tree/main/packages/codex-hooks"
+            target="_blank"
+            rel="noopener noreferrer"
+            className={extLink}
+          >
+            Neotoma Codex hooks
+          </a>{" "}
+          package edits <code>~/.codex/config.toml</code> to register session
+          start, notification, and session end handlers. Codex exposes fewer
+          hook points than Claude Code, so these focus on the most useful
+          moments: anchoring each session as a <code>conversation</code>,
+          recording notifications as timeline events, and capturing the final
+          assistant reply as a safety net.
+        </p>
+        <p className="text-[14px] leading-6 text-muted-foreground mb-2">
+          Install with <code>neotoma-codex-hooks</code> after{" "}
+          <code>npm install -g @neotoma/codex-hooks</code>. MCP still handles
+          agent-driven structured writes.
+        </p>
+      </IntegrationSection>
+
       <IntegrationSection sectionKey="getting-started" title="Getting started">
         <GettingStartedEvaluateInstallLinks agentTargetPhrase="Codex" />
         <p className="text-[15px] leading-7 text-muted-foreground mb-3">

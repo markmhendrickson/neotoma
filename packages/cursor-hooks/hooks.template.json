@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeSubmitPrompt": [
+      {
+        "command": "node",
+        "args": ["${HOOK_DIR}/dist/before_submit_prompt.js"]
+      }
+    ],
+    "afterToolUse": [
+      {
+        "command": "node",
+        "args": ["${HOOK_DIR}/dist/after_tool_use.js"]
+      }
+    ],
+    "stop": [
+      {
+        "command": "node",
+        "args": ["${HOOK_DIR}/dist/stop.js"]
+      }
+    ]
+  }
+}

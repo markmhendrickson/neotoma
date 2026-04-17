@@ -77,6 +77,13 @@ export class TempFileManager {
     return filePath;
   }
 
+  async createBinary(name: string, content: Uint8Array): Promise<string> {
+    const filePath = join(this.dir, name);
+    await writeFile(filePath, content);
+    this.files.push(filePath);
+    return filePath;
+  }
+
   async cleanup(): Promise<void> {
     if (this.dir) {
       await rm(this.dir, { recursive: true, force: true });

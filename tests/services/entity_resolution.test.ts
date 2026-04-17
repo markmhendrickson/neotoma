@@ -338,6 +338,75 @@ describe("Entity Resolution Service", () => {
         generateEntityId("company", "acme corp"),
       );
     });
+
+    // Audit finding #1: two receipts for the same merchant but different
+    // totals and dates were collapsing into a single entity because the
+    // canonical name was only derived from merchant. With schema-declared
+    // canonical_name_fields the composite of (merchant, total_amount,
+    // receipt_date) must distinguish them.
+    it("produces distinct canonical names for two Ecoveritas receipts with different totals (schema-declared composite)", () => {
+      const schema = {
+        canonical_name_fields: [
+          "merchant",
+          "total_amount",
+          "receipt_date",
+        ],
+      };
+      const c1 = deriveCanonicalNameFromFields(
+        "receipt",
+        {
+          merchant: "Ecoveritas",
+          total_amount: 42.5,
+          receipt_date: "2024-05-01",
+        },
+        schema,
+      );
+      const c2 = deriveCanonicalNameFromFields(
+        "receipt",
+        {
+          merchant: "Ecoveritas",
+          total_amount: 78.9,
+          receipt_date: "2024-05-03",
+        },
+        schema,
+      );
+      expect(c1).not.toBe(c2);
+      expect(generateEntityId("receipt", c1)).not.toBe(
+        generateEntityId("receipt", c2),
+      );
+    });
+
+    // When none of the schema-declared composite fields have values, the
+    // canonical derivation must not fall back to a generic enum-like token
+    // (currency=EUR) that would collapse every receipt in the system.
+    it("rejects enum-like single-value canonical fallback (EUR-only receipt)", () => {
+      const schema = {
+        canonical_name_fields: [
+          "merchant",
+          "total_amount",
+          "receipt_date",
+        ],
+      };
+      const canonical = deriveCanonicalNameFromFields(
+        "receipt",
+        { currency: "EUR" },
+        schema,
+      );
+      // No schema-declared field has a value; enum-like tokens must be
+      // rejected by isRejectedCanonicalValue, so this must NOT produce
+      // a canonical of "EUR".
+      expect(canonical).not.toBe("EUR");
+      expect(canonical?.toLowerCase()).not.toBe("eur");
+    });
+
+    it("still resolves via heuristic for an unseeded type without schema", () => {
+      // Without any schema, the heuristic fallback picks a reasonable field.
+      const canonical = deriveCanonicalNameFromFields("custom_widget", {
+        widget_name: "Blue Widget",
+      });
+      expect(canonical).toBeTruthy();
+      expect(typeof canonical).toBe("string");
+    });
   });
 
   describe("Integration - generateEntityId with normalizeEntityValue", () => {

@@ -47,6 +47,7 @@ import {
 } from "./shared/action_schemas.js";
 import { ensureLocalDevUser } from "./services/local_auth.js";
 import type { RelationshipType } from "./services/relationships.js";
+import type { SchemaDefinition } from "./services/schema_registry.js";
 import {
   extractTextFromBuffer,
   getPdfFirstPageImageDataUrl,
@@ -1539,8 +1540,56 @@ export class NeotomaServer {
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const { getEntityWithProvenance } = await import("./services/entity_queries.js");
     const { observationReducer } = await import("./reducers/observation_reducer.js");
+    const { renderEntityCompactText } = await import("./services/canonical_markdown.js");
+    const { schemaRegistry } = await import("./services/schema_registry.js");
 
     const parsed = EntitySnapshotRequestSchema.parse(args ?? {});
+    const responseFormat = parsed.format ?? "markdown";
+
+    const renderEntitySnapshotResponse = async (
+      payload: {
+        entity_id: string;
+        entity_type: string;
+        schema_version: string;
+        snapshot: Record<string, unknown>;
+        raw_fragments?: unknown;
+        provenance: Record<string, string>;
+        computed_at: string | null | undefined;
+        observation_count: number;
+        last_observation_at: string | null | undefined;
+      }
+    ): Promise<{ content: Array<{ type: string; text: string }> }> => {
+      if (responseFormat === "json") {
+        return this.buildTextResponse(payload);
+      }
+      let schemaFieldOrder: string[] | undefined;
+      try {
+        const schema = await schemaRegistry.loadActiveSchema(
+          payload.entity_type,
+          this.authenticatedUserId ?? undefined
+        );
+        if (schema?.schema_definition?.fields) {
+          schemaFieldOrder = Object.keys(schema.schema_definition.fields);
+        }
+      } catch {
+        // Fall through with alphabetical ordering if schema load fails.
+      }
+      const text = renderEntityCompactText(
+        {
+          entity_id: payload.entity_id,
+          entity_type: payload.entity_type,
+          schema_version: payload.schema_version,
+          snapshot: payload.snapshot,
+          computed_at: payload.computed_at ?? null,
+          observation_count: payload.observation_count,
+          last_observation_at: payload.last_observation_at ?? null,
+          provenance: payload.provenance,
+        },
+        schemaFieldOrder,
+        { includeProvenance: true }
+      );
+      return { content: [{ type: "text", text }] };
+    };
 
     // Get entity first to check if it exists and handle merged entity redirection
     const entity = await getEntityWithProvenance(parsed.entity_id);
@@ -1578,7 +1627,7 @@ export class NeotomaServer {
 
         if (!observations || observations.length === 0) {
           // No observations at this point in time - return empty snapshot
-          return this.buildTextResponse({
+          return renderEntitySnapshotResponse({
             entity_id: entity.entity_id,
             entity_type: entity.entity_type,
             schema_version: entity.entity_type, // Fallback
@@ -1623,7 +1672,7 @@ export class NeotomaServer {
         const currentEntity = await getEntityWithProvenance(entity.entity_id);
 
         // Format response to match EntityWithProvenance structure
-        return this.buildTextResponse({
+        return renderEntitySnapshotResponse({
           entity_id: historicalSnapshot.entity_id,
           entity_type: historicalSnapshot.entity_type,
           schema_version: historicalSnapshot.schema_version,
@@ -1646,7 +1695,26 @@ export class NeotomaServer {
     }
 
     // Return current snapshot (from stored entity_snapshots table)
-    return this.buildTextResponse(entity);
+    return renderEntitySnapshotResponse({
+      entity_id: entity.entity_id,
+      entity_type: entity.entity_type,
+      schema_version:
+        (entity as { schema_version?: string }).schema_version ?? entity.entity_type,
+      snapshot:
+        ((entity as { snapshot?: Record<string, unknown> }).snapshot as
+          | Record<string, unknown>
+          | undefined) ?? {},
+      raw_fragments: (entity as { raw_fragments?: unknown }).raw_fragments,
+      provenance:
+        ((entity as { provenance?: Record<string, string> }).provenance as
+          | Record<string, string>
+          | undefined) ?? {},
+      computed_at: (entity as { computed_at?: string | null }).computed_at ?? null,
+      observation_count:
+        (entity as { observation_count?: number }).observation_count ?? 0,
+      last_observation_at:
+        (entity as { last_observation_at?: string | null }).last_observation_at ?? null,
+    });
   }
 
   private async listObservations(
@@ -3047,6 +3115,18 @@ export class NeotomaServer {
     const { validateFieldsWithConverters } = await import("./services/field_validation.js");
     const { generateObservationId } = await import("./services/observation_identity.js");
     const { db } = await import("./db.js");
+    const { detectFlatPackedRows, FlatPackedRowsError } = await import(
+      "./services/flat_packed_detection.js"
+    );
+
+    // Reject flat-packed rows early so MCP clients get a clear error instead
+    // of a single corrupted entity snapshot.
+    for (const entityData of entities) {
+      const detection = detectFlatPackedRows(entityData);
+      if (detection.detected) {
+        throw new FlatPackedRowsError(detection);
+      }
+    }
 
     if (idempotencyKey) {
       const { data: existingSource, error: existingSourceError } = await db
@@ -3138,7 +3218,7 @@ export class NeotomaServer {
 
     for (const entityData of entities) {
       // Extract entity_type (support both 'entity_type' and 'type' fields)
-      const entityType =
+      let entityType =
         (entityData.entity_type as string) || (entityData.type as string) || "generic";
 
       // Exclude entity_type and type from field validation (they're metadata)
@@ -3148,6 +3228,27 @@ export class NeotomaServer {
 
       // Load schema for validation from database
       let schema = await schemaRegistry.loadActiveSchema(entityType, userId);
+
+      // Schema-agnostic duplicate-type collapse: before auto-creating a new
+      // schema for this candidate, check whether an existing registered type
+      // is semantically equivalent (alias, normalized, or same singular form).
+      // If so, redirect storage to the canonical type instead of creating a
+      // near-duplicate schema like `place`/`places`.
+      if (!schema) {
+        const { findEquivalentEntityType } = await import(
+          "./services/entity_type_equivalence.js"
+        );
+        const match = await findEquivalentEntityType(entityType, { userId });
+        if (match) {
+          logger.warn(
+            `[STORE] Collapsing new entity_type "${entityType}" -> existing ` +
+              `"${match.canonical_entity_type}" (reason: ${match.reason}). ` +
+              `Set schema.aliases explicitly if this is wrong.`,
+          );
+          entityType = match.canonical_entity_type;
+          schema = await schemaRegistry.loadActiveSchema(entityType, userId);
+        }
+      }
 
       if (!schema) {
         // Auto-create user-specific schema from structured data
@@ -3354,6 +3455,19 @@ export class NeotomaServer {
           const { upsertTimelineEventsForEntitySnapshot } = await import(
             "./services/timeline_events.js"
           );
+          let timelineSchema: SchemaDefinition | null = null;
+          try {
+            const { schemaRegistry } = await import(
+              "./services/schema_registry.js"
+            );
+            const entry = await schemaRegistry.loadActiveSchema(
+              snapshot.entity_type,
+              snapshot.user_id || userId,
+            );
+            timelineSchema = entry?.schema_definition ?? null;
+          } catch {
+            timelineSchema = null;
+          }
           await upsertTimelineEventsForEntitySnapshot({
             entityType: snapshot.entity_type,
             entityId: snapshot.entity_id,
@@ -3361,7 +3475,33 @@ export class NeotomaServer {
             userId: snapshot.user_id || userId,
             snapshot: (snapshot.snapshot as Record<string, unknown>) || {},
             sameTypeInSourceBatch: sameTypeInBatch,
+            schema: timelineSchema,
           });
+
+          // Schema-driven auto-linking of reference_fields → typed edges.
+          if (timelineSchema?.reference_fields?.length) {
+            try {
+              const { autoLinkReferenceFields } = await import(
+                "./services/schema_reference_linking.js"
+              );
+              await autoLinkReferenceFields({
+                entityId: snapshot.entity_id,
+                entityType: snapshot.entity_type,
+                fields: (snapshot.snapshot as Record<string, unknown>) || {},
+                schema: timelineSchema,
+                userId: snapshot.user_id || userId,
+                sourceId: storageResult.sourceId,
+              });
+            } catch (linkErr) {
+              logger.warn(
+                `[STORE] Auto-link reference fields failed for ` +
+                  `${snapshot.entity_type}/${snapshot.entity_id}: ` +
+                  (linkErr instanceof Error
+                    ? linkErr.message
+                    : String(linkErr)),
+              );
+            }
+          }
         }
       } catch (error) {
         logger.error(

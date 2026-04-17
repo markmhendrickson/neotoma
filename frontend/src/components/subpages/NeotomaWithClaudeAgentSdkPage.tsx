@@ -272,6 +272,33 @@ export function NeotomaWithClaudeAgentSdkPage() {
         </p>
       </IntegrationSection>
 
+      <IntegrationSection sectionKey="neotoma-sdk-adapter" title="Neotoma SDK adapter (optional)">
+        <p className="text-[15px] leading-7 text-muted-foreground mb-4">
+          The{" "}
+          <a
+            href="https://github.com/markmhendrickson/neotoma/tree/main/packages/claude-agent-sdk-adapter"
+            target="_blank"
+            rel="noopener noreferrer"
+            className={extLink}
+          >
+            Neotoma Claude Agent SDK adapter
+          </a>{" "}
+          returns ready-to-mount callbacks for the SDK&apos;s hooks interface
+          (<code>UserPromptSubmit</code>, <code>PostToolUse</code>,{" "}
+          <code>PreCompact</code>, <code>Stop</code>). MCP remains the path
+          for agent-driven structured writes. The adapter captures lifecycle
+          events the agent cannot see on its own and injects retrieved
+          Neotoma context into each prompt via{" "}
+          <code>additionalContext</code>.
+        </p>
+        <p className="text-[14px] leading-6 text-muted-foreground mb-2">
+          Install with{" "}
+          <code>npm install @neotoma/claude-agent-sdk-adapter @neotoma/client</code>{" "}
+          alongside the SDK. Pair with MCP for a reliable floor plus a
+          structured ceiling.
+        </p>
+      </IntegrationSection>
+
       <IntegrationSection sectionKey="getting-started" title="Getting started">
         <GettingStartedEvaluateInstallLinks agentTargetPhrase="the Claude Agent SDK or Managed Agents" />
         <p className="text-[15px] leading-7 text-muted-foreground mb-4">

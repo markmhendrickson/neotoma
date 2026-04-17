@@ -442,12 +442,19 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
 export const SITE_CODE_SNIPPETS = {
   onboardingSequence: "evaluation -> installation -> activation -> tooling config",
   activationSequence: "discover -> propose -> preview -> ingest -> reconstruct -> query -> correct",
-  installCommands: `# Global install
+  installCommands: `# 1. Install globally (required for agent harnesses — avoids per-repo PATH prompts)
 npm install -g neotoma
 
-# Initialize
-neotoma init`,
-  agentInstallPrompt: `Read https://neotoma.io/install and carry me through the install-first Neotoma flow. Install, activate it with my data, and configure my current tool for robust ongoing use.`,
+# 2. Inspect state in one call (no shell introspection needed)
+neotoma doctor --json
+
+# 3. Run the full idempotent setup for the current harness
+neotoma setup --tool claude-code --yes   # or: --tool cursor | --tool codex | --tool openclaw`,
+  agentInstallPrompt: `Read https://neotoma.io/install and carry me through the install-first Neotoma flow.
+
+Use only \`neotoma\` commands (especially \`neotoma doctor --json\` and \`neotoma setup --tool <my_tool> --yes\`). Do NOT run \`python3 -c\`, \`grep -r\`, \`ls\`, \`cat\`, \`jq\`, \`find\`, \`which\`, \`node -e\`, or arbitrary \`npm run <script>\`. Everything you need to introspect state is in \`neotoma doctor --json\`. If you hit a permission prompt for anything other than \`neotoma *\` or \`npm install -g neotoma\`, stop and ask me to widen the allowlist instead of improvising an alternative command.
+
+Install, activate it with my data, and configure my current tool for robust ongoing use.`,
   postInstallCommands: `# Run API server (development)
 neotoma api start --env dev
 
@@ -486,8 +493,8 @@ docker build -t neotoma .`,
   }
 }`,
   /** Short prompt — home evaluate section + integration “Getting started” blocks. */
-  homeEvaluatePrompt: `Read https://neotoma.io/evaluate. Before you answer, inspect any broader tool, workspace, and configuration context you can access so you assess my real workflow rather than just this chat. Then assess whether Neotoma fits my workflow, what data would be highest value to persist first, and what I should do next.`,
-  agentEvaluationPrompt: `Read https://neotoma.io/evaluate. Before you answer, inspect any broader tool, workspace, and configuration context you can access so you assess my real workflow rather than just this chat. Then tell me whether Neotoma is a real fit for my workflow, what data would be highest value to persist first, and what I should do next.`,
+  homeEvaluatePrompt: `Read https://neotoma.io/evaluate. Inspect any broader tool and workspace context already available in this session (open files, git status, this chat) to assess my real workflow. Do NOT run \`python3 -c\`, \`grep -r\`, \`ls\`, \`cat\`, \`jq\`, \`find\`, \`which\`, \`node -e\`, or arbitrary \`npm run\` scripts to introspect — if Neotoma is already installed run \`neotoma doctor --json\` instead. Then tell me whether Neotoma fits my workflow, what data would be highest value to persist first, and what I should do next.`,
+  agentEvaluationPrompt: `Read https://neotoma.io/evaluate. Inspect any broader tool and workspace context already available in this session (open files, git status, this chat) to assess my real workflow. Do NOT run \`python3 -c\`, \`grep -r\`, \`ls\`, \`cat\`, \`jq\`, \`find\`, \`which\`, \`node -e\`, or arbitrary \`npm run\` scripts to introspect — if Neotoma is already installed run \`neotoma doctor --json\` instead. Then tell me whether Neotoma is a real fit for my workflow, what data would be highest value to persist first, and what I should do next.`,
   agentEvaluationShareEmail: "contact@neotoma.io",
   agentEvaluationShareSubject: "Agent evaluation of Neotoma",
   dockerCliExample: `# Store an entity
@@ -498,6 +505,52 @@ docker exec neotoma neotoma store \\
 docker exec neotoma neotoma entities list --type task`,
   cliStoreExample: `neotoma store --json='[{"entity_type":"task","title":"Submit expense report","status":"open"}]'`,
   cliListExample: `neotoma entities list --type company --limit 10`,
+  /**
+   * Per-harness permissions preflight snippets.
+   *
+   * Each snippet adds the minimal set of allow rules so the agent never needs
+   * individual approvals for `neotoma doctor`, `neotoma setup`, `neotoma init`,
+   * or any other `neotoma` subcommand. Users paste these *before* asking the
+   * agent to run the install prompt.
+   */
+  preflightClaudeCode: `// Paste into .claude/settings.local.json (project) or ~/.claude/settings.json (user).
+// Merge with any existing "permissions.allow" list.
+{
+  "permissions": {
+    "allow": [
+      "Bash(neotoma:*)",
+      "Bash(npm install -g neotoma:*)"
+    ]
+  }
+}`,
+  preflightCursor: `// Paste into .cursor/allowlist.json (project).
+// Cursor will then auto-approve any \`neotoma ...\` command plus the one-time
+// global install.
+{
+  "allow": [
+    "neotoma *",
+    "npm install -g neotoma"
+  ]
+}`,
+  preflightCodex: `# Append to ~/.codex/config.toml (user scope).
+# Codex uses this to auto-approve commands matching each pattern.
+[approvals]
+allow = [
+  "neotoma *",
+  "npm install -g neotoma",
+]`,
+  preflightOpenClaw: `# OpenClaw manages consent through its native plugin. No allowlist snippet is
+# required. Ask the user to run:
+openclaw plugins install clawhub:neotoma
+# and approve the plugin permission prompt once when prompted.`,
+  preflightPathMise: `# If \`which neotoma\` fails after \`npm install -g neotoma\`, your shell manager
+# (mise, nvm, fnm) is not active in the agent's non-interactive shell. Run
+# \`neotoma doctor --json\` and read \`.neotoma.path_fix_hint\` — it will tell
+# you the exact activation line to add. Common fixes:
+#
+# mise:   eval "$(mise activate zsh)"
+# nvm:    source "$NVM_DIR/nvm.sh"     # in ~/.zshenv for non-interactive shells
+# fnm:    eval "$(fnm env)"`,
   cliUploadExample: `neotoma upload ./fixtures/invoice.pdf
 neotoma upload ./doc.pdf --no-interpret --mime-type application/pdf
 neotoma upload --local ./invoice.pdf   # run in-process, no API server required`,

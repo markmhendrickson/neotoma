@@ -1,0 +1,29 @@
+{
+  "name": "@neotoma/cursor-hooks",
+  "version": "0.1.0",
+  "description": "Neotoma hooks for Cursor — retrieval injection, observation capture, compaction markers, and persistence safety net.",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "install:hooks": "node scripts/install.mjs",
+    "uninstall:hooks": "node scripts/install.mjs --uninstall"
+  },
+  "bin": {
+    "neotoma-cursor-hooks": "./scripts/install.mjs"
+  },
+  "files": [
+    "dist",
+    "hooks",
+    "scripts",
+    "hooks.template.json",
+    "README.md"
+  ],
+  "dependencies": {
+    "@neotoma/client": "file:../client"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/node": "^20.11.0"
+  }
+}

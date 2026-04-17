@@ -4,13 +4,18 @@
  * Tests content-addressed storage, deduplication, and retrieval.
  */
 
+import path from "node:path";
+import { tmpdir } from "node:os";
+import { pathToFileURL } from "node:url";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { config } from "../../src/config.js";
 import { db } from "../../src/db.js";
 import {
   computeContentHash,
   storeRawContent,
   getSourceMetadata,
   downloadRawContent,
+  resolveLocalSourceFilePath,
   SourceFileNotFoundError,
 } from "../../src/services/raw_storage.js";
 
@@ -311,6 +316,22 @@ describe("Raw Storage Service", () => {
         code: "SOURCE_FILE_NOT_FOUND",
         storageUrl,
       });
+    });
+  });
+
+  describe("resolveLocalSourceFilePath", () => {
+    it("returns null for internal pseudo URLs", () => {
+      expect(resolveLocalSourceFilePath("internal://relationship/PART_OF")).toBeNull();
+    });
+
+    it("maps file:// URLs to filesystem paths", () => {
+      const p = path.join(tmpdir(), "neotoma-resolve-local-source-test");
+      expect(resolveLocalSourceFilePath(pathToFileURL(p).href)).toBe(p);
+    });
+
+    it("joins storage_url under rawStorageDir for content-addressed keys", () => {
+      const rel = "00000000-0000-0000-0000-000000000000/deadbeefcafe";
+      expect(resolveLocalSourceFilePath(rel)).toBe(path.resolve(path.join(config.rawStorageDir, rel)));
     });
   });
 

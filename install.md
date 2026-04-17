@@ -10,14 +10,17 @@ The canonical onboarding sequence is:
 
 The activation phase follows:
 
-**discover → propose → preview → ingest → reconstruct → query → correct**
+**detect context → discover → propose → preview → ingest → reconstruct → query → correct**
 
 Not:
 - install first without checking fit or tool constraints
 - scan everything → ingest everything → hope value appears
 - configure every integration before the user has seen first value
+- assume the install directory is a personal-data directory when it may be a developer/projects directory
 
 The agent optimizes for reaching the Installation Aha: a reconstructed timeline from the user's own files, with every event traced to a specific source. The first visible post-ingest output is never a file count -- it is a timeline with provenance.
+
+When the install directory is developer-oriented (multiple git repositories present), activation may branch from "detect context" into a [repo-integration path](#activation-branch-developer--repo-integration) that outputs a written integration plan instead of proceeding to ingest.
 
 ## Workflow
 
@@ -47,23 +50,111 @@ Data evaluation can happen here before installation if the user already has enou
 
 ### Phase 2: Installation
 
+The installation phase is optimized for agent harnesses with directory-scoped
+permissions. The agent MUST use the canonical `neotoma` commands below and MUST
+NOT improvise shell introspection (`python3 -c`, `grep -r`, `ls`, `cat`, `jq`,
+`find`, `which`, `node -e`). Each such command typically triggers a separate
+permission prompt; the canonical commands collapse the entire flow into two
+approvals: `neotoma *` (wildcard) and a one-time `npm install -g neotoma`.
+
+**Step 2.1 — Permissions pre-flight (user action)**
+
+Before running any command, ask the user to paste the allowlist snippet for
+their current harness from the
+[Permissions pre-flight](https://neotoma.io/install#permissions-preflight)
+block into the appropriate file:
+
+- Claude Code: `.claude/settings.local.json` (project) or `~/.claude/settings.json` (user)
+- Cursor: `.cursor/allowlist.json` (project)
+- Codex: `~/.codex/config.toml` (user)
+- OpenClaw: handled by the native plugin; no allowlist needed
+
+If the user declines the preflight, every command below may prompt individually.
+
+**Step 2.2 — Install the binary (if needed)**
+
 If the user is not already installed:
 
-1. Choose the install path that matches the current tool:
-   - OpenClaw: install via `openclaw plugins install clawhub:neotoma`
-   - Other tools: install with `npm install -g neotoma`
-2. If the chosen path is the standard CLI route, initialize Neotoma with `neotoma init`.
-3. Report what changed after installation (plugin registration or install/init effects such as data directory, env, MCP config, CLI instructions).
+- OpenClaw: `openclaw plugins install clawhub:neotoma`
+- All other harnesses: `npm install -g neotoma` (global install is required so
+  the binary resolves on the agent's PATH without per-repo `npx` prompts; an
+  opt-in local-install path is documented at the bottom of this file)
 
-If the user is already installed:
+**Step 2.3 — Inspect state with a single call**
 
-1. Verify that Neotoma is available in the current environment.
-2. Confirm whether install/init needs to be repaired or updated.
-3. Skip reinstallation unless needed.
+Run `neotoma doctor --json`. This returns a consolidated snapshot covering:
+
+- install state (installed, version, `path_fix_hint` when PATH is wrong)
+- data/init state (config_dir, data_dir, db_exists, initialized)
+- API runtime state (running, env, port)
+- detected MCP server configs per harness
+- CLI instruction files per harness (project + user scope)
+- permission-file status per harness
+- `current_tool_hint` and `suggested_next_step`
+
+Do NOT run shell introspection commands to recover any of this state. Every
+field above is available from `doctor --json`.
+
+**Step 2.4 — Apply the full setup in one call**
+
+Run `neotoma setup --tool <current_tool> --yes`. This composes:
+
+- `neotoma init --yes --idempotent` (safe to re-run; no-op when already initialized)
+- MCP configuration for the current tool
+- CLI instructions installation for the current tool
+- permission-file patches (merge-preserving; adds `neotoma *` wildcard and
+  `npm install -g neotoma` allow entries)
+
+Use `--dry-run` first if the harness is strict; `--json` returns a structured
+report of every step, including changed files.
+
+**If the user is already installed**
+
+Run `neotoma doctor --json` to verify, then `neotoma setup --tool <tool> --yes`
+(idempotent) to bring any missing pieces into compliance. Do not improvise
+shell introspection to confirm state.
+
+**Forbidden during installation**
+
+- Do NOT run `python3 -c`, `grep -r`, `ls`, `cat`, `jq`, `find`, `which`, `node -e`
+  to introspect Neotoma state. Use `neotoma doctor --json`.
+- Do NOT run arbitrary `npm run <script>` from the user's repositories during
+  install-first onboarding. The only approved npm command is `npm install -g neotoma`.
+- Do NOT `open` URLs, documentation, or application packages on the user's
+  machine to verify state.
 
 ### Phase 3: Activation
 
 Activation is the first successful Neotoma-backed workflow: the user sees value from their own data and can continue with structure, provenance, and correction. If data evaluation was not completed during Phase 1, begin by determining what should be stored first.
+
+#### Activation step 0: Context detection
+
+Before preference selection, detect what kind of directory Neotoma is being installed into. Do not default to personal-file ingestion without checking.
+
+**Detection:**
+- List direct subdirectories of the install directory and check for `.git/` in each; also check whether the install directory itself is a git repository.
+- Note lightweight personal-file signals at the same level: folders of notes, contracts, invoices, transcripts, or financial documents.
+
+**Surface the findings:**
+```
+I see N git repositories here: <list>
+I also see <personal-file signals, if any>
+```
+
+**Ask explicitly:**
+```
+Is this primarily:
+(a) a developer/projects directory (repos for code projects),
+(b) a personal-data directory (notes, clients, documents),
+(c) a mix?
+```
+
+**Branch on the answer:**
+- **Personal** → continue to Activation step 1 below (preference selection → discovery → preview → ingest → aha).
+- **Developer** → switch to the [Developer / repo-integration branch](#activation-branch-developer--repo-integration). That branch outputs a written integration plan, not an ingest.
+- **Mixed** → start with the developer / repo-integration branch; after the plan is delivered, offer to continue with the personal-data branch as a separate step.
+
+Store the user's context choice as a `user_preference` entity so later sessions can default correctly. Do not ingest files at this step.
 
 #### Activation step 1: Preference selection
 
@@ -126,22 +217,25 @@ Likely state: 1 client entity, 1-2 contract entities, 3-4 dated events.
 Timeline potential: Can reconstruct proposal evolution and client relationship.
 ```
 
-#### Activation step 4: Scoped confirmation
+#### Activation step 4: Preview contract
 
-Let the user confirm at a granular level:
-- Ingest entire folder
-- Ingest selected files only
-- Skip this cluster
-- Inspect more (show additional file details)
+Before any ingest in the personal or mixed branch, the agent MUST produce a preview. This applies to every activation ingest, including single-file and single-transcript cases. Count-only summaries (e.g. "stored 12 entities") are forbidden as the first post-action output.
 
-**Before ingestion, show the expected reconstruction preview:**
-```
-Expected output: 1 client entity, 1 contract entity, 4 dated events, 3 linked sources
-```
+**The preview MUST contain:**
 
-Also present migration candidates from platform memory and other context sources (see below) in the same preview, with provenance marking stored vs new.
+1. **Candidates** -- every file, transcript, or migration item proposed for storage, with its source path and a short content excerpt where useful. Include platform-memory and other context-source candidates here too, with provenance marking stored vs new.
+2. **Why each was selected** -- the specific signals that triggered it (repeated entity names, dated revisions, recent modification, sender/recipient, transcript structure). One reason per candidate.
+3. **Expected reconstruction** -- entity types, event counts, and the timeline or relationships the agent expects to emerge.
+   ```
+   Expected output: 1 client entity, 1 contract entity, 4 dated events, 3 linked sources
+   ```
+4. **Explicit confirmation prompt** with scoped options:
+   - Ingest entire folder
+   - Ingest selected files only
+   - Skip this cluster
+   - Inspect more (show additional file details)
 
-Ask for explicit confirmation. After asking, pause and wait for user response. Do not store data or proceed until the user explicitly confirms.
+After asking, pause and wait for user response. Do not store any data before receiving explicit confirmation.
 
 #### Activation step 5: Ingest and reconstruct
 
@@ -176,6 +270,48 @@ Then surface 2-4 leveraged next actions personalized to the user's data:
 
 See [`docs/developer/agent_onboarding_confirmation.md`](docs/developer/agent_onboarding_confirmation.md) for the complete aha specification with examples and anti-patterns.
 
+#### Activation step 6.5: Offer lifecycle hooks (opt-in)
+
+After the first-Aha timeline -- and only then -- propose installing Neotoma's lifecycle hooks for the current harness. Hooks layer on top of the MCP integration the user just saw working: they capture session/prompt/tool-use events even when the agent does not explicitly call MCP, and they hydrate context with retrieved memories at prompt time. They are **offered**, never installed by default, because they change runtime behavior and require a second round of user consent.
+
+**Read `doctor.hooks` first.** Do not improvise detection or ask the user to look for config files.
+
+- If `doctor.hooks.eligible_for_offer === false`, skip this step entirely. Do not mention hooks. Eligibility is false when the current tool is not hook-capable (e.g. `claude-desktop`, `openclaw`), when Neotoma hooks are already installed for this tool, or when MCP is not yet configured.
+- If `doctor.hooks.installed[<tool>].other_hook_plugins` is non-empty, surface that list to the user and require explicit acknowledgment before proceeding. The offer must name the other plugin(s) and state that installing Neotoma hooks will add entries alongside them rather than replace them.
+
+**Proposal template:**
+
+```
+The timeline you just saw came from MCP calls the agent made while working with
+your data. Neotoma can also capture these events via lifecycle hooks in
+<tool>, so memories are persisted even on turns where MCP is not called and
+retrieved memories are injected into your prompts automatically.
+
+Install Neotoma hooks for <tool> now?
+(y)es -- run `neotoma hooks install --tool <tool> --yes`
+(n)o  -- I will decide later
+(l)ater -- remind me next session
+```
+
+**Handling the response:**
+
+| Answer | Action |
+| --- | --- |
+| `yes` | Run `neotoma hooks install --tool <tool> --yes`. Treat a non-zero exit code as a failure and surface the installer's message verbatim. |
+| `no`   | Store a `user_preference` entity with `{ hooks: "declined", tool: "<tool>" }`. Do not offer again in future activation flows unless the user asks. |
+| `later` | Store a reminder-style entity (e.g. `task` with a `remind_at` of the next session) so the next activation surfaces the proposal once more. |
+
+**Harness coverage at time of activation.** The CLI can only delegate to an installer script for harnesses whose hook package ships with a Node-resolvable `scripts/install.mjs`: `cursor` and `codex` today. For `claude-code`, `opencode`, and `claude-agent-sdk`, `neotoma hooks install --tool <tool>` prints a copy-paste snippet the user (or agent) applies manually. If the current tool falls in the snippet-only group, surface the snippet inline and ask the user to confirm they have applied it before moving on.
+
+See [`docs/integrations/hooks/README.md`](docs/integrations/hooks/README.md) for the per-harness guides and [`.cursor/plans/activation-hooks-opt-in_98c72335.plan.md`](.cursor/plans/activation-hooks-opt-in_98c72335.plan.md) for the rationale behind keeping hooks out of `neotoma setup`.
+
+**Forbidden during activation**
+
+- Do NOT run `neotoma hooks install` without an explicit "yes" from the user in the same session. Silent installs, "I'll set this up while you review the timeline" phrasing, or bundling hook installs into the Installation-aha step are all forbidden.
+- Do NOT proceed with `neotoma hooks install --tool <tool>` when `doctor.hooks.installed[<tool>].other_hook_plugins` is non-empty unless the user has explicitly acknowledged those plugins by name. `--force` is reserved for that acknowledgment path.
+- Do NOT skip `neotoma doctor --json` before offering hooks. Eligibility, installed-state, and other-plugin detection all come from that single snapshot; improvised detection is forbidden.
+- Do NOT offer hooks when `doctor.hooks.eligible_for_offer === false`. That value already encodes "supported harness, not installed yet, MCP configured" -- do not second-guess it.
+
 #### Activation step 7: Correction
 
 Demonstrate correction immediately after the aha timeline:
@@ -183,20 +319,86 @@ Demonstrate correction immediately after the aha timeline:
 - Support: wrong entity merge, wrong date, wrong source linkage, file exclusion
 - The correction prompt must reference the specific reconstruction just shown
 
+#### Activation branch: developer / repo integration
+
+Entered from Activation step 0 when the user identifies the install directory as developer-oriented (or mixed). The output of this branch is a **written integration plan document**, not an ingest. Do not store entities, do not watch folders, do not call `store --file-path` during this branch.
+
+##### Step B1: Repo inventory
+
+For each detected git repository, gather lightweight signals from cheap reads (no deep content scans):
+
+- Recent commit activity -- last commit timestamp (e.g. `git log -1 --format=%ci`)
+- README presence and primary language (by file extension heuristics)
+- AI-agent configuration present: `.cursor/rules/`, `.claude/`, `AGENTS.md`, `.codex/`
+- Docs footprint: `docs/`, `specs/`, `ADR/`, design-doc folder
+- Approximate activity scale: commit count in last 90 days; multi-author if available
+
+Present the inventory as a compact list.
+
+##### Step B2: Rank and recommend
+
+Score repos for "likely benefit from Neotoma as a memory substrate." Higher score when:
+
+- Long decision history (many commits, many PRs/issues, long-lived branches)
+- Existing AI-agent configuration indicates recurring agent sessions that lose context across runs
+- Rich documentation (specs, ADRs, design docs) with cross-references
+- Multi-author activity (coordination cost)
+- Signals of recurring context loss: repeated "why did we do X" style issues, stale TODOs, investigation threads across files
+
+Present the top 3-5 repos. For each, include a one-paragraph rationale grounded in the signals above.
+
+##### Step B3: Explain the integration
+
+For the recommended repos collectively, explain:
+
+- **What Neotoma would persist per repo**: decisions and their rationale, open threads, entity relationships between PRs/issues/people, cross-session agent context.
+- **What pain it solves**: agent context loss across sessions, rediscovery of past decisions, drift between docs and code, orphaned investigation threads.
+- **What is out of scope**: code indexing for search, runtime memory, autonomous agent execution. Neotoma is the State Layer only (see [`docs/foundation/layered_architecture.md`](docs/foundation/layered_architecture.md)).
+
+##### Step B4: Offer plan drafting
+
+Ask:
+```
+Which repo should I draft a full Neotoma integration plan for?
+```
+
+After the user picks one, produce a written integration plan covering:
+
+- **Scope**: which docs, configs, and history segments to treat as ingestible source (for example `docs/`, `specs/`, `ADR/`, selected commit ranges, open issues/PRs).
+- **Per-repo agent instructions**: proposed edits to `.cursor/rules/`, `AGENTS.md`, and `.claude/rules/` that point contributors at Neotoma for memory operations. Reference the existing `neotoma_cli.mdc` pattern.
+- **MCP wiring**: guidance for contributors to configure the Neotoma MCP server locally (or CLI as fallback).
+- **Expected aha**: a timeline or decision graph reconstructible from the proposed scope once ingested.
+- **Next steps**: an explicit checklist for the user to execute when ready. This branch does not execute those steps.
+
+End the activation flow after delivering the plan. Do not ingest as a "natural next step"; any ingest requires a fresh, explicit request from the user that re-enters the personal or mixed branch.
+
 ### Phase 4: Tooling config
 
-After the user has reached activation, configure the current tool for the most robust ongoing Neotoma usage.
+After activation, confirm the current tool is configured for robust ongoing
+usage. If `neotoma setup` was run in Phase 2, most of this is already in place.
 
-1. Configure the integration that matches the tool the user is currently in.
-2. Prefer the strongest persistent instruction/configuration surface available in that tool.
-3. If the user started in a local environment, offer to help configure additional remote or hosted access points after activation.
-4. If the user started in a constrained hosted tool, recommend a better-supported primary environment if that will materially improve Neotoma usage.
+1. Run `neotoma doctor --json` once more. If `suggested_next_step` is `ready`,
+   stop. If it is `configure-mcp`, `configure-cli-instructions`, or
+   `configure-permissions`, re-run `neotoma setup --tool <tool> --yes` to
+   close the gap. Do NOT grep, `ls`, or `cat` config files to verify state.
+2. When reading the content of a specific config or instruction file is
+   needed, use `neotoma mcp config --json` and `neotoma cli-instructions config --json`
+   to print authoritative content. Do NOT search for "where the content is
+   defined" across the codebase.
+3. If the user started in a local environment, offer to help configure
+   additional remote or hosted access points after activation.
+4. If the user started in a constrained hosted tool, recommend a
+   better-supported primary environment if that will materially improve Neotoma usage.
 
 **Examples:**
 - **ChatGPT**: prefer a Custom GPT or remote MCP path when supported.
-- **Claude**: create or use a Project, connect Neotoma, and add routing instructions.
-- **Cursor / Claude Code / Codex**: complete local MCP wiring first, then offer additional remote access points where relevant.
-- **OpenClaw**: prefer the native plugin install and configuration path first; fall back to manual MCP wiring only when necessary.
+- **Claude Desktop**: create or use a Project, connect Neotoma, and add routing instructions.
+- **Cursor / Claude Code / Codex**: `neotoma setup --tool <tool> --yes` already
+  writes MCP + CLI instructions + permissions; re-run with `--scope both` when
+  the user wants user-level coverage in addition to the project scope.
+- **OpenClaw**: prefer the native plugin install and configuration path first;
+  fall back to manual MCP wiring only when necessary. `neotoma setup --tool openclaw`
+  intentionally skips permission-file writes because the plugin manages consent.
 
 ## Migration from existing tools
 
@@ -261,12 +463,56 @@ If other MCP servers are configured (Gmail, Google Calendar, etc.):
 - Extract and store entities per the store-first rule (people, events, tasks, notifications).
 - Include provenance: "from Gmail", "from Google Calendar", etc.
 
+**Activation-time integration friction (user-gated, never agent-initiated):**
+
+Some integrations require user action the agent cannot complete. Treat each of
+these as a single, user-gated step. Do not retry, do not improvise a
+work-around, do not chain multiple of them together in one turn.
+
+- **OAuth reconnect** (Gmail, Google Calendar, Slack, GitHub, etc.): if an MCP
+  tool call returns an auth or token-expired error, stop, tell the user the
+  exact provider and tool, and ask them to reconnect in their MCP client. Do
+  not re-invoke the tool on your own after the error.
+- **Project / repo discovery**: when the developer / repo-integration branch
+  needs to pick a repo, ask once with the candidate list and wait. Do not
+  scan filesystems outside the directories the user confirmed.
+- **Credential entry**: never ask the agent or user to paste credentials into
+  chat or into a `neotoma` command. Direct them to their MCP client's
+  credential UI or to 1Password / environment variables.
+- **Billing / quota prompts** (OpenAI, Anthropic, Google, etc.): surface the
+  exact provider error, link the user to the provider dashboard, and stop.
+
+Each of these is a single user-gated step. The agent's role is to surface the
+blocker with provenance, not to drive around it.
+
 ### Cross-platform migration
 
 When Neotoma is already configured in one tool and the user is adding another:
 
 - Neotoma's state is already available via MCP or CLI. No migration needed — the new tool reads the same state layer.
 - This is Neotoma's core cross-platform value: memory stored via Claude is immediately available in Cursor, Codex, or any other MCP client.
+
+## Permissions
+
+Directory-scoped agent harnesses (Claude Code, Cursor, Codex) prompt for
+approval on every command. The onboarding flow is designed to succeed with
+only two approvals:
+
+1. `Bash(neotoma:*)` / `neotoma *` wildcard
+2. A one-time `npm install -g neotoma`
+
+The per-harness allowlist snippets live in the
+[Permissions pre-flight](https://neotoma.io/install#permissions-preflight)
+section of the site. When the user pastes the correct snippet before the agent
+runs any command, the agent never needs individual approvals for `neotoma init`,
+`neotoma doctor`, `neotoma setup`, `neotoma mcp …`, or any other `neotoma`
+subcommand.
+
+If a permission prompt appears for anything other than those two items, stop
+and ask the user to widen the allowlist rather than improvising an alternative
+command. Do NOT fall back to shell introspection (`python3 -c`, `grep -r`,
+`ls`, `cat`, `jq`, `find`, `which`, `node -e`, arbitrary `npm run <script>`,
+`open`).
 
 ## Guardrails
 
@@ -276,8 +522,34 @@ When Neotoma is already configured in one tool and the user is adding another:
 - Do not save any previewed data before explicit user confirmation.
 - After presenting the preview, do not proceed with additional actions until the user explicitly confirms what to save.
 - Keep confirmation-first behavior scoped to first-run onboarding only.
-- Migration from platform memory is best-effort. Platform memory is opaque and may be incomplete — make this clear in the preview.
+- Migration from platform memory is best-effort. Platform memory is opaque and may be incomplete -- make this clear in the preview.
 - Provenance must be shown for every stored entity. Every fact traces back to its source.
+- Do not skip Activation step 0 (context detection). Always check whether the install directory is developer-oriented before defaulting to personal-file ingestion.
+- The developer / repo-integration branch must not ingest files or store entities. Its output is a written integration plan only. Any ingest requires a separate, explicit user request that re-enters the personal or mixed branch.
+- The preview contract (Activation step 4) is mandatory even for single-file or single-transcript ingests. Count-only summaries are forbidden as the first post-action output.
+- Do not improvise shell introspection in place of `neotoma doctor --json`,
+  `neotoma mcp config --json`, or `neotoma cli-instructions config --json`.
+  Every fact these commands surface is authoritative; searching for "where X is
+  defined" in the codebase is a permission-prompt anti-pattern.
+- Do not run arbitrary `npm run <script>` in the user's repositories during
+  install-first onboarding. The only approved npm command is
+  `npm install -g neotoma`.
+
+## Opt-in local install
+
+The default for agent-led installation is `npm install -g neotoma` because a
+global install guarantees the binary resolves on PATH for any agent harness
+without triggering path-variance prompts (`npx`, `./node_modules/.bin`, per-repo
+installs). Only offer the local install path when the user explicitly asks:
+
+```
+npm install neotoma       # local to the current directory
+npx neotoma doctor        # then prefix all commands with npx
+```
+
+Local installs often require additional allowlist entries (`npx:*`) and
+repeated re-approval in each project, which defeats the purpose of this
+guide. Document the trade-off clearly if the user insists.
 
 ## Standing instruction handoff
 

@@ -927,8 +927,18 @@ list_entity_types({ keyword: "date" });
 {
   entity_id: string; // Required: Entity ID (hash-based)
   at?: string; // Optional: ISO 8601 timestamp to get historical snapshot state
+  format?: "markdown" | "json"; // Optional: text response format (default: markdown)
 }
 ```
+
+**Text response format:**
+
+MCP transports return a text block alongside the structured response. As of the markdown-mirror subsystem, the text block is rendered by `renderEntityCompactText` from `src/services/canonical_markdown.ts` — the same deterministic renderer family that backs the filesystem mirror, the Inspector markdown preview, and `neotoma memory-export`. This gives the text block byte-for-byte stability across identical reads, which keeps LLM KV-caches warm under repeated lookups.
+
+- `format=markdown` (default): canonical markdown text. Schema-ordered, sorted nested keys, suppresses `_deleted` fields.
+- `format=json`: explicit escape hatch. Returns `JSON.stringify(snapshot)` with sorted keys for callers that need structured text.
+
+The structured (JSON-RPC result) response shape is unchanged regardless of `format`.
 
 **Response Schema:**
 

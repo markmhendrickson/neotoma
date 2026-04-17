@@ -1,43 +1,15 @@
-import React, { useLayoutEffect } from "react";
+import React from "react";
 import { SiteHeaderNav } from "@/components/SiteHeaderNav";
 import { SiteTailpiece } from "@/components/SiteTailpiece";
 import { SeoDevMetaFooter } from "@/components/SeoDevMetaFooter";
 import { DocsSidebar } from "@/components/DocsSidebar";
-import { SidebarInset, SidebarProvider, useSidebar } from "@/components/ui/sidebar";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { SiteAppNavProvider, useSiteAppNavBarVisible } from "@/context/SiteAppNavContext";
 import { cn } from "@/lib/utils";
 import { normalizeToDefaultRoute } from "@/i18n/routing";
 import { useEffectiveRoutePath } from "@/hooks/useEffectiveRoutePath";
 import { isPathUnderDocsSidebarNav } from "@/site/docs_sidebar_nav";
 import { isMarketingFullPageRoute } from "@/site/full_page_paths";
-
-/** Desktop sidebar starts collapsed on these routes (full-width content). */
-function shouldCollapseDocsSidebarForRoute(normalizedPath: string): boolean {
-  return (
-    normalizedPath === "/evaluate" ||
-    normalizedPath === "/meet" ||
-    normalizedPath === "/install" ||
-    normalizedPath.startsWith("/install/")
-  );
-}
-
-function CollapseSidebarOnEvaluateInstallRoutes() {
-  const effectivePath = useEffectiveRoutePath();
-  const { setOpen, setOpenMobile } = useSidebar();
-  const stripped = normalizeToDefaultRoute(effectivePath);
-
-  useLayoutEffect(() => {
-    if (!shouldCollapseDocsSidebarForRoute(stripped)) return;
-    setOpen(false);
-    setOpenMobile(false);
-    // Depend only on `stripped`. `setOpen` from SidebarProvider is recreated whenever `open`
-    // changes (its useCallback lists `open`), so listing it in deps re-ran after every toggle
-    // and forced the sidebar closed on /evaluate and /install.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- collapse on route change only
-  }, [stripped]);
-
-  return null;
-}
 
 /** True when the app is served under a product path (e.g. /neotoma-with-claude-code). */
 function isProductBasePath(): boolean {
@@ -64,8 +36,8 @@ export function Layout({ children, siteName = DEFAULT_SITE_NAME }: LayoutProps) 
   /** Full-bleed shell: home, marketing vertical landings, product-at-root basenames. */
   const isHomeShell = (isRouteHome && !isProductBasePath()) || isFullPageLanding;
   const showDocsSidebar = !isHomeShell && isPathUnderDocsSidebarNav(stripped);
-  /** Collapsed by default; cookie `sidebar_state` overrides after first toggle. */
-  const docsSidebarDefaultOpen = false;
+  /** Expanded by default; cookie `sidebar_state` overrides after first toggle. */
+  const docsSidebarDefaultOpen = true;
 
   if (isRawMarkdownRoute || isMarkdownMirrorRoute) {
     return <>{children}</>;
@@ -109,7 +81,6 @@ function LayoutShell({
 
   return (
     <SidebarProvider defaultOpen={docsSidebarDefaultOpen} className="flex-col">
-      <CollapseSidebarOnEvaluateInstallRoutes />
       <SiteHeaderNav showSidebarTrigger={showDocsSidebar} />
       <div
         className={

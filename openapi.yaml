@@ -103,6 +103,9 @@ components:
           type: string
         storage_url:
           type: string
+        filesystem_absolute_path:
+          type: string
+          description: Local storage only — absolute path to raw file on disk (sources bucket under raw storage dir).
         file_size:
           type: integer
         original_filename:
@@ -1433,6 +1436,16 @@ paths:
               properties:
                 entity_id:
                   type: string
+                at:
+                  type: string
+                  description: ISO 8601 timestamp for historical snapshot reconstruction
+                format:
+                  type: string
+                  enum: [markdown, json]
+                  description: >-
+                    Response text format. `markdown` (default for MCP) returns canonical
+                    deterministic markdown for KV-cache stability. `json` returns the raw
+                    snapshot payload for programmatic callers.
       responses:
         '200':
           description: Entity snapshot

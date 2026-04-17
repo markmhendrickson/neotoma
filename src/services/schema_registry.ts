@@ -5,6 +5,7 @@
  */
 
 import { db } from "../db.js";
+import { enforceEntityTypeGuards } from "./entity_type_guard.js";
 import {
   prepareEntitySnapshotWithEmbedding,
   upsertEntitySnapshotWithEmbedding,
@@ -35,8 +36,49 @@ export interface FieldDefinition {
   converters?: ConverterDefinition[]; // Field type converters
 }
 
+/**
+ * Declarative rules that drive per-type behavior from the schema instead of
+ * hardcoded branches. See `docs/foundation/schema_agnostic_design_rules.md`.
+ */
 export interface SchemaDefinition {
   fields: Record<string, FieldDefinition>;
+
+  /**
+   * Ordered list of field names used to compose this entity's canonical_name
+   * when no explicit name/title/email/url is present. The first non-empty
+   * subset (all fields present and non-empty) is used, joined with "|" and
+   * prefixed by entity_type, e.g. `receipt:2025-08-06|Ecoveritas|7.45`.
+   * When omitted, canonical_name falls back to generic heuristics.
+   */
+  canonical_name_fields?: string[];
+
+  /**
+   * Fields that carry real event timestamps and should emit timeline events.
+   * When present, only these fields drive timeline emission for this type
+   * (plus the small global set of always-temporal fields like `start_date`,
+   * `end_date`, `due_date`). When omitted, falls back to the permissive
+   * heuristic detector but logs a warning for unseeded types.
+   */
+  temporal_fields?: Array<{
+    field: string;
+    event_type?: string;
+  }>;
+
+  /**
+   * Fields whose string values are references to other entities. Used to
+   * auto-create REFERS_TO edges at store time.
+   */
+  reference_fields?: Array<{
+    field: string;
+    target_entity_type: string;
+    relationship_type?: string;
+  }>;
+
+  /**
+   * Alternate entity_type names that should resolve to this schema. Used by
+   * the duplicate-type detector to bias toward the canonical singular type.
+   */
+  aliases?: string[];
 }
 
 export interface ReducerConfig {
@@ -157,7 +199,15 @@ export class SchemaRegistryService {
     user_specific?: boolean;
     activate?: boolean;
     metadata?: SchemaMetadata;
+    force?: boolean;
   }): Promise<SchemaRegistryEntry> {
+    // Entity-type naming guards (forbidden-pattern + plural). Warns in dev,
+    // throws in production unless force: true.
+    enforceEntityTypeGuards(config.entity_type, {
+      force: config.force,
+      context: "register_schema",
+    });
+
     // Validate schema definition
     this.validateSchemaDefinition(config.schema_definition);
 
@@ -174,7 +224,7 @@ export class SchemaRegistryService {
         schema_definition: config.schema_definition,
         reducer_config: config.reducer_config,
         active: config.activate || false, // New schemas start inactive unless specified
-        user_id: config.user_id || null,
+        user_id: config.user_specific ? (config.user_id || null) : null,
         scope: scope,
         metadata: config.metadata || {},
       })
@@ -370,7 +420,14 @@ export class SchemaRegistryService {
     user_id?: string;
     migrate_existing?: boolean; // Only for backfilling historical data
     activate?: boolean; // Default: true - activate immediately so new data uses updated schema
+    force?: boolean;
   }): Promise<SchemaRegistryEntry> {
+    // Entity-type naming guards (forbidden-pattern + plural).
+    enforceEntityTypeGuards(options.entity_type, {
+      force: options.force,
+      context: "update_schema_incremental",
+    });
+
     const activateSchema = options.activate !== false; // Default to true
 
     // 1. Load current active schema (user-specific or global)
@@ -461,11 +518,44 @@ export class SchemaRegistryService {
       ? options.user_id 
       : undefined;
 
+    // Preserve schema-level declarations that aren't field-maps (canonical_name_fields,
+    // temporal_fields, reference_fields, aliases) across incremental updates.
+    // Prune any removed field names from these lists so they don't reference
+    // deleted fields after a major version bump.
+    const preserved = { ...currentSchema.schema_definition };
+    delete (preserved as { fields?: unknown }).fields;
+
+    const removalSet = new Set(options.fields_to_remove || []);
+    if (preserved.canonical_name_fields) {
+      preserved.canonical_name_fields = preserved.canonical_name_fields.filter(
+        (f) => !removalSet.has(f),
+      );
+      if (preserved.canonical_name_fields.length === 0) {
+        delete preserved.canonical_name_fields;
+      }
+    }
+    if (preserved.temporal_fields) {
+      preserved.temporal_fields = preserved.temporal_fields.filter(
+        (t) => !removalSet.has(t.field),
+      );
+      if (preserved.temporal_fields.length === 0) {
+        delete preserved.temporal_fields;
+      }
+    }
+    if (preserved.reference_fields) {
+      preserved.reference_fields = preserved.reference_fields.filter(
+        (r) => !removalSet.has(r.field),
+      );
+      if (preserved.reference_fields.length === 0) {
+        delete preserved.reference_fields;
+      }
+    }
+
     // 5. Register new version (start inactive, we'll activate separately if needed)
     const newSchema = await this.register({
       entity_type: options.entity_type,
       schema_version: newVersion,
-      schema_definition: { fields: mergedFields },
+      schema_definition: { ...preserved, fields: mergedFields },
       reducer_config: { merge_policies: mergedReducerPolicies },
       user_id: userId,
       user_specific: options.user_specific,
@@ -1218,6 +1308,72 @@ export class SchemaRegistryService {
   private validateSchemaDefinition(definition: SchemaDefinition): void {
     if (!definition.fields || typeof definition.fields !== "object") {
       throw new Error("Schema definition must have fields object");
+    }
+
+    if (definition.canonical_name_fields !== undefined) {
+      if (!Array.isArray(definition.canonical_name_fields)) {
+        throw new Error("canonical_name_fields must be an array of field names");
+      }
+      for (const name of definition.canonical_name_fields) {
+        if (typeof name !== "string" || !name.trim()) {
+          throw new Error("canonical_name_fields entries must be non-empty strings");
+        }
+        if (!definition.fields[name]) {
+          throw new Error(
+            `canonical_name_fields references unknown field: ${name}`,
+          );
+        }
+      }
+    }
+
+    if (definition.temporal_fields !== undefined) {
+      if (!Array.isArray(definition.temporal_fields)) {
+        throw new Error("temporal_fields must be an array");
+      }
+      for (const entry of definition.temporal_fields) {
+        if (!entry || typeof entry !== "object" || typeof entry.field !== "string") {
+          throw new Error("temporal_fields entries must be { field, event_type? }");
+        }
+        if (!definition.fields[entry.field]) {
+          throw new Error(
+            `temporal_fields references unknown field: ${entry.field}`,
+          );
+        }
+      }
+    }
+
+    if (definition.reference_fields !== undefined) {
+      if (!Array.isArray(definition.reference_fields)) {
+        throw new Error("reference_fields must be an array");
+      }
+      for (const entry of definition.reference_fields) {
+        if (
+          !entry ||
+          typeof entry !== "object" ||
+          typeof entry.field !== "string" ||
+          typeof entry.target_entity_type !== "string"
+        ) {
+          throw new Error(
+            "reference_fields entries must be { field, target_entity_type, relationship_type? }",
+          );
+        }
+        if (!definition.fields[entry.field]) {
+          throw new Error(
+            `reference_fields references unknown field: ${entry.field}`,
+          );
+        }
+      }
+    }
+
+    if (definition.aliases !== undefined) {
+      if (!Array.isArray(definition.aliases)) {
+        throw new Error("aliases must be an array of strings");
+      }
+      for (const alias of definition.aliases) {
+        if (typeof alias !== "string" || !alias.trim()) {
+          throw new Error("aliases entries must be non-empty strings");
+        }
+      }
     }
 
     const validTypes = [

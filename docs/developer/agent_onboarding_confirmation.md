@@ -39,6 +39,38 @@ Before starting activation:
 2. The agent knows the user's current tool and likely tool constraints.
 3. The agent either already identified likely first data to store during evaluation or is about to do so now.
 
+### Stage 0: Context detection
+
+Before preference selection, detect what kind of directory Neotoma is being installed into. Do not default to personal-file ingestion without checking.
+
+**Detection:**
+- List direct subdirectories of the install directory and check for `.git/` in each; also check whether the install directory itself is a git repository.
+- Note personal-file signals at the same level (folders of notes, contracts, invoices, transcripts, financial documents).
+
+**Surface the findings:**
+
+```
+I see N git repositories here: <list>
+I also see <personal-file signals, if any>
+```
+
+**Ask explicitly:**
+
+```
+Is this primarily:
+(a) a developer/projects directory (repos for code projects),
+(b) a personal-data directory (notes, clients, documents),
+(c) a mix?
+```
+
+**Branch on the answer:**
+
+- **Personal** -- continue to Stage 1 (preference selection → discovery → preview → ingest → aha).
+- **Developer** -- switch to the [developer / repo-integration branch](#activation-branch-developer--repo-integration). That branch produces a written integration plan, not an ingest.
+- **Mixed** -- start with the developer / repo-integration branch; after the plan is delivered, offer to continue with the personal-data branch.
+
+Store the user's context choice as a `user_preference` entity so later sessions default correctly. Do not ingest files at this stage.
+
 ### Stage 1: Preference selection
 
 At the start of activation, the agent asks what data types matter most to the user. This shapes the discovery scan.
@@ -118,27 +150,29 @@ Timeline potential: Can reconstruct proposal evolution and client relationship
 history from January through March 2026.
 ```
 
-### Stage 4: Scoped confirmation
+### Stage 4: Preview contract
 
-The user confirms at a granular level. This is not all-or-nothing.
+Before any ingest in the personal or mixed branch, the agent MUST produce a preview. This applies to every activation ingest, including single-file and single-transcript cases. Count-only summaries are forbidden as the first post-action output.
 
-**Options per cluster:**
-- Ingest entire folder
-- Ingest selected files only
-- Skip this cluster
-- Inspect more (agent shows additional file details)
+**The preview MUST contain:**
 
-**Before ingestion**, show the expected reconstruction preview:
+1. **Candidates** -- every file, transcript, or migration item proposed for storage, with its source path and a short content excerpt where useful. Include platform-memory and other context-source candidates here too, with provenance marking stored vs new.
+2. **Why each was selected** -- the specific signals that triggered it (repeated entity names, dated revisions, recent modification, sender/recipient, transcript structure). One reason per candidate.
+3. **Expected reconstruction**:
+   ```
+   Expected output from Acme project:
+   - 1 client entity (Acme Corp)
+   - 1 contract entity (Integration Contract)
+   - 4 dated events (proposal drafts, meeting, confirmation)
+   - 4 linked sources
+   ```
+4. **Explicit confirmation prompt** with scoped options:
+   - Ingest entire folder
+   - Ingest selected files only
+   - Skip this cluster
+   - Inspect more (agent shows additional file details)
 
-```
-Expected output from Acme project:
-- 1 client entity (Acme Corp)
-- 1 contract entity (Integration Contract)
-- 4 dated events (proposal drafts, meeting, confirmation)
-- 4 linked sources
-```
-
-This sets expectations and builds trust before any data is stored.
+After asking, pause and wait for the user's response. Do not store any data before receiving explicit confirmation.
 
 ### Stage 5: Ingest and reconstruct
 
@@ -240,6 +274,77 @@ Demonstrate the correction mechanism immediately after the aha timeline.
 
 This demonstrates that the user has full control over the state layer.
 
+### Activation branch: developer / repo integration
+
+Entered from Stage 0 when the user identifies the install directory as developer-oriented (or mixed). The output of this branch is a **written integration plan document**, not an ingest. Do not store entities, do not watch folders, do not call `store --file-path` in this branch.
+
+#### Step B1: Repo inventory
+
+For each detected git repository, gather lightweight signals from cheap reads (no deep content scans):
+
+- Recent commit activity -- last commit timestamp (for example `git log -1 --format=%ci`)
+- README presence and primary language (by file extension heuristics)
+- AI-agent configuration present: `.cursor/rules/`, `.claude/`, `AGENTS.md`, `.codex/`
+- Docs footprint: `docs/`, `specs/`, `ADR/`, design-doc folder
+- Approximate activity scale: commit count in the last 90 days; multi-author if available
+
+Present the inventory as a compact list.
+
+#### Step B2: Rank and recommend
+
+Score repos for "likely benefit from Neotoma as a memory substrate." Higher score when:
+
+- Long decision history (many commits, many PRs/issues, long-lived branches)
+- Existing AI-agent configuration indicates recurring agent sessions that lose context across runs
+- Rich documentation (specs, ADRs, design docs) with cross-references
+- Multi-author activity (coordination cost)
+- Signals of recurring context loss: repeated "why did we do X" style issues, stale TODOs, investigation threads across files
+
+Present the top 3-5 repos. For each, include a one-paragraph rationale grounded in the signals above.
+
+#### Step B3: Explain the integration
+
+For the recommended repos collectively, explain:
+
+- **What Neotoma would persist per repo**: decisions and their rationale, open threads, entity relationships between PRs/issues/people, cross-session agent context.
+- **What pain it solves**: agent context loss across sessions, rediscovery of past decisions, drift between docs and code, orphaned investigation threads.
+- **What is out of scope**: code indexing for search, runtime memory, autonomous agent execution. Neotoma is the State Layer only.
+
+#### Step B4: Offer plan drafting
+
+Ask: "Which repo should I draft a full Neotoma integration plan for?"
+
+After the user picks one, produce a written integration plan covering:
+
+- **Scope**: which docs, configs, and history segments to treat as ingestible source (for example `docs/`, `specs/`, `ADR/`, selected commit ranges, open issues/PRs).
+- **Per-repo agent instructions**: proposed edits to `.cursor/rules/`, `AGENTS.md`, and `.claude/rules/` that point contributors at Neotoma for memory operations.
+- **MCP wiring**: guidance for contributors to configure the Neotoma MCP server locally (or CLI as fallback).
+- **Expected aha**: a timeline or decision graph reconstructible from the proposed scope once ingested.
+- **Next steps**: an explicit checklist for the user to execute when ready. This branch does not execute those steps.
+
+**Example developer-branch aha (produced later, after the user acts on the plan):**
+
+```
+neotoma repo integration -- Decision timeline reconstructed from 6 sources
+
+Oct 12 2025 -- Adopted State/Strategy/Execution layer split
+  Source: docs/foundation/layered_architecture.md, initial commit
+
+Nov 02 2025 -- Chose hash-based deterministic entity IDs
+  Source: docs/architecture/determinism.md, ADR-003
+
+Dec 18 2025 -- Added agent-driven onboarding funnel
+  Source: install.md, commit 3a1b2c4
+
+Jan 09 2026 -- Added preview-before-store guardrail
+  Source: docs/developer/agent_onboarding_confirmation.md, commit 9f2e3d5
+
+4 entities detected | 6 events | 6 linked sources
+Entities: Neotoma architecture (project), layered_architecture (doc), determinism ADR (decision), onboarding funnel (feature)
+```
+
+End the activation flow after delivering the plan. Do not ingest as a "natural next step"; any ingest requires a fresh, explicit request from the user that re-enters the personal or mixed branch.
+
 ## Tooling config after activation
 
 After the user has reached the Installation Aha, configure the tool they are using for the most robust ongoing Neotoma workflow.
@@ -279,6 +384,9 @@ Phrased as capabilities unlocked by the structure that now exists, not as instru
 - Provenance always shown. Every stored entity links back to source files.
 - Correction always available. Entity merges, dates, linkages, and exclusions can be fixed.
 - Preferences shape discovery. User-selected data types weight the scoring heuristic.
+- Do not skip Stage 0 (context detection). Always check whether the install directory is developer-oriented before defaulting to personal-file ingestion.
+- The developer / repo-integration branch must not ingest files or store entities. Its output is a written integration plan only. Any ingest requires a separate, explicit user request that re-enters the personal or mixed branch.
+- The preview contract (Stage 4) is mandatory even for single-file or single-transcript ingests. Count-only summaries are forbidden as the first post-action output.
 
 ## Related documents
 

@@ -1,9 +1,10 @@
 ---
 name: release
-description: Prepare a GitHub + npm release with preview. Covers preflight, changelog preview, version bump, tag, merge, GitHub Release creation, and npm publish.
+description: Release
 ---
 
 <!-- Source: .cursor/skills/release/SKILL.md -->
+
 
 # Release
 

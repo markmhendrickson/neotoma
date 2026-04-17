@@ -68,7 +68,7 @@ const SidebarProvider = React.forwardRef<
 >(
   (
     {
-      defaultOpen = false,
+      defaultOpen = true,
       open: openProp,
       onOpenChange: setOpenProp,
       className,
@@ -81,7 +81,7 @@ const SidebarProvider = React.forwardRef<
     const isMobile = useIsMobile();
     const [openMobile, setOpenMobile] = React.useState(false);
 
-    // Restore open state from cookie so collapsed state is remembered.
+    // Restore open state from cookie when set; otherwise use defaultOpen.
     const [_open, _setOpen] = React.useState(() => {
       const stored = getCookie(SIDEBAR_COOKIE_NAME);
       if (stored === "true") return true;
