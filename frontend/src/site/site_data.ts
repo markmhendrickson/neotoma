@@ -452,9 +452,9 @@ neotoma doctor --json
 neotoma setup --tool claude-code --yes   # or: --tool cursor | --tool codex | --tool openclaw`,
   agentInstallPrompt: `Read https://neotoma.io/install and carry me through the install-first Neotoma flow.
 
-Use only \`neotoma\` commands (especially \`neotoma doctor --json\` and \`neotoma setup --tool <my_tool> --yes\`). Do NOT run \`python3 -c\`, \`grep -r\`, \`ls\`, \`cat\`, \`jq\`, \`find\`, \`which\`, \`node -e\`, or arbitrary \`npm run <script>\`. Everything you need to introspect state is in \`neotoma doctor --json\`. If you hit a permission prompt for anything other than \`neotoma *\` or \`npm install -g neotoma\`, stop and ask me to widen the allowlist instead of improvising an alternative command.
+Use \`neotoma\` commands for status and setup. If Neotoma is already installed, start with \`neotoma doctor --json\`; otherwise install it and run \`neotoma setup --tool <my_tool> --yes\`.
 
-Install, activate it with my data, and configure my current tool for robust ongoing use.`,
+Avoid ad-hoc shell introspection or arbitrary repo scripts. Then activate Neotoma with my data and configure my current tool for robust ongoing use.`,
   postInstallCommands: `# Run API server (development)
 neotoma api start --env dev
 
@@ -493,8 +493,8 @@ docker build -t neotoma .`,
   }
 }`,
   /** Short prompt — home evaluate section + integration “Getting started” blocks. */
-  homeEvaluatePrompt: `Read https://neotoma.io/evaluate. Inspect any broader tool and workspace context already available in this session (open files, git status, this chat) to assess my real workflow. Do NOT run \`python3 -c\`, \`grep -r\`, \`ls\`, \`cat\`, \`jq\`, \`find\`, \`which\`, \`node -e\`, or arbitrary \`npm run\` scripts to introspect — if Neotoma is already installed run \`neotoma doctor --json\` instead. Then tell me whether Neotoma fits my workflow, what data would be highest value to persist first, and what I should do next.`,
-  agentEvaluationPrompt: `Read https://neotoma.io/evaluate. Inspect any broader tool and workspace context already available in this session (open files, git status, this chat) to assess my real workflow. Do NOT run \`python3 -c\`, \`grep -r\`, \`ls\`, \`cat\`, \`jq\`, \`find\`, \`which\`, \`node -e\`, or arbitrary \`npm run\` scripts to introspect — if Neotoma is already installed run \`neotoma doctor --json\` instead. Then tell me whether Neotoma is a real fit for my workflow, what data would be highest value to persist first, and what I should do next.`,
+  homeEvaluatePrompt: `Read https://neotoma.io/evaluate. Use any tool, workspace, and chat context already available in this session to assess my real workflow. Avoid ad-hoc shell introspection just to profile me; if Neotoma is already installed, use \`neotoma doctor --json\` for status instead. Then tell me whether Neotoma fits my workflow, what data would be highest value to persist first, and what I should do next.`,
+  agentEvaluationPrompt: `Read https://neotoma.io/evaluate. Use any tool, workspace, and chat context already available in this session to assess my real workflow. Avoid ad-hoc shell introspection just to profile me; if Neotoma is already installed, use \`neotoma doctor --json\` for status instead. Then tell me whether Neotoma is a real fit for my workflow, what data would be highest value to persist first, and what I should do next.`,
   agentEvaluationShareEmail: "contact@neotoma.io",
   agentEvaluationShareSubject: "Agent evaluation of Neotoma",
   dockerCliExample: `# Store an entity

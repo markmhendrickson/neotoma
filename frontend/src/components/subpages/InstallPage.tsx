@@ -326,14 +326,12 @@ export function InstallPage() {
         </TrackedProductLink>
       </div>
 
-      <PermissionsPreflight />
-
       <h2 className="text-[20px] font-medium tracking-[-0.01em] mb-3">Agent-assisted install</h2>
       <p className="text-[15px] leading-7 mb-4">
         If you want to skip the initial evaluation page and proceed directly from
         install, paste this prompt into Claude, Codex, Cursor, or a similar
-        agent. The prompt is concise; this page contains the full install-first
-        sequence the agent should follow.
+        agent. The prompt stays intentionally short; this page documents the
+        full install-first sequence it should follow.
       </p>
       <CodeBlock
         code={SITE_CODE_SNIPPETS.agentInstallPrompt}
@@ -341,8 +339,21 @@ export function InstallPage() {
         installBlock="agent_assisted"
       />
 
+      <div className="mb-6 rounded-lg border border-sky-500/20 bg-sky-500/5 p-4">
+        <p className="text-[14px] leading-6 text-sky-900 dark:text-sky-50 mb-2">
+          <strong>This page expands the prompt.</strong> The copied prompt omits
+          detail for readability; the full install-first flow here includes:
+        </p>
+        <ol className="list-decimal pl-5 space-y-1 text-[14px] leading-6 text-sky-900 dark:text-sky-50">
+          <li>Confirming the user wants the install-first path and identifying the current tool.</li>
+          <li>Installing only if needed, then verifying state with <code className="bg-sky-500/10 px-1 py-0.5 rounded">neotoma doctor --json</code>.</li>
+          <li>Choosing the first data to store and the onboarding mode.</li>
+          <li>Running activation, then configuring the current tool for ongoing use.</li>
+        </ol>
+      </div>
+
       <h3 className="text-[17px] font-medium tracking-[-0.01em] mt-6 mb-3">
-        Agent: install-first instructions
+        Expanded install-first sequence
       </h3>
       <p className="text-[15px] leading-7 mb-3">
         Use this path only when the user already wants to proceed with Neotoma
@@ -426,6 +437,13 @@ export function InstallPage() {
           primary environment.
         </li>
       </ol>
+      <div className="mb-6 rounded-lg border border-border/60 bg-muted/30 p-4">
+        <p className="text-[14px] leading-6 text-muted-foreground mb-3">
+          If your agent requires command allowlists, use the pre-flight snippets
+          before running the prompt.
+        </p>
+        <PermissionsPreflight />
+      </div>
       <p className="text-[14px] leading-6 text-muted-foreground mb-4">
         Canonical written reference:{" "}
         <a

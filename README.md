@@ -79,7 +79,7 @@ Most AI memory systems optimize storage or retrieval. Neotoma enforces state int
 Ask your AI agent whether Neotoma fits your workflow. Paste this into Claude, Cursor, ChatGPT, or any MCP-capable tool:
 
 ```
-Read https://neotoma.io/evaluate. Before you answer, inspect any broader tool, workspace, and configuration context you can access so you assess my real workflow rather than just this chat. Then tell me whether Neotoma is a real fit for my workflow, what data would be highest value to persist first, and what I should do next.
+Read https://neotoma.io/evaluate. Use any tool, workspace, and chat context already available in this session to assess my real workflow. Avoid ad-hoc shell introspection just to profile me; if Neotoma is already installed, use `neotoma doctor --json` for status instead. Then tell me whether Neotoma is a real fit for my workflow, what data would be highest value to persist first, and what I should do next.
 ```
 
 The agent reads the evaluation page, checks your context, and gives you an honest assessment. If it's a fit, the agent carries you through install and activation.
@@ -89,7 +89,7 @@ The agent reads the evaluation page, checks your context, and gives you an hones
 Agents install Neotoma themselves. Paste this prompt into Claude, Cursor, ChatGPT, or Codex:
 
 ```
-Read https://neotoma.io/install and carry me through the install-first Neotoma flow. Install, activate it with my data, and configure my current tool for robust ongoing use.
+Read https://neotoma.io/install and carry me through the install-first Neotoma flow. Use `neotoma` commands for status and setup. If Neotoma is already installed, start with `neotoma doctor --json`; otherwise install it and run `neotoma setup --tool <my_tool> --yes`. Avoid ad-hoc shell introspection or arbitrary repo scripts. Then activate Neotoma with my data and configure my current tool for robust ongoing use.
 ```
 
 The agent handles npm install, initialization, and MCP configuration. **Manual install:**

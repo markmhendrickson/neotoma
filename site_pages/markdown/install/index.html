@@ -76,7 +76,7 @@ Want the full agent-driven sequence? Start with evaluation, then let the agent i
 
 If you want to skip the initial evaluation page and proceed directly from install, paste this prompt into Claude, Codex, Cursor, or a similar agent. The prompt is concise; this page contains the full install-first sequence the agent should follow.
 
-`Read https://neotoma.io/install and carry me through the install-first Neotoma flow. Install, activate it with my data, and configure my current tool for robust ongoing use.`
+`Read https://neotoma.io/install and carry me through the install-first Neotoma flow. Use neotoma commands for status and setup. If Neotoma is already installed, start with neotoma doctor --json; otherwise install it and run neotoma setup --tool <my_tool> --yes. Avoid ad-hoc shell introspection or arbitrary repo scripts. Then activate Neotoma with my data and configure my current tool for robust ongoing use.`
 
 ### Agent: install-first instructions
 
