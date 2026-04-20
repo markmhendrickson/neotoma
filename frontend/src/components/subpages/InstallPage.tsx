@@ -529,6 +529,23 @@ export function InstallPage() {
         . After first value is visible, configure the current tool for robust
         ongoing usage.
       </p>
+      <div className="mb-4 rounded-lg border border-border/60 bg-muted/30 p-3">
+        <p className="text-[13px] leading-5 text-muted-foreground mb-2">
+          <strong className="text-foreground">Troubleshooting: <code className="bg-muted px-1 py-0.5 rounded">which neotoma</code> fails after install?</strong>{" "}
+          Your shell manager (mise, nvm, fnm) is probably not active in the
+          agent's non-interactive shell. Run{" "}
+          <code className="bg-muted px-1 py-0.5 rounded">neotoma doctor --json</code>{" "}
+          and read <code className="bg-muted px-1 py-0.5 rounded">.neotoma.path_fix_hint</code>{" "}
+          for the exact activation line. Common fixes to add to{" "}
+          <code className="bg-muted px-1 py-0.5 rounded">~/.zshenv</code> or{" "}
+          <code className="bg-muted px-1 py-0.5 rounded">~/.zshrc</code>:
+        </p>
+        <pre className="overflow-x-auto rounded bg-muted/60 p-2 font-mono text-[12px] leading-5 whitespace-pre-wrap break-words">
+          <code>{`mise:  eval "$(mise activate zsh)"
+nvm:   source "$NVM_DIR/nvm.sh"   # in ~/.zshenv for non-interactive shells
+fnm:   eval "$(fnm env)"`}</code>
+        </pre>
+      </div>
       <ol className="list-decimal pl-5 space-y-2 mb-6">
         <li className="text-[15px] leading-7 text-muted-foreground">
           <strong className="text-foreground">Preference selection</strong> - if

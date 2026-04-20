@@ -486,7 +486,7 @@ export function sendFunnelInstallPromptCopy(block: InstallPromptCopyBlock): void
 }
 
 /** Which permissions pre-flight snippet the user copied. */
-export type PreflightHarness = "claude-code" | "cursor" | "codex" | "openclaw" | "path-mise";
+export type PreflightHarness = "claude-code" | "cursor" | "codex";
 
 /**
  * Permissions pre-flight copy. Each harness snippet is tracked separately so

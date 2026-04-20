@@ -45,20 +45,6 @@ const TABS: HarnessTab[] = [
     filePath: "~/.codex/config.toml",
     snippet: SITE_CODE_SNIPPETS.preflightCodex,
   },
-  {
-    id: "openclaw",
-    label: "OpenClaw",
-    description: "Native plugin handles consent. No allowlist needed.",
-    filePath: "(managed by the OpenClaw plugin)",
-    snippet: SITE_CODE_SNIPPETS.preflightOpenClaw,
-  },
-  {
-    id: "path-mise",
-    label: "PATH / mise / nvm",
-    description: "If `which neotoma` fails after install, fix your shell manager activation.",
-    filePath: "~/.zshenv or ~/.zshrc",
-    snippet: SITE_CODE_SNIPPETS.preflightPathMise,
-  },
 ];
 
 export function PermissionsPreflight(): React.ReactElement {
@@ -84,7 +70,7 @@ export function PermissionsPreflight(): React.ReactElement {
           id="permissions-preflight-heading"
           className="text-[15px] font-semibold tracking-[-0.01em]"
         >
-          Permissions pre-flight (copy once, before the agent runs)
+          Permissions pre-flight (copy once, before running the agent prompt below)
         </h2>
         <p className="text-[13px] leading-5 text-muted-foreground">
           Paste this snippet into the right file for your agent harness so the
@@ -92,6 +78,12 @@ export function PermissionsPreflight(): React.ReactElement {
           and one <code className="rounded bg-muted px-1 py-0.5">npm install -g neotoma</code>.
           Without this, directory-scoped harnesses will prompt for every
           individual command.
+        </p>
+        <p className="text-[12px] leading-5 text-muted-foreground">
+          Using <strong>OpenClaw</strong>? Skip this — the native plugin handles
+          consent. Just run{" "}
+          <code className="rounded bg-muted px-1 py-0.5">openclaw plugins install clawhub:neotoma</code>{" "}
+          and approve the plugin permission prompt once.
         </p>
       </header>
       <div

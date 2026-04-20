@@ -1,7 +1,6 @@
 import { PRODUCT_NAV_SOURCES, sendFunnelEvaluatePromptCopy } from "@/utils/analytics";
 import { SITE_CODE_SNIPPETS } from "../../site/site_data";
 import { CopyableCodeBlock } from "../CopyableCodeBlock";
-import { PermissionsPreflight } from "../PermissionsPreflight";
 import { TrackedProductLink } from "../TrackedProductNav";
 import { DetailPage } from "../DetailPage";
 
@@ -32,7 +31,6 @@ export function EvaluatePage() {
         for agent-assisted setup, manual commands, Docker, and integration
         docs.
       </p>
-      <PermissionsPreflight />
       <div className="mb-8">
         <p className="text-[15px] leading-7 mb-2 text-muted-foreground">
           <strong>Prompt to use</strong>

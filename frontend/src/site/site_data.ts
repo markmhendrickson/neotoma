@@ -539,18 +539,6 @@ allow = [
   "neotoma *",
   "npm install -g neotoma",
 ]`,
-  preflightOpenClaw: `# OpenClaw manages consent through its native plugin. No allowlist snippet is
-# required. Ask the user to run:
-openclaw plugins install clawhub:neotoma
-# and approve the plugin permission prompt once when prompted.`,
-  preflightPathMise: `# If \`which neotoma\` fails after \`npm install -g neotoma\`, your shell manager
-# (mise, nvm, fnm) is not active in the agent's non-interactive shell. Run
-# \`neotoma doctor --json\` and read \`.neotoma.path_fix_hint\` — it will tell
-# you the exact activation line to add. Common fixes:
-#
-# mise:   eval "$(mise activate zsh)"
-# nvm:    source "$NVM_DIR/nvm.sh"     # in ~/.zshenv for non-interactive shells
-# fnm:    eval "$(fnm env)"`,
   cliUploadExample: `neotoma upload ./fixtures/invoice.pdf
 neotoma upload ./doc.pdf --no-interpret --mime-type application/pdf
 neotoma upload --local ./invoice.pdf   # run in-process, no API server required`,
