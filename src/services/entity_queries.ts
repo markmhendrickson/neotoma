@@ -18,6 +18,10 @@ export interface EntityQueryOptions {
   offset?: number;
   /** When provided, fetch only these entity IDs (e.g. from semantic search) */
   entityIds?: string[];
+  /** ISO 8601 timestamp; return entities whose updated_at is >= this value. */
+  updatedSince?: string;
+  /** ISO 8601 timestamp; return entities whose created_at is >= this value. */
+  createdSince?: string;
 }
 
 export interface EntityWithProvenance {
@@ -104,6 +108,8 @@ export async function queryEntities(
     limit = 100,
     offset = 0,
     entityIds: filterEntityIds,
+    updatedSince,
+    createdSince,
   } = options;
 
   // Build query for entities
@@ -127,6 +133,13 @@ export async function queryEntities(
   // Filter by specific entity IDs (e.g. from semantic search)
   if (filterEntityIds && filterEntityIds.length > 0) {
     entityQuery = entityQuery.in("id", filterEntityIds);
+  }
+
+  if (updatedSince) {
+    entityQuery = entityQuery.gte("updated_at", updatedSince);
+  }
+  if (createdSince) {
+    entityQuery = entityQuery.gte("created_at", createdSince);
   }
 
   const ascending = sortOrder === "asc";
@@ -154,6 +167,12 @@ export async function queryEntities(
     }
     if (!includeMerged) {
       query = query.is("merged_to_entity_id", null);
+    }
+    if (updatedSince) {
+      query = query.gte("updated_at", updatedSince);
+    }
+    if (createdSince) {
+      query = query.gte("created_at", createdSince);
     }
     const { data, error } = await query;
     if (error) {

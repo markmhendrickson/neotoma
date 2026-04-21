@@ -66,6 +66,7 @@ describe("Auto-Enhancement Converter Detection", () => {
             title: { type: "string", required: true },
             created_at: { type: "date", required: false },
           },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policies: {
@@ -142,6 +143,7 @@ describe("Auto-Enhancement Converter Detection", () => {
             title: { type: "string", required: true },
             updated_at: { type: "date", required: false },
           },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policies: {
@@ -205,6 +207,7 @@ describe("Auto-Enhancement Converter Detection", () => {
             title: { type: "string", required: true },
             amount: { type: "number", required: false },
           },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policies: {
@@ -265,6 +268,7 @@ describe("Auto-Enhancement Converter Detection", () => {
             title: { type: "string", required: true },
             date_field: { type: "date", required: false },
           },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policies: {
@@ -329,6 +333,7 @@ describe("Auto-Enhancement Converter Detection", () => {
             title: { type: "string", required: true },
             created_at: { type: "date", required: false },
           },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policies: {
@@ -383,6 +388,7 @@ describe("Auto-Enhancement Converter Detection", () => {
           fields: {
             title: { type: "string", required: true },
           },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policies: {},
@@ -429,6 +435,7 @@ describe("Auto-Enhancement Converter Detection", () => {
             title: { type: "string", required: true },
             created_at: { type: "date", required: false },
           },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policies: {
@@ -490,6 +497,7 @@ describe("Auto-Enhancement Converter Detection", () => {
               ],
             },
           },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policies: {
@@ -531,6 +539,7 @@ describe("Auto-Enhancement Converter Detection", () => {
           fields: {
             title: { type: "string", required: true },
           },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policies: {},
@@ -573,6 +582,7 @@ describe("Auto-Enhancement Converter Detection", () => {
             title: { type: "string", required: true },
             created_at: { type: "date", required: false },
           },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policies: {

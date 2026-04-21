@@ -72,6 +72,8 @@ import {
   upsertEntitySnapshotWithEmbedding,
 } from "./services/entity_snapshot_embedding.js";
 import { readOpenApiActionsFile, readOpenApiFile } from "./shared/openapi_file.js";
+import { buildSmitheryServerCard } from "./mcp_server_card.js";
+import { listRecentRecordActivity } from "./services/recent_record_activity.js";
 // import { setupDocumentationRoutes } from "./routes/documentation.js";
 
 type ErrorEnvelope = {
@@ -158,6 +160,25 @@ const oauthRegisterLimit = rateLimit({
 
 // Favicon (no-auth) to avoid 401 noise when not present on disk
 app.get("/favicon.ico", (_req, res) => res.status(204).end());
+
+// Smithery / MCP registry static metadata when automatic scan cannot finish (same host as /mcp)
+app.get("/.well-known/mcp/server-card.json", (_req, res) => {
+  const override = process.env.NEOTOMA_MCP_SERVER_CARD_JSON?.trim();
+  if (override) {
+    try {
+      const parsed = JSON.parse(override) as Record<string, unknown>;
+      res.type("application/json");
+      return res.json(parsed);
+    } catch {
+      return res.status(500).type("application/json").json({
+        error: "invalid_server_card_json",
+        error_description: "NEOTOMA_MCP_SERVER_CARD_JSON is not valid JSON",
+      });
+    }
+  }
+  res.type("application/json");
+  res.json(buildSmitheryServerCard());
+});
 
 // ============================================================================
 // OAuth discovery (RFC 8414 / MCP Authorization) for Cursor and other clients
@@ -1859,6 +1880,8 @@ app.post("/entities/query", async (req, res) => {
       published_before,
       include_snapshots,
       include_merged,
+      updated_since,
+      created_since,
     } = parsed.data;
     const { entities, total } = await queryEntitiesWithCount({
       userId,
@@ -1873,6 +1896,8 @@ app.post("/entities/query", async (req, res) => {
       search,
       limit,
       offset,
+      updatedSince: updated_since,
+      createdSince: created_since,
     });
 
     return res.json({
@@ -2773,6 +2798,27 @@ app.get("/timeline/:id", async (req, res) => {
   }
 });
 
+// GET /api/record_activity - Cross-table recent rows for inspector (ordered by latest timestamps)
+// REQUIRES AUTHENTICATION
+app.get("/record_activity", async (req, res) => {
+  try {
+    const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+    const limit = parseInt(String(req.query.limit ?? "50"), 10) || 50;
+    const offset = parseInt(String(req.query.offset ?? "0"), 10) || 0;
+    const result = listRecentRecordActivity(userId, limit, offset);
+    return res.json(result);
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to list recent record activity",
+      "DB_QUERY_FAILED",
+      "APIError:record_activity"
+    );
+  }
+});
+
 // GET /api/sources - Get source list (FU-301)
 app.get("/sources", async (req, res) => {
   try {
@@ -3161,9 +3207,31 @@ async function storeStructuredForApi(params: {
   sourcePriority: number;
   idempotencyKey: string;
   originalFilename?: string;
+  relationships?: Array<{
+    relationship_type: string;
+    source_index: number;
+    target_index: number;
+  }>;
+  commit?: boolean;
+  strict?: boolean;
 }) {
-  const { userId, entities, sourcePriority, idempotencyKey, originalFilename } = params;
-  const { resolveEntity } = await import("./services/entity_resolution.js");
+  const {
+    userId,
+    entities,
+    sourcePriority,
+    idempotencyKey,
+    originalFilename,
+    relationships,
+    commit: commitInput,
+    strict: strictInput,
+  } = params;
+  const commit = commitInput !== false;
+  const strict = strictInput === true;
+  const {
+    resolveEntityWithTrace,
+    CanonicalNameUnresolvedError,
+    MergeRefusedError,
+  } = await import("./services/entity_resolution.js");
   const { detectFlatPackedRows, FlatPackedRowsError } = await import(
     "./services/flat_packed_detection.js"
   );
@@ -3233,13 +3301,59 @@ async function storeStructuredForApi(params: {
     },
   });
 
-  const createdEntities = [];
+  // Two-pass: first resolve every entity with trace (so CanonicalNameUnresolvedError
+  // / MergeRefusedError land per-observation before any writes), then commit
+  // observations/snapshots/relationships. In plan mode we stop after pass 1.
+  interface ResolvedEntity {
+    observation_index: number;
+    entity_type: string;
+    entity_id: string;
+    fields: Record<string, unknown>;
+    trace: {
+      canonical_name: string;
+      resolver_path: string[];
+      identity_basis: string;
+      identity_rule: string;
+      action:
+        | "created"
+        | "matched_existing"
+        | "would_create"
+        | "would_match_existing"
+        | "extended";
+    };
+    intent?: string;
+    targetId?: string;
+  }
 
-  for (const entityData of entities) {
+  interface ResolutionIssue {
+    observation_index: number;
+    entity_type: string;
+    code: "ERR_CANONICAL_NAME_UNRESOLVED" | "ERR_MERGE_REFUSED";
+    message: string;
+    details: Record<string, unknown>;
+  }
+
+  const resolved: ResolvedEntity[] = [];
+  const issues: ResolutionIssue[] = [];
+
+  for (let observation_index = 0; observation_index < entities.length; observation_index++) {
+    const entityData = entities[observation_index];
     let entity_type = entityData.entity_type as string;
     if (!entity_type) {
       throw new Error("entity_type is required for each entity");
     }
+
+    // Per-entity overrides: `intent: "create_new"` is shorthand for strict on
+    // this record; `target_id` forces extend mode (bypass derivation).
+    const intent =
+      typeof (entityData as Record<string, unknown>).intent === "string"
+        ? ((entityData as Record<string, unknown>).intent as string)
+        : undefined;
+    const targetId =
+      typeof (entityData as Record<string, unknown>).target_id === "string"
+        ? ((entityData as Record<string, unknown>).target_id as string)
+        : undefined;
+    const effectiveStrict = strict || intent === "create_new";
 
     // Schema-agnostic duplicate-type collapse (e.g. `places` -> `place`,
     // aliased-type -> canonical). Applied before storing so the resolved
@@ -3268,78 +3382,226 @@ async function storeStructuredForApi(params: {
       );
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- intentional omit
-    const { entity_type: _removed, ...fields } = entityData;
-    const entity_id = await resolveEntity({
-      entityType: entity_type,
-      fields,
-      userId,
-    });
-
-    const obsData = await createObservation({
-      entity_id,
-      entity_type,
-      schema_version: "1.0",
-      source_id: storageResult.sourceId,
-      interpretation_id: null,
-      observed_at: new Date().toISOString(),
-      specificity_score: 1.0,
-      source_priority: sourcePriority,
-      fields,
-      user_id: userId,
-    });
+    const {
+      entity_type: _removedType,
+      intent: _removedIntent,
+      target_id: _removedTargetId,
+      ...fields
+    } = entityData as Record<string, unknown>;
+    void _removedType;
+    void _removedIntent;
+    void _removedTargetId;
 
     try {
-      const { recomputeSnapshot } = await import("./services/snapshot_computation.js");
-      await recomputeSnapshot(entity_id, userId);
-    } catch (snapshotErr) {
-      logger.warn(`Snapshot recompute failed for ${entity_id}: ${snapshotErr}`);
-    }
-
-    // Schema-driven auto-linking: if the entity's active schema declares
-    // reference_fields, create typed relationships to the referenced
-    // entities (REFERS_TO by default). Silent fallback when no schema or no
-    // match exists — never invent targets.
-    try {
-      const { schemaRegistry } = await import("./services/schema_registry.js");
-      const schemaEntry = await schemaRegistry.loadActiveSchema(
-        entity_type,
+      const result = await resolveEntityWithTrace({
+        entityType: entity_type,
+        fields,
         userId,
-      );
-      if (schemaEntry?.schema_definition?.reference_fields?.length) {
-        const { autoLinkReferenceFields } = await import(
-          "./services/schema_reference_linking.js"
-        );
-        await autoLinkReferenceFields({
-          entityId: entity_id,
-          entityType: entity_type,
-          fields,
-          schema: schemaEntry.schema_definition,
-          userId,
-          sourceId: storageResult.sourceId,
+        commit,
+        strict: effectiveStrict,
+        targetId,
+      });
+      resolved.push({
+        observation_index,
+        entity_type,
+        entity_id: result.entityId,
+        fields,
+        trace: {
+          canonical_name: result.trace.canonicalName,
+          resolver_path: result.trace.path,
+          identity_basis: result.trace.identityBasis,
+          identity_rule: result.trace.identityRule,
+          action: result.trace.action,
+        },
+        intent,
+        targetId,
+      });
+    } catch (err) {
+      if (err instanceof CanonicalNameUnresolvedError) {
+        issues.push({
+          observation_index,
+          entity_type,
+          code: "ERR_CANONICAL_NAME_UNRESOLVED",
+          message: err.message,
+          details: {
+            seen_fields: err.seenFields,
+            attempted_value: err.attemptedValue,
+          },
         });
+      } else if (err instanceof MergeRefusedError) {
+        issues.push({
+          observation_index,
+          entity_type,
+          code: "ERR_MERGE_REFUSED",
+          message: err.message,
+          details: {
+            entity_id: err.entityId,
+            canonical_name: err.canonicalName,
+            resolver_path: err.resolverPath,
+          },
+        });
+      } else {
+        throw err;
       }
-    } catch (linkErr) {
-      logger.warn(
-        `Auto-link reference fields failed for ${entity_type}/${entity_id}: ${
-          linkErr instanceof Error ? linkErr.message : String(linkErr)
-        }`,
-      );
+    }
+  }
+
+  if (issues.length > 0) {
+    const aggregate = new Error(
+      `Structured store refused: ${issues.length} observation(s) failed resolution.`,
+    ) as Error & {
+      code: string;
+      issues: ResolutionIssue[];
+    };
+    aggregate.code = "ERR_STORE_RESOLUTION_FAILED";
+    aggregate.issues = issues;
+    throw aggregate;
+  }
+
+  const createdEntities: Array<{
+    entity_id: string;
+    entity_type: string;
+    observation_id: string | null;
+    observation_index: number;
+    action: ResolvedEntity["trace"]["action"];
+    canonical_name: string;
+    resolver_path: string[];
+    identity_basis: string;
+    identity_rule: string;
+    entity_snapshot_after: Record<string, unknown> | null;
+  }> = [];
+
+  for (const r of resolved) {
+    let observation_id: string | null = null;
+    let snapshotAfter: Record<string, unknown> | null = null;
+
+    if (commit) {
+      const obsData = await createObservation({
+        entity_id: r.entity_id,
+        entity_type: r.entity_type,
+        schema_version: "1.0",
+        source_id: storageResult.sourceId,
+        interpretation_id: null,
+        observed_at: new Date().toISOString(),
+        specificity_score: 1.0,
+        source_priority: sourcePriority,
+        fields: r.fields,
+        user_id: userId,
+        identity_basis: r.trace.identity_basis,
+        identity_rule: r.trace.identity_rule,
+      });
+      observation_id = obsData.id;
+
+      try {
+        const { recomputeSnapshot } = await import("./services/snapshot_computation.js");
+        const snap = await recomputeSnapshot(r.entity_id, userId);
+        snapshotAfter =
+          (snap as { snapshot?: Record<string, unknown> } | null | undefined)
+            ?.snapshot ?? null;
+      } catch (snapshotErr) {
+        logger.warn(`Snapshot recompute failed for ${r.entity_id}: ${snapshotErr}`);
+      }
+
+      // Schema-driven auto-linking: if the entity's active schema declares
+      // reference_fields, create typed relationships to the referenced
+      // entities (REFERS_TO by default). Silent fallback when no schema or no
+      // match exists — never invent targets.
+      try {
+        const { schemaRegistry } = await import("./services/schema_registry.js");
+        const schemaEntry = await schemaRegistry.loadActiveSchema(
+          r.entity_type,
+          userId,
+        );
+        if (schemaEntry?.schema_definition?.reference_fields?.length) {
+          const { autoLinkReferenceFields } = await import(
+            "./services/schema_reference_linking.js"
+          );
+          await autoLinkReferenceFields({
+            entityId: r.entity_id,
+            entityType: r.entity_type,
+            fields: r.fields,
+            schema: schemaEntry.schema_definition,
+            userId,
+            sourceId: storageResult.sourceId,
+          });
+        }
+      } catch (linkErr) {
+        logger.warn(
+          `Auto-link reference fields failed for ${r.entity_type}/${r.entity_id}: ${
+            linkErr instanceof Error ? linkErr.message : String(linkErr)
+          }`,
+        );
+      }
     }
 
     createdEntities.push({
-      entity_id,
-      entity_type,
-      observation_id: obsData.id,
+      entity_id: r.entity_id,
+      entity_type: r.entity_type,
+      observation_id,
+      observation_index: r.observation_index,
+      action: r.trace.action,
+      canonical_name: r.trace.canonical_name,
+      resolver_path: r.trace.resolver_path,
+      identity_basis: r.trace.identity_basis,
+      identity_rule: r.trace.identity_rule,
+      entity_snapshot_after: snapshotAfter,
     });
+  }
+
+  // Relationships (parity with MCP store_structured). Indices are resolved
+  // against the observation order; commit=false skips creation.
+  const relationshipsCreated: Array<{
+    relationship_type: string;
+    source_entity_id: string;
+    target_entity_id: string;
+  }> = [];
+  if (commit && relationships && relationships.length > 0) {
+    const { relationshipsService } = await import("./services/relationships.js");
+    for (const rel of relationships) {
+      const source = resolved[rel.source_index];
+      const target = resolved[rel.target_index];
+      if (!source || !target) {
+        logger.warn(
+          `[STORE] Skipping relationship: invalid source_index=${rel.source_index} ` +
+            `or target_index=${rel.target_index} (have ${resolved.length} entities).`,
+        );
+        continue;
+      }
+      try {
+        await relationshipsService.createRelationship({
+          source_entity_id: source.entity_id,
+          target_entity_id: target.entity_id,
+          relationship_type: rel.relationship_type as never,
+          source_id: storageResult.sourceId,
+          user_id: userId,
+        });
+        relationshipsCreated.push({
+          relationship_type: rel.relationship_type,
+          source_entity_id: source.entity_id,
+          target_entity_id: target.entity_id,
+        });
+      } catch (relErr) {
+        logger.warn(
+          `Failed to create relationship ${rel.relationship_type} ` +
+            `${source.entity_id} -> ${target.entity_id}: ${
+              relErr instanceof Error ? relErr.message : String(relErr)
+            }`,
+        );
+      }
+    }
   }
 
   return {
     success: true,
-    source_id: storageResult.sourceId,
-    entities_created: createdEntities.length,
-    observations_created: createdEntities.length,
+    commit,
+    source_id: commit ? storageResult.sourceId : null,
+    entities_created: commit
+      ? createdEntities.filter((e) => e.action === "created" || e.action === "extended")
+          .length
+      : 0,
+    observations_created: commit ? createdEntities.length : 0,
     entities: createdEntities,
+    relationships_created: relationshipsCreated,
   };
 }
 
@@ -3422,6 +3684,15 @@ app.post("/store", async (req, res) => {
         sourcePriority: parsed.data.source_priority ?? 100,
         idempotencyKey: parsed.data.idempotency_key,
         originalFilename: parsed.data.original_filename,
+        relationships: parsed.data.relationships as
+          | Array<{
+              relationship_type: string;
+              source_index: number;
+              target_index: number;
+            }>
+          | undefined,
+        commit: (parsed.data as { commit?: boolean }).commit,
+        strict: (parsed.data as { strict?: boolean }).strict,
       });
     }
 
@@ -3488,6 +3759,32 @@ app.post("/store", async (req, res) => {
       const message = error instanceof Error ? error.message : String(error);
       logWarn("EntityTypeGuardError:store", req, { code: errCode, message });
       return sendError(res, 400, errCode, message);
+    }
+    if (
+      error &&
+      typeof error === "object" &&
+      errCode === "ERR_STORE_RESOLUTION_FAILED"
+    ) {
+      const err = error as {
+        message: string;
+        issues: Array<{
+          observation_index: number;
+          entity_type: string;
+          code: string;
+          message: string;
+          details: Record<string, unknown>;
+        }>;
+      };
+      logWarn("StoreResolutionError:store", req, {
+        issue_count: err.issues?.length ?? 0,
+      });
+      return res.status(400).json({
+        error: {
+          code: "ERR_STORE_RESOLUTION_FAILED",
+          message: err.message,
+          issues: err.issues ?? [],
+        },
+      });
     }
     if (
       error &&
@@ -3566,7 +3863,16 @@ app.post("/observations/query", async (req, res) => {
     // Get authenticated user_id (REQUIRED)
     const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
 
-    const { observation_id, entity_id, entity_type, source_id, limit, offset } = parsed.data;
+    const {
+      observation_id,
+      entity_id,
+      entity_type,
+      source_id,
+      limit,
+      offset,
+      updated_since,
+      created_since,
+    } = parsed.data;
 
     // Build query - ALWAYS filter by authenticated user_id
     let query = db.from("observations").select("*", { count: "exact" }).eq("user_id", userId); // SECURITY: Always filter by authenticated user
@@ -3587,6 +3893,16 @@ app.post("/observations/query", async (req, res) => {
       query = query.eq("source_id", source_id);
     }
 
+    if (updated_since) {
+      // Observations are immutable; treat updated_since as a synonym for
+      // observed_at >= updated_since so clients have a single "since" knob.
+      query = query.gte("observed_at", updated_since);
+    }
+
+    if (created_since) {
+      query = query.gte("observed_at", created_since);
+    }
+
     query = query.order("observed_at", { ascending: false }).range(offset, offset + limit - 1);
 
     const { data, error, count } = await query;
@@ -3605,6 +3921,53 @@ app.post("/observations/query", async (req, res) => {
     }
     logError("APIError:observations_query", req, error);
     const message = error instanceof Error ? error.message : "Failed to query observations";
+    return sendError(res, 500, "DB_QUERY_FAILED", message);
+  }
+});
+
+// GET /entities/duplicates - List candidate duplicate entity pairs (R5).
+// Read-only fuzzy post-hoc detector. Never auto-merges. Hands off to
+// /entities/merge once an operator or agent confirms a pair.
+app.get("/entities/duplicates", async (req, res) => {
+  try {
+    const entityType = typeof req.query.entity_type === "string" ? req.query.entity_type : undefined;
+    if (!entityType) {
+      return sendError(res, 400, "VALIDATION_INVALID_FORMAT", "entity_type query parameter is required");
+    }
+    const providedUserId = typeof req.query.user_id === "string" ? req.query.user_id : undefined;
+    const authenticatedUserId = await getAuthenticatedUserId(req, providedUserId);
+    if (providedUserId && providedUserId !== authenticatedUserId) {
+      return sendError(res, 403, "FORBIDDEN", "user_id does not match authenticated user.");
+    }
+
+    const thresholdRaw = typeof req.query.threshold === "string" ? req.query.threshold : undefined;
+    const limitRaw = typeof req.query.limit === "string" ? req.query.limit : undefined;
+
+    const threshold = thresholdRaw ? Number(thresholdRaw) : undefined;
+    if (threshold !== undefined && (Number.isNaN(threshold) || threshold <= 0 || threshold > 1)) {
+      return sendError(res, 400, "VALIDATION_INVALID_FORMAT", "threshold must be a number in (0, 1]");
+    }
+    const limit = limitRaw ? Number(limitRaw) : undefined;
+    if (limit !== undefined && (!Number.isFinite(limit) || limit < 1 || limit > 200)) {
+      return sendError(res, 400, "VALIDATION_INVALID_FORMAT", "limit must be an integer in [1, 200]");
+    }
+
+    const { findDuplicateCandidates } = await import("./services/duplicate_detection.js");
+    const candidates = await findDuplicateCandidates({
+      entityType,
+      userId: authenticatedUserId,
+      threshold,
+      limit,
+    });
+
+    return res.json({
+      candidates,
+      entity_type: entityType,
+      threshold: threshold ?? null,
+    });
+  } catch (error) {
+    logError("APIError:entities_duplicates", req, error);
+    const message = error instanceof Error ? error.message : "Failed to list potential duplicates";
     return sendError(res, 500, "DB_QUERY_FAILED", message);
   }
 });
@@ -3697,16 +4060,23 @@ app.post("/list_observations", async (req, res) => {
     return sendValidationError(res, parsed.error.issues);
   }
 
-  const { entity_id, limit = 100, offset = 0 } = parsed.data;
+  const { entity_id, limit = 100, offset = 0, updated_since, created_since } = parsed.data;
 
-  const query = db
+  let query = db
     .from("observations")
     .select("*")
-    .eq("entity_id", entity_id)
+    .eq("entity_id", entity_id);
+
+  if (updated_since) {
+    query = query.gte("observed_at", updated_since);
+  }
+  if (created_since) {
+    query = query.gte("observed_at", created_since);
+  }
+
+  const { data, error } = await query
     .order("observed_at", { ascending: false })
     .range(offset, offset + limit - 1);
-
-  const { data, error } = await query;
 
   if (error) {
     logError("DbError:list_observations", req, error);
@@ -3921,13 +4291,17 @@ app.post("/retrieve_entity_by_identifier", async (req, res) => {
   }
 
   try {
-    const { identifier, entity_type } = parsed.data;
-    const userId = await getAuthenticatedUserId(req, undefined);
+    const { identifier, entity_type, by, limit, include_observations, observations_limit } =
+      parsed.data;
+    const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
     const result = await retrieveEntityByIdentifierWithFallback({
       identifier,
       entityType: entity_type,
       userId,
-      limit: 100,
+      limit: limit ?? 100,
+      by,
+      includeObservations: include_observations,
+      observationsLimit: observations_limit,
     });
 
     logDebug("Success:retrieve_entity_by_identifier", req, {
@@ -4580,12 +4954,27 @@ app.post("/register_schema", async (req, res) => {
 
     const { schemaRegistry } = await import("./services/schema_registry.js");
 
+    // R2 back-compat: existing HTTP/CLI callers may register schemas
+    // without declaring canonical_name_fields or identity_opt_out (e.g. the
+    // bootstrap path from `neotoma schemas register`). Default to an
+    // explicit identity_opt_out so registration still succeeds while
+    // surfacing the gap loudly via startup logs and stats. Clients that
+    // want strong identity should set `canonical_name_fields` on the
+    // request payload.
+    const definitionWithIdentity = (() => {
+      const def = schema_definition as Record<string, unknown> | undefined;
+      if (!def || typeof def !== "object") return schema_definition;
+      if (def.canonical_name_fields || def.identity_opt_out) return schema_definition;
+      logWarn("DefaultIdentityOptOut:register_schema", req, { entity_type });
+      return { ...def, identity_opt_out: "heuristic_canonical_name" };
+    })();
+
     let newSchema;
     try {
       newSchema = await schemaRegistry.register({
         entity_type,
         schema_version,
-        schema_definition: schema_definition as unknown as Parameters<
+        schema_definition: definitionWithIdentity as unknown as Parameters<
           typeof schemaRegistry.register
         >[0]["schema_definition"],
         reducer_config: (reducer_config || { merge_policies: {} }) as unknown as Parameters<

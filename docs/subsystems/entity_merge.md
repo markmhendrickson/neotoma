@@ -229,42 +229,51 @@ No transitive merges are supported. If you need to merge A, B, and C:
 ✅ A → C, B → C (both merge to C)
 ❌ A → B → C (chain not supported)
 ```
-## 7. Duplicate Detection (Post-Launch)
-### 7.1 Heuristic Detection
-Background worker identifies potential duplicates:
-```typescript
-async function detectPotentialDuplicates(): Promise<void> {
-  const users = await getDistinctUsers();
-  
-  for (const { user_id } of users) {
-    const merchants = await db.query("entities", {
-      entity_type: "merchant",
-      user_id: user_id,
-      merged_to_entity_id: null,
-    }, ["id", "canonical_name"]);
-    const candidates = findSimilarNames(merchants ?? [], 0.85);
-    
-    logMetric('entity.potential_duplicates', candidates.length, { 
-      entity_type: 'merchant',
-      user_id 
-    });
-  }
+## 7. Duplicate Detection (R5)
+
+Read-only fuzzy post-hoc detector that surfaces candidate duplicate pairs for operator or agent review. Never auto-merges. Hands off to `merge_entities` once a reviewer confirms a pair. Doctrine preserved: identity resolution stays deterministic via the `entity_type + canonical_name` hash; fuzzy matching lives only here, on demand.
+
+### 7.1 Schema-driven configuration
+
+Schemas drive detector behavior via two optional fields on `SchemaDefinition` (see `src/services/schema_registry.ts`):
+
+- `duplicate_detection_fields`: array of snapshot field names to compare in addition to `canonical_name`. Omit to compare `canonical_name` only (weakest signal).
+- `duplicate_detection_threshold`: similarity threshold in (0, 1]. Defaults to `0.85` when omitted.
+
+The detector is implemented in `src/services/duplicate_detection.ts` and computes a normalized Levenshtein similarity over `canonical_name` plus any declared snapshot fields. A pair is flagged when the best per-field score clears the threshold; the response includes the matched field names, a composite `score`, and the snapshot fields that were compared.
+
+### 7.2 CLI and MCP surfaces
+
+- CLI: `neotoma entities find-duplicates --entity-type <type> [--threshold <0..1>] [--limit <n>]`
+- MCP: `list_potential_duplicates({ entity_type, threshold?, limit?, user_id? })`
+- HTTP: `GET /entities/duplicates?entity_type=...&threshold=...&limit=...` (`operationId: listPotentialDuplicates`)
+
+All three return the same payload shape:
+
+```json
+{
+  "candidates": [
+    {
+      "entity_a": { "id": "ent_...", "canonical_name": "...", "snapshot_fields": { "...": "..." } },
+      "entity_b": { "id": "ent_...", "canonical_name": "...", "snapshot_fields": { "...": "..." } },
+      "score": 0.93,
+      "matched_fields": ["canonical_name", "email"],
+      "entity_type": "contact"
+    }
+  ],
+  "entity_type": "contact",
+  "threshold": 0.85
 }
 ```
-### 7.2 MCP Tool (Post-Launch)
-```typescript
-list_untyped_entities({
-  limit?: number  // Default: 50
-})
-→ {
-  entities: Array<{
-    entity_id: string,
-    source_id: string,
-    raw_data: object,
-    created_at: string
-  }>
-}
-```
+
+Operators or agents review the list and call `merge_entities` per pair. No automatic merging.
+
+### 7.3 Constraints
+
+- Same-user only (scoped by `user_id`).
+- Merged entities are excluded.
+- Pure read path: no observations, snapshots, or entities are mutated.
+- The detector caps the scan at 2000 entities per type per call. Callers requiring larger scans should page by type or add filters via future parameters.
 ## 8. Error Codes
 | Code | Meaning |
 |------|---------|

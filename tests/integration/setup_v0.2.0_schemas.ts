@@ -14,6 +14,7 @@ export async function setupTestSchemas() {
           content: { type: "string" },
           created_at: { type: "date" },
         },
+        identity_opt_out: "heuristic_canonical_name",
       },
       reducer_config: {
         merge_policies: {
@@ -36,6 +37,7 @@ export async function setupTestSchemas() {
           email: { type: "string" },
           phone: { type: "string" },
         },
+        identity_opt_out: "heuristic_canonical_name",
       },
       reducer_config: {
         merge_policies: {

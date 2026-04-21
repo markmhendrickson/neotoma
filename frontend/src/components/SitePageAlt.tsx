@@ -72,7 +72,7 @@ const ALT_SECTION_ORDER: readonly string[] = [
   "who",
   "demo",
   "outcomes",
-  "memory-guarantees",
+  "state-guarantees",
   "proof",
   "evaluate",
   "common-questions",
@@ -96,7 +96,7 @@ function getLocalizedDotNavSections(pack: ReturnType<typeof useLocale>["pack"]) 
     { id: "who", label: pack.siteSections.who ?? "Who" },
     { id: "demo", label: pack.siteSections.demo ?? "Demo" },
     { id: "outcomes", label: pack.siteSections.beforeAfter },
-    { id: "memory-guarantees", label: pack.siteSections.guarantees },
+    { id: "state-guarantees", label: pack.siteSections.guarantees },
     { id: "proof", label: pack.siteSections.personalOs },
     { id: "evaluate", label: pack.siteSections.evaluate ?? "Evaluate" },
   ];
@@ -558,7 +558,7 @@ const ALT_ICP_CARDS: {
     tagline:
       "Every session starts from zero. Context scatters across tools. Corrections don\u2019t persist between runs. You\u2019re the human sync layer and the inference babysitter.",
     homepageTransition:
-      "Stop compensating for missing memory. Store a fact once and it\u2019s available everywhere \u2014 versioned, corrected, and consistent across sessions and agents.",
+      "Stop compensating for missing state. Store a fact once and it\u2019s available everywhere \u2014 versioned, corrected, and consistent across sessions and agents.",
   },
   {
     slug: "debugging-infrastructure",
@@ -698,12 +698,12 @@ export function SitePageAlt() {
                     <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(340px,0.92fr)] lg:items-center">
                       <div className="space-y-6 text-center lg:text-left">
                         <h1 className="text-[36px] md:text-[48px] font-semibold tracking-[-0.035em] leading-[1.1]">
-                          The state layer your agents are missing.
+                          Structured state your agents can share, version, and replay.
                         </h1>
 
                         <p className="text-[15px] md:text-[17px] leading-7 text-foreground/80 max-w-xl mx-auto lg:mx-0">
-                          Structured, versioned, deterministic. Works across Claude, Cursor, ChatGPT,
-                          and every MCP tool.
+                          Typed entities. Versioned history. Deterministic retrieval.
+                          One source of truth across Claude, Cursor, ChatGPT, and every MCP tool.
                         </p>
 
                         <p className="text-[12px] font-mono uppercase tracking-wider text-muted-foreground/60 max-w-xl mx-auto lg:mx-0">
@@ -786,7 +786,7 @@ export function SitePageAlt() {
                           to={`/faq#${faqQuestionToSectionId(FAQ_QUESTION_BUILDING_YOUR_OWN_MEMORY_SYSTEM)}`}
                           className={WHO_CALLOUT_FAQ_LINK_CLASS}
                         >
-                          memory that stays correct
+                          state that stays correct
                         </Link>
                         .
                       </p>
@@ -822,7 +822,7 @@ export function SitePageAlt() {
                     <h2 className={HOME_SECTION_H2_CLASS}>
                       You run AI agents seriously...
                       <span className="mt-1.5 block text-muted-foreground sm:mt-2">
-                        ...and pay the tax for missing memory
+                        ...and pay the tax for unstructured state
                       </span>
                     </h2>
                   </div>
@@ -892,13 +892,14 @@ export function SitePageAlt() {
                 <div className="space-y-6 md:space-y-8 max-w-5xl mx-auto">
                   <div className="space-y-2 text-center">
                     <p className="text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
-                      Product demo
+                      See what your agent knows
                     </p>
                     <h2 className={HOME_SECTION_H2_CLASS}>
-                      Inspect, version, diff, and replay what your agents remember
+                      Inspect, version, diff, and replay the state your agents share
                     </h2>
                     <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl mx-auto">
-                      The same operations work from the CLI, the REST API, the Inspector app, or
+                      Every entity, every observation, every relationship &mdash; visible. The
+                      same operations work from the CLI, the REST API, the Inspector app, or
                       through any MCP-connected agent. Toggle between views to try each interface.
                     </p>
                   </div>
@@ -909,8 +910,8 @@ export function SitePageAlt() {
             </FadeSection>
           </section>
 
-          {/* Slide 5: Memory guarantees */}
-          <section id="memory-guarantees" className={SLIDE_CLASS}>
+          {/* Slide 5: State guarantees */}
+          <section id="state-guarantees" className={SLIDE_CLASS}>
             <FadeSection scrollContainerRef={scrollContainerRef}>
               <div className={SLIDE_INNER}>
                 <div className="space-y-6 md:space-y-8 max-w-5xl mx-auto">
@@ -919,7 +920,7 @@ export function SitePageAlt() {
                       Guarantees
                     </p>
                     <h2 className={HOME_SECTION_H2_CLASS}>
-                      Memory that stays correct from session one to month twelve
+                      Structured state that stays correct from session one to month twelve
                     </h2>
                     <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl mx-auto">
                       Chat memory fades. RAG drifts. Markdown and JSON files accumulate silent
@@ -978,7 +979,7 @@ export function SitePageAlt() {
                   </div>
                 </div>
               </div>
-              <SectionEdgeIndicators sectionId="memory-guarantees" />
+              <SectionEdgeIndicators sectionId="state-guarantees" />
             </FadeSection>
           </section>
 

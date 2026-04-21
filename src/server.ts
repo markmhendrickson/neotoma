@@ -706,6 +706,22 @@ export class NeotomaServer {
     });
   }
 
+  private async listRecentChanges(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const schema = z.object({
+      limit: z.number().int().positive().max(200).optional().default(50),
+      offset: z.number().int().nonnegative().optional().default(0),
+    });
+    const parsed = schema.parse(args ?? {});
+    const userId = this.getAuthenticatedUserId(undefined);
+    const { listRecentRecordActivity } = await import(
+      "./services/recent_record_activity.js"
+    );
+    const result = listRecentRecordActivity(userId, parsed.limit, parsed.offset);
+    return this.buildTextResponse(result);
+  }
+
   private async npmCheckUpdate(
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
@@ -981,6 +997,8 @@ export class NeotomaServer {
         return await this.correct(args);
       case "merge_entities":
         return await this.mergeEntities(args);
+      case "list_potential_duplicates":
+        return await this.listPotentialDuplicates(args);
       case "delete_entity":
         return await this.deleteEntity(args);
       case "delete_relationship":
@@ -993,6 +1011,8 @@ export class NeotomaServer {
         return await this.getAuthenticatedUser(args);
       case "health_check_snapshots":
         return await this.healthCheckSnapshots(args);
+      case "list_recent_changes":
+        return await this.listRecentChanges(args);
       case "npm_check_update":
         return await this.npmCheckUpdate(args);
       default:
@@ -1723,11 +1743,20 @@ export class NeotomaServer {
     const parsed = ListObservationsRequestSchema.parse(args ?? {});
     const userId = this.getAuthenticatedUserId(undefined);
 
-    const { data: observations, error, count } = await db
+    let obsQuery = db
       .from("observations")
       .select("*", { count: "exact" })
       .eq("entity_id", parsed.entity_id)
-      .eq("user_id", userId)
+      .eq("user_id", userId);
+
+    if (parsed.updated_since) {
+      obsQuery = obsQuery.gte("observed_at", parsed.updated_since);
+    }
+    if (parsed.created_since) {
+      obsQuery = obsQuery.gte("observed_at", parsed.created_since);
+    }
+
+    const { data: observations, error, count } = await obsQuery
       .order("observed_at", { ascending: false })
       .range(parsed.offset, parsed.offset + parsed.limit - 1);
 
@@ -2098,6 +2127,8 @@ export class NeotomaServer {
       similarityThreshold: parsed.similarity_threshold,
       limit: parsed.limit,
       offset: parsed.offset,
+      updatedSince: parsed.updated_since,
+      createdSince: parsed.created_since,
     });
 
     return this.buildTextResponse({
@@ -2191,7 +2222,10 @@ export class NeotomaServer {
       identifier: parsed.identifier,
       entityType: parsed.entity_type,
       userId,
-      limit: 100,
+      limit: parsed.limit ?? 100,
+      by: parsed.by,
+      includeObservations: parsed.include_observations,
+      observationsLimit: parsed.observations_limit,
     });
 
     return this.buildTextResponse({
@@ -2765,6 +2799,8 @@ export class NeotomaServer {
           )
           .optional(),
         source_priority: z.number().default(100),
+        commit: z.boolean().optional(),
+        strict: z.boolean().optional(),
       })
       .refine(
         (data) => {
@@ -2791,7 +2827,11 @@ export class NeotomaServer {
         parsed.source_priority,
         idempotencyKey,
         parsed.original_filename,
-        parsed.relationships
+        parsed.relationships,
+        {
+          commit: (parsed as { commit?: boolean }).commit !== false,
+          strict: (parsed as { strict?: boolean }).strict === true,
+        }
       );
       try {
         const text = structuredResponse.content[0]?.text ?? "{}";
@@ -3010,14 +3050,15 @@ export class NeotomaServer {
       return [];
     }
 
-    // Debug: log observation details
-    logger.error(
-      `Found ${observations.length} observation(s) for source ${sourceId}:`,
-      observations.map((obs: { id: string; entity_id: string | null }) => ({
-        obs_id: obs.id,
-        entity_id: obs.entity_id,
-      }))
-    );
+    if (process.env.NEOTOMA_DEBUG_ENTITY_IDS_FROM_SOURCE === "1") {
+      logger.debug(
+        `Found ${observations.length} observation(s) for source ${sourceId}:`,
+        observations.map((obs: { id: string; entity_id: string | null }) => ({
+          obs_id: obs.id,
+          entity_id: obs.entity_id,
+        }))
+      );
+    }
 
     // Get unique entity IDs, filtering out null/undefined
     const entityIds: string[] = Array.from(
@@ -3028,7 +3069,9 @@ export class NeotomaServer {
       )
     );
 
-    logger.error(`Extracted ${entityIds.length} entity ID(s):`, entityIds);
+    if (process.env.NEOTOMA_DEBUG_ENTITY_IDS_FROM_SOURCE === "1") {
+      logger.debug(`Extracted ${entityIds.length} entity ID(s):`, entityIds);
+    }
     return entityIds;
   }
 
@@ -3107,10 +3150,21 @@ export class NeotomaServer {
     sourcePriority: number = 100,
     idempotencyKey?: string,
     originalFilename?: string,
-    relationships?: Array<{ relationship_type: string; source_index: number; target_index: number }>
+    relationships?: Array<{
+      relationship_type: string;
+      source_index: number;
+      target_index: number;
+    }>,
+    options: { commit?: boolean; strict?: boolean } = {},
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const commit = options.commit !== false;
+    const strict = options.strict === true;
     const { storeRawContent } = await import("./services/raw_storage.js");
-    const { resolveEntity } = await import("./services/entity_resolution.js");
+    const {
+      resolveEntityWithTrace,
+      CanonicalNameUnresolvedError,
+      MergeRefusedError,
+    } = await import("./services/entity_resolution.js");
     const { schemaRegistry } = await import("./services/schema_registry.js");
     const { validateFieldsWithConverters } = await import("./services/field_validation.js");
     const { generateObservationId } = await import("./services/observation_identity.js");
@@ -3126,6 +3180,75 @@ export class NeotomaServer {
       if (detection.detected) {
         throw new FlatPackedRowsError(detection);
       }
+    }
+
+    // Plan mode: resolve deterministically, report planned actions per entity,
+    // and skip every write (source row, observations, snapshots, relationships).
+    if (!commit) {
+      const planEntities: Array<{
+        observation_index: number;
+        entity_type: string;
+        canonical_name: string;
+        resolver_path: string[];
+        identity_basis: string;
+        identity_rule: string;
+        action: string;
+      }> = [];
+      const issues: Array<{ observation_index: number; entity_type: string; message: string }> = [];
+      for (let i = 0; i < entities.length; i++) {
+        const entityData = entities[i] ?? {};
+        const entityType =
+          (entityData.entity_type as string) || (entityData.type as string) || "generic";
+        const fieldsForPlan = { ...entityData };
+        delete fieldsForPlan.entity_type;
+        delete fieldsForPlan.type;
+        try {
+          const result = await resolveEntityWithTrace({
+            entityType,
+            fields: fieldsForPlan,
+            userId,
+            commit: false,
+            strict,
+          });
+          planEntities.push({
+            observation_index: i,
+            entity_type: entityType,
+            canonical_name: result.trace.canonicalName,
+            resolver_path: result.trace.path,
+            identity_basis: result.trace.identityBasis,
+            identity_rule: result.trace.identityRule,
+            action: result.trace.action,
+          });
+        } catch (err) {
+          if (err instanceof CanonicalNameUnresolvedError || err instanceof MergeRefusedError) {
+            issues.push({
+              observation_index: i,
+              entity_type: entityType,
+              message: (err as Error).message,
+            });
+          } else {
+            throw err;
+          }
+        }
+      }
+      if (issues.length > 0) {
+        throw new McpError(
+          ErrorCode.InvalidParams,
+          `store_structured plan: ${issues.length} entity issue(s). ` +
+            issues.map((iss) => `[${iss.observation_index}] ${iss.message}`).join(" | "),
+        );
+      }
+      return this.buildTextResponse({
+        plan: true,
+        commit: false,
+        strict,
+        source_id: null,
+        entities: planEntities,
+        entity_snapshots_after: planEntities.map(() => null),
+        unknown_fields_count: 0,
+        related_entities: [],
+        related_relationships: [],
+      });
     }
 
     if (idempotencyKey) {
@@ -3213,6 +3336,11 @@ export class NeotomaServer {
       entityId: string;
       entityType: string;
       observationId: string;
+      canonicalName: string;
+      resolverPath: string[];
+      identityBasis: string;
+      identityRule: string;
+      action: string;
     }> = [];
     let unknownFieldsCount = 0;
 
@@ -3336,12 +3464,47 @@ export class NeotomaServer {
         unknownFields,
       });
 
-      // Resolve entity (user-scoped)
-      const entityId = await resolveEntity({
-        entityType,
-        fields: validFields,
-        userId,
-      });
+      // Resolve entity (user-scoped) and capture the resolver trace so we
+      // can surface action / canonical_name / resolver_path per observation.
+      let entityId: string;
+      let resolverTrace: {
+        canonicalName: string;
+        path: string[];
+        identityBasis: string;
+        identityRule: string;
+        action: string;
+      };
+      try {
+        const result = await resolveEntityWithTrace({
+          entityType,
+          fields: validFields,
+          userId,
+          commit: true,
+          strict,
+        });
+        entityId = result.entityId;
+        resolverTrace = {
+          canonicalName: result.trace.canonicalName,
+          path: result.trace.path,
+          identityBasis: result.trace.identityBasis,
+          identityRule: result.trace.identityRule,
+          action: result.trace.action,
+        };
+      } catch (err) {
+        if (err instanceof CanonicalNameUnresolvedError) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            `Observation ${createdEntities.length} (${entityType}): ${err.message}`,
+          );
+        }
+        if (err instanceof MergeRefusedError) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            `Observation ${createdEntities.length} (${entityType}): ${err.message}`,
+          );
+        }
+        throw err;
+      }
 
       // Create observation directly (no interpretation_id).
       // Use fieldsForObservation so date-like unknowns are in the observation and thus
@@ -3377,6 +3540,8 @@ export class NeotomaServer {
           source_priority: sourcePriority, // Use provided priority (default 100)
           fields: fieldsForObservation,
           user_id: userId,
+          identity_basis: resolverTrace.identityBasis,
+          identity_rule: resolverTrace.identityRule,
         });
 
         if (obsError) {
@@ -3388,10 +3553,16 @@ export class NeotomaServer {
         entityId,
         entityType,
         observationId,
+        canonicalName: resolverTrace.canonicalName,
+        resolverPath: resolverTrace.path,
+        identityBasis: resolverTrace.identityBasis,
+        identityRule: resolverTrace.identityRule,
+        action: resolverTrace.action,
       });
     }
 
     // Compute and store snapshots for all entities
+    const snapshotByEntityId = new Map<string, Record<string, unknown>>();
     const { observationReducer } = await import("./reducers/observation_reducer.js");
     for (const createdEntity of createdEntities) {
       try {
@@ -3448,6 +3619,10 @@ export class NeotomaServer {
             user_id: snapshot.user_id,
           });
           await upsertEntitySnapshotWithEmbedding(rowWithEmbedding);
+          snapshotByEntityId.set(
+            snapshot.entity_id,
+            (snapshot.snapshot as Record<string, unknown>) || {},
+          );
 
           const sameTypeInBatch = createdEntities.filter(
             (e) => e.entityType === createdEntity.entityType
@@ -3549,10 +3724,17 @@ export class NeotomaServer {
 
     return this.buildTextResponse({
       source_id: storageResult.sourceId,
-      entities: createdEntities.map((e) => ({
+      entities: createdEntities.map((e, idx) => ({
+        observation_index: idx,
         entity_id: e.entityId,
         entity_type: e.entityType,
         observation_id: e.observationId,
+        action: e.action,
+        canonical_name: e.canonicalName,
+        resolver_path: e.resolverPath,
+        identity_basis: e.identityBasis,
+        identity_rule: e.identityRule,
+        entity_snapshot_after: snapshotByEntityId.get(e.entityId) ?? null,
       })),
       unknown_fields_count: unknownFieldsCount,
       related_entities: relatedData.entities,
@@ -3711,6 +3893,62 @@ export class NeotomaServer {
         `Failed to merge entities: ${err instanceof Error ? err.message : String(err)}`
       );
     }
+  }
+
+  /**
+   * MCP list_potential_duplicates: read-only fuzzy duplicate detector (R5).
+   * Never auto-merges; returns ranked candidate pairs so an operator or agent
+   * can invoke `merge_entities`.
+   */
+  private async listPotentialDuplicates(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const rawArgs = (args ?? {}) as {
+      entity_type?: unknown;
+      threshold?: unknown;
+      limit?: unknown;
+      user_id?: unknown;
+    };
+    const entityType = typeof rawArgs.entity_type === "string" ? rawArgs.entity_type : "";
+    if (!entityType) {
+      throw new McpError(ErrorCode.InvalidParams, "entity_type is required");
+    }
+    const userId = this.getAuthenticatedUserId(
+      typeof rawArgs.user_id === "string" ? rawArgs.user_id : undefined
+    );
+
+    const threshold =
+      typeof rawArgs.threshold === "number"
+        ? rawArgs.threshold
+        : typeof rawArgs.threshold === "string"
+          ? Number(rawArgs.threshold)
+          : undefined;
+    if (threshold !== undefined && (Number.isNaN(threshold) || threshold <= 0 || threshold > 1)) {
+      throw new McpError(ErrorCode.InvalidParams, "threshold must be a number in (0, 1]");
+    }
+    const limit =
+      typeof rawArgs.limit === "number"
+        ? rawArgs.limit
+        : typeof rawArgs.limit === "string"
+          ? Number(rawArgs.limit)
+          : undefined;
+    if (limit !== undefined && (!Number.isFinite(limit) || limit < 1 || limit > 200)) {
+      throw new McpError(ErrorCode.InvalidParams, "limit must be an integer in [1, 200]");
+    }
+
+    const { findDuplicateCandidates } = await import("./services/duplicate_detection.js");
+    const candidates = await findDuplicateCandidates({
+      entityType,
+      userId,
+      threshold,
+      limit,
+    });
+
+    return this.buildTextResponse({
+      candidates,
+      entity_type: entityType,
+      threshold: threshold ?? null,
+    });
   }
 
   /** MCP delete_entity: delete an entity via deletion observation (immutable, reversible for audit) */

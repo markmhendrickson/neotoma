@@ -39,6 +39,26 @@ export interface PermissionFileStatus {
   has_npm_install_allow: boolean;
 }
 
+/** Canonical markdown mirror state surfaced to activation. */
+export interface MirrorReport {
+  /** Whether mirror write-through is currently enabled. */
+  enabled: boolean;
+  /** Resolved absolute path of the mirror root. */
+  path: string;
+  /** True when the mirror path sits inside a git repo. */
+  inside_git_repo: boolean;
+  /** Absolute path of the enclosing git repo, or null when `inside_git_repo` is false. */
+  git_repo_root: string | null;
+  /** True when `<git_repo_root>/.gitignore` already ignores the mirror directory. */
+  gitignored: boolean;
+  /**
+   * Activation may offer the mirror iff it is not already enabled. Prior
+   * declines are tracked at the agent level (stored as a `user_preference`
+   * during activation), not in doctor.
+   */
+  eligible_for_offer: boolean;
+}
+
 /** Consolidated doctor snapshot. */
 export interface DoctorReport {
   neotoma: {
@@ -74,6 +94,7 @@ export interface DoctorReport {
   permission_files: Record<string, PermissionFileStatus>;
   current_tool_hint: ToolId | null;
   hooks: HooksReport;
+  mirror: MirrorReport;
   suggested_next_step:
     | "install"
     | "init"
@@ -82,6 +103,7 @@ export interface DoctorReport {
     | "configure-permissions"
     | "activate"
     | "offer-hooks"
+    | "offer-mirror"
     | "ready";
 }
 
@@ -267,7 +289,38 @@ function suggestNextStep(report: Omit<DoctorReport, "suggested_next_step">): Doc
   }
   if (!report.api.running) return "activate";
   if (report.hooks.eligible_for_offer) return "offer-hooks";
+  if (report.mirror.eligible_for_offer) return "offer-mirror";
   return "ready";
+}
+
+/** Build the mirror block for the doctor report. */
+async function detectMirror(): Promise<MirrorReport> {
+  try {
+    const { getMirrorConfig } = await import("../services/canonical_mirror.js");
+    const { checkMirrorGitignoreStatus } = await import(
+      "./commands/mirror.js"
+    );
+    const cfg = getMirrorConfig();
+    const gitignore = checkMirrorGitignoreStatus(cfg);
+    return {
+      enabled: cfg.enabled,
+      path: path.resolve(cfg.path),
+      inside_git_repo: gitignore.inside_git_repo,
+      git_repo_root: gitignore.git_repo_root,
+      gitignored: gitignore.gitignored,
+      eligible_for_offer: !cfg.enabled,
+    };
+  } catch {
+    // Never let mirror detection break doctor.
+    return {
+      enabled: false,
+      path: "",
+      inside_git_repo: false,
+      git_repo_root: null,
+      gitignored: false,
+      eligible_for_offer: false,
+    };
+  }
 }
 
 export interface RunDoctorOptions {
@@ -371,6 +424,8 @@ export async function runDoctor(opts: RunDoctorOptions = {}): Promise<DoctorRepo
     mcpConfigured,
   });
 
+  const mirror = await detectMirror();
+
   const partial: Omit<DoctorReport, "suggested_next_step"> = {
     neotoma: {
       installed,
@@ -395,6 +450,7 @@ export async function runDoctor(opts: RunDoctorOptions = {}): Promise<DoctorRepo
     permission_files: permissionFiles,
     current_tool_hint: currentToolHint,
     hooks,
+    mirror,
   };
 
   return { ...partial, suggested_next_step: suggestNextStep(partial) };

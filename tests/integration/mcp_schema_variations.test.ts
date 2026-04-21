@@ -35,7 +35,8 @@ describe("MCP schema actions - parameter variations", () => {
         schema_definition: {
           fields: {
             title: { type: "string", required: true }
-          }
+          },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policy: "last_write"
@@ -63,7 +64,8 @@ describe("MCP schema actions - parameter variations", () => {
           schema_definition: {
             fields: {
               title: { type: "string", required: true }
-            }
+            },
+            identity_opt_out: "heuristic_canonical_name",
           },
           reducer_config: {
             merge_policy: "last_write"
@@ -92,7 +94,8 @@ describe("MCP schema actions - parameter variations", () => {
               boolean_field: { type: "boolean", required: false },
               array_field: { type: "array", required: false },
               object_field: { type: "object", required: false }
-            }
+            },
+            identity_opt_out: "heuristic_canonical_name",
           },
           reducer_config: {
             merge_policy: "last_write"
@@ -117,7 +120,8 @@ describe("MCP schema actions - parameter variations", () => {
             schema_definition: {
               fields: {
                 title: { type: "string", required: true }
-              }
+              },
+              identity_opt_out: "heuristic_canonical_name",
             },
             reducer_config: {
               merge_policy: strategy
@@ -146,7 +150,8 @@ describe("MCP schema actions - parameter variations", () => {
           schema_definition: {
             fields: {
               title: { type: "string", required: true }
-            }
+            },
+            identity_opt_out: "heuristic_canonical_name",
           },
           reducer_config: {
             merge_policy: "last_write"
@@ -175,7 +180,8 @@ describe("MCP schema actions - parameter variations", () => {
           schema_definition: {
             fields: {
               title: { type: "string", required: true }
-            }
+            },
+            identity_opt_out: "heuristic_canonical_name",
           },
           reducer_config: {
             merge_policy: "last_write"
@@ -202,7 +208,8 @@ describe("MCP schema actions - parameter variations", () => {
           schema_definition: {
             fields: {
               title: { type: "string", required: true }
-            }
+            },
+            identity_opt_out: "heuristic_canonical_name",
           },
           reducer_config: {
             merge_policy: "last_write"
@@ -216,7 +223,8 @@ describe("MCP schema actions - parameter variations", () => {
             fields: {
               title: { type: "string", required: true },
               description: { type: "string", required: false }
-            }
+            },
+            identity_opt_out: "heuristic_canonical_name",
           },
           reducer_config: {
             merge_policy: "last_write"
@@ -253,7 +261,8 @@ describe("MCP schema actions - parameter variations", () => {
         schema_definition: {
           fields: {
             title: { type: "string", required: true }
-          }
+          },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policy: "last_write"
@@ -270,7 +279,8 @@ describe("MCP schema actions - parameter variations", () => {
             title: { type: "string", required: true },
             description: { type: "string", required: false },
             tags: { type: "array", required: false }
-          }
+          },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policy: "last_write"
@@ -303,7 +313,8 @@ describe("MCP schema actions - parameter variations", () => {
         schema_definition: {
           fields: {
             title: { type: "string", required: true }
-          }
+          },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policy: "last_write"

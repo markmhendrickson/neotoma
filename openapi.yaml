@@ -246,6 +246,42 @@ components:
           type: integer
         timeline_events:
           type: integer
+        sources_count:
+          type: integer
+        entities_by_type:
+          type: object
+          additionalProperties:
+            type: integer
+        total_entities:
+          type: integer
+        total_relationships:
+          type: integer
+        total_events:
+          type: integer
+        total_observations:
+          type: integer
+        total_interpretations:
+          type: integer
+        observations_by_identity_basis:
+          type: object
+          description: |
+            R4 telemetry: count of observations per structured identity basis.
+            Keys are `schema_rule`, `heuristic_name`, `heuristic_fallback`,
+            `target_id`, or `unclassified` for rows written before the
+            `identity_basis` column existed.
+          additionalProperties:
+            type: integer
+        observations_by_identity_basis_by_type:
+          type: object
+          description: |
+            R4 telemetry: count of observations per identity basis, keyed by
+            entity_type (outer) then basis (inner).
+          additionalProperties:
+            type: object
+            additionalProperties:
+              type: integer
+        last_updated:
+          type: string
     StoreRequest:
       type: object
       properties:
@@ -293,6 +329,22 @@ components:
           additionalProperties: true
         user_id:
           type: string
+        commit:
+          type: boolean
+          default: true
+          description: |
+            When false, runs in plan/dry-run mode: resolves entities and returns
+            planned actions ("would_create" / "would_match_existing") without
+            persisting observations or source rows. Useful for previewing a
+            structured store before committing.
+        strict:
+          type: boolean
+          default: false
+          description: |
+            When true, refuse silent merges: only match an existing entity when
+            the entity's schema declares canonical_name_fields that the request
+            matches, or when target_id is supplied. Prevents accidental
+            coalescing into a pre-existing record.
       description: Unified store payload. Supports structured only, unstructured only, or both in one request.
     StoreResponse:
       type: object
@@ -341,6 +393,22 @@ components:
           description: |
             Optional. For agent-provided structured data, omit so the source has no filename (null).
             Pass only when mirroring a real file name or when a display label is desired.
+        commit:
+          type: boolean
+          default: true
+          description: |
+            When false, runs in plan/dry-run mode: resolves entities and returns
+            planned actions ("would_create" / "would_match_existing") without
+            persisting observations or source rows. Useful for previewing a
+            structured store before committing.
+        strict:
+          type: boolean
+          default: false
+          description: |
+            When true, refuse silent merges: only match an existing entity when
+            the entity's schema declares canonical_name_fields that the request
+            matches, or when target_id is supplied. Prevents accidental
+            coalescing into a pre-existing record.
     StoreStructuredResponse:
       type: object
       properties:
@@ -356,6 +424,32 @@ components:
               entity_type:
                 type: string
               observation_id:
+                type: string
+              canonical_name:
+                type: string
+              resolver_path:
+                type: array
+                items:
+                  type: string
+              identity_basis:
+                type: string
+                description: |
+                  R4 telemetry: how the entity's identity was resolved. One of
+                  `schema_rule`, `heuristic_name`, `heuristic_fallback`,
+                  `target_id`.
+                enum:
+                  - schema_rule
+                  - schema_lookup
+                  - heuristic_name
+                  - heuristic_fallback
+                  - target_id
+              identity_rule:
+                type: string
+                description: |
+                  Human-readable label for the rule that produced the
+                  canonical_name (e.g. `email`,
+                  `composite:full_name+employer`, `first_string_field:name`).
+              action:
                 type: string
     StoreUnstructuredRequest:
       type: object
@@ -903,6 +997,16 @@ paths:
                   type: boolean
                 user_id:
                   type: string
+                updated_since:
+                  type: string
+                  description: |
+                    ISO 8601 timestamp. Return only entities whose
+                    updated_at is greater than or equal to this value.
+                created_since:
+                  type: string
+                  description: |
+                    ISO 8601 timestamp. Return only entities whose
+                    created_at is greater than or equal to this value.
       responses:
         '200':
           description: Entity list
@@ -986,6 +1090,81 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/RelationshipSnapshot'
+
+  /entities/duplicates:
+    get:
+      summary: List potential duplicate entities for a given entity_type (R5).
+      description: >
+        Read-only fuzzy duplicate detector. Surfaces candidate pairs for
+        operator or agent review and hands off to `/entities/merge`. Never
+        auto-merges. Per-schema thresholds and fields may be declared via
+        `duplicate_detection_threshold` and `duplicate_detection_fields` on
+        the schema definition; callers may override `threshold` per call.
+      operationId: listPotentialDuplicates
+      parameters:
+        - in: query
+          name: entity_type
+          required: true
+          schema: { type: string }
+        - in: query
+          name: user_id
+          required: false
+          schema: { type: string }
+        - in: query
+          name: threshold
+          required: false
+          description: Similarity threshold in (0, 1]. Defaults to the schema's `duplicate_detection_threshold` or 0.85.
+          schema:
+            type: number
+            minimum: 0
+            maximum: 1
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+      responses:
+        '200':
+          description: Ranked list of candidate duplicate pairs.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  candidates:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        entity_a:
+                          type: object
+                          properties:
+                            id: { type: string }
+                            canonical_name: { type: string }
+                            snapshot_fields:
+                              type: object
+                              additionalProperties: true
+                        entity_b:
+                          type: object
+                          properties:
+                            id: { type: string }
+                            canonical_name: { type: string }
+                            snapshot_fields:
+                              type: object
+                              additionalProperties: true
+                        score:
+                          type: number
+                        matched_fields:
+                          type: array
+                          items: { type: string }
+                        entity_type:
+                          type: string
+                  entity_type:
+                    type: string
+                  threshold:
+                    type: number
 
   /entities/merge:
     post:
@@ -1137,6 +1316,18 @@ paths:
                   type: integer
                 user_id:
                   type: string
+                updated_since:
+                  type: string
+                  description: |
+                    ISO 8601 timestamp. Return only observations whose
+                    observed_at is greater than or equal to this value.
+                    (Observations are immutable, so updated_since and
+                    created_since both filter observed_at.)
+                created_since:
+                  type: string
+                  description: |
+                    ISO 8601 timestamp. Return only observations whose
+                    observed_at is greater than or equal to this value.
       responses:
         '200':
           description: Observations
@@ -1151,6 +1342,68 @@ paths:
                       $ref: '#/components/schemas/Observation'
                   total:
                     type: integer
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+
+  /record_activity:
+    get:
+      summary: Recent cross-table record activity
+      description: |
+        Lists the most recently changed records across core Neotoma tables
+        (entities, sources, observations, interpretations, relationships,
+        timeline_events) for the authenticated user, ordered by latest
+        created/updated timestamp available on each table. Powers the
+        Inspector's "recent activity" panel and the MCP `list_recent_changes`
+        tool.
+      operationId: getRecordActivity
+      parameters:
+        - in: query
+          name: user_id
+          required: false
+          schema: { type: string }
+        - in: query
+          name: limit
+          required: false
+          schema: { type: integer }
+        - in: query
+          name: offset
+          required: false
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Recent record activity
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        record_type:
+                          type: string
+                          enum:
+                            - entity
+                            - source
+                            - observation
+                            - interpretation
+                            - timeline_event
+                            - relationship
+                        id:
+                          type: string
+                        activity_at:
+                          type: string
+                        title:
+                          type: string
+                        subtitle:
+                          type: string
+                          nullable: true
+                  has_more:
+                    type: boolean
                   limit:
                     type: integer
                   offset:
@@ -1470,6 +1723,16 @@ paths:
                   type: integer
                 offset:
                   type: integer
+                updated_since:
+                  type: string
+                  description: |
+                    ISO 8601 timestamp. Return only observations whose
+                    observed_at is greater than or equal to this value.
+                created_since:
+                  type: string
+                  description: |
+                    ISO 8601 timestamp. Return only observations whose
+                    observed_at is greater than or equal to this value.
       responses:
         '200':
           description: Observations
@@ -1569,6 +1832,35 @@ paths:
                 entity_type:
                   type: string
                   description: Optional entity type to limit search
+                user_id:
+                  type: string
+                  description: Optional user_id override (scoped to callers with privilege to query on behalf of another user).
+                by:
+                  type: string
+                  description: |
+                    Restrict snapshot-field matching to a single field
+                    (e.g. "email", "domain", "company"). When omitted, a
+                    default identity-bearing set is checked
+                    (name, full_name, title, email, domain, company).
+                limit:
+                  type: integer
+                  minimum: 1
+                  description: Maximum number of matching entities to return (default 100).
+                include_observations:
+                  type: boolean
+                  default: false
+                  description: |
+                    When true, attach recent observations to each matched entity
+                    (ordered by observed_at descending). Useful for collapsing
+                    identify → snapshot → list_observations into a single call.
+                observations_limit:
+                  type: integer
+                  minimum: 1
+                  maximum: 200
+                  default: 20
+                  description: |
+                    Maximum observations to attach per entity when
+                    include_observations is true. Ignored otherwise.
       responses:
         '200':
           description: Entity search results
@@ -1580,7 +1872,20 @@ paths:
                   entities:
                     type: array
                     items:
-                      $ref: '#/components/schemas/Entity'
+                      allOf:
+                        - $ref: '#/components/schemas/Entity'
+                        - type: object
+                          properties:
+                            observations:
+                              type: array
+                              description: |
+                                Present only when the request set
+                                include_observations = true. Ordered by
+                                observed_at descending, capped by
+                                observations_limit.
+                              items:
+                                type: object
+                                additionalProperties: true
                   total:
                     type: integer
         '400':

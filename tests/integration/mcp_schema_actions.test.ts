@@ -245,6 +245,7 @@ describe("MCP Schema Actions - Integration", () => {
           fields: {
             existing_field: { type: "string" },
           },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policies: {
@@ -284,7 +285,7 @@ describe("MCP Schema Actions - Integration", () => {
       const baseSchema = await registryService.register({
         entity_type: `${testEntityType}_version`,
         schema_version: "1.0",
-        schema_definition: { fields: {} },
+        schema_definition: { fields: {}, identity_opt_out: "heuristic_canonical_name" },
         reducer_config: { merge_policies: {} },
         activate: true,
       });
@@ -310,6 +311,7 @@ describe("MCP Schema Actions - Integration", () => {
           fields: {
             existing_field: { type: "string" },
           },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policies: {
@@ -340,7 +342,7 @@ describe("MCP Schema Actions - Integration", () => {
       const baseSchema = await registryService.register({
         entity_type: `${testEntityType}_activate`,
         schema_version: "1.0",
-        schema_definition: { fields: {} },
+        schema_definition: { fields: {}, identity_opt_out: "heuristic_canonical_name" },
         reducer_config: { merge_policies: {} },
         activate: true,
       });
@@ -364,7 +366,7 @@ describe("MCP Schema Actions - Integration", () => {
       const baseSchema = await registryService.register({
         entity_type: `${testEntityType}_no_activate`,
         schema_version: "1.0",
-        schema_definition: { fields: {} },
+        schema_definition: { fields: {}, identity_opt_out: "heuristic_canonical_name" },
         reducer_config: { merge_policies: {} },
         activate: true,
       });
@@ -398,6 +400,7 @@ describe("MCP Schema Actions - Integration", () => {
             noise_field: { type: "string", required: false },
             another_noise: { type: "number", required: false },
           },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policies: {
@@ -436,6 +439,7 @@ describe("MCP Schema Actions - Integration", () => {
             field_a: { type: "string" },
             field_b: { type: "string" },
           },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policies: {
@@ -465,6 +469,7 @@ describe("MCP Schema Actions - Integration", () => {
             stable: { type: "string" },
             obsolete: { type: "string" },
           },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policies: {
@@ -499,6 +504,7 @@ describe("MCP Schema Actions - Integration", () => {
           fields: {
             only_field: { type: "string" },
           },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policies: {
@@ -527,6 +533,7 @@ describe("MCP Schema Actions - Integration", () => {
           fields: {
             test_field: { type: "string" },
           },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policies: {
@@ -568,6 +575,7 @@ describe("MCP Schema Actions - Integration", () => {
           fields: {
             test_field: { type: "string" },
           },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policies: {
@@ -598,6 +606,7 @@ describe("MCP Schema Actions - Integration", () => {
           fields: {
             test_field: { type: "string" },
           },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policies: {
@@ -672,7 +681,7 @@ describe("MCP Schema Actions - Integration", () => {
       const baseSchema = await registryService.register({
         entity_type: workflowEntityType,
         schema_version: "1.0",
-        schema_definition: { fields: {} },
+        schema_definition: { fields: {}, identity_opt_out: "heuristic_canonical_name" },
         reducer_config: { merge_policies: {} },
         activate: true,
       });
@@ -710,6 +719,7 @@ describe("MCP Schema Actions - Integration", () => {
           fields: {
             global_field: { type: "string" },
           },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policies: {
@@ -730,6 +740,7 @@ describe("MCP Schema Actions - Integration", () => {
             global_field: { type: "string" },
             user_field: { type: "number" },
           },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policies: {
@@ -785,7 +796,7 @@ describe("MCP Schema Actions - Integration", () => {
       const baseSchema = await registryService.register({
         entity_type: `${testEntityType}_missing_fields`,
         schema_version: "1.0",
-        schema_definition: { fields: {} },
+        schema_definition: { fields: {}, identity_opt_out: "heuristic_canonical_name" },
         reducer_config: { merge_policies: {} },
         activate: true,
       });

@@ -150,6 +150,47 @@ describe("Dashboard Stats Service", () => {
     });
   });
 
+  describe("Identity basis telemetry (R4)", () => {
+    it("should include observations_by_identity_basis aggregation", async () => {
+      const stats = await getDashboardStats(testUserId);
+
+      expect(stats.observations_by_identity_basis).toBeDefined();
+      expect(typeof stats.observations_by_identity_basis).toBe("object");
+      expect(Array.isArray(stats.observations_by_identity_basis)).toBe(false);
+
+      // All bucket values must be non-negative integers.
+      for (const count of Object.values(stats.observations_by_identity_basis)) {
+        expect(typeof count).toBe("number");
+        expect(count).toBeGreaterThanOrEqual(0);
+      }
+
+      // Bucket totals must reconcile with total_observations. They may be
+      // less if some rows live under the `unclassified` bucket because
+      // observations were written before the identity_basis column existed;
+      // the sum should never exceed total_observations.
+      const bucketSum = Object.values(stats.observations_by_identity_basis).reduce(
+        (a, b) => a + b,
+        0
+      );
+      expect(bucketSum).toBeLessThanOrEqual(stats.total_observations);
+    });
+
+    it("should include observations_by_identity_basis_by_type aggregation", async () => {
+      const stats = await getDashboardStats(testUserId);
+
+      expect(stats.observations_by_identity_basis_by_type).toBeDefined();
+      expect(typeof stats.observations_by_identity_basis_by_type).toBe("object");
+
+      for (const inner of Object.values(stats.observations_by_identity_basis_by_type)) {
+        expect(typeof inner).toBe("object");
+        for (const count of Object.values(inner)) {
+          expect(typeof count).toBe("number");
+          expect(count).toBeGreaterThanOrEqual(0);
+        }
+      }
+    });
+  });
+
   describe("User ID Filtering", () => {
     it("should filter sources by user_id", async () => {
       const user1Stats = await getDashboardStats("user1-dashboard");

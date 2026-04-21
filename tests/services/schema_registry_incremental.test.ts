@@ -139,7 +139,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
             scope: "user",
             user_id: "test-user-id",
             active: true,
-            schema_definition: { fields: {} },
+            schema_definition: { fields: {}, identity_opt_out: "heuristic_canonical_name" },
             reducer_config: { merge_policies: {} },
           },
         }),
@@ -177,7 +177,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
             scope: "global",
             user_id: null,
             active: true,
-            schema_definition: { fields: {} },
+            schema_definition: { fields: {}, identity_opt_out: "heuristic_canonical_name" },
             reducer_config: { merge_policies: {} },
           },
         }),
@@ -319,6 +319,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
           fields: {
             existing_field: { type: "string" },
           },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policies: {
@@ -363,7 +364,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
         id: "schema-id",
         entity_type: "transaction",
         schema_version: "1.0",
-        schema_definition: { fields: {} },
+        schema_definition: { fields: {}, identity_opt_out: "heuristic_canonical_name" },
         reducer_config: { merge_policies: {} },
         active: true,
       };
@@ -403,6 +404,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
           fields: {
             existing_field: { type: "string" },
           },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policies: {
@@ -424,6 +426,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
                 existing_field: { type: "string" },
                 new_field: { type: "number" },
               },
+              identity_opt_out: "heuristic_canonical_name",
             },
           },
         }),
@@ -458,6 +461,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
           fields: {
             existing_field: { type: "string" },
           },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policies: {
@@ -507,7 +511,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
         id: "schema-id",
         entity_type: "transaction",
         schema_version: "1.0",
-        schema_definition: { fields: {} },
+        schema_definition: { fields: {}, identity_opt_out: "heuristic_canonical_name" },
         reducer_config: { merge_policies: {} },
         active: true,
         scope: "global",
@@ -548,7 +552,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
         id: "schema-id",
         entity_type: "transaction",
         schema_version: "1.0",
-        schema_definition: { fields: {} },
+        schema_definition: { fields: {}, identity_opt_out: "heuristic_canonical_name" },
         reducer_config: { merge_policies: {} },
         active: true,
       };
@@ -582,7 +586,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
         id: "schema-id",
         entity_type: "transaction",
         schema_version: "1.0",
-        schema_definition: { fields: {} },
+        schema_definition: { fields: {}, identity_opt_out: "heuristic_canonical_name" },
         reducer_config: { merge_policies: {} },
         active: true,
       };
@@ -654,6 +658,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
             keep_field: { type: "string", required: true },
             remove_field: { type: "string", required: false },
           },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policies: {
@@ -700,6 +705,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
             keep_field: { type: "string" },
             remove_field: { type: "string" },
           },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policies: {
@@ -746,6 +752,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
             field_a: { type: "string" },
             field_b: { type: "string" },
           },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policies: {
@@ -790,6 +797,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
           fields: {
             existing_field: { type: "string" },
           },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policies: {
@@ -838,6 +846,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
           fields: {
             only_field: { type: "string" },
           },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policies: {
@@ -867,6 +876,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
             keep_field: { type: "string" },
             old_field: { type: "string" },
           },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policies: {
@@ -1053,7 +1063,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
       const result = await service.register({
         entity_type: "transaction",
         schema_version: "1.0",
-        schema_definition: { fields: {} },
+        schema_definition: { fields: {}, identity_opt_out: "heuristic_canonical_name" },
         reducer_config: { merge_policies: {} },
         user_id: "test-user-id",
         user_specific: true,
@@ -1085,7 +1095,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
       const result = await service.register({
         entity_type: "transaction",
         schema_version: "1.0",
-        schema_definition: { fields: {} },
+        schema_definition: { fields: {}, identity_opt_out: "heuristic_canonical_name" },
         reducer_config: { merge_policies: {} },
       });
 
@@ -1112,7 +1122,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
       const result = await service.register({
         entity_type: "transaction",
         schema_version: "1.0",
-        schema_definition: { fields: {} },
+        schema_definition: { fields: {}, identity_opt_out: "heuristic_canonical_name" },
         reducer_config: { merge_policies: {} },
         activate: true,
       });
@@ -1138,7 +1148,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
       await service.register({
         entity_type: "transaction",
         schema_version: "1.0",
-        schema_definition: { fields: {} },
+        schema_definition: { fields: {}, identity_opt_out: "heuristic_canonical_name" },
         reducer_config: { merge_policies: {} },
       });
 

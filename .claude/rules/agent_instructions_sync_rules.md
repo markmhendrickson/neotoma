@@ -170,6 +170,7 @@ Each atomic rule below exists in both files with transport-appropriate wording. 
 | 70 | CLI backup transport (prefer API transport when reconciling with MCP) | `CLI backup transport` | **CLI backup transport** bullet |
 | 71 | Summarization after store (follow display rule) | `Summarization after MCP actions` | **Summarization after store** bullet |
 | 72 | Update check at session start | `Update check` | **Update check** bullet |
+| 72a | Duplicate repair on demand (list_potential_duplicates / `entities find-duplicates` → confirm → merge_entities; post-hoc only) | `Duplicate repair (on demand)` | **Duplicate repair (on demand)** bullet |
 
 ### [ERRORS & RECOVERY]
 

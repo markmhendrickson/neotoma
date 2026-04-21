@@ -37,6 +37,20 @@ export interface FieldDefinition {
 }
 
 /**
+ * A single identity rule used to derive an entity's canonical_name.
+ *
+ * - `string` — single-field rule. Matches when that field is present and
+ *   non-empty on the payload. Only valid inside an ordered rule list that
+ *   includes at least one `{ composite: [...] }` entry (otherwise the whole
+ *   array is treated as a legacy single-composite declaration for
+ *   backward-compat; see `SchemaDefinition.canonical_name_fields`).
+ * - `{ composite: string[] }` — composite rule. Matches only when every
+ *   declared field is present and non-empty. Used for both legacy semantics
+ *   (a flat `string[]` array) and the explicit object form in ordered lists.
+ */
+export type CanonicalNameRule = string | { composite: string[] };
+
+/**
  * Declarative rules that drive per-type behavior from the schema instead of
  * hardcoded branches. See `docs/foundation/schema_agnostic_design_rules.md`.
  */
@@ -44,13 +58,26 @@ export interface SchemaDefinition {
   fields: Record<string, FieldDefinition>;
 
   /**
-   * Ordered list of field names used to compose this entity's canonical_name
-   * when no explicit name/title/email/url is present. The first non-empty
-   * subset (all fields present and non-empty) is used, joined with "|" and
-   * prefixed by entity_type, e.g. `receipt:2025-08-06|Ecoveritas|7.45`.
+   * Identity rules used to compose this entity's canonical_name. Two accepted
+   * shapes:
+   *
+   * 1. Legacy single composite — `string[]`. Every field must be present and
+   *    non-empty; otherwise falls through to the heuristic. Joined with "|"
+   *    and prefixed by entity_type, e.g. `receipt:2025-08-06|Ecoveritas|7.45`.
+   *    All existing declarations keep this meaning.
+   *
+   * 2. Ordered precedence rules — `Array<string | { composite: string[] }>`.
+   *    An array that contains at least one `{ composite: [...] }` entry is
+   *    interpreted as ordered rules: each string is a single-field rule, each
+   *    `composite` is an all-required rule. The resolver walks the list and
+   *    uses the first rule whose fields are all present. A schema that needs
+   *    ordered single-field semantics for every rule should use the
+   *    `{ composite: [...] }` form for at least one rule to opt in
+   *    unambiguously (e.g. `[{composite:["tax_id"]}, "domain", "legal_name"]`).
+   *
    * When omitted, canonical_name falls back to generic heuristics.
    */
-  canonical_name_fields?: string[];
+  canonical_name_fields?: CanonicalNameRule[];
 
   /**
    * Fields that carry real event timestamps and should emit timeline events.
@@ -79,7 +106,47 @@ export interface SchemaDefinition {
    * the duplicate-type detector to bias toward the canonical singular type.
    */
   aliases?: string[];
+
+  /**
+   * Explicit opt-out from `canonical_name_fields` (R2). When set, the schema
+   * declares that it has no strong identifiers and intentionally resolves
+   * via the heuristic canonical-name derivation. This is loud by design:
+   * opt-outs appear in startup logs and may be counted in R4 basis stats so
+   * that regressions are visible.
+   *
+   * Accepted value: `"heuristic_canonical_name"`. Reserved for bookkeeping
+   * types (e.g. `agent_message`, `conversation`, `relationship`) and
+   * schemas whose identity legitimately cannot be declared.
+   *
+   * At schema registration, a schema MUST declare either
+   * `canonical_name_fields` or `identity_opt_out`.
+   */
+  identity_opt_out?: "heuristic_canonical_name";
+
+  /**
+   * Fields compared by the post-hoc duplicate detector (R5). When omitted,
+   * the detector falls back to comparing canonical_name only, which is the
+   * weakest possible signal. Declaring additional fields (e.g. ["email"],
+   * ["name", "employer"]) produces richer candidate pairs without widening
+   * the identity hash. The detector is read-only and never auto-merges; it
+   * surfaces candidate pairs so an operator or agent can invoke
+   * `merge_entities`.
+   */
+  duplicate_detection_fields?: string[];
+
+  /**
+   * Similarity threshold (0..1) at which the duplicate detector flags a
+   * candidate pair for this schema. Defaults to 0.85 when omitted. Higher
+   * values mean fewer, more conservative candidates. See R5 in
+   * docs/subsystems/entity_merge.md.
+   */
+  duplicate_detection_threshold?: number;
 }
+
+/** Known opt-out tokens for {@link SchemaDefinition.identity_opt_out}. */
+const VALID_IDENTITY_OPT_OUT_TOKENS = new Set<string>([
+  "heuristic_canonical_name",
+]);
 
 export interface ReducerConfig {
   merge_policies: Record<
@@ -284,6 +351,48 @@ export class SchemaRegistryService {
       throw new Error(`Failed to list active schemas: ${error.message}`);
     }
     return (data ?? []) as SchemaRegistryEntry[];
+  }
+
+  /**
+   * Emit a one-time startup log of every active schema that has opted out
+   * of strong identity via {@link SchemaDefinition.identity_opt_out} (R2).
+   *
+   * Opt-outs are loud by design: if a schema that should have an identifier
+   * accidentally landed on the heuristic path, the regression is visible in
+   * server/CLI boot logs before any writes happen.
+   *
+   * Returns the list of opt-out entity_types so callers (tests, CLIs) can
+   * assert or display them. Set `silent: true` to compute the list without
+   * writing to stderr (used by the CLI when rendering stats tables).
+   */
+  async logIdentityOptOutsAtStartup(options?: {
+    userId?: string;
+    silent?: boolean;
+  }): Promise<{
+    opt_outs: Array<{ entity_type: string; reason: string }>;
+  }> {
+    const schemas = await this.listActiveSchemas(options?.userId);
+    const optOuts: Array<{ entity_type: string; reason: string }> = [];
+    for (const s of schemas) {
+      const def = s.schema_definition;
+      if (def?.identity_opt_out) {
+        optOuts.push({
+          entity_type: s.entity_type,
+          reason: def.identity_opt_out,
+        });
+      }
+    }
+    optOuts.sort((a, b) => a.entity_type.localeCompare(b.entity_type));
+    if (!options?.silent && optOuts.length > 0) {
+      const label = optOuts.length === 1 ? "1 schema" : `${optOuts.length} schemas`;
+      logSchemaRegistryInfo(
+        `ℹ️  [SCHEMA_REGISTRY] R2: ${label} opted out of canonical_name_fields ` +
+          `(identity_opt_out): ${optOuts.map((o) => o.entity_type).join(", ")}. ` +
+          "These resolve via the heuristic canonical_name path. See " +
+          "docs/foundation/schema_agnostic_design_rules.md.",
+      );
+    }
+    return { opt_outs: optOuts };
   }
 
   /**
@@ -527,11 +636,21 @@ export class SchemaRegistryService {
 
     const removalSet = new Set(options.fields_to_remove || []);
     if (preserved.canonical_name_fields) {
-      preserved.canonical_name_fields = preserved.canonical_name_fields.filter(
-        (f) => !removalSet.has(f),
-      );
-      if (preserved.canonical_name_fields.length === 0) {
+      const prunedRules = preserved.canonical_name_fields
+        .map((rule) => {
+          if (typeof rule === "string") {
+            return removalSet.has(rule) ? null : rule;
+          }
+          const remaining = rule.composite.filter((f) => !removalSet.has(f));
+          if (remaining.length === 0) return null;
+          if (remaining.length === rule.composite.length) return rule;
+          return { composite: remaining };
+        })
+        .filter((r): r is NonNullable<typeof r> => r !== null);
+      if (prunedRules.length === 0) {
         delete preserved.canonical_name_fields;
+      } else {
+        preserved.canonical_name_fields = prunedRules;
       }
     }
     if (preserved.temporal_fields) {
@@ -1310,18 +1429,74 @@ export class SchemaRegistryService {
       throw new Error("Schema definition must have fields object");
     }
 
+    // R2: every schema must either declare `canonical_name_fields` or opt
+    // out explicitly via `identity_opt_out`. This moves the failure from
+    // first-write runtime ("why did this entity collapse into a
+    // heuristic-named duplicate?") to schema-registration time, where it
+    // is visible before any data is written.
+    if (
+      definition.canonical_name_fields === undefined &&
+      definition.identity_opt_out === undefined
+    ) {
+      throw new Error(
+        "Schema definition must declare `canonical_name_fields` OR " +
+          "`identity_opt_out: \"heuristic_canonical_name\"`. See " +
+          "docs/foundation/schema_agnostic_design_rules.md (R2).",
+      );
+    }
+
+    if (definition.identity_opt_out !== undefined) {
+      if (typeof definition.identity_opt_out !== "string") {
+        throw new Error(
+          "identity_opt_out must be a string token (e.g. \"heuristic_canonical_name\")",
+        );
+      }
+      if (!VALID_IDENTITY_OPT_OUT_TOKENS.has(definition.identity_opt_out)) {
+        throw new Error(
+          `identity_opt_out has unknown value: ${definition.identity_opt_out}. ` +
+            `Allowed: ${Array.from(VALID_IDENTITY_OPT_OUT_TOKENS).join(", ")}`,
+        );
+      }
+    }
+
     if (definition.canonical_name_fields !== undefined) {
       if (!Array.isArray(definition.canonical_name_fields)) {
-        throw new Error("canonical_name_fields must be an array of field names");
+        throw new Error(
+          "canonical_name_fields must be an array of field names or { composite: string[] } rules",
+        );
       }
-      for (const name of definition.canonical_name_fields) {
-        if (typeof name !== "string" || !name.trim()) {
-          throw new Error("canonical_name_fields entries must be non-empty strings");
+      for (const entry of definition.canonical_name_fields) {
+        if (typeof entry === "string") {
+          if (!entry.trim()) {
+            throw new Error("canonical_name_fields entries must be non-empty strings");
+          }
+          if (!definition.fields[entry]) {
+            throw new Error(
+              `canonical_name_fields references unknown field: ${entry}`,
+            );
+          }
+          continue;
         }
-        if (!definition.fields[name]) {
+        if (!entry || typeof entry !== "object" || !Array.isArray((entry as { composite?: unknown }).composite)) {
           throw new Error(
-            `canonical_name_fields references unknown field: ${name}`,
+            "canonical_name_fields entries must be strings or { composite: string[] } objects",
           );
+        }
+        const compositeFields = (entry as { composite: unknown[] }).composite;
+        if (compositeFields.length === 0) {
+          throw new Error("canonical_name_fields composite rule must declare at least one field");
+        }
+        for (const name of compositeFields) {
+          if (typeof name !== "string" || !name.trim()) {
+            throw new Error(
+              "canonical_name_fields composite fields must be non-empty strings",
+            );
+          }
+          if (!definition.fields[name]) {
+            throw new Error(
+              `canonical_name_fields references unknown field: ${name}`,
+            );
+          }
         }
       }
     }

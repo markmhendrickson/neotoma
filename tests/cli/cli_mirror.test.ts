@@ -8,11 +8,14 @@
  * `src/services/canonical_mirror.test.ts`.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 
 import {
+  checkMirrorGitignoreStatus,
+  ensureMirrorGitignored,
+  findEnclosingGitRepo,
   formatMirrorConfig,
   formatMirrorStatus,
   formatRebuildReport,
@@ -20,6 +23,7 @@ import {
   runMirrorEnable,
   runMirrorStatus,
 } from "../../src/cli/commands/mirror.ts";
+import type { MirrorConfig } from "../../src/services/canonical_mirror.ts";
 
 describe("neotoma mirror CLI helpers", () => {
   let tmpRoot: string;
@@ -138,6 +142,54 @@ describe("neotoma mirror CLI helpers", () => {
     expect(formatted).toContain("Git:      enabled");
   });
 
+  it("runMirrorEnable with gitignore=true writes .gitignore inside enclosing repo", async () => {
+    const repoRoot = mkdtempSync(path.join(tmpdir(), "neotoma-mirror-repo-"));
+    try {
+      mkdirSync(path.join(repoRoot, ".git"), { recursive: true });
+      const mirrorDir = path.join(repoRoot, "data", "mirror");
+      mkdirSync(mirrorDir, { recursive: true });
+      process.env.NEOTOMA_MIRROR_PATH = mirrorDir;
+
+      const cfg = await runMirrorEnable({
+        path: mirrorDir,
+        kinds: "entities",
+        noGit: true,
+        gitignore: true,
+      });
+
+      expect(cfg.gitignore).toBeTruthy();
+      expect(cfg.gitignore?.added).toBe(true);
+      expect(cfg.gitignore?.already_present).toBe(false);
+      expect(cfg.gitignore?.repo_root).toBe(repoRoot);
+      expect(cfg.gitignore?.entry).toBe("data/mirror/");
+      const text = readFileSync(path.join(repoRoot, ".gitignore"), "utf8");
+      expect(text).toContain("# Neotoma markdown mirror");
+      expect(text).toContain("data/mirror/");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("runMirrorEnable with noGitignore=true skips writing .gitignore", async () => {
+    const repoRoot = mkdtempSync(path.join(tmpdir(), "neotoma-mirror-repo-"));
+    try {
+      mkdirSync(path.join(repoRoot, ".git"), { recursive: true });
+      const mirrorDir = path.join(repoRoot, "data", "mirror");
+      mkdirSync(mirrorDir, { recursive: true });
+      process.env.NEOTOMA_MIRROR_PATH = mirrorDir;
+
+      const cfg = await runMirrorEnable({
+        path: mirrorDir,
+        noGit: true,
+        noGitignore: true,
+      });
+
+      expect(cfg.gitignore).toBeNull();
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it("formatRebuildReport reports per-kind counts", () => {
     const out = formatRebuildReport({
       config: {
@@ -159,5 +211,105 @@ describe("neotoma mirror CLI helpers", () => {
     });
     expect(out).toContain("entities");
     expect(out).toMatch(/5\s+1\s+2/);
+  });
+});
+
+describe("mirror gitignore helpers", () => {
+  let repoRoot: string;
+  let mirrorDir: string;
+  let cfg: MirrorConfig;
+
+  beforeEach(() => {
+    repoRoot = mkdtempSync(path.join(tmpdir(), "neotoma-gi-repo-"));
+    mkdirSync(path.join(repoRoot, ".git"), { recursive: true });
+    mirrorDir = path.join(repoRoot, "data", "mirror");
+    mkdirSync(mirrorDir, { recursive: true });
+    cfg = {
+      enabled: true,
+      path: mirrorDir,
+      kinds: ["entities"],
+      git_enabled: false,
+      memory_export: { enabled: false, path: "MEMORY.md", limit_lines: 200 },
+    };
+  });
+
+  afterEach(() => {
+    try {
+      rmSync(repoRoot, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
+  });
+
+  it("findEnclosingGitRepo returns the repo root for a nested path", () => {
+    expect(findEnclosingGitRepo(mirrorDir)).toBe(repoRoot);
+  });
+
+  it("findEnclosingGitRepo returns null when no .git is found up the tree", () => {
+    const loose = mkdtempSync(path.join(tmpdir(), "neotoma-gi-loose-"));
+    try {
+      // Walk up from a deep path that never hits a .git until it stops.
+      const deep = path.join(loose, "a", "b", "c");
+      mkdirSync(deep, { recursive: true });
+      const found = findEnclosingGitRepo(deep);
+      // Either null (no enclosing repo) or not `loose` itself. Since loose is
+      // under /tmp and /tmp is not a git repo, expect null.
+      expect(found).toBeNull();
+    } finally {
+      rmSync(loose, { recursive: true, force: true });
+    }
+  });
+
+  it("ensureMirrorGitignored appends once then is idempotent", () => {
+    const first = ensureMirrorGitignored(cfg);
+    expect(first.added).toBe(true);
+    expect(first.already_present).toBe(false);
+    expect(first.entry).toBe("data/mirror/");
+    expect(first.repo_root).toBe(repoRoot);
+
+    const second = ensureMirrorGitignored(cfg);
+    expect(second.added).toBe(false);
+    expect(second.already_present).toBe(true);
+
+    const text = readFileSync(path.join(repoRoot, ".gitignore"), "utf8");
+    const occurrences = text.split("data/mirror/").length - 1;
+    expect(occurrences).toBe(1);
+  });
+
+  it("ensureMirrorGitignored treats an existing absolute-style entry as already present", () => {
+    writeFileSync(
+      path.join(repoRoot, ".gitignore"),
+      "# existing\n/data/mirror/\n",
+      "utf8"
+    );
+    const result = ensureMirrorGitignored(cfg);
+    expect(result.added).toBe(false);
+    expect(result.already_present).toBe(true);
+  });
+
+  it("ensureMirrorGitignored returns null-shaped result when mirror is not inside a repo", () => {
+    const loose = mkdtempSync(path.join(tmpdir(), "neotoma-gi-loose-"));
+    try {
+      const looseMirror = path.join(loose, "mirror");
+      mkdirSync(looseMirror, { recursive: true });
+      const looseCfg: MirrorConfig = { ...cfg, path: looseMirror };
+      const result = ensureMirrorGitignored(looseCfg);
+      expect(result.repo_root).toBeNull();
+      expect(result.added).toBe(false);
+      expect(result.entry).toBeNull();
+    } finally {
+      rmSync(loose, { recursive: true, force: true });
+    }
+  });
+
+  it("checkMirrorGitignoreStatus reflects gitignored state read-only", () => {
+    const before = checkMirrorGitignoreStatus(cfg);
+    expect(before.inside_git_repo).toBe(true);
+    expect(before.git_repo_root).toBe(repoRoot);
+    expect(before.gitignored).toBe(false);
+
+    ensureMirrorGitignored(cfg);
+    const after = checkMirrorGitignoreStatus(cfg);
+    expect(after.gitignored).toBe(true);
   });
 });

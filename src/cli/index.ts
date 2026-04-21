@@ -8,7 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { createWriteStream, readdirSync, realpathSync, type Dirent, type Stats } from "node:fs";
+import { createWriteStream, readdirSync, readFileSync, realpathSync, type Dirent, type Stats } from "node:fs";
 import * as readline from "node:readline";
 import Database, { type SqliteDatabase } from "../repositories/sqlite/sqlite_driver.js";
 
@@ -31,7 +31,7 @@ import {
   isProd,
   readConfig,
   rememberKnownApiPort,
-  resolveBaseUrl,
+  resolveBaseUrl as resolveBaseUrlInner,
   waitForApiReady,
   waitForHealth,
   writeConfig,
@@ -796,9 +796,80 @@ function resolveOutputMode(): OutputMode {
   return json ? "json" : "pretty";
 }
 
+interface CliTransportMeta {
+  transport: "offline" | "api";
+  base_url: string | null;
+  data_dir: string | null;
+}
+
+// Captured the last baseUrl resolved via resolveBaseUrl so JSON responses and
+// the TTY banner can surface it without plumbing it through every command.
+let lastResolvedBaseUrl: string | null = null;
+let bannerEmitted = false;
+
+function recordResolvedBaseUrl(url: string): void {
+  lastResolvedBaseUrl = url;
+}
+
+async function resolveBaseUrl(option?: string, config?: Config): Promise<string> {
+  const url = await resolveBaseUrlInner(option, config);
+  recordResolvedBaseUrl(url);
+  return url;
+}
+
+function resolveCurrentDataDir(): string | null {
+  const envDir = process.env.NEOTOMA_DATA_DIR?.trim();
+  if (envDir) return envDir;
+  // Fall back to <cwd>/data when offline transport is in force; otherwise null.
+  if (process.env.NEOTOMA_FORCE_LOCAL_TRANSPORT === "true") {
+    return path.join(process.cwd(), "data");
+  }
+  return null;
+}
+
+function getCliTransportMeta(): CliTransportMeta {
+  const forceLocal = process.env.NEOTOMA_FORCE_LOCAL_TRANSPORT === "true";
+  const transport: "offline" | "api" = forceLocal ? "offline" : "api";
+  return {
+    transport,
+    base_url: transport === "api" ? lastResolvedBaseUrl : null,
+    data_dir: transport === "offline" ? resolveCurrentDataDir() : null,
+  };
+}
+
+function maybeEmitTransportBanner(): void {
+  if (bannerEmitted) return;
+  bannerEmitted = true;
+  if (!process.stderr.isTTY) return;
+  const meta = getCliTransportMeta();
+  const parts =
+    meta.transport === "offline"
+      ? [`transport=offline`, meta.data_dir ? `data_dir=${meta.data_dir}` : null]
+      : [`transport=api`, meta.base_url ? `base_url=${meta.base_url}` : null];
+  const line = parts.filter(Boolean).join(" ");
+  process.stderr.write(dim(`[neotoma] ${line}`) + "\n");
+}
+
+/** Attach _neotoma transport meta to JSON responses; leave pretty output untouched. */
+function attachTransportMeta(value: unknown): unknown {
+  const meta = getCliTransportMeta();
+  if (value === null || value === undefined) {
+    return { _neotoma: meta };
+  }
+  if (Array.isArray(value)) {
+    return { items: value, _neotoma: meta };
+  }
+  if (typeof value === "object") {
+    return { ...(value as Record<string, unknown>), _neotoma: meta };
+  }
+  return { value, _neotoma: meta };
+}
+
 function writeOutput(value: unknown, mode: OutputMode): void {
   const indent = mode === "pretty" ? 2 : 0;
-  process.stdout.write(`${stableStringify(value, indent)}\n`);
+  maybeEmitTransportBanner();
+  const payload = mode === "json" ? attachTransportMeta(value) : value;
+  process.stdout.write(`${stableStringify(payload, indent)}\n`);
 }
 
 /** Wrap a string to a max display width; returns lines. Prefers breaking at / or space so paths and words don't split mid-token. */
@@ -1898,6 +1969,17 @@ program
     );
   });
 
+/** Parse a boolean env var. True on "1", "true", "yes", "on" (case-insensitive). */
+function envFlag(name: string): boolean | undefined {
+  const raw = process.env[name];
+  if (raw == null) return undefined;
+  const v = raw.trim().toLowerCase();
+  if (v === "" || v === "0" || v === "false" || v === "no" || v === "off") {
+    return false;
+  }
+  return true;
+}
+
 // No preAction auth validation: CLI uses MCP-style auth (key-derived or no token),
 // not stored OAuth. auth login remains for MCP Connect (Cursor) setup.
 program.hook("preAction", (_thisCommand, actionCommand) => {
@@ -1906,10 +1988,18 @@ program.hook("preAction", (_thisCommand, actionCommand) => {
     apiOnly?: boolean;
   };
   const isTestEnv = process.env.NODE_ENV === "test";
-  if (opts.offline && opts.apiOnly) {
-    throw new Error("Choose one: --offline or --api-only");
+
+  // Precedence: flag > env > default. NEOTOMA_API_ONLY / NEOTOMA_OFFLINE let
+  // users pin transport without passing a flag on every invocation.
+  const envApiOnly = envFlag("NEOTOMA_API_ONLY");
+  const envOffline = envFlag("NEOTOMA_OFFLINE");
+  const effectiveApiOnly = opts.apiOnly !== undefined ? opts.apiOnly : envApiOnly;
+  const effectiveOffline = opts.offline !== undefined ? opts.offline : envOffline;
+
+  if (effectiveOffline && effectiveApiOnly) {
+    throw new Error("Choose one: --offline or --api-only (or NEOTOMA_OFFLINE vs NEOTOMA_API_ONLY)");
   }
-  if (opts.apiOnly) {
+  if (effectiveApiOnly) {
     process.env.NEOTOMA_FORCE_LOCAL_TRANSPORT = "false";
     process.env.NEOTOMA_DISABLE_OFFLINE_FALLBACK = "true";
     return;
@@ -1918,7 +2008,7 @@ program.hook("preAction", (_thisCommand, actionCommand) => {
   // In test runs, prefer the shared test API server unless --offline was explicitly
   // requested. This avoids per-command local transport startup flakes across large
   // CLI suites while preserving explicit offline coverage.
-  if (isTestEnv && !opts.offline) {
+  if (isTestEnv && !effectiveOffline) {
     process.env.NEOTOMA_FORCE_LOCAL_TRANSPORT = "false";
     process.env.NEOTOMA_DISABLE_OFFLINE_FALLBACK = "true";
     return;
@@ -1927,7 +2017,7 @@ program.hook("preAction", (_thisCommand, actionCommand) => {
   // Offline/local transport is the default for CLI data commands.
   process.env.NEOTOMA_FORCE_LOCAL_TRANSPORT = "true";
   process.env.NEOTOMA_DISABLE_OFFLINE_FALLBACK = "false";
-  if (opts.offline && process.stdout.isTTY) {
+  if (effectiveOffline && process.stdout.isTTY) {
     process.stderr.write(
       dim(
         "Offline mode enabled: running in-process local transport (this may trigger first-run OS permission prompts)." +
@@ -1935,6 +2025,11 @@ program.hook("preAction", (_thisCommand, actionCommand) => {
       )
     );
   }
+});
+
+// Global preAction: emit the transport banner on TTY once per invocation.
+program.hook("preAction", () => {
+  maybeEmitTransportBanner();
 });
 
 // ── Session (interactive REPL) ─────────────────────────────────────────────
@@ -8915,8 +9010,21 @@ mirrorCommand
   )
   .option("--git", "Enable git-backed mirror (Phase 3)")
   .option("--no-git", "Disable git-backed mirror")
+  .option(
+    "--gitignore",
+    "After enabling, append the mirror path to the enclosing git repo's .gitignore (idempotent)"
+  )
+  .option(
+    "--no-gitignore",
+    "Do not touch .gitignore (default). Explicit form for --yes scripts."
+  )
   .action(
-    async (opts: { path?: string; kinds?: string; git?: boolean }) => {
+    async (opts: {
+      path?: string;
+      kinds?: string;
+      git?: boolean;
+      gitignore?: boolean;
+    }) => {
       const outputMode = resolveOutputMode();
       try {
         const { runMirrorEnable, formatMirrorConfig } = await import(
@@ -8927,6 +9035,8 @@ mirrorCommand
           kinds: opts.kinds,
           git: opts.git === true ? true : undefined,
           noGit: opts.git === false ? true : undefined,
+          gitignore: opts.gitignore === true ? true : undefined,
+          noGitignore: opts.gitignore === false ? true : undefined,
         });
         if (outputMode === "json") {
           writeOutput(cfg, outputMode);
@@ -8942,6 +9052,29 @@ mirrorCommand
       }
     }
   );
+
+mirrorCommand
+  .command("gitignore")
+  .description(
+    "Append the mirror path to the enclosing git repo's .gitignore (idempotent; no-op when mirror is not inside a repo)"
+  )
+  .action(async () => {
+    const outputMode = resolveOutputMode();
+    try {
+      const { runMirrorGitignore, formatMirrorGitignore } = await import(
+        "./commands/mirror.js"
+      );
+      const result = await runMirrorGitignore();
+      if (outputMode === "json") {
+        writeOutput(result, outputMode);
+      } else {
+        process.stdout.write(formatMirrorGitignore(result) + "\n");
+      }
+    } catch (err) {
+      writeCliError(err instanceof Error ? err.message : String(err));
+      process.exitCode = 1;
+    }
+  });
 
 mirrorCommand
   .command("disable")
@@ -9826,6 +9959,18 @@ entitiesCommand
   .option("--limit <n>", "Limit", "100")
   .option("--offset <n>", "Offset", "0")
   .option("--include-merged", "Include merged entities")
+  .option(
+    "--since <iso>",
+    "Return only entities whose updated_at is >= this ISO 8601 timestamp (alias for --updated-since)"
+  )
+  .option(
+    "--updated-since <iso>",
+    "Return only entities whose updated_at is >= this ISO 8601 timestamp"
+  )
+  .option(
+    "--created-since <iso>",
+    "Return only entities whose created_at is >= this ISO 8601 timestamp"
+  )
   .action(async (...args: any[]) => {
     // Commander passes different arguments depending on whether optional argument is provided:
     // Without entityId: (command)
@@ -9841,6 +9986,9 @@ entitiesCommand
       limit?: string;
       offset?: string;
       includeMerged?: boolean;
+      since?: string;
+      updatedSince?: string;
+      createdSince?: string;
     };
     const outputMode = resolveOutputMode();
     const config = await readConfig();
@@ -9894,6 +10042,7 @@ entitiesCommand
     // If positional arg is provided and doesn't look like an entity ID, treat it as entity type
     const positionalEntityType = id && !/^ent_[a-f0-9]+$/i.test(id) ? id : undefined;
     const entityType = opts.entityType ?? opts.type ?? positionalEntityType ?? undefined;
+    const updatedSince = opts.updatedSince ?? opts.since;
     const { data, error, response } = await api.POST("/entities/query", {
       body: {
         entity_type: entityType,
@@ -9902,6 +10051,8 @@ entitiesCommand
         limit: Number(opts.limit ?? "100"),
         offset: Number(opts.offset ?? "0"),
         include_merged: Boolean(opts.includeMerged),
+        ...(updatedSince ? { updated_since: updatedSince } : {}),
+        ...(opts.createdSince ? { created_since: opts.createdSince } : {}),
       },
     });
     const status = response?.status;
@@ -9919,8 +10070,13 @@ entitiesCommand
 entitiesCommand
   .command("get")
   .description("Get entity by ID")
-  .argument("<id>", "Entity ID")
-  .action(async (id: string) => {
+  .argument("[id]", "Entity ID (or use --id / --entity-id)")
+  .option("--id <id>", "Entity ID (alternative to positional)")
+  .option("--entity-id <id>", "Entity ID (alternative to positional)")
+  .action(async (idArg: string | undefined, opts: { id?: string; entityId?: string }) => {
+    const id = idArg ?? opts.id ?? opts.entityId;
+    if (!id)
+      throw new Error("Entity ID is required (use positional, --id, or --entity-id)");
     const outputMode = resolveOutputMode();
     const config = await readConfig();
     const token = await getCliToken();
@@ -9967,10 +10123,33 @@ entitiesCommand
   .option("--query <id>", "Compatibility alias for --identifier")
   .option("--entity-type <type>", "Limit search to specific entity type")
   .option("--user-id <userId>", "User ID")
+  .option(
+    "--by <field>",
+    "Restrict snapshot-field matching to one field (e.g. email, domain, company)"
+  )
+  .option("--limit <n>", "Maximum matching entities to return", (v) => Number(v))
+  .option(
+    "--include-observations",
+    "Attach recent observations to each matched entity (same call)"
+  )
+  .option(
+    "--observations-limit <n>",
+    "Max observations per entity when --include-observations is set (default 20, max 200)",
+    (v) => Number(v)
+  )
   .action(
     async (
       identifierArg: string | undefined,
-      opts: { identifier?: string; query?: string; entityType?: string; userId?: string }
+      opts: {
+        identifier?: string;
+        query?: string;
+        entityType?: string;
+        userId?: string;
+        by?: string;
+        limit?: number;
+        includeObservations?: boolean;
+        observationsLimit?: number;
+      }
     ) => {
       if (opts.identifier && opts.query && opts.identifier !== opts.query) {
         throw new Error(
@@ -9994,6 +10173,11 @@ entitiesCommand
         body: {
           identifier,
           entity_type: opts.entityType,
+          user_id: opts.userId,
+          by: opts.by,
+          limit: opts.limit,
+          include_observations: opts.includeObservations ?? false,
+          observations_limit: opts.observationsLimit,
         },
       });
       if (error) throw new Error("Failed to search entity");
@@ -10104,6 +10288,68 @@ entitiesCommand
   );
 
 entitiesCommand
+  .command("find-duplicates")
+  .description(
+    "List candidate duplicate entities for a given entity type (read-only). Hands off to `entities merge` (never auto-merges).",
+  )
+  .requiredOption("--entity-type <type>", "Entity type to scan (e.g. contact, company)")
+  .option("--threshold <score>", "Similarity threshold in (0, 1]. Defaults to schema's duplicate_detection_threshold or 0.85.")
+  .option("--limit <n>", "Max candidate pairs to return", "50")
+  .option("--user-id <userId>", "User ID (optional; inferred from auth when omitted)")
+  .action(
+    async (opts: {
+      entityType: string;
+      threshold?: string;
+      limit?: string;
+      userId?: string;
+    }) => {
+      const outputMode = resolveOutputMode();
+      const config = await readConfig();
+      const token = await getCliToken();
+      const api = createApiClient({
+        baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+        token,
+      });
+
+      const query: {
+        entity_type: string;
+        threshold?: number;
+        limit?: number;
+        user_id?: string;
+      } = { entity_type: opts.entityType };
+      if (opts.threshold) {
+        const t = Number(opts.threshold);
+        if (!Number.isFinite(t) || t <= 0 || t > 1) {
+          throw new Error("--threshold must be a number in (0, 1]");
+        }
+        query.threshold = t;
+      }
+      if (opts.limit) {
+        const l = Number(opts.limit);
+        if (!Number.isFinite(l) || l < 1 || l > 200) {
+          throw new Error("--limit must be an integer in [1, 200]");
+        }
+        query.limit = l;
+      }
+      if (opts.userId) query.user_id = opts.userId;
+
+      const { data, error, response } = await api.GET("/entities/duplicates", {
+        params: { query },
+      });
+      const status = response?.status;
+      if (error) {
+        const detail = formatApiError(error);
+        let msg = status
+          ? `Failed to list potential duplicates: ${status} ${detail}`
+          : `Failed to list potential duplicates: ${detail}`;
+        if (status === 401) msg += ". Run `neotoma auth login` to sign in.";
+        throw new Error(msg);
+      }
+      writeOutput(data, outputMode);
+    },
+  );
+
+entitiesCommand
   .command("restore")
   .description("Restore a deleted entity (creates restoration observation)")
   .argument("<entityId>", "Entity ID to restore")
@@ -10208,8 +10454,12 @@ observationsCommand
   .command("get")
   .description("Get observation by ID")
   .option("--observation-id <id>", "Observation ID (required)")
-  .action(async (opts: { observationId?: string }) => {
-    if (!opts.observationId) throw new Error("--observation-id is required");
+  .option("--id <id>", "Alias for --observation-id")
+  .option("--user-id <userId>", "User ID")
+  .action(async (opts: { observationId?: string; id?: string; userId?: string }) => {
+    const observationId = opts.observationId ?? opts.id;
+    if (!observationId)
+      throw new Error("--observation-id (or --id) is required");
     const outputMode = resolveOutputMode();
     const config = await readConfig();
     const token = await getCliToken();
@@ -10219,7 +10469,8 @@ observationsCommand
     });
     const { data, error } = await api.POST("/observations/query", {
       body: {
-        observation_id: opts.observationId,
+        observation_id: observationId,
+        user_id: opts.userId,
         limit: 1,
         offset: 0,
       },
@@ -10228,7 +10479,7 @@ observationsCommand
     const result = data as any;
     const observations: any[] = result?.observations ?? result ?? [];
     const obs = observations[0] ?? null;
-    if (!obs) throw new Error(`Observation not found: ${opts.observationId}`);
+    if (!obs) throw new Error(`Observation not found: ${observationId}`);
     writeOutput({ observation: obs }, outputMode);
   });
 
@@ -10236,10 +10487,24 @@ observationsCommand
   .command("list")
   .description("List observations")
   .option("--entity-id <id>", "Filter by entity ID")
+  .option("--id <id>", "Alias for --entity-id")
   .option("--entity-type <type>", "Filter by entity type")
   .option("--source-id <id>", "Filter by source ID")
+  .option("--user-id <userId>", "Filter by user ID")
   .option("--limit <n>", "Limit", "100")
   .option("--offset <n>", "Offset", "0")
+  .option(
+    "--since <iso>",
+    "Return only observations with observed_at >= this ISO 8601 timestamp (alias for --updated-since)"
+  )
+  .option(
+    "--updated-since <iso>",
+    "Return only observations with observed_at >= this ISO 8601 timestamp"
+  )
+  .option(
+    "--created-since <iso>",
+    "Return only observations with observed_at >= this ISO 8601 timestamp"
+  )
   .action(async (opts) => {
     const outputMode = resolveOutputMode();
     const config = await readConfig();
@@ -10248,13 +10513,17 @@ observationsCommand
       baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
       token,
     });
+    const updatedSince = opts.updatedSince ?? opts.since;
     const { data, error } = await api.POST("/observations/query", {
       body: {
-        entity_id: opts.entityId,
+        entity_id: opts.entityId ?? opts.id,
         entity_type: opts.entityType,
         source_id: opts.sourceId,
+        user_id: opts.userId,
         limit: Number(opts.limit),
         offset: Number(opts.offset),
+        ...(updatedSince ? { updated_since: updatedSince } : {}),
+        ...(opts.createdSince ? { created_since: opts.createdSince } : {}),
       },
     });
     if (error) throw new Error("Failed to list observations");
@@ -11150,6 +11419,12 @@ program
     "--file-idempotency-key <key>",
     "Optional idempotency key for file path in combined store"
   )
+  .option("--plan", "Dry-run: resolve entities and return planned actions without committing")
+  .option("--dry-run", "Alias for --plan")
+  .option(
+    "--strict",
+    "Refuse silent merges: only match an existing entity when schema canonical_name_fields match or --target-id is supplied"
+  )
   .action(async (opts) => {
     const outputMode = resolveOutputMode();
     const config = await readConfig();
@@ -11228,11 +11503,15 @@ program
       }
     }
 
+    const commit = !(opts.plan || opts.dryRun);
+    const strict = Boolean(opts.strict);
     const { data, error } = await api.POST("/store", {
       body: {
         ...structuredBody,
         ...unstructuredBody,
         user_id: opts.userId,
+        commit,
+        strict,
       },
     });
     if (error) throw new Error(`Failed to store payload: ${JSON.stringify(error)}`);
@@ -11257,6 +11536,132 @@ program
     }
 
     writeOutput(data, outputMode);
+  });
+
+program
+  .command("ingest")
+  .description(
+    "Atomically ingest a caller-extracted entities payload with source-file provenance (composes /store). Extraction stays in the caller; ingest only links entities + file + idempotency."
+  )
+  .requiredOption(
+    "--entities <path>",
+    "Path to JSON file containing an entities array extracted by the caller"
+  )
+  .requiredOption(
+    "--source-file <path>",
+    "Path to the source artifact (PDF, transcript, CSV, etc.) to attach as provenance"
+  )
+  .option("--plan", "Dry-run: return a diff of planned actions without committing")
+  .option("--dry-run", "Alias for --plan")
+  .option(
+    "--strict",
+    "Refuse silent merges: only match an existing entity when schema canonical_name_fields match or --target-id is supplied"
+  )
+  .option("--user-id <id>", "User ID for the operation")
+  .option("--idempotency-key <key>", "Idempotency key (default: derived from entities + file hash)")
+  .option(
+    "--file-idempotency-key <key>",
+    "Optional idempotency key for the source file (default: derived from contents)"
+  )
+  .option("--source-priority <level>", "Source priority level (default: 100)")
+  .action(async (opts) => {
+    const outputMode = resolveOutputMode();
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({
+      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      token,
+    });
+
+    const entitiesPath = path.isAbsolute(opts.entities)
+      ? opts.entities
+      : path.resolve(process.cwd(), opts.entities);
+    const rawEntities = await fs.readFile(entitiesPath, "utf-8");
+    let entities: unknown;
+    try {
+      entities = JSON.parse(rawEntities);
+    } catch (err) {
+      throw new Error(`Failed to parse --entities JSON at ${entitiesPath}: ${(err as Error).message}`);
+    }
+    if (!Array.isArray(entities) || entities.length === 0) {
+      throw new Error("--entities must point to a non-empty JSON array");
+    }
+
+    const sourcePath = path.isAbsolute(opts.sourceFile)
+      ? opts.sourceFile
+      : path.resolve(process.cwd(), opts.sourceFile);
+    await fs.access(sourcePath);
+    const sourceBuffer = await fs.readFile(sourcePath);
+    const sourceMime = inferMimeTypeForPath(sourcePath);
+    const sourceBasename = path.basename(sourcePath);
+
+    const commit = !(opts.plan || opts.dryRun);
+    const strict = Boolean(opts.strict);
+
+    const idempotencyKey =
+      opts.idempotencyKey ??
+      createIdempotencyKey({ entities, source_file: sourceBasename, size: sourceBuffer.length });
+    const fileIdempotencyKey =
+      opts.fileIdempotencyKey ??
+      (await import("node:crypto")).createHash("sha256").update(sourceBuffer).digest("hex");
+
+    const body: Record<string, unknown> = {
+      entities,
+      idempotency_key: idempotencyKey,
+      file_path: sourcePath,
+      mime_type: sourceMime,
+      original_filename: sourceBasename,
+      file_idempotency_key: fileIdempotencyKey,
+      user_id: opts.userId,
+      commit,
+      strict,
+    };
+    if (opts.sourcePriority) {
+      const parsedPriority = parseInt(opts.sourcePriority as string, 10);
+      if (!Number.isNaN(parsedPriority)) body.source_priority = parsedPriority;
+    }
+
+    const { data, error } = await api.POST("/store", { body: body as any });
+    if (error) throw new Error(`Failed to ingest payload: ${JSON.stringify(error)}`);
+
+    const storeResult = (data ?? {}) as Record<string, unknown>;
+    const entitiesList = Array.isArray((storeResult as any).entities)
+      ? ((storeResult as any).entities as any[])
+      : [];
+
+    type ActionCounts = Record<string, number>;
+    const actionCounts: ActionCounts = {};
+    for (const entity of entitiesList) {
+      const action = (entity?.action as string | undefined) ?? "unknown";
+      actionCounts[action] = (actionCounts[action] ?? 0) + 1;
+    }
+
+    const diffReport = {
+      mode: commit ? "commit" : "plan",
+      source_file: {
+        path: sourcePath,
+        original_filename: sourceBasename,
+        mime_type: sourceMime,
+        size_bytes: sourceBuffer.length,
+      },
+      entities_total: entitiesList.length,
+      action_counts: actionCounts,
+      entities: entitiesList.map((e) => ({
+        entity_id: e?.entity_id ?? e?.id,
+        entity_type: e?.entity_type,
+        canonical_name: e?.canonical_name,
+        action: e?.action,
+        resolver_path: e?.resolver_path,
+      })),
+    };
+
+    writeOutput(
+      {
+        ...storeResult,
+        ingest_report: diffReport,
+      },
+      outputMode
+    );
   });
 
 program
@@ -11443,22 +11848,28 @@ program
       token,
     });
 
-    let fileBuffer: Buffer;
+    let fileBuffer: Buffer | undefined;
     let originalFilename: string | undefined;
+    let resolvedPath: string | undefined;
 
     if (opts.filePath) {
-      const resolvedPath = path.isAbsolute(opts.filePath)
+      const pathFromFlag = path.isAbsolute(opts.filePath)
         ? opts.filePath
         : path.resolve(process.cwd(), opts.filePath);
-      fileBuffer = await fs.readFile(resolvedPath);
-      originalFilename = path.basename(resolvedPath);
+      await fs.access(pathFromFlag);
+      resolvedPath = pathFromFlag;
+      originalFilename = path.basename(pathFromFlag);
     } else if (opts.fileContent) {
       fileBuffer = Buffer.from(opts.fileContent as string, "utf-8");
     } else {
       throw new Error("Provide --file-path or --file-content");
     }
 
-    const ext = originalFilename ? path.extname(originalFilename).toLowerCase() : "";
+    const ext = originalFilename
+      ? path.extname(originalFilename).toLowerCase()
+      : resolvedPath
+        ? path.extname(resolvedPath).toLowerCase()
+        : "";
     const mimeMap: Record<string, string> = {
       ".json": "application/json",
       ".txt": "text/plain",
@@ -11466,19 +11877,26 @@ program
       ".md": "text/markdown",
       ".pdf": "application/pdf",
     };
-    const mimeType = mimeMap[ext] ?? "text/plain";
-    const contentBase64 = fileBuffer.toString("base64");
-    const idempotencyKey = opts.idempotencyKey ?? createIdempotencyKey({ content: contentBase64 });
+    const mimeType = resolvedPath ? inferMimeTypeForPath(resolvedPath) : mimeMap[ext] ?? "text/plain";
+    const body = resolvedPath
+      ? {
+          file_path: resolvedPath,
+          mime_type: mimeType,
+          original_filename: originalFilename,
+          idempotency_key: opts.idempotencyKey,
+          user_id: opts.userId,
+        }
+      : {
+          file_content: fileBuffer!.toString("base64"),
+          mime_type: mimeType,
+          original_filename: originalFilename,
+          idempotency_key:
+            opts.idempotencyKey ??
+            createIdempotencyKey({ content: fileBuffer!.toString("base64") }),
+          user_id: opts.userId,
+        };
 
-    const { data, error } = await api.POST("/store/unstructured", {
-      body: {
-        file_content: contentBase64,
-        mime_type: mimeType,
-        original_filename: originalFilename,
-        idempotency_key: idempotencyKey,
-        user_id: opts.userId,
-      },
-    });
+    const { data, error } = await api.POST("/store", { body });
     if (error) throw new Error(`Failed to store unstructured content: ${JSON.stringify(error)}`);
     writeOutput(data, outputMode);
   });
@@ -11562,7 +11980,7 @@ program
         file_path: resolvedPath,
         mime_type: mimeType,
         original_filename: originalFilename,
-        file_idempotency_key: opts.idempotencyKey,
+        idempotency_key: opts.idempotencyKey,
       };
 
       const { data, error } = await api.POST("/store", { body });
@@ -11580,7 +11998,103 @@ interface StatsData {
   total_observations?: number;
   total_interpretations?: number;
   entities_by_type?: Record<string, number>;
+  observations_by_identity_basis?: Record<string, number>;
+  observations_by_identity_basis_by_type?: Record<string, Record<string, number>>;
   last_updated?: string;
+}
+
+/**
+ * Print observations grouped by identity_basis (R4 telemetry).
+ *
+ * Renders a totals table (basis -> count) followed by a per-entity_type
+ * breakdown so operators can see, at a glance, which schemas are resolving
+ * via declared rules vs heuristic fallbacks.
+ */
+function printIdentityBasisTable(stats: StatsData): void {
+  const gap = "  ";
+  const totals = stats.observations_by_identity_basis ?? {};
+  const entries = Object.entries(totals).sort((a, b) => {
+    const diff = b[1] - a[1];
+    return diff !== 0 ? diff : a[0].localeCompare(b[0]);
+  });
+  process.stdout.write(bold("Observations by identity basis") + "\n\n");
+  if (entries.length === 0) {
+    process.stdout.write(dim("(none)") + "\n\n");
+  } else {
+    const basisColWidth = Math.max(
+      ...entries.map(([b]) => displayWidth(b)),
+      displayWidth("Basis")
+    );
+    const countColWidth = Math.max(
+      ...entries.map(([, c]) => displayWidth(String(c))),
+      displayWidth("Count")
+    );
+    process.stdout.write(
+      padToDisplayWidth("Basis", basisColWidth) +
+        gap +
+        padToDisplayWidth("Count", countColWidth) +
+        "\n"
+    );
+    process.stdout.write(
+      dim("-".repeat(basisColWidth) + gap + "-".repeat(countColWidth)) + "\n"
+    );
+    for (const [basis, count] of entries) {
+      process.stdout.write(
+        padToDisplayWidth(basis, basisColWidth) +
+          gap +
+          padToDisplayWidth(String(count), countColWidth) +
+          "\n"
+      );
+    }
+    process.stdout.write("\n");
+  }
+
+  const byType = stats.observations_by_identity_basis_by_type ?? {};
+  const typeEntries = Object.entries(byType).sort((a, b) => a[0].localeCompare(b[0]));
+  if (typeEntries.length === 0) return;
+
+  process.stdout.write(bold("By entity type") + "\n\n");
+  const allBases = Array.from(
+    new Set(typeEntries.flatMap(([, m]) => Object.keys(m)))
+  ).sort();
+  const typeColWidth = Math.max(
+    ...typeEntries.map(([t]) => displayWidth(t)),
+    displayWidth("Entity type")
+  );
+  const colWidths = allBases.map((b) =>
+    Math.max(
+      displayWidth(b),
+      ...typeEntries.map(([, m]) => displayWidth(String(m[b] ?? 0)))
+    )
+  );
+  process.stdout.write(
+    padToDisplayWidth("Entity type", typeColWidth) +
+      gap +
+      allBases
+        .map((b, i) => padToDisplayWidth(b, colWidths[i] ?? displayWidth(b)))
+        .join(gap) +
+      "\n"
+  );
+  process.stdout.write(
+    dim(
+      "-".repeat(typeColWidth) +
+        gap +
+        colWidths.map((w) => "-".repeat(w)).join(gap)
+    ) + "\n"
+  );
+  for (const [type, counts] of typeEntries) {
+    process.stdout.write(
+      padToDisplayWidth(type, typeColWidth) +
+        gap +
+        allBases
+          .map((b, i) =>
+            padToDisplayWidth(String(counts[b] ?? 0), colWidths[i] ?? displayWidth(b))
+          )
+          .join(gap) +
+        "\n"
+    );
+  }
+  process.stdout.write("\n");
 }
 
 function printStatsTables(stats: StatsData): void {
@@ -12033,6 +12547,50 @@ program
   );
 
 // ---------------------------------------------------------------------------
+// neotoma recent
+//
+// Surfaces the most recently changed records across core Neotoma tables for
+// the authenticated user. Shares the same SQL helper (`listRecentRecordActivity`)
+// that powers the REST GET /record_activity endpoint and the new MCP tool
+// `list_recent_changes`.
+// ---------------------------------------------------------------------------
+program
+  .command("recent")
+  .description(
+    "List the most recently changed records across entities, sources, observations, relationships, interpretations, and timeline events"
+  )
+  .option("--limit <n>", "Maximum items to return (max 200)", "50")
+  .option("--offset <n>", "Pagination offset", "0")
+  .option("--user-id <userId>", "Optional explicit user ID")
+  .action(async (opts) => {
+    const outputMode = resolveOutputMode();
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({
+      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      token,
+    });
+    const query: Record<string, string | number> = {
+      limit: Number(opts.limit ?? "50"),
+      offset: Number(opts.offset ?? "0"),
+    };
+    if (opts.userId) query.user_id = opts.userId;
+    const { data, error, response } = await api.GET("/record_activity", {
+      params: { query: query as any },
+    });
+    const status = response?.status;
+    if (error) {
+      const detail = formatApiError(error);
+      let msg = status
+        ? `Failed to list recent changes: ${status} ${detail}`
+        : `Failed to list recent changes: ${detail}`;
+      if (status === 401) msg += ". Run `neotoma auth login` to sign in.";
+      throw new Error(msg);
+    }
+    writeOutput(data, outputMode);
+  });
+
+// ---------------------------------------------------------------------------
 // neotoma memory-export
 //
 // Writes a bounded single-file MEMORY.md using the same canonical renderer
@@ -12123,22 +12681,46 @@ program
   );
 
 const statsCmd = program.command("stats").description("Dashboard and entity statistics");
-statsCmd.action(async () => {
-  const outputMode = resolveOutputMode();
-  const config = await readConfig();
-  const token = await getCliToken();
-  const api = createApiClient({
-    baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
-    token,
+statsCmd
+  .option(
+    "--by <dimension>",
+    "Bucket stats by a specific dimension (e.g. `identity-basis`)"
+  )
+  .action(async (opts: { by?: string }) => {
+    const outputMode = resolveOutputMode();
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({
+      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      token,
+    });
+    const { data, error } = await api.GET("/stats", {});
+    if (error) throw new Error("Failed to fetch stats");
+    const stats = (data ?? {}) as StatsData;
+
+    const by = opts.by?.trim().toLowerCase();
+    if (by === "identity-basis" || by === "identity_basis") {
+      if (outputMode === "json") {
+        writeOutput(
+          {
+            observations_by_identity_basis: stats.observations_by_identity_basis ?? {},
+            observations_by_identity_basis_by_type:
+              stats.observations_by_identity_basis_by_type ?? {},
+          },
+          outputMode
+        );
+        return;
+      }
+      printIdentityBasisTable(stats);
+      return;
+    }
+
+    if (outputMode === "json") {
+      writeOutput(data, outputMode);
+      return;
+    }
+    printStatsTables(stats);
   });
-  const { data, error } = await api.GET("/stats", {});
-  if (error) throw new Error("Failed to fetch stats");
-  if (outputMode === "json") {
-    writeOutput(data, outputMode);
-    return;
-  }
-  printStatsTables((data ?? {}) as StatsData);
-});
 statsCmd
   .command("entities")
   .description("Entity counts by type")
@@ -13254,6 +13836,29 @@ export async function hasAnyInitializedContext(repoRoot: string | null): Promise
   return Boolean(userContext?.envFileExists && userContext.dataDirExists);
 }
 
+/**
+ * Lightweight, sync read of mirror-enabled state for the intro banner.
+ *
+ * Mirrors the precedence in `getMirrorConfig()` (env var > user config file >
+ * default) but avoids importing the full canonical_mirror module so the banner
+ * renderer stays synchronous and free of DB-adjacent module side effects.
+ */
+function readMirrorEnabledForBanner(): boolean {
+  try {
+    if (process.env.NEOTOMA_MIRROR_ENABLED !== undefined) {
+      return process.env.NEOTOMA_MIRROR_ENABLED.toLowerCase() === "true";
+    }
+    const home = process.env.HOME || process.env.USERPROFILE;
+    if (!home) return false;
+    const configPath = path.join(home, ".config", "neotoma", "config.json");
+    const raw = readFileSync(configPath, "utf8");
+    const parsed = JSON.parse(raw) as { mirror?: { enabled?: boolean } };
+    return parsed.mirror?.enabled === true;
+  } catch {
+    return false;
+  }
+}
+
 export function buildInstallationBoxLines(
   mcpConfigs: McpConfigStatus[],
   cliScan: CliInstructionScanSummary | null,
@@ -13358,6 +13963,12 @@ export function buildInstallationBoxLines(
   if (cliMissing || anyMcpMissing) {
     lines.push("");
     lines.push("To complete setup: neotoma init");
+  }
+  // Discoverability: nudge users who skipped the activation offer so they
+  // know the markdown mirror exists. Only renders when mirror is disabled.
+  if (!readMirrorEnabledForBanner()) {
+    lines.push("");
+    lines.push("Markdown mirror: disabled (enable: neotoma mirror enable --yes)");
   }
   return lines;
 }
@@ -13733,6 +14344,11 @@ function hasNoCommand(args: string[]): boolean {
   return firstPositional === undefined;
 }
 
+/** First user subcommand after global options (e.g. `mirror` for `neotoma mirror rebuild`). */
+function firstPositionalCliCommand(args: string[]): string | undefined {
+  return args.find((a) => a !== "--" && !a.startsWith("-"));
+}
+
 /** Tee process.stdout and process.stderr to a log file. Used when --log-file is set. */
 function teeToLogFile(logFilePath: string): (() => Promise<void>) | null {
   try {
@@ -13886,7 +14502,13 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
   const serverPolicy =
     noArgs && !noSession ? await resolveServerPolicy(noServers, serversOpt) : null;
   const startServers = serverPolicy === "start";
-  const deferApiStats = serverPolicy === "start" || serverPolicy === "use-existing";
+  const firstUserCommand = firstPositionalCliCommand(userArgsForCommandDetection);
+  // Mirror reads SQLite directly; skip intro /stats and API probes so TTY runs do not
+  // block on local-transport startup or unreachable HTTP APIs.
+  const deferApiStats =
+    serverPolicy === "start" ||
+    serverPolicy === "use-existing" ||
+    firstUserCommand === "mirror";
 
   // Apply --env early so resolveBaseUrl and use-existing logic respect it for both session and direct commands.
   const envOpt = (program.opts() as { env?: string }).env;

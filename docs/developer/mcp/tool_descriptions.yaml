@@ -23,6 +23,7 @@ tools:
   parse_file: "Parse local or base64-encoded files into agent-readable text and first-page PDF images without storing anything. Use before store when you need to extract entities from a file."
   correct: "Create high-priority correction observation to override AI-extracted fields. Corrections always win in snapshot computation."
   merge_entities: "Merge duplicate entities. Rewrites observations from source entity to target entity and marks source as merged."
+  list_potential_duplicates: "List candidate duplicate entity pairs for an entity_type. Read-only fuzzy post-hoc detector; never auto-merges. Per-schema thresholds and fields come from the schema's duplicate_detection_threshold and duplicate_detection_fields; callers may override threshold per call. Confirm pairs with the user, then hand off to merge_entities."
   delete_entity: "Delete an entity. Creates a deletion observation so the entity is excluded from snapshots and queries. Immutable and reversible for audit; use for user-initiated or GDPR-style removal from active use."
   delete_relationship: "Delete a relationship. Creates a deletion observation so the relationship is excluded from snapshots and queries. Immutable and reversible for audit."
   restore_entity: "Restore a deleted entity. Creates a restoration observation (priority 1001) that overrides the deletion. Entity becomes visible in snapshots and queries again. Immutable restoration for audit."

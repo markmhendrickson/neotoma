@@ -447,14 +447,17 @@ For chat persistence recipes, MCP and CLI use the same underlying store contract
   - `--path <dir>`: Override mirror root.
   - `--git`: Enable git-backed history (`git init` on the mirror path, one commit per write batch). Requires the optional `simple-git` dependency (installed by default).
   - `--kinds <list>`: Comma-separated kinds to mirror (`entities,relationships,sources,timeline,schemas`, default all).
+  - `--gitignore`: After enabling, append the resolved mirror path to the enclosing git repo's `.gitignore` (idempotent). No-op when the mirror path is not inside a repo. Equivalent to running `neotoma mirror gitignore` after `enable`.
+  - `--no-gitignore`: Explicit form for `--yes` scripts that want to leave `.gitignore` alone (default).
 - `neotoma mirror disable`: Disable mirror write-through. Does not delete existing files.
 - `neotoma mirror rebuild`: Regenerate the mirror from SQLite.
   - `--kind <entities|relationships|sources|timeline|schemas|all>` (default `all`).
   - `--entity-type <type>`, `--entity-id <id>`: Scope rebuild to a type or single record.
   - `--clean`: Remove stale mirror files within the targeted scope that this rebuild did not produce.
 - `neotoma mirror status`: Print current mirror config, file counts per kind, and whether git is enabled.
+- `neotoma mirror gitignore`: Idempotently append the resolved mirror path to the enclosing git repo's `.gitignore`, under a `# Neotoma markdown mirror` comment. The helper walks up from the mirror path to find the enclosing `.git` directory; it never prompts for a path and never writes to a repo it did not detect. When the mirror path is not inside a repo, it exits 0 with a "not inside a git repo" message. Use `--json` to get the structured result (`repo_root`, `gitignore_path`, `entry`, `added`, `already_present`).
 
-The mirror is a derived artifact: SQLite is the only source of truth. Mirror files carry a header warning that manual edits will be overwritten on the next write. To edit an entity, use `neotoma edit <id>` or the Inspector (see below). See `docs/subsystems/markdown_mirror.md` for layout, determinism, and git semantics.
+The mirror is a derived artifact: SQLite is the only source of truth. Mirror files carry a header warning that manual edits will be overwritten on the next write. To edit an entity, use `neotoma edit <id>` or the Inspector (see below). The mirror defaults to disabled; activation offers it as an opt-in (see [`install.md`](../../install.md#activation-step-66-offer-markdown-mirror-opt-in)). See `docs/subsystems/markdown_mirror.md` for layout, determinism, and git semantics.
 
 ### Edit
 

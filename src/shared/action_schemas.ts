@@ -19,6 +19,8 @@ export const ListObservationsRequestSchema = z.object({
   entity_id: z.string(),
   limit: z.number().int().positive().optional().default(100),
   offset: z.number().int().nonnegative().optional().default(0),
+  updated_since: z.string().optional(),
+  created_since: z.string().optional(),
 });
 
 export const FieldProvenanceRequestSchema = z.object({
@@ -154,6 +156,8 @@ const EntitiesQueryRequestBaseSchema = z
     include_snapshots: z.boolean().optional().default(true),
     include_merged: z.boolean().optional().default(false),
     user_id: z.string().optional(),
+    updated_since: z.string().optional(),
+    created_since: z.string().optional(),
   })
   .superRefine(validateEntityQueryCombinations);
 
@@ -191,6 +195,8 @@ const RetrieveEntitiesRequestBaseSchema = z
     published_before: z.string().optional(),
     include_snapshots: z.boolean().optional().default(true),
     include_merged: z.boolean().optional().default(false),
+    updated_since: z.string().optional(),
+    created_since: z.string().optional(),
   })
   .superRefine(validateEntityQueryCombinations);
 
@@ -215,6 +221,8 @@ export const ObservationsQueryRequestSchema = z.object({
   limit: z.number().int().positive().optional().default(100),
   offset: z.number().int().nonnegative().optional().default(0),
   user_id: z.string().optional(),
+  updated_since: z.string().optional(),
+  created_since: z.string().optional(),
 });
 
 export const StoreStructuredRequestSchema = z.object({
@@ -263,6 +271,10 @@ export const StoreRequestSchema = z
     file_path: z.string().optional(),
     mime_type: z.string().min(1).optional(),
     original_filename: z.string().optional(),
+    /** Plan/dry-run: resolve and report action per observation, skip inserts. */
+    commit: z.boolean().optional().default(true),
+    /** Refuse merges that resolve to an existing entity without a deterministic rule. */
+    strict: z.boolean().optional().default(false),
   })
   .refine(
     (data) => {
@@ -331,6 +343,11 @@ export const ListEntityTypesRequestSchema = z.object({
 export const RetrieveEntityByIdentifierSchema = z.object({
   identifier: z.string(),
   entity_type: z.string().optional(),
+  user_id: z.string().optional(),
+  by: z.string().optional(),
+  limit: z.number().int().positive().optional(),
+  include_observations: z.boolean().optional().default(false),
+  observations_limit: z.number().int().positive().max(200).optional().default(20),
 });
 
 export const RetrieveRelatedEntitiesSchema = z.object({

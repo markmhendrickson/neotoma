@@ -58,6 +58,7 @@ describe("Field Converters Integration", () => {
               ],
             },
           },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policies: {

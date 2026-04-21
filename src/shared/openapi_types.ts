@@ -399,6 +399,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/entities/duplicates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List potential duplicate entities for a given entity_type (R5).
+         * @description Read-only fuzzy duplicate detector. Surfaces candidate pairs for operator or agent review and hands off to `/entities/merge`. Never auto-merges. Per-schema thresholds and fields may be declared via `duplicate_detection_threshold` and `duplicate_detection_fields` on the schema definition; callers may override `threshold` per call.
+         */
+        get: operations["listPotentialDuplicates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/entities/merge": {
         parameters: {
             query?: never;
@@ -478,6 +498,31 @@ export interface paths {
         put?: never;
         /** Query observations */
         post: operations["queryObservations"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/record_activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Recent cross-table record activity
+         * @description Lists the most recently changed records across core Neotoma tables
+         *     (entities, sources, observations, interpretations, relationships,
+         *     timeline_events) for the authenticated user, ordered by latest
+         *     created/updated timestamp available on each table. Powers the
+         *     Inspector's "recent activity" panel and the MCP `list_recent_changes`
+         *     tool.
+         */
+        get: operations["getRecordActivity"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1107,6 +1152,8 @@ export interface components {
             content_hash?: string;
             mime_type?: string;
             storage_url?: string;
+            /** @description Local storage only — absolute path to raw file on disk (sources bucket under raw storage dir). */
+            filesystem_absolute_path?: string;
             file_size?: number;
             original_filename?: string;
             /** Format: date-time */
@@ -1189,6 +1236,34 @@ export interface components {
             observations?: number;
             relationships?: number;
             timeline_events?: number;
+            sources_count?: number;
+            entities_by_type?: {
+                [key: string]: number;
+            };
+            total_entities?: number;
+            total_relationships?: number;
+            total_events?: number;
+            total_observations?: number;
+            total_interpretations?: number;
+            /**
+             * @description R4 telemetry: count of observations per structured identity basis.
+             *     Keys are `schema_rule`, `heuristic_name`, `heuristic_fallback`,
+             *     `target_id`, or `unclassified` for rows written before the
+             *     `identity_basis` column existed.
+             */
+            observations_by_identity_basis?: {
+                [key: string]: number;
+            };
+            /**
+             * @description R4 telemetry: count of observations per identity basis, keyed by
+             *     entity_type (outer) then basis (inner).
+             */
+            observations_by_identity_basis_by_type?: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            last_updated?: string;
         };
         /** @description Unified store payload. Supports structured only, unstructured only, or both in one request. */
         StoreRequest: {
@@ -1215,6 +1290,22 @@ export interface components {
             mime_type?: string;
             original_filename?: string;
             user_id?: string;
+            /**
+             * @description When false, runs in plan/dry-run mode: resolves entities and returns
+             *     planned actions ("would_create" / "would_match_existing") without
+             *     persisting observations or source rows. Useful for previewing a
+             *     structured store before committing.
+             * @default true
+             */
+            commit?: boolean;
+            /**
+             * @description When true, refuse silent merges: only match an existing entity when
+             *     the entity's schema declares canonical_name_fields that the request
+             *     matches, or when target_id is supplied. Prevents accidental
+             *     coalescing into a pre-existing record.
+             * @default false
+             */
+            strict?: boolean;
         };
         StoreResponse: {
             structured?: components["schemas"]["StoreStructuredResponse"];
@@ -1244,6 +1335,22 @@ export interface components {
              *     Pass only when mirroring a real file name or when a display label is desired.
              */
             original_filename?: string;
+            /**
+             * @description When false, runs in plan/dry-run mode: resolves entities and returns
+             *     planned actions ("would_create" / "would_match_existing") without
+             *     persisting observations or source rows. Useful for previewing a
+             *     structured store before committing.
+             * @default true
+             */
+            commit?: boolean;
+            /**
+             * @description When true, refuse silent merges: only match an existing entity when
+             *     the entity's schema declares canonical_name_fields that the request
+             *     matches, or when target_id is supplied. Prevents accidental
+             *     coalescing into a pre-existing record.
+             * @default false
+             */
+            strict?: boolean;
         };
         StoreStructuredResponse: {
             success?: boolean;
@@ -1251,6 +1358,22 @@ export interface components {
                 entity_id?: string;
                 entity_type?: string;
                 observation_id?: string;
+                canonical_name?: string;
+                resolver_path?: string[];
+                /**
+                 * @description R4 telemetry: how the entity's identity was resolved. One of
+                 *     `schema_rule`, `heuristic_name`, `heuristic_fallback`,
+                 *     `target_id`.
+                 * @enum {string}
+                 */
+                identity_basis?: "schema_rule" | "schema_lookup" | "heuristic_name" | "heuristic_fallback" | "target_id";
+                /**
+                 * @description Human-readable label for the rule that produced the
+                 *     canonical_name (e.g. `email`,
+                 *     `composite:full_name+employer`, `first_string_field:name`).
+                 */
+                identity_rule?: string;
+                action?: string;
             }[];
         };
         StoreUnstructuredRequest: {
@@ -1886,6 +2009,16 @@ export interface operations {
                     include_snapshots?: boolean;
                     include_merged?: boolean;
                     user_id?: string;
+                    /**
+                     * @description ISO 8601 timestamp. Return only entities whose
+                     *     updated_at is greater than or equal to this value.
+                     */
+                    updated_since?: string;
+                    /**
+                     * @description ISO 8601 timestamp. Return only entities whose
+                     *     created_at is greater than or equal to this value.
+                     */
+                    created_since?: string;
                 };
             };
         };
@@ -1980,6 +2113,54 @@ export interface operations {
                 content: {
                     "application/json": {
                         relationships?: components["schemas"]["RelationshipSnapshot"][];
+                    };
+                };
+            };
+        };
+    };
+    listPotentialDuplicates: {
+        parameters: {
+            query: {
+                entity_type: string;
+                user_id?: string;
+                /** @description Similarity threshold in (0, 1]. Defaults to the schema's `duplicate_detection_threshold` or 0.85. */
+                threshold?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Ranked list of candidate duplicate pairs. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        candidates?: {
+                            entity_a?: {
+                                id?: string;
+                                canonical_name?: string;
+                                snapshot_fields?: {
+                                    [key: string]: unknown;
+                                };
+                            };
+                            entity_b?: {
+                                id?: string;
+                                canonical_name?: string;
+                                snapshot_fields?: {
+                                    [key: string]: unknown;
+                                };
+                            };
+                            score?: number;
+                            matched_fields?: string[];
+                            entity_type?: string;
+                        }[];
+                        entity_type?: string;
+                        threshold?: number;
                     };
                 };
             };
@@ -2112,6 +2293,18 @@ export interface operations {
                     limit?: number;
                     offset?: number;
                     user_id?: string;
+                    /**
+                     * @description ISO 8601 timestamp. Return only observations whose
+                     *     observed_at is greater than or equal to this value.
+                     *     (Observations are immutable, so updated_since and
+                     *     created_since both filter observed_at.)
+                     */
+                    updated_since?: string;
+                    /**
+                     * @description ISO 8601 timestamp. Return only observations whose
+                     *     observed_at is greater than or equal to this value.
+                     */
+                    created_since?: string;
                 };
             };
         };
@@ -2125,6 +2318,42 @@ export interface operations {
                     "application/json": {
                         observations?: components["schemas"]["Observation"][];
                         total?: number;
+                        limit?: number;
+                        offset?: number;
+                    };
+                };
+            };
+        };
+    };
+    getRecordActivity: {
+        parameters: {
+            query?: {
+                user_id?: string;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Recent record activity */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items?: {
+                            /** @enum {string} */
+                            record_type?: "entity" | "source" | "observation" | "interpretation" | "timeline_event" | "relationship";
+                            id?: string;
+                            activity_at?: string;
+                            title?: string;
+                            subtitle?: string | null;
+                        }[];
+                        has_more?: boolean;
                         limit?: number;
                         offset?: number;
                     };
@@ -2439,6 +2668,13 @@ export interface operations {
             content: {
                 "application/json": {
                     entity_id?: string;
+                    /** @description ISO 8601 timestamp for historical snapshot reconstruction */
+                    at?: string;
+                    /**
+                     * @description Response text format. `markdown` (default for MCP) returns canonical deterministic markdown for KV-cache stability. `json` returns the raw snapshot payload for programmatic callers.
+                     * @enum {string}
+                     */
+                    format?: "markdown" | "json";
                 };
             };
         };
@@ -2467,6 +2703,16 @@ export interface operations {
                     entity_id?: string;
                     limit?: number;
                     offset?: number;
+                    /**
+                     * @description ISO 8601 timestamp. Return only observations whose
+                     *     observed_at is greater than or equal to this value.
+                     */
+                    updated_since?: string;
+                    /**
+                     * @description ISO 8601 timestamp. Return only observations whose
+                     *     observed_at is greater than or equal to this value.
+                     */
+                    created_since?: string;
                 };
             };
         };
@@ -2581,6 +2827,30 @@ export interface operations {
                     identifier: string;
                     /** @description Optional entity type to limit search */
                     entity_type?: string;
+                    /** @description Optional user_id override (scoped to callers with privilege to query on behalf of another user). */
+                    user_id?: string;
+                    /**
+                     * @description Restrict snapshot-field matching to a single field
+                     *     (e.g. "email", "domain", "company"). When omitted, a
+                     *     default identity-bearing set is checked
+                     *     (name, full_name, title, email, domain, company).
+                     */
+                    by?: string;
+                    /** @description Maximum number of matching entities to return (default 100). */
+                    limit?: number;
+                    /**
+                     * @description When true, attach recent observations to each matched entity
+                     *     (ordered by observed_at descending). Useful for collapsing
+                     *     identify → snapshot → list_observations into a single call.
+                     * @default false
+                     */
+                    include_observations?: boolean;
+                    /**
+                     * @description Maximum observations to attach per entity when
+                     *     include_observations is true. Ignored otherwise.
+                     * @default 20
+                     */
+                    observations_limit?: number;
                 };
             };
         };
@@ -2592,7 +2862,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        entities?: components["schemas"]["Entity"][];
+                        entities?: (components["schemas"]["Entity"] & {
+                            /**
+                             * @description Present only when the request set
+                             *     include_observations = true. Ordered by
+                             *     observed_at descending, capped by
+                             *     observations_limit.
+                             */
+                            observations?: {
+                                [key: string]: unknown;
+                            }[];
+                        })[];
                         total?: number;
                     };
                 };

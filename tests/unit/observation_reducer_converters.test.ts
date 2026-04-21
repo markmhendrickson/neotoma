@@ -33,6 +33,7 @@ describe("ObservationReducer - Converter Application", () => {
             invoice_number: { type: "string", required: true },
             amount_due: { type: "string", required: true },
           },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policies: {
@@ -83,6 +84,7 @@ describe("ObservationReducer - Converter Application", () => {
               ],
             },
           },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policies: {
@@ -118,6 +120,7 @@ describe("ObservationReducer - Converter Application", () => {
             invoice_number: { type: "string", required: true },
             created_at: { type: "number", required: false },
           },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policies: {
@@ -169,6 +172,7 @@ describe("ObservationReducer - Converter Application", () => {
               ],
             },
           },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policies: {
@@ -208,6 +212,7 @@ describe("ObservationReducer - Converter Application", () => {
               ],
             },
           },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policies: {
@@ -254,6 +259,7 @@ describe("ObservationReducer - Converter Application", () => {
           fields: {
             amount_due: { type: "string", required: true },
           },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policies: {
@@ -299,6 +305,7 @@ describe("ObservationReducer - Converter Application", () => {
               ],
             },
           },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policies: {
@@ -345,6 +352,7 @@ describe("ObservationReducer - Converter Application", () => {
           fields: {
             amount_due: { type: "string", required: true },
           },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policies: {
@@ -390,6 +398,7 @@ describe("ObservationReducer - Converter Application", () => {
               ],
             },
           },
+          identity_opt_out: "heuristic_canonical_name",
         },
         reducer_config: {
           merge_policies: {

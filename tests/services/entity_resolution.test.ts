@@ -6,7 +6,9 @@
 
 import { describe, it, expect } from "vitest";
 import {
+  CanonicalNameUnresolvedError,
   deriveCanonicalNameFromFields,
+  deriveCanonicalNameFromFieldsWithTrace,
   formatCanonicalNameForStorage,
   generateEntityId,
   normalizeEntityValue,
@@ -379,7 +381,7 @@ describe("Entity Resolution Service", () => {
     // When none of the schema-declared composite fields have values, the
     // canonical derivation must not fall back to a generic enum-like token
     // (currency=EUR) that would collapse every receipt in the system.
-    it("rejects enum-like single-value canonical fallback (EUR-only receipt)", () => {
+    it("refuses to hash an enum-like single-value canonical fallback (EUR-only receipt)", () => {
       const schema = {
         canonical_name_fields: [
           "merchant",
@@ -387,16 +389,28 @@ describe("Entity Resolution Service", () => {
           "receipt_date",
         ],
       };
-      const canonical = deriveCanonicalNameFromFields(
-        "receipt",
-        { currency: "EUR" },
-        schema,
-      );
-      // No schema-declared field has a value; enum-like tokens must be
-      // rejected by isRejectedCanonicalValue, so this must NOT produce
-      // a canonical of "EUR".
-      expect(canonical).not.toBe("EUR");
-      expect(canonical?.toLowerCase()).not.toBe("eur");
+      expect(() =>
+        deriveCanonicalNameFromFields(
+          "receipt",
+          { currency: "EUR" },
+          schema,
+        ),
+      ).toThrow(CanonicalNameUnresolvedError);
+    });
+
+    it("refuses to hash when no usable name/id field is present", () => {
+      expect(() =>
+        deriveCanonicalNameFromFields("contact", {
+          status: "active",
+          created_at: "2024-05-01",
+        }),
+      ).toThrow(CanonicalNameUnresolvedError);
+    });
+
+    it("refuses to hash when the only name-like field is a rejected token", () => {
+      expect(() =>
+        deriveCanonicalNameFromFields("contact", { name: "unknown" }),
+      ).toThrow(CanonicalNameUnresolvedError);
     });
 
     it("still resolves via heuristic for an unseeded type without schema", () => {
@@ -406,6 +420,170 @@ describe("Entity Resolution Service", () => {
       });
       expect(canonical).toBeTruthy();
       expect(typeof canonical).toBe("string");
+    });
+
+    // R1: ordered identity precedence with partial matches.
+    describe("ordered identity precedence (R1)", () => {
+      const orderedContactSchema = {
+        canonical_name_fields: [
+          "email",
+          "phone",
+          { composite: ["full_name", "employer"] },
+          "full_name",
+        ],
+      };
+
+      it("prefers the first single-field rule that matches (email)", () => {
+        const result = deriveCanonicalNameFromFieldsWithTrace(
+          "contact",
+          { email: "jane@example.com", full_name: "Jane Doe" },
+          orderedContactSchema,
+        );
+        expect(result.canonicalName).toContain("jane@example.com");
+        expect(result.path[0]).toBe("schema:canonical_name_fields:email");
+      });
+
+      it("skips missing single-field rules and uses the next one (phone)", () => {
+        const result = deriveCanonicalNameFromFieldsWithTrace(
+          "contact",
+          { phone: "+15551234567", full_name: "Jane Doe" },
+          orderedContactSchema,
+        );
+        expect(result.canonicalName).toContain("15551234567");
+        expect(result.path[0]).toBe("schema:canonical_name_fields:phone");
+      });
+
+      it("falls through to composite rule when single fields are absent", () => {
+        const result = deriveCanonicalNameFromFieldsWithTrace(
+          "contact",
+          { full_name: "Jane Doe", employer: "Acme" },
+          orderedContactSchema,
+        );
+        expect(result.canonicalName).toContain("Jane Doe");
+        expect(result.canonicalName).toContain("Acme");
+        expect(result.path[0]).toBe(
+          "schema:canonical_name_fields:composite:full_name+employer",
+        );
+      });
+
+      it("falls through to a later single-field rule when composite is incomplete", () => {
+        const result = deriveCanonicalNameFromFieldsWithTrace(
+          "contact",
+          { full_name: "Jane Doe" },
+          orderedContactSchema,
+        );
+        expect(result.canonicalName).toContain("Jane Doe");
+        expect(result.path[0]).toBe("schema:canonical_name_fields:full_name");
+      });
+
+      it("two observations with the same email and different names still produce the same entity id", () => {
+        const schema = {
+          canonical_name_fields: [
+            "email",
+            { composite: ["full_name"] },
+          ],
+        };
+        const c1 = deriveCanonicalNameFromFields(
+          "contact",
+          { email: "j@x.com", full_name: "John" },
+          schema,
+        );
+        const c2 = deriveCanonicalNameFromFields(
+          "contact",
+          { email: "j@x.com", full_name: "John Smith" },
+          schema,
+        );
+        expect(generateEntityId("contact", c1)).toBe(
+          generateEntityId("contact", c2),
+        );
+      });
+
+      it("two observations with the same name but different emails produce different entity ids", () => {
+        const schema = {
+          canonical_name_fields: [
+            "email",
+            { composite: ["full_name"] },
+          ],
+        };
+        const c1 = deriveCanonicalNameFromFields(
+          "contact",
+          { email: "a@x.com", full_name: "John" },
+          schema,
+        );
+        const c2 = deriveCanonicalNameFromFields(
+          "contact",
+          { email: "b@x.com", full_name: "John" },
+          schema,
+        );
+        expect(generateEntityId("contact", c1)).not.toBe(
+          generateEntityId("contact", c2),
+        );
+      });
+
+      it("legacy flat string[] still behaves as a single all-or-nothing composite", () => {
+        // Legacy invoice-style declaration. All three required.
+        const schema = {
+          canonical_name_fields: ["invoice_number", "vendor_name", "invoice_date"],
+        };
+        const allPresent = deriveCanonicalNameFromFieldsWithTrace(
+          "invoice",
+          { invoice_number: "INV-1", vendor_name: "Acme", invoice_date: "2024-01-01" },
+          schema,
+        );
+        expect(allPresent.canonicalName).toContain("INV-1");
+        expect(allPresent.path[0]).toBe(
+          "schema:canonical_name_fields:invoice_number,vendor_name,invoice_date",
+        );
+
+        // Missing one → falls through to name-key heuristic.
+        const partial = deriveCanonicalNameFromFieldsWithTrace(
+          "invoice",
+          { invoice_number: "INV-1", vendor_name: "Acme" },
+          schema,
+        );
+        expect(partial.path[0]).not.toMatch(/^schema:canonical_name_fields/);
+      });
+
+      it("refuses to hash when no ordered rule matches and no heuristic is viable", () => {
+        const schema = {
+          canonical_name_fields: [
+            "tax_id",
+            { composite: ["legal_name", "country"] },
+          ],
+        };
+        expect(() =>
+          deriveCanonicalNameFromFields(
+            "company",
+            { status: "active" },
+            schema,
+          ),
+        ).toThrow(CanonicalNameUnresolvedError);
+      });
+    });
+
+    it("returns a resolver trace path for each derivation rule", () => {
+      const schemaPath = deriveCanonicalNameFromFieldsWithTrace(
+        "receipt",
+        { merchant: "Ecoveritas", total_amount: 42.5, receipt_date: "2024-05-01" },
+        { canonical_name_fields: ["merchant", "total_amount", "receipt_date"] },
+      );
+      expect(schemaPath.path[0]).toMatch(/^schema:canonical_name_fields:/);
+
+      const nameKey = deriveCanonicalNameFromFieldsWithTrace("company", {
+        name: "Acme Corporation",
+      });
+      expect(nameKey.path[0]).toBe("name_key:name");
+
+      const idKey = deriveCanonicalNameFromFieldsWithTrace("email_message", {
+        source: "gmail",
+        message_id: "19c7482c87b8e406",
+      });
+      expect(idKey.path[0]).toBe("id_key:message_id");
+
+      const heuristic = deriveCanonicalNameFromFieldsWithTrace("custom_widget", {
+        widget_name: "Blue Widget",
+      });
+      expect(heuristic.path[0]).toBe("heuristic:widget_name");
     });
   });
 

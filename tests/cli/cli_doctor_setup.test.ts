@@ -249,4 +249,58 @@ describe("runDoctor", () => {
       await fs.rm(cwd, { recursive: true, force: true });
     }
   });
+
+  it("includes a mirror block with inside_git_repo / gitignored shape", async () => {
+    const cwd = await mkTmp("ntm-doctor-mirror-cwd");
+    const repoRoot = await mkTmp("ntm-doctor-mirror-repo");
+    const mirrorDir = path.join(repoRoot, "data", "mirror");
+    const originalMirrorEnabled = process.env.NEOTOMA_MIRROR_ENABLED;
+    const originalMirrorPath = process.env.NEOTOMA_MIRROR_PATH;
+    try {
+      await fs.mkdir(path.join(repoRoot, ".git"), { recursive: true });
+      await fs.mkdir(mirrorDir, { recursive: true });
+      process.env.NEOTOMA_MIRROR_ENABLED = "false";
+      process.env.NEOTOMA_MIRROR_PATH = mirrorDir;
+
+      const report = await runDoctor({ cwd });
+
+      expect(report).toHaveProperty("mirror");
+      expect(report.mirror.enabled).toBe(false);
+      expect(report.mirror.path).toBe(path.resolve(mirrorDir));
+      expect(report.mirror.inside_git_repo).toBe(true);
+      expect(report.mirror.git_repo_root).toBe(repoRoot);
+      expect(report.mirror.gitignored).toBe(false);
+      expect(report.mirror.eligible_for_offer).toBe(true);
+    } finally {
+      if (originalMirrorEnabled === undefined) delete process.env.NEOTOMA_MIRROR_ENABLED;
+      else process.env.NEOTOMA_MIRROR_ENABLED = originalMirrorEnabled;
+      if (originalMirrorPath === undefined) delete process.env.NEOTOMA_MIRROR_PATH;
+      else process.env.NEOTOMA_MIRROR_PATH = originalMirrorPath;
+      await fs.rm(cwd, { recursive: true, force: true });
+      await fs.rm(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("mirror.eligible_for_offer is false when mirror is enabled", async () => {
+    const cwd = await mkTmp("ntm-doctor-mirror-on-cwd");
+    const mirrorDir = await mkTmp("ntm-doctor-mirror-on");
+    const originalMirrorEnabled = process.env.NEOTOMA_MIRROR_ENABLED;
+    const originalMirrorPath = process.env.NEOTOMA_MIRROR_PATH;
+    try {
+      process.env.NEOTOMA_MIRROR_ENABLED = "true";
+      process.env.NEOTOMA_MIRROR_PATH = mirrorDir;
+
+      const report = await runDoctor({ cwd });
+
+      expect(report.mirror.enabled).toBe(true);
+      expect(report.mirror.eligible_for_offer).toBe(false);
+    } finally {
+      if (originalMirrorEnabled === undefined) delete process.env.NEOTOMA_MIRROR_ENABLED;
+      else process.env.NEOTOMA_MIRROR_ENABLED = originalMirrorEnabled;
+      if (originalMirrorPath === undefined) delete process.env.NEOTOMA_MIRROR_PATH;
+      else process.env.NEOTOMA_MIRROR_PATH = originalMirrorPath;
+      await fs.rm(cwd, { recursive: true, force: true });
+      await fs.rm(mirrorDir, { recursive: true, force: true });
+    }
+  });
 });

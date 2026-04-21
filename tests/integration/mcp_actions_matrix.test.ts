@@ -849,7 +849,8 @@ describe("MCP Actions Matrix - All 17 Actions", () => {
           schema_definition: {
             fields: {
               test_field: { type: "string", required: false }
-            }
+            },
+            identity_opt_out: "heuristic_canonical_name",
           },
           reducer_config: {
             merge_policies: {
@@ -881,6 +882,7 @@ describe("MCP Actions Matrix - All 17 Actions", () => {
             entity_type: "invalid_schema_test",
             schema_definition: {
               fields: null, // Invalid
+              identity_opt_out: "heuristic_canonical_name",
             },
             reducer_config: {
               merge_policies: {}

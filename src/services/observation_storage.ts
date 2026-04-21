@@ -21,6 +21,17 @@ export interface CreateObservationParams {
   fields: Record<string, unknown>;
   user_id: string;
   idempotency_key?: string | null;
+  /**
+   * Structured identity classification from the resolver. Persisted per-row
+   * so `/stats?by=identity_basis` can aggregate without re-running derivation.
+   * See {@link ../services/entity_resolution.ts#IdentityBasis}.
+   */
+  identity_basis?: string | null;
+  /**
+   * Human-readable rule label that matched (e.g. `email`,
+   * `composite:full_name+employer`, `first_string_field:name`).
+   */
+  identity_rule?: string | null;
 }
 
 export interface ObservationRecord {
@@ -66,6 +77,12 @@ export async function createObservation(
 
   if (params.idempotency_key) {
     (row as Record<string, unknown>).idempotency_key = params.idempotency_key;
+  }
+  if (params.identity_basis) {
+    (row as Record<string, unknown>).identity_basis = params.identity_basis;
+  }
+  if (params.identity_rule) {
+    (row as Record<string, unknown>).identity_rule = params.identity_rule;
   }
 
   const { data, error } = await db

@@ -5,7 +5,15 @@
       "WebFetch(domain:medium.com)",
       "WebFetch(domain:substack.com)",
       "WebFetch(domain:evoailabs.medium.com)",
-      "WebFetch(domain:prociq.ai)"
+      "WebFetch(domain:prociq.ai)",
+      "WebFetch(domain:blog.cloudflare.com)",
+      "mcp__web-scraper__scrape_content",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "WebSearch",
+      "WebFetch(domain:x.com)",
+      "WebFetch(domain:chatgptguide.ai)",
+      "WebFetch(domain:www.reddit.com)",
+      "WebFetch(domain:old.reddit.com)"
     ]
   },
   "enableAllProjectMcpServers": true,

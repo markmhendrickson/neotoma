@@ -193,6 +193,16 @@ export function buildToolDefinitions(
             type: "string",
             description: "Optional explicit user ID (normally inferred from auth context).",
           },
+          updated_since: {
+            type: "string",
+            description:
+              "ISO 8601 timestamp. Return only entities whose updated_at is greater than or equal to this value.",
+          },
+          created_since: {
+            type: "string",
+            description:
+              "ISO 8601 timestamp. Return only entities whose created_at is greater than or equal to this value.",
+          },
         },
         required: [],
       },
@@ -216,7 +226,7 @@ export function buildToolDefinitions(
       name: "retrieve_entity_by_identifier",
       description: desc(
         "retrieve_entity_by_identifier",
-        "Retrieve entity by identifier (name, email, etc.) across entity types or specific type.",
+        "Retrieve entity by identifier (name, email, etc.) across entity types or specific type. Set include_observations=true to hydrate each match with recent observations in the same call (useful for collapsing resolve/snapshot/list sequences).",
       ),
       inputSchema: {
         type: "object",
@@ -230,6 +240,30 @@ export function buildToolDefinitions(
             type: "string",
             description:
               "Optional: Limit search to specific entity type (e.g., 'company', 'person')",
+          },
+          by: {
+            type: "string",
+            description:
+              "Restrict snapshot-field matching to a single field (e.g. 'email', 'domain', 'company'). When omitted, checks a default identity-bearing set (name, full_name, title, email, domain, company).",
+          },
+          limit: {
+            type: "integer",
+            minimum: 1,
+            description: "Max matching entities (default 100).",
+          },
+          include_observations: {
+            type: "boolean",
+            description:
+              "When true, include recent observations per matched entity (ordered by observed_at desc).",
+            default: false,
+          },
+          observations_limit: {
+            type: "integer",
+            minimum: 1,
+            maximum: 200,
+            description:
+              "Max observations per entity when include_observations is true (default 20, max 200).",
+            default: 20,
           },
         },
         required: ["identifier"],
@@ -467,6 +501,39 @@ export function buildToolDefinitions(
         "Merge duplicate entities. Rewrites observations from source entity to target entity and marks source as merged.",
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("merge_entities"),
+    },
+    {
+      name: "list_potential_duplicates",
+      description: desc(
+        "list_potential_duplicates",
+        "List candidate duplicate entity pairs for an entity_type. Read-only; never auto-merges. Hand off confirmed pairs to merge_entities.",
+      ),
+      inputSchema: {
+        type: "object",
+        properties: {
+          entity_type: {
+            type: "string",
+            description: "Entity type to scan for duplicates (e.g. contact, company).",
+          },
+          threshold: {
+            type: "number",
+            minimum: 0,
+            maximum: 1,
+            description: "Similarity threshold in (0, 1]. Defaults to the schema's duplicate_detection_threshold or 0.85.",
+          },
+          limit: {
+            type: "integer",
+            minimum: 1,
+            maximum: 200,
+            description: "Maximum number of candidate pairs to return. Defaults to 50.",
+          },
+          user_id: {
+            type: "string",
+            description: "Optional. Inferred from authentication if omitted.",
+          },
+        },
+        required: ["entity_type"],
+      },
     },
     {
       name: "delete_entity",
@@ -805,6 +872,31 @@ export function buildToolDefinitions(
       },
     },
     {
+      name: "list_recent_changes",
+      description: desc(
+        "list_recent_changes",
+        "List the most recently changed records across core Neotoma tables (entities, sources, observations, interpretations, relationships, timeline_events) for the authenticated user. Returns items ordered by latest activity_at.",
+      ),
+      inputSchema: {
+        type: "object",
+        properties: {
+          limit: {
+            type: "integer",
+            minimum: 1,
+            maximum: 200,
+            description: "Maximum number of items to return (default 50, max 200).",
+          },
+          offset: {
+            type: "integer",
+            minimum: 0,
+            description: "Pagination offset (default 0).",
+          },
+        },
+        required: [],
+      },
+      annotations: { readOnlyHint: true },
+    },
+    {
       name: "npm_check_update",
       description: desc(
         "npm_check_update",
@@ -855,6 +947,7 @@ export const NEOTOMA_TOOL_NAMES = [
   "parse_file",
   "correct",
   "merge_entities",
+  "list_potential_duplicates",
   "delete_entity",
   "delete_relationship",
   "restore_entity",
@@ -867,6 +960,7 @@ export const NEOTOMA_TOOL_NAMES = [
   "register_schema",
   "get_authenticated_user",
   "health_check_snapshots",
+  "list_recent_changes",
   "npm_check_update",
 ] as const;
 

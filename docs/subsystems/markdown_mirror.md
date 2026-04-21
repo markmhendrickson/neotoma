@@ -96,14 +96,21 @@ All hooks are guarded by `mirror.enabled` and the per-kind `mirror.kinds` list. 
 
 See `docs/developer/cli_reference.md` for full syntax. Summary:
 
-- `neotoma mirror enable` — initial enable + rebuild, optional `--git` and `--kinds <list>`.
+- `neotoma mirror enable` — initial enable + rebuild, optional `--git`, `--kinds <list>`, and `--gitignore` (append the mirror path to the enclosing git repo's `.gitignore`).
 - `neotoma mirror disable` — stop write-through. Does not delete files.
 - `neotoma mirror rebuild` — regenerate from SQLite. Scoping: `--kind`, `--entity-type`, `--entity-id`, `--clean`.
 - `neotoma mirror status` — show config, per-kind file counts, git state.
+- `neotoma mirror gitignore` — idempotently append the mirror path to the enclosing git repo's `.gitignore`. No-op when the mirror path is not inside a repo.
 
 ### Rebuild filters
 
 `rebuild` always truncates and regenerates within the targeted scope. `--clean` removes stale files inside the scope that this pass did not produce. Without `--clean`, stale files are preserved.
+
+### Activation offer
+
+The mirror defaults to `enabled: false`. Activation (post-install onboarding) offers it as an opt-in step — see [**Activation step 6.6: Offer markdown mirror**](../../install.md#activation-step-66-offer-markdown-mirror-opt-in). The activation agent reads `doctor.mirror` (from `neotoma doctor --json`) for `enabled`, `inside_git_repo`, `git_repo_root`, `gitignored`, and `eligible_for_offer`; offers install only when `eligible_for_offer === true`; and, when the mirror path sits inside a git repo, follows up with a gitignore sub-prompt that runs `neotoma mirror gitignore --yes`.
+
+The session/no-session intro banner also surfaces a one-line `Markdown mirror: disabled (enable: neotoma mirror enable --yes)` hint when mirror is off, so users who skipped activation still find the discovery surface.
 
 ## 5. Configuration
 

@@ -452,6 +452,7 @@ describe("SchemaRecommendationService", () => {
           fields: {
             field1: { type: "string" },
           },
+          identity_opt_out: "heuristic_canonical_name",
         },
       });
 
@@ -491,6 +492,7 @@ describe("SchemaRecommendationService", () => {
       mockRegistry.loadActiveSchema = vi.fn().mockResolvedValue({
         schema_definition: {
           fields: {},
+          identity_opt_out: "heuristic_canonical_name",
         },
       });
       service["schemaRegistry"] = mockRegistry as any;

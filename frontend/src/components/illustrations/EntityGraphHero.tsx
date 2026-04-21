@@ -20,9 +20,32 @@ const EDGES: [number, number, string][] = [
 
 const STAGGER_MS = 180;
 
+// Live observations that cycle through the ticker, each one targets a node index
+// so we can pulse the matching entity when it appears.
+const OBSERVATIONS: { text: string; nodeIdx: number }[] = [
+  { text: "task.status \u2192 done", nodeIdx: 2 },
+  { text: "company.employees += 1", nodeIdx: 1 },
+  { text: "person.last_seen updated", nodeIdx: 0 },
+  { text: "transaction.amount corrected", nodeIdx: 3 },
+  { text: "task \u2192 person :: assigned", nodeIdx: 2 },
+];
+
+const OBSERVATION_INTERVAL_MS = 2400;
+
 export function EntityGraphHero({ className = "" }: EntityGraphHeroProps) {
   const [visible, setVisible] = useState(false);
+  const [obsIdx, setObsIdx] = useState(0);
+  const [reduceMotion, setReduceMotion] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mql = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setReduceMotion(mql.matches);
+    const handler = (e: MediaQueryListEvent) => setReduceMotion(e.matches);
+    mql.addEventListener?.("change", handler);
+    return () => mql.removeEventListener?.("change", handler);
+  }, []);
 
   useEffect(() => {
     const el = ref.current;
@@ -40,18 +63,53 @@ export function EntityGraphHero({ className = "" }: EntityGraphHeroProps) {
     return () => observer.disconnect();
   }, []);
 
+  useEffect(() => {
+    if (!visible || reduceMotion) return;
+    const interval = window.setInterval(() => {
+      setObsIdx((i) => (i + 1) % OBSERVATIONS.length);
+    }, OBSERVATION_INTERVAL_MS);
+    return () => window.clearInterval(interval);
+  }, [visible, reduceMotion]);
+
+  const currentObs = OBSERVATIONS[obsIdx];
+
   return (
     <div
       ref={ref}
       className={`relative mx-auto w-full max-w-[420px] lg:max-w-none ${className}`}
+      style={{ perspective: "1200px" }}
     >
-      <div className="relative rounded-xl border border-border/60 bg-card/30 p-4 shadow-[0_18px_48px_-28px_rgba(15,23,42,0.30)] dark:shadow-[0_18px_48px_-28px_rgba(0,0,0,0.50)]">
+      <div
+        className="relative rounded-xl border border-border/60 bg-card/30 p-4 shadow-[0_24px_60px_-28px_rgba(15,23,42,0.35)] dark:shadow-[0_24px_60px_-28px_rgba(0,0,0,0.55)] transition-transform duration-[700ms] ease-out motion-reduce:transition-none"
+        style={{
+          transform: reduceMotion
+            ? "none"
+            : visible
+              ? "rotateX(6deg) rotateY(-8deg) translateZ(0)"
+              : "rotateX(0deg) rotateY(0deg) translateZ(-20px)",
+          transformStyle: "preserve-3d",
+        }}
+      >
         <svg
           viewBox="0 0 100 80"
           className="w-full"
           style={{ aspectRatio: "100/80" }}
-          aria-label="Entity relationship graph showing person, company, task, and transaction nodes"
+          aria-label="Entity relationship graph showing person, company, task, and transaction nodes with live observations flowing in"
         >
+          <defs>
+            <marker
+              id="arrow-emerald"
+              viewBox="0 0 10 10"
+              refX="9"
+              refY="5"
+              markerWidth="4"
+              markerHeight="4"
+              orient="auto-start-reverse"
+            >
+              <path d="M 0 0 L 10 5 L 0 10 z" className="fill-emerald-500/50 dark:fill-emerald-400/45" />
+            </marker>
+          </defs>
+
           {EDGES.map(([from, to, label], i) => {
             const a = NODES[from];
             const b = NODES[to];
@@ -61,7 +119,7 @@ export function EntityGraphHero({ className = "" }: EntityGraphHeroProps) {
               <g
                 key={`edge-${i}`}
                 style={{
-                  opacity: visible ? 0.6 : 0,
+                  opacity: visible ? 0.65 : 0,
                   transition: `opacity 600ms ease-out ${(NODES.length + i) * STAGGER_MS}ms`,
                 }}
               >
@@ -70,15 +128,16 @@ export function EntityGraphHero({ className = "" }: EntityGraphHeroProps) {
                   y1={a.y}
                   x2={b.x}
                   y2={b.y}
-                  className="stroke-emerald-500/40 dark:stroke-emerald-400/35"
+                  className="stroke-emerald-500/45 dark:stroke-emerald-400/40"
                   strokeWidth="0.3"
                   strokeDasharray="1.2 0.8"
+                  markerEnd="url(#arrow-emerald)"
                 />
                 <text
                   x={mx}
                   y={my - 1.2}
                   textAnchor="middle"
-                  className="fill-muted-foreground/50 text-[2.8px] font-mono"
+                  className="fill-muted-foreground/55 text-[2.8px] font-mono"
                 >
                   {label}
                 </text>
@@ -86,52 +145,82 @@ export function EntityGraphHero({ className = "" }: EntityGraphHeroProps) {
             );
           })}
 
-          {NODES.map((node, i) => (
-            <g
-              key={node.id}
-              style={{
-                opacity: visible ? 1 : 0,
-                transform: visible ? "translateY(0)" : "translateY(4px)",
-                transition: `opacity 500ms ease-out ${i * STAGGER_MS}ms, transform 500ms ease-out ${i * STAGGER_MS}ms`,
-              }}
-            >
-              <circle
-                cx={node.x}
-                cy={node.y}
-                r="7"
-                className="fill-background stroke-border"
-                strokeWidth="0.4"
-              />
-              <circle
-                cx={node.x}
-                cy={node.y}
-                r="7"
-                className="fill-emerald-500/8 dark:fill-emerald-400/10"
-              />
-              <svg
-                x={node.x - 3}
-                y={node.y - 5}
-                width="6"
-                height="6"
-                viewBox="0 0 24 24"
-                fill="none"
-                className="stroke-foreground/70"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
+          {NODES.map((node, i) => {
+            const pulsing = visible && !reduceMotion && currentObs.nodeIdx === i;
+            return (
+              <g
+                key={node.id}
+                style={{
+                  opacity: visible ? 1 : 0,
+                  transform: visible ? "translateY(0)" : "translateY(4px)",
+                  transition: `opacity 500ms ease-out ${i * STAGGER_MS}ms, transform 500ms ease-out ${i * STAGGER_MS}ms`,
+                }}
               >
-                <path d={node.icon} />
-              </svg>
-              <text
-                x={node.x}
-                y={node.y + 5.5}
-                textAnchor="middle"
-                className="fill-foreground/80 text-[3px] font-mono"
-              >
-                {node.label}
-              </text>
-            </g>
-          ))}
+                {pulsing ? (
+                  <circle
+                    cx={node.x}
+                    cy={node.y}
+                    r="7"
+                    className="fill-none stroke-emerald-500/60 dark:stroke-emerald-400/55"
+                    strokeWidth="0.4"
+                  >
+                    <animate
+                      attributeName="r"
+                      values="7;11;7"
+                      dur="1.6s"
+                      repeatCount="1"
+                    />
+                    <animate
+                      attributeName="opacity"
+                      values="0.9;0;0"
+                      dur="1.6s"
+                      repeatCount="1"
+                    />
+                  </circle>
+                ) : null}
+                <circle
+                  cx={node.x}
+                  cy={node.y}
+                  r="7"
+                  className="fill-background stroke-border"
+                  strokeWidth="0.4"
+                />
+                <circle
+                  cx={node.x}
+                  cy={node.y}
+                  r="7"
+                  className={
+                    pulsing
+                      ? "fill-emerald-500/20 dark:fill-emerald-400/20"
+                      : "fill-emerald-500/8 dark:fill-emerald-400/10"
+                  }
+                  style={{ transition: "fill 400ms ease-out" }}
+                />
+                <svg
+                  x={node.x - 3}
+                  y={node.y - 5}
+                  width="6"
+                  height="6"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  className="stroke-foreground/70"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d={node.icon} />
+                </svg>
+                <text
+                  x={node.x}
+                  y={node.y + 5.5}
+                  textAnchor="middle"
+                  className="fill-foreground/80 text-[3px] font-mono"
+                >
+                  {node.label}
+                </text>
+              </g>
+            );
+          })}
         </svg>
 
         <div
@@ -147,6 +236,44 @@ export function EntityGraphHero({ className = "" }: EntityGraphHeroProps) {
           <span className="text-border">&middot;</span>
           <span className="rounded border border-border/50 px-1.5 py-0.5">versioned</span>
         </div>
+
+        {/* Live observation ticker — shows writes landing on the graph in real time */}
+        <div
+          className="mt-3 flex items-center justify-center gap-2 rounded-md border border-emerald-500/20 bg-emerald-50/40 px-2.5 py-1.5 text-[11px] font-mono dark:bg-emerald-950/20"
+          style={{
+            opacity: visible ? 1 : 0,
+            transition: `opacity 600ms ease-out ${(NODES.length + EDGES.length + 1) * STAGGER_MS}ms`,
+          }}
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          <span
+            className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500 dark:bg-emerald-400"
+            style={{
+              animation: reduceMotion ? undefined : "pulse 1.8s ease-in-out infinite",
+            }}
+            aria-hidden
+          />
+          <span className="text-muted-foreground/60">observation</span>
+          <span
+            key={obsIdx}
+            className="text-foreground/80"
+            style={
+              reduceMotion
+                ? undefined
+                : { animation: "fadeInObs 600ms ease-out" }
+            }
+          >
+            {currentObs.text}
+          </span>
+        </div>
+
+        <style>{`
+          @keyframes fadeInObs {
+            from { opacity: 0; transform: translateY(2px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+        `}</style>
       </div>
       <p className="mt-3 text-center text-[12px] leading-5 text-muted-foreground lg:text-left">
         Structured entities and relationships your agents can query, version, and trust.

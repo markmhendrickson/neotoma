@@ -312,6 +312,59 @@ See [`docs/integrations/hooks/README.md`](docs/integrations/hooks/README.md) for
 - Do NOT skip `neotoma doctor --json` before offering hooks. Eligibility, installed-state, and other-plugin detection all come from that single snapshot; improvised detection is forbidden.
 - Do NOT offer hooks when `doctor.hooks.eligible_for_offer === false`. That value already encodes "supported harness, not installed yet, MCP configured" -- do not second-guess it.
 
+#### Activation step 6.6: Offer markdown mirror (opt-in)
+
+After the hooks offer -- whether the user accepted, declined, or deferred -- propose enabling the canonical markdown mirror. The mirror is a deterministic filesystem view of the same entities, relationships, sources, timeline events, and schemas the user just saw reconstructed: one `.md` per record, regenerated on write, so standard UNIX tools (`cat`, `grep`, `less`, `tree`) work against the knowledge graph without going through the API. It is **offered**, never enabled by default, because it writes files into the data directory and may add noise to an enclosing git repository.
+
+**Read `doctor.mirror` first.** Do not improvise detection or ask the user to look for config files.
+
+- If `doctor.mirror.eligible_for_offer === false`, skip this step entirely. Do not mention the mirror. Eligibility is false when the mirror is already enabled, or when the user previously declined the offer.
+- `doctor.mirror.inside_git_repo` and `doctor.mirror.gitignored` drive the gitignore sub-prompt (below).
+
+**Proposal template:**
+
+```
+The timeline you just saw lives in SQLite. Neotoma can also mirror it to
+markdown files on disk -- one .md per entity/relationship/source/timeline
+day/schema -- regenerated on write so you can `cat`, `grep`, and `less`
+the knowledge graph with standard tools. SQLite stays the only source of
+truth; mirror files are read-only and safe to delete.
+
+Enable the markdown mirror at <resolved_path>?
+(y)es -- run `neotoma mirror enable --yes`
+(n)o  -- I will decide later
+(l)ater -- remind me next session
+```
+
+**Handling the response:**
+
+| Answer | Action |
+| --- | --- |
+| `yes` | Run `neotoma mirror enable --yes` (and optionally `--gitignore`, see sub-prompt). Treat a non-zero exit code as a failure and surface the CLI's message verbatim. |
+| `no`   | Store a `user_preference` entity with `{ mirror: "declined" }`. Do not offer again in future activation flows unless the user asks. |
+| `later` | Store a reminder-style entity (e.g. `task` with a `remind_at` of the next session) so the next activation surfaces the proposal once more. |
+
+**Gitignore sub-prompt.** When `doctor.mirror.inside_git_repo === true` AND `doctor.mirror.gitignored === false` AND the user answered `yes` to the mirror offer, follow up with:
+
+```
+The mirror path at <resolved_path> sits inside the git repo at
+<git_repo_root>. Add it to <git_repo_root>/.gitignore so the generated
+markdown does not show up in `git status`?
+(y)es -- run `neotoma mirror gitignore --yes`
+(n)o  -- leave .gitignore alone
+```
+
+If the user answers yes, run `neotoma mirror enable --yes --gitignore` (or `neotoma mirror gitignore --yes` if mirror was enabled on a previous turn). The helper is idempotent: repeated runs are no-ops. Skip the sub-prompt entirely when `inside_git_repo` is false.
+
+See [`docs/subsystems/markdown_mirror.md`](docs/subsystems/markdown_mirror.md) for the mirror layout, determinism guarantees, and optional git-backed history.
+
+**Forbidden during activation**
+
+- Do NOT run `neotoma mirror enable` without an explicit "yes" from the user in the same session. Silent enables or bundling the mirror into the Installation-aha step are both forbidden.
+- Do NOT run `neotoma mirror gitignore` without the explicit sub-prompt "yes". The helper only writes to the enclosing git repo of the resolved mirror path; it never prompts for a path, and the agent MUST not pass one.
+- Do NOT skip `neotoma doctor --json` before offering the mirror. Eligibility, `inside_git_repo`, and `gitignored` all come from that single snapshot.
+- Do NOT offer the mirror when `doctor.mirror.eligible_for_offer === false`.
+
 #### Activation step 7: Correction
 
 Demonstrate correction immediately after the aha timeline:

@@ -14,6 +14,19 @@ export interface DashboardStats {
   total_events: number;
   total_observations: number;
   total_interpretations: number;
+  /**
+   * Count of observations per structured identity basis (R4 telemetry).
+   * Keys are values of {@link IdentityBasis} — `schema_rule`,
+   * `heuristic_name`, `heuristic_fallback`, `target_id`. Observations
+   * written before the identity_basis column existed appear under
+   * `unclassified`.
+   */
+  observations_by_identity_basis: Record<string, number>;
+  /**
+   * Count of observations per structured identity basis for each entity_type
+   * (R4 telemetry). Outer key is entity_type; inner key is basis.
+   */
+  observations_by_identity_basis_by_type: Record<string, Record<string, number>>;
   last_updated: string;
 }
 
@@ -29,6 +42,8 @@ export async function getDashboardStats(userId?: string): Promise<DashboardStats
     total_events: 0,
     total_observations: 0,
     total_interpretations: 0,
+    observations_by_identity_basis: {},
+    observations_by_identity_basis_by_type: {},
     last_updated: new Date().toISOString(),
   };
 
@@ -88,6 +103,37 @@ export async function getDashboardStats(userId?: string): Promise<DashboardStats
   
   const { count: observationsCount } = await observationsQuery;
   stats.total_observations = observationsCount || 0;
+
+  // R4: observations bucketed by identity_basis (and by entity_type for
+  // per-schema triage). Rows written before this column existed are
+  // bucketed as "unclassified" so operators can see coverage grow over time.
+  let basisQuery = db
+    .from("observations")
+    .select("entity_type, identity_basis");
+  if (userId) {
+    basisQuery = basisQuery.eq("user_id", userId);
+  }
+  const { data: basisRows, error: basisError } = await basisQuery;
+  if (!basisError && basisRows) {
+    const totals = new Map<string, number>();
+    const byType = new Map<string, Map<string, number>>();
+    for (const row of basisRows as Array<{
+      entity_type?: string | null;
+      identity_basis?: string | null;
+    }>) {
+      const basis = row.identity_basis || "unclassified";
+      totals.set(basis, (totals.get(basis) || 0) + 1);
+
+      const type = row.entity_type || "unknown";
+      if (!byType.has(type)) byType.set(type, new Map());
+      const bucket = byType.get(type)!;
+      bucket.set(basis, (bucket.get(basis) || 0) + 1);
+    }
+    stats.observations_by_identity_basis = Object.fromEntries(totals);
+    stats.observations_by_identity_basis_by_type = Object.fromEntries(
+      Array.from(byType.entries()).map(([t, m]) => [t, Object.fromEntries(m)]),
+    );
+  }
 
   // Get total relationships count (relationship_snapshots)
   let relationshipsQuery = db

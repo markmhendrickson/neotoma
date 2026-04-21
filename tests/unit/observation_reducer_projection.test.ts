@@ -70,6 +70,7 @@ describe("ObservationReducer - Schema Projection Filtering", () => {
           name: { type: "string", required: true },
           amount: { type: "number", required: false },
         },
+        identity_opt_out: "heuristic_canonical_name",
       },
       reducer_config: {
         merge_policies: {
@@ -110,6 +111,7 @@ describe("ObservationReducer - Schema Projection Filtering", () => {
         fields: {
           title: { type: "string", required: true },
         },
+        identity_opt_out: "heuristic_canonical_name",
       },
       reducer_config: {
         merge_policies: {
@@ -158,6 +160,7 @@ describe("ObservationReducer - Schema Projection Filtering", () => {
           title: { type: "string", required: true },
           restored_field: { type: "string", required: false },
         },
+        identity_opt_out: "heuristic_canonical_name",
       },
       reducer_config: {
         merge_policies: {
@@ -206,6 +209,7 @@ describe("ObservationReducer - Schema Projection Filtering", () => {
         fields: {
           name: { type: "string", required: true },
         },
+        identity_opt_out: "heuristic_canonical_name",
       },
       reducer_config: {
         merge_policies: {

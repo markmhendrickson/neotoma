@@ -73,11 +73,24 @@ export interface GitCommitResult {
 async function loadSimpleGit(dir: string): Promise<import("simple-git").SimpleGit | null> {
   try {
     const { simpleGit } = await import("simple-git");
-    return simpleGit({ baseDir: dir, binary: "git", maxConcurrentProcesses: 1 });
+    // Mirror commits are fully automated: never invoke GPG or repo hooks (either
+    // can block the CLI indefinitely on pinentry / interactive pre-commit).
+    return simpleGit({
+      baseDir: dir,
+      binary: "git",
+      maxConcurrentProcesses: 1,
+      config: ["commit.gpgsign=false"],
+    });
   } catch {
     return null;
   }
 }
+
+/** Options appended to every mirror `git commit` (hooks/GPG must not block rebuild). */
+const MIRROR_COMMIT_SAFETY_OPTS: Record<string, string | null> = {
+  "--no-verify": null,
+  "--no-gpg-sign": null,
+};
 
 async function isGitRepo(dir: string): Promise<boolean> {
   try {
@@ -225,7 +238,7 @@ export async function commitMirrorBatch(
   if (fileCount === 0) return { committed: false, reason: "empty_diff" };
 
   const message = buildCommitMessage(batch, fileCount);
-  const commitOpts: Record<string, string | null> = {};
+  const commitOpts: Record<string, string | null> = { ...MIRROR_COMMIT_SAFETY_OPTS };
   if (batch.author?.name) commitOpts["--author"] =
     `${batch.author.name} <${batch.author.email ?? "neotoma@localhost"}>`;
 
@@ -265,6 +278,8 @@ export async function ensureInitialCommit(cfg?: MirrorConfig): Promise<GitCommit
     status.modified.length;
   if (fileCount === 0) return { committed: false, reason: "empty_diff" };
 
-  const res = await git.commit("Neotoma mirror initialized\n");
+  const res = await git.commit("Neotoma mirror initialized\n", undefined, {
+    ...MIRROR_COMMIT_SAFETY_OPTS,
+  });
   return { committed: true, commit_hash: res.commit, file_count: fileCount };
 }

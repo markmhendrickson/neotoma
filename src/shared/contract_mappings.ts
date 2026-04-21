@@ -191,6 +191,14 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     cliCommand: "request --operation mergeEntities",
   },
   {
+    operationId: "listPotentialDuplicates",
+    method: "get",
+    path: "/entities/duplicates",
+    adapter: "both",
+    mcpTool: "list_potential_duplicates",
+    cliCommand: "entities find-duplicates",
+  },
+  {
     operationId: "listSources",
     method: "get",
     path: "/sources",
@@ -282,6 +290,14 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     path: "/stats",
     adapter: "cli",
     cliCommand: "stats",
+  },
+  {
+    operationId: "getRecordActivity",
+    method: "get",
+    path: "/record_activity",
+    adapter: "both",
+    mcpTool: "list_recent_changes",
+    cliCommand: "recent",
   },
   {
     operationId: "storeStructured",
@@ -500,6 +516,7 @@ export const MCP_TOOL_TO_OPERATION_ID: Record<string, string> = {
   list_timeline_events: "listTimeline",
   list_entity_types: "listSchemas",
   merge_entities: "mergeEntities",
+  list_potential_duplicates: "listPotentialDuplicates",
   store: "storeStructured",
   store_structured: "storeStructured",
   store_unstructured: "storeUnstructured",
@@ -518,6 +535,7 @@ export const MCP_TOOL_TO_OPERATION_ID: Record<string, string> = {
   correct: "correct",
   get_authenticated_user: "getAuthenticatedUser",
   health_check_snapshots: "healthCheckSnapshots",
+  list_recent_changes: "getRecordActivity",
 };
 
 export const MCP_ONLY_TOOLS: string[] = [];

@@ -78,6 +78,23 @@ The client exposes typed wrappers for the full MCP action catalog:
 
 See [`docs/specs/MCP_SPEC.md`](https://github.com/markmhendrickson/neotoma/blob/main/docs/specs/MCP_SPEC.md) and [`openapi.yaml`](https://github.com/markmhendrickson/neotoma/blob/main/openapi.yaml) for complete action semantics.
 
+## High-level helpers
+
+Canonical primitives that wrap the low-level transport operations and encode the turn-lifecycle and access-policy obligations agents are expected to honor. Import from `@neotoma/client/helpers`, `@neotoma/client/diagnose`, or `@neotoma/client/turn_report`.
+
+```ts
+import { storeChatTurn, retrieveOrStore, snapshotOnUpdate } from "@neotoma/client/helpers";
+import { diagnoseTurn, applyRepairs, hasErrors } from "@neotoma/client/diagnose";
+import { renderTurnReport } from "@neotoma/client/turn_report";
+```
+
+- `storeChatTurn(transport, input)` — persist user + assistant `agent_message` for one logical turn with `PART_OF` → conversation. Canonical dual-message shape; idempotent per `(conversationId, turnId)`.
+- `retrieveOrStore(transport, input)` — retrieve-before-write primitive. Reuses an existing entity by identifier; stores a new one only if none is found.
+- `snapshotOnUpdate(transport, input)` — fetch the current snapshot before applying a correction so callers never write over stale state unseen.
+- `diagnoseTurn(observation)` — runs per-turn invariants (missing user/assistant store, unstored attachments, store-first ordering, Parquet residue) and returns structured `Diagnosis` items with severity and suggested repair actions.
+- `applyRepairs(transport, diagnoses, conversationId, turnId)` — executes the suggested repairs in the same turn and records a `neotoma_repair` summary entity.
+- `renderTurnReport(input)` — formats the mandatory `🧠 Neotoma` section (Created / Updated / Retrieved groups, plus Issues) that agents append to every user-visible reply.
+
 ## Related packages
 
 - [`neotoma`](https://www.npmjs.com/package/neotoma) — the Neotoma engine (CLI and server)

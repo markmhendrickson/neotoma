@@ -18,6 +18,8 @@ interface QueryEntitiesParams {
   similarityThreshold?: number;
   limit?: number;
   offset?: number;
+  updatedSince?: string;
+  createdSince?: string;
 }
 
 const MAX_LEXICAL_CANDIDATES = 5000;
@@ -177,6 +179,8 @@ async function countVisibleEntities(params: {
   published?: boolean;
   publishedAfter?: string;
   publishedBefore?: string;
+  updatedSince?: string;
+  createdSince?: string;
 }): Promise<number> {
   const {
     userId,
@@ -185,6 +189,8 @@ async function countVisibleEntities(params: {
     published,
     publishedAfter,
     publishedBefore,
+    updatedSince,
+    createdSince,
   } = params;
 
   let entityIdQuery = db.from("entities").select("id").eq("user_id", userId);
@@ -193,6 +199,12 @@ async function countVisibleEntities(params: {
   }
   if (!includeMerged) {
     entityIdQuery = entityIdQuery.is("merged_to_entity_id", null);
+  }
+  if (updatedSince) {
+    entityIdQuery = entityIdQuery.gte("updated_at", updatedSince);
+  }
+  if (createdSince) {
+    entityIdQuery = entityIdQuery.gte("created_at", createdSince);
   }
   if (published !== undefined || publishedAfter || publishedBefore) {
     let snapshotQuery = db
@@ -283,6 +295,8 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
     similarityThreshold,
     limit = 100,
     offset = 0,
+    updatedSince,
+    createdSince,
   } = params;
 
   let entities: EntityWithProvenance[];
@@ -316,6 +330,8 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
         limit,
         offset: 0,
         entityIds,
+        updatedSince,
+        createdSince,
       });
       const orderMap = new Map(entityIds.map((id, i) => [id, i]));
       entities.sort((a, b) => {
@@ -347,6 +363,8 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
           published,
           publishedAfter,
           publishedBefore,
+          updatedSince,
+          createdSince,
           limit: paginatedIds.length,
           offset: 0,
           entityIds: paginatedIds,
@@ -374,6 +392,8 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
       publishedBefore,
       limit,
       offset,
+      updatedSince,
+      createdSince,
     });
 
     total = await countVisibleEntities({
@@ -383,6 +403,8 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
       published,
       publishedAfter,
       publishedBefore,
+      updatedSince,
+      createdSince,
     });
   }
 

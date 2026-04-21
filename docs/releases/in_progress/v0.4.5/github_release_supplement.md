@@ -7,7 +7,8 @@ This release turns Neotoma's onboarding into an install-first flow and adds the 
 - Added `neotoma doctor` as a consolidated onboarding/runtime diagnostic so agents can inspect install state, API state, MCP wiring, CLI instructions, permissions, and hook eligibility without falling back to ad-hoc shell introspection.
 - Added `neotoma setup --tool <tool>` to collapse init, MCP config, CLI instruction sync, and permission-file updates into one idempotent command for supported harnesses.
 - Added `neotoma hooks <status|install|uninstall>` so hook-based integrations can be offered as an explicit post-activation step instead of being mixed into baseline setup.
-- Added `neotoma mirror <enable|disable|rebuild|status>` plus supporting edit / export flows for teams that want a filesystem view of Neotoma state.
+- Added `neotoma mirror <enable|disable|rebuild|status|gitignore>` plus supporting edit / export flows for teams that want a filesystem view of Neotoma state. `neotoma mirror enable --gitignore` and the standalone `neotoma mirror gitignore` subcommand idempotently append the resolved mirror path to the enclosing git repo's `.gitignore` so the generated files do not noise up `git status`.
+- Extended `neotoma doctor` with a `mirror` block (`enabled`, `path`, `inside_git_repo`, `git_repo_root`, `gitignored`, `eligible_for_offer`) so the activation agent can offer the markdown mirror as an opt-in step (see `install.md` Activation step 6.6) and fall back to a session-banner hint (`Markdown mirror: disabled (enable: neotoma mirror enable --yes)`) when users skip the offer.
 
 **Runtime / data layer**
 

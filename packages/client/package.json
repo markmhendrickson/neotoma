@@ -18,6 +18,18 @@
     "./local": {
       "types": "./dist/local.d.ts",
       "import": "./dist/local.js"
+    },
+    "./helpers": {
+      "types": "./dist/helpers.d.ts",
+      "import": "./dist/helpers.js"
+    },
+    "./diagnose": {
+      "types": "./dist/diagnose.d.ts",
+      "import": "./dist/diagnose.js"
+    },
+    "./turn_report": {
+      "types": "./dist/turn_report.d.ts",
+      "import": "./dist/turn_report.js"
     }
   },
   "files": [

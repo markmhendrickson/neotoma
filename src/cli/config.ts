@@ -300,7 +300,14 @@ const FALLBACK_BASE_URL = `http://${DETECT_HOST}:3080`;
  * session port env vars in mcp.json.
  */
 export async function resolveBaseUrl(option?: string, _config?: Config): Promise<string> {
+  // Precedence: explicit --base-url flag > NEOTOMA_BASE_URL env var > session
+  // ports (for in-session commands) > config.json > auto-detect.
   if (option) return option.replace(/\/$/, "");
+
+  const envBaseUrl = process.env.NEOTOMA_BASE_URL?.trim();
+  if (envBaseUrl && envBaseUrl.startsWith("http")) {
+    return envBaseUrl.replace(/\/$/, "");
+  }
 
   const sessionActive = process.env[SESSION_ACTIVE_PORT_ENV];
   if (sessionActive && /^\d+$/.test(sessionActive)) {

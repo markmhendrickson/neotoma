@@ -22,3 +22,33 @@ export {
   type StoreResult,
   type StoredEntityRef,
 } from "./types.js";
+
+export {
+  storeChatTurn,
+  retrieveOrStore,
+  snapshotOnUpdate,
+  type ChatTurnMessage,
+  type StoreChatTurnInput,
+  type StoreChatTurnResult,
+  type RetrieveOrStoreInput,
+  type RetrieveOrStoreResult,
+  type SnapshotOnUpdateInput,
+  type SnapshotOnUpdateResult,
+} from "./helpers.js";
+
+export {
+  diagnoseTurn,
+  applyRepairs,
+  hasErrors,
+  type Diagnosis,
+  type DiagnosisSeverity,
+  type RepairAction,
+  type RepairOutcome,
+  type TurnObservation,
+} from "./diagnose.js";
+
+export {
+  renderTurnReport,
+  type TurnReportEntity,
+  type TurnReportInput,
+} from "./turn_report.js";

@@ -73,6 +73,7 @@ const TEST_SCHEMA = {
       amount: { type: "number" as const, required: false },
       status: { type: "string" as const, required: false },
     },
+    identity_opt_out: "heuristic_canonical_name",
   },
   reducer_config: {
     merge_policies: {
@@ -162,6 +163,7 @@ describe("ObservationReducer - provenance", () => {
       ...TEST_SCHEMA,
       schema_definition: {
         fields: { name: { type: "string" as const, required: true } },
+        identity_opt_out: "heuristic_canonical_name",
       },
       reducer_config: {
         merge_policies: { name: { strategy: "last_write" as const } },

@@ -70,6 +70,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         import_date: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
+      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
+      // declare explicit opt-out so resolution falls through to the heuristic
+      // path. See docs/foundation/schema_agnostic_design_rules.md.
+      identity_opt_out: "heuristic_canonical_name",
     },
     reducer_config: {
       merge_policies: {
@@ -104,6 +108,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         import_date: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
+      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
+      // declare explicit opt-out so resolution falls through to the heuristic
+      // path. See docs/foundation/schema_agnostic_design_rules.md.
+      identity_opt_out: "heuristic_canonical_name",
     },
     reducer_config: {
       merge_policies: {
@@ -138,6 +146,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         import_date: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
+      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
+      // declare explicit opt-out so resolution falls through to the heuristic
+      // path. See docs/foundation/schema_agnostic_design_rules.md.
+      identity_opt_out: "heuristic_canonical_name",
     },
     reducer_config: {
       merge_policies: {
@@ -173,6 +185,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         import_date: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
+      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
+      // declare explicit opt-out so resolution falls through to the heuristic
+      // path. See docs/foundation/schema_agnostic_design_rules.md.
+      identity_opt_out: "heuristic_canonical_name",
     },
     reducer_config: {
       merge_policies: {
@@ -204,6 +220,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         import_date: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
+      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
+      // declare explicit opt-out so resolution falls through to the heuristic
+      // path. See docs/foundation/schema_agnostic_design_rules.md.
+      identity_opt_out: "heuristic_canonical_name",
     },
     reducer_config: {
       merge_policies: {
@@ -241,6 +261,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         import_date: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
+      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
+      // declare explicit opt-out so resolution falls through to the heuristic
+      // path. See docs/foundation/schema_agnostic_design_rules.md.
+      identity_opt_out: "heuristic_canonical_name",
     },
     reducer_config: {
       merge_policies: {
@@ -270,6 +294,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         import_date: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
+      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
+      // declare explicit opt-out so resolution falls through to the heuristic
+      // path. See docs/foundation/schema_agnostic_design_rules.md.
+      identity_opt_out: "heuristic_canonical_name",
     },
     reducer_config: {
       merge_policies: {
@@ -398,6 +426,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         completed_date: { type: "date", required: false },
         notes: { type: "string", required: false },
       },
+      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
+      // declare explicit opt-out so resolution falls through to the heuristic
+      // path. See docs/foundation/schema_agnostic_design_rules.md.
+      identity_opt_out: "heuristic_canonical_name",
     },
     reducer_config: {
       merge_policies: {
@@ -434,6 +466,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         import_date: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
+      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
+      // declare explicit opt-out so resolution falls through to the heuristic
+      // path. See docs/foundation/schema_agnostic_design_rules.md.
+      identity_opt_out: "heuristic_canonical_name",
     },
     reducer_config: {
       merge_policies: {
@@ -467,6 +503,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         import_date: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
+      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
+      // declare explicit opt-out so resolution falls through to the heuristic
+      // path. See docs/foundation/schema_agnostic_design_rules.md.
+      identity_opt_out: "heuristic_canonical_name",
     },
     reducer_config: {
       merge_policies: {
@@ -503,6 +543,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         import_date: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
+      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
+      // declare explicit opt-out so resolution falls through to the heuristic
+      // path. See docs/foundation/schema_agnostic_design_rules.md.
+      identity_opt_out: "heuristic_canonical_name",
     },
     reducer_config: {
       merge_policies: {
@@ -538,6 +582,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         import_date: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
+      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
+      // declare explicit opt-out so resolution falls through to the heuristic
+      // path. See docs/foundation/schema_agnostic_design_rules.md.
+      identity_opt_out: "heuristic_canonical_name",
     },
     reducer_config: {
       merge_policies: {
@@ -582,6 +630,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         import_date: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
+      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
+      // declare explicit opt-out so resolution falls through to the heuristic
+      // path. See docs/foundation/schema_agnostic_design_rules.md.
+      identity_opt_out: "heuristic_canonical_name",
     },
     reducer_config: {
       merge_policies: {
@@ -614,6 +666,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         import_date: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
+      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
+      // declare explicit opt-out so resolution falls through to the heuristic
+      // path. See docs/foundation/schema_agnostic_design_rules.md.
+      identity_opt_out: "heuristic_canonical_name",
     },
     reducer_config: {
       merge_policies: {
@@ -685,6 +741,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         import_date: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
+      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
+      // declare explicit opt-out so resolution falls through to the heuristic
+      // path. See docs/foundation/schema_agnostic_design_rules.md.
+      identity_opt_out: "heuristic_canonical_name",
     },
     reducer_config: {
       merge_policies: {
@@ -722,6 +782,17 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         import_date: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
+      // R2: ordered identity precedence (R1 shape). Strong identifiers
+      // first (external_id, website, email, legal_name), falling through
+      // to `name` as the last resort so name-only observations still
+      // resolve deterministically.
+      canonical_name_fields: [
+        "external_id",
+        "website",
+        "email",
+        "legal_name",
+        "name",
+      ],
     },
     reducer_config: {
       merge_policies: {
@@ -760,6 +831,16 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         import_date: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
+      // R2: ordered identity precedence. Email/phone/external_id are strong
+      // single-field identifiers; first+last is a stable composite; `name`
+      // is the final fallback so name-only observations still resolve.
+      canonical_name_fields: [
+        "email",
+        "phone",
+        "external_id",
+        { composite: ["first_name", "last_name"] },
+        "name",
+      ],
     },
     reducer_config: {
       merge_policies: {
@@ -797,6 +878,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         import_date: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
+      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
+      // declare explicit opt-out so resolution falls through to the heuristic
+      // path. See docs/foundation/schema_agnostic_design_rules.md.
+      identity_opt_out: "heuristic_canonical_name",
     },
     reducer_config: {
       merge_policies: {
@@ -821,6 +906,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         schema_version: { type: "string", required: true },
         title: { type: "string", required: false, preserveCase: true },
       },
+      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
+      // declare explicit opt-out so resolution falls through to the heuristic
+      // path. See docs/foundation/schema_agnostic_design_rules.md.
+      identity_opt_out: "heuristic_canonical_name",
     },
     reducer_config: {
       merge_policies: {
@@ -845,6 +934,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         content: { type: "string", required: true, preserveCase: true },
         turn_key: { type: "string", required: false },
       },
+      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
+      // declare explicit opt-out so resolution falls through to the heuristic
+      // path. See docs/foundation/schema_agnostic_design_rules.md.
+      identity_opt_out: "heuristic_canonical_name",
     },
     reducer_config: {
       merge_policies: {
@@ -877,6 +970,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         import_date: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
+      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
+      // declare explicit opt-out so resolution falls through to the heuristic
+      // path. See docs/foundation/schema_agnostic_design_rules.md.
+      identity_opt_out: "heuristic_canonical_name",
     },
     reducer_config: {
       merge_policies: {
@@ -942,6 +1039,14 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         { field: "due_date", event_type: "TaskDue" },
         { field: "completed_date", event_type: "TaskCompleted" },
       ],
+      // R2: tasks are usually uniquely identified by title within a project
+      // or by explicit external_id. Fall back to title alone so that
+      // title-only observations still resolve deterministically.
+      canonical_name_fields: [
+        { composite: ["project_id", "title"] },
+        { composite: ["title", "due_date"] },
+        "title",
+      ],
     },
     reducer_config: {
       merge_policies: {
@@ -981,6 +1086,8 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         import_date: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
+      // R2: project name is the natural identifier.
+      canonical_name_fields: ["name"],
     },
     reducer_config: {
       merge_policies: {
@@ -1015,6 +1122,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         import_date: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
+      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
+      // declare explicit opt-out so resolution falls through to the heuristic
+      // path. See docs/foundation/schema_agnostic_design_rules.md.
+      identity_opt_out: "heuristic_canonical_name",
     },
     reducer_config: {
       merge_policies: {
@@ -1053,6 +1164,13 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         import_date: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
+      // R2: RFC 5322 message_id is the canonical strong identifier when
+      // present. Fall back to (from, subject, sent_at) which uniquely
+      // identifies the message within most mailboxes.
+      canonical_name_fields: [
+        "message_id",
+        { composite: ["from", "subject", "sent_at"] },
+      ],
     },
     reducer_config: {
       merge_policies: {
@@ -1088,6 +1206,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         import_date: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
+      // R2: thread_id+sent_at disambiguates within a thread; fall back to
+      // sender+sent_at which uniquely identifies most single-channel chats.
+      canonical_name_fields: [
+        { composite: ["thread_id", "sender", "sent_at"] },
+        { composite: ["sender", "sent_at"] },
+      ],
     },
     reducer_config: {
       merge_policies: {
@@ -1120,6 +1244,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         import_date: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
+      // R2: title is a natural identifier when present; content is the
+      // fallback so title-less scratchpads still resolve deterministically.
+      canonical_name_fields: [
+        "title",
+        { composite: ["source", "created_date"] },
+      ],
     },
     reducer_config: {
       merge_policies: {
@@ -1146,6 +1276,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         source_file: { type: "string", required: false },
         summary: { type: "string", required: false },
       },
+      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
+      // declare explicit opt-out so resolution falls through to the heuristic
+      // path. See docs/foundation/schema_agnostic_design_rules.md.
+      identity_opt_out: "heuristic_canonical_name",
     },
     reducer_config: {
       merge_policies: {},
@@ -1206,6 +1340,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         { field: "start_time", event_type: "EventStart" },
         { field: "end_time", event_type: "EventEnd" },
       ],
+      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
+      // declare explicit opt-out so resolution falls through to the heuristic
+      // path. See docs/foundation/schema_agnostic_design_rules.md.
+      identity_opt_out: "heuristic_canonical_name",
     },
     reducer_config: {
       merge_policies: {
@@ -1241,6 +1379,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         import_date: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
+      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
+      // declare explicit opt-out so resolution falls through to the heuristic
+      // path. See docs/foundation/schema_agnostic_design_rules.md.
+      identity_opt_out: "heuristic_canonical_name",
     },
     reducer_config: {
       merge_policies: {
@@ -1274,6 +1416,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         import_date: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
+      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
+      // declare explicit opt-out so resolution falls through to the heuristic
+      // path. See docs/foundation/schema_agnostic_design_rules.md.
+      identity_opt_out: "heuristic_canonical_name",
     },
     reducer_config: {
       merge_policies: {
@@ -1351,6 +1497,16 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         created_date: { type: "date", required: false },
         updated_date: { type: "date", required: false },
       },
+      // R2: ordered identity precedence. Contact records arrive with varied
+      // identifiers depending on source (CRM export, email signature, chat
+      // mention), so each strong identifier is a single-field rule.
+      canonical_name_fields: [
+        "email",
+        "phone",
+        "external_id",
+        "contact_id",
+        "name",
+      ],
     },
     reducer_config: {
       merge_policies: {
@@ -1383,6 +1539,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         type: { type: "string", required: false },
         notes: { type: "string", required: false },
       },
+      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
+      // declare explicit opt-out so resolution falls through to the heuristic
+      // path. See docs/foundation/schema_agnostic_design_rules.md.
+      identity_opt_out: "heuristic_canonical_name",
     },
     reducer_config: {
       merge_policies: {
@@ -1412,6 +1572,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         status: { type: "string", required: false },
         notes: { type: "string", required: false },
       },
+      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
+      // declare explicit opt-out so resolution falls through to the heuristic
+      // path. See docs/foundation/schema_agnostic_design_rules.md.
+      identity_opt_out: "heuristic_canonical_name",
     },
     reducer_config: {
       merge_policies: {
@@ -1444,6 +1608,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         import_date: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
+      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
+      // declare explicit opt-out so resolution falls through to the heuristic
+      // path. See docs/foundation/schema_agnostic_design_rules.md.
+      identity_opt_out: "heuristic_canonical_name",
     },
     reducer_config: {
       merge_policies: {
@@ -1479,6 +1647,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         import_date: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
+      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
+      // declare explicit opt-out so resolution falls through to the heuristic
+      // path. See docs/foundation/schema_agnostic_design_rules.md.
+      identity_opt_out: "heuristic_canonical_name",
     },
     reducer_config: {
       merge_policies: {
@@ -1512,6 +1684,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         import_date: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
+      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
+      // declare explicit opt-out so resolution falls through to the heuristic
+      // path. See docs/foundation/schema_agnostic_design_rules.md.
+      identity_opt_out: "heuristic_canonical_name",
     },
     reducer_config: {
       merge_policies: {
@@ -1548,6 +1724,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         import_date: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
+      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
+      // declare explicit opt-out so resolution falls through to the heuristic
+      // path. See docs/foundation/schema_agnostic_design_rules.md.
+      identity_opt_out: "heuristic_canonical_name",
     },
     reducer_config: {
       merge_policies: {
@@ -1576,6 +1756,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         import_date: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
+      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
+      // declare explicit opt-out so resolution falls through to the heuristic
+      // path. See docs/foundation/schema_agnostic_design_rules.md.
+      identity_opt_out: "heuristic_canonical_name",
     },
     reducer_config: {
       merge_policies: {
@@ -1606,6 +1790,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         import_date: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
+      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
+      // declare explicit opt-out so resolution falls through to the heuristic
+      // path. See docs/foundation/schema_agnostic_design_rules.md.
+      identity_opt_out: "heuristic_canonical_name",
     },
     reducer_config: {
       merge_policies: {
@@ -1639,6 +1827,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         created_date: { type: "date", required: false },
         updated_date: { type: "date", required: false },
       },
+      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
+      // declare explicit opt-out so resolution falls through to the heuristic
+      // path. See docs/foundation/schema_agnostic_design_rules.md.
+      identity_opt_out: "heuristic_canonical_name",
     },
     reducer_config: {
       merge_policies: {
@@ -1669,6 +1861,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         import_date: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
+      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
+      // declare explicit opt-out so resolution falls through to the heuristic
+      // path. See docs/foundation/schema_agnostic_design_rules.md.
+      identity_opt_out: "heuristic_canonical_name",
     },
     reducer_config: {
       merge_policies: {
@@ -1702,6 +1898,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         import_source_file: { type: "string", required: true },
         notes: { type: "string", required: false },
       },
+      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
+      // declare explicit opt-out so resolution falls through to the heuristic
+      // path. See docs/foundation/schema_agnostic_design_rules.md.
+      identity_opt_out: "heuristic_canonical_name",
     },
     reducer_config: {
       merge_policies: {
@@ -1732,6 +1932,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         created_date: { type: "date", required: false },
         created_datetime: { type: "date", required: false },
       },
+      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
+      // declare explicit opt-out so resolution falls through to the heuristic
+      // path. See docs/foundation/schema_agnostic_design_rules.md.
+      identity_opt_out: "heuristic_canonical_name",
     },
     reducer_config: {
       merge_policies: {
@@ -1767,6 +1971,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         imported_at: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
+      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
+      // declare explicit opt-out so resolution falls through to the heuristic
+      // path. See docs/foundation/schema_agnostic_design_rules.md.
+      identity_opt_out: "heuristic_canonical_name",
     },
     reducer_config: {
       merge_policies: {
@@ -1801,6 +2009,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         imported_at: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
+      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
+      // declare explicit opt-out so resolution falls through to the heuristic
+      // path. See docs/foundation/schema_agnostic_design_rules.md.
+      identity_opt_out: "heuristic_canonical_name",
     },
     reducer_config: {
       merge_policies: {
@@ -1833,6 +2045,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         imported_at: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
+      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
+      // declare explicit opt-out so resolution falls through to the heuristic
+      // path. See docs/foundation/schema_agnostic_design_rules.md.
+      identity_opt_out: "heuristic_canonical_name",
     },
     reducer_config: {
       merge_policies: {},
@@ -1866,6 +2082,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         imported_at: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
+      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
+      // declare explicit opt-out so resolution falls through to the heuristic
+      // path. See docs/foundation/schema_agnostic_design_rules.md.
+      identity_opt_out: "heuristic_canonical_name",
     },
     reducer_config: {
       merge_policies: {},
@@ -1891,6 +2111,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         import_date: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
+      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
+      // declare explicit opt-out so resolution falls through to the heuristic
+      // path. See docs/foundation/schema_agnostic_design_rules.md.
+      identity_opt_out: "heuristic_canonical_name",
     },
     reducer_config: {
       merge_policies: {},
@@ -1918,6 +2142,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         import_date: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
+      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
+      // declare explicit opt-out so resolution falls through to the heuristic
+      // path. See docs/foundation/schema_agnostic_design_rules.md.
+      identity_opt_out: "heuristic_canonical_name",
     },
     reducer_config: {
       merge_policies: {

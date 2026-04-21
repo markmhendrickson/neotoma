@@ -10,7 +10,8 @@ import { NeotomaServer } from "../../src/server.js";
 import { db } from "../../src/db.js";
 
 const FIXTURES_DIR = path.join(process.cwd(), "tests", "fixtures");
-const TEST_USER_ID = "11111111-1111-4111-8111-111111111111";
+/** Isolated user so concurrent integration tests cannot collide on idempotent rows. */
+let testUserId: string;
 
 const NONJSON_FIXTURES: string[] = [
   "csv/sample_transactions.csv",
@@ -51,8 +52,9 @@ describe("Non-JSON fixtures MCP raw store replay", () => {
   let server: NeotomaServer;
 
   beforeAll(async () => {
+    testUserId = randomUUID();
     server = new NeotomaServer();
-    (server as { authenticatedUserId: string | null }).authenticatedUserId = TEST_USER_ID;
+    (server as { authenticatedUserId: string | null }).authenticatedUserId = testUserId;
   });
 
   it("stores supported fixtures as raw sources without server-side extraction", async () => {
@@ -73,13 +75,13 @@ describe("Non-JSON fixtures MCP raw store replay", () => {
             file_content: fileBuffer.toString("base64"),
             mime_type: "text/csv",
             original_filename: path.basename(relPath),
-            user_id: TEST_USER_ID,
+            user_id: testUserId,
             idempotency_key: idempotencyKey,
           };
         } else {
           payload = {
             file_path: fullPath,
-            user_id: TEST_USER_ID,
+            user_id: testUserId,
             idempotency_key: idempotencyKey,
           };
         }

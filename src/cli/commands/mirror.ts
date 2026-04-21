@@ -6,11 +6,14 @@
  * command parsing, user interaction, and formatted output.
  */
 
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import {
   ALL_MIRROR_KINDS,
   getMirrorConfig,
   getMirrorStatus,
+  MirrorConfig,
   MirrorKind,
   rebuildMirror,
   setMirrorConfig,
@@ -29,6 +32,21 @@ export interface MirrorEnableOptions {
   kinds?: string;
   git?: boolean;
   noGit?: boolean;
+  gitignore?: boolean;
+  noGitignore?: boolean;
+}
+
+export interface MirrorGitignoreResult {
+  /** Absolute path of the enclosing git repo, or `null` when the mirror path is not inside a repo. */
+  repo_root: string | null;
+  /** Absolute path of the `.gitignore` file that was (or would be) updated. `null` when no repo was found. */
+  gitignore_path: string | null;
+  /** Repo-root-relative entry written to `.gitignore` (trailing slash included). `null` when no repo was found. */
+  entry: string | null;
+  /** True when the helper appended the entry, false when it was already present or when no repo was found. */
+  added: boolean;
+  /** True when the entry was already present in `.gitignore`. */
+  already_present: boolean;
 }
 
 function parseKind(raw: string | undefined): MirrorKind | "all" | undefined {
@@ -117,6 +135,7 @@ export interface MirrorConfigResult {
   absolute_path: string;
   kinds: MirrorKind[];
   git_enabled: boolean;
+  gitignore?: MirrorGitignoreResult | null;
 }
 
 export async function runMirrorEnable(
@@ -142,12 +161,20 @@ export async function runMirrorEnable(
     }
   }
 
+  let gitignore: MirrorGitignoreResult | null | undefined = undefined;
+  if (options.gitignore === true) {
+    gitignore = ensureMirrorGitignored(cfg);
+  } else if (options.noGitignore === true) {
+    gitignore = null;
+  }
+
   return {
     enabled: cfg.enabled,
     path: cfg.path,
     absolute_path: path.resolve(cfg.path),
     kinds: cfg.kinds,
     git_enabled: cfg.git_enabled,
+    ...(gitignore !== undefined ? { gitignore } : {}),
   };
 }
 
@@ -208,5 +235,187 @@ export function formatMirrorConfig(cfg: MirrorConfigResult): string {
   lines.push(`Path:     ${cfg.absolute_path}`);
   lines.push(`Kinds:    ${cfg.kinds.join(", ")}`);
   lines.push(`Git:      ${cfg.git_enabled ? "enabled" : "disabled"}`);
+  if (cfg.gitignore !== undefined) {
+    lines.push("");
+    lines.push(formatMirrorGitignore(cfg.gitignore));
+  }
+  return lines.join("\n");
+}
+
+// ============================================================================
+// Gitignore helper
+//
+// The mirror lives on disk at `cfg.path` (derived from `NEOTOMA_DATA_DIR` by
+// default). When that path sits inside a git repository, generated markdown
+// files show up in `git status` and can noise up commits. The helper walks up
+// from the resolved mirror path to find the enclosing repo, then appends a
+// repo-root-relative ignore entry to `<repoRoot>/.gitignore` idempotently.
+//
+// The helper is deliberately minimal: it never prompts for a path and never
+// writes to a repo it did not detect by walking up from the mirror path.
+// ============================================================================
+
+/**
+ * Walk up from `startDir` looking for a `.git` directory (or file, for
+ * worktrees). Returns the path of the containing repo root, or `null` when
+ * no enclosing repo is found before reaching the filesystem root or the user's
+ * HOME directory. The HOME boundary prevents an accidental match on a
+ * dotfiles repo that encompasses the entire home directory.
+ */
+export function findEnclosingGitRepo(startDir: string): string | null {
+  const home = os.homedir();
+  let current = path.resolve(startDir);
+  const seen = new Set<string>();
+  while (!seen.has(current)) {
+    seen.add(current);
+    const gitPath = path.join(current, ".git");
+    if (existsSync(gitPath)) return current;
+    // Stop at HOME to avoid matching a dotfiles repo that spans $HOME.
+    if (home && current === home) return null;
+    const parent = path.dirname(current);
+    if (parent === current) return null;
+    current = parent;
+  }
+  return null;
+}
+
+const MIRROR_GITIGNORE_COMMENT = "# Neotoma markdown mirror";
+
+function toPosix(p: string): string {
+  return p.split(path.sep).join("/");
+}
+
+function buildMirrorIgnoreEntry(repoRoot: string, mirrorPath: string): string {
+  const rel = path.relative(repoRoot, mirrorPath);
+  // Normalize to POSIX separators and append a trailing slash so .gitignore
+  // only ignores the directory, not a same-named file.
+  const posixRel = toPosix(rel);
+  return posixRel.endsWith("/") ? posixRel : `${posixRel}/`;
+}
+
+function gitignoreContainsEntry(text: string, entry: string): boolean {
+  const normalized = entry.replace(/\/+$/, "");
+  const variants = new Set([
+    entry,
+    `${entry}/`,
+    normalized,
+    `/${normalized}`,
+    `/${normalized}/`,
+  ]);
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+    if (variants.has(line)) return true;
+  }
+  return false;
+}
+
+/**
+ * Idempotently append the resolved mirror path to the enclosing repo's
+ * `.gitignore`. Returns a structured result describing what was done.
+ */
+export function ensureMirrorGitignored(
+  cfg: MirrorConfig = getMirrorConfig()
+): MirrorGitignoreResult {
+  const mirrorPath = path.resolve(cfg.path);
+  const repoRoot = findEnclosingGitRepo(mirrorPath);
+  if (!repoRoot) {
+    return {
+      repo_root: null,
+      gitignore_path: null,
+      entry: null,
+      added: false,
+      already_present: false,
+    };
+  }
+  const gitignorePath = path.join(repoRoot, ".gitignore");
+  const entry = buildMirrorIgnoreEntry(repoRoot, mirrorPath);
+  let existing = "";
+  try {
+    existing = readFileSync(gitignorePath, "utf8");
+  } catch {
+    existing = "";
+  }
+  if (gitignoreContainsEntry(existing, entry)) {
+    return {
+      repo_root: repoRoot,
+      gitignore_path: gitignorePath,
+      entry,
+      added: false,
+      already_present: true,
+    };
+  }
+  // Ensure a trailing newline before appending so a prior line without a
+  // terminator does not merge with our comment.
+  const needsLeadingNewline = existing.length > 0 && !existing.endsWith("\n");
+  const block =
+    (needsLeadingNewline ? "\n" : "") +
+    (existing.length > 0 ? "\n" : "") +
+    `${MIRROR_GITIGNORE_COMMENT}\n${entry}\n`;
+  writeFileSync(gitignorePath, existing + block, "utf8");
+  return {
+    repo_root: repoRoot,
+    gitignore_path: gitignorePath,
+    entry,
+    added: true,
+    already_present: false,
+  };
+}
+
+/**
+ * Detect whether the mirror path is already ignored by the enclosing git
+ * repo. Read-only; does not mutate `.gitignore`. Used by `neotoma doctor`.
+ */
+export function checkMirrorGitignoreStatus(
+  cfg: MirrorConfig = getMirrorConfig()
+): {
+  inside_git_repo: boolean;
+  git_repo_root: string | null;
+  gitignored: boolean;
+} {
+  const mirrorPath = path.resolve(cfg.path);
+  const repoRoot = findEnclosingGitRepo(mirrorPath);
+  if (!repoRoot) {
+    return { inside_git_repo: false, git_repo_root: null, gitignored: false };
+  }
+  const gitignorePath = path.join(repoRoot, ".gitignore");
+  let existing = "";
+  try {
+    existing = readFileSync(gitignorePath, "utf8");
+  } catch {
+    existing = "";
+  }
+  const entry = buildMirrorIgnoreEntry(repoRoot, mirrorPath);
+  return {
+    inside_git_repo: true,
+    git_repo_root: repoRoot,
+    gitignored: gitignoreContainsEntry(existing, entry),
+  };
+}
+
+export async function runMirrorGitignore(): Promise<MirrorGitignoreResult> {
+  return ensureMirrorGitignored();
+}
+
+export function formatMirrorGitignore(
+  result: MirrorGitignoreResult | null
+): string {
+  if (result === null) {
+    return "Gitignore: skipped";
+  }
+  if (!result.repo_root) {
+    return "Gitignore: mirror path is not inside a git repo; nothing to ignore.";
+  }
+  const lines: string[] = [];
+  lines.push(`Gitignore repo: ${result.repo_root}`);
+  lines.push(`Gitignore file: ${result.gitignore_path}`);
+  lines.push(`Entry:          ${result.entry}`);
+  if (result.added) {
+    lines.push("Status:         added");
+  } else if (result.already_present) {
+    lines.push("Status:         already present");
+  } else {
+    lines.push("Status:         unchanged");
+  }
   return lines.join("\n");
 }

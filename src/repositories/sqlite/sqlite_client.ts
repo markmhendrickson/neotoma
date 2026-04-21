@@ -46,7 +46,9 @@ const SCHEMA_STATEMENTS = [
     created_at TEXT,
     user_id TEXT,
     idempotency_key TEXT,
-    canonical_hash TEXT
+    canonical_hash TEXT,
+    identity_basis TEXT,
+    identity_rule TEXT
   )`,
   `CREATE TABLE IF NOT EXISTS entity_snapshots (
     entity_id TEXT PRIMARY KEY,
@@ -314,6 +316,11 @@ function ensureSchema(db: SqliteDatabase): void {
     }
 
     // Add columns if missing (existing DBs created before these columns existed)
+    addColumnIfMissing(db, "sources", "source_type", "TEXT");
+    addColumnIfMissing(db, "sources", "original_filename", "TEXT");
+    addColumnIfMissing(db, "sources", "mime_type", "TEXT");
+    addColumnIfMissing(db, "sources", "storage_url", "TEXT");
+    addColumnIfMissing(db, "sources", "file_size", "INTEGER");
     addColumnIfMissing(db, "sources", "idempotency_key", "TEXT");
     addColumnIfMissing(db, "observations", "idempotency_key", "TEXT");
     addColumnIfMissing(db, "interpretations", "user_id", "TEXT");
@@ -321,6 +328,8 @@ function ensureSchema(db: SqliteDatabase): void {
     addColumnIfMissing(db, "interpretations", "error_message", "TEXT");
     addColumnIfMissing(db, "interpretations", "unknown_fields_count", "INTEGER");
     addColumnIfMissing(db, "observations", "canonical_hash", "TEXT");
+    addColumnIfMissing(db, "observations", "identity_basis", "TEXT");
+    addColumnIfMissing(db, "observations", "identity_rule", "TEXT");
     addColumnIfMissing(db, "timeline_events", "entity_id", "TEXT");
     addColumnIfMissing(db, "entity_snapshots", "canonical_name", "TEXT");
     addColumnIfMissing(db, "entities", "first_seen_at", "TEXT");

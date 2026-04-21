@@ -453,12 +453,28 @@ export async function runInterpretation(
       const canonicalFields = canonicalizeFields(validFields, effectiveSchemaDefinition);
       const canonicalHash = computeCanonicalHash(canonicalFields);
 
-      // Resolve entity (user-scoped)
-      const entityId = await resolveEntity({
-        entityType,
-        fields: canonicalFields,
-        userId,
-      });
+      // Resolve entity (user-scoped). Interpretation runs must not fail the
+      // whole pipeline when derivation can't settle — skip this observation
+      // and warn so the operator can declare canonical_name_fields.
+      let entityId: string;
+      try {
+        entityId = await resolveEntity({
+          entityType,
+          fields: canonicalFields,
+          userId,
+        });
+      } catch (err) {
+        const { CanonicalNameUnresolvedError } = await import(
+          "./entity_resolution.js"
+        );
+        if (err instanceof CanonicalNameUnresolvedError) {
+          logger.warn(
+            `[Interpretation] Skipping observation for ${entityType}: ${err.message}`,
+          );
+          continue;
+        }
+        throw err;
+      }
 
       // Generate deterministic observation ID
       const observationId = generateObservationId(
