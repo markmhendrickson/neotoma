@@ -46,6 +46,10 @@ It does not cover:
 4. Start: `node dist/actions.js` (API) or `node dist/index.js` (stdio MCP). Use a process manager (e.g. systemd, PM2) and HTTPS in front.
 5. Verify health: `npm run doctor` and smoke-test critical endpoints.
 
+For a headless `systemd`-supervised deployment of the npm-installed CLI
+(including a reference unit file, lockdown flags, and smoke-test commands),
+see [install.md § Production deployment (headless / systemd)](../../install.md#production-deployment-headless--systemd).
+
 ---
 
 ## Health Checks

@@ -7,6 +7,26 @@
 - OAuth (when configured)
 - Key-derived Bearer token (when encryption enabled)
 **Token:** JWT or Bearer token, validated on every request.
+
+## User-ID Resolution
+
+All user-scoped endpoints resolve the effective `user_id` through a single helper, `getAuthenticatedUserId(req, providedUserId?)` in `src/actions.ts`. Do not introduce a parallel resolution path.
+
+Resolution order:
+
+1. **Auth middleware has set `req.authenticatedUserId`** (Bearer, OAuth, or local-dev session):
+   - If `providedUserId` is absent or matches the authenticated user → return the authenticated user.
+   - If `providedUserId` differs and the authenticated user is `LOCAL_DEV_USER_ID` (`00000000-0000-0000-0000-000000000000`) → allow the override (dev / test flows).
+   - If `providedUserId` differs otherwise → reject with an error (session authZ cannot be bypassed).
+2. **No session set** (no auth middleware or explicit Bearer-skip): fall back to `providedUserId` from the body or query.
+
+**Implications for new endpoints:**
+
+- Always call `getAuthenticatedUserId` with the caller-provided value (body `user_id` for POST/PATCH, query `user_id` for GET/DELETE).
+- Never read `req.body.user_id` or `req.query.user_id` directly for authorization.
+- New read endpoints that accept a `user_id` query parameter must declare it in `openapi.yaml` (see `docs/architecture/openapi_contract_flow.md`).
+- The `LOCAL_DEV_USER_ID` override is a deliberate dev-flow affordance; widening it to other users requires an explicit security review.
+
 ## Authorization
 **MVP:** All authenticated users can access all records (no per-user isolation).
 **Future:** Row-Level Security (RLS) by `user_id`.

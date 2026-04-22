@@ -74,6 +74,7 @@ import {
 import { readOpenApiActionsFile, readOpenApiFile } from "./shared/openapi_file.js";
 import { buildSmitheryServerCard } from "./mcp_server_card.js";
 import { listRecentRecordActivity } from "./services/recent_record_activity.js";
+import { listRecentConversations } from "./services/recent_conversations.js";
 // import { setupDocumentationRoutes } from "./routes/documentation.js";
 
 type ErrorEnvelope = {
@@ -905,7 +906,7 @@ app.post("/mcp/oauth/initiate", oauthInitiateLimit, async (req, res) => {
     if (!isLocalRequest(req) && /^https?:\/\/(localhost|127\.0\.0\.1)/i.test(config.apiBase)) {
       logger.warn(
         `[MCP OAuth] Tunnel request detected but config.apiBase is ${config.apiBase}. ` +
-        `OAuth callbacks may fail. Set NEOTOMA_HOST_URL to the tunnel URL or restart the server after the tunnel starts.`
+          `OAuth callbacks may fail. Set NEOTOMA_HOST_URL to the tunnel URL or restart the server after the tunnel starts.`
       );
     }
 
@@ -2056,12 +2057,7 @@ app.post("/entities/:id/batch_correct", async (req, res) => {
         }
       | undefined;
     if (!body?.changes || !Array.isArray(body.changes)) {
-      return sendError(
-        res,
-        400,
-        "VALIDATION_ERROR",
-        "`changes` array is required"
-      );
+      return sendError(res, 400, "VALIDATION_ERROR", "`changes` array is required");
     }
 
     const { applyBatchCorrection } = await import("./services/batch_correction.js");
@@ -2200,37 +2196,111 @@ app.get("/entities/:id/relationships", async (req, res) => {
     if (expandEntities) {
       const relatedIds = new Set<string>();
       for (const rel of [...(outgoing || []), ...(incoming || [])]) {
-        if (rel.source_entity_id && rel.source_entity_id !== entityId) relatedIds.add(rel.source_entity_id);
-        if (rel.target_entity_id && rel.target_entity_id !== entityId) relatedIds.add(rel.target_entity_id);
+        if (rel.source_entity_id && rel.source_entity_id !== entityId)
+          relatedIds.add(rel.source_entity_id);
+        if (rel.target_entity_id && rel.target_entity_id !== entityId)
+          relatedIds.add(rel.target_entity_id);
       }
       if (relatedIds.size > 0) {
         const idsArr = Array.from(relatedIds);
         const [snapshotsResult, entitiesResult] = await Promise.all([
           db.from("entity_snapshots").select("*").in("entity_id", idsArr).eq("user_id", userId),
-          db.from("entities").select("id, canonical_name").in("id", idsArr).eq("user_id", userId),
+          db
+            .from("entities")
+            .select("id, canonical_name, entity_type")
+            .in("id", idsArr)
+            .eq("user_id", userId),
         ]);
-        if (!snapshotsResult.error && snapshotsResult.data) {
-          const canonicalNames = new Map<string, string>();
-          if (!entitiesResult.error && entitiesResult.data) {
-            for (const ent of entitiesResult.data) {
-              if (ent.canonical_name) canonicalNames.set(ent.id, ent.canonical_name);
-            }
+
+        // Merge snapshot + entity rows so callers always get canonical_name
+        // and entity_type even when the snapshot row is missing.
+        const canonicalNames = new Map<string, string>();
+        const entityTypes = new Map<string, string>();
+        if (!entitiesResult.error && entitiesResult.data) {
+          for (const ent of entitiesResult.data) {
+            if (ent.canonical_name) canonicalNames.set(ent.id, ent.canonical_name);
+            if (ent.entity_type) entityTypes.set(ent.id, ent.entity_type);
           }
-          relatedEntities = {};
+        }
+
+        relatedEntities = {};
+        if (!snapshotsResult.error && snapshotsResult.data) {
           for (const e of snapshotsResult.data) {
             if (!e.canonical_name && canonicalNames.has(e.entity_id)) {
               e.canonical_name = canonicalNames.get(e.entity_id);
             }
+            if (!e.entity_type && entityTypes.has(e.entity_id)) {
+              e.entity_type = entityTypes.get(e.entity_id);
+            }
             relatedEntities[e.entity_id] = e;
           }
+        }
+        // Fill in entities that have no snapshot row yet.
+        for (const rid of idsArr) {
+          if (relatedEntities[rid]) continue;
+          relatedEntities[rid] = {
+            entity_id: rid,
+            canonical_name: canonicalNames.get(rid) ?? null,
+            entity_type: entityTypes.get(rid) ?? null,
+          };
+        }
+
+        // Resolve schema-derived entity_type_label via the registry once per
+        // distinct type (best effort; non-fatal).
+        try {
+          const { SchemaRegistryService } = await import("./services/schema_registry.js");
+          const registry = new SchemaRegistryService();
+          const distinctTypes = [...new Set(Array.from(entityTypes.values()).filter(Boolean))];
+          const labelByType = new Map<string, string>();
+          for (const t of distinctTypes) {
+            const schema = await registry.loadActiveSchema(t, userId);
+            if (schema?.metadata?.label) labelByType.set(t, schema.metadata.label);
+          }
+          for (const rid of Object.keys(relatedEntities)) {
+            const type = relatedEntities[rid]?.entity_type;
+            if (type && labelByType.has(type)) {
+              relatedEntities[rid].entity_type_label = labelByType.get(type);
+            }
+          }
+        } catch (err) {
+          // Ignore — expansions without labels are still useful.
+          console.warn(
+            "Failed to attach entity_type_label to related entities:",
+            err instanceof Error ? err.message : err
+          );
         }
       }
     }
 
+    // Decorate relationship rows with top-level convenience fields so clients
+    // don't have to look up `related_entities` per row. Only populated when
+    // `expand_entities=true`.
+    const decorateRelationship = (rel: any) => {
+      if (!relatedEntities) return rel;
+      const src = relatedEntities[rel.source_entity_id];
+      const tgt = relatedEntities[rel.target_entity_id];
+      return {
+        ...rel,
+        source_entity_name: src?.canonical_name ?? null,
+        source_entity_type: src?.entity_type ?? null,
+        source_entity_type_label: src?.entity_type_label ?? null,
+        target_entity_name: tgt?.canonical_name ?? null,
+        target_entity_type: tgt?.entity_type ?? null,
+        target_entity_type_label: tgt?.entity_type_label ?? null,
+      };
+    };
+
+    const decoratedOutgoing = expandEntities
+      ? formattedOutgoing.map(decorateRelationship)
+      : formattedOutgoing;
+    const decoratedIncoming = expandEntities
+      ? formattedIncoming.map(decorateRelationship)
+      : formattedIncoming;
+
     const responseBody: Record<string, any> = {
-      outgoing: formattedOutgoing,
-      incoming: formattedIncoming,
-      relationships: [...formattedOutgoing, ...formattedIncoming],
+      outgoing: decoratedOutgoing,
+      incoming: decoratedIncoming,
+      relationships: [...decoratedOutgoing, ...decoratedIncoming],
     };
     if (relatedEntities) {
       responseBody.related_entities = relatedEntities;
@@ -2555,8 +2625,8 @@ app.post("/relationships/snapshot", async (req, res) => {
   }
 
   try {
-    const userId = await getAuthenticatedUserId(req, undefined);
-    const { relationship_type, source_entity_id, target_entity_id } = parsed.data;
+    const { relationship_type, source_entity_id, target_entity_id, user_id } = parsed.data;
+    const userId = await getAuthenticatedUserId(req, user_id);
     const relationshipKey = `${relationship_type}:${source_entity_id}:${target_entity_id}`;
 
     const { data: snapshot, error: snapshotError } = await db
@@ -2614,8 +2684,7 @@ app.get("/timeline", async (req, res) => {
     const rawOrderBy = String(req.query.order_by ?? "event_timestamp")
       .trim()
       .toLowerCase();
-    const orderByColumn =
-      rawOrderBy === "created_at" ? "created_at" : "event_timestamp";
+    const orderByColumn = rawOrderBy === "created_at" ? "created_at" : "event_timestamp";
 
     // Get source IDs for this user first (timeline_events doesn't have user_id)
     const { data: userSources, error: sourcesError } = await db
@@ -2697,13 +2766,8 @@ app.get("/timeline", async (req, res) => {
 
     // Enrich events with entity canonical names and types
     const events = data || [];
-    const entityIds = [
-      ...new Set(events.map((e: any) => e.entity_id).filter(Boolean)),
-    ];
-    const entityLookup = new Map<
-      string,
-      { canonical_name: string; entity_type: string }
-    >();
+    const entityIds = [...new Set(events.map((e: any) => e.entity_id).filter(Boolean))];
+    const entityLookup = new Map<string, { canonical_name: string; entity_type: string }>();
     if (entityIds.length > 0) {
       const { data: entities } = await db
         .from("entities")
@@ -2819,6 +2883,26 @@ app.get("/record_activity", async (req, res) => {
   }
 });
 
+// GET /recent_conversations — Inspector: conversations with nested messages (SQLite)
+app.get("/recent_conversations", async (req, res) => {
+  try {
+    const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+    const limit = parseInt(String(req.query.limit ?? "25"), 10) || 25;
+    const offset = parseInt(String(req.query.offset ?? "0"), 10) || 0;
+    const result = listRecentConversations(userId, limit, offset);
+    return res.json(result);
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to list recent conversations",
+      "DB_QUERY_FAILED",
+      "APIError:recent_conversations"
+    );
+  }
+});
+
 // GET /api/sources - Get source list (FU-301)
 app.get("/sources", async (req, res) => {
   try {
@@ -2911,7 +2995,9 @@ app.get("/sources/:id", async (req, res) => {
       return sendError(res, 404, "RESOURCE_NOT_FOUND", "Source not found");
     }
 
-    const filesystemAbsolutePath = resolveLocalSourceFilePath(source.storage_url as string | null | undefined);
+    const filesystemAbsolutePath = resolveLocalSourceFilePath(
+      source.storage_url as string | null | undefined
+    );
     const payload =
       filesystemAbsolutePath != null
         ? { ...source, filesystem_absolute_path: filesystemAbsolutePath }
@@ -3015,7 +3101,14 @@ app.get("/sources/:id/content", async (req, res) => {
     if (error instanceof SourceFileNotFoundError) {
       return sendError(res, 404, "SOURCE_FILE_NOT_FOUND", error.message);
     }
-    return handleApiError(req, res, error, "Failed to download source content", "DOWNLOAD_FAILED", "APIError:source_content");
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to download source content",
+      "DOWNLOAD_FAILED",
+      "APIError:source_content"
+    );
   }
 });
 
@@ -3227,23 +3320,17 @@ async function storeStructuredForApi(params: {
   } = params;
   const commit = commitInput !== false;
   const strict = strictInput === true;
-  const {
-    resolveEntityWithTrace,
-    CanonicalNameUnresolvedError,
-    MergeRefusedError,
-  } = await import("./services/entity_resolution.js");
-  const { detectFlatPackedRows, FlatPackedRowsError } = await import(
-    "./services/flat_packed_detection.js"
-  );
+  const { resolveEntityWithTrace, CanonicalNameUnresolvedError, MergeRefusedError } =
+    await import("./services/entity_resolution.js");
+  const { detectFlatPackedRows, FlatPackedRowsError } =
+    await import("./services/flat_packed_detection.js");
 
   // Reject flat-packed rows (whole tables smuggled into a single entity as
   // `<prefix>_<index>_<suffix>` keys). These cannot produce per-row snapshots
   // and are almost always a caller bug. The caller should split into one
   // entity per row and retry.
   for (const entityData of entities) {
-    const detection = detectFlatPackedRows(
-      entityData as Record<string, unknown>,
-    );
+    const detection = detectFlatPackedRows(entityData as Record<string, unknown>);
     if (detection.detected) {
       throw new FlatPackedRowsError(detection);
     }
@@ -3270,10 +3357,15 @@ async function storeStructuredForApi(params: {
       observation_id: obs.id,
     }));
 
+    // Idempotency replay: the source row already exists for
+    // (user_id, idempotency_key). No new observations or entities were
+    // written. Callers distinguish this from a zero-commit fresh write via the
+    // `replayed: true` flag (v0.5.1+). See docs/architecture/idempotence_pattern.md.
     return {
       success: true,
+      replayed: true,
       source_id: existingSource.id,
-      entities_created: existingEntities.length,
+      entities_created: 0,
       observations_created: existingEntities.length,
       entities: existingEntities,
     };
@@ -3314,12 +3406,7 @@ async function storeStructuredForApi(params: {
       resolver_path: string[];
       identity_basis: string;
       identity_rule: string;
-      action:
-        | "created"
-        | "matched_existing"
-        | "would_create"
-        | "would_match_existing"
-        | "extended";
+      action: "created" | "matched_existing" | "would_create" | "would_match_existing" | "extended";
     };
     intent?: string;
     targetId?: string;
@@ -3331,6 +3418,26 @@ async function storeStructuredForApi(params: {
     code: "ERR_CANONICAL_NAME_UNRESOLVED" | "ERR_MERGE_REFUSED";
     message: string;
     details: Record<string, unknown>;
+    hint?: string;
+  }
+
+  // v0.5.1: structured guidance for the v0.5.0 breaking change where callers
+  // nested fields under `attributes`. If resolution failed and the only
+  // observed top-level keys are `attributes` (plus optionally `entity_type`),
+  // surface a hint pointing callers at the flat-payload convention.
+  function buildAttributesHint(seenFields: unknown): string | undefined {
+    if (!Array.isArray(seenFields)) return undefined;
+    const keys = seenFields.filter((k): k is string => typeof k === "string");
+    if (keys.length === 0) return undefined;
+    const nonMetaKeys = keys.filter((k) => k !== "entity_type");
+    if (nonMetaKeys.length === 1 && nonMetaKeys[0] === "attributes") {
+      return (
+        "Payload nests fields under `attributes`. Since v0.5.0, /store expects " +
+        "fields at the top level of each entity object (e.g. `{ entity_type, " +
+        "title, canonical_name, ... }`). Move keys out of `attributes` and retry."
+      );
+    }
+    return undefined;
   }
 
   const resolved: ResolvedEntity[] = [];
@@ -3362,14 +3469,12 @@ async function storeStructuredForApi(params: {
       const { schemaRegistry } = await import("./services/schema_registry.js");
       const active = await schemaRegistry.loadActiveSchema(entity_type, userId);
       if (!active) {
-        const { findEquivalentEntityType } = await import(
-          "./services/entity_type_equivalence.js"
-        );
+        const { findEquivalentEntityType } = await import("./services/entity_type_equivalence.js");
         const match = await findEquivalentEntityType(entity_type, { userId });
         if (match) {
           logger.warn(
             `[STORE] Collapsing new entity_type "${entity_type}" -> existing ` +
-              `"${match.canonical_entity_type}" (reason: ${match.reason}).`,
+              `"${match.canonical_entity_type}" (reason: ${match.reason}).`
           );
           entity_type = match.canonical_entity_type;
         }
@@ -3378,7 +3483,7 @@ async function storeStructuredForApi(params: {
       logger.warn(
         `Equivalence check failed for ${entity_type}: ${
           equivErr instanceof Error ? equivErr.message : String(equivErr)
-        }`,
+        }`
       );
     }
 
@@ -3418,6 +3523,7 @@ async function storeStructuredForApi(params: {
       });
     } catch (err) {
       if (err instanceof CanonicalNameUnresolvedError) {
+        const hint = buildAttributesHint(err.seenFields);
         issues.push({
           observation_index,
           entity_type,
@@ -3427,6 +3533,7 @@ async function storeStructuredForApi(params: {
             seen_fields: err.seenFields,
             attempted_value: err.attemptedValue,
           },
+          ...(hint ? { hint } : {}),
         });
       } else if (err instanceof MergeRefusedError) {
         issues.push({
@@ -3448,7 +3555,7 @@ async function storeStructuredForApi(params: {
 
   if (issues.length > 0) {
     const aggregate = new Error(
-      `Structured store refused: ${issues.length} observation(s) failed resolution.`,
+      `Structured store refused: ${issues.length} observation(s) failed resolution.`
     ) as Error & {
       code: string;
       issues: ResolutionIssue[];
@@ -3496,8 +3603,7 @@ async function storeStructuredForApi(params: {
         const { recomputeSnapshot } = await import("./services/snapshot_computation.js");
         const snap = await recomputeSnapshot(r.entity_id, userId);
         snapshotAfter =
-          (snap as { snapshot?: Record<string, unknown> } | null | undefined)
-            ?.snapshot ?? null;
+          (snap as { snapshot?: Record<string, unknown> } | null | undefined)?.snapshot ?? null;
       } catch (snapshotErr) {
         logger.warn(`Snapshot recompute failed for ${r.entity_id}: ${snapshotErr}`);
       }
@@ -3508,14 +3614,10 @@ async function storeStructuredForApi(params: {
       // match exists — never invent targets.
       try {
         const { schemaRegistry } = await import("./services/schema_registry.js");
-        const schemaEntry = await schemaRegistry.loadActiveSchema(
-          r.entity_type,
-          userId,
-        );
+        const schemaEntry = await schemaRegistry.loadActiveSchema(r.entity_type, userId);
         if (schemaEntry?.schema_definition?.reference_fields?.length) {
-          const { autoLinkReferenceFields } = await import(
-            "./services/schema_reference_linking.js"
-          );
+          const { autoLinkReferenceFields } =
+            await import("./services/schema_reference_linking.js");
           await autoLinkReferenceFields({
             entityId: r.entity_id,
             entityType: r.entity_type,
@@ -3529,7 +3631,7 @@ async function storeStructuredForApi(params: {
         logger.warn(
           `Auto-link reference fields failed for ${r.entity_type}/${r.entity_id}: ${
             linkErr instanceof Error ? linkErr.message : String(linkErr)
-          }`,
+          }`
         );
       }
     }
@@ -3563,7 +3665,7 @@ async function storeStructuredForApi(params: {
       if (!source || !target) {
         logger.warn(
           `[STORE] Skipping relationship: invalid source_index=${rel.source_index} ` +
-            `or target_index=${rel.target_index} (have ${resolved.length} entities).`,
+            `or target_index=${rel.target_index} (have ${resolved.length} entities).`
         );
         continue;
       }
@@ -3585,7 +3687,7 @@ async function storeStructuredForApi(params: {
           `Failed to create relationship ${rel.relationship_type} ` +
             `${source.entity_id} -> ${target.entity_id}: ${
               relErr instanceof Error ? relErr.message : String(relErr)
-            }`,
+            }`
         );
       }
     }
@@ -3593,11 +3695,11 @@ async function storeStructuredForApi(params: {
 
   return {
     success: true,
+    replayed: false,
     commit,
     source_id: commit ? storageResult.sourceId : null,
     entities_created: commit
-      ? createdEntities.filter((e) => e.action === "created" || e.action === "extended")
-          .length
+      ? createdEntities.filter((e) => e.action === "created" || e.action === "extended").length
       : 0,
     observations_created: commit ? createdEntities.length : 0,
     entities: createdEntities,
@@ -3613,14 +3715,7 @@ async function storeUnstructuredForApi(params: {
   idempotencyKey?: string;
   originalFilename?: string;
 }) {
-  const {
-    fileContent,
-    fileBuffer,
-    mimeType,
-    idempotencyKey,
-    originalFilename,
-    userId,
-  } = params;
+  const { fileContent, fileBuffer, mimeType, idempotencyKey, originalFilename, userId } = params;
   const resolvedFileBuffer =
     fileBuffer ?? (fileContent !== undefined ? Buffer.from(fileContent, "base64") : undefined);
   if (!resolvedFileBuffer) {
@@ -3729,7 +3824,8 @@ app.post("/store", async (req, res) => {
         fileBuffer: resolvedFileBuffer,
         mimeType,
         idempotencyKey:
-          parsed.data.file_idempotency_key ?? (!hasEntities ? parsed.data.idempotency_key : undefined),
+          parsed.data.file_idempotency_key ??
+          (!hasEntities ? parsed.data.idempotency_key : undefined),
         originalFilename,
       });
     }
@@ -3749,22 +3845,13 @@ app.post("/store", async (req, res) => {
       return sendError(res, 401, "AUTH_REQUIRED", error.message);
     }
     const errCode =
-      error && typeof error === "object"
-        ? (error as { code?: string }).code
-        : undefined;
-    if (
-      errCode === "ERR_FORBIDDEN_ENTITY_TYPE" ||
-      errCode === "ERR_PLURAL_ENTITY_TYPE"
-    ) {
+      error && typeof error === "object" ? (error as { code?: string }).code : undefined;
+    if (errCode === "ERR_FORBIDDEN_ENTITY_TYPE" || errCode === "ERR_PLURAL_ENTITY_TYPE") {
       const message = error instanceof Error ? error.message : String(error);
       logWarn("EntityTypeGuardError:store", req, { code: errCode, message });
       return sendError(res, 400, errCode, message);
     }
-    if (
-      error &&
-      typeof error === "object" &&
-      errCode === "ERR_STORE_RESOLUTION_FAILED"
-    ) {
+    if (error && typeof error === "object" && errCode === "ERR_STORE_RESOLUTION_FAILED") {
       const err = error as {
         message: string;
         issues: Array<{
@@ -3773,6 +3860,7 @@ app.post("/store", async (req, res) => {
           code: string;
           message: string;
           details: Record<string, unknown>;
+          hint?: string;
         }>;
       };
       logWarn("StoreResolutionError:store", req, {
@@ -3786,11 +3874,7 @@ app.post("/store", async (req, res) => {
         },
       });
     }
-    if (
-      error &&
-      typeof error === "object" &&
-      errCode === "ERR_FLAT_PACKED_ROWS"
-    ) {
+    if (error && typeof error === "object" && errCode === "ERR_FLAT_PACKED_ROWS") {
       const err = error as {
         message: string;
         detection: {
@@ -3930,9 +4014,15 @@ app.post("/observations/query", async (req, res) => {
 // /entities/merge once an operator or agent confirms a pair.
 app.get("/entities/duplicates", async (req, res) => {
   try {
-    const entityType = typeof req.query.entity_type === "string" ? req.query.entity_type : undefined;
+    const entityType =
+      typeof req.query.entity_type === "string" ? req.query.entity_type : undefined;
     if (!entityType) {
-      return sendError(res, 400, "VALIDATION_INVALID_FORMAT", "entity_type query parameter is required");
+      return sendError(
+        res,
+        400,
+        "VALIDATION_INVALID_FORMAT",
+        "entity_type query parameter is required"
+      );
     }
     const providedUserId = typeof req.query.user_id === "string" ? req.query.user_id : undefined;
     const authenticatedUserId = await getAuthenticatedUserId(req, providedUserId);
@@ -3945,11 +4035,21 @@ app.get("/entities/duplicates", async (req, res) => {
 
     const threshold = thresholdRaw ? Number(thresholdRaw) : undefined;
     if (threshold !== undefined && (Number.isNaN(threshold) || threshold <= 0 || threshold > 1)) {
-      return sendError(res, 400, "VALIDATION_INVALID_FORMAT", "threshold must be a number in (0, 1]");
+      return sendError(
+        res,
+        400,
+        "VALIDATION_INVALID_FORMAT",
+        "threshold must be a number in (0, 1]"
+      );
     }
     const limit = limitRaw ? Number(limitRaw) : undefined;
     if (limit !== undefined && (!Number.isFinite(limit) || limit < 1 || limit > 200)) {
-      return sendError(res, 400, "VALIDATION_INVALID_FORMAT", "limit must be an integer in [1, 200]");
+      return sendError(
+        res,
+        400,
+        "VALIDATION_INVALID_FORMAT",
+        "limit must be an integer in [1, 200]"
+      );
     }
 
     const { findDuplicateCandidates } = await import("./services/duplicate_detection.js");
@@ -4062,10 +4162,7 @@ app.post("/list_observations", async (req, res) => {
 
   const { entity_id, limit = 100, offset = 0, updated_since, created_since } = parsed.data;
 
-  let query = db
-    .from("observations")
-    .select("*")
-    .eq("entity_id", entity_id);
+  let query = db.from("observations").select("*").eq("entity_id", entity_id);
 
   if (updated_since) {
     query = query.gte("observed_at", updated_since);
@@ -4167,14 +4264,13 @@ app.post("/create_relationship", async (req, res) => {
     return sendValidationError(res, parsed.error.issues);
   }
 
-  const { relationship_type, source_entity_id, target_entity_id, source_id, metadata } =
+  const { relationship_type, source_entity_id, target_entity_id, source_id, metadata, user_id } =
     parsed.data;
-
-  const userId = "00000000-0000-0000-0000-000000000000"; // v0.1.0 single-user
 
   const { relationshipsService } = await import("./services/relationships.js");
 
   try {
+    const userId = await getAuthenticatedUserId(req, user_id);
     const relationship = await relationshipsService.createRelationship({
       relationship_type,
       source_entity_id,
@@ -4892,10 +4988,7 @@ app.post("/update_schema_incremental", async (req, res) => {
       });
     } catch (err) {
       const code = (err as { code?: string })?.code;
-      if (
-        code === "ERR_FORBIDDEN_ENTITY_TYPE" ||
-        code === "ERR_PLURAL_ENTITY_TYPE"
-      ) {
+      if (code === "ERR_FORBIDDEN_ENTITY_TYPE" || code === "ERR_PLURAL_ENTITY_TYPE") {
         return sendError(res, 400, code, (err as Error).message);
       }
       throw err;
@@ -4989,10 +5082,7 @@ app.post("/register_schema", async (req, res) => {
       const code = (err as { code?: string })?.code;
       const message = err instanceof Error ? err.message : String(err);
       logWarn("ValidationError:register_schema", req, { error: message });
-      if (
-        code === "ERR_FORBIDDEN_ENTITY_TYPE" ||
-        code === "ERR_PLURAL_ENTITY_TYPE"
-      ) {
+      if (code === "ERR_FORBIDDEN_ENTITY_TYPE" || code === "ERR_PLURAL_ENTITY_TYPE") {
         return sendError(res, 400, code, message);
       }
       return sendError(res, 400, "SCHEMA_VALIDATION_FAILED", message);

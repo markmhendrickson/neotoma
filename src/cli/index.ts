@@ -817,6 +817,28 @@ async function resolveBaseUrl(option?: string, config?: Config): Promise<string>
   return url;
 }
 
+/**
+ * Return true when `baseUrl` points at the same machine as the CLI, so the
+ * server can read a local `file_path` directly from disk. Non-localhost URLs
+ * cannot (e.g. remote API deployments) and must receive file_content upload.
+ */
+export function isLocalhostBaseUrl(baseUrl: string): boolean {
+  try {
+    const u = new URL(baseUrl);
+    // URL.hostname preserves brackets for IPv6 (`[::1]`); strip them before
+    // comparing so IPv6 localhost matches cleanly.
+    const host = u.hostname.replace(/^\[|\]$/g, "");
+    return (
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host === "::1" ||
+      host === "0.0.0.0"
+    );
+  } catch {
+    return false;
+  }
+}
+
 function resolveCurrentDataDir(): string | null {
   const envDir = process.env.NEOTOMA_DATA_DIR?.trim();
   if (envDir) return envDir;
@@ -1980,6 +2002,29 @@ function envFlag(name: string): boolean | undefined {
   return true;
 }
 
+/**
+ * Resolve the effective `user_id` for a CLI read verb.
+ *
+ * Precedence (matches the NEOTOMA_API_ONLY / NEOTOMA_OFFLINE precedent):
+ *   1. Per-call `--user-id <id>` flag (explicit wins).
+ *   2. `NEOTOMA_USER_ID` env var (session-wide pin).
+ *   3. `undefined` (server falls back to the authenticated user).
+ *
+ * Returns `undefined` (never an empty string) when nothing is set so that the
+ * downstream `user_id` body/query param is simply omitted rather than sent as
+ * an empty string.
+ */
+export function resolveEffectiveUserId(optsUserId?: string): string | undefined {
+  if (typeof optsUserId === "string" && optsUserId.trim() !== "") {
+    return optsUserId;
+  }
+  const envUserId = process.env.NEOTOMA_USER_ID;
+  if (typeof envUserId === "string" && envUserId.trim() !== "") {
+    return envUserId;
+  }
+  return undefined;
+}
+
 // No preAction auth validation: CLI uses MCP-style auth (key-derived or no token),
 // not stored OAuth. auth login remains for MCP Connect (Cursor) setup.
 program.hook("preAction", (_thisCommand, actionCommand) => {
@@ -1989,10 +2034,20 @@ program.hook("preAction", (_thisCommand, actionCommand) => {
   };
   const isTestEnv = process.env.NODE_ENV === "test";
 
-  // Precedence: flag > env > default. NEOTOMA_API_ONLY / NEOTOMA_OFFLINE let
-  // users pin transport without passing a flag on every invocation.
+  // Precedence: flag > env > default. NEOTOMA_API_ONLY / NEOTOMA_OFFLINE /
+  // NEOTOMA_USER_ID let users pin transport and user scope without passing a
+  // flag on every invocation. NEOTOMA_USER_ID is consumed per call-site via
+  // resolveEffectiveUserId(); preAction only validates the shape here so that
+  // a typo (e.g. empty string) fails fast instead of silently falling back to
+  // the authenticated user.
   const envApiOnly = envFlag("NEOTOMA_API_ONLY");
   const envOffline = envFlag("NEOTOMA_OFFLINE");
+  const envUserId = process.env.NEOTOMA_USER_ID;
+  if (envUserId !== undefined && envUserId.trim() === "") {
+    throw new Error(
+      "NEOTOMA_USER_ID is set to an empty string. Unset it or provide a non-empty user id."
+    );
+  }
   const effectiveApiOnly = opts.apiOnly !== undefined ? opts.apiOnly : envApiOnly;
   const effectiveOffline = opts.offline !== undefined ? opts.offline : envOffline;
 
@@ -9549,6 +9604,26 @@ apiCommand
           : hasSourceWatchScripts
             ? "dev:server"
             : "start:api";
+      // v0.5.1: source-checkout + --env prod routes through `dev:prod`, which
+      // runs a tsx watcher rather than release-compiled artifacts. That is
+      // fine for operator-local production smoke tests but is NOT what you
+      // want for a real production deployment. Point them at the supervised
+      // install recipe in install.md before we spawn. Suppressed under
+      // --output json to preserve machine-readable output.
+      if (
+        envOpt === "prod" &&
+        !opts.tunnel &&
+        hasSourceWatchScripts &&
+        childScript === "dev:prod" &&
+        outputMode !== "json"
+      ) {
+        process.stderr.write(
+          "notice: `neotoma api start --env prod` on a source checkout selects `dev:prod` " +
+            "(tsx watcher, not release-compiled). For a real headless production deployment, " +
+            "install the published npm package (`npm install -g neotoma`) and use the systemd " +
+            "recipe in install.md § Production deployment (headless / systemd).\n"
+        );
+      }
       const spawnEnv: Record<string, string> = { ...process.env, NEOTOMA_ENV: effectiveEnv };
       if (tunnelProvider) spawnEnv.NEOTOMA_TUNNEL_PROVIDER = tunnelProvider;
       const child = spawn(npmCmd, ["run", childScript], {
@@ -9665,6 +9740,20 @@ apiCommand
         : hasSourceWatchScripts
           ? "dev:server"
           : "start:api";
+    // v0.5.1: same advisory as the --background branch above — warn when
+    // `--env prod` on a source checkout falls back to the tsx watcher.
+    // NOTE: the json path already early-returned at line ~9684, so we do
+    // not re-check outputMode here (TS narrows it to "pretty"). The
+    // background branch still needs the outputMode guard because it
+    // emits a json payload *after* spawning rather than early-returning.
+    if (envOpt === "prod" && !useTunnel && hasSourceWatchScripts && childScript === "dev:prod") {
+      process.stderr.write(
+        "notice: `neotoma api start --env prod` on a source checkout selects `dev:prod` " +
+          "(tsx watcher, not release-compiled). For a real headless production deployment, " +
+          "install the published npm package (`npm install -g neotoma`) and use the systemd " +
+          "recipe in install.md § Production deployment (headless / systemd).\n"
+      );
+    }
     const spawnEnv: Record<string, string> = { ...process.env, NEOTOMA_ENV: effectiveEnv };
     if (tunnelProvider) spawnEnv.NEOTOMA_TUNNEL_PROVIDER = tunnelProvider;
     const child = spawn(npmCmd, ["run", childScript], {
@@ -10043,11 +10132,12 @@ entitiesCommand
     const positionalEntityType = id && !/^ent_[a-f0-9]+$/i.test(id) ? id : undefined;
     const entityType = opts.entityType ?? opts.type ?? positionalEntityType ?? undefined;
     const updatedSince = opts.updatedSince ?? opts.since;
+    const effectiveUserId = resolveEffectiveUserId(opts.userId);
     const { data, error, response } = await api.POST("/entities/query", {
       body: {
         entity_type: entityType,
         search: opts.search,
-        user_id: opts.userId,
+        user_id: effectiveUserId,
         limit: Number(opts.limit ?? "100"),
         offset: Number(opts.offset ?? "0"),
         include_merged: Boolean(opts.includeMerged),
@@ -10073,47 +10163,60 @@ entitiesCommand
   .argument("[id]", "Entity ID (or use --id / --entity-id)")
   .option("--id <id>", "Entity ID (alternative to positional)")
   .option("--entity-id <id>", "Entity ID (alternative to positional)")
-  .action(async (idArg: string | undefined, opts: { id?: string; entityId?: string }) => {
-    const id = idArg ?? opts.id ?? opts.entityId;
-    if (!id)
-      throw new Error("Entity ID is required (use positional, --id, or --entity-id)");
-    const outputMode = resolveOutputMode();
-    const config = await readConfig();
-    const token = await getCliToken();
-    const api = createApiClient({
-      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
-      token,
-    });
-    const { data, error, response } = await api.GET("/entities/{id}", {
-      params: { path: { id } },
-    });
-    const status = response?.status;
-    if (error) {
-      const detail = formatApiError(error);
-      let msg = status
-        ? `Failed to get entity: ${status} ${detail}`
-        : `Failed to get entity: ${detail}`;
-      if (status === 401) msg += ". Run `neotoma auth login` to sign in.";
-      throw new Error(msg);
-    }
-    if (outputMode === "pretty") {
-      process.stdout.write(
-        formatEntityPropertiesTable((data ?? {}) as Record<string, unknown>) + "\n"
-      );
-      const { data: relData } = await api.GET("/entities/{id}/relationships", {
-        params: { path: { id } },
+  .option(
+    "--user-id <userId>",
+    "Override user scope (flag > NEOTOMA_USER_ID > authenticated user)"
+  )
+  .action(
+    async (
+      idArg: string | undefined,
+      opts: { id?: string; entityId?: string; userId?: string }
+    ) => {
+      const id = idArg ?? opts.id ?? opts.entityId;
+      if (!id)
+        throw new Error("Entity ID is required (use positional, --id, or --entity-id)");
+      const outputMode = resolveOutputMode();
+      const config = await readConfig();
+      const token = await getCliToken();
+      const api = createApiClient({
+        baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+        token,
       });
-      const relSection =
-        relData && typeof relData === "object"
-          ? formatRelationshipsSection(
-              relData as { outgoing?: RelationshipRow[]; incoming?: RelationshipRow[] }
-            )
-          : "\n" + subHeading("Relationships") + "\n" + dim("Unavailable.");
-      process.stdout.write(relSection + "\n");
-    } else {
-      writeOutput(data, outputMode);
+      const effectiveUserId = resolveEffectiveUserId(opts.userId);
+      const { data, error, response } = await api.GET("/entities/{id}", {
+        params: {
+          path: { id },
+          ...(effectiveUserId ? { query: { user_id: effectiveUserId } } : {}),
+        },
+      });
+      const status = response?.status;
+      if (error) {
+        const detail = formatApiError(error);
+        let msg = status
+          ? `Failed to get entity: ${status} ${detail}`
+          : `Failed to get entity: ${detail}`;
+        if (status === 401) msg += ". Run `neotoma auth login` to sign in.";
+        throw new Error(msg);
+      }
+      if (outputMode === "pretty") {
+        process.stdout.write(
+          formatEntityPropertiesTable((data ?? {}) as Record<string, unknown>) + "\n"
+        );
+        const { data: relData } = await api.GET("/entities/{id}/relationships", {
+          params: { path: { id } },
+        });
+        const relSection =
+          relData && typeof relData === "object"
+            ? formatRelationshipsSection(
+                relData as { outgoing?: RelationshipRow[]; incoming?: RelationshipRow[] }
+              )
+            : "\n" + subHeading("Relationships") + "\n" + dim("Unavailable.");
+        process.stdout.write(relSection + "\n");
+      } else {
+        writeOutput(data, outputMode);
+      }
     }
-  });
+  );
 
 entitiesCommand
   .command("search")
@@ -10173,7 +10276,7 @@ entitiesCommand
         body: {
           identifier,
           entity_type: opts.entityType,
-          user_id: opts.userId,
+          user_id: resolveEffectiveUserId(opts.userId),
           by: opts.by,
           limit: opts.limit,
           include_observations: opts.includeObservations ?? false,
@@ -10331,7 +10434,8 @@ entitiesCommand
         }
         query.limit = l;
       }
-      if (opts.userId) query.user_id = opts.userId;
+      const effectiveUserId = resolveEffectiveUserId(opts.userId);
+      if (effectiveUserId) query.user_id = effectiveUserId;
 
       const { data, error, response } = await api.GET("/entities/duplicates", {
         params: { query },
@@ -10440,7 +10544,7 @@ sourcesCommand
         query: {
           search: opts.search,
           mime_type: opts.mimeType,
-          user_id: opts.userId,
+          user_id: resolveEffectiveUserId(opts.userId),
           limit: Number(opts.limit),
           offset: Number(opts.offset),
         },
@@ -10470,7 +10574,7 @@ observationsCommand
     const { data, error } = await api.POST("/observations/query", {
       body: {
         observation_id: observationId,
-        user_id: opts.userId,
+        user_id: resolveEffectiveUserId(opts.userId),
         limit: 1,
         offset: 0,
       },
@@ -10519,7 +10623,7 @@ observationsCommand
         entity_id: opts.entityId ?? opts.id,
         entity_type: opts.entityType,
         source_id: opts.sourceId,
-        user_id: opts.userId,
+        user_id: resolveEffectiveUserId(opts.userId),
         limit: Number(opts.limit),
         offset: Number(opts.offset),
         ...(updatedSince ? { updated_since: updatedSince } : {}),
@@ -10550,12 +10654,14 @@ relationshipsCommand
       token,
     });
     const metadata = opts.metadata ? JSON.parse(opts.metadata) : undefined;
+    const effectiveUserId = resolveEffectiveUserId(opts.userId);
     const { data, error } = await api.POST("/create_relationship", {
       body: {
         relationship_type: opts.relationshipType as any,
         source_entity_id: opts.sourceEntityId,
         target_entity_id: opts.targetEntityId,
         metadata,
+        ...(effectiveUserId ? { user_id: effectiveUserId } : {}),
       },
     });
     if (error) throw new Error("Failed to create relationship");
@@ -10591,6 +10697,7 @@ relationshipsCommand
       baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
       token,
     });
+    const effectiveUserId = resolveEffectiveUserId(opts.userId);
     const { data, error } = await api.GET("/relationships", {
       params: {
         query: {
@@ -10599,6 +10706,7 @@ relationshipsCommand
           relationship_type: opts.relationshipType,
           limit: Number(opts.limit),
           offset: Number(opts.offset),
+          ...(effectiveUserId ? { user_id: effectiveUserId } : {}),
         } as any,
       } as any,
     });
@@ -10610,6 +10718,7 @@ relationshipsCommand
   .command("get")
   .description("Get a relationship by ID")
   .option("--relationship-id <id>", "Relationship ID (relationship_key)")
+  .option("--user-id <userId>", "User ID")
   .action(async (opts) => {
     const outputMode = resolveOutputMode();
     if (!opts.relationshipId) throw new Error("--relationship-id is required");
@@ -10619,8 +10728,14 @@ relationshipsCommand
       baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
       token,
     });
+    const effectiveUserId = resolveEffectiveUserId(opts.userId);
     const { data, error } = await api.GET("/relationships/{id}", {
-      params: { path: { id: encodeURIComponent(opts.relationshipId) } },
+      params: {
+        path: { id: encodeURIComponent(opts.relationshipId) },
+        query: {
+          ...(effectiveUserId ? { user_id: effectiveUserId } : {}),
+        } as any,
+      } as any,
     });
     if (error) throw new Error("Failed to get relationship");
     writeOutput({ relationship: data }, outputMode);
@@ -10669,12 +10784,14 @@ relationshipsCommand
       baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
       token,
     });
+    const effectiveUserId = resolveEffectiveUserId(opts.userId);
     const { data, error } = await api.POST("/delete_relationship", {
       body: {
         relationship_type: relationshipType as any,
         source_entity_id: sourceEntityId,
         target_entity_id: targetEntityId,
         reason: opts.reason,
+        ...(effectiveUserId ? { user_id: effectiveUserId } : {}),
       },
     });
     if (error) throw new Error("Failed to delete relationship");
@@ -10688,7 +10805,8 @@ relationshipsCommand
   .argument("<relationshipType>", "Relationship type (e.g., PART_OF, CORRECTS)")
   .argument("<sourceEntityId>", "Source entity ID")
   .argument("<targetEntityId>", "Target entity ID")
-  .action(async (relationshipType: string, sourceEntityId: string, targetEntityId: string) => {
+  .option("--user-id <userId>", "User ID")
+  .action(async (relationshipType: string, sourceEntityId: string, targetEntityId: string, opts) => {
     const outputMode = resolveOutputMode();
     const config = await readConfig();
     const token = await getCliToken();
@@ -10696,6 +10814,7 @@ relationshipsCommand
       baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
       token,
     });
+    const effectiveUserId = resolveEffectiveUserId(opts.userId);
     const { data, error } = await api.POST("/relationships/snapshot", {
       body: {
         relationship_type: relationshipType as
@@ -10709,6 +10828,7 @@ relationshipsCommand
           | "EMBEDS",
         source_entity_id: sourceEntityId,
         target_entity_id: targetEntityId,
+        ...(effectiveUserId ? { user_id: effectiveUserId } : {}),
       },
     });
     if (error) throw new Error("Failed to get relationship snapshot");
@@ -10758,12 +10878,14 @@ relationshipsCommand
       baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
       token,
     });
+    const effectiveUserId = resolveEffectiveUserId(opts.userId);
     const { data, error } = await api.POST("/restore_relationship", {
       body: {
         relationship_type: relationshipType as any,
         source_entity_id: sourceEntityId,
         target_entity_id: targetEntityId,
         reason: opts.reason,
+        ...(effectiveUserId ? { user_id: effectiveUserId } : {}),
       },
     });
     if (error) throw new Error("Failed to restore relationship");
@@ -10803,7 +10925,7 @@ timelineCommand
           end_date: opts.endDate,
           event_type: opts.eventType,
           entity_id: opts.entityId,
-          user_id: opts.userId,
+          user_id: resolveEffectiveUserId(opts.userId),
           limit: Number(opts.limit),
           offset: Number(opts.offset),
           order_by: orderBy,
@@ -10834,7 +10956,7 @@ timelineCommand
           id: opts.eventId,
         },
         query: {
-          user_id: opts.userId,
+          user_id: resolveEffectiveUserId(opts.userId),
         },
       },
     });
@@ -10864,7 +10986,7 @@ schemasCommand
       params: {
         query: {
           entity_type: opts.entityType,
-          user_id: opts.userId,
+          user_id: resolveEffectiveUserId(opts.userId),
           user_specific: opts.userSpecific,
           limit: Number(opts.limit),
           offset: Number(opts.offset),
@@ -11517,6 +11639,40 @@ program
     if (error) throw new Error(`Failed to store payload: ${JSON.stringify(error)}`);
     const storeResult = data as Record<string, unknown> | null;
 
+    // Defensive guard (v0.5.1+): in commit mode, a zero-create response that
+    // is NOT an idempotency replay AND returned no resolved entities at all
+    // signals a silent failure (e.g. the store-file vs store-entities
+    // divergence reproduced in v0.5.0 verification). Emit a non-fatal stderr
+    // advisory so agents and humans notice instead of treating the empty
+    // response as success. A genuine replay (server sets `replayed: true`),
+    // or a result where entities were matched/updated (entities array
+    // non-empty even though `entities_created === 0`), are NOT failures.
+    if (commit && storeResult && hasStructured) {
+      // When both structured and unstructured payloads are submitted,
+      // the response wraps structured results under `structured`. For
+      // structured-only, the response is flat.
+      const structuredPart = hasUnstructured
+        ? ((storeResult as any).structured as Record<string, unknown> | undefined)
+        : (storeResult as Record<string, unknown>);
+      if (structuredPart) {
+        const createdCount = Number(
+          (structuredPart as any).entities_created ?? 0,
+        );
+        const replayed = Boolean((structuredPart as any).replayed);
+        const entitiesList = Array.isArray((structuredPart as any).entities)
+          ? ((structuredPart as any).entities as unknown[])
+          : [];
+        if (createdCount === 0 && !replayed && entitiesList.length === 0) {
+          process.stderr.write(
+            "warning: store returned entities_created=0 without replayed=true. " +
+              "No entities were committed and this was not an idempotency replay. " +
+              "Check entity_type schemas, user_id scope, and payload shape " +
+              "(wrap fields at the top level of each entity, not under `attributes`).\n"
+          );
+        }
+      }
+    }
+
     if (storeResult && hasStructured && !hasUnstructured) {
       const entitiesList = Array.isArray((storeResult as any).entities)
         ? ((storeResult as any).entities as any[])
@@ -11564,12 +11720,21 @@ program
     "Optional idempotency key for the source file (default: derived from contents)"
   )
   .option("--source-priority <level>", "Source priority level (default: 100)")
+  .option(
+    "--source-upload",
+    "Force base64 upload of the source file via file_content (required for non-localhost API). Auto-detected when base URL is not localhost."
+  )
+  .option(
+    "--source-content",
+    "Alias for --source-upload; send the source file as file_content rather than a server-side file_path."
+  )
   .action(async (opts) => {
     const outputMode = resolveOutputMode();
     const config = await readConfig();
     const token = await getCliToken();
+    const baseUrl = await resolveBaseUrl(program.opts().baseUrl, config);
     const api = createApiClient({
-      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      baseUrl,
       token,
     });
 
@@ -11598,6 +11763,30 @@ program
     const commit = !(opts.plan || opts.dryRun);
     const strict = Boolean(opts.strict);
 
+    // Transport selection for the source artifact:
+    //   - Localhost base URL: send `file_path` (server reads disk).
+    //   - Non-localhost base URL: send `file_content` (base64) so a remote
+    //     server that cannot see our filesystem still gets the artifact.
+    //   - `--source-upload` / `--source-content`: force upload regardless.
+    const forceUpload = Boolean(opts.sourceUpload || opts.sourceContent);
+    const isLocalhost = isLocalhostBaseUrl(baseUrl);
+    const shouldUpload = forceUpload || !isLocalhost;
+
+    // CLI-side size guard: server enforces a 10 MB JSON body limit via
+    // `express.json({ limit: "10mb" })` in src/actions.ts. Base64 encoding
+    // inflates payloads ~1.37x, so the raw file limit is ~7.5 MB. Abort early
+    // with a clear message instead of a cryptic 413 from the server.
+    const SERVER_JSON_BODY_LIMIT_BYTES = 10 * 1024 * 1024; // must match express.json limit
+    const MAX_UPLOADABLE_BYTES = Math.floor(SERVER_JSON_BODY_LIMIT_BYTES * 0.72);
+    if (shouldUpload && sourceBuffer.length > MAX_UPLOADABLE_BYTES) {
+      throw new Error(
+        `Source file ${sourceBasename} is ${sourceBuffer.length} bytes, which exceeds the ` +
+          `remote upload limit of ~${MAX_UPLOADABLE_BYTES} bytes (server JSON body cap: ` +
+          `${SERVER_JSON_BODY_LIMIT_BYTES} bytes, minus base64 overhead). Host the file on a ` +
+          `localhost API (use --base-url http://127.0.0.1:<port>) and retry without --source-upload.`
+      );
+    }
+
     const idempotencyKey =
       opts.idempotencyKey ??
       createIdempotencyKey({ entities, source_file: sourceBasename, size: sourceBuffer.length });
@@ -11608,7 +11797,6 @@ program
     const body: Record<string, unknown> = {
       entities,
       idempotency_key: idempotencyKey,
-      file_path: sourcePath,
       mime_type: sourceMime,
       original_filename: sourceBasename,
       file_idempotency_key: fileIdempotencyKey,
@@ -11616,6 +11804,11 @@ program
       commit,
       strict,
     };
+    if (shouldUpload) {
+      body.file_content = sourceBuffer.toString("base64");
+    } else {
+      body.file_path = sourcePath;
+    }
     if (opts.sourcePriority) {
       const parsedPriority = parseInt(opts.sourcePriority as string, 10);
       if (!Number.isNaN(parsedPriority)) body.source_priority = parsedPriority;
@@ -11818,6 +12011,23 @@ program
     const created = entitiesList
       .map((e) => ({ id: (e?.entity_id ?? e?.id) as string | undefined }))
       .filter((e) => typeof e.id === "string" && e.id.length > 0);
+    // Defensive guard (v0.5.1+): see note on `store` above. `store-structured`
+    // always commits (no --plan flag). Warn only when there are zero created
+    // entities, the response is NOT an idempotency replay, and the resolved
+    // entities array is empty (no matches/updates either) — that combination
+    // is a silent failure. Matched/updated entities are fine.
+    if (storeResult) {
+      const createdCount = Number((storeResult as any).entities_created ?? 0);
+      const replayed = Boolean((storeResult as any).replayed);
+      if (createdCount === 0 && !replayed && entitiesList.length === 0) {
+        process.stderr.write(
+          "warning: store returned entities_created=0 without replayed=true. " +
+            "No entities were committed and this was not an idempotency replay. " +
+            "Check entity_type schemas, user_id scope, and payload shape " +
+            "(wrap fields at the top level of each entity, not under `attributes`).\n"
+        );
+      }
+    }
     if (storeResult) {
       writeOutput(
         {
@@ -12574,7 +12784,8 @@ program
       limit: Number(opts.limit ?? "50"),
       offset: Number(opts.offset ?? "0"),
     };
-    if (opts.userId) query.user_id = opts.userId;
+    const effectiveUserId = resolveEffectiveUserId(opts.userId);
+    if (effectiveUserId) query.user_id = effectiveUserId;
     const { data, error, response } = await api.GET("/record_activity", {
       params: { query: query as any },
     });
@@ -12673,7 +12884,7 @@ program
         include_bookkeeping: opts.includeBookkeeping === true,
         order: order as "recency" | "importance",
         max_field_chars: maxFieldChars,
-        user_id: opts.userId,
+        user_id: resolveEffectiveUserId(opts.userId),
       });
 
       writeOutput(result, outputMode);
@@ -12686,7 +12897,11 @@ statsCmd
     "--by <dimension>",
     "Bucket stats by a specific dimension (e.g. `identity-basis`)"
   )
-  .action(async (opts: { by?: string }) => {
+  .option(
+    "--user-id <userId>",
+    "Override user scope (flag > NEOTOMA_USER_ID > authenticated user)"
+  )
+  .action(async (opts: { by?: string; userId?: string }) => {
     const outputMode = resolveOutputMode();
     const config = await readConfig();
     const token = await getCliToken();
@@ -12694,7 +12909,12 @@ statsCmd
       baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
       token,
     });
-    const { data, error } = await api.GET("/stats", {});
+    const effectiveUserId = resolveEffectiveUserId(opts.userId);
+    const { data, error } = await api.GET("/stats", {
+      ...(effectiveUserId
+        ? { params: { query: { user_id: effectiveUserId } } }
+        : {}),
+    });
     if (error) throw new Error("Failed to fetch stats");
     const stats = (data ?? {}) as StatsData;
 
@@ -12724,7 +12944,11 @@ statsCmd
 statsCmd
   .command("entities")
   .description("Entity counts by type")
-  .action(async () => {
+  .option(
+    "--user-id <userId>",
+    "Override user scope (flag > NEOTOMA_USER_ID > authenticated user)"
+  )
+  .action(async (opts: { userId?: string }) => {
     const outputMode = resolveOutputMode();
     const config = await readConfig();
     const token = await getCliToken();
@@ -12732,7 +12956,12 @@ statsCmd
       baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
       token,
     });
-    const { data, error } = await api.GET("/stats", {});
+    const effectiveUserId = resolveEffectiveUserId(opts.userId);
+    const { data, error } = await api.GET("/stats", {
+      ...(effectiveUserId
+        ? { params: { query: { user_id: effectiveUserId } } }
+        : {}),
+    });
     if (error) throw new Error("Failed to fetch stats");
     const stats = (data ?? {}) as StatsData;
     if (outputMode === "json") {

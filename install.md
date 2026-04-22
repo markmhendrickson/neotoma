@@ -604,6 +604,88 @@ Local installs often require additional allowlist entries (`npx:*`) and
 repeated re-approval in each project, which defeats the purpose of this
 guide. Document the trade-off clearly if the user insists.
 
+## Production deployment (headless / systemd)
+
+For always-on API servers (remote hosts, shared team deployments, kiosks),
+`neotoma api start` should run under a supervisor rather than a user shell.
+This section documents the reference `systemd` unit and the production-mode
+selection rules the CLI follows.
+
+### Why `--env prod` matters
+
+`neotoma api start --env prod` selects:
+
+- The production data directory (`~/.config/neotoma/prod` by default, or
+  `NEOTOMA_DATA_DIR` when set).
+- The production port band and key file (kept distinct from `dev` so a
+  development server and production server can coexist on the same host).
+- Release-compiled artifacts from `dist/` (via `node dist/actions.js`) when
+  running from an **installed** package. On a source checkout (git clone),
+  the CLI falls back to `dev:prod` (tsx + production data dir) and emits a
+  one-line stderr advisory pointing back to this section so operators don't
+  accidentally run a watcher-style dev process in production.
+
+### Reference `systemd` unit
+
+Install the npm package globally on the server (`npm install -g neotoma`),
+provision a service user, then drop this unit at
+`/etc/systemd/system/neotoma-api.service`:
+
+```ini
+[Unit]
+Description=Neotoma API server (prod)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=neotoma
+Group=neotoma
+Environment=NEOTOMA_DATA_DIR=/var/lib/neotoma/prod
+Environment=NEOTOMA_HTTP_PORT=3080
+ExecStart=/usr/bin/env neotoma api start --env prod --port 3080 --host 127.0.0.1
+Restart=on-failure
+RestartSec=5s
+# Lock the service down; widen only if your integration needs it.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/neotoma/prod
+ProtectHome=yes
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable and start:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now neotoma-api
+sudo journalctl -u neotoma-api -f
+```
+
+### Health check and smoke test
+
+Once the unit is active, verify the server is reachable:
+
+```bash
+curl -sS http://127.0.0.1:3080/health | jq .
+neotoma --base-url http://127.0.0.1:3080 doctor
+```
+
+For remote callers, front the service with a reverse proxy (nginx, Caddy,
+cloud load balancer) that terminates TLS and forwards to the loopback
+listener. Remote CLIs must pass `--base-url https://your.host` and will
+automatically upload source artifacts via `file_content` instead of
+`file_path` (see `docs/developer/cli_reference.md` §Ingest).
+
+### Production runbook cross-links
+
+- Deployment runbook: [`docs/operations/runbook.md`](docs/operations/runbook.md)
+- CLI reference (including ingest auto-upload and size cap): [`docs/developer/cli_reference.md`](docs/developer/cli_reference.md)
+- Environment conventions and env-var naming: [`docs/developer/environment/ENV_VAR_NAMING_STRATEGY.md`](docs/developer/environment/ENV_VAR_NAMING_STRATEGY.md)
+
 ## Standing instruction handoff
 
 The bootstrap, discovery, and reconstruction guidance should also live in standing agent instructions so agents can use it in any context, not only first-run onboarding:

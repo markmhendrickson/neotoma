@@ -65,6 +65,7 @@ export const CreateRelationshipRequestSchema = z.object({
   target_entity_id: z.string(),
   source_id: z.string().optional(),
   metadata: z.record(z.unknown()).optional(),
+  user_id: z.string().optional(),
 });
 
 export const ListRelationshipsRequestSchema = z.object({
@@ -108,9 +109,12 @@ function validateEntityQueryCombinations(
   const normalizedSearch = typeof value.search === "string" ? value.search.trim() : "";
   const hasSearch = normalizedSearch.length > 0;
   const hasPublishedFilters =
-    value.published !== undefined || Boolean(value.published_after) || Boolean(value.published_before);
+    value.published !== undefined ||
+    Boolean(value.published_after) ||
+    Boolean(value.published_before);
   const hasNonDefaultSort =
-    (value.sort_by && value.sort_by !== "entity_id") || (value.sort_order && value.sort_order !== "asc");
+    (value.sort_by && value.sort_by !== "entity_id") ||
+    (value.sort_order && value.sort_order !== "asc");
 
   if (hasSearch && hasPublishedFilters) {
     ctx.addIssue({
@@ -179,12 +183,12 @@ const RetrieveEntitiesRequestBaseSchema = z
     user_id: z.string().optional(),
     entity_type: z.string().optional(),
     search: z.string().optional(),
-  /**
-   * Distance threshold for semantic search (L2, range ~0.9–1.5 in practice).
-   * Results with distance >= threshold are dropped. Lower = stricter matching.
-   * Typical values: 1.0 (very strict), 1.02 (moderate), 1.05 (loose).
-   * Only applied when search is provided.
-   */
+    /**
+     * Distance threshold for semantic search (L2, range ~0.9–1.5 in practice).
+     * Results with distance >= threshold are dropped. Lower = stricter matching.
+     * Typical values: 1.0 (very strict), 1.02 (moderate), 1.05 (loose).
+     * Only applied when search is provided.
+     */
     similarity_threshold: z.number().min(0).max(2).optional(),
     limit: z.number().int().positive().optional().default(100),
     offset: z.number().int().nonnegative().optional().default(0),
@@ -284,8 +288,7 @@ export const StoreRequestSchema = z
       return hasEntities || hasFileContent || hasFilePath;
     },
     {
-      message:
-        "Must provide either entities, file_path, or file_content with mime_type",
+      message: "Must provide either entities, file_path, or file_content with mime_type",
     }
   );
 
@@ -371,6 +374,7 @@ export const RelationshipSnapshotRequestSchema = z.object({
   relationship_type: RelationshipTypeSchema,
   source_entity_id: z.string(),
   target_entity_id: z.string(),
+  user_id: z.string().optional(),
 });
 
 export const AnalyzeSchemaCandidatesRequestSchema = z.object({
@@ -387,31 +391,35 @@ export const GetSchemaRecommendationsRequestSchema = z.object({
   status: z.enum(["pending", "approved", "rejected"]).optional(),
 });
 
-export const UpdateSchemaIncrementalRequestSchema = z.object({
-  entity_type: z.string(),
-  fields_to_add: z.array(
-    z.object({
-      field_name: z.string(),
-      field_type: z.enum(["string", "number", "date", "boolean", "array", "object"]),
-      required: z.boolean().default(false),
-      reducer_strategy: z
-        .enum(["last_write", "highest_priority", "most_specific", "merge_array"])
-        .optional(),
-    })
-  ).optional(),
-  fields_to_remove: z.array(z.string()).optional(),
-  schema_version: z.string().optional(),
-  user_specific: z.boolean().default(false),
-  user_id: z.string().optional(),
-  activate: z.boolean().default(true),
-  migrate_existing: z.boolean().default(false),
-  force: z.boolean().default(false),
-}).refine(
-  (data) =>
-    (data.fields_to_add && data.fields_to_add.length > 0) ||
-    (data.fields_to_remove && data.fields_to_remove.length > 0),
-  { message: "At least one of fields_to_add or fields_to_remove must be provided and non-empty" },
-);
+export const UpdateSchemaIncrementalRequestSchema = z
+  .object({
+    entity_type: z.string(),
+    fields_to_add: z
+      .array(
+        z.object({
+          field_name: z.string(),
+          field_type: z.enum(["string", "number", "date", "boolean", "array", "object"]),
+          required: z.boolean().default(false),
+          reducer_strategy: z
+            .enum(["last_write", "highest_priority", "most_specific", "merge_array"])
+            .optional(),
+        })
+      )
+      .optional(),
+    fields_to_remove: z.array(z.string()).optional(),
+    schema_version: z.string().optional(),
+    user_specific: z.boolean().default(false),
+    user_id: z.string().optional(),
+    activate: z.boolean().default(true),
+    migrate_existing: z.boolean().default(false),
+    force: z.boolean().default(false),
+  })
+  .refine(
+    (data) =>
+      (data.fields_to_add && data.fields_to_add.length > 0) ||
+      (data.fields_to_remove && data.fields_to_remove.length > 0),
+    { message: "At least one of fields_to_add or fields_to_remove must be provided and non-empty" }
+  );
 
 export const RegisterSchemaRequestSchema = z.object({
   entity_type: z.string(),

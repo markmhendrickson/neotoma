@@ -18,6 +18,8 @@ The two files governed by this rule:
 
 Both files are organized under the same ten bracket-labelled sections in the same turn-lifecycle order: `[TURN LIFECYCLE]`, `[STORE RECIPES]` (+ subsections `user-phase`, `attachment`, `screenshot/image`, `chat details and fallbacks`), `[RETRIEVAL]`, `[PROVENANCE]`, `[TASKS & COMMITMENTS]`, `[ENTITY TYPES & SCHEMA]`, `[COMMUNICATION & DISPLAY]`, `[CONVENTIONS]`, `[ERRORS & RECOVERY]`, `[ONBOARDING]`. The anchor table below uses section-qualified rule names so each atomic rule maps 1:1 between the two files.
 
+For the broader architectural touchpoints that surround instruction changes (OpenAPI spec updates, contract mappings, error envelopes, release discipline), see `docs/architecture/change_guardrails_rules.mdc`.
+
 This rule does NOT cover:
 - The auto-injected active-env section in `.cursor/rules/neotoma_cli.mdc` (managed by CLI session startup)
 - Per-tool descriptions in `docs/developer/mcp/tool_descriptions.yaml`
@@ -68,6 +70,7 @@ Each atomic rule below exists in both files with transport-appropriate wording. 
 | 16 | Relationships (PART_OF + REFERS_TO) | `Relationships` | **Relationships** bullet |
 | 17 | Extraction (descriptive entity_type, no schema lookup) | `Extraction` | **Extraction** bullet |
 | 18 | `idempotency_key` format | `idempotency_key:` | **idempotency_key** bullet |
+| 18a | Human-readable chat naming (`agent_message.canonical_name`, `conversation.title`, and canonical-name scope) | `Naming` + `Canonical-name scope` | **Naming** + **Canonical-name scope** bullets |
 
 #### [STORE RECIPES] attachment
 
@@ -168,6 +171,9 @@ Each atomic rule below exists in both files with transport-appropriate wording. 
 | 71 | Summarization after store (follow display rule) | `Summarization after MCP actions` | **Summarization after store** bullet |
 | 72 | Update check at session start | `Update check` | **Update check** bullet |
 | 72a | Duplicate repair on demand (list_potential_duplicates / `entities find-duplicates` → confirm → merge_entities; post-hoc only) | `Duplicate repair (on demand)` | **Duplicate repair (on demand)** bullet |
+| 72b | User scope resolution for read verbs (`--user-id` flag > `NEOTOMA_USER_ID` env var > authenticated user; reject empty/whitespace env) | n/a (CLI-only; MCP infers `user_id` from auth) | **User scope (`--user-id` / `NEOTOMA_USER_ID`)** bullet |
+| 72c | Ingest source transport (`file_path` for localhost; auto-upload `file_content` for non-localhost; `--source-upload` / `--source-content` force upload; CLI enforces ~7.5 MB upload cap) | n/a (CLI-only; MCP stores files via `store_structured` attachment recipe) | **Ingest source transport (`--source-upload` / `--source-content`)** bullet |
+| 72d | Commit-mode store silent-failure guard: when `/store` returns `entities_created=0` with no resolved entities and `replayed != true`, CLI emits stderr warning (flatten `attributes`, check user scope, check schema). | n/a (CLI-only UX; MCP clients surface error envelopes directly) | **Silent-failure guard** bullet |
 
 ### [ERRORS & RECOVERY]
 

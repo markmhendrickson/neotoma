@@ -37,6 +37,23 @@ export interface EntityWithProvenance {
   computed_at?: string;
   merged_to_entity_id?: string | null;
   merged_at?: string | null;
+  /**
+   * Optional schema-derived display label for `entity_type` (from
+   * `SchemaMetadata.label`). Clients may surface this as a human-readable
+   * subtitle to avoid re-deriving it per view.
+   */
+  entity_type_label?: string | null;
+  /**
+   * Optional ordered list of the most important snapshot fields for overview
+   * display. Computed from schema field order when available. Clients are
+   * free to ignore this and use their own ordering.
+   */
+  primary_fields?: string[];
+  /**
+   * Optional ISO timestamp of when the underlying `entities` row was created.
+   * Surfaced here for overview cards; mirrors `entities.created_at`.
+   */
+  created_at?: string;
 }
 
 /** Row shape from entity_snapshots table (select *). */
@@ -609,6 +626,36 @@ export async function getEntityWithProvenance(
     }
   }
 
+  // Best-effort schema-derived enrichments (label, primary fields). These
+  // are optional and never block the entity response.
+  let entityTypeLabel: string | null = null;
+  let primaryFields: string[] | undefined;
+  try {
+    const { SchemaRegistryService } = await import("./schema_registry.js");
+    const registry = new SchemaRegistryService();
+    const schema = await registry.loadActiveSchema(
+      entity.entity_type,
+      entity.user_id ?? undefined,
+    );
+    if (schema?.metadata?.label) entityTypeLabel = schema.metadata.label;
+    const snapshotObj = effectiveSnapshot?.snapshot ?? {};
+    if (snapshotObj && Object.keys(snapshotObj).length > 0) {
+      const schemaFieldOrder = schema?.schema_definition?.fields
+        ? Object.keys(schema.schema_definition.fields)
+        : [];
+      const { orderedSnapshotKeys } = await import("./canonical_markdown.js");
+      const ordered = orderedSnapshotKeys(snapshotObj, schemaFieldOrder);
+      // Cap to a reasonable overview-card size; UI is free to pick fewer.
+      primaryFields = ordered.slice(0, 8);
+    }
+  } catch (err) {
+    // Non-fatal: leave enrichments unset.
+    console.warn(
+      `Failed to compute schema enrichments for entity ${entityId}:`,
+      err instanceof Error ? err.message : err,
+    );
+  }
+
   return {
     entity_id: entity.id,
     entity_type: entity.entity_type,
@@ -622,6 +669,9 @@ export async function getEntityWithProvenance(
     computed_at: effectiveSnapshot?.computed_at || entity.created_at,
     merged_to_entity_id: entity.merged_to_entity_id,
     merged_at: entity.merged_at,
+    entity_type_label: entityTypeLabel,
+    primary_fields: primaryFields,
+    created_at: entity.created_at,
   };
 }
 

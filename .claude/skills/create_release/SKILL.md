@@ -8,7 +8,7 @@ description: Release
 
 # Release
 
-Prepare and ship a GitHub + npm release with a mandatory preview step.
+Prepare and ship a GitHub + npm release with a mandatory preview step. A confirmed **execute** run is **not complete** until **`npm publish`** succeeds from the published package root, unless the user explicitly scoped the request to GitHub-only / no registry.
 
 ## When to Use
 
@@ -84,7 +84,7 @@ If the working tree was dirty when drafting, state that **execute** matches the 
 
 ### Step 4: Execute
 
-After user confirms:
+After user confirms, run **every** step below in order through **`npm publish`**. Stopping after `gh release create` is a failed full `/release` unless the user confirmed a GitHub-only (no npm) scope.
 
 1. **Commit uncommitted changes** (when the preview assumed them and the user confirms execute):
    - Stage only paths that should ship; **never** stage paths forbidden by repository security / pre-commit rules (for example configured `protected_paths`, `.env*`, `data/` when disallowed).
@@ -133,10 +133,12 @@ After user confirms:
    gh release create "vX.Y.Z" --title "vX.Y.Z" --notes-file /tmp/gh-release-vX.Y.Z.md
    ```
 
-9. **Publish to npm**:
+9. **Publish to npm (mandatory for a full release)**:
+   From the directory that owns the published `package.json` (repo or workspace root per your monorepo layout), run:
    ```bash
    npm publish
    ```
+   Do not treat the release as finished until this succeeds (capture or report the registry URL / version). **Skip only** if the user explicitly confirmed a scope that excludes npm (for example tag-only or internal).
 
 10. **Merge main back to dev** (keep branches in sync):
     ```bash
@@ -148,15 +150,16 @@ After user confirms:
 ### Step 5: Post-Release
 
 1. Move supplement: `mv docs/releases/in_progress/vX.Y.Z docs/releases/completed/vX.Y.Z` (if directory was created).
-2. Report summary: version, GitHub Release URL, npm package URL.
+2. Report summary: version, GitHub Release URL, npm package URL (must reflect a successful **`npm publish`** when the release included npm).
 
 ## Submodule Mode
 
 If the user says `/release foundation` (or another submodule name):
 
 1. `cd <submodule>` and run the same workflow scoped to that submodule.
-2. After tagging and pushing inside the submodule, return to the main repo.
-3. Do NOT proceed with main repository release.
+2. If that submodule is the npm package root, run **`npm publish`** there after tag push, same as the main repo execute path.
+3. After tagging and pushing (and npm publish when applicable) inside the submodule, return to the main repo.
+4. Do NOT proceed with main repository release.
 
 ## Constraints
 
@@ -166,6 +169,7 @@ If the user says `/release foundation` (or another submodule name):
 - Always describe uncommitted changes concretely — never use a generic placeholder.
 - Do not ship a GitHub Release body that is only an auto-generated commit list.
 - Do not merge or tag without user approval of the preview.
+- For a standard `/release`, **always** run **`npm publish`** after `gh release create` unless the user explicitly confirmed GitHub-only / no registry.
 - If `docs/developer/github_release_process.md` exists, follow its template and render pipeline.
 
 ## Agent Instructions
@@ -184,3 +188,4 @@ If the user says `/release foundation` (or another submodule name):
 - Omitting material working-tree changes from the integrated preview (they must appear in-section, not dropped)
 - Treating confirmed uncommitted changes as shipped without committing them first
 - Using only `git log --oneline` as the GitHub Release body
+- Ending execute after the GitHub Release without **`npm publish`** when the user confirmed a normal (npm-included) release

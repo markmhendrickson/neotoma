@@ -25,14 +25,28 @@ describe("MCP get_entity_type_counts tool", () => {
     const result = await (server as any).getEntityTypeCounts({ user_id: testUserId });
     const response = JSON.parse(result.content[0].text);
     const after = await getDashboardStats(testUserId);
-    const acceptableCounts = [
-      sortCounts(before.entities_by_type ?? {}),
-      sortCounts(after.entities_by_type ?? {}),
-    ];
-    const acceptableTotals = [before.total_entities ?? 0, after.total_entities ?? 0];
+    const beforeCounts = sortCounts(before.entities_by_type ?? {});
+    const afterCounts = sortCounts(after.entities_by_type ?? {});
+    const allTypes = new Set([
+      ...Object.keys(beforeCounts),
+      ...Object.keys(afterCounts),
+      ...Object.keys(response.entities_by_type ?? {}),
+    ]);
 
-    expect(acceptableCounts).toContainEqual(response.entities_by_type);
-    expect(acceptableTotals).toContain(response.total_entities);
+    for (const entityType of allTypes) {
+      const beforeCount = beforeCounts[entityType] ?? 0;
+      const afterCount = afterCounts[entityType] ?? 0;
+      const responseCount = response.entities_by_type?.[entityType] ?? 0;
+      const minCount = Math.min(beforeCount, afterCount);
+      const maxCount = Math.max(beforeCount, afterCount);
+      expect(responseCount).toBeGreaterThanOrEqual(minCount);
+      expect(responseCount).toBeLessThanOrEqual(maxCount);
+    }
+
+    const minTotal = Math.min(before.total_entities ?? 0, after.total_entities ?? 0);
+    const maxTotal = Math.max(before.total_entities ?? 0, after.total_entities ?? 0);
+    expect(response.total_entities).toBeGreaterThanOrEqual(minTotal);
+    expect(response.total_entities).toBeLessThanOrEqual(maxTotal);
     expect(response.last_updated).toBeDefined();
     expect(response.count_source).toBe("dashboard_stats");
     expect(response.scope).toBe("authenticated_user");

@@ -30,7 +30,12 @@ describe("CLI recent and ingest commands", () => {
       const { stdout, stderr } = await execAsync(
         `${CLI_PATH} recent --limit 5 --json --user-id "${TEST_USER_ID}"`
       );
-      expect(stderr.replace(/Saved repo path[^\n]*\n?/g, "").trim()).toBe("");
+      expect(
+        stderr
+          .replace(/Saved repo path[^\n]*\n?/g, "")
+          .replace(/Saved Neotoma path to config:[^\n]*\n?/g, "")
+          .trim()
+      ).toBe("");
       const result = JSON.parse(stdout) as {
         items: Array<{ record_type: string; id: string; activity_at: string }>;
         limit: number;
@@ -67,7 +72,12 @@ describe("CLI recent and ingest commands", () => {
       const { stdout, stderr } = await execAsync(
         `${CLI_PATH} ingest --entities "${entitiesPath}" --source-file "${sourcePath}" --plan --json --user-id "${TEST_USER_ID}" --idempotency-key "${idem}" --file-idempotency-key "${idem}-file"`
       );
-      expect(stderr.replace(/Saved repo path[^\n]*\n?/g, "").trim()).toBe("");
+      expect(
+        stderr
+          .replace(/Saved repo path[^\n]*\n?/g, "")
+          .replace(/Saved Neotoma path to config:[^\n]*\n?/g, "")
+          .trim()
+      ).toBe("");
       const result = JSON.parse(stdout) as {
         ingest_report?: { mode: string; entities_total: number };
         structured?: { entities?: unknown[] };

@@ -1,6 +1,14 @@
 # Neotoma Error Handling — Error Codes and Propagation
 *(Structured Error Envelope and Canonical Error Codes)*
-## Error Envelope
+
+## Envelope Taxonomy
+
+Two envelope shapes exist. Pick the right one and do not mix them.
+
+### 1. Standard envelope
+
+Emitted by `buildErrorEnvelope(code, message, details?)` in `src/actions.ts`. Used for most API errors.
+
 ```typescript
 interface ErrorEnvelope {
   error_code: string;              // e.g., 'INGESTION_INVALID_FILE'
@@ -10,6 +18,40 @@ interface ErrorEnvelope {
   timestamp: string;               // ISO 8601
 }
 ```
+
+Wire format: `{ error: ErrorEnvelope }`.
+
+### 2. Resolution envelope (`ERR_STORE_RESOLUTION_FAILED`)
+
+Emitted by the `/store` endpoint when one or more entities fail to resolve during a structured store. Carries per-entity `issues[]` so clients can show each row's failure independently.
+
+```typescript
+interface StoreResolutionErrorEnvelope {
+  error: {
+    code: "ERR_STORE_RESOLUTION_FAILED";
+    message: string;
+    issues: Array<{
+      code: string;                // e.g., 'ERR_CANONICAL_NAME_UNRESOLVED'
+      message: string;
+      details?: Record<string, any>;
+      hint?: string;               // Optional structured upgrade guidance
+    }>;
+  };
+}
+```
+
+The `hint` field carries upgrade guidance that the client can surface verbatim (e.g., "Payload looks like the pre-0.5 `attributes`-nested shape; flatten fields to top level."). Do not concatenate upgrade text into `message`; use `hint`.
+
+### Picking the right envelope
+
+- Use the **standard envelope** for single-object failures (auth, validation, resource-not-found, DB, ingestion).
+- Use the **resolution envelope** only when the error carries multiple per-row issues from a batch operation (currently only `/store`).
+
+### Adding fields
+
+Both envelopes are declared in `openapi.yaml` `components/schemas`. Any new field (including `hint`, `details` sub-keys, new issue codes) follows the OpenAPI contract flow: spec first, regenerate types, populate from server, test at contract level. See `docs/architecture/openapi_contract_flow.md`.
+
+
 ## Canonical Error Codes
 ### Ingestion Errors
 | Code | Meaning | HTTP | Retry? |

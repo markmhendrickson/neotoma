@@ -529,6 +529,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/recent_conversations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Recent conversations with nested messages
+         * @description Lists `conversation` entities for the authenticated user ordered by
+         *     their latest activity (conversation-level activity or the latest
+         *     activity of any `agent_message` that is `PART_OF` that conversation).
+         *     Each conversation includes its messages in reverse chronological order,
+         *     and each message includes non-`PART_OF` entities linked from that message.
+         *     Powers the Inspector recent conversations view and dashboard widget.
+         */
+        get: operations["getRecentConversations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/observations/create": {
         parameters: {
             query?: never;
@@ -1119,6 +1144,45 @@ export interface components {
             /** Format: date-time */
             timestamp?: string;
         };
+        /**
+         * @description A single per-observation failure inside an
+         *     `ERR_STORE_RESOLUTION_FAILED` response.
+         */
+        StoreResolutionIssue: {
+            /** @description Index of the offending entity in the request `entities` array. */
+            observation_index?: number;
+            entity_type?: string;
+            /** @enum {string} */
+            code?: "ERR_CANONICAL_NAME_UNRESOLVED" | "ERR_MERGE_REFUSED";
+            message?: string;
+            /**
+             * @description Code-specific context (e.g. `seen_fields`, `attempted_value`,
+             *     `entity_id`, `canonical_name`, `resolver_path`).
+             */
+            details?: {
+                [key: string]: unknown;
+            };
+            /**
+             * @description Optional structured upgrade guidance. Populated when the server can
+             *     detect a common caller mistake (e.g. wrapping fields inside
+             *     `attributes`) and wants to surface a concrete fix without including
+             *     any PII. Consumers MAY display this verbatim to end users.
+             */
+            hint?: string;
+        };
+        /**
+         * @description 400 response shape for `ERR_STORE_RESOLUTION_FAILED`. Distinct from the
+         *     generic `ErrorEnvelope` because it carries a per-observation `issues`
+         *     array rather than a free-form `details` object.
+         */
+        StoreResolutionErrorEnvelope: {
+            error?: {
+                /** @enum {string} */
+                code?: "ERR_STORE_RESOLUTION_FAILED";
+                message?: string;
+                issues?: components["schemas"]["StoreResolutionIssue"][];
+            };
+        };
         Entity: {
             id?: string;
             entity_type?: string;
@@ -1146,6 +1210,16 @@ export interface components {
             observation_count?: number;
             /** Format: date-time */
             last_observation_at?: string;
+            canonical_name?: string | null;
+            merged_to_entity_id?: string | null;
+            /** Format: date-time */
+            merged_at?: string | null;
+            /** Format: date-time */
+            created_at?: string | null;
+            /** @description Optional schema-derived display label for `entity_type` from `SchemaMetadata.label`. */
+            entity_type_label?: string | null;
+            /** @description Optional ordered list of the most important snapshot fields for overview display. */
+            primary_fields?: string[] | null;
         };
         Source: {
             id?: string;
@@ -1175,6 +1249,8 @@ export interface components {
                 [key: string]: unknown;
             };
             user_id?: string;
+            /** @description Human-readable source label attached by `attachSourceLabelsToObservations`. */
+            source?: string | null;
         };
         RelationshipSnapshot: {
             relationship_key?: string;
@@ -1194,6 +1270,14 @@ export interface components {
                 [key: string]: unknown;
             };
             user_id?: string;
+            /** @description Canonical name of the source entity. Populated when `expand_entities=true`. */
+            source_entity_name?: string | null;
+            source_entity_type?: string | null;
+            source_entity_type_label?: string | null;
+            /** @description Canonical name of the target entity. Populated when `expand_entities=true`. */
+            target_entity_name?: string | null;
+            target_entity_type?: string | null;
+            target_entity_type_label?: string | null;
         };
         TimelineEvent: {
             id?: string;
@@ -1354,6 +1438,13 @@ export interface components {
         };
         StoreStructuredResponse: {
             success?: boolean;
+            /**
+             * @description True when the response is an idempotency replay (no new observations
+             *     or entities were written for this request). Consumers can use this
+             *     to distinguish a genuine fresh commit from a replayed earlier result
+             *     when `entities_created_count` is 0.
+             */
+            replayed?: boolean;
             entities?: {
                 entity_id?: string;
                 entity_type?: string;
@@ -2041,7 +2132,10 @@ export interface operations {
     };
     getEntityById: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Optional user scope. When omitted the authenticated user is used. */
+                user_id?: string;
+            };
             header?: never;
             path: {
                 id: string;
@@ -2096,7 +2190,10 @@ export interface operations {
     };
     getEntityRelationships: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description When `true`, the response includes `related_entities` keyed by entity_id and decorates each relationship row with convenience top-level fields (`source_entity_name`, `target_entity_name`, `source_entity_type`, `target_entity_type`, and their labels). */
+                expand_entities?: boolean;
+            };
             header?: never;
             path: {
                 id: string;
@@ -2112,7 +2209,21 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        outgoing?: components["schemas"]["RelationshipSnapshot"][];
+                        incoming?: components["schemas"]["RelationshipSnapshot"][];
                         relationships?: components["schemas"]["RelationshipSnapshot"][];
+                        /** @description Keyed by entity_id; present when `expand_entities=true` and related entities were found. */
+                        related_entities?: {
+                            [key: string]: {
+                                entity_id?: string;
+                                entity_type?: string | null;
+                                canonical_name?: string | null;
+                                snapshot?: {
+                                    [key: string]: unknown;
+                                };
+                                entity_type_label?: string | null;
+                            };
+                        } | null;
                     };
                 };
             };
@@ -2352,6 +2463,71 @@ export interface operations {
                             activity_at?: string;
                             title?: string;
                             subtitle?: string | null;
+                            entity_id?: string | null;
+                            entity_name?: string | null;
+                            entity_type?: string | null;
+                            source_id?: string | null;
+                            source_filename?: string | null;
+                            source_type?: string | null;
+                            source_entity_id?: string | null;
+                            source_entity_name?: string | null;
+                            target_entity_id?: string | null;
+                            target_entity_name?: string | null;
+                            relationship_type?: string | null;
+                            event_type?: string | null;
+                            status?: string | null;
+                            turn_key?: string | null;
+                            group_key?: string | null;
+                        }[];
+                        has_more?: boolean;
+                        limit?: number;
+                        offset?: number;
+                    };
+                };
+            };
+        };
+    };
+    getRecentConversations: {
+        parameters: {
+            query?: {
+                user_id?: string;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Recent conversations */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items?: {
+                            conversation_id?: string;
+                            canonical_name?: string | null;
+                            title?: string | null;
+                            activity_at?: string;
+                            message_count?: number;
+                            messages?: {
+                                message_id?: string;
+                                canonical_name?: string | null;
+                                role?: string | null;
+                                content?: string | null;
+                                turn_key?: string | null;
+                                activity_at?: string;
+                                related_entities?: {
+                                    entity_id?: string;
+                                    entity_type?: string | null;
+                                    canonical_name?: string | null;
+                                    title?: string | null;
+                                    relationship_type?: string;
+                                }[];
+                            }[];
                         }[];
                         has_more?: boolean;
                         limit?: number;
@@ -2629,6 +2805,19 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StoreStructuredResponse"] | components["schemas"]["StoreUnstructuredResponse"] | components["schemas"]["StoreResponse"];
+                };
+            };
+            /**
+             * @description Request rejected. `ERR_STORE_RESOLUTION_FAILED` uses the richer
+             *     `StoreResolutionErrorEnvelope` shape; other validation errors fall
+             *     back to the generic `ErrorEnvelope`.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoreResolutionErrorEnvelope"] | components["schemas"]["ErrorEnvelope"];
                 };
             };
         };

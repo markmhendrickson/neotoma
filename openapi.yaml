@@ -48,6 +48,57 @@ components:
         timestamp:
           type: string
           format: date-time
+    StoreResolutionIssue:
+      type: object
+      description: |
+        A single per-observation failure inside an
+        `ERR_STORE_RESOLUTION_FAILED` response.
+      properties:
+        observation_index:
+          type: integer
+          description: Index of the offending entity in the request `entities` array.
+        entity_type:
+          type: string
+        code:
+          type: string
+          enum:
+            - ERR_CANONICAL_NAME_UNRESOLVED
+            - ERR_MERGE_REFUSED
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+          description: |
+            Code-specific context (e.g. `seen_fields`, `attempted_value`,
+            `entity_id`, `canonical_name`, `resolver_path`).
+        hint:
+          type: string
+          description: |
+            Optional structured upgrade guidance. Populated when the server can
+            detect a common caller mistake (e.g. wrapping fields inside
+            `attributes`) and wants to surface a concrete fix without including
+            any PII. Consumers MAY display this verbatim to end users.
+    StoreResolutionErrorEnvelope:
+      type: object
+      description: |
+        400 response shape for `ERR_STORE_RESOLUTION_FAILED`. Distinct from the
+        generic `ErrorEnvelope` because it carries a per-observation `issues`
+        array rather than a free-form `details` object.
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              enum:
+                - ERR_STORE_RESOLUTION_FAILED
+            message:
+              type: string
+            issues:
+              type: array
+              items:
+                $ref: '#/components/schemas/StoreResolutionIssue'
     Entity:
       type: object
       properties:
@@ -92,6 +143,30 @@ components:
         last_observation_at:
           type: string
           format: date-time
+        canonical_name:
+          type: string
+          nullable: true
+        merged_to_entity_id:
+          type: string
+          nullable: true
+        merged_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
+        entity_type_label:
+          type: string
+          nullable: true
+          description: Optional schema-derived display label for `entity_type` from `SchemaMetadata.label`.
+        primary_fields:
+          type: array
+          nullable: true
+          description: Optional ordered list of the most important snapshot fields for overview display.
+          items:
+            type: string
     Source:
       type: object
       properties:
@@ -144,6 +219,10 @@ components:
           additionalProperties: true
         user_id:
           type: string
+        source:
+          type: string
+          nullable: true
+          description: Human-readable source label attached by `attachSourceLabelsToObservations`.
     RelationshipSnapshot:
       type: object
       properties:
@@ -173,6 +252,26 @@ components:
           additionalProperties: true
         user_id:
           type: string
+        source_entity_name:
+          type: string
+          nullable: true
+          description: Canonical name of the source entity. Populated when `expand_entities=true`.
+        source_entity_type:
+          type: string
+          nullable: true
+        source_entity_type_label:
+          type: string
+          nullable: true
+        target_entity_name:
+          type: string
+          nullable: true
+          description: Canonical name of the target entity. Populated when `expand_entities=true`.
+        target_entity_type:
+          type: string
+          nullable: true
+        target_entity_type_label:
+          type: string
+          nullable: true
     TimelineEvent:
       type: object
       properties:
@@ -414,6 +513,13 @@ components:
       properties:
         success:
           type: boolean
+        replayed:
+          type: boolean
+          description: |
+            True when the response is an idempotency replay (no new observations
+            or entities were written for this request). Consumers can use this
+            to distinguish a genuine fresh commit from a replayed earlier result
+            when `entities_created_count` is 0.
         entities:
           type: array
           items:
@@ -1035,6 +1141,11 @@ paths:
           name: id
           required: true
           schema: { type: string }
+        - in: query
+          name: user_id
+          required: false
+          description: Optional user scope. When omitted the authenticated user is used.
+          schema: { type: string }
       responses:
         '200':
           description: Entity
@@ -1078,6 +1189,15 @@ paths:
           name: id
           required: true
           schema: { type: string }
+        - in: query
+          name: expand_entities
+          required: false
+          description: >
+            When `true`, the response includes `related_entities` keyed by
+            entity_id and decorates each relationship row with convenience
+            top-level fields (`source_entity_name`, `target_entity_name`,
+            `source_entity_type`, `target_entity_type`, and their labels).
+          schema: { type: boolean }
       responses:
         '200':
           description: Relationships
@@ -1086,10 +1206,39 @@ paths:
               schema:
                 type: object
                 properties:
+                  outgoing:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RelationshipSnapshot'
+                  incoming:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RelationshipSnapshot'
                   relationships:
                     type: array
                     items:
                       $ref: '#/components/schemas/RelationshipSnapshot'
+                  related_entities:
+                    type: object
+                    nullable: true
+                    description: Keyed by entity_id; present when `expand_entities=true` and related entities were found.
+                    additionalProperties:
+                      type: object
+                      properties:
+                        entity_id:
+                          type: string
+                        entity_type:
+                          type: string
+                          nullable: true
+                        canonical_name:
+                          type: string
+                          nullable: true
+                        snapshot:
+                          type: object
+                          additionalProperties: true
+                        entity_type_label:
+                          type: string
+                          nullable: true
 
   /entities/duplicates:
     get:
@@ -1402,6 +1551,146 @@ paths:
                         subtitle:
                           type: string
                           nullable: true
+                        entity_id:
+                          type: string
+                          nullable: true
+                        entity_name:
+                          type: string
+                          nullable: true
+                        entity_type:
+                          type: string
+                          nullable: true
+                        source_id:
+                          type: string
+                          nullable: true
+                        source_filename:
+                          type: string
+                          nullable: true
+                        source_type:
+                          type: string
+                          nullable: true
+                        source_entity_id:
+                          type: string
+                          nullable: true
+                        source_entity_name:
+                          type: string
+                          nullable: true
+                        target_entity_id:
+                          type: string
+                          nullable: true
+                        target_entity_name:
+                          type: string
+                          nullable: true
+                        relationship_type:
+                          type: string
+                          nullable: true
+                        event_type:
+                          type: string
+                          nullable: true
+                        status:
+                          type: string
+                          nullable: true
+                        turn_key:
+                          type: string
+                          nullable: true
+                        group_key:
+                          type: string
+                          nullable: true
+                  has_more:
+                    type: boolean
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+
+  /recent_conversations:
+    get:
+      summary: Recent conversations with nested messages
+      description: |
+        Lists `conversation` entities for the authenticated user ordered by
+        their latest activity (conversation-level activity or the latest
+        activity of any `agent_message` that is `PART_OF` that conversation).
+        Each conversation includes its messages in reverse chronological order,
+        and each message includes non-`PART_OF` entities linked from that message.
+        Powers the Inspector recent conversations view and dashboard widget.
+      operationId: getRecentConversations
+      parameters:
+        - in: query
+          name: user_id
+          required: false
+          schema: { type: string }
+        - in: query
+          name: limit
+          required: false
+          schema: { type: integer }
+        - in: query
+          name: offset
+          required: false
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Recent conversations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        conversation_id:
+                          type: string
+                        canonical_name:
+                          type: string
+                          nullable: true
+                        title:
+                          type: string
+                          nullable: true
+                        activity_at:
+                          type: string
+                        message_count:
+                          type: integer
+                        messages:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              message_id:
+                                type: string
+                              canonical_name:
+                                type: string
+                                nullable: true
+                              role:
+                                type: string
+                                nullable: true
+                              content:
+                                type: string
+                                nullable: true
+                              turn_key:
+                                type: string
+                                nullable: true
+                              activity_at:
+                                type: string
+                              related_entities:
+                                type: array
+                                items:
+                                  type: object
+                                  properties:
+                                    entity_id:
+                                      type: string
+                                    entity_type:
+                                      type: string
+                                      nullable: true
+                                    canonical_name:
+                                      type: string
+                                      nullable: true
+                                    title:
+                                      type: string
+                                      nullable: true
+                                    relationship_type:
+                                      type: string
                   has_more:
                     type: boolean
                   limit:
@@ -1659,6 +1948,17 @@ paths:
                   - { $ref: '#/components/schemas/StoreStructuredResponse' }
                   - { $ref: '#/components/schemas/StoreUnstructuredResponse' }
                   - { $ref: '#/components/schemas/StoreResponse' }
+        '400':
+          description: |
+            Request rejected. `ERR_STORE_RESOLUTION_FAILED` uses the richer
+            `StoreResolutionErrorEnvelope` shape; other validation errors fall
+            back to the generic `ErrorEnvelope`.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - { $ref: '#/components/schemas/StoreResolutionErrorEnvelope' }
+                  - { $ref: '#/components/schemas/ErrorEnvelope' }
 
   /store/unstructured:
     post:

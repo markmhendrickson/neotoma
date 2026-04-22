@@ -283,7 +283,7 @@ describe("CLI relationship commands", () => {
 
     it("should get relationship by ID with --json", async () => {
       const { stdout } = await execAsync(
-        `${CLI_PATH} relationships get --relationship-id "${testRelationshipId}" --json`
+        `${CLI_PATH} relationships get --relationship-id "${testRelationshipId}" --user-id "${TEST_USER_ID}" --json`
       );
 
       const result = JSON.parse(stdout);
@@ -308,7 +308,7 @@ describe("CLI relationship commands", () => {
       tracker.addRelationship(createResult.relationship_id);
 
       const { stdout } = await execAsync(
-        `${CLI_PATH} relationships delete --relationship-id "${createResult.relationship_id}" --json`
+        `${CLI_PATH} relationships delete --relationship-id "${createResult.relationship_id}" --user-id "${TEST_USER_ID}" --json`
       );
 
       const result = JSON.parse(stdout);
@@ -327,12 +327,12 @@ describe("CLI relationship commands", () => {
 
       // Delete first
       await execAsync(
-        `${CLI_PATH} relationships delete --relationship-id "${createResult.relationship_id}" --json`
+        `${CLI_PATH} relationships delete --relationship-id "${createResult.relationship_id}" --user-id "${TEST_USER_ID}" --json`
       );
 
       // Then restore
       const { stdout } = await execAsync(
-        `${CLI_PATH} relationships restore --relationship-id "${createResult.relationship_id}" --json`
+        `${CLI_PATH} relationships restore --relationship-id "${createResult.relationship_id}" --user-id "${TEST_USER_ID}" --json`
       );
 
       const result = JSON.parse(stdout);
@@ -350,7 +350,7 @@ describe("CLI relationship commands", () => {
       tracker.addRelationship(createResult.relationship_id);
 
       const { stdout } = await execAsync(
-        `${CLI_PATH} relationships get-snapshot works_at "${sourceEntityId}" "${targetEntityId}" --json`
+        `${CLI_PATH} relationships get-snapshot works_at "${sourceEntityId}" "${targetEntityId}" --user-id "${TEST_USER_ID}" --json`
       );
       const result = JSON.parse(stdout);
       expect(result).toHaveProperty("snapshot");
@@ -386,7 +386,7 @@ describe("CLI relationship commands", () => {
     it("should return exit code 0 on success", async () => {
       try {
         await execAsync(
-          `${CLI_PATH} relationships get --relationship-id "${testRelationshipId}" --json`
+          `${CLI_PATH} relationships get --relationship-id "${testRelationshipId}" --user-id "${TEST_USER_ID}" --json`
         );
         expect(true).toBe(true);
       } catch {

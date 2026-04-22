@@ -300,6 +300,13 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     cliCommand: "recent",
   },
   {
+    operationId: "getRecentConversations",
+    method: "get",
+    path: "/recent_conversations",
+    adapter: "infra",
+    notes: "Inspector HTTP-only; conversations with nested messages.",
+  },
+  {
     operationId: "storeStructured",
     method: "post",
     path: "/store",
@@ -547,7 +554,8 @@ export const MCP_TOOL_TO_CLI_COMMAND: Record<string, string> = {
   retrieve_entity_by_identifier: "entities search <identifier>",
   retrieve_related_entities: "entities related <entityId>",
   retrieve_graph_neighborhood: "entities neighborhood <nodeId>",
-  get_relationship_snapshot: "relationships get-snapshot <relationshipType> <sourceEntityId> <targetEntityId>",
+  get_relationship_snapshot:
+    "relationships get-snapshot <relationshipType> <sourceEntityId> <targetEntityId>",
   analyze_schema_candidates: "schemas analyze",
   get_schema_recommendations: "schemas recommend <entityType>",
   update_schema_incremental: "schemas update <entityType>",
@@ -615,7 +623,10 @@ function sanitizeCliArgs(args: unknown): Record<string, unknown> {
         return [key, value] as const;
       }
       if (Array.isArray(value)) {
-        return [key, value.map((item) => (typeof item === "string" ? item : "<redacted>"))] as const;
+        return [
+          key,
+          value.map((item) => (typeof item === "string" ? item : "<redacted>")),
+        ] as const;
       }
       return [key, "<redacted>"] as const;
     });
@@ -629,7 +640,9 @@ export function buildCliEquivalentInvocation(toolName: string, args: unknown): s
     if (cliCommand) {
       const sanitized = sanitizeCliArgs(args);
       const userId =
-        args && typeof args === "object" && typeof (args as Record<string, unknown>).user_id === "string"
+        args &&
+        typeof args === "object" &&
+        typeof (args as Record<string, unknown>).user_id === "string"
           ? (args as Record<string, unknown>).user_id
           : "<user_id>";
       const payload = stableStringify({ args: sanitized });
