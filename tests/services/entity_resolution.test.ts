@@ -331,6 +331,16 @@ describe("Entity Resolution Service", () => {
       expect(generateEntityId("agent_message", c1)).not.toBe(generateEntityId("agent_message", c2));
     });
 
+    it("should prioritize turn_key for conversation_message identity (Phase 2 rename of agent_message)", () => {
+      const canonical = deriveCanonicalNameFromFields("conversation_message", {
+        role: "user",
+        content: "",
+        turn_key: "cursor:chat:turn-9",
+      });
+
+      expect(canonical).toContain("turn-9");
+    });
+
     it("preserves source casing for name-based entities", () => {
       const canonical = deriveCanonicalNameFromFields("company", {
         name: "Acme Corporation",

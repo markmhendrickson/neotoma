@@ -64,7 +64,26 @@ import {
   upsertEntitySnapshotWithEmbedding,
 } from "./services/entity_snapshot_embedding.js";
 import { getLatestFromRegistry, isUpdateAvailable, formatUpgradeCommand } from "./version_check.js";
+import {
+  isFeedbackAutoSubmitSuppressed,
+  resolveFeedbackTransport,
+} from "./services/feedback_transport.js";
+import { loadFeedbackReportingMode } from "./services/feedback/activation.js";
+import type { SubmitFeedbackArgs } from "./services/feedback/types.js";
+import { buildSessionInfo } from "./services/session_info.js";
+import { AttributionPolicyError } from "./services/attribution_policy.js";
+import {
+  getCurrentAttributionDecision,
+  runWithRequestContext,
+} from "./services/request_context.js";
 import { retrieveEntityByIdentifierWithFallback } from "./shared/action_handlers/entity_identifier_handler.js";
+import {
+  createAgentIdentity as buildAgentIdentity,
+  normaliseClientName,
+  type AAuthRequestContext,
+  type AgentIdentity,
+  type AttributionDecisionDiagnostics,
+} from "./crypto/agent_identity.js";
 
 const MCP_DOCS_SUBDIR = ["docs", "developer", "mcp"] as const;
 const TIMELINE_WIDGET_RESOURCE_URI = "neotoma://ui/timeline_widget";
@@ -77,6 +96,10 @@ export class NeotomaServer {
   private requestAuth: Map<string, { userId: string; token: string }> = new Map();
   /** Connection ID set from HTTP layer so handlers get auth even when SDK does not pass requestInfo */
   private sessionConnectionId: string | null = null;
+  /** AAuth-verified agent context propagated from the HTTP middleware (Phase 1). */
+  private sessionAAuth: AAuthRequestContext | null = null;
+  /** Client self-report from MCP initialize `clientInfo` (fallback attribution). */
+  private sessionClientInfo: { name?: string; version?: string } | null = null;
   /** Tool descriptions loaded from docs/developer/mcp/tool_descriptions.yaml; empty Map if file missing */
   private toolDescriptions: Map<string, string> = new Map();
   /** In-memory cache for npm registry dist-tags: key = "packageName:distTag", value = { version, until } */
@@ -118,7 +141,7 @@ export class NeotomaServer {
     const fallback = [
       "Use MCP actions proactively. Store and retrieve without waiting for explicit requests.",
       "Always store when the user states relevant information, even in conversational contexts. Store first, then respond. Do not skip store because the user did not explicitly ask to save.",
-      "MANDATORY in chat: every assistant turn you MUST (1) create or update a conversation entity with a stable conversation_id, (2) store this turn as an agent_message linked to it via PART_OF (message PART_OF conversation). Do NOT skip this for greetings, minimal messages, or when the user message has no extractable entities; chat storage is required every turn.",
+      "MANDATORY in chat: every assistant turn you MUST (1) create or update a conversation entity with a stable conversation_id, (2) store this turn as a `conversation_message` (canonical; accepts legacy `agent_message` as an alias) linked to it via PART_OF (message PART_OF conversation). Always set the message's `sender_kind` field (user | assistant | agent | system | tool) alongside `role` so the stored shape is unambiguous; for agent-to-agent (A2A) traffic also set `sender_agent_id` / `recipient_agent_id` and set the parent conversation's `thread_kind` to `agent_agent` or `multi_party` as appropriate. Do NOT skip this for greetings, minimal messages, or when the user message has no extractable entities; chat storage is required every turn.",
       'In chat contexts (details): prefer host-provided conversation_id, thread_id, or session_id; when host does not provide, use entity id from first turn\'s store if re-exposed, or a deterministic derivative. Store any new attachments via the unstructured path and link them with EMBEDS. Use only Neotoma-supported relationship types (PART_OF, REFERS_TO, EMBEDS, SUPERSEDES, etc.); see MCP spec. Do this in the same turn as your response; do not wait for the user to say "save" or run an end-of-chat command. This is in addition to extracting and storing entities and attachments from the turn as below.',
       "For conversation/turn idempotency_key: use conversation-{conversation_id}-{turn_id}-{timestamp_ms} or conversation-{conversation_id}-{turn_id}-{uuid} so each turn store creates a new observation. Include stable turn identity in the message entity (e.g. turn_key or id = conversation_id:turn_id). Overwriting between branches is OK; history is available via list_observations.",
       "For reverted turns: optionally link the new message to the previous one with create_relationship(SUPERSEDES, new_message_entity_id, previous_message_entity_id).",
@@ -196,6 +219,15 @@ export class NeotomaServer {
   private setupInitializeHandler(): void {
     this.server.setRequestHandler(InitializeRequestSchema, async (request, extra) => {
       const requestId = request.params?.clientInfo?.name || randomUUID();
+
+      // Capture self-reported client info for fallback attribution (Phase 1.6).
+      // This is NOT verified — it is whatever the MCP client put on the wire.
+      const rawName = request.params?.clientInfo?.name;
+      const rawVersion = request.params?.clientInfo?.version;
+      this.sessionClientInfo = {
+        name: typeof rawName === "string" ? rawName : undefined,
+        version: typeof rawVersion === "string" ? rawVersion : undefined,
+      };
 
       // Detect transport type: HTTP has requestInfo, stdio does not
       const isHTTPTransport = !!extra?.requestInfo;
@@ -394,6 +426,66 @@ export class NeotomaServer {
     this.sessionConnectionId = connectionId;
   }
 
+  /**
+   * Stash the AAuth verification result from the HTTP middleware so the
+   * write-path services can attribute rows to the signing agent (Phase 1).
+   * Called by actions.ts before the transport handles the MCP request. Pass
+   * `null` to clear (e.g. for unsigned requests).
+   */
+  setSessionAgentIdentity(ctx: AAuthRequestContext | null): void {
+    this.sessionAAuth = ctx;
+  }
+
+  /**
+   * Return the current session's fully-resolved {@link AgentIdentity},
+   * combining AAuth verification with clientInfo and connection id
+   * fallback attribution. Returns `null` when nothing attributable is
+   * available (stdio without env identity, etc.).
+   */
+  getAgentIdentity(): AgentIdentity | null {
+    const aauth = this.sessionAAuth;
+    const clientName = normaliseClientName(this.sessionClientInfo?.name);
+    const clientVersion = this.sessionClientInfo?.version;
+    const connectionId = this.sessionConnectionId ?? undefined;
+    const hasAny =
+      !!aauth?.verified || !!clientName || !!clientVersion || !!connectionId;
+    if (!hasAny) return null;
+    return buildAgentIdentity({
+      publicKey: aauth?.publicKey,
+      thumbprint: aauth?.thumbprint,
+      algorithm: aauth?.algorithm,
+      sub: aauth?.sub,
+      iss: aauth?.iss,
+      clientName,
+      clientVersion,
+      connectionId,
+    });
+  }
+
+  /**
+   * Synthesise an {@link AttributionDecisionDiagnostics} for the active
+   * MCP session. HTTP `/mcp` requests receive a middleware-stamped
+   * decision via `req.aauth`; stdio and CLI-over-MCP callers never hit
+   * Express, so we derive the equivalent shape from `sessionAAuth` +
+   * `sessionClientInfo`. The resulting object is safe to put on the
+   * request context so `/session`-equivalent replies via stdio match the
+   * HTTP response shape (see docs/subsystems/agent_attribution_integration.md).
+   */
+  getSessionAttributionDecision(): AttributionDecisionDiagnostics | null {
+    const identity = this.getAgentIdentity();
+    if (!identity) return null;
+    const aauth = this.sessionAAuth;
+    return {
+      signature_present: !!aauth,
+      signature_verified: !!aauth?.verified,
+      client_info_raw_name:
+        typeof this.sessionClientInfo?.name === "string"
+          ? this.sessionClientInfo.name
+          : undefined,
+      resolved_tier: identity.tier,
+    };
+  }
+
   private buildAuthenticatedInitializeResponse(updateNotice: string | null) {
     const instructions = updateNotice
       ? `${updateNotice}\n\n${this.getMcpInteractionInstructions()}`
@@ -575,6 +667,26 @@ export class NeotomaServer {
   }
 
   /**
+   * Resolve the current session's attribution and the active policy.
+   * Mirrors the HTTP `GET /session` endpoint; see
+   * `src/services/session_info.ts`. Read-only.
+   */
+  private async getSessionIdentity(
+    args: unknown,
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    z.object({}).parse(args ?? {});
+    const userId = this.getAuthenticatedUserId();
+    const identity = this.getAgentIdentity();
+    const session = buildSessionInfo({
+      userId,
+      identity,
+      middlewareDecision: getCurrentAttributionDecision(),
+      rawClientInfoName: this.sessionClientInfo?.name ?? null,
+    });
+    return this.buildTextResponse(session);
+  }
+
+  /**
    * Health check for entity snapshots
    * Detects stale snapshots (observation_count=0 but observations exist)
    */
@@ -715,9 +827,7 @@ export class NeotomaServer {
     });
     const parsed = schema.parse(args ?? {});
     const userId = this.getAuthenticatedUserId(undefined);
-    const { listRecentRecordActivity } = await import(
-      "./services/recent_record_activity.js"
-    );
+    const { listRecentRecordActivity } = await import("./services/recent_record_activity.js");
     const result = listRecentRecordActivity(userId, parsed.limit, parsed.offset);
     return this.buildTextResponse(result);
   }
@@ -764,6 +874,87 @@ export class NeotomaServer {
       message,
       suggestedCommand,
     });
+  }
+
+  private async submitFeedback(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    if (isFeedbackAutoSubmitSuppressed()) {
+      throw new McpError(
+        ErrorCode.InvalidRequest,
+        "Feedback auto-submit is disabled via NEOTOMA_FEEDBACK_AUTO_SUBMIT=0",
+      );
+    }
+
+    const schema = z.object({
+      kind: z.enum([
+        "incident",
+        "report",
+        "primitive_ask",
+        "doc_gap",
+        "contract_discrepancy",
+        "fix_verification",
+      ]),
+      title: z.string().min(1),
+      body: z.string().min(1),
+      metadata: z.record(z.any()).optional(),
+      user_consent_captured: z.boolean().optional(),
+      explicit_user_request: z.boolean().optional(),
+      prefer_human_draft: z.boolean().optional(),
+      status_push: z
+        .object({ webhook_url: z.string(), webhook_secret: z.string().optional() })
+        .optional(),
+      parent_feedback_id: z.string().optional(),
+      verification_outcome: z
+        .enum([
+          "verified_working",
+          "verified_working_with_caveat",
+          "unable_to_verify",
+          "verification_failed",
+        ])
+        .optional(),
+      verified_at_version: z.string().optional(),
+      routing_hint: z.enum(["auto", "reopen_parent", "new_child"]).optional(),
+    });
+    const parsed = schema.parse(args ?? {}) as SubmitFeedbackArgs;
+    const mode = await loadFeedbackReportingMode();
+    if (mode === "off" && !parsed.explicit_user_request) {
+      throw new McpError(
+        ErrorCode.InvalidRequest,
+        "feedback reporting mode is off; only explicit_user_request=true submissions are accepted",
+      );
+    }
+    if (mode === "consent" && !parsed.user_consent_captured && !parsed.explicit_user_request) {
+      throw new McpError(
+        ErrorCode.InvalidRequest,
+        "feedback reporting mode is consent; set user_consent_captured=true or explicit_user_request=true",
+      );
+    }
+    const transport = resolveFeedbackTransport();
+    const submitterId = this.authenticatedUserId ?? "anonymous";
+    try {
+      const response = await transport.submit(parsed, submitterId);
+      return this.buildTextResponse(response);
+    } catch (err: any) {
+      throw new McpError(ErrorCode.InternalError, `submit_feedback failed: ${err?.message ?? err}`);
+    }
+  }
+
+  private async getFeedbackStatus(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const schema = z.object({ access_token: z.string().min(1) });
+    const parsed = schema.parse(args ?? {});
+    const transport = resolveFeedbackTransport();
+    try {
+      const response = await transport.status(parsed.access_token);
+      return this.buildTextResponse(response);
+    } catch (err: any) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `get_feedback_status failed: ${err?.message ?? err}`,
+      );
+    }
   }
 
   /**
@@ -850,7 +1041,7 @@ export class NeotomaServer {
             inputSchema: def.inputSchema,
             ...(def.annotations ? { annotations: def.annotations } : {}),
             ...(def._meta ? { _meta: def._meta } : {}),
-          }),
+          })
         ),
       };
     });
@@ -898,7 +1089,21 @@ export class NeotomaServer {
           };
         }
 
-        const result = await this.executeTool(name, args);
+        // Phase 2 parity: wrap every tool dispatch in the request-scoped
+        // AsyncLocalStorage context so write-path services read the same
+        // AAuth/clientInfo identity we already capture during
+        // `InitializeRequestSchema`. Without this wrap, stdio and
+        // CLI-over-MCP callers landed as `anonymous` in observation
+        // provenance even with valid AAuth + clientInfo (see
+        // docs/subsystems/agent_attribution_integration.md). HTTP `/mcp`
+        // requests still nest a richer server-resolved identity inside
+        // this scope — nested AsyncLocalStorage scopes shadow outer ones.
+        const identity = this.getAgentIdentity();
+        const attributionDecision = this.getSessionAttributionDecision();
+        const result = await runWithRequestContext(
+          { agentIdentity: identity, attributionDecision },
+          () => this.executeTool(name, args),
+        );
         const runtimeUpdateNotice =
           name === "npm_check_update" ? null : await this.consumeRuntimeUpdateNotice();
         const resultWithNotice = this.withRuntimeUpdateNotice(result, runtimeUpdateNotice);
@@ -910,6 +1115,17 @@ export class NeotomaServer {
       } catch (error) {
         if (error instanceof McpError) {
           throw error;
+        }
+        if (error instanceof AttributionPolicyError) {
+          // Surface policy rejections as structured MCP errors so clients can
+          // branch on `ATTRIBUTION_REQUIRED` without string-matching. The
+          // envelope carries `min_tier` / `current_tier` / `hint` in the MCP
+          // `data` field (see src/services/attribution_policy.ts).
+          throw new McpError(
+            ErrorCode.InvalidRequest,
+            error.message,
+            error.toErrorEnvelope(),
+          );
         }
         // Safely extract error message, handling BigInt values
         let errorMessage = "Unknown error";
@@ -941,7 +1157,18 @@ export class NeotomaServer {
     userId: string
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     this.authenticatedUserId = userId;
-    return this.executeTool(name, args);
+    // Mirror the CallToolRequestSchema dispatch: wrap in the request-scoped
+    // context so CLI-over-MCP callers (see src/cli/core/operations.ts and
+    // openclaw_entry.ts) stamp attribution just like HTTP `/mcp`. When no
+    // session identity is available this still runs the write inside an
+    // "empty" context, which keeps behaviour stable for existing tests
+    // that exercise local CLI writes as `anonymous`.
+    const identity = this.getAgentIdentity();
+    const attributionDecision = this.getSessionAttributionDecision();
+    return runWithRequestContext(
+      { agentIdentity: identity, attributionDecision },
+      () => this.executeTool(name, args),
+    );
   }
 
   private async executeTool(
@@ -1009,12 +1236,18 @@ export class NeotomaServer {
         return await this.restoreRelationship(args);
       case "get_authenticated_user":
         return await this.getAuthenticatedUser(args);
+      case "get_session_identity":
+        return await this.getSessionIdentity(args);
       case "health_check_snapshots":
         return await this.healthCheckSnapshots(args);
       case "list_recent_changes":
         return await this.listRecentChanges(args);
       case "npm_check_update":
         return await this.npmCheckUpdate(args);
+      case "submit_feedback":
+        return await this.submitFeedback(args);
+      case "get_feedback_status":
+        return await this.getFeedbackStatus(args);
       default:
         throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
     }
@@ -1440,7 +1673,9 @@ export class NeotomaServer {
     throw new Error("file_content+mime_type OR file_path required");
   }
 
-  private async parseFile(args: unknown): Promise<{ content: Array<{ type: string; text: string }> }> {
+  private async parseFile(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const schema = z
       .object({
         file_content: z.string().optional(),
@@ -1566,19 +1801,17 @@ export class NeotomaServer {
     const parsed = EntitySnapshotRequestSchema.parse(args ?? {});
     const responseFormat = parsed.format ?? "markdown";
 
-    const renderEntitySnapshotResponse = async (
-      payload: {
-        entity_id: string;
-        entity_type: string;
-        schema_version: string;
-        snapshot: Record<string, unknown>;
-        raw_fragments?: unknown;
-        provenance: Record<string, string>;
-        computed_at: string | null | undefined;
-        observation_count: number;
-        last_observation_at: string | null | undefined;
-      }
-    ): Promise<{ content: Array<{ type: string; text: string }> }> => {
+    const renderEntitySnapshotResponse = async (payload: {
+      entity_id: string;
+      entity_type: string;
+      schema_version: string;
+      snapshot: Record<string, unknown>;
+      raw_fragments?: unknown;
+      provenance: Record<string, string>;
+      computed_at: string | null | undefined;
+      observation_count: number;
+      last_observation_at: string | null | undefined;
+    }): Promise<{ content: Array<{ type: string; text: string }> }> => {
       if (responseFormat === "json") {
         return this.buildTextResponse(payload);
       }
@@ -1669,6 +1902,7 @@ export class NeotomaServer {
           observed_at: obs.observed_at,
           specificity_score: obs.specificity_score,
           source_priority: obs.source_priority,
+          observation_source: obs.observation_source ?? null,
           fields: obs.fields,
           created_at: obs.created_at,
           user_id: obs.user_id,
@@ -1718,8 +1952,7 @@ export class NeotomaServer {
     return renderEntitySnapshotResponse({
       entity_id: entity.entity_id,
       entity_type: entity.entity_type,
-      schema_version:
-        (entity as { schema_version?: string }).schema_version ?? entity.entity_type,
+      schema_version: (entity as { schema_version?: string }).schema_version ?? entity.entity_type,
       snapshot:
         ((entity as { snapshot?: Record<string, unknown> }).snapshot as
           | Record<string, unknown>
@@ -1730,8 +1963,7 @@ export class NeotomaServer {
           | Record<string, string>
           | undefined) ?? {},
       computed_at: (entity as { computed_at?: string | null }).computed_at ?? null,
-      observation_count:
-        (entity as { observation_count?: number }).observation_count ?? 0,
+      observation_count: (entity as { observation_count?: number }).observation_count ?? 0,
       last_observation_at:
         (entity as { last_observation_at?: string | null }).last_observation_at ?? null,
     });
@@ -1756,7 +1988,11 @@ export class NeotomaServer {
       obsQuery = obsQuery.gte("observed_at", parsed.created_since);
     }
 
-    const { data: observations, error, count } = await obsQuery
+    const {
+      data: observations,
+      error,
+      count,
+    } = await obsQuery
       .order("observed_at", { ascending: false })
       .range(parsed.offset, parsed.offset + parsed.limit - 1);
 
@@ -2101,8 +2337,7 @@ export class NeotomaServer {
       args && typeof args === "object" && !Array.isArray(args)
         ? (args as Record<string, unknown>)
         : {};
-    const hasSearchIntent =
-      "search" in rawArgs || "search_query" in rawArgs || "query" in rawArgs;
+    const hasSearchIntent = "search" in rawArgs || "search_query" in rawArgs || "query" in rawArgs;
     if (hasSearchIntent && typeof parsed.search === "string" && parsed.search.trim().length === 0) {
       throw new McpError(
         ErrorCode.InvalidParams,
@@ -2192,8 +2427,7 @@ export class NeotomaServer {
       );
     }
 
-    const orderColumn =
-      parsed.order_by === "created_at" ? "created_at" : "event_timestamp";
+    const orderColumn = parsed.order_by === "created_at" ? "created_at" : "event_timestamp";
 
     // Get events with pagination
     const { data: events, error } = await query
@@ -2799,6 +3033,9 @@ export class NeotomaServer {
           )
           .optional(),
         source_priority: z.number().default(100),
+        observation_source: z
+          .enum(["sensor", "llm_summary", "workflow_state", "human", "import"])
+          .optional(),
         commit: z.boolean().optional(),
         strict: z.boolean().optional(),
       })
@@ -2831,6 +3068,7 @@ export class NeotomaServer {
         {
           commit: (parsed as { commit?: boolean }).commit !== false,
           strict: (parsed as { strict?: boolean }).strict === true,
+          observationSource: parsed.observation_source,
         }
       );
       try {
@@ -2876,7 +3114,9 @@ export class NeotomaServer {
           parquetResult.entities,
           parsed.source_priority,
           idempotencyKey,
-          parsed.original_filename
+          parsed.original_filename,
+          undefined,
+          { observationSource: parsed.observation_source }
         );
       }
     }
@@ -3012,7 +3252,9 @@ export class NeotomaServer {
       .maybeSingle();
 
     if (existingObservationError) {
-      throw new Error(`Failed to check existing asset observation: ${existingObservationError.message}`);
+      throw new Error(
+        `Failed to check existing asset observation: ${existingObservationError.message}`
+      );
     }
 
     if (!existingObservation) {
@@ -3155,23 +3397,24 @@ export class NeotomaServer {
       source_index: number;
       target_index: number;
     }>,
-    options: { commit?: boolean; strict?: boolean } = {},
+    options: {
+      commit?: boolean;
+      strict?: boolean;
+      observationSource?: import("./shared/action_schemas.js").ObservationSource;
+    } = {}
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const commit = options.commit !== false;
     const strict = options.strict === true;
+    const observationSource = options.observationSource;
     const { storeRawContent } = await import("./services/raw_storage.js");
-    const {
-      resolveEntityWithTrace,
-      CanonicalNameUnresolvedError,
-      MergeRefusedError,
-    } = await import("./services/entity_resolution.js");
+    const { resolveEntityWithTrace, CanonicalNameUnresolvedError, MergeRefusedError } =
+      await import("./services/entity_resolution.js");
     const { schemaRegistry } = await import("./services/schema_registry.js");
     const { validateFieldsWithConverters } = await import("./services/field_validation.js");
     const { generateObservationId } = await import("./services/observation_identity.js");
     const { db } = await import("./db.js");
-    const { detectFlatPackedRows, FlatPackedRowsError } = await import(
-      "./services/flat_packed_detection.js"
-    );
+    const { detectFlatPackedRows, FlatPackedRowsError } =
+      await import("./services/flat_packed_detection.js");
 
     // Reject flat-packed rows early so MCP clients get a clear error instead
     // of a single corrupted entity snapshot.
@@ -3235,7 +3478,7 @@ export class NeotomaServer {
         throw new McpError(
           ErrorCode.InvalidParams,
           `store_structured plan: ${issues.length} entity issue(s). ` +
-            issues.map((iss) => `[${iss.observation_index}] ${iss.message}`).join(" | "),
+            issues.map((iss) => `[${iss.observation_index}] ${iss.message}`).join(" | ")
         );
       }
       return this.buildTextResponse({
@@ -3363,15 +3606,13 @@ export class NeotomaServer {
       // If so, redirect storage to the canonical type instead of creating a
       // near-duplicate schema like `place`/`places`.
       if (!schema) {
-        const { findEquivalentEntityType } = await import(
-          "./services/entity_type_equivalence.js"
-        );
+        const { findEquivalentEntityType } = await import("./services/entity_type_equivalence.js");
         const match = await findEquivalentEntityType(entityType, { userId });
         if (match) {
           logger.warn(
             `[STORE] Collapsing new entity_type "${entityType}" -> existing ` +
               `"${match.canonical_entity_type}" (reason: ${match.reason}). ` +
-              `Set schema.aliases explicitly if this is wrong.`,
+              `Set schema.aliases explicitly if this is wrong.`
           );
           entityType = match.canonical_entity_type;
           schema = await schemaRegistry.loadActiveSchema(entityType, userId);
@@ -3442,9 +3683,8 @@ export class NeotomaServer {
           ? { ...validFields, ...dateLikeUnknowns }
           : validFields;
 
-      const { storeConvertedOriginals, storeUnknownFields } = await import(
-        "./services/raw_fragments.js"
-      );
+      const { storeConvertedOriginals, storeUnknownFields } =
+        await import("./services/raw_fragments.js");
       const schemaVer = schema?.schema_version || "1.0";
 
       await storeConvertedOriginals({
@@ -3494,13 +3734,13 @@ export class NeotomaServer {
         if (err instanceof CanonicalNameUnresolvedError) {
           throw new McpError(
             ErrorCode.InvalidParams,
-            `Observation ${createdEntities.length} (${entityType}): ${err.message}`,
+            `Observation ${createdEntities.length} (${entityType}): ${err.message}`
           );
         }
         if (err instanceof MergeRefusedError) {
           throw new McpError(
             ErrorCode.InvalidParams,
-            `Observation ${createdEntities.length} (${entityType}): ${err.message}`,
+            `Observation ${createdEntities.length} (${entityType}): ${err.message}`
           );
         }
         throw err;
@@ -3528,6 +3768,12 @@ export class NeotomaServer {
       }
 
       if (!existingObservation) {
+        // Stamp agent attribution (Phase 1) so the Inspector can show the
+        // writing agent for structured-store observations too.
+        const { getCurrentAttribution: _structuredAttrib } = await import(
+          "./services/request_context.js"
+        );
+        const structuredAttribution = _structuredAttrib();
         const { error: obsError } = await db.from("observations").insert({
           id: observationId,
           entity_id: entityId,
@@ -3538,10 +3784,14 @@ export class NeotomaServer {
           observed_at: new Date().toISOString(),
           specificity_score: 1.0, // Structured data has high specificity
           source_priority: sourcePriority, // Use provided priority (default 100)
+          observation_source: observationSource ?? "llm_summary",
           fields: fieldsForObservation,
           user_id: userId,
           identity_basis: resolverTrace.identityBasis,
           identity_rule: resolverTrace.identityRule,
+          ...(Object.keys(structuredAttribution).length > 0
+            ? { provenance: structuredAttribution }
+            : {}),
         });
 
         if (obsError) {
@@ -3621,23 +3871,20 @@ export class NeotomaServer {
           await upsertEntitySnapshotWithEmbedding(rowWithEmbedding);
           snapshotByEntityId.set(
             snapshot.entity_id,
-            (snapshot.snapshot as Record<string, unknown>) || {},
+            (snapshot.snapshot as Record<string, unknown>) || {}
           );
 
           const sameTypeInBatch = createdEntities.filter(
             (e) => e.entityType === createdEntity.entityType
           ).length;
-          const { upsertTimelineEventsForEntitySnapshot } = await import(
-            "./services/timeline_events.js"
-          );
+          const { upsertTimelineEventsForEntitySnapshot } =
+            await import("./services/timeline_events.js");
           let timelineSchema: SchemaDefinition | null = null;
           try {
-            const { schemaRegistry } = await import(
-              "./services/schema_registry.js"
-            );
+            const { schemaRegistry } = await import("./services/schema_registry.js");
             const entry = await schemaRegistry.loadActiveSchema(
               snapshot.entity_type,
-              snapshot.user_id || userId,
+              snapshot.user_id || userId
             );
             timelineSchema = entry?.schema_definition ?? null;
           } catch {
@@ -3656,9 +3903,8 @@ export class NeotomaServer {
           // Schema-driven auto-linking of reference_fields → typed edges.
           if (timelineSchema?.reference_fields?.length) {
             try {
-              const { autoLinkReferenceFields } = await import(
-                "./services/schema_reference_linking.js"
-              );
+              const { autoLinkReferenceFields } =
+                await import("./services/schema_reference_linking.js");
               await autoLinkReferenceFields({
                 entityId: snapshot.entity_id,
                 entityType: snapshot.entity_type,
@@ -3671,9 +3917,7 @@ export class NeotomaServer {
               logger.warn(
                 `[STORE] Auto-link reference fields failed for ` +
                   `${snapshot.entity_type}/${snapshot.entity_id}: ` +
-                  (linkErr instanceof Error
-                    ? linkErr.message
-                    : String(linkErr)),
+                  (linkErr instanceof Error ? linkErr.message : String(linkErr))
               );
             }
           }
@@ -4650,10 +4894,7 @@ export class NeotomaServer {
       // If user_id is provided, get source IDs for that user first
       let userSourceIds: string[] | undefined;
       if (userId) {
-        const { data: userSources } = await db
-          .from("sources")
-          .select("id")
-          .eq("user_id", userId);
+        const { data: userSources } = await db.from("sources").select("id").eq("user_id", userId);
 
         if (userSources && userSources.length > 0) {
           userSourceIds = userSources.map((s: any) => s.id);

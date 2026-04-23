@@ -191,6 +191,14 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     cliCommand: "request --operation mergeEntities",
   },
   {
+    operationId: "splitEntity",
+    method: "post",
+    path: "/entities/split",
+    adapter: "both",
+    mcpTool: "split_entity",
+    cliCommand: "request --operation splitEntity",
+  },
+  {
     operationId: "listPotentialDuplicates",
     method: "get",
     path: "/entities/duplicates",
@@ -211,6 +219,13 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     path: "/sources/{id}",
     adapter: "cli",
     cliCommand: "request --operation getSourceById",
+  },
+  {
+    operationId: "getSourceRelationships",
+    method: "get",
+    path: "/sources/{id}/relationships",
+    adapter: "cli",
+    cliCommand: "request --operation getSourceRelationships",
   },
   {
     operationId: "listObservations",
@@ -503,6 +518,14 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     cliCommand: "auth whoami",
   },
   {
+    operationId: "getSessionInfo",
+    method: "get",
+    path: "/session",
+    adapter: "both",
+    mcpTool: "get_session_identity",
+    cliCommand: "auth session",
+  },
+  {
     operationId: "healthCheckSnapshots",
     method: "post",
     path: "/health_check_snapshots",
@@ -523,6 +546,7 @@ export const MCP_TOOL_TO_OPERATION_ID: Record<string, string> = {
   list_timeline_events: "listTimeline",
   list_entity_types: "listSchemas",
   merge_entities: "mergeEntities",
+  split_entity: "splitEntity",
   list_potential_duplicates: "listPotentialDuplicates",
   store: "storeStructured",
   store_structured: "storeStructured",
@@ -541,6 +565,7 @@ export const MCP_TOOL_TO_OPERATION_ID: Record<string, string> = {
   register_schema: "registerSchema",
   correct: "correct",
   get_authenticated_user: "getAuthenticatedUser",
+  get_session_identity: "getSessionInfo",
   health_check_snapshots: "healthCheckSnapshots",
   list_recent_changes: "getRecordActivity",
 };
@@ -550,6 +575,7 @@ export const MCP_ONLY_TOOLS: string[] = [];
 export const MCP_TOOL_TO_CLI_COMMAND: Record<string, string> = {
   get_entity_type_counts: "stats entities",
   get_authenticated_user: "auth whoami",
+  get_session_identity: "auth session",
   health_check_snapshots: "snapshots check",
   retrieve_entity_by_identifier: "entities search <identifier>",
   retrieve_related_entities: "entities related <entityId>",

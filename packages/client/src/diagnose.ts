@@ -280,8 +280,9 @@ async function runRepair(
       await transport.store({
         entities: [
           {
-            entity_type: "agent_message",
+            entity_type: "conversation_message",
             role: "user",
+            sender_kind: "user",
             content: action.content,
             turn_key: `${action.conversationId}:${action.turnId}`,
             data_source: "neotoma-repair",
@@ -294,8 +295,9 @@ async function runRepair(
       await transport.store({
         entities: [
           {
-            entity_type: "agent_message",
+            entity_type: "conversation_message",
             role: "assistant",
+            sender_kind: "assistant",
             content: action.content,
             turn_key: `${action.conversationId}:${action.turnId}:assistant`,
             data_source: "neotoma-repair",

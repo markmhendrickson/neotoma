@@ -5,7 +5,8 @@ export type RecordTypeCategory =
   | "productivity"
   | "knowledge"
   | "health"
-  | "media";
+  | "media"
+  | "agent_runtime";
 
 export interface RecordTypeDefinition {
   id: string;

@@ -1,0 +1,9 @@
+endpoint: "POST /store"
+outcome: valid
+notes: |
+  Pre-v1.1 agent_message payload that predates the sender_kind / sender_agent_id /
+  recipient_agent_id fields (Phase 1 of the message entity redesign, April 2026).
+  Older clients only set `role`; the new schema treats `sender_kind` as optional
+  and falls back to `role` on read. This fixture pins that backward compatibility
+  so a future tightening cannot silently require `sender_kind` without a SemVer
+  bump and release-note entry.

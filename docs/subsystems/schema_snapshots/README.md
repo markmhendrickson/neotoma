@@ -113,7 +113,10 @@ _Last updated: 2026-01-29T00:00:00.000Z_
 - **v1.0** **(active)**: 2026-01-08
 
 ### agent_message
-- **v1.0** **(active)**: 2026-01-29
+- **v1.0**: 2026-01-29
+- **v1.1**: 2026-04-22 — adds `sender_kind`, `sender_agent_id`, `recipient_agent_id`; renames display label to "Chat Message"
+- _Renamed to `conversation_message` in Phase 2 (2026-04-22); remains a registered alias. See `agent_message/README.md`._
+- _Identity upgrades land under the canonical `conversation_message` type (see below, v1.2)._
 
 ### balance
 - **v1.0** **(active)**: 2026-01-08
@@ -125,7 +128,14 @@ _Last updated: 2026-01-29T00:00:00.000Z_
 - **v1.1** **(active)**: 2026-01-08
 
 ### conversation
-- **v1.0** **(active)**: 2026-01-29
+- **v1.0**: 2026-01-29
+- **v1.1**: 2026-04-22 — adds `thread_kind` (human_agent | agent_agent | multi_party)
+- **v1.2** **(active)**: 2026-04-23 — declares `conversation_id` as `canonical_name_fields` and `name_collision_policy: reject` so distinct sessions never heuristically merge via `title`. Removes `identity_opt_out`. See `.cursor/plans/conversation_entity_collision_fix_aef8ba0d.plan.md`.
+
+### conversation_message
+- **v1.0**: 2026-01-29 — renamed from `agent_message` Phase 2 (2026-04-22)
+- **v1.1**: 2026-04-22 — adds `sender_kind`, `sender_agent_id`, `recipient_agent_id`. Canonical replacement for `agent_message`; accepts `agent_message` as an alias.
+- **v1.2** **(active)**: 2026-04-23 — declares `turn_key` as `canonical_name_fields` and `name_collision_policy: reject` so turns with identical content do not collapse across conversations. Removes `identity_opt_out`.
 
 ### contract
 - **v1.0** **(active)**: 2026-01-08

@@ -470,9 +470,11 @@ export function conversationsToEntities(
     });
 
     for (const msg of conv.messages) {
+      const role = msg.role === "unknown" ? "user" : msg.role;
       entities.push({
-        entity_type: "agent_message",
-        role: msg.role === "unknown" ? "user" : msg.role,
+        entity_type: "conversation_message",
+        role,
+        sender_kind: role,
         content: msg.content,
         author: msg.author,
         timestamp: msg.timestamp,

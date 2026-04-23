@@ -109,3 +109,4 @@ Agents MUST:
 - `docs/architecture/schema_handling.md`
 - `docs/subsystems/reducer.md`
 - `docs/foundation/entity_resolution.md`
+- `docs/architecture/change_guardrails_rules.mdc` — cross-cutting change touchpoints (OpenAPI, contract mappings, CLI/MCP parity, release discipline).

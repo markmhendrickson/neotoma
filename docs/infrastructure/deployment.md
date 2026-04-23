@@ -364,6 +364,84 @@ flyctl certs add neotoma.yourdomain.com
    - Use multi-stage builds (already in `Dockerfile`)
    - Minimize image size
    - Use `.dockerignore`
+## MCP host (mcp.neotoma.io)
+
+The **HTTP actions** app (same Fly app as API: `dist/actions.js`, `fly.toml` `internal_port = 3180`) serves Streamable HTTP MCP at **`/mcp`** and OAuth / server-card under **`/.well-known/`**. Use a dedicated hostname so OAuth metadata and Smithery match one origin.
+
+### One-time: DNS
+
+1. At your DNS provider for **neotoma.io**, add a **CNAME**:
+   - **Name:** `mcp`
+   - **Target:** `neotoma.fly.dev` (or the hostname shown by `flyctl info` for your app)
+2. Prefer **DNS only** (grey cloud on Cloudflare) so TLS terminates at Fly. If the record is proxied (orange cloud), use Cloudflare SSL mode **Full (strict)** and ensure Fly’s certificate is valid for `mcp.neotoma.io`.
+
+### One-time: Fly certificate
+
+```bash
+flyctl certs create mcp.neotoma.io
+flyctl certs show mcp.neotoma.io
+```
+
+Wait until issuance shows **Ready**, then verify:
+
+```bash
+curl -sS -o /dev/null -w "%{http_code}\n" https://mcp.neotoma.io/health
+```
+
+### Secrets (required for correct OAuth / MCP URLs)
+
+```bash
+flyctl secrets set NEOTOMA_HOST_URL="https://mcp.neotoma.io"
+```
+
+Set other production secrets as needed (`NEOTOMA_BEARER_TOKEN`, encryption keys, `OPENAI_API_KEY`, etc.). **`NEOTOMA_HOST_URL`** must equal the URL clients use in the browser for MCP “Connect” (scheme + host, no trailing slash).
+
+### Verify MCP and server card
+
+```bash
+curl -sS -o /dev/null -w "%{http_code}\n" https://mcp.neotoma.io/.well-known/mcp/server-card.json
+# Expect 200
+
+curl -sS -o /dev/null -w "%{http_code}\n" -X POST https://mcp.neotoma.io/mcp \
+  -H "Content-Type: application/json" \
+  -d '{}'
+# Expect 401 (unauthenticated) — correct for Smithery OAuth discovery, not 403
+```
+
+### Smithery
+
+After the host is live, publish **`https://mcp.neotoma.io/mcp`**. See `docs/integrations/smithery_external_url.md`.
+
+## Agent feedback pipeline (agent.neotoma.io)
+
+The hosted intake service for `submit_feedback` / `get_feedback_status` runs on Netlify as a set of functions under `services/agent-site/`. See [docs/subsystems/agent_feedback_pipeline.md](../subsystems/agent_feedback_pipeline.md) for the full architecture.
+
+### Netlify site setup
+
+1. From `services/agent-site/`, run `npm install` then `netlify init` to link a new site to the `agent.neotoma.io` subdomain.
+2. Set the following site environment variables via `netlify env:set`:
+   - `AGENT_SITE_BEARER` — public bearer shared with the Neotoma MCP server
+   - `AGENT_SITE_ADMIN_BEARER` — admin bearer held only by the local cron / triage
+3. Point the `agent.neotoma.io` DNS record at the Netlify site per standard Netlify docs.
+4. Deploy with `netlify deploy --prod` (functions bundled via `esbuild`).
+
+### Local dev
+
+`netlify dev` inside `services/agent-site/` starts a local Functions server on port 8888. Point `AGENT_SITE_BASE_URL=http://localhost:8888` at it to exercise the HTTP transport end-to-end against the local Neotoma MCP.
+
+### Cron (local machine)
+
+Install the launchd template:
+
+```bash
+cp scripts/cron/com.neotoma.feedback-ingest.plist.template \
+   ~/Library/LaunchAgents/com.neotoma.feedback-ingest.plist
+sed -i '' "s|\${REPO_ROOT}|$(pwd)|g" ~/Library/LaunchAgents/com.neotoma.feedback-ingest.plist
+launchctl load ~/Library/LaunchAgents/com.neotoma.feedback-ingest.plist
+```
+
+The cron runs `scripts/cron/ingest_agent_incidents.ts` every 15 minutes. Set `NEOTOMA_FEEDBACK_TRANSPORT=http` + admin bearer in the plist `EnvironmentVariables` dict to target the hosted Blobs store; leave at `local` to triage against the local JSON store.
+
 ## Rollback
 ### Rollback to Previous Version
 ```bash

@@ -5,9 +5,12 @@
  * the turn-lifecycle and access-policy obligations that agents are
  * expected to honor:
  *
- *   - `storeChatTurn`: persist the user + assistant `agent_message` pair for
- *     a single conversational turn, each linked `PART_OF` the same
+ *   - `storeChatTurn`: persist the user + assistant `conversation_message`
+ *     pair for a single conversational turn, each linked `PART_OF` the same
  *     conversation. This matches the canonical dual-message shape.
+ *     (`conversation_message` superseded the legacy `agent_message`
+ *     entity_type in Phase 2 of the April 2026 redesign; `agent_message`
+ *     is still accepted as an alias for pre-v0.6 clients.)
  *   - `retrieveOrStore`: a retrieve-before-write primitive. Checks for an
  *     existing entity by identifier; stores a new one only if none is
  *     found. Returns the existing or newly-created `entity_id`.
@@ -22,10 +25,33 @@
 
 import type { NeotomaTransport, StoreEntityInput, StoreInput, StoreResult, StoredEntityRef } from "./types.js";
 
+/**
+ * Authoritative sender category for a chat message.
+ *
+ * `user` and `assistant` are the conventional chat roles. `agent` is used
+ * for agent-to-agent (A2A) traffic where neither side is a human end user.
+ * `system` and `tool` cover system-emitted prompts and tool-call turns.
+ *
+ * Phase 1 writers set `sender_kind` alongside `role` for backward
+ * compatibility. Readers should prefer `sender_kind` and fall back to
+ * `role` when missing.
+ */
+export type ChatTurnSenderKind = "user" | "assistant" | "agent" | "system" | "tool";
+
 export interface ChatTurnMessage {
   content: string;
   role: "user" | "assistant";
-  /** Extra fields to store on the agent_message (timestamp, files_modified, tools_used, etc.). */
+  /**
+   * Authoritative sender category. When omitted, defaults to `role`.
+   * For agent-to-agent traffic, set this to `agent` and also pass
+   * `senderAgentId` / `recipientAgentId`.
+   */
+  senderKind?: ChatTurnSenderKind;
+  /** Stable identifier of the sending agent (AAuth/clientInfo/agent_sub derived). */
+  senderAgentId?: string;
+  /** Stable identifier of the recipient agent, for A2A turns. */
+  recipientAgentId?: string;
+  /** Extra fields to store on the conversation_message (timestamp, files_modified, tools_used, etc.). */
   extra?: Record<string, unknown>;
 }
 
@@ -87,9 +113,13 @@ export async function storeChatTurn(
     const suffix = message.role === "user" ? "" : ":assistant";
     const idx = entities.length;
     indexByRole[message.role] = idx;
+    const senderKind: ChatTurnSenderKind = message.senderKind ?? message.role;
     entities.push({
-      entity_type: "agent_message",
+      entity_type: "conversation_message",
       role: message.role,
+      sender_kind: senderKind,
+      ...(message.senderAgentId ? { sender_agent_id: message.senderAgentId } : {}),
+      ...(message.recipientAgentId ? { recipient_agent_id: message.recipientAgentId } : {}),
       content: message.content,
       turn_key: `${turnKeyBase}${suffix}`,
       turn_number: input.turnNumber,

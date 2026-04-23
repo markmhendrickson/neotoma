@@ -1,0 +1,7 @@
+endpoint: "POST /store"
+outcome: valid
+notes: |
+  Unstructured ingestion of a base64-encoded text file via POST /store's
+  file_content + mime_type shape. Pins the public contract for uploading
+  raw text from the pre-v0.5 era. A future tightening that reshapes this
+  path must flip this fixture and update CHANGES.md.

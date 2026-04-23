@@ -1,0 +1,148 @@
+{
+  "description": "Apr 21 2026 feedback fixtures replayed through the agent-feedback pipeline to validate classification + upgrade_guidance assignment against real content. Derived from Simon's agent-shape and CLI friction reports; each entry SHOULD classify as duplicate_of_shipped_work with a fully-populated upgrade_guidance block on v0.5.0.",
+  "source": [
+    "neotoma-agent-shape-for-mark.md (2026-04-21)",
+    "neotoma-cli-feedback-for-mark.md (2026-04-21)"
+  ],
+  "submissions": [
+    {
+      "kind": "primitive_ask",
+      "title": "Add store --plan so I can preview without persisting",
+      "body": "For agentic use I want a `store --plan` dry-run that returns the resolver_path + action + projected snapshot for each entity without persisting. Today I have to speculatively store and then delete.",
+      "metadata": {
+        "environment": {
+          "neotoma_version": "0.4.8",
+          "client_name": "neotoma-mcp",
+          "os": "darwin",
+          "tool_name": "store_structured"
+        }
+      }
+    },
+    {
+      "kind": "primitive_ask",
+      "title": "Add store --strict so silent merges fail loudly",
+      "body": "The default merge-on-match behavior hides bugs. I want `store --strict` to refuse to silently merge and surface the match candidate instead.",
+      "metadata": {
+        "environment": {
+          "neotoma_version": "0.4.8",
+          "client_name": "neotoma-mcp",
+          "os": "darwin",
+          "tool_name": "store_structured"
+        }
+      }
+    },
+    {
+      "kind": "primitive_ask",
+      "title": "Return entity_snapshot_after + resolver_path + action from store",
+      "body": "Agents need the post-store state back in the response to chain operations deterministically. Today we re-query which is racy.",
+      "metadata": {
+        "environment": {
+          "neotoma_version": "0.4.8",
+          "client_name": "neotoma-client-ts",
+          "os": "darwin",
+          "tool_name": "store_structured"
+        }
+      }
+    },
+    {
+      "kind": "primitive_ask",
+      "title": "Dedicated neotoma ingest verb",
+      "body": "Ingesting a file feels wrong under `store`; want a dedicated `neotoma ingest` verb that carries file + parse semantics.",
+      "metadata": {
+        "environment": {
+          "neotoma_version": "0.4.8",
+          "client_name": "neotoma-cli",
+          "os": "darwin"
+        }
+      }
+    },
+    {
+      "kind": "primitive_ask",
+      "title": "Add NEOTOMA_BASE_URL and NEOTOMA_API_ONLY env vars",
+      "body": "Need to route the CLI through a remote API when SQLite is not present. Today I rely on local-file defaults.",
+      "metadata": {
+        "environment": {
+          "neotoma_version": "0.4.8",
+          "client_name": "neotoma-cli",
+          "os": "linux"
+        }
+      }
+    },
+    {
+      "kind": "primitive_ask",
+      "title": "searchable_fields for schema-driven identifier lookup",
+      "body": "retrieve_entity_by_identifier should fall back across schema-declared searchable_fields (name, aliases, etc).",
+      "metadata": {
+        "environment": {
+          "neotoma_version": "0.4.8",
+          "client_name": "neotoma-mcp",
+          "os": "darwin",
+          "tool_name": "retrieve_entity_by_identifier"
+        }
+      }
+    },
+    {
+      "kind": "primitive_ask",
+      "title": "Expose list_recent_changes across core tables",
+      "body": "Agents want a single call that returns the most recent activity across entities/sources/observations/interpretations/relationships/timeline_events.",
+      "metadata": {
+        "environment": {
+          "neotoma_version": "0.4.8",
+          "client_name": "neotoma-mcp",
+          "os": "darwin"
+        }
+      }
+    },
+    {
+      "kind": "primitive_ask",
+      "title": "Surface CanonicalNameUnresolvedError with actionable hint",
+      "body": "When the store path cannot derive a canonical name, the error message should point to the fields / schema knobs that would fix it.",
+      "metadata": {
+        "environment": {
+          "neotoma_version": "0.4.8",
+          "client_name": "neotoma-client-ts",
+          "os": "darwin",
+          "tool_name": "store"
+        }
+      }
+    },
+    {
+      "kind": "primitive_ask",
+      "title": "Ship list_potential_duplicates / find-duplicates",
+      "body": "Want a dedicated duplicate-detection surface rather than re-doing this per entity_type.",
+      "metadata": {
+        "environment": {
+          "neotoma_version": "0.4.8",
+          "client_name": "neotoma-mcp",
+          "os": "darwin"
+        }
+      }
+    },
+    {
+      "kind": "primitive_ask",
+      "title": "include_observations on retrieve_entity_by_identifier",
+      "body": "I want to fold the observation fetch into the identifier lookup to save a round-trip.",
+      "metadata": {
+        "environment": {
+          "neotoma_version": "0.4.8",
+          "client_name": "neotoma-mcp",
+          "os": "darwin",
+          "tool_name": "retrieve_entity_by_identifier"
+        }
+      }
+    },
+    {
+      "kind": "primitive_ask",
+      "title": "--since / updated_since filters for retrieve_entities",
+      "body": "Filter by last-change timestamps to build incremental sync loops.",
+      "metadata": {
+        "environment": {
+          "neotoma_version": "0.4.8",
+          "client_name": "neotoma-mcp",
+          "os": "darwin",
+          "tool_name": "retrieve_entities"
+        }
+      }
+    }
+  ]
+}

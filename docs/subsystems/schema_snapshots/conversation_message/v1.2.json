@@ -1,0 +1,68 @@
+{
+  "entity_type": "conversation_message",
+  "schema_version": "1.2",
+  "active": true,
+  "created_at": "2026-04-23T00:00:00.000Z",
+  "schema_definition": {
+    "fields": {
+      "schema_version": {
+        "type": "string",
+        "required": true
+      },
+      "role": {
+        "type": "string",
+        "required": true,
+        "description": "Sender role: 'user' or 'assistant' (legacy; prefer sender_kind)."
+      },
+      "content": {
+        "type": "string",
+        "required": true,
+        "description": "Message body."
+      },
+      "turn_key": {
+        "type": "string",
+        "required": false,
+        "description": "Caller-supplied stable per-turn identity, typically '{conversation_id}:{turn_id}' or '...:assistant'. Primary canonical_name_fields rule in v1.2."
+      },
+      "sender_kind": {
+        "type": "string",
+        "required": false,
+        "description": "Authoritative sender category: 'user' | 'assistant' | 'agent' | 'system' | 'tool'."
+      },
+      "sender_agent_id": {
+        "type": "string",
+        "required": false,
+        "description": "Stable identifier of the sending agent (AAuth thumbprint / clientInfo / agent_sub)."
+      },
+      "recipient_agent_id": {
+        "type": "string",
+        "required": false,
+        "description": "Stable identifier of the recipient agent for agent-to-agent traffic."
+      }
+    },
+    "canonical_name_fields": ["turn_key"],
+    "name_collision_policy": "reject"
+  },
+  "reducer_config": {
+    "merge_policies": {
+      "role": {
+        "strategy": "last_write"
+      },
+      "content": {
+        "strategy": "last_write"
+      },
+      "turn_key": {
+        "strategy": "last_write"
+      },
+      "sender_kind": {
+        "strategy": "last_write"
+      },
+      "sender_agent_id": {
+        "strategy": "last_write"
+      },
+      "recipient_agent_id": {
+        "strategy": "last_write"
+      }
+    }
+  }
+}

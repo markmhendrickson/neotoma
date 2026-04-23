@@ -124,6 +124,34 @@ export interface SchemaDefinition {
   identity_opt_out?: "heuristic_canonical_name";
 
   /**
+   * Declarative policy for what the resolver should do when
+   * {@link resolveEntityWithTrace} lands on an existing row via a path
+   * that is NOT a schema-declared `canonical_name_fields` match (i.e.
+   * `identityBasis !== "schema_rule"` and `!targetId`).
+   *
+   * - `"merge"` (default) — existing behavior: return the existing entity.
+   *   Preserves backward compatibility for legacy bookkeeping types and any
+   *   payload that intentionally wants heuristic de-duplication.
+   * - `"warn"` — return the existing entity and append a non-fatal warning
+   *   to the resolver trace (`heuristic_merge:*`). Intended for observability
+   *   while migrating a schema toward `reject`.
+   * - `"reject"` — throw {@link MergeRefusedError} so the structured-store
+   *   pipeline surfaces `ERR_STORE_RESOLUTION_FAILED` per-observation. Use on
+   *   schemas where heuristic title/name collisions would silently merge
+   *   unrelated sessions (e.g. `conversation`, `conversation_message`).
+   *
+   * The policy composes with `strict: true` on the per-call options: `strict`
+   * refuses ANY non-schema heuristic merge regardless of schema policy;
+   * `reject` makes that refusal the default for that schema. `warn` is ignored
+   * under `strict: true` (the strict refusal wins).
+   *
+   * When omitted, defaults to `"merge"` so every existing schema keeps its
+   * current runtime behavior. Declaring this field is a conscious upgrade:
+   * document the rationale in the schema snapshot README.
+   */
+  name_collision_policy?: "merge" | "warn" | "reject";
+
+  /**
    * Fields compared by the post-hoc duplicate detector (R5). When omitted,
    * the detector falls back to comparing canonical_name only, which is the
    * weakest possible signal. Declaring additional fields (e.g. ["email"],
@@ -148,6 +176,36 @@ const VALID_IDENTITY_OPT_OUT_TOKENS = new Set<string>([
   "heuristic_canonical_name",
 ]);
 
+/**
+ * Valid values for the `observation_source` field on observations (kept in
+ * sync with the Zod enum in `src/shared/action_schemas.ts` and the OpenAPI
+ * `Observation.observation_source` enum). Declared here so the schema
+ * registry can validate `observation_source_priority` without importing
+ * the Zod module and creating a cycle.
+ */
+export const OBSERVATION_SOURCE_RANK_VALUES = [
+  "sensor",
+  "llm_summary",
+  "workflow_state",
+  "human",
+  "import",
+] as const;
+
+export type ObservationSourceRankValue =
+  (typeof OBSERVATION_SOURCE_RANK_VALUES)[number];
+
+/**
+ * Default ranking applied by the reducer when a `source_priority` tie
+ * remains and the schema does not declare its own
+ * `observation_source_priority`. Sensors (ground-truth emissions)
+ * outrank deterministic workflow transitions, which outrank LLM
+ * summaries, which outrank direct human writes (lower ranked because
+ * humans should use {@link ../services/correction.ts} for authoritative
+ * overrides), which outrank batch imports.
+ */
+export const DEFAULT_OBSERVATION_SOURCE_PRIORITY: readonly ObservationSourceRankValue[] =
+  ["sensor", "workflow_state", "llm_summary", "human", "import"] as const;
+
 export interface ReducerConfig {
   merge_policies: Record<
     string,
@@ -160,6 +218,17 @@ export interface ReducerConfig {
       tie_breaker?: "observed_at" | "source_priority";
     }
   >;
+  /**
+   * Ordered ranking of `observation_source` values, highest-priority
+   * first. Applied by {@link ../reducers/observation_reducer.ts} as a
+   * tie-breaker *after* numeric `source_priority` (and, for the
+   * `most_specific` strategy, `specificity_score`), before the final
+   * `observed_at` / id tie-break. Schema-agnostic: any schema may
+   * override the default order by declaring this field; unknown enum
+   * values sort last. When omitted, the reducer uses
+   * {@link DEFAULT_OBSERVATION_SOURCE_PRIORITY}.
+   */
+  observation_source_priority?: readonly ObservationSourceRankValue[];
 }
 
 export interface IconMetadata {
@@ -190,6 +259,90 @@ export interface SchemaRegistryEntry {
   user_id?: string | null;
   scope?: "global" | "user";
   metadata?: SchemaMetadata;
+}
+
+/**
+ * R4: Shape returned by {@link deriveRequiredIdentityFields}. Captures the
+ * minimum payload keys a caller must supply on `store_structured` for the
+ * resolver to match via `schema_rule` (identity_basis) instead of the
+ * heuristic path. Derived purely from the schema registry — no per-type
+ * branching anywhere in the consuming code paths.
+ */
+export interface RequiredIdentityFields {
+  /** Schema entity_type this applies to. */
+  entityType: string;
+  /**
+   * `true` when the schema declares `name_collision_policy: "reject"` — at
+   * least one of `anyOfFields` (or every field in one `compositeFields` rule)
+   * MUST be present on the payload or the write will throw
+   * `ERR_STORE_RESOLUTION_FAILED` / `ERR_MERGE_REFUSED`.
+   */
+  required: boolean;
+  /**
+   * Schema-declared single-field canonical rules (e.g. `conversation_id`,
+   * `turn_key`). Supplying any one of these satisfies identity on its own.
+   */
+  anyOfFields: string[];
+  /**
+   * Schema-declared composite canonical rules. Every field in one composite
+   * group must be present to satisfy that rule.
+   */
+  compositeFields: string[][];
+}
+
+/**
+ * R4: derive the minimum set of identity-bearing payload keys a caller must
+ * supply for a given entity_type, straight out of the schema registry. Used
+ * by `store_structured` to populate structured `issues[].hint` on
+ * `ERR_STORE_RESOLUTION_FAILED` responses and by `tool_definitions.ts` to
+ * surface the list in the MCP tool description. Returns null when the entity
+ * type has no registered schema (unseeded — heuristic fallback applies).
+ *
+ * Schema-agnostic by construction: all behavior is driven by
+ * `canonical_name_fields` + `name_collision_policy` on the schema. Adding a
+ * new reject-policy schema automatically extends the contract.
+ */
+export async function deriveRequiredIdentityFields(
+  entityType: string,
+  userId?: string | null,
+): Promise<RequiredIdentityFields | null> {
+  const normalized = normalizeEntityTypeForSchema(entityType);
+  const entry = await schemaRegistry.loadActiveSchema(normalized, userId ?? undefined);
+  // R1/R2 safety net: same reasoning as the resolver's schema-load fallback
+  // in `src/services/entity_resolution.ts` — when the registry has no row for
+  // this entity_type (fresh DB, test fixture, or never-registered type) the
+  // code-defined default in `ENTITY_SCHEMAS` still carries the identity
+  // contract, so the caller-facing hint must come from there instead of
+  // silently returning null.
+  let def = entry?.schema_definition;
+  if (!def) {
+    try {
+      const { ENTITY_SCHEMAS } = await import("./schema_definitions.js");
+      const codeSchema = ENTITY_SCHEMAS[normalized] ?? ENTITY_SCHEMAS[entityType];
+      if (codeSchema) {
+        def = codeSchema.schema_definition;
+      }
+    } catch {
+      // defensive
+    }
+  }
+  if (!def) return null;
+  const rules = def.canonical_name_fields ?? [];
+  const anyOfFields: string[] = [];
+  const compositeFields: string[][] = [];
+  for (const rule of rules) {
+    if (typeof rule === "string") {
+      anyOfFields.push(rule);
+    } else if (rule && typeof rule === "object" && Array.isArray(rule.composite)) {
+      compositeFields.push([...rule.composite]);
+    }
+  }
+  return {
+    entityType: normalized,
+    required: def.name_collision_policy === "reject",
+    anyOfFields,
+    compositeFields,
+  };
 }
 
 /** Normalize entity type for schema registry: snake_case, safe characters, max length */
@@ -1459,6 +1612,31 @@ export class SchemaRegistryService {
       }
     }
 
+    if (definition.name_collision_policy !== undefined) {
+      const policy = definition.name_collision_policy;
+      if (policy !== "merge" && policy !== "warn" && policy !== "reject") {
+        throw new Error(
+          `name_collision_policy has unknown value: ${String(policy)}. ` +
+            "Allowed: merge | warn | reject.",
+        );
+      }
+      if (policy !== "merge" && definition.identity_opt_out !== undefined) {
+        throw new Error(
+          "name_collision_policy cannot be set to \"warn\" or \"reject\" on a " +
+            "schema that also declares identity_opt_out. Either declare " +
+            "canonical_name_fields so identity can be matched deterministically, " +
+            "or keep the default policy (\"merge\").",
+        );
+      }
+      if (policy === "reject" && definition.canonical_name_fields === undefined) {
+        throw new Error(
+          "name_collision_policy: \"reject\" requires a reachable " +
+            "canonical_name_fields declaration so callers have a deterministic " +
+            "path to resolve identity. See docs/foundation/schema_agnostic_design_rules.md (R2).",
+        );
+      }
+    }
+
     if (definition.canonical_name_fields !== undefined) {
       if (!Array.isArray(definition.canonical_name_fields)) {
         throw new Error(
@@ -1656,6 +1834,28 @@ export class SchemaRegistryService {
         throw new Error(
           `Invalid tie breaker for ${fieldName}: ${policy.tie_breaker}`,
         );
+      }
+    }
+
+    if (config.observation_source_priority !== undefined) {
+      if (!Array.isArray(config.observation_source_priority)) {
+        throw new Error(
+          "observation_source_priority must be an array of observation_source values",
+        );
+      }
+      const seen = new Set<string>();
+      for (const value of config.observation_source_priority) {
+        if (!OBSERVATION_SOURCE_RANK_VALUES.includes(value)) {
+          throw new Error(
+            `Invalid observation_source in observation_source_priority: ${value}`,
+          );
+        }
+        if (seen.has(value)) {
+          throw new Error(
+            `Duplicate observation_source in observation_source_priority: ${value}`,
+          );
+        }
+        seen.add(value);
       }
     }
   }

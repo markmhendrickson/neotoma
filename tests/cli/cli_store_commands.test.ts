@@ -212,16 +212,21 @@ describe("CLI store commands", () => {
     });
 
     it("should generate default turn_key when omitted", async () => {
+      const conversationTitle = `CLI Turn Defaults ${Date.now()}`;
       const result = JSON.parse(
         (
           await execAsync(
-            `${CLI_PATH} store-turn --conversation-title "CLI Turn Defaults" --message "Default turn key" --user-id "${TEST_USER_ID}" --json`
+            `${CLI_PATH} store-turn --conversation-title "${conversationTitle}" --message "Default turn key" --user-id "${TEST_USER_ID}" --json`
           )
         ).stdout
       );
 
       const entities = Array.isArray(result.entities) ? result.entities : [];
-      const messageEntity = entities.find((entity: any) => entity.entity_type === "agent_message");
+      const messageEntity = entities.find(
+        (entity: any) =>
+          entity.entity_type === "conversation_message" ||
+          entity.entity_type === "agent_message",
+      );
       const messageEntityId = messageEntity?.entity_id ?? messageEntity?.id;
       expect(typeof messageEntityId).toBe("string");
 

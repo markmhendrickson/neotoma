@@ -88,8 +88,9 @@ async function handle(
     await client.store({
       entities: [
         {
-          entity_type: "agent_message",
+          entity_type: "conversation_message",
           role: "user",
+          sender_kind: "user",
           content: prompt,
           turn_key: `${sessionId}:${turnId}`,
           ...harnessProvenance({ hook_event: "beforeSubmitPrompt" }),

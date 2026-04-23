@@ -104,6 +104,29 @@ export type IdentityBasis =
   | "target_id";
 
 /**
+ * Non-fatal resolver warning. Emitted when `name_collision_policy: "warn"`
+ * lands on an existing entity via a heuristic path. Surfaced per-observation
+ * via {@link ResolverTrace.warnings} and (R3) the structured-store response
+ * `warnings[]` array so dashboards and agents can audit identity quality
+ * without parsing freeform strings.
+ *
+ * Keep this shape PII-free: never embed canonical_name content,
+ * message bodies, or extracted field values here.
+ */
+export interface ResolverWarning {
+  /** Stable machine code. */
+  code: "HEURISTIC_MERGE";
+  /** Schema policy that produced the warning. */
+  policy: "warn";
+  /** entity_type the warning applies to. */
+  entityType: string;
+  /** IdentityBasis that produced the match (never `schema_rule`). */
+  identityBasis: IdentityBasis;
+  /** identity_rule label — e.g. `name_key:title`, `id_key:turn_key`. */
+  identityRule: string;
+}
+
+/**
  * Full trace for a single entity resolution. Populated by
  * {@link resolveEntityWithTrace} and surfaced per-observation.
  */
@@ -124,6 +147,12 @@ export interface ResolverTrace {
   identityRule: string;
   /** Whether the resolution landed on an existing row or created a new one. */
   action: "created" | "matched_existing" | "would_create" | "would_match_existing" | "extended";
+  /**
+   * Non-fatal warnings emitted during resolution. Populated when a schema
+   * with `name_collision_policy: "warn"` lands on an existing entity via a
+   * heuristic path. Empty/undefined otherwise. See {@link ResolverWarning}.
+   */
+  warnings?: ResolverWarning[];
 }
 
 /**
@@ -535,8 +564,19 @@ export interface ResolveEntityResult {
 }
 
 /**
- * Thrown when strict mode resolves to an existing entity without an explicit
- * target_id or a schema canonical_name_fields match.
+ * Thrown when resolution lands on an existing entity without an explicit
+ * `target_id` or a schema `canonical_name_fields` match, and the caller or
+ * schema asked for that heuristic merge to be refused.
+ *
+ * Two trigger paths, distinguished by `reason`:
+ * - `"strict"` — per-call `strict: true` (used by `store --strict` and
+ *   `intent: "create_new"`).
+ * - `"schema_policy"` — schema-declared `name_collision_policy: "reject"`
+ *   (R2). Applies to every write against that schema regardless of strict.
+ *
+ * Both paths surface through the structured-store pipeline as
+ * `ERR_STORE_RESOLUTION_FAILED` / `ERR_MERGE_REFUSED` so callers get a
+ * single, stable error shape.
  */
 export class MergeRefusedError extends Error {
   public readonly code = "ERR_MERGE_REFUSED" as const;
@@ -544,26 +584,46 @@ export class MergeRefusedError extends Error {
   public readonly entityId: string;
   public readonly canonicalName: string;
   public readonly resolverPath: ResolverPathStep[];
+  /** Discriminator describing why the merge was refused. */
+  public readonly reason: "strict" | "schema_policy";
+  /** Schema policy value when `reason === "schema_policy"`. */
+  public readonly policy?: "reject";
 
   constructor(params: {
     entityType: string;
     entityId: string;
     canonicalName: string;
     resolverPath: ResolverPathStep[];
+    /**
+     * When set to `"reject"`, the refusal came from the schema's
+     * `name_collision_policy` and error messaging explains that path instead
+     * of the per-call `strict` path.
+     */
+    policy?: "reject";
   }) {
-    super(
-      `Strict mode: resolution for "${params.entityType}" landed on existing ` +
-        `entity ${params.entityId} (canonical_name "${params.canonicalName}") ` +
-        `without an explicit target_id or a schema canonical_name_fields ` +
-        `match. Pass target_id to extend the existing entity, declare ` +
-        `canonical_name_fields on the schema, or drop --strict / ` +
-        `intent: "create_new" to allow the merge.`,
-    );
+    const reason: "strict" | "schema_policy" = params.policy === "reject"
+      ? "schema_policy"
+      : "strict";
+    const message = reason === "schema_policy"
+      ? `Schema policy "name_collision_policy: reject": resolution for ` +
+          `"${params.entityType}" landed on existing entity ${params.entityId} ` +
+          `(canonical_name "${params.canonicalName}") via a heuristic path. ` +
+          `Supply a value for the schema's canonical_name_fields to match ` +
+          `deterministically, or pass target_id to extend the existing entity.`
+      : `Strict mode: resolution for "${params.entityType}" landed on existing ` +
+          `entity ${params.entityId} (canonical_name "${params.canonicalName}") ` +
+          `without an explicit target_id or a schema canonical_name_fields ` +
+          `match. Pass target_id to extend the existing entity, declare ` +
+          `canonical_name_fields on the schema, or drop --strict / ` +
+          `intent: "create_new" to allow the merge.`;
+    super(message);
     this.name = "MergeRefusedError";
     this.entityType = params.entityType;
     this.entityId = params.entityId;
     this.canonicalName = params.canonicalName;
     this.resolverPath = params.resolverPath;
+    this.reason = reason;
+    this.policy = params.policy;
   }
 }
 
@@ -614,6 +674,28 @@ export async function resolveEntityWithTrace(
       );
       schema = null;
     }
+    // R1/R2 safety net: when the registry has no row for this entity_type
+    // (fresh DB, test fixture, or a type that was never explicitly
+    // registered), fall back to the code-defined default in
+    // `src/services/schema_definitions.ts#ENTITY_SCHEMAS`. Without this,
+    // schema-level identity rules and `name_collision_policy` declared in
+    // code are invisible at runtime — exactly the regression R1/R2 were
+    // designed to prevent (see
+    // `docs/foundation/entity_resolution.md`). Schema loads from DB still
+    // take precedence so user-specific or DB-evolved schemas override the
+    // code defaults.
+    if (!schema) {
+      try {
+        const { ENTITY_SCHEMAS } = await import("./schema_definitions.js");
+        const normalized = entityType.toLowerCase().trim().replace(/\s+/g, "_");
+        const codeSchema = ENTITY_SCHEMAS[entityType] ?? ENTITY_SCHEMAS[normalized];
+        if (codeSchema) {
+          schema = codeSchema.schema_definition;
+        }
+      } catch {
+        // Defensive — module load failure should not prevent resolution.
+      }
+    }
   }
 
   const derivation = deriveCanonicalNameFromFieldsWithTrace(
@@ -647,6 +729,36 @@ export async function resolveEntityWithTrace(
         canonicalName,
         resolverPath: path,
       });
+    }
+
+    // R2: honor the schema-declared name_collision_policy. `reject` refuses
+    // heuristic merges without needing per-call `strict`. `warn` lets the
+    // merge proceed but attaches a non-fatal warning to the trace. `merge`
+    // (default) preserves legacy behavior.
+    const collisionPolicy =
+      (schema as SchemaDefinition | null | undefined)?.name_collision_policy ??
+      "merge";
+    const warnings: ResolverWarning[] = [];
+    if (!schemaDeterministic) {
+      if (collisionPolicy === "reject") {
+        throw new MergeRefusedError({
+          entityType,
+          entityId,
+          canonicalName,
+          resolverPath: path,
+          policy: "reject",
+        });
+      }
+      if (collisionPolicy === "warn") {
+        warnings.push({
+          code: "HEURISTIC_MERGE",
+          policy: "warn",
+          entityType,
+          identityBasis,
+          identityRule,
+        });
+        path.push(`policy:name_collision_policy:warn`);
+      }
     }
 
     if (commit) {
@@ -691,6 +803,7 @@ export async function resolveEntityWithTrace(
         identityBasis,
         identityRule,
         action: commit ? "matched_existing" : "would_match_existing",
+        ...(warnings.length > 0 ? { warnings } : {}),
       },
     };
   }

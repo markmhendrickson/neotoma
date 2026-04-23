@@ -1,0 +1,15 @@
+{
+  "user_id": "00000000-0000-0000-0000-000000000000",
+  "idempotency_key": "legacy-v0.4.x-store-person-attributes-wrapped",
+  "commit": true,
+  "entities": [
+    {
+      "entity_type": "person",
+      "attributes": {
+        "canonical_name": "Legacy Corpus Person (attributes-wrapped)",
+        "name": "Legacy Corpus Person",
+        "email": "legacy-corpus-person@example.com"
+      }
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+endpoint: "POST /store"
+outcome: rejected
+error_code: ERR_STORE_RESOLUTION_FAILED
+issue_code: ERR_MERGE_REFUSED
+hint_match: "/declare.+conversation_id/i"
+notes: |
+  v0.6.0 tightening. The `conversation` schema bumps to v1.2 with
+  `canonical_name_fields: ["conversation_id"]` and
+  `name_collision_policy: "reject"`. Two turns from the same payload with
+  identical `title` and no `conversation_id` used to silently collapse into
+  one entity via heuristic `name_key:title`. After the tightening, the
+  second turn refuses with `ERR_MERGE_REFUSED` / `ERR_STORE_RESOLUTION_FAILED`
+  and the caller sees a structured hint carrying
+  `required_identity_fields: { entity_type: "conversation", required: true,
+  any_of_fields: ["conversation_id"], composite_fields: [] }`.
+
+  Fix on the caller side: supply a stable `conversation_id` on every
+  `conversation` entity (see `docs/developer/mcp/instructions.md`
+  `[STORE RECIPES] user-phase`).

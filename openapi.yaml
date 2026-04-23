@@ -73,12 +73,68 @@ components:
             Code-specific context (e.g. `seen_fields`, `attempted_value`,
             `entity_id`, `canonical_name`, `resolver_path`).
         hint:
-          type: string
+          oneOf:
+            - type: string
+            - type: object
+              required:
+                - text
+              properties:
+                text:
+                  type: string
+                  description: |
+                    Short, actionable instruction for the caller (e.g. "Declare
+                    `conversation_id` on entity_type \"conversation\"…"). PII-free.
+                required_identity_fields:
+                  $ref: '#/components/schemas/RequiredIdentityFields'
           description: |
             Optional structured upgrade guidance. Populated when the server can
             detect a common caller mistake (e.g. wrapping fields inside
-            `attributes`) and wants to surface a concrete fix without including
-            any PII. Consumers MAY display this verbatim to end users.
+            `attributes`) or when a schema with `name_collision_policy: reject`
+            refuses a heuristic merge (R4 — then `required_identity_fields`
+            carries the schema-derived identity key list). PII-free by
+            construction. Consumers MAY display `text` verbatim to end users
+            and MAY key on `required_identity_fields` programmatically to
+            compose a corrected payload without parsing prose.
+    RequiredIdentityFields:
+      type: object
+      description: |
+        R4: schema-derived minimum identity payload for an `entity_type`.
+        Surfaced inside `StoreResolutionIssue.hint.required_identity_fields`
+        when a schema `name_collision_policy: reject` refuses a heuristic
+        merge, and exposed by the MCP tool surface so agents can compose
+        deterministic writes without per-type knowledge. Generated from
+        `SchemaDefinition.canonical_name_fields` — adding a new reject-policy
+        schema automatically extends the contract.
+      required:
+        - entity_type
+        - required
+        - any_of_fields
+        - composite_fields
+      properties:
+        entity_type:
+          type: string
+        required:
+          type: boolean
+          description: |
+            `true` when the schema declares `name_collision_policy: "reject"`.
+            When `false`, the fields are informational — the caller MAY still
+            benefit from supplying them to avoid heuristic matching warnings.
+        any_of_fields:
+          type: array
+          items:
+            type: string
+          description: |
+            Single-field canonical rules. Supplying ANY one of these on the
+            payload is sufficient to satisfy the schema-level identity rule.
+        composite_fields:
+          type: array
+          items:
+            type: array
+            items:
+              type: string
+          description: |
+            Composite canonical rules. EVERY field in at least ONE composite
+            group must be present to satisfy that group.
     StoreResolutionErrorEnvelope:
       type: object
       description: |
@@ -99,6 +155,333 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/StoreResolutionIssue'
+    SplitPredicate:
+      type: object
+      description: |
+        R5: declarative predicate describing which observations of the source
+        entity should be re-pointed onto the new entity. Every form reads a
+        column every observation row carries so the predicate surface is
+        schema-agnostic. At least one form MUST be supplied.
+      properties:
+        observed_at_gte:
+          type: string
+          format: date-time
+          description: |
+            Match observations whose `observed_at` is >= this ISO-8601
+            timestamp. Primary use case: "move every observation from this
+            session forward onto a new entity".
+        source_id_in:
+          type: array
+          items:
+            type: string
+          description: |
+            Match observations whose `source_id` is one of the listed
+            sources. Useful when a single over-merged entity collected
+            observations from distinct sources that should live on separate
+            entities.
+        observation_field_equals:
+          type: object
+          required:
+            - field
+          properties:
+            field:
+              type: string
+              description: Observation `fields.<field>` to compare.
+            value:
+              type: string
+              description: String-equals comparison (no type coercion).
+            value_starts_with:
+              type: string
+              description: String-prefix comparison (no type coercion).
+    SplitEntityRequest:
+      type: object
+      required:
+        - source_entity_id
+        - predicate
+        - new_entity
+        - idempotency_key
+      properties:
+        source_entity_id:
+          type: string
+        predicate:
+          $ref: '#/components/schemas/SplitPredicate'
+        new_entity:
+          type: object
+          required:
+            - entity_type
+            - canonical_name
+          properties:
+            entity_type:
+              type: string
+            canonical_name:
+              type: string
+            target_entity_id:
+              type: string
+              description: |
+                Optional — re-point matched observations onto a pre-existing
+                entity id instead of deriving a new deterministic id.
+        idempotency_key:
+          type: string
+          description: |
+            Required per MUST #11. Reuse with a different predicate returns
+            `ERR_IDEMPOTENCY_MISMATCH`; reuse with the same predicate returns
+            the original split result (`replayed: true`).
+        reason:
+          type: string
+          description: Free-text rationale recorded on the audit row.
+        user_id:
+          type: string
+    SplitEntityResponse:
+      type: object
+      required:
+        - split_id
+        - source_entity_id
+        - new_entity_id
+        - observations_moved
+        - split_at
+        - replayed
+      properties:
+        split_id:
+          type: string
+        source_entity_id:
+          type: string
+        new_entity_id:
+          type: string
+        observations_moved:
+          type: integer
+          description: Number of observations whose `entity_id` was re-pointed.
+        split_at:
+          type: string
+          format: date-time
+        replayed:
+          type: boolean
+          description: |
+            `true` when the response is an idempotent replay of a prior
+            identical split (same `user_id` + `idempotency_key` + predicate).
+    AgentAttribution:
+      type: object
+      description: |
+        Agent-identity provenance recorded on every durable write-path record
+        (observations, relationships, sources, interpretations, timeline
+        events). Fields are stamped additively into the existing provenance
+        JSON blob on each record so no schema migration was required; the
+        shape below documents the keys consumers can rely on.
+
+        When AAuth is active the `agent_*` keys carry the cryptographically
+        verified identity; `client_name`/`client_version` come from the MCP
+        `initialize.clientInfo` fallback and are self-reported. Every field
+        is optional; callers MUST treat a missing key as "no evidence at
+        that tier" and rely on `attribution_tier` for the trust signal.
+      properties:
+        agent_public_key:
+          type: string
+          description: Raw JWK-serialised public key used for the HTTP signature.
+        agent_thumbprint:
+          type: string
+          description: RFC 7638 JWK thumbprint of `agent_public_key`; stable across sessions.
+        agent_algorithm:
+          type: string
+          description: HTTP Message Signature algorithm (`ES256`, `EdDSA`, …).
+        agent_sub:
+          type: string
+          description: "`sub` claim of the `aa-agent+jwt` agent token."
+        agent_iss:
+          type: string
+          description: "`iss` claim (issuer URL) of the agent token."
+        client_name:
+          type: string
+          description: "Self-reported MCP `initialize.clientInfo.name`. NOT verified."
+        client_version:
+          type: string
+          description: "Self-reported MCP `initialize.clientInfo.version`."
+        connection_id:
+          type: string
+          description: Existing OAuth connection id when the request is OAuth-authenticated.
+        attribution_tier:
+          type: string
+          enum:
+            - hardware
+            - software
+            - unverified_client
+            - anonymous
+          description: Derived trust tier; see `src/crypto/agent_identity.ts`.
+        attributed_at:
+          type: string
+          format: date-time
+          description: ISO-8601 timestamp when the attribution block was stamped.
+    AttributionPolicySnapshot:
+      type: object
+      description: |
+        Active attribution policy for the Neotoma instance. Governs how
+        anonymous (unattributed) and sub-tier writes are handled on each
+        write path. Ships defaults that preserve historical behaviour
+        (`anonymous_writes: allow`, no `min_tier`).
+      required:
+        - anonymous_writes
+      properties:
+        anonymous_writes:
+          type: string
+          enum: [allow, warn, reject]
+          description: |
+            Global policy mode applied to writes whose resolved
+            `attribution_tier` is `anonymous`.
+        min_tier:
+          type: string
+          enum: [hardware, software, unverified_client]
+          description: |
+            Optional floor tier; writes with a resolved tier below this
+            floor are rejected with `ATTRIBUTION_REQUIRED`.
+        per_path:
+          type: object
+          additionalProperties:
+            type: string
+            enum: [allow, warn, reject]
+          description: |
+            Optional per-write-path overrides keyed by canonical write
+            path (`observations`, `relationships`, `sources`,
+            `interpretations`, `timeline_events`, `corrections`).
+    SessionAttributionDecision:
+      type: object
+      description: |
+        Diagnostic summary of the most recent AAuth / `clientInfo`
+        resolution decision. Safe to mirror to clients; never contains
+        signatures or public keys. Present only when the server has a
+        decision to surface.
+      required:
+        - signature_present
+        - signature_verified
+        - resolved_tier
+      properties:
+        signature_present:
+          type: boolean
+        signature_verified:
+          type: boolean
+        signature_error_code:
+          type: string
+        client_info_raw_name:
+          type: string
+        client_info_normalised_to_null_reason:
+          type: string
+          enum: [too_generic, empty, not_a_string]
+        resolved_tier:
+          type: string
+          enum: [hardware, software, unverified_client, anonymous]
+    SessionInfo:
+      type: object
+      description: |
+        Resolved attribution and policy for the current session. Returned
+        by `GET /session` and the MCP `get_session_identity` tool.
+      required:
+        - user_id
+        - attribution
+        - policy
+        - eligible_for_trusted_writes
+      properties:
+        user_id:
+          type: string
+        attribution:
+          type: object
+          required:
+            - tier
+          properties:
+            tier:
+              type: string
+              enum: [hardware, software, unverified_client, anonymous]
+            agent_thumbprint:
+              type: string
+            agent_sub:
+              type: string
+            agent_iss:
+              type: string
+            agent_algorithm:
+              type: string
+            agent_public_key:
+              type: string
+            client_name:
+              type: string
+            client_version:
+              type: string
+            connection_id:
+              type: string
+            decision:
+              nullable: true
+              allOf:
+                - $ref: "#/components/schemas/SessionAttributionDecision"
+        policy:
+          $ref: "#/components/schemas/AttributionPolicySnapshot"
+        eligible_for_trusted_writes:
+          type: boolean
+          description: |
+            Convenience flag mirroring the check
+            `enforceAttributionPolicy('observations', identity)` would
+            make on the default write path.
+    AgentDirectoryEntry:
+      type: object
+      description: |
+        One row returned by `/agents`. Aggregates a distinct agent's
+        writes across observations, sources, timeline events,
+        interpretations, and relationship observations.
+      required:
+        - agent_key
+        - label
+        - tier
+        - first_seen_at
+        - last_seen_at
+        - total_records
+        - record_counts
+      properties:
+        agent_key:
+          type: string
+          description: |
+            Stable identifier: `thumb:<thumbprint>` |
+            `sub:<subject>` | `name:<client>[@version]` | `anonymous`.
+        label:
+          type: string
+          description: Short human-readable label for display.
+        tier:
+          type: string
+          enum:
+            - hardware
+            - software
+            - unverified_client
+            - anonymous
+        agent_thumbprint:
+          type: string
+          nullable: true
+        agent_public_key:
+          type: string
+          nullable: true
+        agent_algorithm:
+          type: string
+          nullable: true
+        agent_sub:
+          type: string
+          nullable: true
+        agent_iss:
+          type: string
+          nullable: true
+        client_name:
+          type: string
+          nullable: true
+        client_version:
+          type: string
+          nullable: true
+        first_seen_at:
+          type: string
+          nullable: true
+        last_seen_at:
+          type: string
+          nullable: true
+        total_records:
+          type: integer
+        record_counts:
+          type: object
+          additionalProperties:
+            type: integer
+          description: |
+            Per record-type count (`observation`, `source`,
+            `interpretation`, `timeline_event`, `relationship`).
+            Missing buckets mean zero.
     Entity:
       type: object
       properties:
@@ -135,6 +518,12 @@ components:
         provenance:
           type: object
           additionalProperties: true
+          description: |
+            Reducer provenance: a `field → observation_id` map that records
+            which contributing observation produced each snapshot field.
+            NOT agent-identity attribution; see `AgentAttribution` and the
+            `provenance` field on the contributing `Observation` rows for
+            the agent that wrote each observation.
         computed_at:
           type: string
           format: date-time
@@ -190,6 +579,16 @@ components:
           format: date-time
         user_id:
           type: string
+        provenance:
+          type: object
+          description: |
+            Source provenance. Carries agent-identity keys (see
+            `AgentAttribution`) for the agent that uploaded or synthesised
+            this source, alongside any free-form metadata keys supplied by
+            the ingestion pipeline.
+          additionalProperties: true
+          allOf:
+            - $ref: '#/components/schemas/AgentAttribution'
     Observation:
       type: object
       properties:
@@ -214,6 +613,29 @@ components:
           type: number
         source_priority:
           type: integer
+        observation_source:
+          type: string
+          nullable: true
+          enum: [sensor, llm_summary, workflow_state, human, import]
+          description: |
+            Classifies the *kind* of write that produced this observation,
+            orthogonal to `source_priority` (numeric ranking) and to
+            `provenance`/AAuth (which agent wrote it). One of:
+
+            - `sensor` — ground-truth emission from a tool, hook, webhook,
+              runtime telemetry, file watcher, or scheduled probe. Not
+              authored by an LLM.
+            - `llm_summary` — content authored by an LLM (summaries,
+              extractions, inferences, generated notes).
+            - `workflow_state` — deterministic state-machine transitions
+              (task status advances, node exits, pipeline step outcomes).
+            - `human` — direct human write (acceptance of a suggestion,
+              Inspector edit, `entities correct`, manual annotation).
+            - `import` — batch ingestion / ETL / scheduled imports.
+
+            Null / missing for legacy rows written before the field
+            existed; writes default to `llm_summary` when unspecified
+            because MCP callers are LLM-driven by construction.
         fields:
           type: object
           additionalProperties: true
@@ -223,6 +645,16 @@ components:
           type: string
           nullable: true
           description: Human-readable source label attached by `attachSourceLabelsToObservations`.
+        provenance:
+          type: object
+          description: |
+            Write-time agent attribution for this observation. Carries the
+            `AgentAttribution` keys stamped by the AAuth middleware and
+            MCP `initialize.clientInfo` fallback. Coexists with any
+            free-form provenance keys supplied at write time.
+          additionalProperties: true
+          allOf:
+            - $ref: '#/components/schemas/AgentAttribution'
     RelationshipSnapshot:
       type: object
       properties:
@@ -250,6 +682,21 @@ components:
         provenance:
           type: object
           additionalProperties: true
+          description: |
+            Reducer provenance for the relationship snapshot: a
+            `field → observation_id` map. NOT agent attribution; use
+            `agent_attribution` on the snapshot (and `provenance` on
+            individual contributing relationship observations) to identify
+            the writing agent.
+        agent_attribution:
+          nullable: true
+          description: |
+            Latest agent-identity attribution for the relationship, derived
+            from the most recent contributing `relationship_observations.provenance`
+            row. `null` when no contributing observation carried
+            attribution keys.
+          allOf:
+            - $ref: '#/components/schemas/AgentAttribution'
         user_id:
           type: string
         source_entity_name:
@@ -303,6 +750,14 @@ components:
         properties:
           type: object
           additionalProperties: true
+        provenance:
+          type: object
+          description: |
+            Write-time agent attribution for this timeline event. Carries
+            the `AgentAttribution` keys stamped by the AAuth middleware.
+          additionalProperties: true
+          allOf:
+            - $ref: '#/components/schemas/AgentAttribution'
     EntitySchema:
       type: object
       properties:
@@ -332,6 +787,14 @@ components:
         completed_at:
           type: string
           format: date-time
+        provenance:
+          type: object
+          description: |
+            Write-time agent attribution for the interpretation run. Carries
+            the `AgentAttribution` keys stamped by the AAuth middleware.
+          additionalProperties: true
+          allOf:
+            - $ref: '#/components/schemas/AgentAttribution'
     Stats:
       type: object
       properties:
@@ -383,12 +846,26 @@ components:
           type: string
     StoreRequest:
       type: object
+      additionalProperties: false
+      description: |
+        Unified store payload. Supports structured only, unstructured only, or
+        both in one request. Top-level field set is closed: unknown request
+        fields are rejected with `ERR_UNKNOWN_FIELD` (see
+        `docs/subsystems/errors.md`). Entity-level fields inside `entities[]`
+        remain intentionally open so schema-driven fields flow through.
       properties:
         entities:
           type: array
           items:
             type: object
             additionalProperties: true
+            description: |
+              Entity payload. Fields are declared by the entity's
+              `SchemaDefinition`, not by this OpenAPI shape, so the object is
+              intentionally open. Put entity fields at the top level of this
+              object; nesting under `attributes` (or any other wrapper) is
+              not supported and returns `ERR_STORE_RESOLUTION_FAILED` with a
+              structured `hint` guiding callers to flatten.
         relationships:
           type: array
           description: |
@@ -408,6 +885,15 @@ components:
                 minimum: 0
         source_priority:
           type: integer
+        observation_source:
+          type: string
+          enum: [sensor, llm_summary, workflow_state, human, import]
+          description: |
+            Classifies the *kind* of write being performed, orthogonal to
+            `source_priority`. See `Observation.observation_source` for
+            the full semantic contract. Defaults to `llm_summary` when
+            unspecified. Applies to every observation created by this
+            request.
         idempotency_key:
           type: string
           description: Required for structured path, optional for unstructured-only path.
@@ -425,7 +911,6 @@ components:
           description: Required with file_content, optional with file_path
         original_filename:
           type: string
-          additionalProperties: true
         user_id:
           type: string
         commit:
@@ -444,7 +929,6 @@ components:
             the entity's schema declares canonical_name_fields that the request
             matches, or when target_id is supplied. Prevents accidental
             coalescing into a pre-existing record.
-      description: Unified store payload. Supports structured only, unstructured only, or both in one request.
     StoreResponse:
       type: object
       properties:
@@ -454,18 +938,29 @@ components:
           $ref: '#/components/schemas/StoreUnstructuredResponse'
     StoreStructuredRequest:
       type: object
+      additionalProperties: false
       required: [entities, idempotency_key]
+      description: |
+        Structured-only store payload. Top-level field set is closed; unknown
+        request fields are rejected with `ERR_UNKNOWN_FIELD`. Entity-level
+        fields inside `entities[]` remain intentionally open so
+        schema-driven fields flow through (see description on `entities[]`).
       properties:
         entities:
           type: array
           items:
             type: object
             additionalProperties: true
+            description: |
+              Entity payload. Fields are declared by the entity's
+              `SchemaDefinition`, not by this OpenAPI shape, so the object is
+              intentionally open. Put entity fields at the top level of this
+              object; nesting under `attributes` is not supported.
         relationships:
           type: array
           description: |
             Optional. Create relationships between entities in this request. Indices refer to the entities array (0-based).
-            Enables one-call chat persistence: store [conversation, agent_message] with relationships [{ relationship_type: "PART_OF", source_index: 1, target_index: 0 }].
+            Enables one-call chat persistence: store [conversation, conversation_message] with relationships [{ relationship_type: "PART_OF", source_index: 1, target_index: 0 }]. (`agent_message` remains accepted as a legacy alias for pre-v0.6 clients.)
           items:
             type: object
             required: [relationship_type, source_index, target_index]
@@ -483,6 +978,15 @@ components:
                 description: Index into the entities array for the target entity
         source_priority:
           type: integer
+        observation_source:
+          type: string
+          enum: [sensor, llm_summary, workflow_state, human, import]
+          description: |
+            Classifies the *kind* of write being performed, orthogonal to
+            `source_priority`. See `Observation.observation_source` for
+            the full semantic contract. Defaults to `llm_summary` when
+            unspecified. Applies to every observation created by this
+            request.
         idempotency_key:
           type: string
         user_id:
@@ -557,9 +1061,76 @@ components:
                   `composite:full_name+employer`, `first_string_field:name`).
               action:
                 type: string
+              warnings:
+                type: array
+                description: |
+                  R3 non-fatal resolver warnings for this observation. Present
+                  when the entity's active schema declares
+                  `name_collision_policy: "warn"` and resolution landed on an
+                  existing entity via a heuristic path. PII-free by construction
+                  (never embeds canonical_name content or extracted field
+                  values). See
+                  `.cursor/plans/conversation_entity_collision_fix_aef8ba0d.plan.md`.
+                items:
+                  $ref: '#/components/schemas/ResolverWarning'
+        warnings:
+          type: array
+          description: |
+            Batch-aggregated non-fatal resolver warnings (R3). Mirrors each
+            entity's `entities[].warnings` with `observation_index` and
+            `entity_id` attached so callers can audit identity quality without
+            walking every entity trace.
+          items:
+            allOf:
+              - $ref: '#/components/schemas/ResolverWarning'
+              - type: object
+                properties:
+                  observation_index:
+                    type: integer
+                  entity_id:
+                    type: string
+    ResolverWarning:
+      type: object
+      description: |
+        Non-fatal warning emitted by entity resolution when a schema declares
+        `name_collision_policy: "warn"` and the caller's payload matched an
+        existing entity via a heuristic (non `schema_rule`) path. Shape is
+        intentionally PII-free so it can be forwarded to dashboards, logs, and
+        downstream agents without redaction.
+      required:
+        - code
+        - policy
+        - entity_type
+        - identity_basis
+        - identity_rule
+      properties:
+        code:
+          type: string
+          enum:
+            - HEURISTIC_MERGE
+        policy:
+          type: string
+          enum:
+            - warn
+        entity_type:
+          type: string
+        identity_basis:
+          type: string
+          enum:
+            - schema_rule
+            - schema_lookup
+            - heuristic_name
+            - heuristic_fallback
+            - target_id
+        identity_rule:
+          type: string
     StoreUnstructuredRequest:
       type: object
+      additionalProperties: false
       required: [file_content, mime_type]
+      description: |
+        Unstructured-only store payload. Closed shape; unknown top-level
+        fields are rejected with `ERR_UNKNOWN_FIELD`.
       properties:
         file_content:
           type: string
@@ -596,6 +1167,7 @@ components:
             type: string
     GetRelationshipSnapshotRequest:
       type: object
+      additionalProperties: false
       required: [relationship_type, source_entity_id, target_entity_id]
       properties:
         relationship_type:
@@ -605,6 +1177,9 @@ components:
           type: string
         target_entity_id:
           type: string
+        user_id:
+          type: string
+          description: Optional tenant override for read-scope endpoints. Usual auth precedence applies; see docs/subsystems/auth.md.
     GetRelationshipSnapshotResponse:
       type: object
       required: [snapshot, observations]
@@ -624,6 +1199,7 @@ components:
               metadata: { type: object }
     OAuthInitiateRequest:
       type: object
+      additionalProperties: false
       required: [connection_id]
       properties:
         connection_id:
@@ -1113,6 +1689,20 @@ paths:
                   description: |
                     ISO 8601 timestamp. Return only entities whose
                     created_at is greater than or equal to this value.
+                identity_basis:
+                  type: string
+                  enum:
+                    - schema_rule
+                    - schema_lookup
+                    - heuristic_name
+                    - heuristic_fallback
+                    - target_id
+                  description: |
+                    R3: return only entities that have at least one
+                    observation resolved with the given `identity_basis`.
+                    Primary use case is the Inspector "ambiguous / heuristic
+                    resolution" filter so operators can audit entities that
+                    were matched by name/title rather than by a schema rule.
       responses:
         '200':
           description: Entity list
@@ -1348,6 +1938,64 @@ paths:
                     type: string
                     format: date-time
 
+  /entities/split:
+    post:
+      summary: |
+        Split a subset of an entity's observations onto a new entity (R5). Inverse
+        of `/entities/merge`: repairs over-merges (typically from pre-v1.2
+        heuristic `name_key:title` resolution on session-scoped schemas) by
+        re-pointing the `entity_id` foreign key on matching observations
+        without modifying any observation content.
+      operationId: splitEntity
+      description: |
+        Symmetric with the merge flow documented in
+        `docs/subsystems/entity_merge.md` § 4.3. Exactly one split per
+        `(user_id, idempotency_key)` — reuse of the key with a different
+        predicate returns `ERR_IDEMPOTENCY_MISMATCH`. The server:
+        1. Validates the source entity exists and is not already merged-away.
+        2. Selects observations matching `predicate` (schema-agnostic —
+           predicate reads columns every observation row carries).
+        3. Re-points the `entity_id` FK on matched observations to
+           `new_entity.target_entity_id` when supplied, otherwise to a
+           deterministic new id derived from
+           `(new_entity.entity_type, new_entity.canonical_name)`.
+        4. Invalidates both source + new snapshots and recomputes from the
+           reduced observation sets.
+        5. Inserts a `entity_splits` audit row for auditability.
+
+        No observation content (`fields`, `observed_at`, `source_id`,
+        `interpretation_id`) is ever modified — the immutability guarantee
+        consumers rely on is preserved. Typed relationships remain bound to
+        the source entity; callers are responsible for rebuilding edges onto
+        the new entity via `create_relationship`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SplitEntityRequest'
+      responses:
+        '200':
+          description: Split result (or idempotent replay).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SplitEntityResponse'
+        '400':
+          description: |
+            Invalid predicate, idempotency mismatch, or the predicate matched
+            zero / all observations.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Source entity not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
   /sources:
     get:
       summary: List sources
@@ -1405,6 +2053,42 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Source' }
+
+  /sources/{id}/relationships:
+    get:
+      summary: List relationships tied to a source
+      description: >-
+        Returns relationship snapshots where either (a) a relationship_observation
+        row was stamped with this source_id, or (b) the relationship touches an entity
+        that has an observation from this source.
+      operationId: getSourceRelationships
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: query
+          name: expand_entities
+          required: false
+          schema: { type: boolean, default: false }
+        - in: query
+          name: user_id
+          required: false
+          schema: { type: string }
+      responses:
+        '200':
+          description: Relationships and optional related entity expansions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  relationships:
+                    type: array
+                    items: { $ref: '#/components/schemas/RelationshipSnapshot' }
+                  related_entities:
+                    type: object
+                    additionalProperties: true
 
   /observations:
     get:
@@ -1503,8 +2187,8 @@ paths:
         Lists the most recently changed records across core Neotoma tables
         (entities, sources, observations, interpretations, relationships,
         timeline_events) for the authenticated user, ordered by latest
-        created/updated timestamp available on each table. Powers the
-        Inspector's "recent activity" panel and the MCP `list_recent_changes`
+        created/updated timestamp available on each table.         Powers the
+        Inspector's "Activity" panel and the MCP `list_recent_changes`
         tool.
       operationId: getRecordActivity
       parameters:
@@ -1512,6 +2196,14 @@ paths:
           name: user_id
           required: false
           schema: { type: string }
+        - in: query
+          name: record_types
+          required: false
+          description: |
+            Comma-separated subset of record_type values to include. Omit for all types.
+          schema:
+            type: string
+            example: entity,source,observation
         - in: query
           name: limit
           required: false
@@ -1596,6 +2288,134 @@ paths:
                         group_key:
                           type: string
                           nullable: true
+                        attribution_tier:
+                          type: string
+                          nullable: true
+                          enum:
+                            - hardware
+                            - software
+                            - unverified_client
+                            - anonymous
+                          description: |
+                            Derived agent trust tier for this record, pulled
+                            from the row-level `AgentAttribution` provenance.
+                            Null when the record type does not carry
+                            attribution or predates AAuth.
+                        agent_label:
+                          type: string
+                          nullable: true
+                          description: |
+                            Best-effort human-readable agent label. Priority:
+                            `client_name` (+ `client_version`) → `agent_sub` →
+                            shortened `agent_thumbprint`.
+                  has_more:
+                    type: boolean
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+
+  /agents:
+    get:
+      summary: List agents (writers) seen across the write-path tables
+      description: |
+        Returns distinct agents identified from the `AgentAttribution`
+        provenance stamped by the AAuth middleware and the MCP
+        `initialize.clientInfo` fallback. Agents are aggregated across
+        observations, sources, timeline events, interpretations, and
+        relationship observations. The `agent_key` is stable across
+        calls and may be used for the `/agents/{key}` lookup.
+      parameters:
+        - in: query
+          name: user_id
+          schema:
+            type: string
+          required: false
+      responses:
+        "200":
+          description: Agent directory
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  agents:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AgentDirectoryEntry"
+                  total:
+                    type: integer
+
+  /agents/{key}:
+    get:
+      summary: Get one agent's directory entry
+      parameters:
+        - in: path
+          name: key
+          required: true
+          schema:
+            type: string
+          description: |
+            URL-encoded `agent_key` returned by `/agents`. Format:
+            `thumb:<thumbprint>`, `sub:<subject>`, `name:<client>[@version]`,
+            or `anonymous`.
+        - in: query
+          name: user_id
+          schema:
+            type: string
+          required: false
+      responses:
+        "200":
+          description: Agent details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  agent:
+                    $ref: "#/components/schemas/AgentDirectoryEntry"
+        "404":
+          description: Unknown agent key
+
+  /agents/{key}/records:
+    get:
+      summary: Records written by a specific agent
+      description: |
+        Returns observations, sources, interpretations, timeline events,
+        and relationship observations that carry this agent's provenance.
+        The shape matches `/record_activity` so clients can reuse the
+        same activity feed renderer.
+      parameters:
+        - in: path
+          name: key
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: user_id
+          schema:
+            type: string
+          required: false
+        - in: query
+          name: limit
+          schema:
+            type: integer
+        - in: query
+          name: offset
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Records scoped to this agent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
                   has_more:
                     type: boolean
                   limit:
@@ -1609,9 +2429,10 @@ paths:
       description: |
         Lists `conversation` entities for the authenticated user ordered by
         their latest activity (conversation-level activity or the latest
-        activity of any `agent_message` that is `PART_OF` that conversation).
-        Each conversation includes its messages in reverse chronological order,
-        and each message includes non-`PART_OF` entities linked from that message.
+        activity of any `conversation_message` — or legacy `agent_message` —
+        that is `PART_OF` that conversation). Each conversation includes its
+        messages in reverse chronological order, and each message includes
+        non-`PART_OF` entities linked from that message.
         Powers the Inspector recent conversations view and dashboard widget.
       operationId: getRecentConversations
       parameters:
@@ -1627,6 +2448,21 @@ paths:
           name: offset
           required: false
           schema: { type: integer }
+        - in: query
+          name: activity_after
+          required: false
+          description: Inclusive lower bound on conversation activity (ISO 8601)
+          schema: { type: string }
+        - in: query
+          name: activity_before
+          required: false
+          description: Inclusive upper bound on conversation activity (ISO 8601)
+          schema: { type: string }
+        - in: query
+          name: agent_key
+          required: false
+          description: Filter by latest observation attribution key (same as GET /agents `agent_key`)
+          schema: { type: string }
       responses:
         '200':
           description: Recent conversations
@@ -1652,6 +2488,10 @@ paths:
                           type: string
                         message_count:
                           type: integer
+                        latest_write_provenance:
+                          type: object
+                          nullable: true
+                          additionalProperties: true
                         messages:
                           type: array
                           items:
@@ -2587,6 +3427,7 @@ paths:
           application/json:
             schema:
               type: object
+              additionalProperties: false
               required:
                 - entity_id
                 - entity_type
@@ -2645,6 +3486,45 @@ paths:
                         type: string
                       sqlite_db:
                         type: string
+
+  /session:
+    get:
+      summary: Resolved session attribution
+      description: |
+        Read-only preflight that returns the resolved attribution tier and
+        identity fields for the current request along with the active
+        anonymous-write policy. Local proxies and operators use this as a
+        health check before enabling writes. MUST NOT create rows or emit
+        telemetry; see `src/services/session_info.ts` and
+        `docs/subsystems/agent_attribution_integration.md`.
+      operationId: getSessionInfo
+      parameters:
+        - in: query
+          name: user_id
+          schema:
+            type: string
+          required: false
+        - in: query
+          name: client_name
+          schema:
+            type: string
+          required: false
+          description: |
+            Optional fallback `clientInfo.name` when the caller is not an
+            MCP client with an established `initialize` handshake. Subject
+            to generic-name normalisation.
+        - in: query
+          name: client_version
+          schema:
+            type: string
+          required: false
+      responses:
+        '200':
+          description: Session attribution + policy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionInfo"
 
   /health_check_snapshots:
     post:

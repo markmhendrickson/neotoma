@@ -436,6 +436,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/entities/split": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Split a subset of an entity's observations onto a new entity (R5). Inverse
+         *     of `/entities/merge`: repairs over-merges (typically from pre-v1.2
+         *     heuristic `name_key:title` resolution on session-scoped schemas) by
+         *     re-pointing the `entity_id` foreign key on matching observations
+         *     without modifying any observation content.
+         * @description Symmetric with the merge flow documented in
+         *     `docs/subsystems/entity_merge.md` § 4.3. Exactly one split per
+         *     `(user_id, idempotency_key)` — reuse of the key with a different
+         *     predicate returns `ERR_IDEMPOTENCY_MISMATCH`. The server:
+         *     1. Validates the source entity exists and is not already merged-away.
+         *     2. Selects observations matching `predicate` (schema-agnostic —
+         *        predicate reads columns every observation row carries).
+         *     3. Re-points the `entity_id` FK on matched observations to
+         *        `new_entity.target_entity_id` when supplied, otherwise to a
+         *        deterministic new id derived from
+         *        `(new_entity.entity_type, new_entity.canonical_name)`.
+         *     4. Invalidates both source + new snapshots and recomputes from the
+         *        reduced observation sets.
+         *     5. Inserts a `entity_splits` audit row for auditability.
+         *
+         *     No observation content (`fields`, `observed_at`, `source_id`,
+         *     `interpretation_id`) is ever modified — the immutability guarantee
+         *     consumers rely on is preserved. Typed relationships remain bound to
+         *     the source entity; callers are responsible for rebuilding edges onto
+         *     the new entity via `create_relationship`.
+         */
+        post: operations["splitEntity"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/sources": {
         parameters: {
             query?: never;
@@ -462,6 +505,26 @@ export interface paths {
         };
         /** Get source by ID */
         get: operations["getSourceById"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sources/{id}/relationships": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List relationships tied to a source
+         * @description Returns relationship snapshots where either (a) a relationship_observation row was stamped with this source_id, or (b) the relationship touches an entity that has an observation from this source.
+         */
+        get: operations["getSourceRelationships"];
         put?: never;
         post?: never;
         delete?: never;
@@ -516,11 +579,167 @@ export interface paths {
          * @description Lists the most recently changed records across core Neotoma tables
          *     (entities, sources, observations, interpretations, relationships,
          *     timeline_events) for the authenticated user, ordered by latest
-         *     created/updated timestamp available on each table. Powers the
-         *     Inspector's "recent activity" panel and the MCP `list_recent_changes`
+         *     created/updated timestamp available on each table.         Powers the
+         *     Inspector's "Activity" panel and the MCP `list_recent_changes`
          *     tool.
          */
         get: operations["getRecordActivity"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List agents (writers) seen across the write-path tables
+         * @description Returns distinct agents identified from the `AgentAttribution`
+         *     provenance stamped by the AAuth middleware and the MCP
+         *     `initialize.clientInfo` fallback. Agents are aggregated across
+         *     observations, sources, timeline events, interpretations, and
+         *     relationship observations. The `agent_key` is stable across
+         *     calls and may be used for the `/agents/{key}` lookup.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    user_id?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Agent directory */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            agents?: components["schemas"]["AgentDirectoryEntry"][];
+                            total?: number;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get one agent's directory entry */
+        get: {
+            parameters: {
+                query?: {
+                    user_id?: string;
+                };
+                header?: never;
+                path: {
+                    /**
+                     * @description URL-encoded `agent_key` returned by `/agents`. Format:
+                     *     `thumb:<thumbprint>`, `sub:<subject>`, `name:<client>[@version]`,
+                     *     or `anonymous`.
+                     */
+                    key: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Agent details */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            agent?: components["schemas"]["AgentDirectoryEntry"];
+                        };
+                    };
+                };
+                /** @description Unknown agent key */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/{key}/records": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Records written by a specific agent
+         * @description Returns observations, sources, interpretations, timeline events,
+         *     and relationship observations that carry this agent's provenance.
+         *     The shape matches `/record_activity` so clients can reuse the
+         *     same activity feed renderer.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    user_id?: string;
+                    limit?: number;
+                    offset?: number;
+                };
+                header?: never;
+                path: {
+                    key: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Records scoped to this agent */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            items?: Record<string, never>[];
+                            has_more?: boolean;
+                            limit?: number;
+                            offset?: number;
+                        };
+                    };
+                };
+            };
+        };
         put?: never;
         post?: never;
         delete?: never;
@@ -540,9 +759,10 @@ export interface paths {
          * Recent conversations with nested messages
          * @description Lists `conversation` entities for the authenticated user ordered by
          *     their latest activity (conversation-level activity or the latest
-         *     activity of any `agent_message` that is `PART_OF` that conversation).
-         *     Each conversation includes its messages in reverse chronological order,
-         *     and each message includes non-`PART_OF` entities linked from that message.
+         *     activity of any `conversation_message` — or legacy `agent_message` —
+         *     that is `PART_OF` that conversation). Each conversation includes its
+         *     messages in reverse chronological order, and each message includes
+         *     non-`PART_OF` entities linked from that message.
          *     Powers the Inspector recent conversations view and dashboard widget.
          */
         get: operations["getRecentConversations"];
@@ -1103,6 +1323,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Resolved session attribution
+         * @description Read-only preflight that returns the resolved attribution tier and
+         *     identity fields for the current request along with the active
+         *     anonymous-write policy. Local proxies and operators use this as a
+         *     health check before enabling writes. MUST NOT create rows or emit
+         *     telemetry; see `src/services/session_info.ts` and
+         *     `docs/subsystems/agent_attribution_integration.md`.
+         */
+        get: operations["getSessionInfo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health_check_snapshots": {
         parameters: {
             query?: never;
@@ -1165,10 +1410,49 @@ export interface components {
             /**
              * @description Optional structured upgrade guidance. Populated when the server can
              *     detect a common caller mistake (e.g. wrapping fields inside
-             *     `attributes`) and wants to surface a concrete fix without including
-             *     any PII. Consumers MAY display this verbatim to end users.
+             *     `attributes`) or when a schema with `name_collision_policy: reject`
+             *     refuses a heuristic merge (R4 — then `required_identity_fields`
+             *     carries the schema-derived identity key list). PII-free by
+             *     construction. Consumers MAY display `text` verbatim to end users
+             *     and MAY key on `required_identity_fields` programmatically to
+             *     compose a corrected payload without parsing prose.
              */
-            hint?: string;
+            hint?: string | {
+                /**
+                 * @description Short, actionable instruction for the caller (e.g. "Declare
+                 *     `conversation_id` on entity_type \"conversation\"…"). PII-free.
+                 */
+                text: string;
+                required_identity_fields?: components["schemas"]["RequiredIdentityFields"];
+            };
+        };
+        /**
+         * @description R4: schema-derived minimum identity payload for an `entity_type`.
+         *     Surfaced inside `StoreResolutionIssue.hint.required_identity_fields`
+         *     when a schema `name_collision_policy: reject` refuses a heuristic
+         *     merge, and exposed by the MCP tool surface so agents can compose
+         *     deterministic writes without per-type knowledge. Generated from
+         *     `SchemaDefinition.canonical_name_fields` — adding a new reject-policy
+         *     schema automatically extends the contract.
+         */
+        RequiredIdentityFields: {
+            entity_type: string;
+            /**
+             * @description `true` when the schema declares `name_collision_policy: "reject"`.
+             *     When `false`, the fields are informational — the caller MAY still
+             *     benefit from supplying them to avoid heuristic matching warnings.
+             */
+            required: boolean;
+            /**
+             * @description Single-field canonical rules. Supplying ANY one of these on the
+             *     payload is sufficient to satisfy the schema-level identity rule.
+             */
+            any_of_fields: string[];
+            /**
+             * @description Composite canonical rules. EVERY field in at least ONE composite
+             *     group must be present to satisfy that group.
+             */
+            composite_fields: string[][];
         };
         /**
          * @description 400 response shape for `ERR_STORE_RESOLUTION_FAILED`. Distinct from the
@@ -1181,6 +1465,218 @@ export interface components {
                 code?: "ERR_STORE_RESOLUTION_FAILED";
                 message?: string;
                 issues?: components["schemas"]["StoreResolutionIssue"][];
+            };
+        };
+        /**
+         * @description R5: declarative predicate describing which observations of the source
+         *     entity should be re-pointed onto the new entity. Every form reads a
+         *     column every observation row carries so the predicate surface is
+         *     schema-agnostic. At least one form MUST be supplied.
+         */
+        SplitPredicate: {
+            /**
+             * Format: date-time
+             * @description Match observations whose `observed_at` is >= this ISO-8601
+             *     timestamp. Primary use case: "move every observation from this
+             *     session forward onto a new entity".
+             */
+            observed_at_gte?: string;
+            /**
+             * @description Match observations whose `source_id` is one of the listed
+             *     sources. Useful when a single over-merged entity collected
+             *     observations from distinct sources that should live on separate
+             *     entities.
+             */
+            source_id_in?: string[];
+            observation_field_equals?: {
+                /** @description Observation `fields.<field>` to compare. */
+                field: string;
+                /** @description String-equals comparison (no type coercion). */
+                value?: string;
+                /** @description String-prefix comparison (no type coercion). */
+                value_starts_with?: string;
+            };
+        };
+        SplitEntityRequest: {
+            source_entity_id: string;
+            predicate: components["schemas"]["SplitPredicate"];
+            new_entity: {
+                entity_type: string;
+                canonical_name: string;
+                /**
+                 * @description Optional — re-point matched observations onto a pre-existing
+                 *     entity id instead of deriving a new deterministic id.
+                 */
+                target_entity_id?: string;
+            };
+            /**
+             * @description Required per MUST #11. Reuse with a different predicate returns
+             *     `ERR_IDEMPOTENCY_MISMATCH`; reuse with the same predicate returns
+             *     the original split result (`replayed: true`).
+             */
+            idempotency_key: string;
+            /** @description Free-text rationale recorded on the audit row. */
+            reason?: string;
+            user_id?: string;
+        };
+        SplitEntityResponse: {
+            split_id: string;
+            source_entity_id: string;
+            new_entity_id: string;
+            /** @description Number of observations whose `entity_id` was re-pointed. */
+            observations_moved: number;
+            /** Format: date-time */
+            split_at: string;
+            /**
+             * @description `true` when the response is an idempotent replay of a prior
+             *     identical split (same `user_id` + `idempotency_key` + predicate).
+             */
+            replayed: boolean;
+        };
+        /**
+         * @description Agent-identity provenance recorded on every durable write-path record
+         *     (observations, relationships, sources, interpretations, timeline
+         *     events). Fields are stamped additively into the existing provenance
+         *     JSON blob on each record so no schema migration was required; the
+         *     shape below documents the keys consumers can rely on.
+         *
+         *     When AAuth is active the `agent_*` keys carry the cryptographically
+         *     verified identity; `client_name`/`client_version` come from the MCP
+         *     `initialize.clientInfo` fallback and are self-reported. Every field
+         *     is optional; callers MUST treat a missing key as "no evidence at
+         *     that tier" and rely on `attribution_tier` for the trust signal.
+         */
+        AgentAttribution: {
+            /** @description Raw JWK-serialised public key used for the HTTP signature. */
+            agent_public_key?: string;
+            /** @description RFC 7638 JWK thumbprint of `agent_public_key`; stable across sessions. */
+            agent_thumbprint?: string;
+            /** @description HTTP Message Signature algorithm (`ES256`, `EdDSA`, …). */
+            agent_algorithm?: string;
+            /** @description `sub` claim of the `aa-agent+jwt` agent token. */
+            agent_sub?: string;
+            /** @description `iss` claim (issuer URL) of the agent token. */
+            agent_iss?: string;
+            /** @description Self-reported MCP `initialize.clientInfo.name`. NOT verified. */
+            client_name?: string;
+            /** @description Self-reported MCP `initialize.clientInfo.version`. */
+            client_version?: string;
+            /** @description Existing OAuth connection id when the request is OAuth-authenticated. */
+            connection_id?: string;
+            /**
+             * @description Derived trust tier; see `src/crypto/agent_identity.ts`.
+             * @enum {string}
+             */
+            attribution_tier?: "hardware" | "software" | "unverified_client" | "anonymous";
+            /**
+             * Format: date-time
+             * @description ISO-8601 timestamp when the attribution block was stamped.
+             */
+            attributed_at?: string;
+        };
+        /**
+         * @description Active attribution policy for the Neotoma instance. Governs how
+         *     anonymous (unattributed) and sub-tier writes are handled on each
+         *     write path. Ships defaults that preserve historical behaviour
+         *     (`anonymous_writes: allow`, no `min_tier`).
+         */
+        AttributionPolicySnapshot: {
+            /**
+             * @description Global policy mode applied to writes whose resolved
+             *     `attribution_tier` is `anonymous`.
+             * @enum {string}
+             */
+            anonymous_writes: "allow" | "warn" | "reject";
+            /**
+             * @description Optional floor tier; writes with a resolved tier below this
+             *     floor are rejected with `ATTRIBUTION_REQUIRED`.
+             * @enum {string}
+             */
+            min_tier?: "hardware" | "software" | "unverified_client";
+            /**
+             * @description Optional per-write-path overrides keyed by canonical write
+             *     path (`observations`, `relationships`, `sources`,
+             *     `interpretations`, `timeline_events`, `corrections`).
+             */
+            per_path?: {
+                [key: string]: "allow" | "warn" | "reject";
+            };
+        };
+        /**
+         * @description Diagnostic summary of the most recent AAuth / `clientInfo`
+         *     resolution decision. Safe to mirror to clients; never contains
+         *     signatures or public keys. Present only when the server has a
+         *     decision to surface.
+         */
+        SessionAttributionDecision: {
+            signature_present: boolean;
+            signature_verified: boolean;
+            signature_error_code?: string;
+            client_info_raw_name?: string;
+            /** @enum {string} */
+            client_info_normalised_to_null_reason?: "too_generic" | "empty" | "not_a_string";
+            /** @enum {string} */
+            resolved_tier: "hardware" | "software" | "unverified_client" | "anonymous";
+        };
+        /**
+         * @description Resolved attribution and policy for the current session. Returned
+         *     by `GET /session` and the MCP `get_session_identity` tool.
+         */
+        SessionInfo: {
+            user_id: string;
+            attribution: {
+                /** @enum {string} */
+                tier: "hardware" | "software" | "unverified_client" | "anonymous";
+                agent_thumbprint?: string;
+                agent_sub?: string;
+                agent_iss?: string;
+                agent_algorithm?: string;
+                agent_public_key?: string;
+                client_name?: string;
+                client_version?: string;
+                connection_id?: string;
+                decision?: components["schemas"]["SessionAttributionDecision"] | null;
+            };
+            policy: components["schemas"]["AttributionPolicySnapshot"];
+            /**
+             * @description Convenience flag mirroring the check
+             *     `enforceAttributionPolicy('observations', identity)` would
+             *     make on the default write path.
+             */
+            eligible_for_trusted_writes: boolean;
+        };
+        /**
+         * @description One row returned by `/agents`. Aggregates a distinct agent's
+         *     writes across observations, sources, timeline events,
+         *     interpretations, and relationship observations.
+         */
+        AgentDirectoryEntry: {
+            /**
+             * @description Stable identifier: `thumb:<thumbprint>` |
+             *     `sub:<subject>` | `name:<client>[@version]` | `anonymous`.
+             */
+            agent_key: string;
+            /** @description Short human-readable label for display. */
+            label: string;
+            /** @enum {string} */
+            tier: "hardware" | "software" | "unverified_client" | "anonymous";
+            agent_thumbprint?: string | null;
+            agent_public_key?: string | null;
+            agent_algorithm?: string | null;
+            agent_sub?: string | null;
+            agent_iss?: string | null;
+            client_name?: string | null;
+            client_version?: string | null;
+            first_seen_at: string | null;
+            last_seen_at: string | null;
+            total_records: number;
+            /**
+             * @description Per record-type count (`observation`, `source`,
+             *     `interpretation`, `timeline_event`, `relationship`).
+             *     Missing buckets mean zero.
+             */
+            record_counts: {
+                [key: string]: number;
             };
         };
         Entity: {
@@ -1202,6 +1698,13 @@ export interface components {
             raw_fragments?: {
                 [key: string]: unknown;
             };
+            /**
+             * @description Reducer provenance: a `field → observation_id` map that records
+             *     which contributing observation produced each snapshot field.
+             *     NOT agent-identity attribution; see `AgentAttribution` and the
+             *     `provenance` field on the contributing `Observation` rows for
+             *     the agent that wrote each observation.
+             */
             provenance?: {
                 [key: string]: unknown;
             };
@@ -1233,6 +1736,15 @@ export interface components {
             /** Format: date-time */
             created_at?: string;
             user_id?: string;
+            /**
+             * @description Source provenance. Carries agent-identity keys (see
+             *     `AgentAttribution`) for the agent that uploaded or synthesised
+             *     this source, alongside any free-form metadata keys supplied by
+             *     the ingestion pipeline.
+             */
+            provenance?: {
+                [key: string]: unknown;
+            } & components["schemas"]["AgentAttribution"];
         };
         Observation: {
             id?: string;
@@ -1245,12 +1757,43 @@ export interface components {
             observed_at?: string;
             specificity_score?: number;
             source_priority?: number;
+            /**
+             * @description Classifies the *kind* of write that produced this observation,
+             *     orthogonal to `source_priority` (numeric ranking) and to
+             *     `provenance`/AAuth (which agent wrote it). One of:
+             *
+             *     - `sensor` — ground-truth emission from a tool, hook, webhook,
+             *       runtime telemetry, file watcher, or scheduled probe. Not
+             *       authored by an LLM.
+             *     - `llm_summary` — content authored by an LLM (summaries,
+             *       extractions, inferences, generated notes).
+             *     - `workflow_state` — deterministic state-machine transitions
+             *       (task status advances, node exits, pipeline step outcomes).
+             *     - `human` — direct human write (acceptance of a suggestion,
+             *       Inspector edit, `entities correct`, manual annotation).
+             *     - `import` — batch ingestion / ETL / scheduled imports.
+             *
+             *     Null / missing for legacy rows written before the field
+             *     existed; writes default to `llm_summary` when unspecified
+             *     because MCP callers are LLM-driven by construction.
+             * @enum {string|null}
+             */
+            observation_source?: "sensor" | "llm_summary" | "workflow_state" | "human" | "import" | null;
             fields?: {
                 [key: string]: unknown;
             };
             user_id?: string;
             /** @description Human-readable source label attached by `attachSourceLabelsToObservations`. */
             source?: string | null;
+            /**
+             * @description Write-time agent attribution for this observation. Carries the
+             *     `AgentAttribution` keys stamped by the AAuth middleware and
+             *     MCP `initialize.clientInfo` fallback. Coexists with any
+             *     free-form provenance keys supplied at write time.
+             */
+            provenance?: {
+                [key: string]: unknown;
+            } & components["schemas"]["AgentAttribution"];
         };
         RelationshipSnapshot: {
             relationship_key?: string;
@@ -1266,9 +1809,23 @@ export interface components {
             observation_count?: number;
             /** Format: date-time */
             last_observation_at?: string;
+            /**
+             * @description Reducer provenance for the relationship snapshot: a
+             *     `field → observation_id` map. NOT agent attribution; use
+             *     `agent_attribution` on the snapshot (and `provenance` on
+             *     individual contributing relationship observations) to identify
+             *     the writing agent.
+             */
             provenance?: {
                 [key: string]: unknown;
             };
+            /**
+             * @description Latest agent-identity attribution for the relationship, derived
+             *     from the most recent contributing `relationship_observations.provenance`
+             *     row. `null` when no contributing observation carried
+             *     attribution keys.
+             */
+            agent_attribution?: components["schemas"]["AgentAttribution"] | null;
             user_id?: string;
             /** @description Canonical name of the source entity. Populated when `expand_entities=true`. */
             source_entity_name?: string | null;
@@ -1296,6 +1853,13 @@ export interface components {
             properties?: {
                 [key: string]: unknown;
             };
+            /**
+             * @description Write-time agent attribution for this timeline event. Carries
+             *     the `AgentAttribution` keys stamped by the AAuth middleware.
+             */
+            provenance?: {
+                [key: string]: unknown;
+            } & components["schemas"]["AgentAttribution"];
         };
         EntitySchema: {
             entity_type?: string;
@@ -1313,6 +1877,13 @@ export interface components {
             created_at?: string;
             /** Format: date-time */
             completed_at?: string;
+            /**
+             * @description Write-time agent attribution for the interpretation run. Carries
+             *     the `AgentAttribution` keys stamped by the AAuth middleware.
+             */
+            provenance?: {
+                [key: string]: unknown;
+            } & components["schemas"]["AgentAttribution"];
         };
         Stats: {
             entities?: number;
@@ -1349,7 +1920,13 @@ export interface components {
             };
             last_updated?: string;
         };
-        /** @description Unified store payload. Supports structured only, unstructured only, or both in one request. */
+        /**
+         * @description Unified store payload. Supports structured only, unstructured only, or
+         *     both in one request. Top-level field set is closed: unknown request
+         *     fields are rejected with `ERR_UNKNOWN_FIELD` (see
+         *     `docs/subsystems/errors.md`). Entity-level fields inside `entities[]`
+         *     remain intentionally open so schema-driven fields flow through.
+         */
         StoreRequest: {
             entities?: {
                 [key: string]: unknown;
@@ -1362,6 +1939,15 @@ export interface components {
                 target_index: number;
             }[];
             source_priority?: number;
+            /**
+             * @description Classifies the *kind* of write being performed, orthogonal to
+             *     `source_priority`. See `Observation.observation_source` for
+             *     the full semantic contract. Defaults to `llm_summary` when
+             *     unspecified. Applies to every observation created by this
+             *     request.
+             * @enum {string}
+             */
+            observation_source?: "sensor" | "llm_summary" | "workflow_state" | "human" | "import";
             /** @description Required for structured path, optional for unstructured-only path. */
             idempotency_key?: string;
             /** @description Optional idempotency key for file path when sending structured + unstructured in one call. */
@@ -1395,13 +1981,19 @@ export interface components {
             structured?: components["schemas"]["StoreStructuredResponse"];
             unstructured?: components["schemas"]["StoreUnstructuredResponse"];
         };
+        /**
+         * @description Structured-only store payload. Top-level field set is closed; unknown
+         *     request fields are rejected with `ERR_UNKNOWN_FIELD`. Entity-level
+         *     fields inside `entities[]` remain intentionally open so
+         *     schema-driven fields flow through (see description on `entities[]`).
+         */
         StoreStructuredRequest: {
             entities: {
                 [key: string]: unknown;
             }[];
             /**
              * @description Optional. Create relationships between entities in this request. Indices refer to the entities array (0-based).
-             *     Enables one-call chat persistence: store [conversation, agent_message] with relationships [{ relationship_type: "PART_OF", source_index: 1, target_index: 0 }].
+             *     Enables one-call chat persistence: store [conversation, conversation_message] with relationships [{ relationship_type: "PART_OF", source_index: 1, target_index: 0 }]. (`agent_message` remains accepted as a legacy alias for pre-v0.6 clients.)
              */
             relationships?: {
                 /** @enum {string} */
@@ -1412,6 +2004,15 @@ export interface components {
                 target_index: number;
             }[];
             source_priority?: number;
+            /**
+             * @description Classifies the *kind* of write being performed, orthogonal to
+             *     `source_priority`. See `Observation.observation_source` for
+             *     the full semantic contract. Defaults to `llm_summary` when
+             *     unspecified. Applies to every observation created by this
+             *     request.
+             * @enum {string}
+             */
+            observation_source?: "sensor" | "llm_summary" | "workflow_state" | "human" | "import";
             idempotency_key: string;
             user_id?: string;
             /**
@@ -1465,8 +2066,49 @@ export interface components {
                  */
                 identity_rule?: string;
                 action?: string;
+                /**
+                 * @description R3 non-fatal resolver warnings for this observation. Present
+                 *     when the entity's active schema declares
+                 *     `name_collision_policy: "warn"` and resolution landed on an
+                 *     existing entity via a heuristic path. PII-free by construction
+                 *     (never embeds canonical_name content or extracted field
+                 *     values). See
+                 *     `.cursor/plans/conversation_entity_collision_fix_aef8ba0d.plan.md`.
+                 */
+                warnings?: components["schemas"]["ResolverWarning"][];
             }[];
+            /**
+             * @description Batch-aggregated non-fatal resolver warnings (R3). Mirrors each
+             *     entity's `entities[].warnings` with `observation_index` and
+             *     `entity_id` attached so callers can audit identity quality without
+             *     walking every entity trace.
+             */
+            warnings?: (components["schemas"]["ResolverWarning"] & {
+                observation_index?: number;
+                entity_id?: string;
+            })[];
         };
+        /**
+         * @description Non-fatal warning emitted by entity resolution when a schema declares
+         *     `name_collision_policy: "warn"` and the caller's payload matched an
+         *     existing entity via a heuristic (non `schema_rule`) path. Shape is
+         *     intentionally PII-free so it can be forwarded to dashboards, logs, and
+         *     downstream agents without redaction.
+         */
+        ResolverWarning: {
+            /** @enum {string} */
+            code: "HEURISTIC_MERGE";
+            /** @enum {string} */
+            policy: "warn";
+            entity_type: string;
+            /** @enum {string} */
+            identity_basis: "schema_rule" | "schema_lookup" | "heuristic_name" | "heuristic_fallback" | "target_id";
+            identity_rule: string;
+        };
+        /**
+         * @description Unstructured-only store payload. Closed shape; unknown top-level
+         *     fields are rejected with `ERR_UNKNOWN_FIELD`.
+         */
         StoreUnstructuredRequest: {
             /** @description Base64-encoded file content */
             file_content: string;
@@ -1494,6 +2136,8 @@ export interface components {
             relationship_type: "PART_OF" | "CORRECTS" | "REFERS_TO" | "SETTLES" | "DUPLICATE_OF" | "DEPENDS_ON" | "SUPERSEDES" | "EMBEDS" | "works_at" | "owns" | "manages" | "part_of" | "related_to" | "depends_on" | "references" | "transacted_with" | "member_of" | "reports_to" | "located_at" | "created_by" | "funded_by" | "acquired_by" | "subsidiary_of" | "partner_of" | "competitor_of" | "supplies_to" | "contracted_with" | "invested_in";
             source_entity_id: string;
             target_entity_id: string;
+            /** @description Optional tenant override for read-scope endpoints. Usual auth precedence applies; see docs/subsystems/auth.md. */
+            user_id?: string;
         };
         GetRelationshipSnapshotResponse: {
             snapshot: components["schemas"]["RelationshipSnapshot"];
@@ -2110,6 +2754,15 @@ export interface operations {
                      *     created_at is greater than or equal to this value.
                      */
                     created_since?: string;
+                    /**
+                     * @description R3: return only entities that have at least one
+                     *     observation resolved with the given `identity_basis`.
+                     *     Primary use case is the Inspector "ambiguous / heuristic
+                     *     resolution" filter so operators can audit entities that
+                     *     were matched by name/title rather than by a schema rule.
+                     * @enum {string}
+                     */
+                    identity_basis?: "schema_rule" | "schema_lookup" | "heuristic_name" | "heuristic_fallback" | "target_id";
                 };
             };
         };
@@ -2310,6 +2963,51 @@ export interface operations {
             };
         };
     };
+    splitEntity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SplitEntityRequest"];
+            };
+        };
+        responses: {
+            /** @description Split result (or idempotent replay). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SplitEntityResponse"];
+                };
+            };
+            /**
+             * @description Invalid predicate, idempotency mismatch, or the predicate matched
+             *     zero / all observations.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Source entity not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     listSources: {
         parameters: {
             query?: {
@@ -2357,6 +3055,36 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Source"];
+                };
+            };
+        };
+    };
+    getSourceRelationships: {
+        parameters: {
+            query?: {
+                expand_entities?: boolean;
+                user_id?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Relationships and optional related entity expansions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        relationships?: components["schemas"]["RelationshipSnapshot"][];
+                        related_entities?: {
+                            [key: string]: unknown;
+                        };
+                    };
                 };
             };
         };
@@ -2440,6 +3168,8 @@ export interface operations {
         parameters: {
             query?: {
                 user_id?: string;
+                /** @description Comma-separated subset of record_type values to include. Omit for all types. */
+                record_types?: string;
                 limit?: number;
                 offset?: number;
             };
@@ -2478,6 +3208,20 @@ export interface operations {
                             status?: string | null;
                             turn_key?: string | null;
                             group_key?: string | null;
+                            /**
+                             * @description Derived agent trust tier for this record, pulled
+                             *     from the row-level `AgentAttribution` provenance.
+                             *     Null when the record type does not carry
+                             *     attribution or predates AAuth.
+                             * @enum {string|null}
+                             */
+                            attribution_tier?: "hardware" | "software" | "unverified_client" | "anonymous" | null;
+                            /**
+                             * @description Best-effort human-readable agent label. Priority:
+                             *     `client_name` (+ `client_version`) → `agent_sub` →
+                             *     shortened `agent_thumbprint`.
+                             */
+                            agent_label?: string | null;
                         }[];
                         has_more?: boolean;
                         limit?: number;
@@ -2493,6 +3237,12 @@ export interface operations {
                 user_id?: string;
                 limit?: number;
                 offset?: number;
+                /** @description Inclusive lower bound on conversation activity (ISO 8601) */
+                activity_after?: string;
+                /** @description Inclusive upper bound on conversation activity (ISO 8601) */
+                activity_before?: string;
+                /** @description Filter by latest observation attribution key (same as GET /agents `agent_key`) */
+                agent_key?: string;
             };
             header?: never;
             path?: never;
@@ -2513,6 +3263,9 @@ export interface operations {
                             title?: string | null;
                             activity_at?: string;
                             message_count?: number;
+                            latest_write_provenance?: {
+                                [key: string]: unknown;
+                            } | null;
                             messages?: {
                                 message_id?: string;
                                 canonical_name?: string | null;
@@ -3497,6 +4250,35 @@ export interface operations {
                             sqlite_db?: string;
                         };
                     };
+                };
+            };
+        };
+    };
+    getSessionInfo: {
+        parameters: {
+            query?: {
+                user_id?: string;
+                /**
+                 * @description Optional fallback `clientInfo.name` when the caller is not an
+                 *     MCP client with an established `initialize` handshake. Subject
+                 *     to generic-name normalisation.
+                 */
+                client_name?: string;
+                client_version?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Session attribution + policy */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionInfo"];
                 };
             };
         };

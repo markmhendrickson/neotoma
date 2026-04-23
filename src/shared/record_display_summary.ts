@@ -119,6 +119,12 @@ export function getRecordDisplaySummary(
         MAX_SUMMARY_LEN + 10
       );
 
+    case "entity_splits":
+      return `${name(str(row, "source_entity_id"))} ↛ ${name(str(row, "new_entity_id"))}`.slice(
+        0,
+        MAX_SUMMARY_LEN + 10
+      );
+
     case "relationship_snapshots": {
       const rel = str(row, "relationship_type", 12);
       const src = name(str(row, "source_entity_id"));

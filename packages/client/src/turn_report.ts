@@ -9,8 +9,9 @@
  *
  * Groups:
  *   - `Conversation` — mandatory. Always rendered, containing the turn's
- *     stored `conversation`, user `agent_message`, and (after reply is
- *     composed) assistant `agent_message` entities. Surfacing this bookkeeping
+ *     stored `conversation`, user `conversation_message`, and (after reply is
+ *     composed) assistant `conversation_message` entities (or legacy
+ *     `agent_message` for pre-v0.6 data). Surfacing this bookkeeping
  *     is an explicit requirement — agents must show the conversational data
  *     persisted this turn.
  *   - `Reads` / `Created` / `Updated` — optional non-bookkeeping groups.
@@ -32,7 +33,7 @@ export interface TurnReportEntity {
   emoji?: string;
   /** Short human-readable label (title, name, or descriptive fragment). */
   label: string;
-  /** Neotoma entity_type (e.g. "task", "agent_message"). */
+  /** Neotoma entity_type (e.g. "task", "conversation_message"). */
   entityType: string;
 }
 
@@ -217,6 +218,9 @@ function pickDefaultEmoji(entityType: string): string {
     product_feedback: "💬",
     neotoma_repair: "🛠️",
     conversation: "🧵",
+    conversation_message: "💬",
+    // Legacy alias kept so historical rows stored under `agent_message`
+    // still render with the chat-message emoji.
     agent_message: "💬",
   };
   return map[entityType] ?? "🗂️";

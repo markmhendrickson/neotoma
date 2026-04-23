@@ -1,0 +1,7 @@
+{
+  "user_id": "00000000-0000-0000-0000-000000000000",
+  "file_idempotency_key": "legacy-v0.4.x-ingest-text-source",
+  "original_filename": "legacy_corpus_note.txt",
+  "mime_type": "text/plain",
+  "file_content": "TGVnYWN5IGNvcnB1cyBub3RlIC0tIGEgdGV4dCBzb3VyY2UgaW5nZXN0ZWQgdGhyb3VnaCB0aGUgdjAuNC54IHNoYXBlLgo="
+}

@@ -9,7 +9,11 @@ globs:
   - "docs/releases/**"
   - ".cursor/plans/**"
   - "tests/contract/**"
+  - "tests/contract/legacy_payloads/**"
   - "tests/cli/cli_command_coverage_guard.test.ts"
+  - "scripts/openapi_bc_diff.js"
+  - ".cursor/skills/release/SKILL.md"
+  - ".cursor/skills/create-release/SKILL.md"
   - "foundation_config.yaml"
 ---
 
@@ -36,6 +40,7 @@ For each change type, follow the linked canonical doc. The matrix lists only the
 | Change type | Canonical doc | Seams you must update together |
 |-------------|---------------|-------------------------------|
 | HTTP endpoint / request / response field | `docs/architecture/openapi_contract_flow.md` | `openapi.yaml` → `src/shared/openapi_types.ts` → `src/shared/contract_mappings.ts` → handler → contract tests |
+| Request-shape tightening (closing `additionalProperties`, adding required fields, narrowing types) | `docs/architecture/openapi_contract_flow.md` § Legacy-payload corpus + `docs/subsystems/errors.md` § Tightening-change hint obligation | `openapi.yaml` schema, `src/middleware/unknown_fields_guard.ts` (if new closed shape), `tests/contract/legacy_payloads/` fixture flip + `CHANGES.md` note, supplement "Breaking changes" section |
 | New or changed MCP tool | `docs/architecture/openapi_contract_flow.md` + `docs/developer/mcp/` | `src/tool_definitions.ts`, `src/server.ts`, `src/shared/contract_mappings.ts`, `docs/developer/mcp/tool_descriptions.yaml` |
 | New or changed CLI command | `docs/developer/cli_reference.md` | `src/cli/index.ts`, `tests/cli/cli_command_coverage_guard.test.ts`, `docs/developer/cli_reference.md`, `docs/developer/cli_agent_instructions.md` (via anchor rule) |
 | New CLI runtime override (env var + flag) | `docs/developer/cli_reference.md` § Runtime overrides | `src/cli/index.ts` `preAction` hook, env-var precedence table in cli_reference |
@@ -58,9 +63,10 @@ For each change type, follow the linked canonical doc. The matrix lists only the
 
 | Change type | Canonical doc | Seams you must update together |
 |-------------|---------------|-------------------------------|
-| Release / supplement | `docs/developer/github_release_process.md` § Supplement immutability | In-progress supplement under `docs/releases/in_progress/<TAG>/`; historical supplements untouched |
+| Release / supplement | `docs/developer/github_release_process.md` § Supplement immutability + § Validation tightening is breaking | In-progress supplement under `docs/releases/in_progress/<TAG>/`; historical supplements untouched; supplement MUST contain an explicit "Breaking changes" section (even if only `No breaking changes.`); `npm run openapi:bc-diff` output reconciled against the supplement in the release SKILL preflight |
 | Logging, metrics, events, traces | `docs/observability/logging.md` + `docs/observability/metrics_standard.md` + `docs/subsystems/privacy.md` | No PII in any observable payload; structured logs include `trace_id`; metrics follow `neotoma_{subsystem}_…` naming |
 | File / folder rename | `foundation/agent_instructions/cursor_rules/file_naming.mdc` | Snake_case; update `foundation_config.yaml` references; rewire `.claude/rules/` symlinks |
+| npm script rename / new prefix | `docs/developer/package_scripts.md` | Match the three-category convention (`watch:*` for dev watchers, `serve:*`/`start:*` for compiled-dist runners, `dev:*` for other dev tooling); keep aliases inside the same category; one-minor alias back-compat when renaming |
 
 ## Cross-cutting constraints
 
@@ -80,6 +86,9 @@ These rules sit between subsystems. Each canonical doc covers its own surface; o
 10. Ingestion writes (sources → observations → entity updates) MUST be transactional. Mutations that commit partially on failure are a bug (`docs/subsystems/ingestion/ingestion.md`).
 11. Mutating operations (`ingest`, `store`, `correct`) MUST accept and honor an `idempotency_key`; reuse with a different payload is a validation error, not a silent overwrite.
 12. File and folder names use `snake_case`; renames update `foundation_config.yaml` and any `.claude/rules/` symlinks in the same change.
+13. A PR that causes previously-accepted input to start returning an `ERR_*` MUST populate a structured `hint` at the validation seam in the same change (`docs/subsystems/errors.md` § Tightening-change hint obligation) and update an entry in `tests/contract/legacy_payloads/` (flip `outcome` to `rejected`, populate `hint_match`, add a line to `CHANGES.md`).
+14. Tightening request-shape validation — closing an `additionalProperties`, adding a required field, narrowing a type, removing an enum value — is a breaking change and MUST be named in the release supplement's "Breaking changes" section (`docs/developer/github_release_process.md` § Validation tightening is breaking), regardless of whether the tightened shape was previously declared in `openapi.yaml`.
+15. Every release supplement MUST contain an explicit "Breaking changes" section. Use the literal line `No breaking changes.` when none exist; never omit the section (`.cursor/skills/release/SKILL.md` § Step 3).
 
 ### MUST NOT
 
@@ -95,6 +104,8 @@ These rules sit between subsystems. Each canonical doc covers its own surface; o
 10. Implement strategy or execution logic inside Neotoma (filter suggestions, agent orchestration, scheduled runs). Neotoma is the State Layer; upper layers read truth and write only through the prescribed ingestion / correction flows (`docs/foundation/layered_architecture.md`, `docs/NEOTOMA_MANIFEST.md`).
 11. Emit PII in any observable surface — logs, metric labels, event payloads, or error messages. Use IDs and redacted references (`docs/subsystems/privacy.md`, `docs/observability/logging.md`).
 12. Create untyped relationships or cycles in hierarchical relationship types (`docs/subsystems/relationships.md`).
+13. Tighten validation of a previously-tolerated request shape without (a) a structured `hint`, (b) a legacy-payload fixture flipped to `rejected`, and (c) a line in the release supplement's "Breaking changes" section. Silent tightenings are the specific regression mode the legacy-payload corpus and the OpenAPI breaking-change diff gate exist to catch.
+14. Omit the "Breaking changes" section from a release supplement, even for patch releases with no breaking changes. Write `No breaking changes.` explicitly.
 
 ### SHOULD
 
@@ -117,6 +128,10 @@ Before opening a PR that touches any surface in the Touchpoint Matrix, confirm:
 - [ ] Runtime overrides follow `flag > env > default` and appear in the cli_reference Runtime overrides table.
 - [ ] New env vars are `NEOTOMA_`-prefixed and read in `preAction`.
 - [ ] Error hints emitted as structured `hint` / `details` fields, not concatenated into `message`.
+- [ ] If this PR causes previously-accepted input to be rejected, a structured `hint` is populated in the same change and a legacy-payload fixture under `tests/contract/legacy_payloads/` is updated (see `docs/subsystems/errors.md` § Tightening-change hint obligation).
+- [ ] For release PRs: `npm run openapi:bc-diff` output reviewed; any "Breaking" entries named in the supplement's "Breaking changes" section (or the supplement contains the literal line `No breaking changes.`).
+- [ ] `tests/contract/legacy_payloads/replay.test.ts` passes; any outcome flips (`valid` → `rejected` or similar) are paired with a new entry in `CHANGES.md` under the affected version.
+- [ ] New top-level request bodies added to `openapi.yaml` declare `additionalProperties: false` unless implicit tolerance is intentional and documented in the schema `description`.
 - [ ] New response fields declared in `openapi.yaml`; populated consistently across all code paths that return the schema.
 - [ ] Release-visible changes documented in a supplement under `docs/releases/in_progress/<TAG>/`; historical supplements untouched.
 - [ ] `docs/foundation/schema_agnostic_design_rules.md` re-read when adding per-type behavior.
@@ -140,8 +155,8 @@ Load the canonical doc for the surface your change touches, not this rule, for s
 
 **API & contract**
 
-- `docs/architecture/openapi_contract_flow.md` — OpenAPI-first workflow, contract mappings, response-shape changes.
-- `docs/subsystems/errors.md` — error envelope taxonomy (standard + `ERR_STORE_RESOLUTION_FAILED` with `issues[]` / `hint`).
+- `docs/architecture/openapi_contract_flow.md` — OpenAPI-first workflow, contract mappings, response-shape changes, legacy-payload corpus (`tests/contract/legacy_payloads/`), OpenAPI breaking-change diff gate (`scripts/openapi_bc_diff.js`).
+- `docs/subsystems/errors.md` — error envelope taxonomy (standard + `ERR_STORE_RESOLUTION_FAILED` with `issues[]` / `hint`), `ERR_UNKNOWN_FIELD` for closed request shapes, and the Tightening-change hint obligation.
 - `docs/subsystems/auth.md` — user-id resolution via `getAuthenticatedUserId` and the `LOCAL_DEV_USER_ID` override.
 - `docs/developer/agent_instructions_sync_rules.mdc` — MCP ↔ CLI instruction anchor table.
 - `docs/developer/cli_reference.md` — CLI commands, flags, and runtime overrides.
@@ -156,10 +171,12 @@ Load the canonical doc for the surface your change touches, not this rule, for s
 
 **Ops & process**
 
-- `docs/developer/github_release_process.md` — release supplement lifecycle and immutability.
+- `docs/developer/github_release_process.md` — release supplement lifecycle, immutability, and the "Validation tightening is breaking" rule.
+- `.cursor/skills/release/SKILL.md` (mirrored in `.cursor/skills/create-release/SKILL.md` and under `.claude/skills/`) — release preflight including `openapi:bc-diff` reconciliation and the explicit "Breaking changes" supplement section.
 - `docs/subsystems/privacy.md` + `docs/observability/logging.md` + `docs/observability/metrics_standard.md` — no PII in observable surfaces; logging/metric naming.
 - `docs/feature_units/standards/error_protocol.md` — class 2/3 errors require regression tests.
 - `foundation/agent_instructions/cursor_rules/file_naming.mdc` — repo-wide snake_case; `foundation_config.yaml` sync on rename.
+- `docs/developer/package_scripts.md` — three-category npm-script prefix convention (`watch:*` / `serve:*` / `dev:*`), alias rules, and renaming policy.
 
 ## When to load this rule
 

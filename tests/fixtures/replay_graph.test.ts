@@ -3,6 +3,13 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 vi.mock("../../src/services/schema_registry.js", () => ({
+  DEFAULT_OBSERVATION_SOURCE_PRIORITY: [
+    "sensor",
+    "workflow_state",
+    "llm_summary",
+    "human",
+    "import",
+  ] as const,
   schemaRegistry: {
     loadActiveSchema: vi.fn().mockResolvedValue(null),
   },

@@ -162,6 +162,22 @@ const EntitiesQueryRequestBaseSchema = z
     user_id: z.string().optional(),
     updated_since: z.string().optional(),
     created_since: z.string().optional(),
+    /**
+     * R3: filter entities whose observations were resolved with the given
+     * `identity_basis`. Satisfied when ANY observation for the entity carries
+     * this basis. Enables the Inspector "Ambiguous/heuristic" filter without
+     * joining observations client-side. See
+     * `src/services/entity_resolution.ts#IdentityBasis`.
+     */
+    identity_basis: z
+      .enum([
+        "schema_rule",
+        "schema_lookup",
+        "heuristic_name",
+        "heuristic_fallback",
+        "target_id",
+      ])
+      .optional(),
   })
   .superRefine(validateEntityQueryCombinations);
 
@@ -229,6 +245,26 @@ export const ObservationsQueryRequestSchema = z.object({
   created_since: z.string().optional(),
 });
 
+/**
+ * Classification of the *kind* of write being performed, orthogonal to
+ * numeric `source_priority`. See `Observation.observation_source` in
+ * openapi.yaml for the full semantic contract. Default (`llm_summary`)
+ * is applied by the write path, not at parse time, so MCP callers that
+ * omit the field remain LLM-driven by construction without breaking
+ * idempotency hashes or contract-test fixtures.
+ */
+export const OBSERVATION_SOURCE_VALUES = [
+  "sensor",
+  "llm_summary",
+  "workflow_state",
+  "human",
+  "import",
+] as const;
+
+export const ObservationSourceSchema = z.enum(OBSERVATION_SOURCE_VALUES);
+
+export type ObservationSource = z.infer<typeof ObservationSourceSchema>;
+
 export const StoreStructuredRequestSchema = z.object({
   entities: z.array(z.record(z.unknown())),
   relationships: z
@@ -241,6 +277,7 @@ export const StoreStructuredRequestSchema = z.object({
     )
     .optional(),
   source_priority: z.number().optional().default(100),
+  observation_source: ObservationSourceSchema.optional(),
   idempotency_key: z.string().min(1),
   user_id: z.string().optional(),
   original_filename: z.string().optional(),
@@ -269,6 +306,7 @@ export const StoreRequestSchema = z
       )
       .optional(),
     source_priority: z.number().optional().default(100),
+    observation_source: ObservationSourceSchema.optional(),
     idempotency_key: z.string().min(1).optional(),
     file_idempotency_key: z.string().min(1).optional(),
     file_content: z.string().optional(),
@@ -296,6 +334,55 @@ export const MergeEntitiesRequestSchema = z.object({
   from_entity_id: z.string(),
   to_entity_id: z.string(),
   merge_reason: z.string().optional(),
+  user_id: z.string().optional(),
+});
+
+/**
+ * R5: declarative predicate for `split_entity`. Schema-agnostic — every
+ * form reads a column every observation row carries (entity_id,
+ * observed_at, source_id, fields blob). See
+ * `src/services/entity_split.ts#SplitPredicate`.
+ */
+export const SplitPredicateSchema = z
+  .object({
+    observed_at_gte: z.string().optional(),
+    source_id_in: z.array(z.string()).optional(),
+    observation_field_equals: z
+      .object({
+        field: z.string().min(1),
+        value: z.string().optional(),
+        value_starts_with: z.string().optional(),
+      })
+      .refine(
+        (v) => v.value !== undefined || v.value_starts_with !== undefined,
+        {
+          message:
+            "observation_field_equals requires either `value` or `value_starts_with`",
+        },
+      )
+      .optional(),
+  })
+  .refine(
+    (v) =>
+      v.observed_at_gte !== undefined ||
+      (v.source_id_in !== undefined && v.source_id_in.length > 0) ||
+      v.observation_field_equals !== undefined,
+    {
+      message:
+        "Split predicate must declare at least one of observed_at_gte, source_id_in, observation_field_equals",
+    },
+  );
+
+export const SplitEntityRequestSchema = z.object({
+  source_entity_id: z.string().min(1),
+  predicate: SplitPredicateSchema,
+  new_entity: z.object({
+    entity_type: z.string().min(1),
+    canonical_name: z.string().min(1),
+    target_entity_id: z.string().optional(),
+  }),
+  idempotency_key: z.string().min(1),
+  reason: z.string().optional(),
   user_id: z.string().optional(),
 });
 

@@ -37,8 +37,8 @@ describe("storeChatTurn", () => {
           structured: {
             entities: [
               { entity_id: "conv-1", entity_type: "conversation" },
-              { entity_id: "msg-user-1", entity_type: "agent_message" },
-              { entity_id: "msg-assistant-1", entity_type: "agent_message" },
+              { entity_id: "msg-user-1", entity_type: "conversation_message" },
+              { entity_id: "msg-assistant-1", entity_type: "conversation_message" },
             ],
           },
         } as StoreResult;
@@ -63,14 +63,16 @@ describe("storeChatTurn", () => {
     expect(captured!.entities).toHaveLength(3);
     expect(captured!.entities![0].entity_type).toBe("conversation");
     expect(captured!.entities![1]).toMatchObject({
-      entity_type: "agent_message",
+      entity_type: "conversation_message",
       role: "user",
+      sender_kind: "user",
       content: "hello",
       turn_key: "abc:1",
     });
     expect(captured!.entities![2]).toMatchObject({
-      entity_type: "agent_message",
+      entity_type: "conversation_message",
       role: "assistant",
+      sender_kind: "assistant",
       turn_key: "abc:1:assistant",
     });
     expect(captured!.relationships).toEqual([
@@ -80,13 +82,53 @@ describe("storeChatTurn", () => {
     expect(captured!.idempotency_key).toBe("conversation-abc-1-turn");
   });
 
+  it("passes agent-to-agent sender metadata through to the stored message", async () => {
+    let captured: StoreInput | undefined;
+    const transport = makeStubTransport({
+      store: vi.fn(async (input: StoreInput) => {
+        captured = input;
+        return {
+          structured: {
+            entities: [
+              { entity_id: "conv-2", entity_type: "conversation" },
+              { entity_id: "msg-a2a-1", entity_type: "conversation_message" },
+            ],
+          },
+        } as StoreResult;
+      }),
+    });
+
+    await storeChatTurn(transport, {
+      conversationId: "a2a-thread-1",
+      turnId: "7",
+      messages: [
+        {
+          role: "assistant",
+          content: "handing off to downstream agent",
+          senderKind: "agent",
+          senderAgentId: "agent-orchestrator",
+          recipientAgentId: "agent-summarizer",
+        },
+      ],
+    });
+
+    expect(captured).toBeDefined();
+    expect(captured!.entities![1]).toMatchObject({
+      entity_type: "conversation_message",
+      role: "assistant",
+      sender_kind: "agent",
+      sender_agent_id: "agent-orchestrator",
+      recipient_agent_id: "agent-summarizer",
+    });
+  });
+
   it("allows storing only a user message when the assistant reply is not yet known", async () => {
     const transport = makeStubTransport({
       store: vi.fn(async () => ({
         structured: {
           entities: [
             { entity_id: "conv-1", entity_type: "conversation" },
-            { entity_id: "msg-user-1", entity_type: "agent_message" },
+            { entity_id: "msg-user-1", entity_type: "conversation_message" },
           ],
         },
       } as StoreResult)),

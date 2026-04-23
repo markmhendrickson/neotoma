@@ -11,7 +11,6 @@ import { Layout } from "@/components/Layout";
 import { NotFound } from "@/components/NotFound";
 import { SitePage } from "@/components/SitePage";
 import { SitePageAlt } from "@/components/SitePageAlt";
-import { SitePageHomeRevamp2026 } from "@/components/SitePageHomeRevamp2026";
 import { TerminologyPage } from "@/components/subpages/TerminologyPage";
 import { AgentInstructionsPage } from "@/components/subpages/AgentInstructionsPage";
 import { ApiReferencePage } from "@/components/subpages/ApiReferencePage";
@@ -116,7 +115,6 @@ type AppRoute = {
 const APP_ROUTES: readonly AppRoute[] = [
   { path: "/", element: <SitePage /> },
   { path: "/home/x7k9m2vp", element: <SitePageAlt /> },
-  { path: "/home/k3q7h9n2rx", element: <SitePageHomeRevamp2026 /> },
   { path: "/terminology", element: <TerminologyPage /> },
   { path: "/agent-instructions", element: <AgentInstructionsPage /> },
   { path: "/api", element: <ApiReferencePage /> },

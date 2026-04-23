@@ -59,7 +59,7 @@ A consistent pattern across evaluations: agents with tool-use capabilities asses
 
 ### Implications
 
-- AEO (agent evaluation optimization) is a real acquisition funnel — agents are making or influencing adoption decisions
+- AEO (agent evaluation optimization — Neotoma's usage; distinct from industry "answer engine optimization", see `docs/foundation/product_positioning.md` §7.5) is a real acquisition funnel — agents are making or influencing adoption decisions
 - The site should be optimized for agent legibility (structured data, verifiable claims, machine-readable comparisons)
 - Agents with tool access are the best evaluators because they already need state management
 

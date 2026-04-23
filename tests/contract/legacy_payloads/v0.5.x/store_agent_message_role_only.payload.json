@@ -1,0 +1,22 @@
+{
+  "user_id": "00000000-0000-0000-0000-000000000000",
+  "idempotency_key": "legacy-v0.5.x-agent-message-role-only",
+  "commit": true,
+  "entities": [
+    {
+      "entity_type": "conversation",
+      "canonical_name": "Legacy agent_message role-only conversation",
+      "title": "Legacy agent_message role-only conversation"
+    },
+    {
+      "entity_type": "agent_message",
+      "canonical_name": "Legacy agent_message role-only turn",
+      "role": "user",
+      "content": "pre-v1.1 agent_message without sender_kind",
+      "turn_key": "legacy-v0.5.x-agent-message-role-only:1"
+    }
+  ],
+  "relationships": [
+    { "relationship_type": "PART_OF", "source_index": 1, "target_index": 0 }
+  ]
+}

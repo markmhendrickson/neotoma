@@ -1,0 +1,23 @@
+{
+  "name": "@neotoma/agent-site",
+  "version": "0.1.0",
+  "description": "Agent-facing feedback intake service hosted at agent.neotoma.io (Netlify Functions + Blobs)",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "echo 'static site, no build step'",
+    "dev": "netlify dev --port 8888",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hellocoop/httpsig": "^1.4.0",
+    "@netlify/blobs": "^8.1.0",
+    "@netlify/functions": "^2.8.0",
+    "jose": "^6.2.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "netlify-cli": "^17.36.0",
+    "typescript": "^5.4.0"
+  }
+}

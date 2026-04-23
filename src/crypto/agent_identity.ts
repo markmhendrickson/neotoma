@@ -1,46 +1,345 @@
 /**
- * Agent Identity Abstraction for Cryptographic Schema Fields (FU-053)
+ * Agent identity abstraction for Neotoma MCP write-path attribution.
  *
- * Represents agent as public key for future cryptographic signature verification.
+ * Two attribution paths contribute to a single `AgentIdentity` shape:
+ *
+ * 1. **AAuth (preferred)** — cryptographically verified HTTP Message Signature
+ *    with an agent-token JWT (RFC 9421 + AAuth profile). Populates
+ *    `publicKey`, `thumbprint`, `algorithm`, `sub`, `iss`.
+ *
+ * 2. **Fallback (non-AAuth)** — MCP `initialize.clientInfo` (name + version)
+ *    and/or resolved OAuth `connection_id`. Populates `clientName`,
+ *    `clientVersion`, `connectionId`.
+ *
+ * The resulting record is stamped into every durable write-path row
+ * (observations, relationships, timeline events, sources, interpretations)
+ * so the Inspector and audit tooling can show "who stored this" and with
+ * what level of assurance.
+ *
+ * See docs/proposals/agent-trust-framework.md and the AAuth Neotoma
+ * integration plan for the broader rationale.
  */
+
+import type { Request } from "express";
+
+/**
+ * Trust tier shown in the Inspector and surfaced in API responses.
+ *
+ * - `hardware` — AAuth verified and the signing algorithm indicates a
+ *   hardware-bound key (ES256 via Secure Enclave, EdDSA via YubiKey, etc.).
+ * - `software` — AAuth verified but software-only key material.
+ * - `unverified_client` — No AAuth, but `clientInfo.name` was provided on
+ *   the MCP `initialize` handshake. Self-reported, not verified.
+ * - `anonymous` — No AAuth and no useful `clientInfo` (or generic values
+ *   like the literal string "mcp").
+ */
+export type AttributionTier =
+  | "hardware"
+  | "software"
+  | "unverified_client"
+  | "anonymous";
 
 export interface AgentIdentity {
-  publicKey: string;
-  algorithm?: string; // e.g., 'ed25519'
+  // --- AAuth fields (present iff AAuth verification succeeded) --------------
+  /** Raw public key in JWK form (JSON-serialised). */
+  publicKey?: string;
+  /** RFC 7638 JWK thumbprint — stable key identifier across requests. */
+  thumbprint?: string;
+  /** JOSE algorithm name, e.g. "ES256", "EdDSA". */
+  algorithm?: string;
+  /** Agent subject from the `aa-agent+jwt` token — stable agent identifier. */
+  sub?: string;
+  /** Agent issuer URL from the `aa-agent+jwt` token. */
+  iss?: string;
+
+  // --- Fallback attribution fields (always best-effort) ---------------------
+  /**
+   * Human-readable client name from MCP `initialize.clientInfo.name`.
+   * Self-reported and NOT verified. Generic values like "mcp" or "client"
+   * are normalised to `undefined` so they do not masquerade as attribution.
+   */
+  clientName?: string;
+  /** Self-reported client version from `initialize.clientInfo.version`. */
+  clientVersion?: string;
+  /** Resolved OAuth connection id, when available. */
+  connectionId?: string;
+
+  // --- Derived -------------------------------------------------------------
+  /** Derived trust tier. See {@link AttributionTier}. */
+  tier: AttributionTier;
 }
 
 /**
- * Get agent public key from request context (stub)
- *
- * In future, this will extract public key from authenticated request.
+ * Result of the AAuth middleware stamped onto the Express request.
+ * The middleware is non-blocking, so absence just means no AAuth headers
+ * were present (or they failed validation — the middleware logs and
+ * proceeds with `aauth === null`).
  */
-export function getAgentPublicKey(): string | null {
-  // Stub: Future implementation will extract from request context
-  // For now, return null (no agent identity)
-  return null;
+export interface AAuthRequestContext {
+  verified: boolean;
+  publicKey?: string;
+  thumbprint?: string;
+  algorithm?: string;
+  sub?: string;
+  iss?: string;
 }
 
 /**
- * Create agent identity from public key
+ * Diagnostic summary of the attribution resolution decision for a single
+ * request. Mirrored onto the Express request as `req.attributionDecision`
+ * by the AAuth middleware and returned verbatim in the
+ * {@link SessionAttributionDecision} block of `/session`. Contains no
+ * signatures or public keys so it is safe to surface to clients.
+ */
+export interface AttributionDecisionDiagnostics {
+  signature_present: boolean;
+  signature_verified: boolean;
+  /** Short error code when `signature_verified === false`. */
+  signature_error_code?: string;
+  /** Raw `clientInfo.name` seen (pre-normalisation) when available. */
+  client_info_raw_name?: string;
+  /** Reason {@link normaliseClientNameWithReason} dropped the client name. */
+  client_info_normalised_to_null_reason?: ClientNameNormalisationReason;
+  /** Tier resolved for this request. */
+  resolved_tier: AttributionTier;
+}
+
+/**
+ * Generic "looks like a hardware-backed key" heuristic. This is deliberately
+ * conservative: ES256 and EdDSA are the algorithms emitted by
+ * `@aauth/local-keys` when using Secure Enclave / YubiKey backends. Anything
+ * else is treated as software-only until we can inspect key metadata more
+ * precisely in Phase 2.
+ */
+export function algorithmLooksHardwareBacked(
+  algorithm: string | undefined
+): boolean {
+  if (!algorithm) return false;
+  const normalised = algorithm.toUpperCase();
+  return normalised === "ES256" || normalised === "EDDSA";
+}
+
+/**
+ * Generic clientInfo names that should NOT count as self-identification.
+ * Kept lowercase; comparison is case-insensitive.
+ */
+const GENERIC_CLIENT_NAMES = new Set([
+  "",
+  "mcp",
+  "client",
+  "mcp-client",
+  "unknown",
+  "anonymous",
+]);
+
+/**
+ * Reason codes surfaced when {@link normaliseClientNameWithReason} drops an
+ * input. Mirrored in diagnostics logs and on the `/session` response so
+ * integrators can tell "I didn't send a name" from "I sent something that
+ * was too generic to be attribution".
+ */
+export type ClientNameNormalisationReason =
+  | "too_generic"
+  | "empty"
+  | "not_a_string";
+
+/** Normalise a self-reported client name to `undefined` when too generic. */
+export function normaliseClientName(
+  name: string | null | undefined
+): string | undefined {
+  return normaliseClientNameWithReason(name).value;
+}
+
+/**
+ * Normalise a self-reported client name and also return a reason code when
+ * the value was rejected. Returns `{ value: <string> }` on acceptance and
+ * `{ value: undefined, reason }` otherwise. Use this in middleware / the
+ * diagnostics path; the legacy {@link normaliseClientName} stays as the
+ * thin compatibility shim for existing call sites.
+ */
+export function normaliseClientNameWithReason(
+  name: string | null | undefined
+): { value: string | undefined; reason?: ClientNameNormalisationReason } {
+  if (name === null || name === undefined) return { value: undefined };
+  if (typeof name !== "string") return { value: undefined, reason: "not_a_string" };
+  const trimmed = name.trim();
+  if (!trimmed) return { value: undefined, reason: "empty" };
+  if (GENERIC_CLIENT_NAMES.has(trimmed.toLowerCase())) {
+    return { value: undefined, reason: "too_generic" };
+  }
+  return { value: trimmed };
+}
+
+/**
+ * Derive the {@link AttributionTier} from the fields on an
+ * {@link AgentIdentity}-in-progress. Pure function; safe to call multiple
+ * times while assembling attribution.
+ */
+export function deriveAttributionTier(
+  input: Omit<AgentIdentity, "tier">
+): AttributionTier {
+  const aauthVerified = !!(input.publicKey && input.thumbprint);
+  if (aauthVerified) {
+    return algorithmLooksHardwareBacked(input.algorithm)
+      ? "hardware"
+      : "software";
+  }
+  if (input.clientName) {
+    return "unverified_client";
+  }
+  return "anonymous";
+}
+
+/**
+ * Attribution fields stamped into provenance JSON blobs. This is the shape
+ * written to observations, relationships, timeline events, sources, and
+ * interpretations; it is also the shape consumed by the Inspector.
+ *
+ * Every field is optional so existing records without attribution continue
+ * to parse cleanly.
+ */
+export interface AttributionProvenance {
+  agent_public_key?: string;
+  agent_thumbprint?: string;
+  agent_algorithm?: string;
+  agent_sub?: string;
+  agent_iss?: string;
+  client_name?: string;
+  client_version?: string;
+  connection_id?: string;
+  attribution_tier?: AttributionTier;
+  /** ISO-8601 timestamp when the attribution was recorded. */
+  attributed_at?: string;
+}
+
+/**
+ * Serialise an {@link AgentIdentity} into the provenance JSON shape. Omits
+ * keys that are undefined so blobs stay compact.
+ */
+export function toAttributionProvenance(
+  identity: AgentIdentity | null | undefined
+): AttributionProvenance {
+  if (!identity) return {};
+  const out: AttributionProvenance = {
+    attribution_tier: identity.tier,
+    attributed_at: new Date().toISOString(),
+  };
+  if (identity.publicKey) out.agent_public_key = identity.publicKey;
+  if (identity.thumbprint) out.agent_thumbprint = identity.thumbprint;
+  if (identity.algorithm) out.agent_algorithm = identity.algorithm;
+  if (identity.sub) out.agent_sub = identity.sub;
+  if (identity.iss) out.agent_iss = identity.iss;
+  if (identity.clientName) out.client_name = identity.clientName;
+  if (identity.clientVersion) out.client_version = identity.clientVersion;
+  if (identity.connectionId) out.connection_id = identity.connectionId;
+  return out;
+}
+
+/**
+ * Merge an {@link AttributionProvenance} block into an existing provenance
+ * object, returning a JSON string ready for persistence. When either input
+ * is empty the output preserves existing fields rather than overwriting
+ * them. The merge is shallow and last-write-wins at the attribution key
+ * level — which matches how Phase 1 stamps attribution (once per write).
+ */
+export function mergeAttributionIntoProvenance(
+  existing: string | Record<string, unknown> | null | undefined,
+  attribution: AttributionProvenance
+): Record<string, unknown> {
+  let base: Record<string, unknown> = {};
+  if (existing && typeof existing === "string") {
+    try {
+      const parsed = JSON.parse(existing);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        base = parsed as Record<string, unknown>;
+      }
+    } catch {
+      // Malformed JSON — fall through to empty base so we never throw.
+    }
+  } else if (
+    existing &&
+    typeof existing === "object" &&
+    !Array.isArray(existing)
+  ) {
+    base = { ...(existing as Record<string, unknown>) };
+  }
+  if (Object.keys(attribution).length === 0) return base;
+  return { ...base, ...attribution };
+}
+
+/**
+ * Legacy helper retained for backwards compatibility with FU-053 callers.
+ * Prefer {@link getAgentIdentityFromRequest} in new code.
+ */
+export function getAgentPublicKey(req?: Request): string | null {
+  if (!req) return null;
+  const aauth = (req as Request & { aauth?: AAuthRequestContext }).aauth;
+  return aauth?.publicKey ?? null;
+}
+
+/**
+ * Build a fresh {@link AgentIdentity} from AAuth verification result plus
+ * fallback attribution inputs. Any field can be undefined; the returned
+ * object's {@link AttributionTier} reflects what is actually available.
  */
 export function createAgentIdentity(
-  publicKey: string,
-  algorithm: string = "ed25519",
+  input: Omit<AgentIdentity, "tier"> & { tier?: AttributionTier }
 ): AgentIdentity {
-  return {
-    publicKey,
-    algorithm,
-  };
+  const tier = input.tier ?? deriveAttributionTier(input);
+  return { ...input, tier };
 }
 
 /**
- * Validate agent identity format (stub)
+ * Extract the full {@link AgentIdentity} for an Express request. The AAuth
+ * middleware populates `req.aauth`; the server layer separately exposes
+ * `clientInfo` / `connection_id` via the NeotomaServer session state. This
+ * helper is usable in HTTP handlers that want attribution before the MCP
+ * `initialize` handshake has completed.
+ */
+export function getAgentIdentityFromRequest(
+  req: Request,
+  extra?: {
+    clientName?: string | null;
+    clientVersion?: string | null;
+    connectionId?: string | null;
+  }
+): AgentIdentity | null {
+  const aauth = (req as Request & { aauth?: AAuthRequestContext }).aauth;
+  const clientName = normaliseClientName(extra?.clientName);
+  const clientVersion = extra?.clientVersion ?? undefined;
+  const connectionId = extra?.connectionId ?? undefined;
+  const hasAnything =
+    !!aauth?.verified || !!clientName || !!clientVersion || !!connectionId;
+  if (!hasAnything) return null;
+  return createAgentIdentity({
+    publicKey: aauth?.publicKey,
+    thumbprint: aauth?.thumbprint,
+    algorithm: aauth?.algorithm,
+    sub: aauth?.sub,
+    iss: aauth?.iss,
+    clientName,
+    clientVersion: clientVersion ?? undefined,
+    connectionId: connectionId ?? undefined,
+  });
+}
+
+/**
+ * Minimal structural validation. Kept permissive because the middleware
+ * already enforces the heavy lifting (signature, JWT, JWKS).
  */
 export function validateAgentIdentity(identity: AgentIdentity): boolean {
-  // Stub: Future implementation will validate public key format
-  if (!identity.publicKey || typeof identity.publicKey !== "string") {
+  if (!identity || typeof identity !== "object") return false;
+  if (
+    identity.publicKey !== undefined &&
+    (typeof identity.publicKey !== "string" || identity.publicKey.length === 0)
+  ) {
     return false;
   }
-  // Basic validation: non-empty string
-  return identity.publicKey.length > 0;
+  const tier = identity.tier;
+  return (
+    tier === "hardware" ||
+    tier === "software" ||
+    tier === "unverified_client" ||
+    tier === "anonymous"
+  );
 }

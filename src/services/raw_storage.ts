@@ -7,6 +7,11 @@ import { fileURLToPath } from "node:url";
 import { config } from "../config.js";
 import { db } from "../db.js";
 import { generateDeterministicSourceId } from "./source_identity.js";
+import {
+  getCurrentAgentIdentity,
+  getCurrentAttribution,
+} from "./request_context.js";
+import { enforceAttributionPolicy } from "./attribution_policy.js";
 
 export interface RawStorageOptions {
   userId: string;
@@ -44,6 +49,7 @@ export function computeContentHash(buffer: Buffer): string {
 export async function storeRawContent(
   options: RawStorageOptions
 ): Promise<RawStorageResult> {
+  enforceAttributionPolicy("sources", getCurrentAgentIdentity());
   const { userId, fileBuffer, mimeType, originalFilename, provenance = {}, idempotencyKey } = options;
 
   // Compute content hash
@@ -174,6 +180,7 @@ export async function storeRawContent(
       provenance: {
         ...provenance,
         uploaded_at: new Date().toISOString(),
+        ...getCurrentAttribution(),
       },
     })
     .select()

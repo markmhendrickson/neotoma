@@ -7,6 +7,11 @@ import { createHash } from "node:crypto";
 import { db } from "../db.js";
 import { logger } from "../utils/logger.js";
 import type { SchemaDefinition } from "./schema_registry.js";
+import {
+  getCurrentAgentIdentity,
+  getCurrentAttribution,
+} from "./request_context.js";
+import { enforceAttributionPolicy } from "./attribution_policy.js";
 
 /** Date-like field names that may appear in entity snapshots (order does not matter). */
 const DATE_FIELD_NAMES = new Set([
@@ -325,6 +330,7 @@ export interface UpsertTimelineEventsForSnapshotParams {
 export async function upsertTimelineEventsForEntitySnapshot(
   params: UpsertTimelineEventsForSnapshotParams
 ): Promise<void> {
+  enforceAttributionPolicy("timeline_events", getCurrentAgentIdentity());
   const {
     entityType,
     entityId,
@@ -368,6 +374,11 @@ export async function upsertTimelineEventsForEntitySnapshot(
     }
   }
 
+  const timelineAttribution = getCurrentAttribution();
+  const timelineAttributionMixin =
+    Object.keys(timelineAttribution).length > 0
+      ? { provenance: timelineAttribution }
+      : {};
   for (const row of timelineRows) {
     const { error: evtError } = await db.from("timeline_events").upsert(
       {
@@ -379,6 +390,7 @@ export async function upsertTimelineEventsForEntitySnapshot(
         entity_id: row.entity_id,
         created_at: row.created_at,
         user_id: row.user_id,
+        ...timelineAttributionMixin,
       },
       { onConflict: "id" }
     );

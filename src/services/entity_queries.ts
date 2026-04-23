@@ -22,6 +22,22 @@ export interface EntityQueryOptions {
   updatedSince?: string;
   /** ISO 8601 timestamp; return entities whose created_at is >= this value. */
   createdSince?: string;
+  /**
+   * R3: filter entities whose observations were resolved with a specific
+   * `identity_basis` (see {@link IdentityBasis} in entity_resolution.ts). The
+   * filter is satisfied when ANY observation for the entity was resolved with
+   * the requested basis, so callers can ask "which entities were created via
+   * heuristic name matching?" without joining observations themselves.
+   *
+   * Implemented as a pre-filter: resolve candidate `entity_id`s from the
+   * `observations` table and intersect with the main entity query.
+   */
+  identityBasis?:
+    | "schema_rule"
+    | "schema_lookup"
+    | "heuristic_name"
+    | "heuristic_fallback"
+    | "target_id";
 }
 
 export interface EntityWithProvenance {
@@ -127,7 +143,50 @@ export async function queryEntities(
     entityIds: filterEntityIds,
     updatedSince,
     createdSince,
+    identityBasis,
   } = options;
+
+  // R3: when an `identity_basis` filter is set, resolve candidate entity_ids
+  // from the observations table first. Distinct per entity; we only need the
+  // presence of AT LEAST one observation with the requested basis. Intersect
+  // with any caller-supplied `entityIds` so both filters compose.
+  let identityBasisIds: string[] | null = null;
+  if (identityBasis) {
+    let obsQuery = db
+      .from("observations")
+      .select("entity_id")
+      .eq("identity_basis", identityBasis);
+    if (userId) {
+      obsQuery = obsQuery.eq("user_id", userId);
+    }
+    const { data: obsRows, error: obsErr } = await obsQuery;
+    if (obsErr) {
+      throw new Error(
+        `Failed to prefilter entities by identity_basis: ${obsErr.message}`
+      );
+    }
+    const distinct = new Set<string>(
+      (obsRows || []).map((r: { entity_id: string }) => r.entity_id)
+    );
+    // Empty result set → short-circuit to an empty match IDs list.
+    identityBasisIds = Array.from(distinct);
+    if (identityBasisIds.length === 0) {
+      return [];
+    }
+  }
+
+  const effectiveEntityIds: string[] | undefined = (() => {
+    if (filterEntityIds && identityBasisIds) {
+      const caller = new Set(filterEntityIds);
+      return identityBasisIds.filter((id) => caller.has(id));
+    }
+    if (identityBasisIds) return identityBasisIds;
+    return filterEntityIds;
+  })();
+
+  if (identityBasis && effectiveEntityIds && effectiveEntityIds.length === 0) {
+    return [];
+  }
 
   // Build query for entities
   let entityQuery = db.from("entities").select(ENTITY_BASE_SELECT);
@@ -147,9 +206,10 @@ export async function queryEntities(
     entityQuery = entityQuery.is("merged_to_entity_id", null);
   }
 
-  // Filter by specific entity IDs (e.g. from semantic search)
-  if (filterEntityIds && filterEntityIds.length > 0) {
-    entityQuery = entityQuery.in("id", filterEntityIds);
+  // Filter by specific entity IDs (e.g. from semantic search, R3 identity
+  // basis pre-filter).
+  if (effectiveEntityIds && effectiveEntityIds.length > 0) {
+    entityQuery = entityQuery.in("id", effectiveEntityIds);
   }
 
   if (updatedSince) {
@@ -213,8 +273,8 @@ export async function queryEntities(
       if (entityType) {
         snapshotQuery = snapshotQuery.eq("entity_type", entityType);
       }
-      if (filterEntityIds && filterEntityIds.length > 0) {
-        snapshotQuery = snapshotQuery.in("entity_id", filterEntityIds);
+      if (effectiveEntityIds && effectiveEntityIds.length > 0) {
+        snapshotQuery = snapshotQuery.in("entity_id", effectiveEntityIds);
       }
       if (published !== undefined) {
         snapshotQuery = snapshotQuery.eq("snapshot->>published", published ? "true" : "false");

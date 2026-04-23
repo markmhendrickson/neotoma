@@ -6,6 +6,11 @@ import { db } from "../db.js";
 import { schemaRegistry, type SchemaDefinition, type SchemaRegistryEntry } from "./schema_registry.js";
 import { resolveEntity } from "./entity_resolution.js";
 import {
+  getCurrentAgentIdentity,
+  getCurrentAttribution,
+} from "./request_context.js";
+import { enforceAttributionPolicy } from "./attribution_policy.js";
+import {
   getSchemaDefinition,
   getRegisteredEntityTypes,
   resolveEntityTypeFromAlias,
@@ -101,9 +106,11 @@ function validateAgainstSchema(
 export async function runInterpretation(
   options: InterpretationOptions
 ): Promise<InterpretationResult> {
+  enforceAttributionPolicy("interpretations", getCurrentAgentIdentity());
   const { userId, sourceId, extractedData, config } = options;
 
   // Create interpretation
+  const interpretationAttribution = getCurrentAttribution();
   const { data: run, error: runError } = await db
     .from("interpretations")
     .insert({
@@ -112,6 +119,9 @@ export async function runInterpretation(
       interpretation_config: config,
       status: "running",
       started_at: new Date().toISOString(),
+      ...(Object.keys(interpretationAttribution).length > 0
+        ? { provenance: interpretationAttribution }
+        : {}),
     })
     .select()
     .single();
@@ -785,6 +795,7 @@ export async function createRelationshipObservations(
   userId: string,
   sourcePriority: number = 0,
 ): Promise<number> {
+  enforceAttributionPolicy("relationships", getCurrentAgentIdentity());
   const { relationshipReducer } = await import("../reducers/relationship_reducer.js");
   const { createHash } = await import("crypto");
   
@@ -845,6 +856,7 @@ export async function createRelationshipObservations(
 
       // Create relationship observation
       // Handle schema cache issues: if canonical_hash column not in cache, retry without it
+      const relAttribution = getCurrentAttribution();
       const relationshipObsData: Record<string, unknown> = {
         id: observationId,
         relationship_key: relationshipKey,
@@ -859,6 +871,9 @@ export async function createRelationshipObservations(
         metadata: canonicalMetadata,
         canonical_hash: canonicalHash,
         user_id: userId,
+        ...(Object.keys(relAttribution).length > 0
+          ? { provenance: relAttribution }
+          : {}),
       };
 
       let { error: obsError } = await db

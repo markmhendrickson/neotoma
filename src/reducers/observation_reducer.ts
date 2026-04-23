@@ -8,6 +8,9 @@ import {
   schemaRegistry,
   type FieldDefinition,
   type SchemaRegistryEntry,
+  type ReducerConfig,
+  type ObservationSourceRankValue,
+  DEFAULT_OBSERVATION_SOURCE_PRIORITY,
 } from "../services/schema_registry.js";
 import { validateFieldWithConverters } from "../services/field_validation.js";
 import { getSchemaDefinition } from "../services/schema_definitions.js";
@@ -21,9 +24,46 @@ export interface Observation {
   observed_at: string;
   specificity_score: number | null;
   source_priority: number;
+  /**
+   * Kind of write (sensor / llm_summary / workflow_state / human /
+   * import). Used as a tie-break after numeric `source_priority`.
+   * Null / undefined for legacy rows written before the field existed;
+   * those rank last within their `source_priority` bucket.
+   */
+  observation_source?: ObservationSourceRankValue | null;
   fields: Record<string, unknown>;
   created_at: string;
   user_id: string;
+}
+
+/**
+ * Convert a `ReducerConfig.observation_source_priority` declaration (or
+ * the shipped default) into a rank lookup where lower numbers win.
+ * Unknown or missing values fall to `Number.MAX_SAFE_INTEGER` so they
+ * sort last within their `source_priority` bucket without bypassing the
+ * normal observed_at / id tie-break downstream.
+ */
+function buildObservationSourceRank(
+  reducerConfig?: ReducerConfig,
+): Map<string, number> {
+  const order =
+    reducerConfig?.observation_source_priority ??
+    DEFAULT_OBSERVATION_SOURCE_PRIORITY;
+  const rank = new Map<string, number>();
+  order.forEach((value, index) => {
+    rank.set(value, index);
+  });
+  return rank;
+}
+
+function rankForObservationSource(
+  obs: Pick<Observation, "observation_source">,
+  rank: Map<string, number>,
+): number {
+  const value = obs.observation_source;
+  if (!value) return Number.MAX_SAFE_INTEGER;
+  const r = rank.get(value);
+  return r === undefined ? Number.MAX_SAFE_INTEGER : r;
 }
 
 export interface EntitySnapshot {
@@ -61,13 +101,22 @@ export class ObservationReducer {
     // Sort observations first to check for deletion
     const sortedObservations = this.sortObservations(observations);
 
+    // Pre-compute observation_source ranking from the schema (or default
+    // order) so deletion / highest-priority / most-specific comparisons
+    // all use the same tie-break axis without re-reading the schema.
+    const deletionRank = buildObservationSourceRank();
+
     // Check if entity is deleted (highest priority observation with _deleted: true)
     const highestPriorityObs = [...sortedObservations].sort((a, b) => {
       // Primary: source_priority DESC
       if (b.source_priority !== a.source_priority) {
         return b.source_priority - a.source_priority;
       }
-      // Secondary: observed_at DESC
+      // Secondary: observation_source ranking (ASC — lower rank wins)
+      const rankA = rankForObservationSource(a, deletionRank);
+      const rankB = rankForObservationSource(b, deletionRank);
+      if (rankA !== rankB) return rankA - rankB;
+      // Tertiary: observed_at DESC
       return new Date(b.observed_at).getTime() - new Date(a.observed_at).getTime();
     })[0];
 
@@ -111,6 +160,7 @@ export class ObservationReducer {
     const schemaVersion = schemaEntry.schema_version;
     const schemaDef = schemaEntry.schema_definition;
     const reducerConfig = schemaEntry.reducer_config;
+    const observationSourceRank = buildObservationSourceRank(reducerConfig);
 
     // Compute snapshot by applying merge strategies per field
     const snapshot: Record<string, unknown> = {};
@@ -142,6 +192,7 @@ export class ObservationReducer {
         strategy,
         tieBreaker,
         fieldDef,
+        observationSourceRank,
       );
 
       if (result && result.value !== undefined && result.value !== null) {
@@ -194,6 +245,7 @@ export class ObservationReducer {
     strategy: MergeStrategy,
     tieBreaker: "observed_at" | "source_priority",
     fieldDef?: FieldDefinition,
+    observationSourceRank: Map<string, number> = buildObservationSourceRank(),
   ): { value: unknown; source_observation_id: string } | null {
     // Filter observations that have this field
     const relevantObservations = observations.filter(
@@ -213,11 +265,21 @@ export class ObservationReducer {
         break;
 
       case "highest_priority":
-        mergedResult = this.highestPriority(field, relevantObservations, tieBreaker);
+        mergedResult = this.highestPriority(
+          field,
+          relevantObservations,
+          tieBreaker,
+          observationSourceRank,
+        );
         break;
 
       case "most_specific":
-        mergedResult = this.mostSpecific(field, relevantObservations, tieBreaker);
+        mergedResult = this.mostSpecific(
+          field,
+          relevantObservations,
+          tieBreaker,
+          observationSourceRank,
+        );
         break;
 
       case "merge_array":
@@ -260,8 +322,15 @@ export class ObservationReducer {
     field: string,
     observations: Observation[],
   ): { value: unknown; source_observation_id: string } {
-    // Observations already sorted by observed_at DESC
+    // Observations already sorted by observed_at DESC.
+    // Callers (notably computeSnapshotWithDefaults) pre-filter observations
+    // down to those where this field is non-null, so the input list can be
+    // empty for fields whose only observation is null. Return a sentinel
+    // no-value result in that case; the caller drops it from the snapshot.
     const latest = observations[0];
+    if (!latest) {
+      return { value: undefined, source_observation_id: "" };
+    }
     return {
       value: latest.fields[field],
       source_observation_id: latest.id,
@@ -275,12 +344,17 @@ export class ObservationReducer {
     field: string,
     observations: Observation[],
     tieBreaker: "observed_at" | "source_priority",
+    observationSourceRank: Map<string, number>,
   ): { value: unknown; source_observation_id: string } {
     const sorted = [...observations].sort((a, b) => {
       // Primary: source_priority DESC
       if (b.source_priority !== a.source_priority) {
         return b.source_priority - a.source_priority;
       }
+      // Secondary: observation_source rank ASC (lower rank wins; null last)
+      const rankA = rankForObservationSource(a, observationSourceRank);
+      const rankB = rankForObservationSource(b, observationSourceRank);
+      if (rankA !== rankB) return rankA - rankB;
       // Tie breaker
       if (tieBreaker === "observed_at") {
         return (
@@ -304,6 +378,7 @@ export class ObservationReducer {
     field: string,
     observations: Observation[],
     tieBreaker: "observed_at" | "source_priority",
+    observationSourceRank: Map<string, number>,
   ): { value: unknown; source_observation_id: string } {
     const sorted = [...observations].sort((a, b) => {
       // Primary: specificity_score DESC
@@ -312,14 +387,22 @@ export class ObservationReducer {
       if (scoreB !== scoreA) {
         return scoreB - scoreA;
       }
-      // Tie breaker
-      if (tieBreaker === "observed_at") {
-        return (
-          new Date(b.observed_at).getTime() - new Date(a.observed_at).getTime()
-        );
-      } else {
-        return b.source_priority - a.source_priority;
+      // Secondary: source_priority DESC when configured, else observed_at DESC.
+      if (tieBreaker === "source_priority") {
+        if (b.source_priority !== a.source_priority) {
+          return b.source_priority - a.source_priority;
+        }
       }
+      // Tertiary (or secondary for observed_at tie_breaker):
+      // observation_source rank ASC — sensors / workflow beat LLM
+      // summaries when specificity and numeric priority are equal.
+      const rankA = rankForObservationSource(a, observationSourceRank);
+      const rankB = rankForObservationSource(b, observationSourceRank);
+      if (rankA !== rankB) return rankA - rankB;
+      // Final: observed_at DESC
+      return (
+        new Date(b.observed_at).getTime() - new Date(a.observed_at).getTime()
+      );
     });
 
     return {
@@ -403,13 +486,22 @@ export class ObservationReducer {
     // Sort observations deterministically
     const sortedObservations = this.sortObservations(observations);
 
+    // Unseeded-type path: use the default observation_source ranking
+    // so sensors / workflow emissions still outrank LLM summaries when
+    // `source_priority` ties, matching the seeded-type behavior.
+    const defaultRank = buildObservationSourceRank();
+
     // Check if entity is deleted (highest priority observation with _deleted: true)
     const highestPriorityObs = [...sortedObservations].sort((a, b) => {
       // Primary: source_priority DESC
       if (b.source_priority !== a.source_priority) {
         return b.source_priority - a.source_priority;
       }
-      // Secondary: observed_at DESC
+      // Secondary: observation_source rank ASC
+      const rankA = rankForObservationSource(a, defaultRank);
+      const rankB = rankForObservationSource(b, defaultRank);
+      if (rankA !== rankB) return rankA - rankB;
+      // Tertiary: observed_at DESC
       return new Date(b.observed_at).getTime() - new Date(a.observed_at).getTime();
     })[0];
 

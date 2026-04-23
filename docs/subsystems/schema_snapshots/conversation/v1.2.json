@@ -1,0 +1,42 @@
+{
+  "entity_type": "conversation",
+  "schema_version": "1.2",
+  "active": true,
+  "created_at": "2026-04-23T00:00:00.000Z",
+  "schema_definition": {
+    "fields": {
+      "schema_version": {
+        "type": "string",
+        "required": true
+      },
+      "conversation_id": {
+        "type": "string",
+        "required": false,
+        "description": "Caller-supplied stable identifier linking all turns in this conversation. Declared as the primary canonical_name_fields rule so distinct sessions never heuristically merge via `title`."
+      },
+      "title": {
+        "type": "string",
+        "required": false,
+        "description": "Descriptive conversation title. NOT an identity field in v1.2; use `conversation_id` for resolution."
+      },
+      "thread_kind": {
+        "type": "string",
+        "required": false,
+        "description": "Participant topology: 'human_agent' (default, user + assistant), 'agent_agent' (A2A), or 'multi_party'."
+      }
+    },
+    "canonical_name_fields": ["conversation_id"],
+    "name_collision_policy": "reject"
+  },
+  "reducer_config": {
+    "merge_policies": {
+      "title": {
+        "strategy": "highest_priority",
+        "tie_breaker": "source_priority"
+      },
+      "thread_kind": {
+        "strategy": "last_write"
+      }
+    }
+  }
+}

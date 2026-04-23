@@ -36,6 +36,62 @@ CREATE POLICY "Users see only their records" ON records
   FOR SELECT
   USING (user_id = auth.uid());
 ```
+## AAuth (Agent Authentication) and the Trust-Tier Contract
+
+AAuth gives every write a cryptographically verifiable *agent identity* that is orthogonal to the human `user_id` above. Where `user_id` answers "whose data is this?", AAuth answers "which agent wrote it?". The two live side-by-side on every durable row.
+
+### Wire channels
+
+Per-request identity is resolved from (in precedence order):
+
+1. **AAuth** — RFC 9421 HTTP Message Signatures plus an `aa-agent+jwt` agent token (`Signature`, `Signature-Input`, `Signature-Key` headers). Covers `@authority`, `@method`, `@target-uri`, `content-digest`, and `signature-key`.
+2. **MCP `clientInfo`** — the self-reported `{ name, version }` from `initialize`. Generic names (`mcp`, `client`, `anonymous`, …) are dropped via `normaliseClientNameWithReason`.
+3. **HTTP fallback headers** — `X-Client-Name` / `X-Client-Version` for non-MCP callers (CLI, tools that cannot wield `clientInfo`). Same normalisation as MCP.
+4. **OAuth connection id** — last-resort correlate when none of the above fire.
+
+### Trust-tier contract
+
+A single enum is stamped onto every observation, relationship, source, interpretation, and timeline event:
+
+| Tier                | When                                                                                |
+| ------------------- | ----------------------------------------------------------------------------------- |
+| `hardware`          | AAuth verified AND signing algorithm is `ES256` or `EdDSA`.                         |
+| `software`          | AAuth verified with any other algorithm.                                            |
+| `unverified_client` | No AAuth, but a non-generic `clientInfo.name` / `X-Client-Name` survived filtering. |
+| `anonymous`         | Nothing distinctive. `client_info` may have been too generic or absent.             |
+
+Tier derivation is centralised in `src/crypto/agent_identity.ts`; the policy seam that rejects or warns based on tier is `enforceAttributionPolicy` in `src/services/attribution_policy.ts`. Do not re-derive tiers in services or clients — always read the resolved `AgentIdentity` from the per-request context.
+
+### Bearer / AAuth / clientInfo precedence
+
+Precedence for the *user* is always the OAuth / bearer / local-dev chain documented above — AAuth never bypasses user-scope resolution. Within that user scope, the attribution identity is resolved from AAuth → clientInfo → X-Client-Name → OAuth connection. Bearer tokens provide `user_id` only; they do not mint an attribution tier above `anonymous` on their own.
+
+### Attribution policy knobs
+
+The server publishes its active policy on `GET /session` under `policy`:
+
+| Field              | Controlled by                                                       | Default |
+| ------------------ | ------------------------------------------------------------------- | ------- |
+| `anonymous_writes` | `NEOTOMA_ATTRIBUTION_POLICY=allow\|warn\|reject`                    | `allow` |
+| `min_tier`         | `NEOTOMA_MIN_ATTRIBUTION_TIER=hardware\|software\|unverified_client`| unset   |
+| `per_path`         | `NEOTOMA_ATTRIBUTION_POLICY_JSON={"observations":"reject", …}`      | unset   |
+
+`reject` returns HTTP 403 `ATTRIBUTION_REQUIRED` with `min_tier` / `current_tier`. `warn` stamps an `X-Neotoma-Attribution-Warning` header + structured log; `allow` is silent.
+
+### Preflight (mandatory for new integrators)
+
+Before enabling writes, call `GET /session` (or `get_session_identity` over MCP, or `neotoma auth session` via CLI) and confirm:
+
+- `attribution.decision.signature_verified === true` (when AAuth is intended).
+- `attribution.tier` is `hardware` or `software` (for signed clients) or at least `unverified_client` for clientInfo-only fallback.
+- `eligible_for_trusted_writes === true`.
+
+### Where to go next
+
+- Full integration guide (wire format, diagnostics, transport parity, troubleshooting): [`docs/subsystems/agent_attribution_integration.md`](./agent_attribution_integration.md).
+- Fleet quickstart (AAuth key setup, fleet schemas, snapshot export + drift): [`docs/developer/fleet_onboarding.md`](../developer/fleet_onboarding.md).
+- Capability scoping (per-agent `(op, entity_type)` allow-lists): [`docs/subsystems/agent_capabilities.md`](./agent_capabilities.md).
+
 ## MCP Authentication
 
 MCP clients MUST authenticate using OAuth 2.0 Authorization Code flow with PKCE (recommended) or session tokens (deprecated).

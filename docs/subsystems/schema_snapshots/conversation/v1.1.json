@@ -1,0 +1,110 @@
+{
+  "entity_type": "conversation",
+  "schema_version": "1.1",
+  "active": true,
+  "created_at": "2026-04-22T00:00:00.000Z",
+  "schema_definition": {
+    "fields": {
+      "schema_version": {
+        "type": "string",
+        "required": true
+      },
+      "conversation_id": {
+        "type": "string",
+        "required": false,
+        "description": "Unique identifier linking all turns in this conversation"
+      },
+      "title": {
+        "type": "string",
+        "required": false,
+        "description": "Auto-generated conversation title based on topics"
+      },
+      "thread_kind": {
+        "type": "string",
+        "required": false,
+        "description": "Participant topology: 'human_agent' (default, user + assistant), 'agent_agent' (A2A), or 'multi_party'. Lets downstream views filter agent-to-agent threads from conventional chats."
+      },
+      "turn_count": {
+        "type": "number",
+        "required": false,
+        "description": "Total number of turns in conversation"
+      },
+      "start_timestamp": {
+        "type": "date",
+        "required": false,
+        "description": "When conversation started (first turn)"
+      },
+      "last_updated": {
+        "type": "date",
+        "required": false,
+        "description": "When conversation was last updated (most recent turn)"
+      },
+      "topics": {
+        "type": "array",
+        "required": false,
+        "description": "Extracted topics discussed in conversation"
+      },
+      "decisions": {
+        "type": "array",
+        "required": false,
+        "description": "Key decisions made during conversation"
+      },
+      "action_items": {
+        "type": "array",
+        "required": false,
+        "description": "Action items identified during conversation"
+      },
+      "platform": {
+        "type": "string",
+        "required": false,
+        "description": "Platform where conversation occurred (cursor, chatgpt, claude)"
+      },
+      "summary": {
+        "type": "string",
+        "required": false,
+        "description": "Brief summary of conversation content and outcomes"
+      },
+      "status": {
+        "type": "string",
+        "required": false,
+        "description": "Conversation status (active, archived)"
+      },
+      "notes": {
+        "type": "string",
+        "required": false,
+        "description": "Additional context and data operations summary"
+      }
+    }
+  },
+  "reducer_config": {
+    "merge_policies": {
+      "turn_count": {
+        "strategy": "last_write"
+      },
+      "last_updated": {
+        "strategy": "last_write"
+      },
+      "title": {
+        "strategy": "last_write"
+      },
+      "thread_kind": {
+        "strategy": "last_write"
+      },
+      "topics": {
+        "strategy": "merge_array"
+      },
+      "decisions": {
+        "strategy": "merge_array"
+      },
+      "action_items": {
+        "strategy": "merge_array"
+      },
+      "summary": {
+        "strategy": "last_write"
+      },
+      "status": {
+        "strategy": "last_write"
+      }
+    }
+  }
+}

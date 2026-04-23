@@ -44,8 +44,9 @@ def main() -> int:
         return 0
 
     entity = {
-        "entity_type": "agent_message",
+        "entity_type": "conversation_message",
         "role": "assistant",
+        "sender_kind": "assistant",
         "content": final_text,
         "turn_key": f"{session_id}:{turn_id}:assistant",
         "observed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),

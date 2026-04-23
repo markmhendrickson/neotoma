@@ -98,8 +98,9 @@ def main() -> int:
             {
                 "entities": [
                     {
-                        "entity_type": "agent_message",
+                        "entity_type": "conversation_message",
                         "role": "user",
+                        "sender_kind": "user",
                         "content": prompt,
                         "turn_key": f"{session_id}:{turn_id}",
                         **harness_provenance({"hook_event": "UserPromptSubmit"}),

@@ -49,6 +49,7 @@ Each atomic rule below exists in both files with transport-appropriate wording. 
 | 5 | Step 4 — Compose reply | `Step 4 — Compose reply` | **Step 4 — Compose reply** bullet |
 | 6 | Step 5a — Closing store shape | `Step 5a — Closing store shape` | **Step 5a — Closing store shape** bullet |
 | 7 | Step 5b — Closing store relationship (PART_OF to same conversation) | `Step 5b — Closing store relationship` | **Step 5b — Closing store relationship** bullet |
+| 7a | Step 5b.1 — Reply-cited entity edges (REFERS_TO from assistant agent_message to cited/produced entities, with dedup) | `Step 5b.1 — Reply-cited entity edges` | **Step 5b.1 — Reply-cited entity edges** bullet |
 | 8 | Step 5c — Closing store skip / forbidden clauses | `Step 5c — Closing store skip/forbidden` | **Step 5c — Closing store skip/forbidden** bullet |
 | 9 | Rapid-fire / edit-heavy sessions (batch cadence, closing-store invariant) | `Rapid-fire and edit-heavy sessions` | **Rapid-fire and edit-heavy sessions** bullet |
 | 10 | Backfill after persistence gap / /learn | `Backfill` | **Backfill** bullet |
@@ -61,13 +62,14 @@ Each atomic rule below exists in both files with transport-appropriate wording. 
 | 12 | Relationship batching in one store request | `Relationship batching` | **Relationship batching** bullet |
 | 13 | Turn identity (scoped `turn_key`, unique `conversation_id`) | `Turn identity` | **Turn identity** bullet |
 | 14 | Fallback IDs when host has no conversation_id/turn_id | `Fallback IDs` | **Fallback IDs** bullet |
+| 14a | observation_source (write-kind classification; sensor / workflow_state / llm_summary / human / import; default llm_summary; reducer tie-break after `source_priority`) | `observation_source (write classification)` | **observation_source (write classification)** bullet |
 
 #### [STORE RECIPES] user-phase
 
 | # | Behavior | MCP anchor | CLI anchor |
 |---|---|---|---|
 | 15 | Shape (entities list, response indices) | `[STORE RECIPES] user-phase` → `Shape` | `#### [STORE RECIPES] user-phase` → **Shape (MCP)** + **Shape (CLI)** bullets |
-| 16 | Relationships (PART_OF + REFERS_TO) | `Relationships` | **Relationships** bullet |
+| 16 | Relationships (PART_OF + REFERS_TO for created and updated entities, with dedup) | `Relationships` | **Relationships** bullet |
 | 17 | Extraction (descriptive entity_type, no schema lookup) | `Extraction` | **Extraction** bullet |
 | 18 | `idempotency_key` format | `idempotency_key:` | **idempotency_key** bullet |
 | 18a | Human-readable chat naming (`agent_message.canonical_name`, `conversation.title`, and canonical-name scope) | `Naming` + `Canonical-name scope` | **Naming** + **Canonical-name scope** bullets |
@@ -119,6 +121,7 @@ Each atomic rule below exists in both files with transport-appropriate wording. 
 | 39 | Synthesized deliverables stored as structured entity | `Synthesized deliverables` | **Synthesized deliverables** bullet |
 | 40 | Analysis/briefing durability (note/report/research entity) | `Analysis/briefing durability` | **Analysis/briefing durability** bullet |
 | 41 | Session-derived chat artifacts (link provenance same turn) | `Session-derived chat artifacts` | **Session-derived chat artifacts** bullet |
+| 41a | Per-turn linkage invariant (REFERS_TO from user or assistant agent_message for every touched entity) | `Per-turn linkage invariant` | **Per-turn linkage invariant** bullet |
 
 ### [TASKS & COMMITMENTS]
 
@@ -137,6 +140,7 @@ Each atomic rule below exists in both files with transport-appropriate wording. 
 | 47 | Schema evolution (`update_schema_incremental`, fields_to_remove) | `Schema evolution` | **Schema evolution** bullet |
 | 48 | Entity-type consistency within a workflow | `Entity-type consistency within a workflow` | **Entity-type consistency within a workflow** bullet |
 | 49 | Instruction scope (keep general / workflow-level; /learn) | `Instruction scope (for /learn and future edits)` | **Instruction scope** bullet |
+| 49a | conversation_message sender semantics (`sender_kind` alongside `role`; A2A uses `sender_agent_id` / `recipient_agent_id` + `conversation.thread_kind`; `agent_message` remains accepted as an alias) | `conversation_message sender semantics` | **conversation_message sender semantics** bullet |
 
 ### [COMMUNICATION & DISPLAY]
 
@@ -145,6 +149,8 @@ Each atomic rule below exists in both files with transport-appropriate wording. 
 | 50 | Silent storage default (+ memory-language confirmation exception) | `[COMMUNICATION & DISPLAY]` → `Silent storage default` | `### [COMMUNICATION & DISPLAY]` → **Silent storage default** bullet |
 | 51 | Proactive storage (store first, then respond) | `Proactive storage` | **Proactive storage** bullet |
 | 52 | External tool store-first | `External tool store-first` | **External tool store-first** bullet |
+| 52a | Depth of capture — hydrate list→detail before persisting external tool rows, preserving `api_response_data.list` / `.detail`; with gates: scope cap (~10 items/turn), size cap (~100 KB → unstructured path + EMBEDS), sensitivity (no body echo beyond answering), idempotent upgrade (`correct` / `neotoma edit` on existing `entity_id`), tool-capability fallback (`capture_depth: "summary_only"`) | `Depth of capture` (+ `— scope cap`, `— size cap`, `— sensitivity`, `— idempotent upgrade`, `— tool-capability awareness` sub-rules) | **Depth of capture** bullet |
+| 52b | Embedded entity extraction — once a container payload is hydrated, extract first-class entities embedded in its body (charges → `transaction`/`subscription`, proposals → `event`+`task`, line items → `order_item`, mentions → `contact`, itinerary stops → `place`) in the SAME store call with `source_quote` + `data_source` + normalized fields; link container→embedded via `REFERS_TO` (or `EMBEDS` for file/media); apply existing-entity correction for identifier matches; respect Depth-of-capture scope/sensitivity caps (~20 line items per container) | `Embedded entity extraction` | **Embedded entity extraction** bullet |
 | 53 | User identity (store as contact/person same turn) | `User identity` | **User identity** bullet |
 | 54 | Extract-all (people, tasks, events, …, places; container+asset EMBEDS) | `Extract-all` | **Extract-all** bullet |
 | 55 | No-data bootstrap / onboarding discovery entry | (covered by `[ONBOARDING]` Discovery flow) | **No-data bootstrap and onboarding discovery** bullet |
@@ -174,6 +180,8 @@ Each atomic rule below exists in both files with transport-appropriate wording. 
 | 72b | User scope resolution for read verbs (`--user-id` flag > `NEOTOMA_USER_ID` env var > authenticated user; reject empty/whitespace env) | n/a (CLI-only; MCP infers `user_id` from auth) | **User scope (`--user-id` / `NEOTOMA_USER_ID`)** bullet |
 | 72c | Ingest source transport (`file_path` for localhost; auto-upload `file_content` for non-localhost; `--source-upload` / `--source-content` force upload; CLI enforces ~7.5 MB upload cap) | n/a (CLI-only; MCP stores files via `store_structured` attachment recipe) | **Ingest source transport (`--source-upload` / `--source-content`)** bullet |
 | 72d | Commit-mode store silent-failure guard: when `/store` returns `entities_created=0` with no resolved entities and `replayed != true`, CLI emits stderr warning (flatten `attributes`, check user scope, check schema). | n/a (CLI-only UX; MCP clients surface error envelopes directly) | **Silent-failure guard** bullet |
+| 72e | `api start --env prod --watch` opt-in on source checkouts (v0.5.2+): flag is observable and preserves current watcher routing; implicit path prints a stderr deprecation line announcing the v0.6.0 flip to `start:api:prod`; json mode suppresses the line; no effect on installed-package or tunnel paths. | n/a (CLI-only; MCP has no server-lifecycle surface) | **`api start --env prod --watch` (source checkouts only)** bullet |
+| 72f | Feedback reporting retention (`submit_feedback` result must be stored in Neotoma with `feedback_id` + `access_token` until terminal state / verification closeout) | `[FEEDBACK REPORTING]` → `Immediately after submit_feedback returns` | **Feedback reporting retention** bullet |
 
 ### [ERRORS & RECOVERY]
 

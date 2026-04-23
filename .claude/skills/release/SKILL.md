@@ -37,6 +37,18 @@ Run before anything else:
 5. **Submodules**: `git submodule status` — surface any that are ahead/behind recorded SHAs.
 6. **Previous tag**: `git tag --sort=-v:refname | head -1` — this is the compare base unless the user specifies `--compare-base`.
 7. **Current package.json version**: Read and display.
+8. **OpenAPI breaking-change diff**: Run `npm run -s openapi:bc-diff -- --base <previous-tag>` (the script defaults to the latest tag if `--base` is omitted). Capture stdout — it lists every breaking entry classified against `openapi.yaml`. The script exits non-zero when breaking entries exist; that exit code is informational, not fatal, at this stage. Save the prose output for the supplement reconciliation in Step 3.
+9. **Breaking-changes section present**: When the draft supplement at `docs/releases/in_progress/<TAG>/github_release_supplement.md` exists, confirm it contains a `## Breaking changes` (or `### Breaking changes`) heading. If missing, abort preflight with a clear message pointing at `docs/developer/github_release_process.md` § Validation tightening is breaking. When the release has no breaking changes, the section still exists and contains the single line `No breaking changes.` — an omitted heading is treated as a preflight failure, not an empty section.
+10. **Preflight reconciliation (gate)**: For every entry in the Step 8 breaking list, confirm the draft supplement's Breaking changes section names that entry with a migration note. Abort preflight when any breaking entry is uncovered. Typical output:
+
+    ```
+    OpenAPI diff reports 2 breaking entries; supplement covers 1.
+    Missing: tightened-additional-properties components.schemas.StoreRequest
+    Add an entry under "## Breaking changes" in docs/releases/in_progress/<TAG>/github_release_supplement.md
+    or restore compatibility before proceeding.
+    ```
+
+    The release-skill executor does not tag or push a release whose supplement omits a breaking entry reported by the diff.
 
 ### Step 2: Resolve Version
 
@@ -56,7 +68,7 @@ Draft the supplement following the section pattern from `docs/developer/github_r
 - **Internal changes**: Refactors, architecture, dependency, test-only work.
 - **Fixes**: Bug fixes with user/operator impact.
 - **Tests and validation**: What validates confidence.
-- **Breaking changes**: None, or list with migration notes.
+- **Breaking changes**: **REQUIRED AND EXPLICIT.** Never omit this section. When nothing is breaking, write a single line `No breaking changes.` under the heading. When the release contains validation tightenings (see `docs/developer/github_release_process.md` § Validation tightening is breaking), each entry names the before/after request shape, the error code returned, the structured `hint` text, and the migration step callers must take. The preflight in Step 1 refuses to proceed when this section is absent.
 
 **Integrated supplement (mandatory for `/release`):** The narrative is always a **single release story** across committed history and the working tree. Walk the default compare range (commits not yet on `main`, plus any user override) **and** fold **all** material uncommitted and untracked work into **the same sections above**, written **as if that work were already committed** — same grouping and reader-facing tone as shipped commits. Do not isolate dirty work in a separate appendix (for example, do not use a standalone **Uncommitted changes pending inclusion** block as the primary description). If paths cannot ship under repo security or submodule policy, state that in **Breaking changes** or a one-line **Ship constraints** item inside the same structure.
 
@@ -140,6 +152,12 @@ After user confirms, run **every** step below in order through **`npm publish`**
    ```
    Do not treat the release as finished until this succeeds (capture or report the registry URL / version). **Skip only** if the user explicitly confirmed a scope that excludes npm (for example tag-only or internal).
 
+   After `npm publish` returns, confirm the registry actually reflects the new version before moving on:
+   ```bash
+   npm view neotoma version
+   ```
+   The output must equal `X.Y.Z`. If it still reports the previous version, the registry has not propagated yet — wait 30s and retry rather than advancing. This protects against the contract-discrepancy class of issue Simon's agent reported against v0.5.0, where the GitHub Release existed but `npm install neotoma@latest` still resolved to the prior version for several minutes.
+
 10. **Merge main back to dev** (keep branches in sync):
     ```bash
     git checkout dev
@@ -189,3 +207,4 @@ If the user says `/release foundation` (or another submodule name):
 - Treating confirmed uncommitted changes as shipped without committing them first
 - Using only `git log --oneline` as the GitHub Release body
 - Ending execute after the GitHub Release without **`npm publish`** when the user confirmed a normal (npm-included) release
+- Omitting the **Breaking changes** section from the supplement, even when the release contains no breaking changes (write `No breaking changes.` explicitly)

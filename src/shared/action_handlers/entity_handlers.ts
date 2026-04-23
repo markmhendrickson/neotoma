@@ -20,6 +20,13 @@ interface QueryEntitiesParams {
   offset?: number;
   updatedSince?: string;
   createdSince?: string;
+  /** R3: filter entities by the identity_basis carried on their observations. */
+  identityBasis?:
+    | "schema_rule"
+    | "schema_lookup"
+    | "heuristic_name"
+    | "heuristic_fallback"
+    | "target_id";
 }
 
 const MAX_LEXICAL_CANDIDATES = 5000;
@@ -297,6 +304,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
     offset = 0,
     updatedSince,
     createdSince,
+    identityBasis,
   } = params;
 
   let entities: EntityWithProvenance[];
@@ -332,6 +340,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
         entityIds,
         updatedSince,
         createdSince,
+        identityBasis,
       });
       const orderMap = new Map(entityIds.map((id, i) => [id, i]));
       entities.sort((a, b) => {
@@ -368,6 +377,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
           limit: paginatedIds.length,
           offset: 0,
           entityIds: paginatedIds,
+          identityBasis,
         });
 
         const orderMap = new Map(paginatedIds.map((id, i) => [id, i]));
@@ -394,18 +404,42 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
       offset,
       updatedSince,
       createdSince,
+      identityBasis,
     });
 
-    total = await countVisibleEntities({
-      userId,
-      entityType,
-      includeMerged,
-      published,
-      publishedAfter,
-      publishedBefore,
-      updatedSince,
-      createdSince,
-    });
+    // R3: when filtering by identity_basis, the visible count must reflect
+    // the same pre-filter, so derive the total from the non-paginated result
+    // set rather than counting all entities.
+    if (identityBasis) {
+      const allMatches = await queryEntities({
+        userId,
+        entityType,
+        includeMerged,
+        includeSnapshots: false,
+        sortBy,
+        sortOrder,
+        published,
+        publishedAfter,
+        publishedBefore,
+        limit: 10000,
+        offset: 0,
+        updatedSince,
+        createdSince,
+        identityBasis,
+      });
+      total = allMatches.length;
+    } else {
+      total = await countVisibleEntities({
+        userId,
+        entityType,
+        includeMerged,
+        published,
+        publishedAfter,
+        publishedBefore,
+        updatedSince,
+        createdSince,
+      });
+    }
   }
 
   return {

@@ -16,11 +16,12 @@ const BOOLEAN_COLUMNS: Record<string, Set<string>> = {
 
 const JSON_COLUMNS: Record<string, Set<string>> = {
   sources: new Set(["provenance"]),
-  interpretations: new Set(["interpretation_config"]),
-  observations: new Set(["fields"]),
+  interpretations: new Set(["interpretation_config", "provenance"]),
+  observations: new Set(["fields", "provenance"]),
+  timeline_events: new Set(["provenance"]),
   entity_snapshots: new Set(["snapshot", "provenance"]),
   entities: new Set(["aliases"]),
-  relationship_observations: new Set(["metadata"]),
+  relationship_observations: new Set(["metadata", "provenance"]),
   relationship_snapshots: new Set(["snapshot", "provenance"]),
   raw_fragments: new Set(["fragment_value", "fragment_envelope"]),
   schema_registry: new Set(["schema_definition", "reducer_config", "metadata"]),
@@ -97,6 +98,7 @@ const TABLES_WITH_ID = new Set([
   "relationship_observations",
   "raw_fragments",
   "entity_merges",
+  "entity_splits",
   "schema_registry",
   "schema_recommendations",
   "auto_enhancement_queue",
@@ -546,16 +548,25 @@ class LocalQueryBuilder {
     const clauses: string[] = [];
     const values: unknown[] = [];
 
+    // SECURITY: allowlist column identifiers; values are always bound as `?`.
+    // Without this check, any caller that interpolates user-controlled strings
+    // into the `or(...)` clause (e.g. `mime_type.ilike.${userNeedle}`) could
+    // inject arbitrary SQL into the identifier position. See docs/reports/
+    // security_audit_2026_04_22.md S-3.
+    const IDENT_RE =
+      /^[A-Za-z_][A-Za-z0-9_]*(->>[A-Za-z_][A-Za-z0-9_]*)?$/;
     for (const part of parts) {
       const dotIdx = part.indexOf(".");
       if (dotIdx < 0) continue;
-      const left = part.slice(0, dotIdx);
+      const rawLeft = part.slice(0, dotIdx);
       const rest = part.slice(dotIdx + 1);
       const dotIdx2 = rest.indexOf(".");
       const op = dotIdx2 >= 0 ? rest.slice(0, dotIdx2) : rest;
       const value = dotIdx2 >= 0 ? rest.slice(dotIdx2 + 1) : "";
 
-      if (!left || !op) continue;
+      if (!rawLeft || !op) continue;
+      if (!IDENT_RE.test(rawLeft)) continue;
+      const left = normalizeColumnName(this.table, rawLeft);
 
       if (op === "eq") {
         clauses.push(`${left} = ?`);
@@ -840,10 +851,27 @@ class LocalStorageBucket {
   }
 
   private resolvePath(objectPath: string): string {
-    if (this.bucket === "sources") {
-      return path.join(config.rawStorageDir, objectPath);
+    const root =
+      this.bucket === "sources"
+        ? path.resolve(config.rawStorageDir)
+        : path.resolve(config.dataDir, "storage", this.bucket);
+    // Reject absolute paths, URL schemes, and null bytes outright so a later
+    // `path.resolve` cannot escape the storage root.
+    if (
+      typeof objectPath !== "string" ||
+      objectPath.length === 0 ||
+      objectPath.includes("\0") ||
+      /^[a-z][a-z0-9+.-]*:\/\//i.test(objectPath) ||
+      path.isAbsolute(objectPath)
+    ) {
+      throw new Error(`STORAGE_PATH_REJECTED: ${objectPath}`);
     }
-    return path.join(config.dataDir, "storage", this.bucket, objectPath);
+    const resolved = path.resolve(root, objectPath);
+    const rootWithSep = root.endsWith(path.sep) ? root : root + path.sep;
+    if (resolved !== root && !resolved.startsWith(rootWithSep)) {
+      throw new Error(`STORAGE_PATH_TRAVERSAL_BLOCKED: ${objectPath}`);
+    }
+    return resolved;
   }
 
   async upload(objectPath: string, data: Buffer, options?: { upsert?: boolean; contentType?: string }): Promise<QueryResult<null>> {

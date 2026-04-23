@@ -1,4 +1,5 @@
 import { getSqliteDb } from "../repositories/sqlite/sqlite_client.js";
+import { deriveAgentKeyFromProvenance } from "./agent_key.js";
 
 /** Fallback so max() never compares empty strings (ISO strings sort lexicographically). */
 const TS_EPOCH = "1970-01-01T00:00:00.000Z";
@@ -10,6 +11,15 @@ export type RecordActivityType =
   | "interpretation"
   | "timeline_event"
   | "relationship";
+
+export const RECORD_ACTIVITY_TYPES: RecordActivityType[] = [
+  "entity",
+  "source",
+  "observation",
+  "interpretation",
+  "relationship",
+  "timeline_event",
+];
 
 export interface RecordActivityItem {
   record_type: RecordActivityType;
@@ -44,6 +54,26 @@ export interface RecordActivityItem {
    * primary entity, and can be visually bundled by the client.
    */
   group_key?: string | null;
+
+  /**
+   * Derived agent trust tier for this record. Pulled from the same
+   * `AttributionProvenance` block the Inspector consumes elsewhere (see
+   * `src/crypto/agent_identity.ts`). Null for record types that don't yet
+   * carry attribution (e.g. entity rows are derived, not directly
+   * written by an agent) or for rows that predate AAuth.
+   */
+  attribution_tier?:
+    | "hardware"
+    | "software"
+    | "unverified_client"
+    | "anonymous"
+    | null;
+  /**
+   * Best-effort human-readable agent label for activity feeds. Picked in
+   * priority order: `client_name` (+ version) → `agent_sub` → short
+   * thumbprint. Null when no attribution is available.
+   */
+  agent_label?: string | null;
 }
 
 type SqlRow = {
@@ -66,6 +96,8 @@ type SqlRow = {
   event_type: string | null;
   status: string | null;
   turn_key: string | null;
+  /** JSON text of the row-level provenance blob (agent attribution + extras). */
+  provenance_json: string | null;
 };
 
 function max2(a: string, b: string): string {
@@ -87,8 +119,7 @@ function max3(a: string, b: string, c: string): string {
  * `sources`, and via `json_extract` on the observation `fields` blob for
  * turn identity. Missing joins simply yield NULLs which the UI ignores.
  */
-const UNION_SQL = `
-SELECT * FROM (
+const RECORD_ACTIVITY_UNION_INNER = `
   SELECT
     'entity' AS record_type,
     e.id AS id,
@@ -108,7 +139,8 @@ SELECT * FROM (
     NULL AS relationship_type,
     NULL AS event_type,
     NULL AS status,
-    NULL AS turn_key
+    NULL AS turn_key,
+    NULL AS provenance_json
   FROM entities e
   WHERE e.user_id = ?
     AND (e.merged_to_entity_id IS NULL OR trim(ifnull(e.merged_to_entity_id, '')) = '')
@@ -134,7 +166,8 @@ SELECT * FROM (
     NULL AS relationship_type,
     NULL AS event_type,
     NULL AS status,
-    NULL AS turn_key
+    NULL AS turn_key,
+    s.provenance AS provenance_json
   FROM sources s
   WHERE s.user_id = ?
 
@@ -159,7 +192,8 @@ SELECT * FROM (
     NULL AS relationship_type,
     NULL AS event_type,
     NULL AS status,
-    json_extract(o.fields, '$.turn_key') AS turn_key
+    json_extract(o.fields, '$.turn_key') AS turn_key,
+    o.provenance AS provenance_json
   FROM observations o
   LEFT JOIN entities oe ON oe.id = o.entity_id
   LEFT JOIN sources os ON os.id = o.source_id
@@ -186,7 +220,8 @@ SELECT * FROM (
     NULL AS relationship_type,
     NULL AS event_type,
     i.status AS status,
-    NULL AS turn_key
+    NULL AS turn_key,
+    i.provenance AS provenance_json
   FROM interpretations i
   LEFT JOIN sources isrc ON isrc.id = i.source_id
   WHERE i.user_id = ?
@@ -212,7 +247,15 @@ SELECT * FROM (
     rs.relationship_type AS relationship_type,
     NULL AS event_type,
     NULL AS status,
-    NULL AS turn_key
+    NULL AS turn_key,
+    (
+      SELECT ro.provenance
+      FROM relationship_observations ro
+      WHERE ro.relationship_key = rs.relationship_key
+        AND ro.user_id = rs.user_id
+      ORDER BY ro.observed_at DESC
+      LIMIT 1
+    ) AS provenance_json
   FROM relationship_snapshots rs
   LEFT JOIN entities rse ON rse.id = rs.source_entity_id
   LEFT JOIN entities rte ON rte.id = rs.target_entity_id
@@ -239,20 +282,106 @@ SELECT * FROM (
     NULL AS relationship_type,
     te.event_type AS event_type,
     NULL AS status,
-    NULL AS turn_key
+    NULL AS turn_key,
+    te.provenance AS provenance_json
   FROM timeline_events te
   LEFT JOIN entities tee ON tee.id = te.entity_id
   LEFT JOIN sources tes ON tes.id = te.source_id
   WHERE te.source_id IN (SELECT id FROM sources WHERE user_id = ?)
-)
-ORDER BY activity_at DESC
-LIMIT ? OFFSET ?
 `;
+
+function buildRecordActivityListSql(recordTypes?: RecordActivityType[]): string {
+  const typeClause =
+    recordTypes && recordTypes.length > 0
+      ? `WHERE ra.record_type IN (${recordTypes.map(() => "?").join(",")})`
+      : "";
+  return `SELECT * FROM (
+${RECORD_ACTIVITY_UNION_INNER}
+) AS ra
+${typeClause}
+ORDER BY ra.activity_at DESC
+LIMIT ? OFFSET ?`;
+}
+
+function normalizeRecordTypes(
+  types: RecordActivityType[] | undefined
+): RecordActivityType[] | undefined {
+  if (!types || types.length === 0) return undefined;
+  const allowed = new Set(RECORD_ACTIVITY_TYPES);
+  const out: RecordActivityType[] = [];
+  const seen = new Set<string>();
+  for (const t of types) {
+    if (allowed.has(t) && !seen.has(t)) {
+      seen.add(t);
+      out.push(t);
+    }
+  }
+  return out.length > 0 ? out : undefined;
+}
+
+/** Parse `record_types` query (comma-separated enum values). */
+export function parseRecordActivityTypesQuery(raw: unknown): RecordActivityType[] | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  const s = String(raw).trim();
+  if (!s) return undefined;
+  const parts = s.split(",").map((p) => p.trim()).filter(Boolean) as RecordActivityType[];
+  return normalizeRecordTypes(parts);
+}
 
 function cleanString(v: string | null | undefined): string | null {
   if (v === null || v === undefined) return null;
   const s = String(v).trim();
   return s.length > 0 ? s : null;
+}
+
+const KNOWN_TIERS = new Set<RecordActivityItem["attribution_tier"]>([
+  "hardware",
+  "software",
+  "unverified_client",
+  "anonymous",
+]);
+
+function parseProvenance(raw: string | null): Record<string, unknown> | null {
+  const trimmed = cleanString(raw);
+  if (!trimmed) return null;
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    // Not JSON — likely pre-AAuth free-form provenance text.
+  }
+  return null;
+}
+
+function deriveAttributionTier(
+  prov: Record<string, unknown> | null
+): RecordActivityItem["attribution_tier"] {
+  if (!prov) return null;
+  const tier = prov.attribution_tier;
+  if (typeof tier === "string" && KNOWN_TIERS.has(tier as any)) {
+    return tier as RecordActivityItem["attribution_tier"];
+  }
+  return null;
+}
+
+function shortThumbprint(tp: string): string {
+  return tp.length > 12 ? `${tp.slice(0, 8)}…${tp.slice(-4)}` : tp;
+}
+
+function deriveAgentLabel(prov: Record<string, unknown> | null): string | null {
+  if (!prov) return null;
+  const clientName = cleanString((prov.client_name as string) ?? null);
+  if (clientName) {
+    const version = cleanString((prov.client_version as string) ?? null);
+    return version ? `${clientName} ${version}` : clientName;
+  }
+  const sub = cleanString((prov.agent_sub as string) ?? null);
+  if (sub) return sub;
+  const thumbprint = cleanString((prov.agent_thumbprint as string) ?? null);
+  if (thumbprint) return shortThumbprint(thumbprint);
+  return null;
 }
 
 function computeGroupKey(row: SqlRow): string | null {
@@ -280,6 +409,7 @@ function normalizeItem(row: SqlRow): RecordActivityItem {
       ? String(row.title).trim()
       : humanizeRecordType(type);
   const subtitle = cleanString(row.subtitle);
+  const provenance = parseProvenance(row.provenance_json);
   return {
     record_type: type,
     id: row.id,
@@ -301,6 +431,8 @@ function normalizeItem(row: SqlRow): RecordActivityItem {
     status: cleanString(row.status),
     turn_key: cleanString(row.turn_key),
     group_key: computeGroupKey(row),
+    attribution_tier: deriveAttributionTier(provenance),
+    agent_label: deriveAgentLabel(provenance),
   };
 }
 
@@ -323,19 +455,71 @@ function humanizeRecordType(t: RecordActivityType): string {
   }
 }
 
+export interface ListRecentRecordActivityOptions {
+  limit: number;
+  offset: number;
+  /**
+   * When set, only these `record_type` values are returned (SQL filter).
+   * Omit or leave empty for all types.
+   */
+  recordTypes?: RecordActivityType[];
+  /**
+   * Optional agent key (see `deriveAgentKeyFromProvenance`) used to scope
+   * the feed to a single writer. Rows whose derived key does not match
+   * are filtered out in JS after the SQL fetch — kept simple because the
+   * Inspector is not a high-volume surface.
+   */
+  agentKey?: string;
+}
+
 export function listRecentRecordActivity(
   userId: string,
-  limit: number,
-  offset: number
+  limitOrOptions: number | ListRecentRecordActivityOptions,
+  offset?: number
 ): { items: RecordActivityItem[]; has_more: boolean; limit: number; offset: number } {
+  const options: ListRecentRecordActivityOptions =
+    typeof limitOrOptions === "number"
+      ? { limit: limitOrOptions, offset: offset ?? 0 }
+      : limitOrOptions;
   const db = getSqliteDb();
-  const safeLimit = Math.min(Math.max(limit, 1), 200);
-  const safeOffset = Math.max(offset, 0);
+  const safeLimit = Math.min(Math.max(options.limit, 1), 200);
+  const safeOffset = Math.max(options.offset, 0);
   const fetchLimit = safeLimit + 1;
+  const recordTypes = normalizeRecordTypes(options.recordTypes);
+
+  if (options.agentKey) {
+    // Agent-scoped view. We have to pull a large window and filter in JS
+    // because the agent key is derived from several JSON fields. Cap the
+    // window so a noisy writer does not hang the request.
+    const stmt = db.prepare(buildRecordActivityListSql(recordTypes));
+    const windowSize = 2000;
+    const binds: Array<string | number> = [userId, userId, userId, userId, userId, userId];
+    if (recordTypes?.length) binds.push(...recordTypes);
+    binds.push(windowSize, 0);
+    const rows = stmt.all(...binds) as SqlRow[];
+    const matching: SqlRow[] = [];
+    for (const row of rows) {
+      const prov = parseProvenance(row.provenance_json);
+      if (deriveAgentKeyFromProvenance(prov) === options.agentKey) {
+        matching.push(row);
+      }
+    }
+    const page = matching.slice(safeOffset, safeOffset + safeLimit);
+    const hasMore = matching.length > safeOffset + safeLimit;
+    return {
+      items: page.map(normalizeItem),
+      has_more: hasMore,
+      limit: safeLimit,
+      offset: safeOffset,
+    };
+  }
 
   // Anonymous `?` only: better-sqlite3 mis-counts array binds for `?1`/`?2` (see WiseLibs/better-sqlite3#576).
-  const stmt = db.prepare(UNION_SQL);
-  const rows = stmt.all(userId, userId, userId, userId, userId, userId, fetchLimit, safeOffset) as SqlRow[];
+  const stmt = db.prepare(buildRecordActivityListSql(recordTypes));
+  const binds: Array<string | number> = [userId, userId, userId, userId, userId, userId];
+  if (recordTypes?.length) binds.push(...recordTypes);
+  binds.push(fetchLimit, safeOffset);
+  const rows = stmt.all(...binds) as SqlRow[];
   const hasMore = rows.length > safeLimit;
   const slice = hasMore ? rows.slice(0, safeLimit) : rows;
   return {

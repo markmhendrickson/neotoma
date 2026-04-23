@@ -448,14 +448,104 @@ async function validateAndIngest(
 4. **Missing [Provenance](../vocabulary/canonical_terms.md#provenance):** Verify FK constraint violation
 5. **Prompt Change Test:** Verify prompt/model changes do NOT silently alter [source](../vocabulary/canonical_terms.md#source) shapes without [entity schema](../vocabulary/canonical_terms.md#entity-schema) version bump
 
-## 10. Security Model
+## 10. Agent Attribution in Provenance
+
+### 10.1 Overview
+
+Every durable write produced by the Neotoma server (observations, relationships,
+sources, timeline events, interpretations) carries an **agent attribution**
+block stamped into its existing JSON provenance / metadata / properties field.
+This lets the Inspector and audit tooling answer "which agent wrote this?"
+without requiring a schema migration or a new column.
+
+The attribution contract is additive and fail-open: if AAuth headers are absent
+or `clientInfo` on the MCP `initialize` call is generic, the record degrades
+cleanly to `attribution_tier: "anonymous"` rather than failing.
+
+See `.cursor/plans/aauth_neotoma_integration_cada30a5.plan.md` for the full
+integration plan and `docs/proposals/agent-trust-framework.md` for the
+historical context the AAuth integration supersedes.
+
+### 10.2 Attribution Field Shape
+
+The following keys may appear inside the existing provenance JSON on each
+record type. All fields are optional; the tier is always set.
+
+```json
+{
+  "agent_public_key": "…",
+  "agent_algorithm": "ES256",
+  "agent_sub": "aauth:local@you.github.io",
+  "agent_iss": "https://you.github.io",
+  "client_name": "cursor",
+  "client_version": "0.45.2",
+  "connection_id": "conn_…",
+  "attribution_tier": "hardware"
+}
+```
+
+| Field              | Source                                                   | Present when                      |
+|--------------------|----------------------------------------------------------|-----------------------------------|
+| `agent_public_key` | Verified RFC 9421 HTTP signing key (thumbprint)          | AAuth verified                    |
+| `agent_algorithm`  | Signing algorithm (`ES256`, `EdDSA`, …)                  | AAuth verified                    |
+| `agent_sub`        | `sub` claim of the agent token JWT                       | AAuth verified                    |
+| `agent_iss`        | `iss` claim of the agent token JWT                       | AAuth verified                    |
+| `client_name`      | MCP `initialize.clientInfo.name`                          | Client self-identifies on connect |
+| `client_version`   | MCP `initialize.clientInfo.version`                       | Client self-identifies on connect |
+| `connection_id`    | Existing OAuth connection / resolved token subject       | Request authenticated via OAuth   |
+| `attribution_tier` | Derived — see below                                       | Always                            |
+
+### 10.3 Trust Tiers
+
+`attribution_tier` is one of four values, derived from the most trusted evidence
+available on the request:
+
+| Tier                | Derivation                                                                                  | Inspector rendering            |
+|---------------------|---------------------------------------------------------------------------------------------|--------------------------------|
+| `hardware`          | AAuth verified AND algorithm suggests a hardware-backed key (e.g. Secure Enclave, YubiKey)  | Shield icon, full colour       |
+| `software`          | AAuth verified, software-only signing key                                                    | Key icon, full colour          |
+| `unverified_client` | No AAuth, but `clientInfo.name` (and ideally `version`) were provided on MCP `initialize`    | Dotted outline, "self-reported"|
+| `anonymous`         | No AAuth and no useful `clientInfo` (or generic values like `"mcp"` / `"client"`)            | Em-dash, no tooltip            |
+
+Hardware-vs-software detection lives in
+[`src/crypto/agent_identity.ts`](../../src/crypto/agent_identity.ts).
+
+### 10.4 Where Attribution Is Stamped
+
+Write paths record the attribution block on:
+
+- **Observations** — inside `observations.metadata` (or the equivalent
+  provenance JSON) via `mergeAttributionIntoProvenance`.
+- **Relationships** — on `RelationshipSnapshot.provenance` when the
+  relationship is created or its contributing observations change.
+- **Sources** — on `sources.source_metadata` when upload or parse is
+  initiated by an agent.
+- **Interpretations** — on the `interpretations` metadata / config so the
+  agent that ran the interpretation is visible even when the source was
+  uploaded by a different agent.
+- **Timeline events** — inside `event.properties`.
+
+The stamp is applied via request-scoped `AsyncLocalStorage` context populated by
+`src/middleware/aauth_verify.ts` and the MCP `initialize` handler in
+`src/server.ts`. When no context is active, no attribution fields are emitted.
+
+### 10.5 Anti-Spoofing Expectations
+
+Clients MUST NOT fabricate another agent's `clientInfo` or reuse another
+agent's public key. Neotoma does not currently reject spoofed `clientInfo`
+during verification, but the attribution contract treats impersonation as a
+policy breach. See
+[`docs/developer/cli_agent_instructions.md`](../developer/cli_agent_instructions.md)
+`[ATTRIBUTION & AGENT IDENTITY]` for the full contract.
+
+## 11. Security Model
 
 - **RLS**: Client keys (`anon`, `authenticated`) have SELECT-only access
 - **MCP Server**: All mutations via `service_role`; user identity stamped into rows
 - **Storage URLs**: Opaque, never returned to clients; reads via MCP server + ownership check
 - **Cross-User Prevention**: All operations validate `user_id` match
 
-## 11. Related Documents
+## 12. Related Documents
 
 - [`docs/subsystems/schema.md`](./schema.md) — Database schema (includes sources, interpretations tables)
 - [`docs/subsystems/observation_architecture.md`](./observation_architecture.md) — [Observation](../vocabulary/canonical_terms.md#observation) layer
@@ -463,7 +553,7 @@ async function validateAndIngest(
 - [`docs/subsystems/entity_merge.md`](./entity_merge.md) — [Entity](../vocabulary/canonical_terms.md#entity) merge mechanism
 - [`docs/architecture/determinism.md`](../architecture/determinism.md) — Determinism doctrine
 
-## 12. Agent Instructions
+## 13. Agent Instructions
 
 ### When to Load This Document
 
@@ -491,3 +581,66 @@ Load `docs/subsystems/sources.md` when:
 - Skipping quota checks
 - Cross-user [source](../vocabulary/canonical_terms.md#source) access
 - Deleting [interpretations](../vocabulary/canonical_terms.md#interpretation) (archive instead)
+
+### Worked Example: Gmail list → detail hydration
+
+Illustrates the `Depth of capture` rule defined in `docs/developer/mcp/instructions.md` ([COMMUNICATION & DISPLAY]) and `docs/developer/cli_agent_instructions.md`. List/summary tool responses are index rows, not the final payload; hydrate via the detail endpoint before persisting so each `email_message` entity carries body content, not just headers.
+
+**Flow** for a user prompt like *"retrieve last 5 emails from gmail"*:
+
+1. **List call.** `search_emails(max_results=5)` returns 5 index rows with `id`, `thread_id`, `from`, `to`, `subject`, `snippet`, `date`. Do not persist these alone.
+2. **Detail hydration.** For each id, call `read_email(message_id=<id>)` to retrieve `body_text`, `body_html`, `headers`, and attachment metadata. Scope cap: hydrate up to ~10 items per turn unless the user explicitly asks for a larger ingestion.
+3. **Single store call.** Emit one `store_structured` with the user-phase recipe plus 5 extracted `email_message` entities. Each entity carries the detail fields (`from`, `to`, `subject`, `sent_at`, `body_text`, `body_html`, `snippet`, `thread_id`, `message_id`, `labels`, attachment descriptors) and preserves provenance:
+
+   ```json
+   {
+     "entity_type": "email_message",
+     "canonical_name": "<subject>",
+     "message_id": "<gmail id>",
+     "thread_id": "<thread id>",
+     "from": "sender@example.com",
+     "to": ["me@example.com"],
+     "subject": "<subject>",
+     "sent_at": "2026-04-22T10:00:00Z",
+     "body_text": "<plain body>",
+     "body_html": "<html body>",
+     "data_source": "Gmail API GET users.messages.get <id> 2026-04-22",
+     "api_response_data": {
+       "list": { "id": "...", "snippet": "...", "date": "..." },
+       "detail": { "payload": { ... }, "headers": [ ... ] }
+     },
+     "capture_depth": "full"
+   }
+   ```
+
+4. **Embedded entity extraction.** Scan each hydrated body for first-class entities embedded in it (per the `Embedded entity extraction` rule in `[COMMUNICATION & DISPLAY]`). Append them to the same `store_structured` call alongside the containing `email_message`, with `source_quote` citing the verbatim body snippet and `REFERS_TO` edges from container → embedded. Examples:
+   - Subscription billing email ("Your Netflix subscription: $15.49 charged on May 1") → one `transaction` (amount, currency, merchant, posted_at, recurrence) plus optionally a `subscription` entity (merchant, plan, billing_period, next_charge_at) when not already stored. If a prior `subscription` matches on merchant + billing period, call `correct` on the existing `entity_id` rather than minting a duplicate.
+   - Meeting proposal ("Can we sync Thursday 3pm PT?") → `event` (proposed_start_at, attendees, title) plus a `task` ("Confirm Thursday 3pm sync with <counterparty>") linked to the counterparty `contact`.
+   - Order confirmation with multiple line items → one `order_item` per line (capped at ~20 per container per the Depth-of-capture scope cap; surface the rest as a list and offer to continue).
+   - Person mentioned in a thread not already a `contact` → emit a `contact` with `source_quote` and link via `REFERS_TO`.
+
+   Store-shape sketch for the subscription case:
+
+   ```json
+   [
+     { "entity_type": "email_message", "canonical_name": "Netflix: Your subscription renews May 1", ... },
+     {
+       "entity_type": "transaction",
+       "canonical_name": "Netflix subscription charge 2026-05-01",
+       "amount": 15.49,
+       "currency": "USD",
+       "counterparty": "Netflix",
+       "posted_at": "2026-05-01",
+       "recurrence": "monthly",
+       "source_quote": "Your Netflix subscription: $15.49 will be charged on May 1, 2026.",
+       "data_source": "Gmail API GET users.messages.get <id> 2026-04-22 (embedded)"
+     }
+   ]
+   ```
+
+   Relationships (batched in `store_structured.relationships`): `{ relationship_type: "REFERS_TO", source_index: <email_message idx>, target_index: <transaction idx> }`.
+
+5. **Size cap.** If a detail body exceeds ~100 KB (large HTML newsletter, MIME bundle with inline images), persist it via the unstructured path (`file_content`+`mime_type` or `file_path` on `store_structured`; `--file-path` / `--file-content` on `neotoma store`) and link the structured `email_message` to the file entity with `EMBEDS` instead of inlining the body.
+6. **Idempotent upgrade.** If any of the 5 `email_message` entities already exists from a prior summary-only store (canonical_name / message_id match), hydrate via `correct` on the same `entity_id` (or `neotoma edit <id>` on CLI) rather than creating a duplicate — see the `Existing-entity correction` rule under `[ENTITY TYPES & SCHEMA]`. The same rule applies to embedded entities: a `transaction` that matches a prior merchant + billing period should be corrected, not duplicated.
+7. **Tool-capability fallback.** If no detail endpoint exists for a given list tool, persist the list row as-is and set `capture_depth: "summary_only"` so a later turn can enrich.
+8. **Reply discipline.** For peek-style questions, the reply stays at summary level (sender, subject, date). Body content is persisted but not echoed back into chat beyond what answering requires — and the same discipline applies to embedded entities (mention the charge existed, do not paste the full payment snippet into chat unless the user asks for it).

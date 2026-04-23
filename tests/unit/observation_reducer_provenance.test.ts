@@ -21,6 +21,13 @@ import {
 } from "../../src/reducers/observation_reducer.js";
 
 vi.mock("../../src/services/schema_registry.js", () => ({
+  DEFAULT_OBSERVATION_SOURCE_PRIORITY: [
+    "sensor",
+    "workflow_state",
+    "llm_summary",
+    "human",
+    "import",
+  ] as const,
   schemaRegistry: {
     loadActiveSchema: vi.fn(),
   },

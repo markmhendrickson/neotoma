@@ -120,9 +120,13 @@ export async function retrieveEntityByIdentifierWithFallback(
     includeObservations = false,
     observationsLimit = 20,
   } = params;
-  const normalized = entityType
+  const normalizedRaw = entityType
     ? normalizeEntityValue(entityType, identifier)
     : identifier.trim().toLowerCase();
+  // SECURITY: strip commas before interpolating into a PostgREST-style
+  // .or(...) clause; the builder splits parts on commas. See docs/reports/
+  // security_audit_2026_04_22.md S-3.
+  const normalized = normalizedRaw.replace(/,/g, "");
   const needleLower = identifier.trim().toLowerCase();
   const snapshotFields = by ? [by] : DEFAULT_SNAPSHOT_SEARCH_FIELDS;
 

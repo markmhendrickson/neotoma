@@ -39,6 +39,8 @@ Full constraints in `docs/foundation/agent_instructions_rules.mdc` and `.Codex/r
 - Break immutability (no modifying observations/source after creation)
 - Store docs in repo root (all docs in `docs/` subdirectories)
 
+**Change-time guardrails** (OpenAPI-first, MCP/CLI parity, transport precedence, error envelopes, release discipline): `docs/architecture/change_guardrails_rules.mdc`. Re-read this document before any change that touches `openapi.yaml`, `src/cli/index.ts`, `src/actions.ts`, `src/tool_definitions.ts`, `docs/developer/mcp/`, or a release supplement.
+
 **Validation checklist** in `docs/foundation/agent_instructions_rules.mdc`.
 
 ## Configuration
@@ -62,6 +64,16 @@ In those cases: ask a short, concrete question with 1–2 options or "proceed wi
 **Do not ask** for: "should I do X?" when X is already specified; "is this correct?" for obvious fixes; permission to use allowed tools.
 
 **Alignment**: Mirrors risk management hold points (schema changes, foundation doc changes, security, constraint violations); ask when ambiguity could lead to high-risk wrong choice.
+
+## Agent Identity & Attribution
+
+Every write to Neotoma (observations, relationships, timeline events, sources, interpretations) is attributed per-row and surfaced in the Inspector. Self-identify when writing:
+
+- **Preferred**: sign `/mcp` requests with AAuth (RFC 9421 + `aa-agent+jwt`) via `@aauth/local-keys`. Verified agents render with a `hardware` or `software` trust badge.
+- **Fallback**: set a meaningful `clientInfo.name` and `clientInfo.version` on the MCP `initialize` handshake (e.g. `"cursor-agent"` + build, `"claude-code"` + release). Generic values like `"mcp"` or `"client"` are normalised to the `anonymous` tier.
+- **Do not spoof** another agent's `clientInfo`, public key, or JWT subject.
+
+See `docs/developer/cli_agent_instructions.md` `[ATTRIBUTION & AGENT IDENTITY]` and `docs/developer/mcp/instructions.md` for the full contract.
 
 ## Quick Reference
 

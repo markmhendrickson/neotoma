@@ -9,6 +9,11 @@
 import { db } from "../db.js";
 import { generateObservationId } from "./observation_identity.js";
 import { recomputeSnapshot } from "./snapshot_computation.js";
+import {
+  getCurrentAgentIdentity,
+  getCurrentAttribution,
+} from "./request_context.js";
+import { enforceAttributionPolicy } from "./attribution_policy.js";
 
 export interface CreateCorrectionParams {
   entity_id: string;
@@ -31,6 +36,7 @@ export interface CorrectionResult {
 export async function createCorrection(
   params: CreateCorrectionParams
 ): Promise<CorrectionResult> {
+  enforceAttributionPolicy("corrections", getCurrentAgentIdentity());
   const { entity_id, entity_type, field, value, schema_version, user_id, idempotency_key } =
     params;
 
@@ -58,6 +64,11 @@ export async function createCorrection(
 
   if (idempotency_key) {
     row.idempotency_key = idempotency_key;
+  }
+
+  const correctionAttribution = getCurrentAttribution();
+  if (Object.keys(correctionAttribution).length > 0) {
+    row.provenance = correctionAttribution;
   }
 
   const { error: obsError } = await db.from("observations").insert(row);

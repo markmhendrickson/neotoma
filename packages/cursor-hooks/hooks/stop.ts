@@ -33,8 +33,9 @@ async function handle(
   if (!finalText) return {};
 
   const entity = {
-    entity_type: "agent_message",
+    entity_type: "conversation_message",
     role: "assistant",
+    sender_kind: "assistant",
     content: finalText,
     turn_key: `${sessionId}:${turnId}:assistant`,
     observed_at: new Date().toISOString(),

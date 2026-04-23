@@ -8,6 +8,22 @@
 
 import { db } from "../db.js";
 import { generateObservationId } from "./observation_identity.js";
+import {
+  getCurrentAgentIdentity,
+  getCurrentAttribution,
+} from "./request_context.js";
+import { enforceAttributionPolicy } from "./attribution_policy.js";
+import type { ObservationSource } from "../shared/action_schemas.js";
+
+/**
+ * Default `observation_source` applied by the write path when a caller
+ * omits the field. MCP / CLI callers are LLM-driven by construction, so
+ * unclassified writes land in the LLM-summary bucket. Sensors, workflow
+ * state machines, humans, and ETL pipelines MUST set the field
+ * explicitly — the default is deliberately non-sensor so the reducer
+ * does not over-weight unclassified writes.
+ */
+export const DEFAULT_OBSERVATION_SOURCE: ObservationSource = "llm_summary";
 
 export interface CreateObservationParams {
   entity_id: string;
@@ -18,6 +34,14 @@ export interface CreateObservationParams {
   observed_at: string;
   specificity_score: number;
   source_priority: number;
+  /**
+   * Kind of write (sensor | llm_summary | workflow_state | human | import).
+   * Orthogonal to `source_priority` (numeric ranking) and to
+   * `provenance`/AAuth (which agent wrote it). Omit to fall back to
+   * {@link DEFAULT_OBSERVATION_SOURCE}. See openapi.yaml
+   * `Observation.observation_source` for the semantic contract.
+   */
+  observation_source?: ObservationSource | null;
   fields: Record<string, unknown>;
   user_id: string;
   idempotency_key?: string | null;
@@ -44,6 +68,7 @@ export interface ObservationRecord {
   observed_at: string;
   specificity_score: number;
   source_priority: number;
+  observation_source: ObservationSource | null;
   fields: Record<string, unknown>;
   user_id: string;
   created_at: string;
@@ -52,6 +77,7 @@ export interface ObservationRecord {
 export async function createObservation(
   params: CreateObservationParams
 ): Promise<ObservationRecord> {
+  enforceAttributionPolicy("observations", getCurrentAgentIdentity());
   const observationId = generateObservationId(
     params.source_id,
     params.interpretation_id,
@@ -70,6 +96,7 @@ export async function createObservation(
     observed_at: params.observed_at,
     specificity_score: params.specificity_score,
     source_priority: params.source_priority,
+    observation_source: params.observation_source ?? DEFAULT_OBSERVATION_SOURCE,
     fields: params.fields,
     user_id: params.user_id,
     created_at: new Date().toISOString(),
@@ -83,6 +110,15 @@ export async function createObservation(
   }
   if (params.identity_rule) {
     (row as Record<string, unknown>).identity_rule = params.identity_rule;
+  }
+
+  // Agent attribution (Phase 1). The provenance blob is empty when no
+  // request context is active (stdio + no env identity), which keeps
+  // existing behaviour intact. See src/crypto/agent_identity.ts for the
+  // AttributionProvenance shape.
+  const attribution = getCurrentAttribution();
+  if (Object.keys(attribution).length > 0) {
+    (row as Record<string, unknown>).provenance = attribution;
   }
 
   const { data, error } = await db

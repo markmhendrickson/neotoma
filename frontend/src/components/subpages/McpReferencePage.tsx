@@ -80,7 +80,7 @@ retrieve_entity_by_identifier(identifier="Ana Rivera", entity_type="contact")
 store_structured(
   entities=[
     { entity_type: "conversation", title: "Project sync" },
-    { entity_type: "agent_message", role: "user", content: "...", turn_key: "conv:1" }
+    { entity_type: "conversation_message", role: "user", sender_kind: "user", content: "...", turn_key: "conv:1" }
   ],
   relationships=[{ relationship_type: "PART_OF", source_index: 1, target_index: 0 }],
   idempotency_key="conversation-conv-1-1711900000000"

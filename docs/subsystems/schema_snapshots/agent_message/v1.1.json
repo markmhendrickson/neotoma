@@ -1,0 +1,144 @@
+{
+  "entity_type": "agent_message",
+  "schema_version": "1.1",
+  "active": false,
+  "created_at": "2026-04-22T00:00:00.000Z",
+  "schema_definition": {
+    "fields": {
+      "schema_version": {
+        "type": "string",
+        "required": true
+      },
+      "message_id": {
+        "type": "string",
+        "required": true,
+        "description": "Unique identifier for this message/turn"
+      },
+      "conversation_id": {
+        "type": "string",
+        "required": true,
+        "description": "Links to parent conversation entity"
+      },
+      "turn_number": {
+        "type": "number",
+        "required": true,
+        "description": "Sequential turn number in conversation"
+      },
+      "timestamp": {
+        "type": "date",
+        "required": true,
+        "description": "When this turn occurred"
+      },
+      "role": {
+        "type": "string",
+        "required": true,
+        "description": "Sender role: 'user' or 'assistant' (legacy; prefer sender_kind)"
+      },
+      "sender_kind": {
+        "type": "string",
+        "required": false,
+        "description": "Authoritative sender category: 'user' | 'assistant' | 'agent' | 'system' | 'tool'. Preferred read path; mirrors role for legacy user/assistant turns and extends it for agent-to-agent, system, and tool messages."
+      },
+      "sender_agent_id": {
+        "type": "string",
+        "required": false,
+        "description": "Stable identifier of the sending agent (AAuth thumbprint / clientInfo / agent_sub). See docs/subsystems/agent_attribution_integration.md."
+      },
+      "recipient_agent_id": {
+        "type": "string",
+        "required": false,
+        "description": "Stable identifier of the recipient agent for agent-to-agent traffic."
+      },
+      "content": {
+        "type": "string",
+        "required": true,
+        "description": "Message body"
+      },
+      "turn_key": {
+        "type": "string",
+        "required": false,
+        "description": "Stable per-turn identity, typically '{conversation_id}:{turn_id}' or '...:assistant'"
+      },
+      "role_user": {
+        "type": "string",
+        "required": false,
+        "description": "Legacy: user's message/query text (v1.0 shape)"
+      },
+      "role_agent": {
+        "type": "string",
+        "required": false,
+        "description": "Legacy: agent's response text (v1.0 shape)"
+      },
+      "neotoma_operations": {
+        "type": "array",
+        "required": false,
+        "description": "List of Neotoma MCP operations performed during this turn"
+      },
+      "files_modified": {
+        "type": "array",
+        "required": false,
+        "description": "List of file paths created, modified, or read"
+      },
+      "tools_used": {
+        "type": "array",
+        "required": false,
+        "description": "List of tools/actions used by agent"
+      },
+      "platform": {
+        "type": "string",
+        "required": false,
+        "description": "Platform where message occurred (cursor, chatgpt, claude)"
+      },
+      "model": {
+        "type": "string",
+        "required": false,
+        "description": "Model used for agent response (claude-sonnet-4, gpt-4, etc)"
+      },
+      "notes": {
+        "type": "string",
+        "required": false,
+        "description": "Additional context about this turn"
+      }
+    }
+  },
+  "reducer_config": {
+    "merge_policies": {
+      "role": {
+        "strategy": "last_write"
+      },
+      "content": {
+        "strategy": "last_write"
+      },
+      "turn_key": {
+        "strategy": "last_write"
+      },
+      "sender_kind": {
+        "strategy": "last_write"
+      },
+      "sender_agent_id": {
+        "strategy": "last_write"
+      },
+      "recipient_agent_id": {
+        "strategy": "last_write"
+      },
+      "role_user": {
+        "strategy": "highest_priority"
+      },
+      "role_agent": {
+        "strategy": "highest_priority"
+      },
+      "neotoma_operations": {
+        "strategy": "merge_array"
+      },
+      "files_modified": {
+        "strategy": "merge_array"
+      },
+      "tools_used": {
+        "strategy": "merge_array"
+      },
+      "timestamp": {
+        "strategy": "last_write"
+      }
+    }
+  }
+}

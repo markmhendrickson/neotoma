@@ -83,9 +83,18 @@ To start the API in the **background**:
 - `neotoma api start --env dev --tunnel` (or `--env prod --tunnel`, no `--background`)
   Runs the API and tunnel in the **foreground** in the current terminal (same as `npm run dev:api`). Logs stream to the terminal; Ctrl+C stops both. Tunnel URL: `cat /tmp/ngrok-mcp-url.txt`.
 
+**`--watch` flag (source checkouts, v0.5.2+).** On a source checkout `neotoma api start --env prod` currently spawns `dev:prod` (tsx watcher with `NEOTOMA_ENV=production`). In **v0.6.0 the default will flip** to the built runner (`start:api:prod`, which builds server TypeScript and runs `dist/actions.js`), which is what headless-production operators actually want. Contributors who want to keep iterating with hot-reload under the prod env should pass `--watch`:
+
+- `neotoma api start --env prod --watch` — preserves the current watcher behavior across the v0.6.0 flip. In v0.6.0 this routes to `watch:prod` (the `dev:prod` alias is dropped; `watch:prod` itself is unchanged).
+- `neotoma api start --env prod` (no `--watch`) — in v0.5.2 still selects the watcher and prints a one-line stderr deprecation notice announcing the flip. In v0.6.0 this switches to `start:api:prod`.
+
+The flag is a no-op on `--env dev`, on installed-package checkouts without source watch scripts, and on the `--tunnel` path (the tunnel flow always wants the watcher). The deprecation line is suppressed under `--output json`.
+
+For a real **headless / systemd** production deployment, install the published npm package (`npm install -g neotoma`) and use the recipe in [install.md § Production deployment (headless / systemd)](../../install.md#production-deployment-headless--systemd) rather than `neotoma api start` on a source checkout.
+
 ## npm scripts summary
 
-All `npm run <script>` commands in one place. The `dev:*` names are aliases for the corresponding `watch:*` scripts.
+All `npm run <script>` commands in one place. Scripts follow the three-category prefix convention documented in [`docs/developer/package_scripts.md`](package_scripts.md): `watch:*` for developer watchers, `serve:*`/`start:*` for compiled-`dist` runners, `dev:*` for other dev tooling. Some `dev:*` entries remain as aliases for their `watch:*` counterparts for historical reasons; new aliases that cross the category boundary are not introduced.
 
 ### Build and start
 
@@ -210,7 +219,7 @@ CLI behavior can be pinned per invocation via flags or across invocations via en
 | `--offline` | `NEOTOMA_OFFLINE` | Force in-process local transport; do not contact a remote API. |
 | `--env <env>` | `NEOTOMA_ENV` (`development` / `production`) | Environment selector for server lifecycle commands. |
 | `--root <path>` | `NEOTOMA_REPO_ROOT` | Source-checkout root when `neotoma` is run with no args. |
-| `--user-id <id>` | `NEOTOMA_USER_ID` | Pin the user scope for read-verb requests (`entities`, `observations`, `relationships`, `timeline`, `schemas`, `sources`, `stats`, `recent`, `memory-export`). The flag wins per call; the env var acts as a session-wide pin; the server falls back to the authenticated user when both are unset. |
+| `--user-id <id>` | `NEOTOMA_USER_ID` | Pin the user scope for read-verb requests (`entities`, `observations`, `relationships`, `timeline`, `schemas`, `sources`, `stats`, `list-recent-changes` (alias `recent`), `memory-export`). The flag wins per call; the env var acts as a session-wide pin; the server falls back to the authenticated user when both are unset. |
 
 `--offline` and `--api-only` are mutually exclusive; setting both (via flag or env) raises an error at startup.
 
@@ -559,6 +568,40 @@ The CLI and the Inspector share one `applyBatchCorrection` backend (`src/service
     - Does not replace the live DB automatically.
     - Stop Neotoma (MCP/API) before running `--recover`.
     - After a successful recover, manually archive the live `.db` / `-wal` / `-shm` and then copy the recovered file into place.
+
+### Snapshots
+
+Fleet-general write-integrity tooling built on the canonical snapshot layer. `snapshots check` / `snapshots request` operate on the runtime snapshot tables; `snapshots export`, `snapshots diff`, and `snapshots parsers` power the fleet-neutral drift workflow described in `docs/releases/in_progress/v0.6.0/` (item 3: snapshot export + drift comparison).
+
+- `neotoma snapshots check`: Check for stale entity snapshots.
+  - `--auto-fix`: Also recompute stale snapshots in place.
+- `neotoma snapshots request`: Request snapshot recomputation for stale snapshots.
+  - `--dry-run`: Check only; do not recompute.
+- `neotoma snapshots export`: Export entity snapshots as fleet-neutral JSON (schema_version `0.1.0`) with per-field provenance, an `observation_source` histogram, and an `attribution_fingerprint` roll-up per entity.
+  - `--entity-types <csv>`: Restrict to comma-separated entity types (e.g. `agent_task,agent_attempt`).
+  - `--agent-sub <sub>`: Restrict to a single AAuth `agent_sub`.
+  - `--attribution-tier <tier>`: Restrict to one tier — `hardware | software | unverified_client | anonymous`.
+  - `--observation-source <kind>`: Restrict to one write kind — `sensor | llm_summary | workflow_state | human | import`.
+  - `--since <iso>`: ISO-8601 lower bound on `last_observation_at`.
+  - `--limit <n>`: Cap on returned entities (default: 500).
+  - `--out <path>`: Write the export to this file instead of stdout.
+  - `--user-id <id>`: Override user scope (flag > `NEOTOMA_USER_ID` > authenticated user).
+  - Output shape: `{ schema_version, exported_at, filter, total_entities, entities[] }`.
+- `neotoma snapshots diff`: Compare a Neotoma export against an external-state snapshot via a pluggable `ExternalParser`. Defaults to the identity `json` parser; fleet-specific parsers register via `registerExternalParser` in `src/services/drift_comparison.ts`.
+  - `--neotoma <path>` (required): Path to a `snapshots export` JSON file.
+  - `--external <path>` (required): Path to the external-state snapshot file.
+  - `--parser <name>`: External parser name (default: `json`; list via `snapshots parsers`).
+  - `--out <path>`: Write the drift report to this file instead of stdout.
+  - Report shape: `{ summary, missing_in_neotoma[], missing_in_external[], field_diffs[], provenance_gaps[] }`. `provenance_gaps` flags entities with unclassified `observation_source` or anonymous / unverified_client attribution even when field values agree.
+- `neotoma snapshots parsers`: List registered external parsers available to `snapshots diff`.
+
+Fleet round-trip example (AIBTC Lumen, LangGraph, custom adapters all follow the same shape):
+
+```bash
+neotoma snapshots export --entity-types agent_task,agent_attempt --out ./neotoma.json
+# produce a NormalizedExternalSnapshot from whatever your fleet keeps on disk
+neotoma snapshots diff --neotoma ./neotoma.json --external ./fleet.json --parser json
+```
 
 ### Backup and restore
 

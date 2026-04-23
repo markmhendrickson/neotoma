@@ -503,6 +503,14 @@ export function buildToolDefinitions(
       inputSchema: getOpenApiInputSchemaOrThrow("merge_entities"),
     },
     {
+      name: "split_entity",
+      description: desc(
+        "split_entity",
+        "Inverse of merge_entities (R5). Re-point a predicate-selected subset of an entity's observations onto a new or pre-existing entity to repair over-merges. Schema-agnostic predicate; observation content is never modified. Idempotent via (user_id, idempotency_key).",
+      ),
+      inputSchema: getOpenApiInputSchemaOrThrow("split_entity"),
+    },
+    {
       name: "list_potential_duplicates",
       description: desc(
         "list_potential_duplicates",
@@ -854,6 +862,16 @@ export function buildToolDefinitions(
       },
     },
     {
+      name: "get_session_identity",
+      description:
+        "Resolve the current session's attribution: trust tier, AAuth / clientInfo fields, active anonymous-write policy, and whether the session is eligible for trusted writes. Safe to call as a preflight health check; does not write any rows.",
+      inputSchema: {
+        type: "object",
+        properties: {},
+        required: [],
+      },
+    },
+    {
       name: "health_check_snapshots",
       description: desc(
         "health_check_snapshots",
@@ -893,6 +911,108 @@ export function buildToolDefinitions(
           },
         },
         required: [],
+      },
+      annotations: { readOnlyHint: true },
+    },
+    {
+      name: "submit_feedback",
+      description: desc(
+        "submit_feedback",
+        "Submit feedback about Neotoma (incident, report, primitive_ask, doc_gap, contract_discrepancy) or a fix_verification for a prior feedback. " +
+          "PII in `title`/`body`/`metadata.environment.error_message` MUST be redacted or altered before submission; the server applies a backstop redaction pass with hash-stable placeholders. " +
+          "`metadata.environment` MUST include `neotoma_version`, `client_name`, and `os`; include `tool_name`, `error_class`, `error_message`, `invocation_shape` when applicable (error_class and hit_count are best-effort). " +
+          "Returns `feedback_id`, a single-purpose `access_token` for polling, and `next_check_suggested_at`. Do not share or log the access_token beyond the originating agent context.",
+      ),
+      inputSchema: {
+        type: "object",
+        properties: {
+          kind: {
+            type: "string",
+            enum: [
+              "incident",
+              "report",
+              "primitive_ask",
+              "doc_gap",
+              "contract_discrepancy",
+              "fix_verification",
+            ],
+            description:
+              "Category of feedback. Use `fix_verification` to attest the outcome of a previously resolved feedback (requires parent_feedback_id, verification_outcome, verified_at_version).",
+          },
+          title: { type: "string", description: "Short human-readable title (PII-redacted)." },
+          body: {
+            type: "string",
+            description:
+              "Detailed description in markdown (PII-redacted). Include reproduction steps, expected vs actual behavior.",
+          },
+          metadata: {
+            type: "object",
+            description:
+              "Structured context. `environment` is required with at minimum { neotoma_version, client_name, os }.",
+          },
+          user_consent_captured: { type: "boolean" },
+          explicit_user_request: { type: "boolean" },
+          prefer_human_draft: {
+            type: "boolean",
+            description:
+              "Opt in to human-authored fixes instead of auto-PR drafts (used by auto-PR rollout gates).",
+          },
+          status_push: {
+            type: "object",
+            description:
+              "Opt in to a push notification when `min_version_including_fix` is assigned. Server POSTs the full status to webhook_url, signed with webhook_secret (HMAC-SHA256) when provided.",
+            properties: {
+              webhook_url: { type: "string" },
+              webhook_secret: { type: "string" },
+            },
+            required: ["webhook_url"],
+          },
+          parent_feedback_id: {
+            type: "string",
+            description: "Required when kind=fix_verification.",
+          },
+          verification_outcome: {
+            type: "string",
+            enum: [
+              "verified_working",
+              "verified_working_with_caveat",
+              "unable_to_verify",
+              "verification_failed",
+            ],
+            description: "Required when kind=fix_verification.",
+          },
+          verified_at_version: {
+            type: "string",
+            description: "Required when kind=fix_verification. Version string tested against.",
+          },
+          routing_hint: {
+            type: "string",
+            enum: ["auto", "reopen_parent", "new_child"],
+            description:
+              "For verification_failed submissions: override server routing heuristic. Default `auto`.",
+          },
+        },
+        required: ["kind", "title", "body"],
+      },
+    },
+    {
+      name: "get_feedback_status",
+      description: desc(
+        "get_feedback_status",
+        "Poll the status of a previously submitted feedback using its `access_token`. " +
+          "Respect `next_check_suggested_at` — do not poll more frequently. " +
+          "When a fix ships, the response includes `upgrade_guidance` with install commands, verification steps, and optionally a `verification_request` asking the agent to submit a `fix_verification` feedback.",
+      ),
+      inputSchema: {
+        type: "object",
+        properties: {
+          access_token: {
+            type: "string",
+            description:
+              "The single-purpose access token returned by submit_feedback. Sufficient for reads — no additional auth required.",
+          },
+        },
+        required: ["access_token"],
       },
       annotations: { readOnlyHint: true },
     },
@@ -947,6 +1067,7 @@ export const NEOTOMA_TOOL_NAMES = [
   "parse_file",
   "correct",
   "merge_entities",
+  "split_entity",
   "list_potential_duplicates",
   "delete_entity",
   "delete_relationship",
@@ -959,8 +1080,11 @@ export const NEOTOMA_TOOL_NAMES = [
   "update_schema_incremental",
   "register_schema",
   "get_authenticated_user",
+  "get_session_identity",
   "health_check_snapshots",
   "list_recent_changes",
+  "submit_feedback",
+  "get_feedback_status",
   "npm_check_update",
 ] as const;
 

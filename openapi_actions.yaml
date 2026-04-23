@@ -151,6 +151,18 @@ components:
           type: number
         source_priority:
           type: integer
+        observation_source:
+          type: string
+          nullable: true
+          enum:
+          - sensor
+          - llm_summary
+          - workflow_state
+          - human
+          - import
+          description: Kind of write that produced this observation (sensor,
+            llm_summary, workflow_state, human, import). Orthogonal to
+            source_priority and to provenance/AAuth.
         fields:
           type: object
           additionalProperties: true
@@ -324,6 +336,16 @@ components:
                 minimum: 0
         source_priority:
           type: integer
+        observation_source:
+          type: string
+          enum:
+          - sensor
+          - llm_summary
+          - workflow_state
+          - human
+          - import
+          description: Kind of write (sensor, llm_summary, workflow_state, human,
+            import). Defaults to llm_summary when unspecified.
         idempotency_key:
           type: string
           description: Required for structured path, optional for unstructured-only
@@ -378,9 +400,9 @@ components:
           description: 'Optional. Create relationships between entities in this request.
             Indices refer to the entities array (0-based).
 
-            Enables one-call chat persistence: store [conversation, agent_message]
+            Enables one-call chat persistence: store [conversation, conversation_message]
             with relationships [{ relationship_type: "PART_OF", source_index: 1, target_index:
-            0 }].
+            0 }]. (`agent_message` remains accepted as a legacy alias for pre-v0.6 clients.)
 
             '
           items:
@@ -431,6 +453,16 @@ components:
                 description: Index into the entities array for the target entity
         source_priority:
           type: integer
+        observation_source:
+          type: string
+          enum:
+          - sensor
+          - llm_summary
+          - workflow_state
+          - human
+          - import
+          description: Kind of write (sensor, llm_summary, workflow_state, human,
+            import). Defaults to llm_summary when unspecified.
         idempotency_key:
           type: string
         user_id:

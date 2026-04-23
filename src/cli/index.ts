@@ -104,6 +104,26 @@ function inferMimeTypeForPath(filePath: string): string {
   return getMimeTypeFromExtension(ext) ?? "application/octet-stream";
 }
 
+const OBSERVATION_SOURCE_CLI_VALUES = [
+  "sensor",
+  "llm_summary",
+  "workflow_state",
+  "human",
+  "import",
+] as const;
+
+type ObservationSourceFlag = (typeof OBSERVATION_SOURCE_CLI_VALUES)[number];
+
+function normalizeObservationSourceFlag(raw: string): ObservationSourceFlag {
+  const normalized = raw.trim().toLowerCase().replace(/-/g, "_");
+  if (!(OBSERVATION_SOURCE_CLI_VALUES as readonly string[]).includes(normalized)) {
+    throw new Error(
+      `Invalid --observation-source "${raw}". Expected one of: ${OBSERVATION_SOURCE_CLI_VALUES.join(", ")}.`
+    );
+  }
+  return normalized as ObservationSourceFlag;
+}
+
 export function getPromptPlaceholder(buffer: string, placeholderText = "/ for commands"): string {
   return placeholderText.length > 0 && buffer.length === 0 ? placeholderText : "";
 }
@@ -7117,6 +7137,127 @@ authCommand
     writeOutput(data, outputMode);
   });
 
+authCommand
+  .command("session")
+  .description(
+    "Show the resolved attribution tier, identity fields, and active policy for the current session (preflight health check for AAuth / clientInfo)",
+  )
+  .action(async () => {
+    const outputMode = resolveOutputMode();
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({
+      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      token,
+    });
+    const { data, error } = await api.GET("/session", {
+      params: { query: {} },
+    });
+    if (error) throw new Error("Failed to resolve session identity");
+    const { describeConfiguredSigner } = await import("./aauth_signer.js");
+    const signer = await describeConfiguredSigner();
+    writeOutput({ ...(data as Record<string, unknown>), cli_signer: signer }, outputMode);
+  });
+
+authCommand
+  .command("keygen")
+  .description(
+    "Generate an AAuth keypair under ~/.neotoma/aauth/ so the CLI can sign outbound requests. Without it CLI calls land as anonymous / unverified_client.",
+  )
+  .option("--alg <alg>", "Signing algorithm: ES256 (default) or EdDSA", "ES256")
+  .option("--sub <sub>", "AAuth subject (self-reported identity)")
+  .option("--iss <iss>", "AAuth issuer (defaults to https://neotoma.cli.local)")
+  .option("--force", "Overwrite an existing keypair", false)
+  .action(async (opts: { alg?: string; sub?: string; iss?: string; force?: boolean }) => {
+    const outputMode = resolveOutputMode();
+    try {
+      const alg =
+        opts.alg === "EdDSA" || opts.alg === "ES256" ? opts.alg : "ES256";
+      const { generateAndStoreKeypair } = await import("./aauth_signer.js");
+      const result = await generateAndStoreKeypair({
+        alg,
+        sub: opts.sub,
+        iss: opts.iss,
+        force: opts.force ?? false,
+      });
+      if (outputMode === "json") {
+        writeOutput(
+          {
+            message: "AAuth keypair generated",
+            alg: result.alg,
+            thumbprint: result.thumbprint,
+            private_jwk_path: result.privateJwkPath,
+            public_jwk_path: result.publicJwkPath,
+            config_path: result.configPath,
+            public_jwk: result.publicJwk,
+            config: result.config,
+          },
+          outputMode,
+        );
+      } else {
+        process.stdout.write(
+          success(`Generated AAuth ${result.alg} keypair`) + "\n",
+        );
+        process.stdout.write(
+          keyValue("private", pathStyle(result.privateJwkPath)) + "\n",
+        );
+        process.stdout.write(
+          keyValue("public", pathStyle(result.publicJwkPath)) + "\n",
+        );
+        process.stdout.write(
+          keyValue("thumbprint", result.thumbprint) + "\n",
+        );
+        process.stdout.write(
+          keyValue("sub", result.config.sub) + "\n",
+        );
+        process.stdout.write(
+          keyValue("iss", result.config.iss) + "\n",
+        );
+        process.stdout.write(
+          dim(
+            "Signed CLI requests will now land as hardware/software tier in attribution. " +
+              "Run `neotoma auth session` to confirm.",
+          ) + "\n",
+        );
+      }
+    } catch (err) {
+      writeMessage(formatCliError(err), outputMode);
+      process.exitCode = 1;
+    }
+  });
+
+authCommand
+  .command("sign-example")
+  .description(
+    "Print a signed curl command against a Neotoma endpoint (debugging helper for the CLI AAuth signer).",
+  )
+  .option("--url <url>", "Target URL (defaults to <baseUrl>/session)")
+  .option("--body <json>", "Request body (JSON string)", "{}")
+  .action(async (opts: { url?: string; body?: string }) => {
+    const outputMode = resolveOutputMode();
+    try {
+      const config = await readConfig();
+      const baseUrl = (await resolveBaseUrl(program.opts().baseUrl, config)).replace(/\/$/, "");
+      const url = opts.url ?? `${baseUrl}/session`;
+      const { buildSignedCurlExample } = await import("./aauth_signer.js");
+      const example = await buildSignedCurlExample(url, opts.body ?? "{}");
+      if (outputMode === "json") {
+        writeOutput({ url, curl: example.curl, headers: example.headers }, outputMode);
+      } else {
+        process.stdout.write(heading("Signed AAuth example") + nl() + nl());
+        process.stdout.write(example.curl + nl() + nl());
+        process.stdout.write(
+          dim(
+            "Note: this prints the JWT agent-token only. The full RFC 9421 signature headers are computed per-request by @hellocoop/httpsig at fetch time.",
+          ) + nl(),
+        );
+      }
+    } catch (err) {
+      writeMessage(formatCliError(err), outputMode);
+      process.exitCode = 1;
+    }
+  });
+
 const mcpCommand = program.command("mcp").description("MCP server configuration");
 
 mcpCommand
@@ -8137,6 +8278,83 @@ program
       process.on("SIGTERM", onExit);
     }
   );
+
+const feedbackCommand = program
+  .command("feedback")
+  .description("Agent-feedback pipeline preferences (reporting mode, activation state)");
+
+feedbackCommand
+  .command("mode [value]")
+  .description(
+    "Show or set the feedback reporting mode (proactive | consent | off). Default is proactive.",
+  )
+  .action(async (value) => {
+    const outputMode = resolveOutputMode();
+    const {
+      loadFeedbackReportingMode,
+      setFeedbackReportingMode,
+      describeModes,
+      DEFAULT_FEEDBACK_REPORTING_MODE,
+    } = await import("../services/feedback/activation.js");
+    if (!value) {
+      const current = await loadFeedbackReportingMode();
+      if (outputMode === "json") {
+        writeOutput({ mode: current, default: DEFAULT_FEEDBACK_REPORTING_MODE }, outputMode);
+      } else {
+        process.stdout.write(`Current feedback reporting mode: ${current}\n\n${describeModes()}\n`);
+      }
+      return;
+    }
+    await setFeedbackReportingMode(value as "proactive" | "consent" | "off");
+    if (outputMode === "json") {
+      writeOutput({ ok: true, mode: value }, outputMode);
+    } else {
+      process.stdout.write(`Feedback reporting mode set to: ${value}\n`);
+    }
+  });
+
+program
+  .command("triage")
+  .description(
+    "Triage the agent-feedback pipeline: run the ingest pass, list pending items, update status, or mark resolved. Respects NEOTOMA_FEEDBACK_TRANSPORT / AGENT_SITE_BASE_URL."
+  )
+  .option("--watch", "Continuously run the ingest pass every 15 minutes")
+  .option("--remote", "Force HTTP transport even if AGENT_SITE_BASE_URL is unset (requires env)")
+  .option("--list-pending", "List pending feedback items (use --json for machine-readable output)")
+  .option("--health", "Print classification rate and status counts")
+  .option("--set-status <status>", "Set the status of a feedback item (requires --feedback-id)")
+  .option("--feedback-id <id>", "Feedback id to update")
+  .option("--classification <label>", "Classification label to set alongside --set-status")
+  .option("--triage-notes <text>", "Notes recorded on the feedback")
+  .option("--issue-url <url>", "Append a GitHub issue URL to resolution_links")
+  .option("--pr-url <url>", "Append a pull-request URL to resolution_links")
+  .option("--commit-sha <sha>", "Append a commit SHA to resolution_links")
+  .option("--resolve <feedback-id>", "Mark a feedback item as resolved")
+  .option("--dry-run", "When combined with the default ingest pass, print decisions only")
+  .option(
+    "--mirror-replay <feedback-id>",
+    "Force an immediate Neotoma mirror replay (agent.neotoma.io admin endpoint). Requires AGENT_SITE_BASE_URL + AGENT_SITE_ADMIN_BEARER.",
+  )
+  .action(async (opts) => {
+    const { runTriage } = await import("./triage.js");
+    await runTriage({
+      watch: Boolean(opts.watch),
+      remote: Boolean(opts.remote),
+      listPending: Boolean(opts.listPending),
+      json: Boolean((program.opts() as { json?: boolean }).json),
+      health: Boolean(opts.health),
+      setStatus: opts.setStatus,
+      feedbackId: opts.feedbackId,
+      classification: opts.classification,
+      triageNotes: opts.triageNotes,
+      issueUrl: opts.issueUrl,
+      prUrl: opts.prUrl,
+      commitSha: opts.commitSha,
+      resolve: opts.resolve,
+      dryRun: Boolean(opts.dryRun),
+      mirrorReplay: opts.mirrorReplay,
+    });
+  });
 
 program
   .command("doctor")
@@ -9516,7 +9734,16 @@ apiCommand
     "--tunnel-provider <provider>",
     "Tunnel provider: ngrok or cloudflare (default: auto-detect from installed tools)"
   )
-  .action(async (opts: { background?: boolean; tunnel?: boolean; tunnelProvider?: string }) => {
+  .option(
+    "--watch",
+    "Run the tsx watcher on a source checkout instead of the built runner. Currently the watcher is the default for --env prod on a source checkout; v0.6.0 will flip the default to the built runner and this flag will preserve the watcher behavior for contributors."
+  )
+  .action(async (opts: {
+    background?: boolean;
+    tunnel?: boolean;
+    tunnelProvider?: string;
+    watch?: boolean;
+  }) => {
     const outputMode = resolveOutputMode();
     const envOpt = (program.opts() as { env?: string }).env;
     if (envOpt !== "dev" && envOpt !== "prod") {
@@ -9593,6 +9820,11 @@ apiCommand
         process.stderr.write(`neotoma api start: ${error}\n`);
         return;
       }
+      // v0.5.2: `--watch` is observable but does NOT change routing yet — the
+      // default stays `dev:prod` for one release so contributors who rely on
+      // the watcher under `--env prod` have a deprecation window. v0.6.0
+      // flips the default to `start:api:prod` and routes `--watch` to
+      // `watch:prod` (the `dev:prod` alias is dropped in v0.6.0 as well).
       const childScript = opts.tunnel
         ? envOpt === "prod"
           ? "watch:prod:tunnel"
@@ -9604,24 +9836,28 @@ apiCommand
           : hasSourceWatchScripts
             ? "dev:server"
             : "start:api";
-      // v0.5.1: source-checkout + --env prod routes through `dev:prod`, which
-      // runs a tsx watcher rather than release-compiled artifacts. That is
-      // fine for operator-local production smoke tests but is NOT what you
-      // want for a real production deployment. Point them at the supervised
-      // install recipe in install.md before we spawn. Suppressed under
-      // --output json to preserve machine-readable output.
+      // v0.5.2 deprecation line: when `--env prod` on a source checkout
+      // selects the tsx watcher without an explicit `--watch`, warn that
+      // v0.6.0 will flip the default to the built runner and point
+      // operators at the supervised systemd recipe. Suppressed under
+      // --output json to preserve machine-readable output. Contributors
+      // who want to keep the watcher pass `--watch`, which will survive
+      // the v0.6.0 flip (routing to `watch:prod`).
       if (
         envOpt === "prod" &&
         !opts.tunnel &&
+        !opts.watch &&
         hasSourceWatchScripts &&
         childScript === "dev:prod" &&
         outputMode !== "json"
       ) {
         process.stderr.write(
-          "notice: `neotoma api start --env prod` on a source checkout selects `dev:prod` " +
-            "(tsx watcher, not release-compiled). For a real headless production deployment, " +
-            "install the published npm package (`npm install -g neotoma`) and use the systemd " +
-            "recipe in install.md § Production deployment (headless / systemd).\n"
+          "deprecation: `neotoma api start --env prod` on a source checkout currently runs " +
+            "the tsx watcher (`dev:prod`, not release-compiled). In v0.6.0 the default will " +
+            "flip to the built runner (`start:api:prod`); pass `--watch` to preserve the " +
+            "current behavior. For a real headless production deployment, install the " +
+            "published npm package (`npm install -g neotoma`) and use the systemd recipe in " +
+            "install.md § Production deployment (headless / systemd).\n"
         );
       }
       const spawnEnv: Record<string, string> = { ...process.env, NEOTOMA_ENV: effectiveEnv };
@@ -9740,18 +9976,27 @@ apiCommand
         : hasSourceWatchScripts
           ? "dev:server"
           : "start:api";
-    // v0.5.1: same advisory as the --background branch above — warn when
-    // `--env prod` on a source checkout falls back to the tsx watcher.
-    // NOTE: the json path already early-returned at line ~9684, so we do
-    // not re-check outputMode here (TS narrows it to "pretty"). The
+    // v0.5.2 deprecation line (foreground twin of the --background branch
+    // above): when `--env prod` on a source checkout selects the tsx
+    // watcher without an explicit `--watch`, announce the v0.6.0 flip.
+    // NOTE: the json path already early-returned above, so we do not
+    // re-check outputMode here (TS narrows it to "pretty"). The
     // background branch still needs the outputMode guard because it
     // emits a json payload *after* spawning rather than early-returning.
-    if (envOpt === "prod" && !useTunnel && hasSourceWatchScripts && childScript === "dev:prod") {
+    if (
+      envOpt === "prod" &&
+      !useTunnel &&
+      !opts.watch &&
+      hasSourceWatchScripts &&
+      childScript === "dev:prod"
+    ) {
       process.stderr.write(
-        "notice: `neotoma api start --env prod` on a source checkout selects `dev:prod` " +
-          "(tsx watcher, not release-compiled). For a real headless production deployment, " +
-          "install the published npm package (`npm install -g neotoma`) and use the systemd " +
-          "recipe in install.md § Production deployment (headless / systemd).\n"
+        "deprecation: `neotoma api start --env prod` on a source checkout currently runs " +
+          "the tsx watcher (`dev:prod`, not release-compiled). In v0.6.0 the default will " +
+          "flip to the built runner (`start:api:prod`); pass `--watch` to preserve the " +
+          "current behavior. For a real headless production deployment, install the " +
+          "published npm package (`npm install -g neotoma`) and use the systemd recipe in " +
+          "install.md § Production deployment (headless / systemd).\n"
       );
     }
     const spawnEnv: Record<string, string> = { ...process.env, NEOTOMA_ENV: effectiveEnv };
@@ -11395,7 +11640,6 @@ program
               },
             ],
             idempotency_key: `preferences-reset-${Date.now()}`,
-            interpret: false,
           },
         });
         if (error) throw new Error(JSON.stringify(error));
@@ -11431,7 +11675,6 @@ program
               },
             ],
             idempotency_key: `preferences-set-${Date.now()}`,
-            interpret: false,
           },
         });
         if (error) throw new Error(JSON.stringify(error));
@@ -11536,6 +11779,10 @@ program
   .option("--file-content <content>", "Inline file content to store")
   .option("--user-id <id>", "User ID for the operation")
   .option("--source-priority <level>", "Source priority level (default: 100)")
+  .option(
+    "--observation-source <kind>",
+    "Kind of write: sensor, llm_summary (default), workflow_state, human, or import"
+  )
   .option("--idempotency-key <key>", "Idempotency key to prevent duplicate stores")
   .option(
     "--file-idempotency-key <key>",
@@ -11616,6 +11863,11 @@ program
         if (!Number.isNaN(parsedPriority)) {
           structuredBody.source_priority = parsedPriority;
         }
+      }
+      if (opts.observationSource) {
+        structuredBody.observation_source = normalizeObservationSourceFlag(
+          opts.observationSource as string
+        );
       }
       if (opts.file && !hasUnstructured) {
         const resolvedFile = path.isAbsolute(opts.file)
@@ -11721,6 +11973,10 @@ program
   )
   .option("--source-priority <level>", "Source priority level (default: 100)")
   .option(
+    "--observation-source <kind>",
+    "Kind of write: sensor, llm_summary (default), workflow_state, human, or import"
+  )
+  .option(
     "--source-upload",
     "Force base64 upload of the source file via file_content (required for non-localhost API). Auto-detected when base URL is not localhost."
   )
@@ -11813,6 +12069,11 @@ program
       const parsedPriority = parseInt(opts.sourcePriority as string, 10);
       if (!Number.isNaN(parsedPriority)) body.source_priority = parsedPriority;
     }
+    if (opts.observationSource) {
+      body.observation_source = normalizeObservationSourceFlag(
+        opts.observationSource as string
+      );
+    }
 
     const { data, error } = await api.POST("/store", { body: body as any });
     if (error) throw new Error(`Failed to ingest payload: ${JSON.stringify(error)}`);
@@ -11896,11 +12157,13 @@ program
       extractedEntities = parsed as Array<Record<string, unknown>>;
     }
 
+    const messageRole = opts.role ?? "user";
     const entities = [
       { entity_type: "conversation", title: opts.conversationTitle ?? "Chat conversation" },
       {
-        entity_type: "agent_message",
-        role: opts.role ?? "user",
+        entity_type: "conversation_message",
+        role: messageRole,
+        sender_kind: messageRole,
         content: String(opts.message),
         turn_key: turnKey,
       },
@@ -11925,7 +12188,6 @@ program
         entities,
         relationships,
         idempotency_key: idempotencyKey,
-        interpret: false,
         user_id: opts.userId,
       },
     });
@@ -11941,6 +12203,10 @@ program
   .option("--entity-type <type>", "Entity type to use if not in data")
   .option("--user-id <id>", "User ID for the operation")
   .option("--source-priority <priority>", "Source priority (default: 100)")
+  .option(
+    "--observation-source <kind>",
+    "Kind of write: sensor, llm_summary (default), workflow_state, human, or import"
+  )
   .action(async (opts) => {
     const outputMode = resolveOutputMode();
     const config = await readConfig();
@@ -11992,13 +12258,17 @@ program
     const sourcePriority = opts.sourcePriority ? parseInt(opts.sourcePriority as string, 10) : 100;
     const idempotencyKey = createIdempotencyKey({ entities: entityArray });
 
+    const observationSource = opts.observationSource
+      ? normalizeObservationSourceFlag(opts.observationSource as string)
+      : undefined;
+
     const { data, error } = await api.POST("/store", {
       body: {
         entities: entityArray,
         idempotency_key: idempotencyKey,
         source_priority: sourcePriority,
+        ...(observationSource ? { observation_source: observationSource } : {}),
         original_filename: originalFilename,
-        interpret: false,
         user_id: opts.userId,
       },
     });
@@ -12765,9 +13035,10 @@ program
 // `list_recent_changes`.
 // ---------------------------------------------------------------------------
 program
-  .command("recent")
+  .command("list-recent-changes")
+  .aliases(["recent"])
   .description(
-    "List the most recently changed records across entities, sources, observations, relationships, interpretations, and timeline events"
+    "List the most recently changed records across entities, sources, observations, relationships, interpretations, and timeline events. Alias: `recent`."
   )
   .option("--limit <n>", "Maximum items to return (max 200)", "50")
   .option("--offset <n>", "Pagination offset", "0")
@@ -13025,6 +13296,170 @@ snapshotsCommand
         auto_fix: !opts.dryRun,
         ...(data as Record<string, unknown>),
       },
+      outputMode
+    );
+  });
+
+// ---------------------------------------------------------------------
+// Fleet-general snapshot export + drift comparison (item-3).
+//
+// Both subcommands run against the local service layer (same process
+// as the CLI) so they work offline and do not require an extra HTTP
+// surface. The export shape is intentionally fleet-neutral; fleet-
+// specific parsers plug into `drift_comparison.ts` via
+// `registerExternalParser` without touching the CLI.
+// ---------------------------------------------------------------------
+
+snapshotsCommand
+  .command("export")
+  .description(
+    "Export entity snapshots (including attribution fingerprint + observation_source histogram) as fleet-neutral JSON. Filter by entity type, agent, trust tier, or write kind."
+  )
+  .option("--entity-types <csv>", "Comma-separated list of entity types to export")
+  .option("--agent-sub <sub>", "Restrict to a single AAuth agent_sub")
+  .option(
+    "--attribution-tier <tier>",
+    "Restrict to one attribution tier (hardware | software | unverified_client | anonymous)"
+  )
+  .option(
+    "--observation-source <kind>",
+    "Restrict to one write kind: sensor | llm_summary | workflow_state | human | import"
+  )
+  .option("--since <iso>", "ISO-8601 lower bound on last_observation_at")
+  .option("--limit <n>", "Cap on returned entities (default: 500)")
+  .option("--out <path>", "Write the export to this file instead of stdout")
+  .option(
+    "--user-id <id>",
+    "Override user scope (flag > NEOTOMA_USER_ID > authenticated user)"
+  )
+  .action(async (opts) => {
+    const outputMode = resolveOutputMode();
+    const { exportEntitySnapshots, DEFAULT_SNAPSHOT_EXPORT_LIMIT } = await import(
+      "../services/snapshot_export.js"
+    );
+
+    const userId = resolveEffectiveUserId(opts.userId) ?? LOCAL_DEV_USER_ID;
+    const filter = {
+      user_id: userId,
+      ...(opts.entityTypes
+        ? {
+            entity_types: String(opts.entityTypes)
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean),
+          }
+        : {}),
+      ...(opts.agentSub ? { agent_sub: String(opts.agentSub) } : {}),
+      ...(opts.attributionTier
+        ? { attribution_tier: String(opts.attributionTier) as never }
+        : {}),
+      ...(opts.observationSource
+        ? {
+            observation_source: normalizeObservationSourceFlag(
+              String(opts.observationSource)
+            ),
+          }
+        : {}),
+      ...(opts.since ? { since: String(opts.since) } : {}),
+      limit: opts.limit
+        ? parseInt(String(opts.limit), 10) || DEFAULT_SNAPSHOT_EXPORT_LIMIT
+        : DEFAULT_SNAPSHOT_EXPORT_LIMIT,
+    };
+
+    const doc = await exportEntitySnapshots(filter);
+
+    if (opts.out) {
+      const resolved = path.isAbsolute(opts.out)
+        ? opts.out
+        : path.resolve(process.cwd(), opts.out);
+      await fs.writeFile(resolved, JSON.stringify(doc, null, 2), "utf-8");
+      writeOutput(
+        {
+          wrote: resolved,
+          total_entities: doc.total_entities,
+        },
+        outputMode
+      );
+      return;
+    }
+    writeOutput(doc, outputMode);
+  });
+
+snapshotsCommand
+  .command("diff")
+  .description(
+    "Compare a Neotoma snapshot export against an external-state snapshot via a pluggable ExternalParser. Defaults to the identity JSON parser; fleet-specific parsers register via src/services/drift_comparison.ts."
+  )
+  .requiredOption("--neotoma <path>", "Path to a snapshots export JSON file")
+  .requiredOption("--external <path>", "Path to the external-state snapshot file")
+  .option(
+    "--parser <name>",
+    "External parser name (default: json; list via `snapshots parsers`)",
+    "json"
+  )
+  .option("--out <path>", "Write the drift report to this file instead of stdout")
+  .action(async (opts) => {
+    const outputMode = resolveOutputMode();
+    const { compareSnapshots, getExternalParser } = await import(
+      "../services/drift_comparison.js"
+    );
+
+    const neotomaPath = path.isAbsolute(opts.neotoma)
+      ? opts.neotoma
+      : path.resolve(process.cwd(), opts.neotoma);
+    const externalPath = path.isAbsolute(opts.external)
+      ? opts.external
+      : path.resolve(process.cwd(), opts.external);
+
+    const [neotomaRaw, externalRaw] = await Promise.all([
+      fs.readFile(neotomaPath, "utf-8"),
+      fs.readFile(externalPath, "utf-8"),
+    ]);
+
+    const parser = getExternalParser(String(opts.parser));
+    if (!parser) {
+      throw new Error(
+        `Unknown external parser "${opts.parser}". Register one via registerExternalParser() in src/services/drift_comparison.ts.`
+      );
+    }
+
+    let neotomaDoc: import("../services/snapshot_export.js").SnapshotExportDocument;
+    try {
+      neotomaDoc = JSON.parse(neotomaRaw);
+    } catch (err) {
+      throw new Error(
+        `Failed to parse --neotoma JSON at ${neotomaPath}: ${(err as Error).message}`
+      );
+    }
+    const external = parser.parse(externalRaw);
+
+    const report = compareSnapshots(neotomaDoc, external);
+
+    if (opts.out) {
+      const resolved = path.isAbsolute(opts.out)
+        ? opts.out
+        : path.resolve(process.cwd(), opts.out);
+      await fs.writeFile(resolved, JSON.stringify(report, null, 2), "utf-8");
+      writeOutput(
+        {
+          wrote: resolved,
+          summary: report.summary,
+        },
+        outputMode
+      );
+      return;
+    }
+    writeOutput(report, outputMode);
+  });
+
+snapshotsCommand
+  .command("parsers")
+  .description("List registered external parsers for `snapshots diff`")
+  .action(async () => {
+    const outputMode = resolveOutputMode();
+    const { listExternalParsers } = await import("../services/drift_comparison.js");
+    writeOutput(
+      listExternalParsers().map((p) => ({ name: p.name, description: p.description })),
       outputMode
     );
   });

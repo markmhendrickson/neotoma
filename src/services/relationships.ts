@@ -10,6 +10,8 @@ import { createHash } from "node:crypto";
 import { db } from "../db.js";
 import type { RelationshipSnapshot } from "../reducers/relationship_reducer.js";
 import { generateDeterministicSourceId } from "./source_identity.js";
+import { getCurrentAgentIdentity } from "./request_context.js";
+import { enforceAttributionPolicy } from "./attribution_policy.js";
 
 export type RelationshipType =
   | "PART_OF"
@@ -111,6 +113,7 @@ export class RelationshipsService {
     metadata?: Record<string, unknown>;
     user_id: string;
   }): Promise<RelationshipSnapshot> {
+    enforceAttributionPolicy("relationships", getCurrentAgentIdentity());
     if (!this.validTypes.has(params.relationship_type)) {
       throw new Error(`Invalid relationship type: ${params.relationship_type}`);
     }

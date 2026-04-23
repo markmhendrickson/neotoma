@@ -1,0 +1,15 @@
+{
+  "user_id": "00000000-0000-0000-0000-000000000000",
+  "idempotency_key": "legacy-v0.6.x-conversation-without-id",
+  "commit": true,
+  "entities": [
+    {
+      "entity_type": "conversation",
+      "title": "Gmail recent emails"
+    },
+    {
+      "entity_type": "conversation",
+      "title": "Gmail recent emails"
+    }
+  ]
+}

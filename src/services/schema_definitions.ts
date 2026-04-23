@@ -27,7 +27,13 @@ import type { SchemaDefinition, ReducerConfig } from "./schema_registry.js";
 export interface EntitySchemaMetadata {
   label: string;
   description: string;
-  category: "finance" | "productivity" | "knowledge" | "health" | "media";
+  category:
+    | "finance"
+    | "productivity"
+    | "knowledge"
+    | "health"
+    | "media"
+    | "agent_runtime";
   aliases?: string[];
   primaryProperties?: string[]; // Optional: can derive from required fields
 }
@@ -894,7 +900,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
 
   conversation: {
     entity_type: "conversation",
-    schema_version: "1.0",
+    schema_version: "1.2",
     metadata: {
       label: "Conversation",
       description: "Chat conversation container entity.",
@@ -904,28 +910,44 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
+        // v1.2: caller-supplied stable identifier linking all turns in this
+        // conversation. Declared as the primary canonical_name_fields rule so
+        // distinct sessions never heuristically merge via `title`. See
+        // docs/foundation/entity_resolution.md and
+        // .cursor/plans/conversation_entity_collision_fix_aef8ba0d.plan.md.
+        conversation_id: { type: "string", required: false },
         title: { type: "string", required: false, preserveCase: true },
+        // Phase 1: identifies the participant topology of the conversation so
+        // downstream views can distinguish human<->agent chats from
+        // agent<->agent (A2A) or multi-party threads. Optional; defaults to
+        // "human_agent" when omitted.
+        thread_kind: { type: "string", required: false },
       },
-      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
-      // declare explicit opt-out so resolution falls through to the heuristic
-      // path. See docs/foundation/schema_agnostic_design_rules.md.
-      identity_opt_out: "heuristic_canonical_name",
+      // v1.2: session-scoped identity via caller-supplied `conversation_id`.
+      // When absent, resolution falls through to the heuristic path; the
+      // schema-level `name_collision_policy: reject` (R2) then converts that
+      // heuristic match into ERR_STORE_RESOLUTION_FAILED instead of silently
+      // collapsing unrelated sessions by `title`.
+      canonical_name_fields: ["conversation_id"],
+      name_collision_policy: "reject",
     },
     reducer_config: {
       merge_policies: {
         title: { strategy: "highest_priority", tie_breaker: "source_priority" },
+        thread_kind: { strategy: "last_write" },
       },
     },
   },
 
-  agent_message: {
-    entity_type: "agent_message",
-    schema_version: "1.0",
+  conversation_message: {
+    entity_type: "conversation_message",
+    schema_version: "1.2",
     metadata: {
-      label: "Agent Message",
-      description: "Message entity representing one chat turn.",
+      label: "Chat Message",
+      description:
+        "One turn in a conversation. Sender may be a human user, an assistant, another agent, a system, or a tool; see sender_kind. Phase 2 (2026-04) renamed the canonical entity_type from `agent_message`; `agent_message` remains an alias for backward compatibility.",
       category: "knowledge",
-      aliases: ["chat_message", "message"],
+      aliases: ["agent_message", "chat_message"],
     },
     schema_definition: {
       fields: {
@@ -933,17 +955,34 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         role: { type: "string", required: true },
         content: { type: "string", required: true, preserveCase: true },
         turn_key: { type: "string", required: false },
+        // Phase 1: authoritative sender category. One of
+        // "user" | "assistant" | "agent" | "system" | "tool". New writers set
+        // this alongside `role` (mirror for user/assistant, richer values for
+        // A2A and tool turns). Reads should prefer sender_kind and fall back
+        // to role when missing on legacy rows.
+        sender_kind: { type: "string", required: false },
+        // Phase 1: stable identifier of the sending agent. Derived from
+        // AAuth thumbprint / clientInfo / agent_sub where available; see
+        // docs/subsystems/agent_attribution_integration.md.
+        sender_agent_id: { type: "string", required: false },
+        // Phase 1: stable identifier of the recipient agent for A2A traffic.
+        recipient_agent_id: { type: "string", required: false },
       },
-      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
-      // declare explicit opt-out so resolution falls through to the heuristic
-      // path. See docs/foundation/schema_agnostic_design_rules.md.
-      identity_opt_out: "heuristic_canonical_name",
+      // v1.2: turn-scoped identity via caller-supplied `turn_key`. Falls
+      // through to heuristic when missing; R2 `name_collision_policy: reject`
+      // converts that to ERR_STORE_RESOLUTION_FAILED rather than a silent
+      // merge across turns with identical content.
+      canonical_name_fields: ["turn_key"],
+      name_collision_policy: "reject",
     },
     reducer_config: {
       merge_policies: {
         role: { strategy: "last_write" },
         content: { strategy: "last_write" },
         turn_key: { strategy: "last_write" },
+        sender_kind: { strategy: "last_write" },
+        sender_agent_id: { strategy: "last_write" },
+        recipient_agent_id: { strategy: "last_write" },
       },
     },
   },
@@ -2150,6 +2189,280 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
     reducer_config: {
       merge_policies: {
         priority: { strategy: "last_write" },
+      },
+    },
+  },
+
+  // ---------------------------------------------------------------------
+  // Fleet-general agent runtime schemas (v0.1)
+  //
+  // These six singular, unprefixed schemas capture the LCD of the
+  // `task -> attempt -> outcome -> artifact` chain that autonomous agent
+  // fleets (AIBTC Lumen, LangGraph, OpenClaw, homegrown loops) share.
+  // They intentionally cover only the lowest common denominator; fleet-
+  // specific extensions (AIBTC `skills_loaded`, LangGraph node ids,
+  // custom-adapter metadata) land later as minor-bump optional fields or
+  // sibling `*_extension` entity types linked via REFERS_TO.
+  //
+  // Cross-cutting:
+  //   * Agent identity is NOT a schema field — it lives in provenance
+  //     via AAuth (`agent_sub` / `agent_public_key`) with OAuth /
+  //     bearer / `clientInfo` as the fallback tier. See
+  //     docs/subsystems/sources.md.
+  //   * Every write should carry an `observation_source` classification
+  //     (sensor | workflow_state | llm_summary | human | import). The
+  //     reducer uses it as a tie-break after `source_priority`; see
+  //     src/shared/action_schemas.ts and src/reducers/observation_reducer.ts.
+  //   * Schema version is pinned at `0.1.0` so the next fleet-validated
+  //     promotion is a standard minor bump.
+  // ---------------------------------------------------------------------
+
+  agent_task: {
+    entity_type: "agent_task",
+    schema_version: "0.1.0",
+    metadata: {
+      label: "Agent task",
+      description:
+        "Fleet-general unit of agent work dispatched to a runtime (agent-runtime, LangGraph, OpenClaw, custom). LCD v0.1; fleet-specific fields ride a minor bump.",
+      category: "agent_runtime",
+      aliases: ["agent_job", "runtime_task"],
+    },
+    schema_definition: {
+      fields: {
+        task_id: { type: "string", required: true },
+        parent_task_id: { type: "string", required: false },
+        status: { type: "string", required: false },
+        description: { type: "string", required: false, preserveCase: true },
+        started_at: { type: "date", required: false },
+        completed_at: { type: "date", required: false },
+        source: { type: "string", required: false },
+        priority: { type: "string", required: false },
+        input_summary: { type: "string", required: false, preserveCase: true },
+      },
+      canonical_name_fields: ["task_id"],
+      temporal_fields: [
+        { field: "started_at", event_type: "AgentTaskStarted" },
+        { field: "completed_at", event_type: "AgentTaskCompleted" },
+      ],
+    },
+    reducer_config: {
+      merge_policies: {
+        status: { strategy: "last_write" },
+        description: { strategy: "highest_priority", tie_breaker: "source_priority" },
+        started_at: { strategy: "last_write" },
+        completed_at: { strategy: "last_write" },
+        source: { strategy: "last_write" },
+        priority: { strategy: "last_write" },
+        input_summary: {
+          strategy: "highest_priority",
+          tie_breaker: "source_priority",
+        },
+      },
+    },
+  },
+
+  agent_attempt: {
+    entity_type: "agent_attempt",
+    schema_version: "0.1.0",
+    metadata: {
+      label: "Agent attempt",
+      description:
+        "A single execution attempt of an agent_task on a named runtime. Captures lifecycle + cost/timing. Fleet-general LCD.",
+      category: "agent_runtime",
+      aliases: ["agent_run", "agent_execution"],
+    },
+    schema_definition: {
+      fields: {
+        attempt_id: { type: "string", required: true },
+        task_id: { type: "string", required: true },
+        runtime: { type: "string", required: false },
+        status: { type: "string", required: false },
+        started_at: { type: "date", required: false },
+        completed_at: { type: "date", required: false },
+        tokens: { type: "number", required: false },
+        cost: { type: "number", required: false },
+        duration_ms: { type: "number", required: false },
+        adapter: { type: "string", required: false },
+      },
+      canonical_name_fields: ["attempt_id"],
+      temporal_fields: [
+        { field: "started_at", event_type: "AgentAttemptStarted" },
+        { field: "completed_at", event_type: "AgentAttemptCompleted" },
+      ],
+    },
+    reducer_config: {
+      merge_policies: {
+        status: { strategy: "last_write" },
+        runtime: { strategy: "last_write" },
+        started_at: { strategy: "last_write" },
+        completed_at: { strategy: "last_write" },
+        tokens: { strategy: "last_write" },
+        cost: { strategy: "last_write" },
+        duration_ms: { strategy: "last_write" },
+        adapter: { strategy: "last_write" },
+      },
+    },
+  },
+
+  agent_outcome: {
+    entity_type: "agent_outcome",
+    schema_version: "0.1.0",
+    metadata: {
+      label: "Agent outcome",
+      description:
+        "Terminal result of an agent_attempt (success/failure + summary + evidence refs). Fleet-general LCD.",
+      category: "agent_runtime",
+      aliases: ["agent_result"],
+    },
+    schema_definition: {
+      fields: {
+        outcome_id: { type: "string", required: true },
+        attempt_id: { type: "string", required: true },
+        success: { type: "boolean", required: false },
+        summary: { type: "string", required: false, preserveCase: true },
+        error: { type: "string", required: false, preserveCase: true },
+        evidence_summary: {
+          type: "string",
+          required: false,
+          preserveCase: true,
+        },
+        artifact_refs: { type: "object", required: false },
+      },
+      canonical_name_fields: ["outcome_id"],
+    },
+    reducer_config: {
+      merge_policies: {
+        success: { strategy: "last_write" },
+        summary: { strategy: "highest_priority", tie_breaker: "source_priority" },
+        error: { strategy: "highest_priority", tie_breaker: "source_priority" },
+        evidence_summary: {
+          strategy: "highest_priority",
+          tie_breaker: "source_priority",
+        },
+        artifact_refs: { strategy: "last_write" },
+      },
+    },
+  },
+
+  agent_artifact: {
+    entity_type: "agent_artifact",
+    schema_version: "0.1.0",
+    metadata: {
+      label: "Agent artifact",
+      description:
+        "A concrete artifact emitted by an agent_outcome (file, message, tool output, text, image). Linked via outcome_id.",
+      category: "agent_runtime",
+      aliases: ["agent_output"],
+    },
+    schema_definition: {
+      fields: {
+        artifact_id: { type: "string", required: true },
+        outcome_id: { type: "string", required: true },
+        kind: { type: "string", required: false },
+        uri: { type: "string", required: false },
+        hash: { type: "string", required: false },
+        size_bytes: { type: "number", required: false },
+        mime_type: { type: "string", required: false },
+      },
+      canonical_name_fields: ["artifact_id"],
+    },
+    reducer_config: {
+      merge_policies: {
+        kind: { strategy: "last_write" },
+        uri: { strategy: "last_write" },
+        hash: { strategy: "last_write" },
+        size_bytes: { strategy: "last_write" },
+        mime_type: { strategy: "last_write" },
+      },
+    },
+  },
+
+  agent_sensor_signal: {
+    entity_type: "agent_sensor_signal",
+    schema_version: "0.1.0",
+    metadata: {
+      label: "Agent sensor signal",
+      description:
+        "Ground-truth emission from an agent sensor (tool event, telemetry, env probe). Use with observation_source=sensor so the reducer can rank sensor reality over LLM summaries.",
+      category: "agent_runtime",
+      aliases: ["sensor_emission", "agent_signal"],
+    },
+    schema_definition: {
+      fields: {
+        sensor_id: { type: "string", required: true },
+        signal_kind: { type: "string", required: false },
+        payload_summary: {
+          type: "string",
+          required: false,
+          preserveCase: true,
+        },
+        emitted_at: { type: "date", required: false },
+        payload: { type: "object", required: false },
+      },
+      canonical_name_fields: [
+        { composite: ["sensor_id", "emitted_at"] },
+        "sensor_id",
+      ],
+      temporal_fields: [{ field: "emitted_at", event_type: "AgentSensorEmitted" }],
+    },
+    reducer_config: {
+      merge_policies: {
+        signal_kind: { strategy: "last_write" },
+        payload_summary: {
+          strategy: "highest_priority",
+          tie_breaker: "source_priority",
+        },
+        emitted_at: { strategy: "last_write" },
+        payload: { strategy: "last_write" },
+      },
+      // Sensor emissions are the ground-truth baseline for this schema;
+      // keep the registry-wide default order (sensor > workflow_state >
+      // llm_summary > human > import) explicit so future edits don't
+      // accidentally demote sensor writes below summaries.
+      observation_source_priority: [
+        "sensor",
+        "workflow_state",
+        "llm_summary",
+        "human",
+        "import",
+      ],
+    },
+  },
+
+  agent_cycle_summary: {
+    entity_type: "agent_cycle_summary",
+    schema_version: "0.1.0",
+    metadata: {
+      label: "Agent cycle summary",
+      description:
+        "Roll-up of one fleet cycle (wall clock, tasks dispatched, cost, optional external-state hash for drift reconciliation).",
+      category: "agent_runtime",
+      aliases: ["agent_cycle"],
+    },
+    schema_definition: {
+      fields: {
+        cycle_id: { type: "string", required: true },
+        tasks_dispatched: { type: "number", required: false },
+        started_at: { type: "date", required: false },
+        ended_at: { type: "date", required: false },
+        tokens: { type: "number", required: false },
+        cost: { type: "number", required: false },
+        external_state_hash: { type: "string", required: false },
+      },
+      canonical_name_fields: ["cycle_id"],
+      temporal_fields: [
+        { field: "started_at", event_type: "AgentCycleStarted" },
+        { field: "ended_at", event_type: "AgentCycleEnded" },
+      ],
+    },
+    reducer_config: {
+      merge_policies: {
+        tasks_dispatched: { strategy: "last_write" },
+        started_at: { strategy: "last_write" },
+        ended_at: { strategy: "last_write" },
+        tokens: { strategy: "last_write" },
+        cost: { strategy: "last_write" },
+        external_state_hash: { strategy: "last_write" },
       },
     },
   },

@@ -1,0 +1,6 @@
+endpoint: "POST /store"
+outcome: valid
+notes: |
+  The pre-v0.5 flat entity shape — fields at the top level — remains accepted
+  after the v0.5.0 `attributes`-nested tightening. This fixture pins the
+  happy path so a future refactor cannot silently reject flat payloads.

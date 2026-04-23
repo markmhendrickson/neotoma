@@ -1,0 +1,51 @@
+[build]
+  command = "npm run build"
+  functions = "netlify/functions"
+  publish = "public"
+
+[functions]
+  node_bundler = "esbuild"
+  directory = "netlify/functions"
+
+[[redirects]]
+  from = "/feedback/submit"
+  to = "/.netlify/functions/submit"
+  status = 200
+
+[[redirects]]
+  from = "/feedback/status"
+  to = "/.netlify/functions/status"
+  status = 200
+
+[[redirects]]
+  from = "/feedback/pending"
+  to = "/.netlify/functions/pending"
+  status = 200
+
+[[redirects]]
+  from = "/feedback/by_commit/:sha"
+  to = "/.netlify/functions/by_commit?sha=:sha"
+  status = 200
+
+[[redirects]]
+  from = "/feedback/:id/status"
+  to = "/.netlify/functions/update_status?id=:id"
+  status = 200
+
+[[redirects]]
+  from = "/feedback/:id/mirror_replay"
+  to = "/.netlify/functions/mirror_replay?id=:id"
+  status = 200
+
+[[redirects]]
+  from = "/healthz"
+  to = "/.netlify/functions/healthz"
+  status = 200
+
+[[redirects]]
+  from = "/.well-known/jwks.json"
+  to = "/.netlify/functions/jwks"
+  status = 200
+
+[functions."push_webhook_worker"]
+  schedule = "*/5 * * * *"

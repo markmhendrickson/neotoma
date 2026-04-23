@@ -46,8 +46,9 @@ def main() -> int:
     if final_text:
         entities.append(
             {
-                "entity_type": "agent_message",
+                "entity_type": "conversation_message",
                 "role": "assistant",
+                "sender_kind": "assistant",
                 "content": final_text,
                 "turn_key": f"{session_id}:{turn_id}:assistant",
                 **harness_provenance({"hook_event": "session_end"}),

@@ -6,6 +6,51 @@ export interface ApiClientOptions {
   baseUrl?: string;
   token?: string;
   useOfflineFallback?: boolean;
+  /**
+   * When true, sign outbound requests with the CLI-side AAuth keypair at
+   * `~/.neotoma/aauth/`. Silently falls back to unsigned `fetch` when no
+   * keypair is configured so CLI callers that have not run
+   * `neotoma auth keygen` are unaffected. Defaults to true in CLI
+   * contexts and false in test / offline contexts.
+   */
+  signWithCliAAuth?: boolean;
+}
+
+/**
+ * Build a `fetch` wrapper that attempts to sign outbound requests with the
+ * CLI-side AAuth keypair. When signing is disabled or no keypair is
+ * configured the returned function is the global `fetch` unchanged. This
+ * indirection keeps Node-only `fs`/`jose` imports out of the browser
+ * bundle via a dynamic import.
+ */
+function buildMaybeSignedFetch(enabled: boolean): typeof fetch {
+  if (!enabled) return fetch;
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : (input as URL | Request).toString();
+    const { cliSignedFetch } = await import("../cli/aauth_signer.js");
+    const method = (init?.method ?? "GET").toUpperCase();
+    const headers: Record<string, string> = {};
+    if (init?.headers) {
+      const h = new Headers(init.headers);
+      h.forEach((value, key) => {
+        headers[key] = value;
+      });
+    }
+    const body = typeof init?.body === "string" ? init.body : undefined;
+    try {
+      return await cliSignedFetch(url, {
+        method,
+        headers,
+        body,
+        signal: init?.signal ?? undefined,
+      });
+    } catch {
+      // Never surface signing misconfiguration as a hard failure from the
+      // API client — the caller should still reach the server and land
+      // as `unverified_client` / `anonymous` tier.
+      return fetch(input, init);
+    }
+  }) as typeof fetch;
 }
 
 export function createApiClient(options: ApiClientOptions = {}) {
@@ -14,9 +59,17 @@ export function createApiClient(options: ApiClientOptions = {}) {
     headers.Authorization = `Bearer ${options.token}`;
   }
 
+  const signingEnabled =
+    options.signWithCliAAuth ??
+    (process.env.NODE_ENV !== "test" &&
+      process.env.NEOTOMA_CLI_AAUTH_DISABLE !== "1" &&
+      process.env.NEOTOMA_CLI_AAUTH_ENABLE !== "0");
+  const fetchImpl = buildMaybeSignedFetch(signingEnabled);
+
   const client = createClient<paths>({
     baseUrl: options.baseUrl,
     headers,
+    fetch: fetchImpl,
   });
 
   const defaultFallback =

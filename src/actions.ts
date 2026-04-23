@@ -2,9 +2,9 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { z } from "zod";
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import { db } from "./db.js";
 import { config } from "./config.js";
 import fs from "fs";
@@ -18,6 +18,29 @@ import {
 } from "./services/public_key_registry.js";
 import { verifyRequest, parseAuthHeader } from "./crypto/auth.js";
 import { encryptResponseMiddleware } from "./middleware/encrypt_response.js";
+import { unknownFieldsGuard } from "./middleware/unknown_fields_guard.js";
+import {
+  aauthVerify,
+  getAAuthContextFromRequest,
+  getAttributionDecisionFromRequest,
+} from "./middleware/aauth_verify.js";
+import { attributionContext } from "./middleware/attribution_context.js";
+import { buildSessionInfo } from "./services/session_info.js";
+import { AttributionPolicyError } from "./services/attribution_policy.js";
+import {
+  AgentCapabilityError,
+  contextFromAgentIdentity,
+  enforceAgentCapability,
+} from "./services/agent_capabilities.js";
+import {
+  getCurrentAgentIdentity,
+  runWithRequestContext,
+} from "./services/request_context.js";
+import {
+  createAgentIdentity as buildAgentIdentity,
+  getAgentIdentityFromRequest,
+  normaliseClientName,
+} from "./crypto/agent_identity.js";
 import { initServerKeys } from "./services/encryption_service.js";
 import {
   storeRawContent,
@@ -52,6 +75,7 @@ import {
   ListObservationsRequestSchema,
   ListRelationshipsRequestSchema,
   MergeEntitiesRequestSchema,
+  SplitEntityRequestSchema,
   ObservationsQueryRequestSchema,
   RegisterSchemaRequestSchema,
   RelationshipSnapshotRequestSchema,
@@ -73,8 +97,12 @@ import {
 } from "./services/entity_snapshot_embedding.js";
 import { readOpenApiActionsFile, readOpenApiFile } from "./shared/openapi_file.js";
 import { buildSmitheryServerCard } from "./mcp_server_card.js";
-import { listRecentRecordActivity } from "./services/recent_record_activity.js";
+import {
+  listRecentRecordActivity,
+  parseRecordActivityTypesQuery,
+} from "./services/recent_record_activity.js";
 import { listRecentConversations } from "./services/recent_conversations.js";
+import { getAgent, listAgentRecords, listAgents } from "./services/agents_directory.js";
 // import { setupDocumentationRoutes } from "./routes/documentation.js";
 
 type ErrorEnvelope = {
@@ -89,6 +117,13 @@ export const app = express();
 // Trust proxy headers (required for express-rate-limit when X-Forwarded-For is present)
 app.set("trust proxy", true);
 // Configure CSP to allow CDN scripts for the uploader and API connects
+// SECURITY: CSP tightened per docs/reports/security_audit_2026_04_22.md S-9.
+// Operators who need to broaden connectSrc (e.g. self-hosted API at a
+// different origin) can set NEOTOMA_CSP_CONNECT_SRC to a comma-separated list.
+const extraConnectSrc = (process.env.NEOTOMA_CSP_CONNECT_SRC || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
 app.use(
   helmet({
     contentSecurityPolicy: {
@@ -96,7 +131,7 @@ app.use(
       directives: {
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://unpkg.com"],
-        connectSrc: ["'self'", "http:", "https:"],
+        connectSrc: ["'self'", ...extraConnectSrc],
         imgSrc: ["'self'", "data:"],
         styleSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com"],
         objectSrc: ["'none'"],
@@ -121,8 +156,20 @@ const corsOptions = {
   optionsSuccessStatus: 200, // Some legacy browsers (IE11, various SmartTVs) choke on 204
 };
 app.use(cors(corsOptions));
-app.use(express.json({ limit: "10mb" }));
+// Capture raw body for AAuth HTTP Message Signature verification. The JSON
+// parser's `verify` hook runs before the body is consumed, so we can stash a
+// Buffer on `req.rawBody` without affecting downstream handlers that read
+// `req.body` as parsed JSON. See src/middleware/aauth_verify.ts.
+app.use(
+  express.json({
+    limit: "10mb",
+    verify: (req, _res, buf) => {
+      (req as { rawBody?: Buffer }).rawBody = Buffer.from(buf);
+    },
+  })
+);
 app.use(morgan("dev"));
+app.use(unknownFieldsGuard);
 
 // Rate limiters for OAuth endpoints
 // validate.trustProxy: false — we use trust proxy behind one proxy; skip strict IP check
@@ -131,6 +178,42 @@ const rateLimitOptions = {
   legacyHeaders: false,
   validate: { trustProxy: false } as const,
 };
+
+// SECURITY: timing-safe equality for short operator-controlled tokens.
+// Plain `===` leaks token length and prefix matches via response time.
+// See docs/reports/security_audit_2026_04_22.md S-13.
+function safeCompareTokens(a: string, b: string): boolean {
+  if (typeof a !== "string" || typeof b !== "string") return false;
+  const aBuf = Buffer.from(a);
+  const bBuf = Buffer.from(b);
+  if (aBuf.length !== bBuf.length) return false;
+  return timingSafeEqual(aBuf, bBuf);
+}
+
+// SECURITY: write-path rate limiting (docs/reports/
+// security_audit_2026_04_22.md S-8). Keyed by authenticated user when
+// available so a single abusive client does not starve others. Operators
+// can tune with NEOTOMA_WRITE_RATE_LIMIT_PER_MIN.
+const WRITE_RATE_LIMIT_PER_MIN = Math.max(
+  1,
+  Number.parseInt(process.env.NEOTOMA_WRITE_RATE_LIMIT_PER_MIN || "", 10) || 120
+);
+const writeRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: WRITE_RATE_LIMIT_PER_MIN,
+  keyGenerator: (req) => {
+    const userId =
+      ((req as express.Request & { authenticatedUserId?: string }).authenticatedUserId as
+        | string
+        | undefined) || "";
+    if (userId) return `u:${userId}`;
+    // Use the library-provided IPv6-safe key helper; keying directly on
+    // req.ip lets IPv6 callers rotate the low-64 bits to bypass limits.
+    return `ip:${ipKeyGenerator(req.ip || "")}`;
+  },
+  message: "Write rate limit exceeded, please slow down",
+  ...rateLimitOptions,
+});
 const oauthInitiateLimit = rateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: 5,
@@ -288,12 +371,29 @@ const mcpTransports = new Map<string, StreamableHTTPServerTransport>();
 // Store server instances by session ID to preserve authentication state
 const mcpServerInstances = new Map<string, NeotomaServer>();
 
-/** True when request is to localhost/127.0.0.1 (local access). Tunnel requests have a non-local Host. */
+/**
+ * True when the request arrived over a loopback socket.
+ *
+ * SECURITY: derived from the TCP socket's remote address, NOT the `Host`
+ * header. `req.headers.host` is attacker-controlled; using it to gate
+ * authentication / auto-approval produces a trivial bypass when the server is
+ * bound to a non-loopback interface. We check `req.socket.remoteAddress`
+ * directly so spoofed `Host: localhost` headers do not promote a remote
+ * caller into the local-dev trust zone.
+ *
+ * Express's `req.ip` is also unsafe here because `trust proxy` honours the
+ * X-Forwarded-For header — any caller can claim to be loopback.
+ */
 export function isLocalRequest(req: express.Request): boolean {
-  const host = (((req.headers["host"] || req.headers["Host"]) as string) || "")
-    .split(":")[0]
-    .toLowerCase();
-  return host === "localhost" || host === "127.0.0.1" || host === "[::1]" || host === "::1";
+  const remote = (req.socket?.remoteAddress || "").toLowerCase();
+  if (!remote) return false;
+  // Unix-domain socket requests have no remote address; treat as non-local.
+  if (remote === "127.0.0.1" || remote === "::1") return true;
+  // IPv4 loopback range (127.0.0.0/8)
+  if (remote.startsWith("127.")) return true;
+  // IPv4-mapped IPv6 loopback (e.g. ::ffff:127.0.0.1)
+  if (remote.startsWith("::ffff:127.")) return true;
+  return false;
 }
 
 const OAUTH_KEY_SESSION_COOKIE = "neotoma_oauth_key_session";
@@ -546,6 +646,48 @@ function setOAuthKeySessionCookie(req: express.Request, res: express.Response): 
   });
 }
 
+/**
+ * Derive the canonical `@authority` the AAuth profile requires (AAuth §10.3.1).
+ * We trust explicit configuration first, then fall back to the host the
+ * process is actually listening on. We must NOT trust `Host:` headers from
+ * the request path — an attacker could smuggle signatures authored against
+ * a different authority. See src/middleware/aauth_verify.ts.
+ */
+function canonicalAauthAuthority(): string {
+  const explicit = process.env.NEOTOMA_AAUTH_AUTHORITY?.trim();
+  if (explicit) return explicit;
+  try {
+    const url = new URL(config.apiBase);
+    return url.host;
+  } catch {
+    return "localhost";
+  }
+}
+
+// AAuth middleware — runs before every handler so `req.aauth` is populated
+// uniformly across HTTP surfaces. Non-blocking by design (see middleware
+// docstring), so OAuth, bearer-token, and unauthenticated clients keep
+// flowing through unchanged. Mounted on `/` (instead of the narrower
+// per-route list used previously) so direct-write endpoints like `/store`,
+// `/observations/create`, `/create_relationship`, and `/correct` honour
+// AAuth headers with the same semantics as the MCP handler. See
+// `docs/subsystems/agent_attribution_integration.md` for the full matrix.
+app.use(
+  aauthVerify({
+    authority: canonicalAauthAuthority(),
+    verbose: process.env.NEOTOMA_AAUTH_VERBOSE === "1",
+  })
+);
+
+// Thread the resolved agent identity into the per-request
+// `AsyncLocalStorage` context for every request. `attributionContext` is
+// purely wiring — write-path services call `enforceAttributionPolicy` to
+// turn the identity into a policy decision. Routes that resolve a richer
+// server-level identity (the MCP HTTP handler is the canonical example)
+// may nest a more specific `runWithRequestContext` — nested scopes
+// shadow outer ones exactly as intended.
+app.use(attributionContext());
+
 // MCP StreamableHTTP endpoint (GET, POST, DELETE)
 // This endpoint enables Cursor's "Connect" button for OAuth authentication
 app.all("/mcp", async (req, res) => {
@@ -572,7 +714,7 @@ app.all("/mcp", async (req, res) => {
       const expectedToken = getMcpAuthToken();
       if (authHeader?.startsWith("Bearer ") && expectedToken) {
         const token = authHeader.slice(7).trim();
-        if (token === expectedToken) {
+        if (safeCompareTokens(token, expectedToken)) {
           req.headers["x-connection-id"] = "dev-local";
           connectionIdHeader = "dev-local";
         }
@@ -593,7 +735,7 @@ app.all("/mcp", async (req, res) => {
       }
       if (authHeader?.startsWith("Bearer ") && process.env.NEOTOMA_BEARER_TOKEN) {
         const token = authHeader.slice(7).trim();
-        if (token === process.env.NEOTOMA_BEARER_TOKEN) {
+        if (safeCompareTokens(token, process.env.NEOTOMA_BEARER_TOKEN)) {
           req.headers["x-connection-id"] = "dev-local";
           connectionIdHeader = "dev-local";
         }
@@ -688,11 +830,14 @@ app.all("/mcp", async (req, res) => {
 
     // Get or create transport
     let transport = sessionId ? mcpTransports.get(sessionId) : undefined;
+    let serverInstance: NeotomaServer | undefined = sessionId
+      ? mcpServerInstances.get(sessionId)
+      : undefined;
 
     if (!transport && req.method === "POST" && isInitializeRequest(req.body)) {
       // Create new server instance for each session to ensure clean auth state
       // This ensures OAuth flow is required for each new connection
-      const serverInstance = new NeotomaServer();
+      serverInstance = new NeotomaServer();
       const connectionIdFromReq = (req.headers["x-connection-id"] ||
         req.headers["X-Connection-Id"]) as string | undefined;
       if (connectionIdFromReq) {
@@ -706,7 +851,7 @@ app.all("/mcp", async (req, res) => {
           if (transport) {
             mcpTransports.set(sid, transport);
             // Store server instance by session ID to preserve authentication state
-            mcpServerInstances.set(sid, serverInstance);
+            mcpServerInstances.set(sid, serverInstance!);
             logger.info(`[MCP HTTP] Session initialized: ${sid}, server instance stored`);
           }
         },
@@ -730,8 +875,46 @@ app.all("/mcp", async (req, res) => {
       });
     }
 
-    // Handle request with the transport
-    await transport.handleRequest(req, res, req.body);
+    // Thread AAuth / clientInfo fallback attribution into the server for
+    // this request. On reused sessions the clientInfo was captured at
+    // initialize time; we still refresh the AAuth context since each POST
+    // may carry its own signature (Phase 1.4).
+    const aauthContext = getAAuthContextFromRequest(req);
+    if (serverInstance) {
+      serverInstance.setSessionAgentIdentity(aauthContext);
+    }
+
+    // Build the provenance attribution to propagate via AsyncLocalStorage so
+    // write-path services (observations, relationships, sources, …) stamp
+    // every row with the resolved identity without plumbing through call
+    // sites. The server instance is the authoritative source since it also
+    // knows the clientInfo from initialize. Fall back to a request-scoped
+    // identity when no server instance is available yet (pre-init POSTs
+    // never actually reach this branch, but defense in depth).
+    const connectionIdHeaderForCtx =
+      req.headers["x-connection-id"] || req.headers["X-Connection-Id"];
+    const fallbackIdentity = (() => {
+      if (serverInstance) return serverInstance.getAgentIdentity();
+      const connId = Array.isArray(connectionIdHeaderForCtx)
+        ? connectionIdHeaderForCtx[0]
+        : connectionIdHeaderForCtx;
+      if (!aauthContext && !connId) return null;
+      return buildAgentIdentity({
+        publicKey: aauthContext?.publicKey,
+        thumbprint: aauthContext?.thumbprint,
+        algorithm: aauthContext?.algorithm,
+        sub: aauthContext?.sub,
+        iss: aauthContext?.iss,
+        clientName: normaliseClientName(undefined),
+        connectionId: typeof connId === "string" ? connId : undefined,
+      });
+    })();
+
+    // Handle request with the transport inside the attribution context.
+    const attributionDecision = getAttributionDecisionFromRequest(req);
+    await runWithRequestContext({ agentIdentity: fallbackIdentity, attributionDecision }, () =>
+      transport!.handleRequest(req, res, req.body)
+    );
   } catch (error: any) {
     logger.error("[MCP HTTP] Request error:", error);
     if (!res.headersSent) {
@@ -833,6 +1016,14 @@ function logError(
   error: unknown,
   extra?: Record<string, unknown>
 ): void {
+  // SECURITY: stacks are gated on development. Production log sinks are often
+  // shared with lower-trust consumers; keeping stacks there leaks file paths
+  // and internal structure. Operators who need stacks can set
+  // NEOTOMA_LOG_STACKS=1. See docs/reports/security_audit_2026_04_22.md S-5.
+  const includeStacks =
+    config.environment !== "production" ||
+    process.env.NEOTOMA_LOG_STACKS === "1" ||
+    process.env.NEOTOMA_LOG_STACKS === "true";
   const payload = {
     method: req.method,
     path: req.path,
@@ -841,7 +1032,11 @@ function logError(
     body: redactSensitiveFields(req.body),
     error:
       error instanceof Error
-        ? { name: error.name, message: error.message, stack: error.stack }
+        ? {
+            name: error.name,
+            message: error.message,
+            ...(includeStacks ? { stack: error.stack } : {}),
+          }
         : redactSensitiveFields(error),
     ...(extra ? (redactSensitiveFields(extra) as Record<string, unknown>) : {}),
   };
@@ -1660,7 +1855,7 @@ app.use(async (req, res, next) => {
     const expectedToken = getMcpAuthToken();
     if (headerAuth.startsWith("Bearer ") && expectedToken) {
       const token = headerAuth.slice(7).trim();
-      if (token === expectedToken) {
+      if (safeCompareTokens(token, expectedToken)) {
         const devUser = ensureLocalDevUser();
         (req as any).authenticatedUserId = devUser.id;
         logger.info(
@@ -1682,7 +1877,7 @@ app.use(async (req, res, next) => {
     }
     if (headerAuth.startsWith("Bearer ") && process.env.NEOTOMA_BEARER_TOKEN) {
       const token = headerAuth.slice(7).trim();
-      if (token === process.env.NEOTOMA_BEARER_TOKEN) {
+      if (safeCompareTokens(token, process.env.NEOTOMA_BEARER_TOKEN)) {
         const devUser = ensureLocalDevUser();
         (req as any).authenticatedUserId = devUser.id;
         logger.info(
@@ -1762,13 +1957,18 @@ app.get("/me", async (req, res) => {
     if (!userId) {
       return sendError(res, 401, "AUTH_REQUIRED", "Not authenticated");
     }
+    // SECURITY: only disclose absolute filesystem paths to local callers.
+    // Remote (tunnel) callers receive just the backend label. See
+    // docs/reports/security_audit_2026_04_22.md S-10.
     const storage =
       config.storageBackend === "local"
-        ? {
-            storage_backend: "local" as const,
-            data_dir: config.dataDir,
-            sqlite_db: config.sqlitePath,
-          }
+        ? isLocalRequest(req)
+          ? {
+              storage_backend: "local" as const,
+              data_dir: config.dataDir,
+              sqlite_db: config.sqlitePath,
+            }
+          : { storage_backend: "local" as const }
         : undefined;
     return res.json({ user_id: userId, email: email ?? undefined, storage });
   } catch (error: any) {
@@ -1843,8 +2043,28 @@ function handleApiError(
       })
     );
   }
+  if (error instanceof AttributionPolicyError) {
+    logWarn(logContext || "AttributionPolicyRejection", req, error.toErrorEnvelope());
+    return res
+      .status(403)
+      .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
+  }
+  if (error instanceof AgentCapabilityError) {
+    logWarn(logContext || "AgentCapabilityRejection", req, error.toErrorEnvelope());
+    return res
+      .status(403)
+      .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
+  }
   logError(logContext || "APIError", req, error);
-  const message = error instanceof Error ? error.message : defaultMessage;
+  // SECURITY: do not echo raw Error.message to clients in production; SQLite /
+  // filesystem errors frequently leak paths and schema. In development we keep
+  // the detailed message for debugging. See docs/reports/
+  // security_audit_2026_04_22.md S-5.
+  const includeDetail =
+    config.environment !== "production" ||
+    process.env.NEOTOMA_VERBOSE_ERRORS === "1" ||
+    process.env.NEOTOMA_VERBOSE_ERRORS === "true";
+  const message = includeDetail && error instanceof Error ? error.message : defaultMessage;
   return res.status(500).json(buildErrorEnvelope(errorCode, message));
 }
 
@@ -1883,6 +2103,7 @@ app.post("/entities/query", async (req, res) => {
       include_merged,
       updated_since,
       created_since,
+      identity_basis,
     } = parsed.data;
     const { entities, total } = await queryEntitiesWithCount({
       userId,
@@ -1899,6 +2120,7 @@ app.post("/entities/query", async (req, res) => {
       offset,
       updatedSince: updated_since,
       createdSince: created_since,
+      identityBasis: identity_basis,
     });
 
     return res.json({
@@ -2456,6 +2678,75 @@ app.get("/schemas/:entity_type", async (req, res) => {
   }
 });
 
+/**
+ * Fetch the most recent `relationship_observations.provenance` for each
+ * relationship_key in the supplied set, and return the resulting
+ * agent-attribution block keyed by relationship_key.
+ *
+ * `RelationshipSnapshot.provenance` is reducer provenance (field →
+ * observation_id) and is NOT the AAuth / clientInfo attribution block the
+ * Inspector wants to render. The actual attribution lives on the
+ * contributing `relationship_observations` rows' `provenance` column (see
+ * `src/crypto/agent_identity.ts` and `src/services/interpretation.ts`). To
+ * avoid overloading the existing field, relationship responses now expose a
+ * separate top-level `agent_attribution` field derived here.
+ */
+async function fetchLatestRelationshipAttribution(
+  relationshipKeys: string[],
+  userId: string
+): Promise<Record<string, Record<string, unknown>>> {
+  if (relationshipKeys.length === 0) return {};
+  const { data, error } = await db
+    .from("relationship_observations")
+    .select("relationship_key, provenance, observed_at")
+    .in("relationship_key", relationshipKeys)
+    .eq("user_id", userId)
+    .order("observed_at", { ascending: false });
+  if (error || !data) return {};
+  const out: Record<string, Record<string, unknown>> = {};
+  for (const row of data as Array<{
+    relationship_key: string;
+    provenance: unknown;
+    observed_at: string;
+  }>) {
+    if (out[row.relationship_key]) continue; // first (most recent) wins
+    const prov = normaliseJsonBlob(row.provenance);
+    if (prov && hasAttributionKeys(prov)) {
+      out[row.relationship_key] = prov;
+    }
+  }
+  return out;
+}
+
+function normaliseJsonBlob(value: unknown): Record<string, unknown> | null {
+  if (!value) return null;
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : null;
+    } catch {
+      return null;
+    }
+  }
+  if (typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return null;
+}
+
+function hasAttributionKeys(obj: Record<string, unknown>): boolean {
+  return (
+    typeof obj.agent_public_key === "string" ||
+    typeof obj.agent_thumbprint === "string" ||
+    typeof obj.agent_sub === "string" ||
+    typeof obj.client_name === "string" ||
+    typeof obj.attribution_tier === "string" ||
+    typeof obj.connection_id === "string"
+  );
+}
+
 // GET /api/relationships - List all relationships with filtering (FU-XXX)
 // REQUIRES AUTHENTICATION - all queries filtered by authenticated user_id
 app.get("/relationships", async (req, res) => {
@@ -2517,10 +2808,20 @@ app.get("/relationships", async (req, res) => {
       }
     }
 
+    // Fetch latest agent attribution per relationship from
+    // relationship_observations.provenance. The snapshot's own `provenance`
+    // field is reducer provenance (field → observation_id), not AAuth /
+    // clientInfo attribution, so we surface agent attribution separately.
+    const attributionByKey = await fetchLatestRelationshipAttribution(
+      (data || []).map((rel: any) => rel.relationship_key),
+      userId
+    );
+
     // Add id field and entity information for frontend compatibility
     const relationships = (data || []).map((rel: any) => {
       const sourceEntity = entityMap.get(rel.source_entity_id);
       const targetEntity = entityMap.get(rel.target_entity_id);
+      const agentAttribution = attributionByKey[rel.relationship_key] ?? null;
 
       return {
         ...rel,
@@ -2529,6 +2830,7 @@ app.get("/relationships", async (req, res) => {
         source_entity_type: sourceEntity?.entity_type,
         target_canonical_name: targetEntity?.canonical_name,
         target_entity_type: targetEntity?.entity_type,
+        agent_attribution: agentAttribution,
       };
     });
 
@@ -2595,6 +2897,13 @@ app.get("/relationships/:id", async (req, res) => {
       .eq("user_id", userId) // SECURITY: Only return if belongs to authenticated user
       .single();
 
+    // Derive agent attribution from the most recent contributing
+    // relationship_observations.provenance row.
+    const attributionByKey = await fetchLatestRelationshipAttribution(
+      [data.relationship_key],
+      userId
+    );
+
     // Add id field and entity information for frontend compatibility
     return res.json({
       ...data,
@@ -2603,6 +2912,7 @@ app.get("/relationships/:id", async (req, res) => {
       source_entity_type: sourceEntity?.entity_type,
       target_canonical_name: targetEntity?.canonical_name,
       target_entity_type: targetEntity?.entity_type,
+      agent_attribution: attributionByKey[data.relationship_key] ?? null,
     });
   } catch (error) {
     return handleApiError(
@@ -2648,14 +2958,34 @@ app.post("/relationships/snapshot", async (req, res) => {
 
     const { data: observations, error: obsError } = await db
       .from("relationship_observations")
-      .select("id, source_id, observed_at, specificity_score, source_priority, metadata")
+      .select(
+        "id, source_id, observed_at, specificity_score, source_priority, metadata, provenance"
+      )
       .eq("relationship_key", relationshipKey)
       .eq("user_id", userId)
       .order("observed_at", { ascending: false });
 
     if (obsError) throw obsError;
 
-    return res.json({ snapshot, observations: observations ?? [] });
+    // Derive the snapshot-level agent attribution from the most recent
+    // observation that carries attribution keys. Reducer provenance on the
+    // snapshot row is intentionally left untouched (it is a field →
+    // observation_id map, not AAuth / clientInfo data).
+    let agentAttribution: Record<string, unknown> | null = null;
+    for (const obs of (observations ?? []) as Array<{
+      provenance: unknown;
+    }>) {
+      const prov = normaliseJsonBlob(obs.provenance);
+      if (prov && hasAttributionKeys(prov)) {
+        agentAttribution = prov;
+        break;
+      }
+    }
+
+    return res.json({
+      snapshot: { ...snapshot, agent_attribution: agentAttribution },
+      observations: observations ?? [],
+    });
   } catch (error) {
     return handleApiError(
       req,
@@ -2869,7 +3199,12 @@ app.get("/record_activity", async (req, res) => {
     const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
     const limit = parseInt(String(req.query.limit ?? "50"), 10) || 50;
     const offset = parseInt(String(req.query.offset ?? "0"), 10) || 0;
-    const result = listRecentRecordActivity(userId, limit, offset);
+    const recordTypes = parseRecordActivityTypesQuery(req.query.record_types);
+    const result = listRecentRecordActivity(userId, {
+      limit,
+      offset,
+      ...(recordTypes?.length ? { recordTypes } : {}),
+    });
     return res.json(result);
   } catch (error) {
     return handleApiError(
@@ -2883,13 +3218,89 @@ app.get("/record_activity", async (req, res) => {
   }
 });
 
+// GET /api/agents — Directory of distinct agents seen across the write-path tables
+// REQUIRES AUTHENTICATION
+app.get("/agents", async (req, res) => {
+  try {
+    const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+    const result = listAgents(userId);
+    return res.json(result);
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to list agents",
+      "DB_QUERY_FAILED",
+      "APIError:agents_list"
+    );
+  }
+});
+
+// GET /api/agents/:key — One agent's identity + rollup counts
+// REQUIRES AUTHENTICATION
+app.get("/agents/:key", async (req, res) => {
+  try {
+    const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+    const agentKey = decodeURIComponent(req.params.key);
+    const agent = getAgent(userId, agentKey);
+    if (!agent) {
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", `Agent not found: ${agentKey}`);
+    }
+    return res.json({ agent });
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to get agent",
+      "DB_QUERY_FAILED",
+      "APIError:agents_detail"
+    );
+  }
+});
+
+// GET /api/agents/:key/records — Records (observations / sources / relationships / etc.)
+// written by this agent, in `RecordActivityItem` shape for reuse in the
+// Inspector's activity feed component.
+// REQUIRES AUTHENTICATION
+app.get("/agents/:key/records", async (req, res) => {
+  try {
+    const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+    const agentKey = decodeURIComponent(req.params.key);
+    const limit = parseInt(String(req.query.limit ?? "50"), 10) || 50;
+    const offset = parseInt(String(req.query.offset ?? "0"), 10) || 0;
+    const result = listAgentRecords(userId, agentKey, limit, offset);
+    return res.json(result);
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to list agent records",
+      "DB_QUERY_FAILED",
+      "APIError:agents_records"
+    );
+  }
+});
+
 // GET /recent_conversations — Inspector: conversations with nested messages (SQLite)
 app.get("/recent_conversations", async (req, res) => {
   try {
     const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
     const limit = parseInt(String(req.query.limit ?? "25"), 10) || 25;
     const offset = parseInt(String(req.query.offset ?? "0"), 10) || 0;
-    const result = listRecentConversations(userId, limit, offset);
+    const activity_after =
+      typeof req.query.activity_after === "string" ? req.query.activity_after.trim() || null : null;
+    const activity_before =
+      typeof req.query.activity_before === "string" ? req.query.activity_before.trim() || null : null;
+    const agent_key =
+      typeof req.query.agent_key === "string" ? req.query.agent_key.trim() || null : null;
+    const result = listRecentConversations(userId, limit, offset, {
+      activity_after,
+      activity_before,
+      agent_key,
+    });
     return res.json(result);
   } catch (error) {
     return handleApiError(
@@ -2921,10 +3332,14 @@ app.get("/sources", async (req, res) => {
     // Filter by MIME/type query.
     // UX behavior: "wav" should match either MIME (audio/wav) OR filename extension (.wav).
     if (mimeType) {
-      const mimeNeedle = mimeType.trim();
+      // SECURITY: strip commas so user input cannot break out of the
+      // PostgREST-style `.or(...)` syntax and inject extra clauses. The `.or`
+      // builder splits on commas to parse its parts. See docs/reports/
+      // security_audit_2026_04_22.md S-3.
+      const mimeNeedle = mimeType.trim().replace(/,/g, "");
       if (mimeNeedle.includes("/")) {
         query = query.ilike("mime_type", `%${mimeNeedle}%`);
-      } else {
+      } else if (mimeNeedle.length > 0) {
         query = query.or(`mime_type.ilike.%${mimeNeedle}%,original_filename.ilike.%${mimeNeedle}%`);
       }
     }
@@ -3013,6 +3428,240 @@ app.get("/sources/:id", async (req, res) => {
       "DB_QUERY_FAILED",
       "APIError:source_detail"
     );
+  }
+});
+
+// GET /api/sources/:id/relationships - Relationships tied to this source
+// Includes (1) relationship_observations stamped with this source_id and
+// (2) relationship_snapshots touching any entity that has observations from this source.
+// REQUIRES AUTHENTICATION
+app.get("/sources/:id/relationships", async (req, res) => {
+  try {
+    const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+    const sourceId = req.params.id;
+    const expandEntities = req.query.expand_entities === "true";
+
+    const { data: sourceRow, error: srcErr } = await db
+      .from("sources")
+      .select("id")
+      .eq("id", sourceId)
+      .eq("user_id", userId)
+      .single();
+
+    if (srcErr || !sourceRow) {
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", "Source not found");
+    }
+
+    const snapByKey = new Map<string, Record<string, unknown>>();
+
+    const { data: relObsRows, error: relObsErr } = await db
+      .from("relationship_observations")
+      .select("relationship_key")
+      .eq("source_id", sourceId)
+      .eq("user_id", userId);
+
+    if (relObsErr) throw relObsErr;
+
+    const keysFromRelObs = [
+      ...new Set(
+        (relObsRows || [])
+          .map((r: { relationship_key?: string }) => r.relationship_key)
+          .filter((k: string | undefined): k is string => typeof k === "string" && k.length > 0)
+      ),
+    ];
+
+    if (keysFromRelObs.length > 0) {
+      const { data: snapsFromKeys, error: snapsErr } = await db
+        .from("relationship_snapshots")
+        .select("*")
+        .in("relationship_key", keysFromRelObs)
+        .eq("user_id", userId);
+
+      if (snapsErr) throw snapsErr;
+      for (const row of snapsFromKeys || []) {
+        snapByKey.set(
+          (row as { relationship_key: string }).relationship_key,
+          row as Record<string, unknown>
+        );
+      }
+    }
+
+    const { data: obsRows, error: obsErr } = await db
+      .from("observations")
+      .select("entity_id")
+      .eq("source_id", sourceId)
+      .eq("user_id", userId);
+
+    if (obsErr) throw obsErr;
+
+    const entityIds = [
+      ...new Set(
+        (obsRows || [])
+          .map((o: { entity_id?: string }) => o.entity_id)
+          .filter((e: string | undefined): e is string => typeof e === "string" && e.length > 0)
+      ),
+    ];
+
+    if (entityIds.length > 0) {
+      const { data: outSnaps, error: outErr } = await db
+        .from("relationship_snapshots")
+        .select("*")
+        .eq("user_id", userId)
+        .in("source_entity_id", entityIds);
+
+      if (outErr) throw outErr;
+      for (const row of outSnaps || []) {
+        const rel = row as { relationship_key: string };
+        snapByKey.set(rel.relationship_key, row as Record<string, unknown>);
+      }
+
+      const { data: inSnaps, error: inErr } = await db
+        .from("relationship_snapshots")
+        .select("*")
+        .eq("user_id", userId)
+        .in("target_entity_id", entityIds);
+
+      if (inErr) throw inErr;
+      for (const row of inSnaps || []) {
+        const rel = row as { relationship_key: string };
+        snapByKey.set(rel.relationship_key, row as Record<string, unknown>);
+      }
+    }
+
+    let relationships = [...snapByKey.values()].map((rel) => ({
+      ...rel,
+      id: rel.relationship_key,
+    })) as Array<Record<string, unknown>>;
+
+    relationships.sort((a, b) =>
+      String(b.last_observation_at ?? "").localeCompare(String(a.last_observation_at ?? ""))
+    );
+
+    let relatedEntities: Record<string, unknown> | undefined;
+
+    if (expandEntities && relationships.length > 0) {
+      const relatedIds = new Set<string>();
+      for (const rel of relationships) {
+        const sId = rel.source_entity_id as string | undefined;
+        const tId = rel.target_entity_id as string | undefined;
+        if (sId) relatedIds.add(sId);
+        if (tId) relatedIds.add(tId);
+      }
+
+      if (relatedIds.size > 0) {
+        const idsArr = Array.from(relatedIds);
+        const [snapshotsResult, entitiesResult] = await Promise.all([
+          db.from("entity_snapshots").select("*").in("entity_id", idsArr).eq("user_id", userId),
+          db
+            .from("entities")
+            .select("id, canonical_name, entity_type")
+            .in("id", idsArr)
+            .eq("user_id", userId),
+        ]);
+
+        const canonicalNames = new Map<string, string>();
+        const entityTypes = new Map<string, string>();
+        if (!entitiesResult.error && entitiesResult.data) {
+          for (const ent of entitiesResult.data as Array<{
+            id: string;
+            canonical_name?: string;
+            entity_type?: string;
+          }>) {
+            if (ent.canonical_name) canonicalNames.set(ent.id, ent.canonical_name);
+            if (ent.entity_type) entityTypes.set(ent.id, ent.entity_type);
+          }
+        }
+
+        relatedEntities = {};
+        if (!snapshotsResult.error && snapshotsResult.data) {
+          for (const e of snapshotsResult.data as Array<
+            Record<string, unknown> & { entity_id?: string }
+          >) {
+            const eid = e.entity_id;
+            if (!eid) continue;
+            if (!e.canonical_name && canonicalNames.has(eid)) {
+              e.canonical_name = canonicalNames.get(eid);
+            }
+            if (!e.entity_type && entityTypes.has(eid)) {
+              e.entity_type = entityTypes.get(eid);
+            }
+            relatedEntities[eid] = e;
+          }
+        }
+        for (const rid of idsArr) {
+          if (relatedEntities[rid]) continue;
+          relatedEntities[rid] = {
+            entity_id: rid,
+            canonical_name: canonicalNames.get(rid) ?? null,
+            entity_type: entityTypes.get(rid) ?? null,
+          };
+        }
+
+        try {
+          const { SchemaRegistryService } = await import("./services/schema_registry.js");
+          const registry = new SchemaRegistryService();
+          const distinctTypes = [...new Set(Array.from(entityTypes.values()).filter(Boolean))];
+          const labelByType = new Map<string, string>();
+          for (const t of distinctTypes) {
+            const schema = await registry.loadActiveSchema(t, userId);
+            if (schema?.metadata?.label) labelByType.set(t, schema.metadata.label as string);
+          }
+          for (const rid of Object.keys(relatedEntities)) {
+            const type = (relatedEntities[rid] as { entity_type?: string }).entity_type;
+            if (type && labelByType.has(type)) {
+              (relatedEntities[rid] as { entity_type_label?: string }).entity_type_label =
+                labelByType.get(type);
+            }
+          }
+        } catch (err) {
+          console.warn(
+            "Failed to attach entity_type_label to related entities (source relationships):",
+            err instanceof Error ? err.message : err
+          );
+        }
+      }
+    }
+
+    if (expandEntities && relatedEntities) {
+      relationships = relationships.map((rel) => {
+        const src = relatedEntities![rel.source_entity_id as string] as
+          | { canonical_name?: string; entity_type?: string; entity_type_label?: string }
+          | undefined;
+        const tgt = relatedEntities![rel.target_entity_id as string] as
+          | { canonical_name?: string; entity_type?: string; entity_type_label?: string }
+          | undefined;
+        return {
+          ...rel,
+          source_entity_name: src?.canonical_name ?? null,
+          source_entity_type: src?.entity_type ?? null,
+          source_entity_type_label: src?.entity_type_label ?? null,
+          target_entity_name: tgt?.canonical_name ?? null,
+          target_entity_type: tgt?.entity_type ?? null,
+          target_entity_type_label: tgt?.entity_type_label ?? null,
+        };
+      });
+    }
+
+    const attributionByKey = await fetchLatestRelationshipAttribution(
+      relationships.map((r) => r.relationship_key as string),
+      userId
+    );
+
+    relationships = relationships.map((rel) => ({
+      ...rel,
+      agent_attribution: attributionByKey[rel.relationship_key as string] ?? null,
+    }));
+
+    const responseBody: Record<string, unknown> = { relationships };
+    if (relatedEntities) {
+      responseBody.related_entities = relatedEntities;
+    }
+
+    return res.json(responseBody);
+  } catch (error) {
+    logError("APIError:source_relationships", req, error);
+    const message = error instanceof Error ? error.message : "Failed to get source relationships";
+    return sendError(res, 500, "DB_QUERY_FAILED", message);
   }
 });
 
@@ -3232,6 +3881,9 @@ app.post("/observations/create", async (req, res) => {
     entity_identifier: z.string(),
     fields: z.record(z.unknown()),
     source_priority: z.number().optional().default(100),
+    observation_source: z
+      .enum(["sensor", "llm_summary", "workflow_state", "human", "import"])
+      .optional(),
     user_id: z.string().uuid(),
   });
 
@@ -3247,7 +3899,14 @@ app.post("/observations/create", async (req, res) => {
     // Get authenticated user_id and validate it matches provided user_id
     const authenticatedUserId = await getAuthenticatedUserId(req, parsed.data.user_id);
 
-    const { entity_type, entity_identifier, fields, source_priority, user_id } = parsed.data;
+    const {
+      entity_type,
+      entity_identifier,
+      fields,
+      source_priority,
+      observation_source,
+      user_id,
+    } = parsed.data;
 
     // SECURITY: Ensure provided user_id matches authenticated user
     if (user_id !== authenticatedUserId) {
@@ -3275,6 +3934,7 @@ app.post("/observations/create", async (req, res) => {
       observed_at: new Date().toISOString(),
       specificity_score: 1.0,
       source_priority,
+      observation_source,
       fields,
       user_id,
     });
@@ -3298,6 +3958,7 @@ async function storeStructuredForApi(params: {
   userId: string;
   entities: Record<string, unknown>[];
   sourcePriority: number;
+  observationSource?: import("./shared/action_schemas.js").ObservationSource;
   idempotencyKey: string;
   originalFilename?: string;
   relationships?: Array<{
@@ -3312,6 +3973,7 @@ async function storeStructuredForApi(params: {
     userId,
     entities,
     sourcePriority,
+    observationSource,
     idempotencyKey,
     originalFilename,
     relationships,
@@ -3320,10 +3982,34 @@ async function storeStructuredForApi(params: {
   } = params;
   const commit = commitInput !== false;
   const strict = strictInput === true;
+
+  // Capability scoping: when the caller is an AAuth-verified agent covered
+  // by the capability registry, gate store_structured by entity_type here
+  // before any writes touch the DB. Unknown / anonymous callers fall
+  // through (attribution_policy still gates their writes downstream).
+  const capabilityCtx = contextFromAgentIdentity(getCurrentAgentIdentity());
+  if (capabilityCtx) {
+    const entityTypes = entities
+      .map((entity) => entity?.entity_type)
+      .filter((t): t is string => typeof t === "string" && t.length > 0);
+    enforceAgentCapability("store_structured", entityTypes, capabilityCtx);
+    const relationshipOp = Array.isArray(relationships) && relationships.length > 0;
+    if (relationshipOp) {
+      enforceAgentCapability("create_relationship", entityTypes, capabilityCtx);
+    }
+  }
+
   const { resolveEntityWithTrace, CanonicalNameUnresolvedError, MergeRefusedError } =
     await import("./services/entity_resolution.js");
   const { detectFlatPackedRows, FlatPackedRowsError } =
     await import("./services/flat_packed_detection.js");
+  // R4: lazy import so the structured-store handler can attach required
+  // identity-field hints when resolving fails under a reject policy.
+  const registryModule = await import("./services/schema_registry.js");
+  const deriveRequiredIdentityFields = registryModule.deriveRequiredIdentityFields;
+  type RequiredIdentityFields = NonNullable<
+    Awaited<ReturnType<typeof deriveRequiredIdentityFields>>
+  >;
 
   // Reject flat-packed rows (whole tables smuggled into a single entity as
   // `<prefix>_<index>_<suffix>` keys). These cannot produce per-row snapshots
@@ -3407,6 +4093,19 @@ async function storeStructuredForApi(params: {
       identity_basis: string;
       identity_rule: string;
       action: "created" | "matched_existing" | "would_create" | "would_match_existing" | "extended";
+      /**
+       * Non-fatal resolver warnings (R2/R3). Present when a schema declares
+       * `name_collision_policy: "warn"` and resolution landed on an existing
+       * entity via a heuristic path. See `ResolverWarning` in
+       * `src/services/entity_resolution.ts`.
+       */
+      warnings?: Array<{
+        code: string;
+        policy: string;
+        entity_type: string;
+        identity_basis: string;
+        identity_rule: string;
+      }>;
     };
     intent?: string;
     targetId?: string;
@@ -3418,7 +4117,13 @@ async function storeStructuredForApi(params: {
     code: "ERR_CANONICAL_NAME_UNRESOLVED" | "ERR_MERGE_REFUSED";
     message: string;
     details: Record<string, unknown>;
-    hint?: string;
+    /**
+     * R4: hint may be a free-form string (legacy attributes-hint) or a
+     * structured object when derived from a schema `name_collision_policy:
+     * reject` refusal. See OpenAPI `StoreResolutionIssue.hint` oneOf and
+     * `RequiredIdentityFields`.
+     */
+    hint?: string | { text: string; required_identity_fields?: RequiredIdentityFields };
   }
 
   // v0.5.1: structured guidance for the v0.5.0 breaking change where callers
@@ -3517,6 +4222,17 @@ async function storeStructuredForApi(params: {
           identity_basis: result.trace.identityBasis,
           identity_rule: result.trace.identityRule,
           action: result.trace.action,
+          ...(result.trace.warnings && result.trace.warnings.length > 0
+            ? {
+                warnings: result.trace.warnings.map((w) => ({
+                  code: w.code,
+                  policy: w.policy,
+                  entity_type: w.entityType,
+                  identity_basis: w.identityBasis,
+                  identity_rule: w.identityRule,
+                })),
+              }
+            : {}),
         },
         intent,
         targetId,
@@ -3536,6 +4252,35 @@ async function storeStructuredForApi(params: {
           ...(hint ? { hint } : {}),
         });
       } else if (err instanceof MergeRefusedError) {
+        // R4: when the refusal comes from a schema `name_collision_policy: reject`,
+        // include a structured hint listing the caller-facing identity fields so
+        // the agent sees exactly which key(s) to supply on the next attempt. The
+        // derivation reads the schema registry — no per-type branching here.
+        let hint: { text: string; required_identity_fields?: RequiredIdentityFields } | undefined;
+        if (err.reason === "schema_policy") {
+          try {
+            const required = await deriveRequiredIdentityFields(entity_type, userId);
+            if (required && (required.anyOfFields.length > 0 || required.compositeFields.length > 0)) {
+              const anyLabel = required.anyOfFields.length > 0
+                ? required.anyOfFields.map((f) => `\`${f}\``).join(" or ")
+                : "";
+              const compositeLabel = required.compositeFields.length > 0
+                ? required.compositeFields
+                    .map((group) => `all of [${group.map((f) => `\`${f}\``).join(", ")}]`)
+                    .join(" or ")
+                : "";
+              const combined = [anyLabel, compositeLabel].filter(Boolean).join(" or ");
+              hint = {
+                text:
+                  `Declare ${combined} on entity_type "${entity_type}" to match deterministically. ` +
+                  "See docs/foundation/entity_resolution.md.",
+                required_identity_fields: required,
+              };
+            }
+          } catch {
+            // Hint is best-effort; never block the error surface on registry IO.
+          }
+        }
         issues.push({
           observation_index,
           entity_type,
@@ -3545,7 +4290,10 @@ async function storeStructuredForApi(params: {
             entity_id: err.entityId,
             canonical_name: err.canonicalName,
             resolver_path: err.resolverPath,
+            reason: err.reason,
+            ...(err.policy ? { policy: err.policy } : {}),
           },
+          ...(hint ? { hint } : {}),
         });
       } else {
         throw err;
@@ -3575,6 +4323,7 @@ async function storeStructuredForApi(params: {
     resolver_path: string[];
     identity_basis: string;
     identity_rule: string;
+    warnings?: ResolvedEntity["trace"]["warnings"];
     entity_snapshot_after: Record<string, unknown> | null;
   }> = [];
 
@@ -3592,6 +4341,7 @@ async function storeStructuredForApi(params: {
         observed_at: new Date().toISOString(),
         specificity_score: 1.0,
         source_priority: sourcePriority,
+        observation_source: observationSource,
         fields: r.fields,
         user_id: userId,
         identity_basis: r.trace.identity_basis,
@@ -3646,6 +4396,9 @@ async function storeStructuredForApi(params: {
       resolver_path: r.trace.resolver_path,
       identity_basis: r.trace.identity_basis,
       identity_rule: r.trace.identity_rule,
+      ...(r.trace.warnings && r.trace.warnings.length > 0
+        ? { warnings: r.trace.warnings }
+        : {}),
       entity_snapshot_after: snapshotAfter,
     });
   }
@@ -3693,6 +4446,33 @@ async function storeStructuredForApi(params: {
     }
   }
 
+  // R3: aggregate non-fatal resolver warnings across the batch so callers
+  // (agents, Inspector, CI) can audit identity quality without walking every
+  // entity.trace. PII-free by construction — see ResolverWarning shape.
+  const aggregatedWarnings: Array<{
+    code: string;
+    policy: string;
+    observation_index: number;
+    entity_type: string;
+    entity_id: string;
+    identity_basis: string;
+    identity_rule: string;
+  }> = [];
+  for (const e of createdEntities) {
+    if (!e.warnings) continue;
+    for (const w of e.warnings) {
+      aggregatedWarnings.push({
+        code: w.code,
+        policy: w.policy,
+        observation_index: e.observation_index,
+        entity_type: e.entity_type,
+        entity_id: e.entity_id,
+        identity_basis: w.identity_basis,
+        identity_rule: w.identity_rule,
+      });
+    }
+  }
+
   return {
     success: true,
     replayed: false,
@@ -3704,6 +4484,7 @@ async function storeStructuredForApi(params: {
     observations_created: commit ? createdEntities.length : 0,
     entities: createdEntities,
     relationships_created: relationshipsCreated,
+    ...(aggregatedWarnings.length > 0 ? { warnings: aggregatedWarnings } : {}),
   };
 }
 
@@ -3745,7 +4526,7 @@ async function storeUnstructuredForApi(params: {
 }
 
 // POST /api/store - Unified store for structured, unstructured, or combined payloads
-app.post("/store", async (req, res) => {
+app.post("/store", writeRateLimit, async (req, res) => {
   const parsed = StoreRequestSchema.safeParse(req.body);
   if (!parsed.success) {
     logWarn("ValidationError:store", req, {
@@ -3777,6 +4558,7 @@ app.post("/store", async (req, res) => {
         userId,
         entities: parsed.data.entities as Record<string, unknown>[],
         sourcePriority: parsed.data.source_priority ?? 100,
+        observationSource: parsed.data.observation_source,
         idempotencyKey: parsed.data.idempotency_key,
         originalFilename: parsed.data.original_filename,
         relationships: parsed.data.relationships as
@@ -4114,6 +4896,73 @@ app.post("/entities/merge", async (req, res) => {
     }
     logError("APIError:entities_merge", req, error);
     const message = error instanceof Error ? error.message : "Failed to merge entities";
+    return sendError(res, 500, "DB_QUERY_FAILED", message);
+  }
+});
+
+// POST /api/entities/split - R5 inverse of /entities/merge.
+// REQUIRES AUTHENTICATION - all ids scoped to authenticated user.
+app.post("/entities/split", async (req, res) => {
+  const parsed = SplitEntityRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn("ValidationError:entities_split", req, {
+      issues: parsed.error.issues,
+    });
+    return sendValidationError(res, parsed.error.issues);
+  }
+
+  try {
+    const authenticatedUserId = await getAuthenticatedUserId(
+      req,
+      parsed.data.user_id,
+    );
+    const providedUserId = parsed.data.user_id;
+    if (providedUserId && providedUserId !== authenticatedUserId) {
+      return sendError(res, 403, "FORBIDDEN", "user_id does not match authenticated user.");
+    }
+    const userId = providedUserId || authenticatedUserId;
+
+    const { splitEntity } = await import("./services/entity_split.js");
+    const result = await splitEntity({
+      sourceEntityId: parsed.data.source_entity_id,
+      userId,
+      predicate: parsed.data.predicate,
+      newEntity: {
+        entity_type: parsed.data.new_entity.entity_type,
+        canonical_name: parsed.data.new_entity.canonical_name,
+        target_entity_id: parsed.data.new_entity.target_entity_id,
+      },
+      idempotencyKey: parsed.data.idempotency_key,
+      reason: parsed.data.reason,
+      splitBy: "http_api",
+    });
+
+    return res.json(result);
+  } catch (error) {
+    const {
+      EntityNotFoundError,
+      EntityAlreadyMergedError,
+      SplitPredicateMatchedNothingError,
+      SplitPredicateMatchedAllError,
+      IdempotencyMismatchError,
+    } = await import("./services/entity_split.js");
+    if (error instanceof EntityNotFoundError) {
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", error.message);
+    }
+    if (error instanceof EntityAlreadyMergedError) {
+      return sendError(res, 400, "VALIDATION_INVALID_FORMAT", error.message);
+    }
+    if (error instanceof SplitPredicateMatchedNothingError) {
+      return sendError(res, 400, "VALIDATION_INVALID_FORMAT", error.message);
+    }
+    if (error instanceof SplitPredicateMatchedAllError) {
+      return sendError(res, 400, "VALIDATION_INVALID_FORMAT", error.message);
+    }
+    if (error instanceof IdempotencyMismatchError) {
+      return sendError(res, 400, "ERR_IDEMPOTENCY_MISMATCH", error.message);
+    }
+    logError("APIError:entities_split", req, error);
+    const message = error instanceof Error ? error.message : "Failed to split entity";
     return sendError(res, 500, "DB_QUERY_FAILED", message);
   }
 });
@@ -4559,6 +5408,29 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
 
         if (!relError) {
           result.relationships = relationships || [];
+          const relatedEntityIds = Array.from(
+            new Set(
+              (relationships || [])
+                .flatMap((relationship: any) => [
+                  relationship.source_entity_id,
+                  relationship.target_entity_id,
+                ])
+                .filter(
+                  (entityId: string | undefined): entityId is string =>
+                    typeof entityId === "string" && entityId.length > 0 && entityId !== node_id
+                )
+            )
+          );
+          if (relatedEntityIds.length > 0) {
+            const { data: relatedEntities, error: relatedEntitiesError } = await db
+              .from("entities")
+              .select("*")
+              .in("id", relatedEntityIds);
+
+            if (!relatedEntitiesError) {
+              result.related_entities = relatedEntities || [];
+            }
+          }
         }
       }
 
@@ -5130,6 +6002,11 @@ app.post("/correct", async (req, res) => {
     const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
     const { entity_id, entity_type, field, value, idempotency_key } = parsed.data;
 
+    const correctCtx = contextFromAgentIdentity(getCurrentAgentIdentity());
+    if (correctCtx) {
+      enforceAgentCapability("correct", [entity_type], correctCtx);
+    }
+
     const { createCorrection } = await import("./services/correction.js");
     const result = await createCorrection({
       entity_id,
@@ -5182,6 +6059,47 @@ app.post("/get_authenticated_user", async (req, res) => {
       "Failed to get authenticated user",
       "AUTH_REQUIRED",
       "APIError:get_authenticated_user"
+    );
+  }
+});
+
+// GET /session — Resolved attribution for the current request.
+//
+// Read-only preflight used by local proxies and operators to verify the
+// tier and identity fields Neotoma has resolved for a request BEFORE any
+// write is attempted. Safe to call repeatedly; MUST NOT create rows or
+// emit telemetry. See `src/services/session_info.ts` and
+// `docs/subsystems/agent_attribution_integration.md`.
+app.get("/session", async (req, res) => {
+  try {
+    const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+    const connectionIdHeader =
+      (req.headers["x-connection-id"] as string | string[] | undefined) ??
+      (req.headers["X-Connection-Id"] as string | string[] | undefined);
+    const connectionId = Array.isArray(connectionIdHeader)
+      ? connectionIdHeader[0]
+      : connectionIdHeader;
+    const rawClientName = typeof req.query.client_name === "string" ? req.query.client_name : null;
+    const identity = getAgentIdentityFromRequest(req, {
+      clientName: rawClientName,
+      clientVersion: typeof req.query.client_version === "string" ? req.query.client_version : null,
+      connectionId: typeof connectionId === "string" ? connectionId : null,
+    });
+    const session = buildSessionInfo({
+      userId,
+      identity,
+      middlewareDecision: getAttributionDecisionFromRequest(req),
+      rawClientInfoName: rawClientName,
+    });
+    return res.json(session);
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to resolve session identity",
+      "AUTH_REQUIRED",
+      "APIError:session"
     );
   }
 });

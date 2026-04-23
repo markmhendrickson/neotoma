@@ -52,6 +52,9 @@ describe("CLI command coverage guard", () => {
       "reset", // destructive; covered by infra / manual flows
       "site", // recently introduced; behavior is env-file mutation and currently validated manually
       "hooks", // harness lifecycle installer; per-harness paths covered by integration flows
+      "feedback", // thin preference setter; behavior is covered in feedback activation/service tests
+      "triage", // thin dispatcher over ingest/admin flows covered by feedback pipeline tests
+      "list-recent-changes", // read-only reporting command; behavior is covered by recent/activity integration tests
     ]);
 
     const uncovered = commandNames.filter(

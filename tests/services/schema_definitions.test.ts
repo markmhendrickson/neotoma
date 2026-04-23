@@ -58,6 +58,41 @@ describe("getSchemaDefinition", () => {
   });
 });
 
+describe("reject-policy schemas have reachable canonical rules (R1/R2 regression)", () => {
+  it("every schema declaring name_collision_policy: 'reject' also declares canonical_name_fields", () => {
+    const types = getRegisteredEntityTypes();
+    const offenders: Array<{ entity_type: string; reason: string }> = [];
+    for (const t of types) {
+      const schema = getSchemaDefinition(t);
+      const def = (schema as { schema_definition?: Record<string, unknown> } | null)?.schema_definition;
+      if (!def) continue;
+      const policy = def.name_collision_policy;
+      if (policy !== "reject") continue;
+      const fields = def.canonical_name_fields;
+      if (!Array.isArray(fields) || fields.length === 0) {
+        offenders.push({
+          entity_type: t,
+          reason: "reject policy without canonical_name_fields — heuristic fallback would never trigger but caller has no schema-level identity rule to satisfy",
+        });
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("conversation and conversation_message are reject-policy with conversation_id / turn_key canonicals", () => {
+    const conv = getSchemaDefinition("conversation");
+    const msg = getSchemaDefinition("conversation_message");
+    const convDef = (conv as { schema_definition?: Record<string, unknown> } | null)?.schema_definition;
+    const msgDef = (msg as { schema_definition?: Record<string, unknown> } | null)?.schema_definition;
+    expect(convDef?.name_collision_policy).toBe("reject");
+    expect(msgDef?.name_collision_policy).toBe("reject");
+    const convFields = (convDef?.canonical_name_fields ?? []) as unknown[];
+    const msgFields = (msgDef?.canonical_name_fields ?? []) as unknown[];
+    expect(convFields.some((f) => f === "conversation_id")).toBe(true);
+    expect(msgFields.some((f) => f === "turn_key")).toBe(true);
+  });
+});
+
 describe("refineEntityTypeFromExtractedFields", () => {
   it("refines note to receipt when extracted fields match receipt schema (2+ required)", () => {
     const keys = ["merchant_name", "amount_total", "currency", "date_purchased"];

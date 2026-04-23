@@ -15,7 +15,7 @@ triggers:
 
 # Release
 
-Prepare and ship a GitHub + npm release with a mandatory preview step.
+Prepare and ship a GitHub + npm release with a mandatory preview step. A confirmed **execute** run is **not complete** until **`npm publish`** succeeds from the published package root, unless the user explicitly scoped the request to GitHub-only / no registry.
 
 ## When to Use
 
@@ -44,6 +44,18 @@ Run before anything else:
 5. **Submodules**: `git submodule status` — surface any that are ahead/behind recorded SHAs.
 6. **Previous tag**: `git tag --sort=-v:refname | head -1` — this is the compare base unless the user specifies `--compare-base`.
 7. **Current package.json version**: Read and display.
+8. **OpenAPI breaking-change diff**: Run `npm run -s openapi:bc-diff -- --base <previous-tag>` (the script defaults to the latest tag if `--base` is omitted). Capture stdout — it lists every breaking entry classified against `openapi.yaml`. The script exits non-zero when breaking entries exist; that exit code is informational, not fatal, at this stage. Save the prose output for the supplement reconciliation in Step 3.
+9. **Breaking-changes section present**: When the draft supplement at `docs/releases/in_progress/<TAG>/github_release_supplement.md` exists, confirm it contains a `## Breaking changes` (or `### Breaking changes`) heading. If missing, abort preflight with a clear message pointing at `docs/developer/github_release_process.md` § Validation tightening is breaking. When the release has no breaking changes, the section still exists and contains the single line `No breaking changes.` — an omitted heading is treated as a preflight failure, not an empty section.
+10. **Preflight reconciliation (gate)**: For every entry in the Step 8 breaking list, confirm the draft supplement's Breaking changes section names that entry with a migration note. Abort preflight when any breaking entry is uncovered. Typical output:
+
+    ```
+    OpenAPI diff reports 2 breaking entries; supplement covers 1.
+    Missing: tightened-additional-properties components.schemas.StoreRequest
+    Add an entry under "## Breaking changes" in docs/releases/in_progress/<TAG>/github_release_supplement.md
+    or restore compatibility before proceeding.
+    ```
+
+    The release-skill executor does not tag or push a release whose supplement omits a breaking entry reported by the diff.
 
 ### Step 2: Resolve Version
 
@@ -56,14 +68,62 @@ Run before anything else:
 Draft the supplement following the section pattern from `docs/developer/github_release_supplement.example.md`:
 
 - **Summary**: One plain-English sentence of what this release ships.
+- **Highlights**: A short section immediately after the summary with the 3-5 most compelling user-facing changes (never omit; draft via the Highlights rule below).
 - **What changed for npm package users**: CLI, runtime/data layer, shipped artifacts.
 - **API surface & contracts**: OpenAPI / MCP tool changes.
 - **Behavior changes**: What users notice after upgrading.
+- **Agent-facing instruction changes**: Include whenever `docs/developer/mcp/instructions.md`, `docs/developer/cli_agent_instructions.md`, or `AGENTS.md` changed materially — the MCP server ships those instructions to every connected client, so each net-new rule or block is user-facing behavior.
+- **Plugin / hooks / SDK changes**: Include when any of `packages/cursor-hooks`, `codex-hooks`, `claude-code-plugin`, `opencode-plugin`, `claude-agent-sdk-adapter`, or the TS/Python clients changed.
+- **Security hardening**: Include when CSP, rate limits, auth, loopback/local classification, or capability registries changed.
 - **Docs site & CI / tooling**: If applicable.
 - **Internal changes**: Refactors, architecture, dependency, test-only work.
 - **Fixes**: Bug fixes with user/operator impact.
 - **Tests and validation**: What validates confidence.
-- **Breaking changes**: None, or list with migration notes.
+- **Breaking changes**: **REQUIRED AND EXPLICIT.** Never omit this section. When nothing is breaking, write a single line `No breaking changes.` under the heading. When the release contains validation tightenings (see `docs/developer/github_release_process.md` § Validation tightening is breaking), each entry names the before/after request shape, the error code returned, the structured `hint` text, and the migration step callers must take. The preflight in Step 1 refuses to proceed when this section is absent.
+
+**Highlights drafting rule (mandatory):**
+
+Before writing Highlights bullets, walk the **actual release scope** (code, docs, tests, OpenAPI diff, plans folder) and identify the user-visible benefit of each major subsystem that changed. Do not draft from commit messages or diff-stats alone — shipped commits plus folded-in working-tree scope both count.
+
+For each candidate bullet, rank it by upgrade motivation:
+
+1. **New capability** — something the reader can now do that was impossible or painful before (e.g. repair an over-merged entity, verify a signed writer, diff against an external store).
+2. **Visibility / trust / safety** — information or guarantees the reader newly gets (e.g. attribution tier exposed, structured migration guidance on validation errors).
+3. **Ops / quality-of-life** — defaults changed to the sane thing (e.g. `api start --env prod` flip).
+4. **Breaking-change cleanup** — only headline-worthy if the cleanup unlocks a new capability. Otherwise keep it in **Breaking changes**, not in Highlights.
+
+Keep **3-5 Highlights bullets** (absolute max 7; prefer fewer). Apply this shape to each bullet:
+
+- `- **<Bolded benefit claim in plain English>.** <One concrete mechanic sentence naming the tool, endpoint, field, flag, or file that delivers the benefit.>`
+
+Benefit-claim phrasing rules: lead with what the reader can do or know; avoid implementation verbs like "refactored", "introduced middleware", "added service". Name endpoints/tools/flags once inside the mechanic sentence so readers can map the bullet to the detailed sections.
+
+When in doubt, cut. Supporting-cast items (single bug fixes, tightenings, internal refactors, doc moves) belong in later sections, not in Highlights.
+
+**Comprehensive body coverage rule (mandatory):**
+
+Highlights are tight; the body is **comprehensive**. Take the time needed to explain every significant user-impacting change in the detailed sections below Highlights — omission and under-explanation are equally bad. A change is user-impacting if it affects anyone in the audience set: npm/CLI users, HTTP/OpenAPI callers, MCP tool callers, agent authors (including via the MCP instructions the server ships to clients), server operators, plugin/hook/SDK integrators, the Inspector/frontend, or the feedback/triage pipeline.
+
+Before writing body sections, enumerate the full release scope across these source lanes and confirm each is covered somewhere in the supplement:
+
+- Committed commits since the base tag (`git log <base>..HEAD`).
+- Dirty working-tree edits and untracked files (folded into the same sections as committed work).
+- `openapi.yaml` diff — new routes, expanded existing routes, new component schemas, validation tightenings.
+- MCP tool diff (`src/tool_definitions.ts`) — new/renamed tools, schema changes.
+- Agent-facing instruction diffs (`docs/developer/mcp/instructions.md`, `docs/developer/cli_agent_instructions.md`, `AGENTS.md`) — these ship to every connected client and count as user-facing behavior.
+- CLI diff (`src/cli/index.ts`, `package.json` scripts) — new commands, flags, defaults, removals.
+- Runtime middleware / reducers / adapters / schema registry.
+- Plugin and hook packages (`packages/cursor-hooks`, `codex-hooks`, `claude-code-plugin`, `opencode-plugin`, `claude-agent-sdk-adapter`, `client`, `client-python`).
+- Frontend (`frontend/`) and Inspector (`inspector/`).
+- New services (`services/…`), new scripts (`scripts/…`), new cron/launchd templates.
+- New subsystem docs (`docs/subsystems/…`), operator docs (`docs/developer/…`, `docs/infrastructure/…`), architecture docs.
+- New or changed tests (counts meaningfully — it tells readers what's validated).
+- New env vars (grep `.env.example` and `NEOTOMA_*` references).
+- Security-relevant changes (CSP, rate limits, auth, loopback detection, capability registries).
+
+Every significant user-impacting item from the above lanes MUST appear in at least one body section with enough detail that the reader can act on it (endpoint path, tool name, CLI flag, env var, schema field, file path). Supporting cast items (single internal refactors, test-only tweaks, doc typo fixes, generated-code churn) can be summarized in aggregate; substantive behavior changes cannot. If a body section grows long, add subheadings rather than cutting — verbosity in body sections is fine when the content is substantive.
+
+For releases that change agent-facing behavior via the shipped MCP instructions, include a dedicated **Agent-facing instruction changes** section calling out each net-new rule or block; that surface ships to every connected agent on server upgrade and is user-facing.
 
 **Integrated supplement (mandatory for `/release`):** The narrative is always a **single release story** across committed history and the working tree. Walk the default compare range (commits not yet on `main`, plus any user override) **and** fold **all** material uncommitted and untracked work into **the same sections above**, written **as if that work were already committed** — same grouping and reader-facing tone as shipped commits. Do not isolate dirty work in a separate appendix (for example, do not use a standalone **Uncommitted changes pending inclusion** block as the primary description). If paths cannot ship under repo security or submodule policy, state that in **Breaking changes** or a one-line **Ship constraints** item inside the same structure.
 
@@ -91,7 +151,7 @@ If the working tree was dirty when drafting, state that **execute** matches the 
 
 ### Step 4: Execute
 
-After user confirms:
+After user confirms, run **every** step below in order through **`npm publish`**. Stopping after `gh release create` is a failed full `/release` unless the user confirmed a GitHub-only (no npm) scope.
 
 1. **Commit uncommitted changes** (when the preview assumed them and the user confirms execute):
    - Stage only paths that should ship; **never** stage paths forbidden by repository security / pre-commit rules (for example configured `protected_paths`, `.env*`, `data/` when disallowed).
@@ -140,10 +200,18 @@ After user confirms:
    gh release create "vX.Y.Z" --title "vX.Y.Z" --notes-file /tmp/gh-release-vX.Y.Z.md
    ```
 
-9. **Publish to npm**:
+9. **Publish to npm (mandatory for a full release)**:
+   From the directory that owns the published `package.json` (repo or workspace root per your monorepo layout), run:
    ```bash
    npm publish
    ```
+   Do not treat the release as finished until this succeeds (capture or report the registry URL / version). **Skip only** if the user explicitly confirmed a scope that excludes npm (for example tag-only or internal).
+
+   After `npm publish` returns, confirm the registry actually reflects the new version before moving on:
+   ```bash
+   npm view neotoma version
+   ```
+   The output must equal `X.Y.Z`. If it still reports the previous version, the registry has not propagated yet — wait 30s and retry rather than advancing. This protects against the contract-discrepancy class of issue Simon's agent reported against v0.5.0, where the GitHub Release existed but `npm install neotoma@latest` still resolved to the prior version for several minutes.
 
 10. **Merge main back to dev** (keep branches in sync):
     ```bash
@@ -155,15 +223,16 @@ After user confirms:
 ### Step 5: Post-Release
 
 1. Move supplement: `mv docs/releases/in_progress/vX.Y.Z docs/releases/completed/vX.Y.Z` (if directory was created).
-2. Report summary: version, GitHub Release URL, npm package URL.
+2. Report summary: version, GitHub Release URL, npm package URL (must reflect a successful **`npm publish`** when the release included npm).
 
 ## Submodule Mode
 
 If the user says `/release foundation` (or another submodule name):
 
 1. `cd <submodule>` and run the same workflow scoped to that submodule.
-2. After tagging and pushing inside the submodule, return to the main repo.
-3. Do NOT proceed with main repository release.
+2. If that submodule is the npm package root, run **`npm publish`** there after tag push, same as the main repo execute path.
+3. After tagging and pushing (and npm publish when applicable) inside the submodule, return to the main repo.
+4. Do NOT proceed with main repository release.
 
 ## Constraints
 
@@ -173,6 +242,7 @@ If the user says `/release foundation` (or another submodule name):
 - Always describe uncommitted changes concretely — never use a generic placeholder.
 - Do not ship a GitHub Release body that is only an auto-generated commit list.
 - Do not merge or tag without user approval of the preview.
+- For a standard `/release`, **always** run **`npm publish`** after `gh release create` unless the user explicitly confirmed GitHub-only / no registry.
 - If `docs/developer/github_release_process.md` exists, follow its template and render pipeline.
 
 ## Agent Instructions
@@ -191,3 +261,8 @@ If the user says `/release foundation` (or another submodule name):
 - Omitting material working-tree changes from the integrated preview (they must appear in-section, not dropped)
 - Treating confirmed uncommitted changes as shipped without committing them first
 - Using only `git log --oneline` as the GitHub Release body
+- Ending execute after the GitHub Release without **`npm publish`** when the user confirmed a normal (npm-included) release
+- Omitting the **Breaking changes** section from the supplement, even when the release contains no breaking changes (write `No breaking changes.` explicitly)
+- Omitting the **Highlights** section, or drafting Highlights from commit messages / diff-stats alone instead of reviewing the actual scope for user benefit
+- Highlights bullets that lead with implementation detail ("refactored X", "added middleware", "new service") instead of a bolded user-benefit claim plus a concrete mechanic
+- Stuffing more than 5 Highlights bullets or mixing supporting-cast items (single fixes, tightenings, internal refactors) into the Highlights section

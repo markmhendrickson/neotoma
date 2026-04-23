@@ -558,7 +558,7 @@ Storage recipes:
 Unified store (preferred one call):
 - store with entities:
   - index 0: { entity_type: "conversation", title? }
-  - index 1: { entity_type: "agent_message", role: "user", content: "<exact message>", turn_key: "{conversation_id}:{turn_id}" }
+  - index 1: { entity_type: "conversation_message", role: "user", sender_kind: "user", content: "<exact message>", turn_key: "{conversation_id}:{turn_id}" }
   - index 2+: optional extracted entities implied by the message
 - relationships in same store call:
   - PART_OF from source_index 1 -> target_index 0
@@ -566,7 +566,7 @@ Unified store (preferred one call):
 - idempotency_key: "conversation-{conversation_id}-{turn_id}-{suffix}" or "conversation-chat-<turn>-{suffix}"
 
 Attachment/image turn:
-- Use one store call with conversation + agent_message, and file_path (or file_content + mime_type) in the same request.
+- Use one store call with conversation + conversation_message, and file_path (or file_content + mime_type) in the same request.
 - Then create_relationship:
   - relationship_type: "EMBEDS"
   - source_entity_id: step1_response.structured.entities[1].entity_id

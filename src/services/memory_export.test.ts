@@ -201,8 +201,9 @@ describe("memory_export.importanceScore", () => {
 });
 
 describe("memory_export bookkeeping constant", () => {
-  it("contains conversation and agent_message", () => {
+  it("contains conversation, conversation_message, and legacy agent_message alias", () => {
     expect(BOOKKEEPING_ENTITY_TYPES.has("conversation")).toBe(true);
+    expect(BOOKKEEPING_ENTITY_TYPES.has("conversation_message")).toBe(true);
     expect(BOOKKEEPING_ENTITY_TYPES.has("agent_message")).toBe(true);
   });
 });

@@ -274,6 +274,75 @@ Operators or agents review the list and call `merge_entities` per pair. No autom
 - Merged entities are excluded.
 - Pure read path: no observations, snapshots, or entities are mutated.
 - The detector caps the scan at 2000 entities per type per call. Callers requiring larger scans should page by type or add filters via future parameters.
+## 7.5 Inverse Operation — `split_entity` (R5)
+
+`split_entity(source_entity_id, predicate, new_entity, idempotency_key)` is the surgical inverse of `merge_entities` introduced alongside the R1–R4 conversation-entity-collision fix. It re-points a predicate-selected subset of observations from an over-merged source entity onto a new (or pre-existing) target entity without modifying any observation content.
+
+### 7.5.1 Why Split Exists
+
+The pre-v1.2 `conversation` schema resolved via `heuristic_name` (`name_key:title`) whenever `conversation_id` was absent. Unrelated chat sessions with identical titles collapsed onto the same entity. R1 (canonical_name_fields) + R2 (`name_collision_policy: "reject"`) prevent future collisions, but existing over-merged entities need a cleanup tool that respects the immutability doctrine. `split_entity` is that tool; it is symmetric with `merge_entities` in every audit and idempotency guarantee.
+
+### 7.5.2 Contract
+
+See the OpenAPI `/entities/split` operation and `SplitEntityRequest` / `SplitEntityResponse` schemas. The MCP tool is `split_entity`.
+
+Required inputs:
+- `source_entity_id`: the over-merged entity.
+- `predicate`: declarative, schema-agnostic — at least one of
+  - `observed_at_gte` (ISO-8601 lower bound),
+  - `source_id_in` (list of source ids),
+  - `observation_field_equals` ({ field, value | value_starts_with }).
+- `new_entity`: `{ entity_type, canonical_name, target_entity_id? }`. Omitting `target_entity_id` derives a deterministic id via `generateEntityId`.
+- `idempotency_key`: required per MUST #11. Reuse with the same canonicalized predicate is a deterministic replay (`replayed: true`); reuse with a different predicate is an error (`ERR_IDEMPOTENCY_MISMATCH`).
+
+### 7.5.3 Execution Semantics
+
+1. Look up the (user_id, idempotency_key) row in `entity_splits`; on hit, return the cached result (replay).
+2. Validate the source entity exists and is not already merged-away.
+3. Load all observations for the source entity and apply the predicate in-process.
+4. Refuse if the predicate matched zero observations (would be a no-op) or every observation (would be a rename — use `correct` or `merge_entities` instead).
+5. Ensure the target entity row exists (insert when a deterministic id was derived).
+6. Re-point `observations.entity_id` for the matched subset with a single SQL `UPDATE ... WHERE id IN (...)`. No observation content (`fields`, `observed_at`, `source_id`, `interpretation_id`) is ever touched.
+7. Delete the source entity snapshot and recompute snapshots for both source and new entities from their reduced observation sets.
+8. Insert a row into `entity_splits` (id, user_id, source_entity_id, new_entity_id, predicate, reason, split_by, observations_rewritten, idempotency_key, created_at).
+
+### 7.5.4 Audit Table
+
+```sql
+CREATE TABLE entity_splits (
+  id TEXT PRIMARY KEY,
+  user_id TEXT,
+  source_entity_id TEXT,
+  new_entity_id TEXT,
+  predicate TEXT,         -- canonicalized JSON, drives idempotency compare
+  reason TEXT,
+  split_by TEXT,
+  observations_rewritten INTEGER,
+  idempotency_key TEXT,
+  created_at TEXT
+);
+CREATE UNIQUE INDEX entity_splits_user_idempotency_unique
+  ON entity_splits(user_id, idempotency_key);
+```
+
+Symmetric with `entity_merges`: one row per split, `(user_id, idempotency_key)` unique, full audit trail.
+
+### 7.5.5 Immutability Reconciliation
+
+`split_entity` updates the `entity_id` foreign key on observations — the same mutation the shipped `merge_entities` flow performs via `rewriteObservationEntityId`. The doctrine that "observation content is immutable" (see [docs/subsystems/observation_architecture.md](./observation_architecture.md)) is preserved: `fields`, `observed_at`, `source_id`, and `interpretation_id` are never modified. Any future ADR that tightens FK mutability applies to merge AND split together.
+
+### 7.5.6 Typed Relationships
+
+Like `merge_entities`, `split_entity` does NOT recompute typed edges (MUST NOT #12 — no untyped edges). Relationships remain bound to the source entity; rebuild them onto the new entity via `create_relationship` when appropriate.
+
+### 7.5.7 Error Codes
+
+| Code | Meaning |
+|------|---------|
+| `RESOURCE_NOT_FOUND` | Source entity does not exist for this user. |
+| `VALIDATION_INVALID_FORMAT` | Source already merged, predicate matched zero observations, or predicate matched every observation. |
+| `ERR_IDEMPOTENCY_MISMATCH` | `idempotency_key` was reused with a different canonicalized predicate. |
+
 ## 8. Error Codes
 | Code | Meaning |
 |------|---------|

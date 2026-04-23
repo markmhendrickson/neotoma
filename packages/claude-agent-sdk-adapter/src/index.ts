@@ -147,8 +147,9 @@ export function createNeotomaAgentHooks(
         await client.store({
           entities: [
             {
-              entity_type: "agent_message",
+              entity_type: "conversation_message",
               role: "user",
+              sender_kind: "user",
               content: prompt,
               turn_key: `${sessionId}:${turnId}`,
               ...harnessProvenance({ hook_event: "UserPromptSubmit" }),
@@ -251,8 +252,9 @@ export function createNeotomaAgentHooks(
         await client.store({
           entities: [
             {
-              entity_type: "agent_message",
+              entity_type: "conversation_message",
               role: "assistant",
+              sender_kind: "assistant",
               content: final,
               turn_key: `${sessionId}:${turnId}:assistant`,
               observed_at: new Date().toISOString(),

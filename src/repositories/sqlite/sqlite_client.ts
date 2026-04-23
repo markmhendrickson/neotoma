@@ -42,6 +42,7 @@ const SCHEMA_STATEMENTS = [
     observed_at TEXT NOT NULL,
     specificity_score REAL,
     source_priority INTEGER,
+    observation_source TEXT,
     fields TEXT,
     created_at TEXT,
     user_id TEXT,
@@ -139,6 +140,24 @@ const SCHEMA_STATEMENTS = [
     observations_rewritten INTEGER,
     created_at TEXT
   )`,
+  // R5: symmetric audit table for split_entity. Mirrors entity_merges exactly
+  // (user_id + idempotency_key unique index) so over-merges can be surgically
+  // reversed without any content rewrite on observations. See
+  // docs/subsystems/entity_merge.md § 5 (inverse operation).
+  `CREATE TABLE IF NOT EXISTS entity_splits (
+    id TEXT PRIMARY KEY,
+    user_id TEXT,
+    source_entity_id TEXT,
+    new_entity_id TEXT,
+    predicate TEXT,
+    reason TEXT,
+    split_by TEXT,
+    observations_rewritten INTEGER,
+    idempotency_key TEXT,
+    created_at TEXT
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS entity_splits_user_idempotency_unique
+    ON entity_splits(user_id, idempotency_key)`,
   `CREATE TABLE IF NOT EXISTS schema_registry (
     id TEXT PRIMARY KEY,
     entity_type TEXT NOT NULL,
@@ -330,6 +349,19 @@ function ensureSchema(db: SqliteDatabase): void {
     addColumnIfMissing(db, "observations", "canonical_hash", "TEXT");
     addColumnIfMissing(db, "observations", "identity_basis", "TEXT");
     addColumnIfMissing(db, "observations", "identity_rule", "TEXT");
+    // Agent attribution (Phase 1 AAuth integration). `provenance` is a JSON
+    // blob containing AAuth fields, fallback clientInfo, and trust tier; see
+    // src/crypto/agent_identity.ts AttributionProvenance shape. Adding via
+    // the soft-migration helper keeps existing databases backward-compatible.
+    addColumnIfMissing(db, "observations", "provenance", "TEXT");
+    // Write-kind classification (sensor / llm_summary / workflow_state /
+    // human / import), orthogonal to numeric `source_priority` and to the
+    // `provenance` attribution blob. Soft migration keeps pre-existing
+    // rows at NULL so historical data round-trips intact.
+    addColumnIfMissing(db, "observations", "observation_source", "TEXT");
+    addColumnIfMissing(db, "timeline_events", "provenance", "TEXT");
+    addColumnIfMissing(db, "interpretations", "provenance", "TEXT");
+    addColumnIfMissing(db, "relationship_observations", "provenance", "TEXT");
     addColumnIfMissing(db, "timeline_events", "entity_id", "TEXT");
     addColumnIfMissing(db, "entity_snapshots", "canonical_name", "TEXT");
     addColumnIfMissing(db, "entities", "first_seen_at", "TEXT");

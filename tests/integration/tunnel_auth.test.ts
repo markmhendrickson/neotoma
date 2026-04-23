@@ -2,7 +2,8 @@
  * Integration tests for tunnel-based remote API auth enforcement.
  *
  * Covers:
- * - isLocalRequest host classification
+ * - isLocalRequest classification by socket remote address (the Host
+ *   header is NOT trusted; see docs/reports/security_audit_2026_04_22.md S-1)
  * - /mcp endpoint auth enforcement for tunnel (remote) requests
  * - NEOTOMA_BEARER_TOKEN validation on /mcp
  * - REST middleware bearer enforcement for tunnel requests
@@ -12,66 +13,73 @@ import { describe, it, expect } from "vitest";
 import { isLocalRequest } from "../../src/actions.js";
 
 // --------------------------------------------------------------------------
-// Helper: build a minimal express-like request object with a Host header
+// Helper: build a minimal express-like request with a socket remoteAddress.
+// The `host` header is included only to prove it is ignored by the check.
 // --------------------------------------------------------------------------
-function fakeReq(host: string): import("express").Request {
+function fakeReq(
+  remoteAddress: string | undefined,
+  hostHeader?: string,
+): import("express").Request {
   return {
-    headers: { host },
+    headers: hostHeader ? { host: hostHeader } : {},
+    socket: { remoteAddress } as unknown,
     header(name: string) {
-      return this.headers[name.toLowerCase()] as string | undefined;
+      return (this.headers as Record<string, string | undefined>)[
+        name.toLowerCase()
+      ];
     },
   } as unknown as import("express").Request;
 }
 
 // ==========================================================================
-// isLocalRequest classification
+// isLocalRequest classification (socket-based)
 // ==========================================================================
-describe("isLocalRequest", () => {
-  it("classifies localhost as local", () => {
-    expect(isLocalRequest(fakeReq("localhost"))).toBe(true);
-    expect(isLocalRequest(fakeReq("localhost:8080"))).toBe(true);
-  });
-
-  it("classifies 127.0.0.1 as local", () => {
+describe("isLocalRequest (socket-based)", () => {
+  it("classifies 127.0.0.1 remote as local", () => {
     expect(isLocalRequest(fakeReq("127.0.0.1"))).toBe(true);
-    expect(isLocalRequest(fakeReq("127.0.0.1:8080"))).toBe(true);
   });
 
-  it("documents that IPv6 loopback is not classified as local (known limitation)", () => {
-    // The split(":")[0] approach doesn't handle IPv6 Host headers correctly:
-    // - "::1" → split(":")[0] → "" (empty)
-    // - "[::1]" → split(":")[0] → "["
-    // Neither matches the comparison strings "::1" or "[::1]".
-    // This is acceptable because: (a) IPv6 loopback in Host headers is
-    // extremely rare, (b) tunnel providers never use it, (c) Express/Node
-    // typically normalizes to 127.0.0.1 for IPv4-mapped IPv6.
-    expect(isLocalRequest(fakeReq("::1"))).toBe(false);
-    expect(isLocalRequest(fakeReq("[::1]"))).toBe(false);
-    expect(isLocalRequest(fakeReq("[::1]:8080"))).toBe(false);
+  it("classifies other IPv4 loopback range (127.0.0.0/8) as local", () => {
+    expect(isLocalRequest(fakeReq("127.0.0.2"))).toBe(true);
+    expect(isLocalRequest(fakeReq("127.5.6.7"))).toBe(true);
   });
 
-  it("classifies ngrok host as remote", () => {
-    expect(isLocalRequest(fakeReq("abc123.ngrok-free.dev"))).toBe(false);
-    expect(isLocalRequest(fakeReq("abc123.ngrok-free.dev:443"))).toBe(false);
+  it("classifies IPv6 loopback ::1 as local", () => {
+    expect(isLocalRequest(fakeReq("::1"))).toBe(true);
   });
 
-  it("classifies cloudflare tunnel host as remote", () => {
-    expect(isLocalRequest(fakeReq("random-words.trycloudflare.com"))).toBe(false);
+  it("classifies IPv4-mapped IPv6 loopback as local", () => {
+    expect(isLocalRequest(fakeReq("::ffff:127.0.0.1"))).toBe(true);
   });
 
-  it("classifies custom domain as remote", () => {
-    expect(isLocalRequest(fakeReq("mcp.neotoma.io"))).toBe(false);
-    expect(isLocalRequest(fakeReq("mcp.neotoma.io:8080"))).toBe(false);
+  it("does NOT trust a spoofed Host header when the socket is remote", () => {
+    // SECURITY: the whole point of the post-audit rewrite. A remote caller
+    // that sends `Host: localhost` must NOT be treated as local.
+    expect(isLocalRequest(fakeReq("203.0.113.10", "localhost"))).toBe(false);
+    expect(isLocalRequest(fakeReq("203.0.113.10", "127.0.0.1"))).toBe(false);
   });
 
-  it("classifies empty host as local (fallback)", () => {
-    const req = { headers: {} } as unknown as import("express").Request;
-    // Empty string after split/lowercase → doesn't match any local pattern
-    expect(isLocalRequest(req)).toBe(false);
+  it("classifies public IPs as remote", () => {
+    expect(isLocalRequest(fakeReq("8.8.8.8"))).toBe(false);
+    expect(isLocalRequest(fakeReq("198.51.100.5"))).toBe(false);
+    expect(isLocalRequest(fakeReq("2001:db8::1"))).toBe(false);
   });
 
-  it("is case-insensitive", () => {
-    expect(isLocalRequest(fakeReq("LOCALHOST"))).toBe(true);
-    expect(isLocalRequest(fakeReq("Localhost:8080"))).toBe(true);
+  it("classifies LAN / private IPs as remote (they are not loopback)", () => {
+    // Private ranges are *not* loopback. Historically a misconfiguration
+    // that bound the API to 0.0.0.0 + let LAN callers through was the
+    // original bypass. Keep them remote.
+    expect(isLocalRequest(fakeReq("192.168.1.10"))).toBe(false);
+    expect(isLocalRequest(fakeReq("10.0.0.5"))).toBe(false);
+    expect(isLocalRequest(fakeReq("172.16.5.5"))).toBe(false);
+  });
+
+  it("classifies requests with no socket remote address as remote", () => {
+    expect(isLocalRequest(fakeReq(undefined))).toBe(false);
+    expect(
+      isLocalRequest({
+        headers: { host: "localhost" },
+      } as unknown as import("express").Request),
+    ).toBe(false);
   });
 });
