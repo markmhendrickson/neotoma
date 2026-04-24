@@ -110,26 +110,38 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     faqItems: [
       {
         question: "Does Neotoma replace Claude's memory or ChatGPT's?",
-        answer: "No \u2014 it works alongside them. Platform memory stores what one vendor decides to remember within that vendor's tool. Neotoma stores facts you control across all your tools. Keep using platform memory for quick context; use Neotoma when you need versioning, auditability, and cross-tool consistency.",
+        answer:
+          "No \u2014 it works alongside them. Platform memory stores what one vendor decides to remember within that vendor's tool. Neotoma stores facts you control across all your tools. Keep using platform memory for quick context; use Neotoma when you need versioning, auditability, and cross-tool consistency.",
       },
       {
         question: "Can't I just build this with SQLite or a JSON file?",
-        answer: "You can start there \u2014 many teams do. But you'll eventually need versioning, conflict detection, schema evolution, and cross-tool sync. That's months of infrastructure work. Neotoma ships those guarantees on day one.",
+        answer:
+          "You can start there \u2014 many teams do. But you'll eventually need versioning, conflict detection, schema evolution, and cross-tool sync. That's months of infrastructure work. Neotoma ships those guarantees on day one.",
       },
       {
         question: "Platform memory (Claude, ChatGPT) is good enough \u2014 why add another tool?",
-        answer: "Platform memory stores what one vendor decides to remember, in a format you can't inspect or export. It doesn't version, doesn't detect conflicts, and vanishes if you switch tools. Neotoma gives you structured, cross-tool memory you control.",
+        answer:
+          "Platform memory stores what one vendor decides to remember, in a format you can't inspect or export. It doesn't version, doesn't detect conflicts, and vanishes if you switch tools. Neotoma gives you structured, cross-tool memory you control.",
       },
       {
         question: "Is this production-ready?",
-        answer: "Neotoma is in developer preview \u2014 used daily by real agent workflows. The core guarantees (deterministic memory, versioned history, append-only change log) are stable. Install in 5 minutes and let your agent evaluate the fit.",
+        answer:
+          "Neotoma is in developer preview \u2014 used daily by real agent workflows. The core guarantees (deterministic memory, versioned history, append-only change log) are stable. Install in 5 minutes and let your agent evaluate the fit.",
       },
       {
         question: "Does Neotoma send my data to the cloud?",
-        answer: "No. Neotoma runs locally by default. Your data stays on your machine in a local SQLite database. There is no cloud sync, no telemetry, and no training on your data unless you choose to expose the API.",
+        answer:
+          "No. Neotoma runs locally by default. Your data stays on your machine in a local SQLite database. There is no cloud sync, no telemetry, and no training on your data unless you choose to expose the API.",
       },
     ],
-    speakable: ["h1", "#intro p", "#who h2", "#who p", "#common-questions summary", "#common-questions p"],
+    speakable: [
+      "h1",
+      "#intro p",
+      "#who h2",
+      "#who p",
+      "#common-questions summary",
+      "#common-questions p",
+    ],
   },
   "/home/x7k9m2vp": {
     title: "Neotoma \u2014 structured state for AI agents",
@@ -143,7 +155,8 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       "Install Neotoma in 5 minutes. Agent-assisted and manual install, Docker setup, API server startup, and MCP configuration.",
     robots: "index,follow",
     ogImageUrl: "https://neotoma.io/og/neotoma-og-install-1200x630.png",
-    ogImageAlt: "Install Neotoma in 5 minutes. npm install -g neotoma. Agent-assisted setup for Cursor, Claude, ChatGPT, and MCP-connected tools.",
+    ogImageAlt:
+      "Install Neotoma in 5 minutes. npm install -g neotoma. Agent-assisted setup for Cursor, Claude, ChatGPT, and MCP-connected tools.",
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
@@ -151,10 +164,68 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     ],
     howToName: "How to install Neotoma",
     howToSteps: [
-      { name: "Install the package", text: "Run 'npm install -g neotoma' to install the Neotoma CLI globally." },
-      { name: "Initialize configuration", text: "Run 'neotoma init', choose your AI client (Cursor, Claude Code, Codex, etc.), and restart your tool." },
-      { name: "Start the API server", text: "Run 'neotoma api start' to launch the local API server." },
-      { name: "Connect via MCP", text: "Configure your AI tool's MCP settings to connect to the Neotoma server. The init step handles this automatically for supported clients." },
+      {
+        name: "Install the package",
+        text: "Run 'npm install -g neotoma' to install the Neotoma CLI globally.",
+      },
+      {
+        name: "Initialize configuration",
+        text: "Run 'neotoma init', choose your AI client (Cursor, Claude Code, Codex, etc.), and restart your tool.",
+      },
+      {
+        name: "Start the API server",
+        text: "Run 'neotoma api start' to launch the local API server.",
+      },
+      {
+        name: "Connect via MCP",
+        text: "Configure your AI tool's MCP settings to connect to the Neotoma server. The init step handles this automatically for supported clients.",
+      },
+    ],
+  },
+  "/sandbox": {
+    title: "Public sandbox | Neotoma",
+    description:
+      "The Neotoma public sandbox lets any agent read and write without installing. Data is public, resets weekly, and exists for quick evaluation and shareable examples.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Hosted", path: "/hosted" },
+      { name: "Sandbox", path: "/sandbox" },
+    ],
+  },
+  "/sandbox/terms-of-use": {
+    title: "Public sandbox terms of use | Neotoma",
+    description:
+      "Terms of use for sandbox.neotoma.io: public data, weekly reset, abuse reporting, and no production warranty. Same text as GET /sandbox/terms on the sandbox host, in readable HTML.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Sandbox", path: "/sandbox" },
+      { name: "Sandbox terms", path: "/sandbox/terms-of-use" },
+    ],
+  },
+  "/hosted": {
+    title: "Hosted Neotoma | Neotoma",
+    description:
+      "Overview of Neotoma hosted flavors: the public sandbox, personal tunnels over self-hosted installs, and future managed production. Pick the right fit for your workflow.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Hosted", path: "/hosted" },
+    ],
+  },
+  "/connect": {
+    title: "Connect a remote Neotoma | Neotoma",
+    description:
+      "Connect any AI harness - Claude Code, Claude Desktop, ChatGPT, Codex, Cursor, OpenClaw - to a hosted Neotoma MCP endpoint without installing locally.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Connect", path: "/connect" },
     ],
   },
   "/docs": {
@@ -315,7 +386,8 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     robots: "index,follow",
     jsonLdType: "WebPage",
     ogImageUrl: "https://neotoma.io/og/neotoma-og-cursor-1200x630.png",
-    ogImageAlt: "Neotoma + Cursor: persistent structured memory for cross-session AI development. Install in 5 minutes via MCP.",
+    ogImageAlt:
+      "Neotoma + Cursor: persistent structured memory for cross-session AI development. Install in 5 minutes via MCP.",
     breadcrumb: [
       { name: "Home", path: "/" },
       { name: "Docs", path: "/docs" },
@@ -348,10 +420,22 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     ],
     howToName: "How to connect Neotoma to Claude Desktop",
     howToSteps: [
-      { name: "Install Neotoma", text: "Run 'npm install -g neotoma' to install the CLI globally." },
-      { name: "Start the API server", text: "Run 'neotoma api start' to launch the local Neotoma server." },
-      { name: "Configure Claude Desktop", text: "Add the Neotoma MCP server entry to your Claude Desktop configuration file (claude_desktop_config.json) with stdio transport." },
-      { name: "Restart Claude Desktop", text: "Restart Claude Desktop to load the new MCP server configuration." },
+      {
+        name: "Install Neotoma",
+        text: "Run 'npm install -g neotoma' to install the CLI globally.",
+      },
+      {
+        name: "Start the API server",
+        text: "Run 'neotoma api start' to launch the local Neotoma server.",
+      },
+      {
+        name: "Configure Claude Desktop",
+        text: "Add the Neotoma MCP server entry to your Claude Desktop configuration file (claude_desktop_config.json) with stdio transport.",
+      },
+      {
+        name: "Restart Claude Desktop",
+        text: "Restart Claude Desktop to load the new MCP server configuration.",
+      },
     ],
   },
   "/neotoma-with-claude-connect-remote-mcp": {
@@ -368,10 +452,22 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     ],
     howToName: "How to connect claude.ai to Neotoma via remote MCP",
     howToSteps: [
-      { name: "Start the Neotoma API", text: "Run 'neotoma api start' to launch the local server." },
-      { name: "Create a tunnel", text: "Use a tunneling tool to expose your local Neotoma API over HTTPS." },
-      { name: "Add MCP server in claude.ai", text: "Go to claude.ai settings, add a new MCP server, and paste your tunnel URL." },
-      { name: "Verify connection", text: "Start a new chat and confirm Neotoma tools appear in the available tools list." },
+      {
+        name: "Start the Neotoma API",
+        text: "Run 'neotoma api start' to launch the local server.",
+      },
+      {
+        name: "Create a tunnel",
+        text: "Use a tunneling tool to expose your local Neotoma API over HTTPS.",
+      },
+      {
+        name: "Add MCP server in claude.ai",
+        text: "Go to claude.ai settings, add a new MCP server, and paste your tunnel URL.",
+      },
+      {
+        name: "Verify connection",
+        text: "Start a new chat and confirm Neotoma tools appear in the available tools list.",
+      },
     ],
   },
   "/neotoma-with-claude-code": {
@@ -450,8 +546,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   },
   "/neotoma-with-codex-connect-local-stdio": {
     title: "Codex local setup (stdio) | Neotoma",
-    description:
-      "Configure Neotoma locally in Codex using stdio transport and .codex/config.toml.",
+    description: "Configure Neotoma locally in Codex using stdio transport and .codex/config.toml.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -462,9 +557,18 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     ],
     howToName: "How to connect Codex to Neotoma locally via stdio",
     howToSteps: [
-      { name: "Install Neotoma", text: "Run 'npm install -g neotoma' to install the CLI globally." },
-      { name: "Configure Codex", text: "Add the Neotoma MCP server to your .codex/config.toml file with stdio transport settings." },
-      { name: "Verify", text: "Start a new Codex session and confirm Neotoma tools are available." },
+      {
+        name: "Install Neotoma",
+        text: "Run 'npm install -g neotoma' to install the CLI globally.",
+      },
+      {
+        name: "Configure Codex",
+        text: "Add the Neotoma MCP server to your .codex/config.toml file with stdio transport settings.",
+      },
+      {
+        name: "Verify",
+        text: "Start a new Codex session and confirm Neotoma tools are available.",
+      },
     ],
   },
   "/neotoma-with-codex-connect-remote-http-oauth": {
@@ -902,12 +1006,24 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/verticals": {
     title: "Use Cases | State Integrity for AI-Driven Verticals | Neotoma",
     description:
-      "Neotoma fits any workflow where 'what did the agent know then?' matters. Explore vertical use cases: compliance, CRM, contracts, due diligence, portfolio monitoring, case management, financial ops, procurement, agent authorization, healthcare, government, customer ops, and logistics.",
+      "Neotoma fits any workflow where 'what did the agent know then?' matters. Explore vertical use cases: compliance, CRM, contracts, due diligence, portfolio monitoring, case management, financial ops, procurement, agent authorization, healthcare, government, customer ops, logistics, trading, and AI-assisted crypto engineering.",
     robots: "noindex,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
       { name: "Verticals", path: "/verticals" },
+    ],
+  },
+  "/crypto-engineering": {
+    title:
+      "Neotoma for Crypto & Security-Sensitive Engineering | Agent-Session Replay and Review-Cost Reduction",
+    description:
+      "Capture every coding-agent session, surface what the agent verified and what it skipped, attribute commits to models and context, and triage AI-generated bounty reports by provenance. Neotoma is the integrity layer for AI-assisted crypto and security-sensitive engineering pipelines with a real human-review ceiling.",
+    robots: "noindex,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Crypto Engineering", path: "/crypto-engineering" },
     ],
   },
   "/build-vs-buy": {
@@ -1013,7 +1129,8 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     robots: "index,follow",
     jsonLdType: "WebPage",
     ogImageUrl: "https://neotoma.io/og/neotoma-og-evaluate-1200x630.png",
-    ogImageAlt: "Let your agent decide if Neotoma fits. Copy the evaluation prompt into Claude, Cursor, or ChatGPT and let your agent assess the fit.",
+    ogImageAlt:
+      "Let your agent decide if Neotoma fits. Copy the evaluation prompt into Claude, Cursor, or ChatGPT and let your agent assess the fit.",
     breadcrumb: [
       { name: "Home", path: "/" },
       { name: "Evaluate", path: "/evaluate" },
@@ -1028,6 +1145,28 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     breadcrumb: [
       { name: "Home", path: "/" },
       { name: "Meet", path: "/meet" },
+    ],
+  },
+  "/privacy": {
+    title: "Privacy Notice | Neotoma",
+    description:
+      "What data neotoma.io collects on the marketing site, the public sandbox, and the agent feedback pipeline. Pre-incorporation notice published by Mark Hendrickson as an individual publisher.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Privacy", path: "/privacy" },
+    ],
+  },
+  "/terms": {
+    title: "Terms of Use | Neotoma",
+    description:
+      "Terms of use for neotoma.io, agent.neotoma.io, and the public sandbox. The Neotoma software remains MIT-licensed; these terms govern the hosted services.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Terms", path: "/terms" },
     ],
   },
   "/faq": {
@@ -1049,7 +1188,8 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     robots: "index,follow",
     jsonLdType: "WebPage",
     ogImageUrl: "https://neotoma.io/og/neotoma-og-vs-platform-1200x630.png",
-    ogImageAlt: "Neotoma vs platform memory: side-by-side comparison of Claude Memory, ChatGPT Memory, and Neotoma across versioning, auditability, and portability.",
+    ogImageAlt:
+      "Neotoma vs platform memory: side-by-side comparison of Claude Memory, ChatGPT Memory, and Neotoma across versioning, auditability, and portability.",
     breadcrumb: [
       { name: "Home", path: "/" },
       { name: "Memory Models", path: "/memory-models" },
@@ -1335,7 +1475,8 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     robots: "index,follow",
     jsonLdType: "WebPage",
     ogImageUrl: "https://neotoma.io/og/neotoma-og-guarantees-1200x630.png",
-    ogImageAlt: "Neotoma memory guarantees compared: versioned history, append-only audit log, schema-bound validation, cross-tool sync, and privacy-first local storage.",
+    ogImageAlt:
+      "Neotoma memory guarantees compared: versioned history, append-only audit log, schema-bound validation, cross-tool sync, and privacy-first local storage.",
     breadcrumb: [
       { name: "Home", path: "/" },
       { name: "Memory Guarantees", path: "/memory-guarantees" },
@@ -1426,7 +1567,7 @@ export const INDEXABLE_SITE_PAGE_PATHS: readonly string[] = INDEXABLE_DEFAULT_LO
 export const SITEMAP_PATHS: readonly string[] = [
   ...INDEXABLE_DEFAULT_LOCALE_PATHS,
   ...NON_DEFAULT_LOCALES.flatMap((locale) =>
-    INDEXABLE_DEFAULT_LOCALE_PATHS.map((path) => localizePath(path, locale)),
+    INDEXABLE_DEFAULT_LOCALE_PATHS.map((path) => localizePath(path, locale))
   ),
 ];
 
@@ -1723,17 +1864,12 @@ export function resolveSeoMetadata(pathname: string): ResolvedSeoMetadata {
     typeof process !== "undefined" && process.env?.SITE_PREVIEW === "1"
       ? "noindex,follow"
       : resolvedRouteMetadata.robots;
-  const ogImageUrl =
-    resolvedRouteMetadata.ogImageUrl ?? SEO_DEFAULTS.ogImageUrl;
+  const ogImageUrl = resolvedRouteMetadata.ogImageUrl ?? SEO_DEFAULTS.ogImageUrl;
   const ogImageAlt =
     resolvedRouteMetadata.ogImageAlt ??
-    buildDefaultOgImageAlt(
-      resolvedRouteMetadata.title,
-      resolvedRouteMetadata.description
-    );
+    buildDefaultOgImageAlt(resolvedRouteMetadata.title, resolvedRouteMetadata.description);
   const keywords = buildKeywords(resolvedRouteMetadata);
-  const twitterCard =
-    resolvedRouteMetadata.twitterCard ?? SEO_DEFAULTS.twitterCard;
+  const twitterCard = resolvedRouteMetadata.twitterCard ?? SEO_DEFAULTS.twitterCard;
   return {
     title: resolvedRouteMetadata.title,
     description: resolvedRouteMetadata.description,

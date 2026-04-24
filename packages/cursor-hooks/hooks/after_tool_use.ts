@@ -36,16 +36,36 @@ async function handle(
 
   const sessionId =
     (input.sessionId as string) ??
+    (input.session_id as string) ??
     (input.conversationId as string) ??
+    (input.conversation_id as string) ??
     "cursor-unknown";
-  const turnId = (input.turnId as string) ?? String(Date.now());
+  const turnId =
+    (input.turnId as string) ??
+    (input.turn_id as string) ??
+    (input.generationId as string) ??
+    (input.generation_id as string) ??
+    String(Date.now());
   const toolName =
-    (input.toolName as string) ?? (input.tool as string) ?? "unknown";
-  const toolInput = (input.toolInput as Record<string, unknown>) ?? {};
+    (input.toolName as string) ??
+    (input.tool_name as string) ??
+    (input.tool as string) ??
+    "unknown";
+  const toolInput =
+    (input.toolInput as Record<string, unknown>) ??
+    (input.tool_input as Record<string, unknown>) ??
+    {};
   const toolResult =
     (input.toolResult as Record<string, unknown>) ??
+    (input.tool_output as Record<string, unknown>) ??
+    (input.toolOutput as Record<string, unknown>) ??
+    (input.tool_result as Record<string, unknown>) ??
     (input.toolResponse as Record<string, unknown>) ??
     {};
+  const hookEventName =
+    (input.hook_event_name as string) ??
+    (input.hookEventName as string) ??
+    "postToolUse";
 
   const entity = {
     entity_type: "tool_invocation",
@@ -55,7 +75,7 @@ async function handle(
     has_error: Boolean((toolResult as { error?: unknown }).error),
     input_summary: summarize(toolInput),
     output_summary: summarize(toolResult),
-    ...harnessProvenance({ hook_event: "afterToolUse" }),
+    ...harnessProvenance({ hook_event: hookEventName }),
   };
 
   try {
@@ -68,9 +88,9 @@ async function handle(
       ),
     });
   } catch (err) {
-    log("debug", `afterToolUse store failed: ${(err as Error).message}`);
+    log("debug", `${hookEventName} store failed: ${(err as Error).message}`);
   }
   return {};
 }
 
-void runHook("afterToolUse", handle);
+void runHook("postToolUse", handle);

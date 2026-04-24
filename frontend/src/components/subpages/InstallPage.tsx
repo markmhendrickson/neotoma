@@ -169,7 +169,10 @@ function CodeBlock({
       <div className="mb-3 flex flex-col gap-3 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-x-3 sm:gap-y-3">
         <div className={CODE_BLOCK_CHROME_STACK_CLASS}>
           <div className={EVALUATE_PROMPT_PILL_CLASS}>
-            <span className="h-2 w-2 rounded-full bg-emerald-500/80 dark:bg-emerald-400/80" aria-hidden />
+            <span
+              className="h-2 w-2 rounded-full bg-emerald-500/80 dark:bg-emerald-400/80"
+              aria-hidden
+            />
             {chrome.title}
           </div>
           <div className={CODE_BLOCK_CHROME_SUBTITLE_CLASS}>{chrome.subtitle}</div>
@@ -243,17 +246,14 @@ function WhatChangesSection() {
   return (
     <div className="mb-8">
       <hr className="mb-6 border-border" />
-      <h2 className="text-[20px] font-medium tracking-[-0.01em]">
-        What changes on your system
-      </h2>
+      <h2 className="text-[20px] font-medium tracking-[-0.01em]">What changes on your system</h2>
       <p className="text-[14px] leading-6 text-muted-foreground mt-2 mb-3">
         <code className="text-[13px] bg-muted px-1.5 py-0.5 rounded">npm install -g neotoma</code>{" "}
         adds a CLI binary.{" "}
-        <code className="text-[13px] bg-muted px-1.5 py-0.5 rounded">neotoma init</code>{" "}
-        creates a config directory, a local SQLite database, and an env file.
-        Optional prompts during init can add MCP config entries and CLI
-        instruction files; you choose at each step. Nothing runs in the
-        background unless you start it. No telemetry, no phone-home.
+        <code className="text-[13px] bg-muted px-1.5 py-0.5 rounded">neotoma init</code> creates a
+        config directory, a local SQLite database, and an env file. Optional prompts during init can
+        add MCP config entries and CLI instruction files; you choose at each step. Nothing runs in
+        the background unless you start it. No telemetry, no phone-home.
       </p>
 
       <div className="rounded-lg border border-border overflow-x-auto mb-3">
@@ -282,20 +282,22 @@ function WhatChangesSection() {
       </div>
 
       <p className="text-[13px] leading-5 text-muted-foreground">
-        <code className="text-[12px] bg-muted px-1 py-0.5 rounded">neotoma reset</code>{" "}
-        backs up every item to a timestamped directory before removing it,
-        then runs{" "}
+        <code className="text-[12px] bg-muted px-1 py-0.5 rounded">neotoma reset</code> backs up
+        every item to a timestamped directory before removing it, then runs{" "}
         <code className="text-[12px] bg-muted px-1 py-0.5 rounded">npm uninstall -g neotoma</code>.
-        If your <code className="text-[12px] bg-muted px-1 py-0.5 rounded">.env</code>{" "}
-        sets <code className="text-[12px] bg-muted px-1 py-0.5 rounded">NEOTOMA_DATA_DIR</code>,
-        that directory is protected and not removed.
+        If your <code className="text-[12px] bg-muted px-1 py-0.5 rounded">.env</code> sets{" "}
+        <code className="text-[12px] bg-muted px-1 py-0.5 rounded">NEOTOMA_DATA_DIR</code>, that
+        directory is protected and not removed.
       </p>
     </div>
   );
 }
 
 export function InstallPage() {
-  const { tab: installDockerTab, setTab: setInstallDockerTab } = useHashSyncedTab("agent", ["agent", "human"]);
+  const { tab: installDockerTab, setTab: setInstallDockerTab } = useHashSyncedTab("agent", [
+    "agent",
+    "human",
+  ]);
 
   return (
     <DetailPage title="Install options">
@@ -312,9 +314,8 @@ export function InstallPage() {
 
       <div className="mb-8 rounded-lg border border-border/60 bg-muted/30 p-4">
         <p className="text-[14px] leading-6 text-muted-foreground mb-3">
-          Want the full agent-driven sequence? Start with evaluation, then let the
-          agent install if needed, activate Neotoma with your data, and configure
-          the tool you are in.
+          Want the full agent-driven sequence? Start with evaluation, then let the agent install if
+          needed, activate Neotoma with your data, and configure the tool you are in.
         </p>
         <TrackedProductLink
           to="/evaluate"
@@ -328,10 +329,9 @@ export function InstallPage() {
 
       <h2 className="text-[20px] font-medium tracking-[-0.01em] mb-3">Agent-assisted install</h2>
       <p className="text-[15px] leading-7 mb-4">
-        If you want to skip the initial evaluation page and proceed directly from
-        install, paste this prompt into Claude, Codex, Cursor, or a similar
-        agent. The prompt stays intentionally short; this page documents the
-        full install-first sequence it should follow.
+        If you want to skip the initial evaluation page and proceed directly from install, paste
+        this prompt into Claude, Codex, Cursor, or a similar agent. The prompt stays intentionally
+        short; this page documents the full install-first sequence it should follow.
       </p>
       <CodeBlock
         code={SITE_CODE_SNIPPETS.agentInstallPrompt}
@@ -341,12 +341,17 @@ export function InstallPage() {
 
       <div className="mb-6 rounded-lg border border-sky-500/20 bg-sky-500/5 p-4">
         <p className="text-[14px] leading-6 text-sky-900 dark:text-sky-50 mb-2">
-          <strong>This page expands the prompt.</strong> The copied prompt omits
-          detail for readability; the full install-first flow here includes:
+          <strong>This page expands the prompt.</strong> The copied prompt omits detail for
+          readability; the full install-first flow here includes:
         </p>
         <ol className="list-decimal pl-5 space-y-1 text-[14px] leading-6 text-sky-900 dark:text-sky-50">
-          <li>Confirming the user wants the install-first path and identifying the current tool.</li>
-          <li>Installing only if needed, then verifying state with <code className="bg-sky-500/10 px-1 py-0.5 rounded">neotoma doctor --json</code>.</li>
+          <li>
+            Confirming the user wants the install-first path and identifying the current tool.
+          </li>
+          <li>
+            Installing only if needed, then verifying state with{" "}
+            <code className="bg-sky-500/10 px-1 py-0.5 rounded">neotoma doctor --json</code>.
+          </li>
           <li>Choosing the first data to store and the onboarding mode.</li>
           <li>Running activation, then configuring the current tool for ongoing use.</li>
         </ol>
@@ -356,8 +361,8 @@ export function InstallPage() {
         Expanded install-first sequence
       </h3>
       <p className="text-[15px] leading-7 mb-3">
-        Use this path only when the user already wants to proceed with Neotoma
-        and does not need the broader fit-assessment flow on{" "}
+        Use this path only when the user already wants to proceed with Neotoma and does not need the
+        broader fit-assessment flow on{" "}
         <TrackedProductLink
           to="/evaluate"
           navTarget="evaluate"
@@ -370,50 +375,51 @@ export function InstallPage() {
       </p>
       <ol className="list-decimal pl-5 space-y-2 mb-4">
         <li className="text-[15px] leading-7 text-muted-foreground">
-          <strong className="text-foreground">Confirm the install-first path</strong>{" "}
-          - verify that the user wants to proceed now, identify their current
-          tool, and note any major tool constraints that affect setup quality.
+          <strong className="text-foreground">Confirm the install-first path</strong> - verify that
+          the user wants to proceed now, identify their current tool, and note any major tool
+          constraints that affect setup quality.
         </li>
         <li className="text-[15px] leading-7 text-muted-foreground">
-          <strong className="text-foreground">Install only if needed</strong> -
-          check whether Neotoma is already installed. If not, branch by tool:
-          for OpenClaw, prefer{" "}
-          <code className="text-sm bg-muted px-1.5 py-0.5 rounded">openclaw plugins install clawhub:neotoma</code>;
-          for other local tools, run{" "}
+          <strong className="text-foreground">Install only if needed</strong> - check whether
+          Neotoma is already installed. If not, branch by tool: for OpenClaw, prefer{" "}
+          <code className="text-sm bg-muted px-1.5 py-0.5 rounded">
+            openclaw plugins install clawhub:neotoma
+          </code>
+          ; for other local tools, run{" "}
           <code className="text-sm bg-muted px-1.5 py-0.5 rounded">npm install -g neotoma</code>.
           Then collapse the rest of setup into two calls:{" "}
-          <code className="text-sm bg-muted px-1.5 py-0.5 rounded">neotoma doctor --json</code>{" "}
-          to inspect consolidated state and{" "}
-          <code className="text-sm bg-muted px-1.5 py-0.5 rounded">neotoma setup --tool &lt;tool&gt; --yes</code>{" "}
-          to apply init + MCP + CLI instructions + permission files idempotently.
-          If Neotoma is already installed, just run{" "}
-          <code className="text-sm bg-muted px-1.5 py-0.5 rounded">neotoma doctor --json</code>{" "}
-          to verify.
+          <code className="text-sm bg-muted px-1.5 py-0.5 rounded">neotoma doctor --json</code> to
+          inspect consolidated state and{" "}
+          <code className="text-sm bg-muted px-1.5 py-0.5 rounded">
+            neotoma setup --tool &lt;tool&gt; --yes
+          </code>{" "}
+          to apply init + MCP + CLI instructions + permission files idempotently. If Neotoma is
+          already installed, just run{" "}
+          <code className="text-sm bg-muted px-1.5 py-0.5 rounded">neotoma doctor --json</code> to
+          verify.
         </li>
         <li className="text-[15px] leading-7 text-muted-foreground">
-          <strong className="text-foreground">Do not improvise shell
-          introspection.</strong> Do not run{" "}
-          <code className="text-sm bg-muted px-1.5 py-0.5 rounded">python3 -c</code>,{" "}
+          <strong className="text-foreground">Do not improvise shell introspection.</strong> Do not
+          run <code className="text-sm bg-muted px-1.5 py-0.5 rounded">python3 -c</code>,{" "}
           <code className="text-sm bg-muted px-1.5 py-0.5 rounded">grep -r</code>,{" "}
           <code className="text-sm bg-muted px-1.5 py-0.5 rounded">ls</code>,{" "}
           <code className="text-sm bg-muted px-1.5 py-0.5 rounded">cat</code>,{" "}
           <code className="text-sm bg-muted px-1.5 py-0.5 rounded">jq</code>,{" "}
           <code className="text-sm bg-muted px-1.5 py-0.5 rounded">find</code>,{" "}
           <code className="text-sm bg-muted px-1.5 py-0.5 rounded">which</code>, or{" "}
-          <code className="text-sm bg-muted px-1.5 py-0.5 rounded">node -e</code>{" "}
-          to introspect Neotoma, and do not run arbitrary{" "}
-          <code className="text-sm bg-muted px-1.5 py-0.5 rounded">npm run</code>{" "}
-          scripts from the user's repositories. If a permission prompt appears
-          for anything other than <code className="text-sm bg-muted px-1.5 py-0.5 rounded">neotoma *</code>{" "}
-          or <code className="text-sm bg-muted px-1.5 py-0.5 rounded">npm install -g neotoma</code>,
-          stop and ask the user to widen the allowlist (see the Permissions
-          pre-flight block above) rather than substituting another command.
+          <code className="text-sm bg-muted px-1.5 py-0.5 rounded">node -e</code> to introspect
+          Neotoma, and do not run arbitrary{" "}
+          <code className="text-sm bg-muted px-1.5 py-0.5 rounded">npm run</code> scripts from the
+          user's repositories. If a permission prompt appears for anything other than{" "}
+          <code className="text-sm bg-muted px-1.5 py-0.5 rounded">neotoma *</code> or{" "}
+          <code className="text-sm bg-muted px-1.5 py-0.5 rounded">npm install -g neotoma</code>,
+          stop and ask the user to widen the allowlist (see the Permissions pre-flight block above)
+          rather than substituting another command.
         </li>
         <li className="text-[15px] leading-7 text-muted-foreground">
-          <strong className="text-foreground">Set the first data target</strong>{" "}
-          - determine what data should be stored first and, if needed, ask the
-          user which onboarding mode they want: quick win, guided, or power
-          user.
+          <strong className="text-foreground">Set the first data target</strong> - determine what
+          data should be stored first and, if needed, ask the user which onboarding mode they want:
+          quick win, guided, or power user.
         </li>
         <li className="text-[15px] leading-7 text-muted-foreground">
           <strong className="text-foreground">Run activation</strong> - execute{" "}
@@ -425,22 +431,21 @@ export function InstallPage() {
           >
             {SITE_CODE_SNIPPETS.activationSequence}
           </a>
-          : discover candidates, preview them, ingest confirmed sources,
-          reconstruct a timeline, then query and correct.
+          : discover candidates, preview them, ingest confirmed sources, reconstruct a timeline,
+          then query and correct.
         </li>
         <li className="text-[15px] leading-7 text-muted-foreground">
-          <strong className="text-foreground">Configure the current tool</strong>{" "}
-          - after first value is visible, set up the strongest ongoing Neotoma
-          workflow for the tool in use. For OpenClaw, keep the native plugin path
-          as the default and use manual MCP wiring only as fallback. If that tool
-          is too constrained, say so explicitly and recommend a better-supported
-          primary environment.
+          <strong className="text-foreground">Configure the current tool</strong> - after first
+          value is visible, set up the strongest ongoing Neotoma workflow for the tool in use. For
+          OpenClaw, keep the native plugin path as the default and use manual MCP wiring only as
+          fallback. If that tool is too constrained, say so explicitly and recommend a
+          better-supported primary environment.
         </li>
       </ol>
       <div className="mb-6 rounded-lg border border-border/60 bg-muted/30 p-4">
         <p className="text-[14px] leading-6 text-muted-foreground mb-3">
-          If your agent requires command allowlists, use the pre-flight snippets
-          before running the prompt.
+          If your agent requires command allowlists, use the pre-flight snippets before running the
+          prompt.
         </p>
         <PermissionsPreflight />
       </div>
@@ -493,7 +498,28 @@ export function InstallPage() {
 
       <WhatChangesSection />
 
-      <h2 className="text-[20px] font-medium tracking-[-0.01em] mt-10 mb-4">Direct integration docs</h2>
+      <h2 className="text-[20px] font-medium tracking-[-0.01em] mt-10 mb-4">
+        Direct integration docs
+      </h2>
+      <p className="text-[13px] leading-6 text-muted-foreground mb-3">
+        Connecting an agent to a hosted Neotoma instead of installing locally? Hosted Neotoma
+        instances expose harness-specific connect snippets at their own root URL (with the host
+        pre-filled) - see{" "}
+        <Link
+          to="/connect"
+          className="text-foreground underline underline-offset-2 hover:no-underline"
+        >
+          Connect a remote Neotoma
+        </Link>{" "}
+        or try the{" "}
+        <Link
+          to="/sandbox"
+          className="text-foreground underline underline-offset-2 hover:no-underline"
+        >
+          public sandbox
+        </Link>
+        .
+      </p>
       <ul className="list-none pl-0 grid grid-cols-1 sm:grid-cols-2 auto-rows-fr gap-3 mb-10 [&_a]:!no-underline [&_a]:hover:!no-underline">
         {INTEGRATIONS.map(({ label, href, desc, Icon }) => (
           <li key={href} className="h-full">
@@ -511,9 +537,7 @@ export function InstallPage() {
                       <Icon className="h-5 w-5 shrink-0" aria-hidden />
                     </span>
                     <div className="min-w-0 flex-1">
-                      <span className="font-medium text-[15px] text-foreground block">
-                        {label}
-                      </span>
+                      <span className="font-medium text-[15px] text-foreground block">{label}</span>
                       <span className="text-[13px] leading-snug text-muted-foreground block mt-0.5">
                         {desc}
                       </span>
@@ -527,9 +551,7 @@ export function InstallPage() {
       </ul>
 
       <h2 className="text-[20px] font-medium tracking-[-0.01em] mt-10 mb-3">Manual install</h2>
-      <p className="text-[15px] leading-7 mb-4">
-        If you prefer to run the commands yourself:
-      </p>
+      <p className="text-[15px] leading-7 mb-4">If you prefer to run the commands yourself:</p>
       <CodeBlock
         code={SITE_CODE_SNIPPETS.installCommands}
         copyFeedbackId="install-copy-manual-commands"
@@ -538,23 +560,21 @@ export function InstallPage() {
 
       <h3 className="text-[17px] font-medium tracking-[-0.01em] mt-6 mb-3">After installation</h3>
       <p className="text-[15px] leading-7 text-muted-foreground mb-3">
-        Once installation is complete, activation follows. If evaluation already
-        identified the first data to store, carry that forward. Otherwise determine
-        it now, then run{" "}
-        <strong className="text-foreground">
-          {SITE_CODE_SNIPPETS.activationSequence}
-        </strong>
-        . After first value is visible, configure the current tool for robust
-        ongoing usage.
+        Once installation is complete, activation follows. If evaluation already identified the
+        first data to store, carry that forward. Otherwise determine it now, then run{" "}
+        <strong className="text-foreground">{SITE_CODE_SNIPPETS.activationSequence}</strong>. After
+        first value is visible, configure the current tool for robust ongoing usage.
       </p>
       <div className="mb-4 rounded-lg border border-border/60 bg-muted/30 p-3">
         <p className="text-[13px] leading-5 text-muted-foreground mb-2">
-          <strong className="text-foreground">Troubleshooting: <code className="bg-muted px-1 py-0.5 rounded">which neotoma</code> fails after install?</strong>{" "}
-          Your shell manager (mise, nvm, fnm) is probably not active in the
-          agent's non-interactive shell. Run{" "}
-          <code className="bg-muted px-1 py-0.5 rounded">neotoma doctor --json</code>{" "}
-          and read <code className="bg-muted px-1 py-0.5 rounded">.neotoma.path_fix_hint</code>{" "}
-          for the exact activation line. Common fixes to add to{" "}
+          <strong className="text-foreground">
+            Troubleshooting: <code className="bg-muted px-1 py-0.5 rounded">which neotoma</code>{" "}
+            fails after install?
+          </strong>{" "}
+          Your shell manager (mise, nvm, fnm) is probably not active in the agent's non-interactive
+          shell. Run <code className="bg-muted px-1 py-0.5 rounded">neotoma doctor --json</code> and
+          read <code className="bg-muted px-1 py-0.5 rounded">.neotoma.path_fix_hint</code> for the
+          exact activation line. Common fixes to add to{" "}
           <code className="bg-muted px-1 py-0.5 rounded">~/.zshenv</code> or{" "}
           <code className="bg-muted px-1 py-0.5 rounded">~/.zshrc</code>:
         </p>
@@ -566,43 +586,39 @@ fnm:   eval "$(fnm env)"`}</code>
       </div>
       <ol className="list-decimal pl-5 space-y-2 mb-6">
         <li className="text-[15px] leading-7 text-muted-foreground">
-          <strong className="text-foreground">Preference selection</strong> - if
-          evaluation already established the priority data types and onboarding mode,
-          carry them forward. Otherwise choose which data types matter most
-          (project files, chat transcripts, meeting notes, financial docs, code
-          context, custom paths) and pick a mode: quick win, guided, or power
+          <strong className="text-foreground">Preference selection</strong> - if evaluation already
+          established the priority data types and onboarding mode, carry them forward. Otherwise
+          choose which data types matter most (project files, chat transcripts, meeting notes,
+          financial docs, code context, custom paths) and pick a mode: quick win, guided, or power
           user.
         </li>
         <li className="text-[15px] leading-7 text-muted-foreground">
-          <strong className="text-foreground">Discovery</strong> - continue from any
-          candidate data already identified during evaluation. If that work has not
-          happened yet, the agent scans shallowly based on your preferences, groups
-          results into domains (not file counts), and checks for chat transcript
-          exports and platform memory.
+          <strong className="text-foreground">Discovery</strong> - continue from any candidate data
+          already identified during evaluation. If that work has not happened yet, the agent scans
+          shallowly based on your preferences, groups results into domains (not file counts), and
+          checks for chat transcript exports and platform memory.
         </li>
         <li className="text-[15px] leading-7 text-muted-foreground">
-          <strong className="text-foreground">Propose and confirm</strong> - for each
-          domain the agent explains why it was selected, what entities it likely contains,
-          and what timeline value it could unlock. You confirm per-folder or per-file
-          before anything is stored.
+          <strong className="text-foreground">Propose and confirm</strong> - for each domain the
+          agent explains why it was selected, what entities it likely contains, and what timeline
+          value it could unlock. You confirm per-folder or per-file before anything is stored.
         </li>
         <li className="text-[15px] leading-7 text-muted-foreground">
-          <strong className="text-foreground">Ingest and reconstruct</strong> -
-          confirmed files are ingested and the agent reconstructs the strongest
-          timeline with provenance - every event traced to a specific source file.
+          <strong className="text-foreground">Ingest and reconstruct</strong> - confirmed files are
+          ingested and the agent reconstructs the strongest timeline with provenance - every event
+          traced to a specific source file.
         </li>
         <li className="text-[15px] leading-7 text-muted-foreground">
-          <strong className="text-foreground">Query and correct</strong> - the agent
-          surfaces a follow-up query against the reconstructed timeline and offers
-          next actions, then asks whether the timeline is accurate and supports
-          corrections (wrong merge, wrong date, source exclusion).
+          <strong className="text-foreground">Query and correct</strong> - the agent surfaces a
+          follow-up query against the reconstructed timeline and offers next actions, then asks
+          whether the timeline is accurate and supports corrections (wrong merge, wrong date, source
+          exclusion).
         </li>
       </ol>
 
       <h2 className="text-[20px] font-medium tracking-[-0.01em] mt-10 mb-3">Try it now</h2>
       <p className="text-[15px] leading-7 mb-4">
-        Once Neotoma is running, try these prompts in any connected tool to see
-        it working:
+        Once Neotoma is running, try these prompts in any connected tool to see it working:
       </p>
       <div className="space-y-3 mb-8">
         <div className="rounded-lg border border-border p-4">
@@ -630,13 +646,15 @@ fnm:   eval "$(fnm env)"`}</code>
             &ldquo;Actually, Sarah&apos;s email changed to sarah@acme.co.&rdquo;
           </p>
           <p className="text-[12px] text-muted-foreground/70">
-            Then: &ldquo;What&apos;s Sarah&apos;s email? Show me the history.&rdquo;
-            Both old and new are preserved with timestamps.
+            Then: &ldquo;What&apos;s Sarah&apos;s email? Show me the history.&rdquo; Both old and
+            new are preserved with timestamps.
           </p>
         </div>
       </div>
 
-      <h2 className="text-[20px] font-medium tracking-[-0.01em] mt-10 mb-3">Start the API server</h2>
+      <h2 className="text-[20px] font-medium tracking-[-0.01em] mt-10 mb-3">
+        Start the API server
+      </h2>
       <p className="text-[15px] leading-7 mb-4">
         The API server provides the HTTP interface that MCP and the CLI communicate through.
       </p>
@@ -657,9 +675,8 @@ fnm:   eval "$(fnm env)"`}</code>
       />
       <div className="mb-6 rounded-lg border border-amber-500/30 bg-amber-50/70 p-3 text-amber-950 dark:border-amber-400/25 dark:bg-amber-500/10 dark:text-amber-50">
         <p className="text-[14px] leading-6 mb-0">
-          <strong>After adding MCP config:</strong> restart your AI tool
-          (Claude Code, Cursor, Claude Desktop, etc.) so it picks up the new
-          server. MCP servers are loaded at startup.
+          <strong>After adding MCP config:</strong> restart your AI tool (Claude Code, Cursor,
+          Claude Desktop, etc.) so it picks up the new server. MCP servers are loaded at startup.
         </p>
       </div>
 
@@ -683,9 +700,9 @@ fnm:   eval "$(fnm env)"`}</code>
         </TabsContent>
         <TabsContent value="human">
           <p className="text-[15px] leading-7 mb-4">
-            If you prefer not to install directly on your host machine, you can run the full
-            Neotoma stack (API server, CLI, and MCP server) inside a Docker
-            container. Clone the Neotoma repository and build the image:
+            If you prefer not to install directly on your host machine, you can run the full Neotoma
+            stack (API server, CLI, and MCP server) inside a Docker container. Clone the Neotoma
+            repository and build the image:
           </p>
           <CodeBlock
             code={SITE_CODE_SNIPPETS.dockerBuild}
@@ -712,8 +729,8 @@ fnm:   eval "$(fnm env)"`}</code>
             Connect MCP from Docker
           </h3>
           <p className="text-[15px] leading-7 mb-4">
-            To connect an MCP client (Cursor, Claude, Codex) to the containerized server,
-            add this to your MCP configuration:
+            To connect an MCP client (Cursor, Claude, Codex) to the containerized server, add this
+            to your MCP configuration:
           </p>
           <CodeBlock
             code={SITE_CODE_SNIPPETS.dockerMcpConfig}
@@ -722,16 +739,16 @@ fnm:   eval "$(fnm env)"`}</code>
           />
           <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-50/70 p-3 text-amber-950 dark:border-amber-400/25 dark:bg-amber-500/10 dark:text-amber-50">
             <p className="text-[14px] leading-6 mb-0">
-              <strong>After adding MCP config:</strong> restart your AI tool
-              so it picks up the new server.
+              <strong>After adding MCP config:</strong> restart your AI tool so it picks up the new
+              server.
             </p>
           </div>
           <h3 className="text-[16px] font-medium tracking-[-0.01em] mt-8 mb-2">
             Use the CLI from Docker
           </h3>
           <p className="text-[15px] leading-7 mb-4">
-            The <code>neotoma</code> CLI is available inside the container. Prefix commands
-            with <code>docker exec</code>:
+            The <code>neotoma</code> CLI is available inside the container. Prefix commands with{" "}
+            <code>docker exec</code>:
           </p>
           <CodeBlock
             code={SITE_CODE_SNIPPETS.dockerCliExample}
@@ -739,8 +756,7 @@ fnm:   eval "$(fnm env)"`}</code>
             installBlock="docker_cli_example"
           />
           <p className="text-[15px] leading-7 mb-4">
-            The API is also available at <code>http://localhost:3080</code> for direct HTTP
-            access.
+            The API is also available at <code>http://localhost:3080</code> for direct HTTP access.
           </p>
         </TabsContent>
       </Tabs>

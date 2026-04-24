@@ -1,6 +1,26 @@
 #!/usr/bin/env sh
 . "$(dirname -- "$0")/_/husky.sh"
 
+pick_free_port() {
+  node scripts/pick-port.js "$1"
+}
+
+run_vitest_suite() {
+  preferred_port="$1"
+  shift
+  vitest_port="$(pick_free_port "$preferred_port")" || return 1
+  NEOTOMA_HTTP_PORT="$vitest_port" HTTP_PORT="$vitest_port" "$@"
+}
+
+run_playwright_suite() {
+  vitest_port="$(pick_free_port 18080)" || return 1
+  ui_port="$(pick_free_port 5195)" || return 1
+  NEOTOMA_HTTP_PORT="$vitest_port" \
+  HTTP_PORT="$vitest_port" \
+  PLAYWRIGHT_UI_BASE_URL="http://127.0.0.1:$ui_port" \
+  "$@"
+}
+
 # Type check (MANDATORY - catches type errors before tests)
 echo "Running type check..."
 npm run type-check || exit 1
@@ -17,18 +37,18 @@ if [ "$SKIP_TESTS" = "1" ] || [ "$NEOTOMA_SKIP_TESTS" = "1" ]; then
 else
   # Unit tests (MANDATORY - catches logic errors)
   echo "Running unit tests..."
-  npm test || exit 1
+  run_vitest_suite 18080 npm test || exit 1
 
   # Integration tests (if backend/DB files changed)
   if git diff --cached --name-only | grep -E "(src/|tests/integration)" > /dev/null; then
     echo "Running integration tests..."
-    npm run test:integration || exit 1
+    run_vitest_suite 18120 npm run test:integration || exit 1
   fi
 
   # E2E tests (if frontend/UI files changed)
   if git diff --cached --name-only | grep -E "(frontend/|playwright/)" > /dev/null; then
     echo "Running E2E tests..."
-    npm run test:e2e || exit 1
+    run_playwright_suite npm run test:e2e || exit 1
   fi
 
   # Validate Playwright coverage map

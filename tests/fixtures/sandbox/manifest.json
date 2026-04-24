@@ -1,0 +1,93 @@
+{
+  "schema_version": "1.0",
+  "description": "Canonical sandbox seed manifest. Consumed by scripts/seed_sandbox.ts. Entities are stored under SANDBOX_PUBLIC_USER_ID. Four synthetic agent identities rotate through seeding so the /agents page shows diversity.",
+  "agent_identities": [
+    {
+      "agent_sub": "sandbox-agent-chatgpt@neotoma.sandbox",
+      "client_name": "sandbox-seed-chatgpt",
+      "client_version": "0.1.0",
+      "label": "ChatGPT seed runner"
+    },
+    {
+      "agent_sub": "sandbox-agent-claude@neotoma.sandbox",
+      "client_name": "sandbox-seed-claude",
+      "client_version": "0.1.0",
+      "label": "Claude seed runner"
+    },
+    {
+      "agent_sub": "sandbox-agent-cursor@neotoma.sandbox",
+      "client_name": "sandbox-seed-cursor",
+      "client_version": "0.1.0",
+      "label": "Cursor seed runner"
+    },
+    {
+      "agent_sub": "sandbox-agent-cli@neotoma.sandbox",
+      "client_name": "sandbox-seed-cli",
+      "client_version": "0.1.0",
+      "label": "Neotoma CLI seed runner"
+    }
+  ],
+  "entity_batches": [
+    {
+      "agent_index": 0,
+      "idempotency_prefix": "sandbox-seed-contacts",
+      "fixture": "reuse://tests/fixtures/json/contact.json",
+      "entity_type_override": "contact",
+      "note": "Reuses existing contact fixture (5 rows)."
+    },
+    {
+      "agent_index": 1,
+      "idempotency_prefix": "sandbox-seed-transactions",
+      "fixture": "reuse://tests/fixtures/json/transaction.json",
+      "entity_type_override": "transaction",
+      "note": "Reuses existing transaction fixture."
+    },
+    {
+      "agent_index": 2,
+      "idempotency_prefix": "sandbox-seed-habits",
+      "fixture": "reuse://tests/fixtures/json/habit.json",
+      "entity_type_override": "habit",
+      "note": "Reuses existing habit fixture."
+    },
+    {
+      "agent_index": 0,
+      "idempotency_prefix": "sandbox-seed-orders",
+      "fixture": "reuse://tests/fixtures/json/order.json",
+      "entity_type_override": "order",
+      "note": "Reuses existing order fixture."
+    },
+    {
+      "agent_index": 3,
+      "idempotency_prefix": "sandbox-seed-conv-chatgpt",
+      "fixture": "inline://conversation_chatgpt",
+      "entity_type_override": "conversation",
+      "note": "Synthetic ChatGPT-style conversation; seeder expands into conversation + conversation_message rows."
+    },
+    {
+      "agent_index": 1,
+      "idempotency_prefix": "sandbox-seed-conv-claude",
+      "fixture": "inline://conversation_claude",
+      "entity_type_override": "conversation",
+      "note": "Synthetic Claude-style conversation; seeder expands into conversation + conversation_message rows."
+    }
+  ],
+  "unstructured_sources": [
+    {
+      "agent_index": 3,
+      "fixture_path": "tests/fixtures/sandbox/public_domain/gutenberg_excerpt.txt",
+      "mime_type": "text/plain",
+      "original_filename": "gutenberg_walden_excerpt.txt",
+      "note": "CC0 excerpt from Thoreau's Walden via Project Gutenberg."
+    },
+    {
+      "agent_index": 2,
+      "fixture_path": "tests/fixtures/json/contact.json",
+      "mime_type": "application/json",
+      "original_filename": "contacts_sample.json",
+      "note": "Reused contact fixture stored as an unstructured source for the Sources page."
+    }
+  ],
+  "excluded_fixtures": [
+    "tests/fixtures/feedback/simon_apr21_reports.json"
+  ]
+}

@@ -8,6 +8,13 @@ primary_region = 'lhr'
 
 [build]
 
+[env]
+  NODE_ENV = "production"
+  NEOTOMA_ENV = "production"
+  # Must match internal_port (Fly routes to this port on the machine)
+  HTTP_PORT = "3180"
+  NEOTOMA_HTTP_PORT = "3180"
+
 [http_service]
   internal_port = 3180
   force_https = true

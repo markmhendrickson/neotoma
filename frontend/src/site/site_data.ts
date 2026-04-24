@@ -350,6 +350,7 @@ export const VERTICAL_LANDING_PATHS: readonly string[] = [
   "/logistics",
   "/personal-data",
   "/trading",
+  "/crypto-engineering",
 ];
 
 export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
@@ -360,7 +361,15 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
       { label: "Evaluate", href: "/evaluate", icon: "ClipboardCheck" },
       { label: "Meet the creator", href: "/meet", icon: "CalendarClock" },
       { label: "Install", href: "/install", icon: "Download" },
+      { label: "Connect a remote Neotoma", href: "/connect", icon: "Plug" },
       { label: "Walkthrough", href: "/walkthrough", icon: "Waypoints" },
+    ],
+  },
+  {
+    title: "Hosted",
+    items: [
+      { label: "Hosted Neotoma", href: "/hosted", icon: "Server" },
+      { label: "Public sandbox", href: "/sandbox", icon: "Globe" },
     ],
   },
   {
@@ -1085,7 +1094,11 @@ export const FUNCTIONALITY_MATRIX: FunctionalityRow[] = [
     endpointDescriptions: [],
     endpointParameters: [],
     cli: "storage info, storage set-data-dir, storage merge-db",
-    cliParameters: ["—", "--move-db-files, --on-conflict, --yes", "--source, --target, --mode, --dry-run"],
+    cliParameters: [
+      "—",
+      "--move-db-files, --on-conflict, --yes",
+      "--source, --target, --mode, --dry-run",
+    ],
     mcp: "—",
     testCoverage: "—",
   },
@@ -1318,7 +1331,8 @@ export const ICP_PROFILES: IcpProfile[] = [
     slug: "operating",
     name: "You're the context janitor between tools",
     shortName: "Context janitor",
-    tagline: "Every session starts from zero. You re-explain context, re-prompt corrections, re-establish what the agent already knew.",
+    tagline:
+      "Every session starts from zero. You re-explain context, re-prompt corrections, re-establish what the agent already knew.",
     homepageTransition:
       "Stop acting as the human sync layer between tools. Start operating with continuity — steering instead of re-explaining.",
     modeLabel: "Cross-tool sync",
@@ -1363,7 +1377,8 @@ export const ICP_PROFILES: IcpProfile[] = [
     slug: "building-pipelines",
     name: "You're babysitting inference variance",
     shortName: "Inference variance",
-    tagline: "Your agent guesses entities every run. Corrections don\u2019t persist. Regressions ship because the architecture can\u2019t prevent them.",
+    tagline:
+      "Your agent guesses entities every run. Corrections don\u2019t persist. Regressions ship because the architecture can\u2019t prevent them.",
     homepageTransition:
       "Stop babysitting inference variance. Build on solid ground — state that stays corrected from run to run.",
     modeLabel: "Pipeline state",

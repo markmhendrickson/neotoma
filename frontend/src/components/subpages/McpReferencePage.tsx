@@ -155,6 +155,55 @@ parse_file(file_path="/path/to/document.pdf")`}</pre>
         source = container, target = asset.
       </p>
 
+      <h2 className="text-[18px] font-medium tracking-[-0.01em] mt-8 mb-3">What the server exposes at its root</h2>
+      <p className="text-[15px] leading-7 mb-4">
+        A running Neotoma binds a handful of unauthenticated discovery and health endpoints at the
+        host root alongside the MCP transport itself. These exist so agents, proxies, and
+        operators can identify and probe the deployment without credentials.
+      </p>
+      <ul className="list-disc pl-5 space-y-1 mb-3 text-[15px] leading-7 text-muted-foreground">
+        <li>
+          <code>GET /</code> - root landing. Content-negotiated: browsers get an HTML page with
+          identity, harness-connect snippets (pre-filled with the actual host URL), and an index of{" "}
+          <Link to="/docs" className="text-foreground underline underline-offset-2 hover:no-underline">neotoma.io</Link>{" "}
+          documentation; send <code>Accept: application/json</code> for the same content as JSON, or{" "}
+          <code>Accept: text/markdown</code> for a Markdown document. Default (no HTML/Markdown) is JSON.
+          The content adapts to deployment mode: <em>sandbox</em>, <em>personal</em> tunnel,{" "}
+          <em>prod</em>, or <em>local</em>.
+        </li>
+        <li>
+          <code>GET /robots.txt</code> - mirrors the deployment mode. Sandbox and local instances
+          disallow crawling; personal and prod allow it and can link an external sitemap via{" "}
+          <code>NEOTOMA_PUBLIC_DOCS_URL</code>.
+        </li>
+        <li>
+          <code>GET /.well-known/mcp/server-card.json</code> - MCP server card (name, version,
+          capabilities).
+        </li>
+        <li>
+          <code>GET /.well-known/oauth-authorization-server</code> and{" "}
+          <code>/.well-known/oauth-protected-resource</code> - OAuth discovery documents.
+        </li>
+        <li>
+          <code>GET /server-info</code> - runtime details (version, git sha, build timestamp).
+        </li>
+        <li>
+          <code>GET /health</code> - liveness probe.
+        </li>
+        <li>
+          <code>GET /favicon.ico</code> - site icon for browser tabs.
+        </li>
+        <li>
+          In sandbox mode: <code>GET /sandbox/terms</code> (acceptable-use JSON),{" "}
+          <code>POST /sandbox/report</code>, and <code>GET /sandbox/report/status</code>.
+        </li>
+      </ul>
+      <p className="text-[14px] leading-6 text-muted-foreground mb-4">
+        See <Link to="/connect" className="text-foreground underline underline-offset-2 hover:no-underline">Connect a remote Neotoma</Link>{" "}
+        for per-harness snippets, and <Link to="/hosted" className="text-foreground underline underline-offset-2 hover:no-underline">Hosted Neotoma</Link>{" "}
+        for the mode comparison.
+      </p>
+
       <h2 className="text-[18px] font-medium tracking-[-0.01em] mt-8 mb-3">Entity types</h2>
       <p className="text-[15px] leading-7 mb-4">
         Common types agents can set directly: <code>contact</code>, <code>person</code>, <code>company</code>,{" "}

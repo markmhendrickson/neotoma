@@ -1,0 +1,160 @@
+# Neotoma Site Privacy Notice
+
+**Published:** 2026-04-24
+**Version:** 1.0
+**Live at:** https://neotoma.io/privacy
+
+This notice describes what data `neotoma.io` collects when you visit
+the marketing site, interact with the public sandbox, or submit agent
+feedback through the pipeline hosted at `agent.neotoma.io`.
+
+Neotoma is currently operated by **[Mark Hendrickson](https://markmhendrickson.com)** as an individual
+publisher — there is no registered legal entity operating this site at
+this time. When Neotoma transitions to a registered entity, this notice
+will be replaced and anyone who has submitted identifiable data will be
+notified via the contact address on record.
+
+## 1. What this notice covers
+
+- **`neotoma.io`** — the public marketing and documentation site.
+- **`agent.neotoma.io`** — the agent feedback pipeline (see `/feedback`).
+- **`sandbox.neotoma.io`** — the public evaluation sandbox. The sandbox
+  has additional terms at
+  [neotoma.io/sandbox/terms-of-use](https://neotoma.io/sandbox/terms-of-use)
+  (same text as
+  [`GET https://sandbox.neotoma.io/sandbox/terms`](https://sandbox.neotoma.io/sandbox/terms)
+  JSON for tools) that govern data submitted to the sandbox itself; those terms take
+  precedence for sandbox content.
+
+This notice does **not** cover:
+- Locally installed Neotoma instances running on your own machine.
+- Third-party sites linked from the documentation.
+
+## 2. What we collect
+
+### 2.1 Analytics (aggregate, pseudonymous)
+
+The marketing site uses a self-hosted Umami instance for aggregate,
+pseudonymous usage analytics:
+
+- **Umami.** Self-hosted, cookie-less, privacy-friendly web analytics.
+  Records URL path, page title, referrer, browser type, and country
+  (derived from IP then discarded). No cookies are set. No cross-site
+  tracking.
+
+We do not run Google Analytics on the marketing site.
+
+### 2.2 Agent feedback pipeline
+
+When an agent running on your machine submits feedback to
+`agent.neotoma.io/feedback/submit` (via the `submit_feedback` MCP
+tool or the `neotoma feedback` CLI), the following is stored:
+
+- The feedback payload your agent sent (title, body, kind, metadata).
+- A redaction pass that replaces emails, phone numbers, API tokens,
+  UUIDs, and home-directory path fragments with `<LABEL:hash>`
+  placeholders **before storage**.
+- An `access_token` scoped to that single feedback row, which is
+  returned to your agent and is the only way to poll status later.
+- Environment metadata your agent supplied (OS, Neotoma version,
+  client name/version, tool name, error class).
+
+Request IP addresses may be logged at the edge (Netlify) for abuse
+investigation. Edge logs are retained per Netlify's default policy
+and are not joined with feedback content.
+
+### 2.3 Sandbox interactions
+
+See [neotoma.io/sandbox/terms-of-use](https://neotoma.io/sandbox/terms-of-use)
+for the full sandbox-specific terms (JSON: `GET https://sandbox.neotoma.io/sandbox/terms`). In summary:
+
+- All content submitted to the sandbox is public by design.
+- The sandbox is wiped every Sunday at 00:00 UTC and re-seeded from
+  synthetic fixtures.
+- Request IPs are hashed before being stored in any abuse report.
+- No cookies or accounts are required to use the sandbox.
+
+### 2.4 What we do not collect
+
+- We do not set login cookies on the marketing site — there are no
+  accounts.
+- We do not sell, rent, or share data with advertising networks.
+- We do not scan your email, files, or other services. Local Neotoma
+  installations run entirely on your machine by default.
+
+## 3. Legal basis (GDPR / UK-GDPR)
+
+- **Umami analytics** — legitimate interest (privacy-friendly,
+  cookie-less, aggregate site-usage measurement).
+- **Feedback pipeline** — consent. Submitting feedback via your agent
+  is an explicit opt-in action.
+- **Sandbox** — consent + public-by-design posture disclosed in the
+  sandbox terms.
+
+## 4. Your rights
+
+You have the right to:
+
+- Ask what we have stored about you.
+- Request correction or deletion of any feedback record identifiable
+  to you (use the `access_token` your agent received, or contact us).
+- Ask us to restrict or stop processing.
+- Request export of any identifiable data.
+
+All requests go to **contact@neotoma.io**. We aim to respond within
+30 days. Because we do not operate user accounts, identification
+usually relies on the `access_token` you were issued or the email
+address that submitted a request.
+
+## 5. Data sharing
+
+We use these third-party processors:
+
+- **Netlify** — hosts the agent feedback pipeline and the marketing
+  site. Receives request metadata necessary to serve HTTP responses.
+- **Fly.io** — hosts the public sandbox. Receives request metadata
+  necessary to serve HTTP responses.
+- **Umami** — self-hosted; no third-party processor involved when
+  Umami is the active analytics backend.
+
+We do not share data with advertising networks or data brokers.
+
+## 6. Data retention
+
+- **Umami analytics** — aggregate event data retained indefinitely,
+  no personal identifiers stored.
+- **Agent feedback records** — retained until the issue is resolved
+  and for a reasonable follow-up window thereafter. Submitters may
+  request deletion at any time via their `access_token` or the
+  contact email.
+- **Sandbox content** — wiped weekly per the sandbox terms.
+- **Edge request logs** — retained per Netlify/Fly.io default log
+  retention (typically 7–30 days).
+
+## 7. Children's privacy
+
+Neotoma is not directed at children under 18. We do not knowingly
+collect information from children.
+
+## 8. Changes to this notice
+
+Material changes will be flagged at the top of this page with a new
+effective date. Non-material changes (typos, formatting) will be
+committed without announcement.
+
+## 9. Contact
+
+**[Mark Hendrickson](https://markmhendrickson.com)**, publisher of Neotoma
+Email: contact@neotoma.io
+
+A postal address for formal correspondence is available on request
+at the contact email above.
+
+## Revision history
+
+### 1.0 — 2026-04-24
+
+- Initial publication of the pre-incorporation site privacy notice.
+- Site analytics clarified as Umami-only; removed Google Analytics references.
+- Supersedes the `docs/legal/privacy_policy.md` template, which is
+  retained as the reference draft for post-incorporation publication.

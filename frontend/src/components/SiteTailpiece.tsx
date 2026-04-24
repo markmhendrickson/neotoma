@@ -33,6 +33,11 @@ const EXTERNAL_LINKS = [
   { label: "Blog", href: "https://markmhendrickson.com/blog" },
 ];
 
+const LEGAL_LINKS = [
+  { label: "Privacy", href: "/privacy" },
+  { label: "Terms", href: "/terms" },
+];
+
 const footerMarkdownLinkClass =
   "inline-flex h-9 min-h-9 items-center gap-1.5 rounded-md px-2 text-[13px] text-muted-foreground no-underline transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 
@@ -105,7 +110,7 @@ export function SiteTailpiece() {
   return (
     <footer className="relative overflow-hidden border-t border-black/10 bg-zinc-50/90 dark:border-white/10 dark:bg-zinc-950/70">
       <div className="relative mx-auto max-w-6xl px-6 py-10 md:px-10">
-        <div className="grid gap-8 md:grid-cols-4">
+        <div className="grid gap-8 md:grid-cols-5">
           <div className="md:col-span-1">
             <figure className="mb-3 w-full max-w-[64px] sm:max-w-[72px] pointer-events-none select-none">
               <img
@@ -160,6 +165,17 @@ export function SiteTailpiece() {
             </p>
             <div className="mt-3 flex flex-col gap-2">
               {EXTERNAL_LINKS.map((link) => (
+                <FooterLink key={link.href} href={link.href} label={link.label} />
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground/80 dark:text-muted-foreground">
+              Legal
+            </p>
+            <div className="mt-3 flex flex-col gap-2">
+              {LEGAL_LINKS.map((link) => (
                 <FooterLink key={link.href} href={link.href} label={link.label} />
               ))}
             </div>

@@ -7,7 +7,7 @@ Hooks that integrate [Neotoma](https://neotoma.io) into Cursor. Pairs with the N
 | Cursor hook | Purpose |
 | --- | --- |
 | `beforeSubmitPrompt` | Injects retrieval context (`@identifier` matches + recent timeline) and captures the user message. |
-| `afterToolUse` | Logs a `tool_invocation` observation for each tool call — passive observability. |
+| `postToolUse` | Logs a `tool_invocation` observation for each tool call — passive observability. |
 | `stop` | Persists the assistant's final reply as a safety net. |
 
 No LLM-based extraction runs in the hook layer — that stays with the agent via MCP.

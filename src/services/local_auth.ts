@@ -3,6 +3,15 @@ import { getSqliteDb } from "../repositories/sqlite/sqlite_client.js";
 
 export const LOCAL_DEV_USER_ID = "00000000-0000-0000-0000-000000000000";
 
+/**
+ * Dedicated public-user id for the `NEOTOMA_SANDBOX_MODE` deployment at
+ * `sandbox.neotoma.io`. Kept distinct from `LOCAL_DEV_USER_ID` so any future
+ * data migration can tell sandbox-written entities apart from local-dev ones
+ * and so the body-level `user_id` override (granted to LOCAL_DEV_USER_ID in
+ * `getAuthenticatedUserId`) does NOT leak to public sandbox writers.
+ */
+export const SANDBOX_PUBLIC_USER_ID = "11111111-1111-1111-1111-111111111111";
+
 export interface LocalAuthUser {
   id: string;
   email: string;
@@ -146,6 +155,32 @@ export function ensureLocalDevUser(): LocalAuthUser {
   ).run(LOCAL_DEV_USER_ID, email, hash, salt, now, now, null);
   return {
     id: LOCAL_DEV_USER_ID,
+    email,
+    created_at: now,
+    updated_at: now,
+    last_login_at: null,
+  };
+}
+
+/**
+ * Ensure the shared sandbox public user exists, used by sandbox-mode bearer
+ * bypass for unauthenticated writes on `sandbox.neotoma.io`. Idempotent; safe
+ * to call on every request.
+ */
+export function ensureSandboxPublicUser(): LocalAuthUser {
+  const db = getSqliteDb();
+  const existing = getLocalAuthUserById(SANDBOX_PUBLIC_USER_ID);
+  if (existing) {
+    return existing;
+  }
+  const now = new Date().toISOString();
+  const email = "sandbox-public@neotoma.local";
+  const { salt, hash } = hashPassword("sandbox-public-no-password");
+  db.prepare(
+    "INSERT INTO local_auth_users (id, email, password_hash, password_salt, created_at, updated_at, last_login_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+  ).run(SANDBOX_PUBLIC_USER_ID, email, hash, salt, now, now, null);
+  return {
+    id: SANDBOX_PUBLIC_USER_ID,
     email,
     created_at: now,
     updated_at: now,

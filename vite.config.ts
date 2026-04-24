@@ -46,6 +46,10 @@ export default defineConfig({
     proxy: {
       // Exact match only: "/health" would also match SPA routes like /healthcare
       "^/health$": { target: `http://localhost:${process.env.HTTP_PORT || "3080"}`, changeOrigin: true, secure: false },
+      // Sandbox API (must not use prefix `/sandbox` — that would capture the marketing SPA route `/sandbox`)
+      "/sandbox/terms": { target: `http://localhost:${process.env.HTTP_PORT || "3080"}`, changeOrigin: true, secure: false },
+      "/sandbox/report": { target: `http://localhost:${process.env.HTTP_PORT || "3080"}`, changeOrigin: true, secure: false },
+      "/sandbox/report/status": { target: `http://localhost:${process.env.HTTP_PORT || "3080"}`, changeOrigin: true, secure: false },
       "/openapi.yaml": { target: `http://localhost:${process.env.HTTP_PORT || "3080"}`, changeOrigin: true, secure: false },
       "/server-info": { target: `http://localhost:${process.env.HTTP_PORT || "3080"}`, changeOrigin: true, secure: false },
       "/mcp": { target: `http://localhost:${process.env.HTTP_PORT || "3080"}`, changeOrigin: true, secure: false },

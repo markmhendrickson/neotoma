@@ -27,6 +27,7 @@ import {
 import { attributionContext } from "./middleware/attribution_context.js";
 import { buildSessionInfo } from "./services/session_info.js";
 import { AttributionPolicyError } from "./services/attribution_policy.js";
+import { registerFeedbackAdminProxyRoutes } from "./services/feedback/admin_proxy.js";
 import {
   AgentCapabilityError,
   contextFromAgentIdentity,
@@ -54,7 +55,29 @@ import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { NeotomaServer } from "./server.js";
 import { logger } from "./utils/logger.js";
 import { OAuthError } from "./services/mcp_oauth_errors.js";
-import { ensureLocalDevUser, LOCAL_DEV_USER_ID } from "./services/local_auth.js";
+import {
+  ensureLocalDevUser,
+  ensureSandboxPublicUser,
+  LOCAL_DEV_USER_ID,
+  SANDBOX_PUBLIC_USER_ID,
+} from "./services/local_auth.js";
+import {
+  isSandboxMode,
+  sandboxDestructiveGuard,
+  sandboxHeaderMiddleware,
+} from "./services/sandbox_mode.js";
+import {
+  buildLandingContext,
+  buildRootLandingHtml,
+  buildRootLandingJson,
+  buildRootLandingMarkdown,
+  buildRobotsTxt,
+  wantsHtml as acceptWantsHtml,
+  wantsMarkdown as acceptWantsMarkdown,
+} from "./services/root_landing/index.js";
+import { getSandboxTermsResponse } from "./services/sandbox/terms.js";
+import { resolveSandboxReportTransport } from "./services/sandbox/transport.js";
+import type { SandboxReportReason } from "./services/sandbox/types.js";
 import { getSqliteDb } from "./repositories/sqlite/sqlite_client.js";
 import { getMcpAuthToken } from "./crypto/mcp_auth_token.js";
 import {
@@ -171,6 +194,56 @@ app.use(
 app.use(morgan("dev"));
 app.use(unknownFieldsGuard);
 
+// Sandbox-mode response header. Stamped on every response so clients can
+// detect public-sandbox deployments (sandbox.neotoma.io) without an extra
+// API call. See src/services/sandbox_mode.ts.
+if (isSandboxMode()) {
+  app.use(sandboxHeaderMiddleware);
+  logger.info(
+    "[Sandbox] NEOTOMA_SANDBOX_MODE=1 — bearer bypass to SANDBOX_PUBLIC_USER_ID, destructive routes gated, weekly reset expected",
+  );
+}
+
+// Inspector SPA mount. When NEOTOMA_INSPECTOR_STATIC_DIR is set, serve the
+// pre-built Inspector bundle at NEOTOMA_INSPECTOR_BASE_PATH (default /app).
+// Deliberately registered before all auth / rate-limit middleware so the SPA
+// shell + assets are reachable without a bearer — the API calls it makes still
+// flow through the normal auth stack below.
+const inspectorStaticDir = (process.env.NEOTOMA_INSPECTOR_STATIC_DIR || "").trim();
+const inspectorBasePath = (
+  (process.env.NEOTOMA_INSPECTOR_BASE_PATH || "/app").trim() || "/app"
+).replace(/\/$/, "");
+if (inspectorStaticDir) {
+  try {
+    const indexHtmlPath = path.resolve(inspectorStaticDir, "index.html");
+    // express.static with fallthrough so 404s on unknown files fall into the
+    // SPA history handler below rather than short-circuiting.
+    app.use(
+      inspectorBasePath,
+      express.static(inspectorStaticDir, {
+        index: false,
+        fallthrough: true,
+        maxAge: "1h",
+      }),
+    );
+    app.get(
+      [`${inspectorBasePath}`, `${inspectorBasePath}/*`],
+      (req, res, next) => {
+        // Only respond if the request was headed for the SPA (accepts html).
+        if (req.method !== "GET") return next();
+        res.sendFile(indexHtmlPath, (err) => {
+          if (err) next(err);
+        });
+      },
+    );
+    logger.info(
+      `[Inspector] Serving SPA from ${inspectorStaticDir} at ${inspectorBasePath}`,
+    );
+  } catch (err) {
+    logger.warn(`[Inspector] Failed to mount SPA: ${(err as Error).message}`);
+  }
+}
+
 // Rate limiters for OAuth endpoints
 // validate.trustProxy: false — we use trust proxy behind one proxy; skip strict IP check
 const rateLimitOptions = {
@@ -214,6 +287,44 @@ const writeRateLimit = rateLimit({
   message: "Write rate limit exceeded, please slow down",
   ...rateLimitOptions,
 });
+
+// SECURITY: sandbox write paths share a single user_id, so keying only by
+// user starves legitimate callers when one IP abuses the endpoint. Sandbox
+// rate limiter keys by IP so each visitor gets their own bucket, and uses a
+// tighter per-minute cap tuned for the `sandbox.neotoma.io` demo.
+const SANDBOX_WRITE_RATE_LIMIT_PER_MIN = Math.max(
+  1,
+  Number.parseInt(process.env.NEOTOMA_SANDBOX_WRITE_RATE_LIMIT_PER_MIN || "", 10) || 30,
+);
+const sandboxWriteRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: SANDBOX_WRITE_RATE_LIMIT_PER_MIN,
+  keyGenerator: (req) => `ip:${ipKeyGenerator(req.ip || "")}`,
+  message: "Sandbox write rate limit exceeded. Install Neotoma locally for unlimited use.",
+  ...rateLimitOptions,
+});
+
+/**
+ * Sandbox-only middleware. Applies the tighter sandbox write rate limit +
+ * destructive-op gate before every write-adjacent handler runs. Skipped on
+ * non-sandbox deployments so local/dev Fly behaviour is unchanged.
+ */
+function sandboxWriteGate(
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction,
+): void {
+  if (!isSandboxMode()) return next();
+  sandboxDestructiveGuard(req, res, (destructiveErr?: unknown) => {
+    if (destructiveErr) return next(destructiveErr);
+    if (res.headersSent) return;
+    // Only POST/PUT/PATCH/DELETE hit the write bucket.
+    if (["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) {
+      return sandboxWriteRateLimit(req, res, next);
+    }
+    next();
+  });
+}
 const oauthInitiateLimit = rateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: 5,
@@ -244,6 +355,44 @@ const oauthRegisterLimit = rateLimit({
 
 // Favicon (no-auth) to avoid 401 noise when not present on disk
 app.get("/favicon.ico", (_req, res) => res.status(204).end());
+
+// ============================================================================
+// Root landing page + robots.txt (no-auth, content-negotiated)
+// ============================================================================
+// HTML for browsers (identity, harness connect snippets, Learn index).
+// JSON for agents/curl (same content, structured). See
+// src/services/root_landing/index.ts.
+app.get("/", (req, res) => {
+  try {
+    const ctx = buildLandingContext(req);
+    res.setHeader("Cache-Control", "public, max-age=60");
+    if (acceptWantsHtml(req.headers.accept)) {
+      return res.type("html").send(buildRootLandingHtml(ctx));
+    }
+    if (acceptWantsMarkdown(req.headers.accept)) {
+      res.type("text/markdown; charset=utf-8");
+      return res.send(buildRootLandingMarkdown(ctx));
+    }
+    return res.type("application/json").json(buildRootLandingJson(ctx));
+  } catch (err) {
+    logger.error("[RootLanding] Failed to render landing page", { err });
+    return res.status(500).type("application/json").json({
+      error: "root_landing_error",
+      error_description: (err as Error).message,
+    });
+  }
+});
+
+app.get("/robots.txt", (req, res) => {
+  try {
+    const ctx = buildLandingContext(req);
+    res.setHeader("Cache-Control", "public, max-age=300");
+    return res.type("text/plain").send(buildRobotsTxt(ctx.mode, ctx.publicDocsUrl));
+  } catch (err) {
+    logger.error("[RootLanding] Failed to render robots.txt", { err });
+    return res.status(500).type("text/plain").send("# error rendering robots.txt\n");
+  }
+});
 
 // Smithery / MCP registry static metadata when automatic scan cannot finish (same host as /mcp)
 app.get("/.well-known/mcp/server-card.json", (_req, res) => {
@@ -1083,6 +1232,112 @@ app.get("/health", (_req, res) => {
 });
 
 // ============================================================================
+// Sandbox endpoints
+//
+// Public-read routes that power the Inspector's /sandbox page at
+// sandbox.neotoma.io. These endpoints are mounted regardless of
+// NEOTOMA_SANDBOX_MODE so a self-hosted Neotoma can still surface its own
+// terms/report forms if operators want to.
+// ============================================================================
+
+app.get("/sandbox/terms", (_req, res) => {
+  return res.json(getSandboxTermsResponse());
+});
+
+// Tight per-IP limiter for /sandbox/report so bots can't flood the forwarder.
+const SANDBOX_REPORT_RATE_LIMIT_PER_MIN = Math.max(
+  1,
+  Number.parseInt(process.env.NEOTOMA_SANDBOX_REPORT_RATE_LIMIT_PER_MIN || "", 10) ||
+    5,
+);
+const sandboxReportRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: SANDBOX_REPORT_RATE_LIMIT_PER_MIN,
+  keyGenerator: (req) => `ip:${ipKeyGenerator(req.ip || "")}`,
+  message:
+    "Sandbox report rate limit exceeded. Please wait a minute before submitting another report.",
+  ...rateLimitOptions,
+});
+
+const VALID_REPORT_REASONS: ReadonlyArray<SandboxReportReason> = [
+  "abuse",
+  "pii_leak",
+  "illegal_content",
+  "spam",
+  "bug",
+  "other",
+];
+
+app.post("/sandbox/report", sandboxReportRateLimit, async (req, res) => {
+  try {
+    const body = (req.body ?? {}) as Partial<{
+      reason: string;
+      description: string;
+      entity_id: string;
+      url: string;
+      reporter_contact: string;
+      metadata: Record<string, unknown>;
+    }>;
+
+    const reason = body.reason as SandboxReportReason | undefined;
+    if (!reason || !VALID_REPORT_REASONS.includes(reason)) {
+      return sendError(
+        res,
+        400,
+        "VALIDATION_INVALID_FIELD",
+        `reason must be one of: ${VALID_REPORT_REASONS.join(", ")}`,
+      );
+    }
+    const description = (body.description ?? "").toString().trim();
+    if (!description) {
+      return sendError(res, 400, "VALIDATION_MISSING_FIELD", "description is required");
+    }
+
+    const submitterIp = req.ip || "";
+    const transport = resolveSandboxReportTransport();
+    const result = await transport.submit(
+      {
+        reason,
+        description,
+        entity_id: body.entity_id,
+        url: body.url,
+        reporter_contact: body.reporter_contact,
+        metadata: body.metadata,
+      },
+      submitterIp,
+    );
+    return res.json(result);
+  } catch (err) {
+    logError("SandboxReportSubmit", req, err);
+    return sendError(res, 500, "SANDBOX_REPORT_ERROR", (err as Error).message);
+  }
+});
+
+app.get("/sandbox/report/status", async (req, res) => {
+  try {
+    const accessToken = (req.query.access_token || "").toString().trim();
+    if (!accessToken) {
+      return sendError(
+        res,
+        400,
+        "VALIDATION_MISSING_FIELD",
+        "access_token is required",
+      );
+    }
+    const transport = resolveSandboxReportTransport();
+    const result = await transport.status(accessToken);
+    return res.json(result);
+  } catch (err) {
+    const msg = (err as Error).message;
+    if (/not found/i.test(msg)) {
+      return sendError(res, 404, "NOT_FOUND", msg);
+    }
+    logError("SandboxReportStatus", req, err);
+    return sendError(res, 500, "SANDBOX_REPORT_ERROR", msg);
+  }
+});
+
+// ============================================================================
 // MCP OAuth Endpoints
 // ============================================================================
 
@@ -1850,6 +2105,20 @@ app.use(async (req, res, next) => {
     return next();
   }
 
+  // Sandbox mode: public deployment at sandbox.neotoma.io where anonymous
+  // callers are attributed to SANDBOX_PUBLIC_USER_ID without a Bearer. AAuth
+  // still runs (earlier in the chain via aauthVerify) so agents exercising the
+  // full AAuth roundtrip get their hardware/software tier. Destructive admin
+  // routes are separately gated by sandboxDestructiveGuard.
+  if (isSandboxMode() && !headerAuth.startsWith("Bearer ")) {
+    const sandboxUser = ensureSandboxPublicUser();
+    (req as any).authenticatedUserId = sandboxUser.id;
+    logger.info(
+      `[Auth] ${req.method} ${req.path} auth_method=sandbox_public user_id=${sandboxUser.id}`,
+    );
+    return next();
+  }
+
   // MCP-style auth (aligns CLI and REST API with MCP). Local requests can skip Bearer; tunnel requires Bearer or OAuth.
   if (config.encryption.enabled) {
     const expectedToken = getMcpAuthToken();
@@ -1949,6 +2218,10 @@ app.use(async (req, res, next) => {
 // Response encryption middleware (applies to all authenticated routes)
 app.use(encryptResponseMiddleware);
 
+// Sandbox-mode write gate: destructive routes blocked + tighter per-IP rate
+// limit on all write methods. No-op outside sandbox.
+app.use(sandboxWriteGate);
+
 // Current session (authenticated user details)
 app.get("/me", async (req, res) => {
   try {
@@ -1994,7 +2267,12 @@ async function getAuthenticatedUserId(
   if (authenticatedUserId) {
     if (providedUserId && providedUserId !== authenticatedUserId) {
       // When authenticated as local dev user, allow body/query user_id override for CLI tests and dev flows.
-      if (authenticatedUserId === LOCAL_DEV_USER_ID) {
+      // The sandbox public user is intentionally excluded so public sandbox
+      // callers cannot pivot into other users' data by spoofing user_id.
+      if (
+        authenticatedUserId === LOCAL_DEV_USER_ID &&
+        authenticatedUserId !== SANDBOX_PUBLIC_USER_ID
+      ) {
         return providedUserId;
       }
       throw new Error(
@@ -6104,6 +6382,10 @@ app.get("/session", async (req, res) => {
   }
 });
 
+// /admin/feedback/* — thin proxy to the agent.neotoma.io admin API. See
+// `src/services/feedback/admin_proxy.ts` for gating + env contract.
+registerFeedbackAdminProxyRoutes(app);
+
 // POST /health_check_snapshots - Check for stale entity snapshots
 app.post("/health_check_snapshots", async (req, res) => {
   const schema = z.object({
@@ -6435,6 +6717,24 @@ function tryListen(
 export async function startHTTPServer() {
   // Initialize encryption service
   await initServerKeys();
+
+  // Sandbox mode: ensure the `sandbox_abuse_report` entity type is registered
+  // before any report comes in so forwarded records can attach cleanly to the
+  // entity graph. Non-sandbox deployments still benefit from having the schema
+  // available in case operators run a self-hosted abuse form.
+  if (isSandboxMode()) {
+    try {
+      const { seedSandboxAbuseReportSchema } = await import(
+        "./services/sandbox/seed_schema.js"
+      );
+      await seedSandboxAbuseReportSchema();
+      logger.info("[Sandbox] sandbox_abuse_report schema seeded");
+    } catch (err) {
+      logger.warn(
+        `[Sandbox] failed to seed sandbox_abuse_report schema: ${(err as Error).message}`,
+      );
+    }
+  }
 
   const httpPortEnv = process.env.NEOTOMA_HTTP_PORT || process.env.HTTP_PORT;
   const basePort = httpPortEnv ? parseInt(httpPortEnv, 10) : config.httpPort || 3080;

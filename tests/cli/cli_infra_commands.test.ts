@@ -343,7 +343,9 @@ describe("CLI infrastructure command smoke tests", () => {
       await setupTempNeotomaRepo(configuredRepoRoot);
       await writeCliConfig(home, { project_root: configuredRepoRoot, repo_root: configuredRepoRoot });
 
-      await execAsync(`node "${cliPathAbsolute}" site configure --ga-measurement-id G-LOCALTEST`, {
+      await execAsync(
+        `node "${cliPathAbsolute}" site configure --umami-url https://umami.local.test --umami-website-id 11111111-1111-1111-1111-111111111111`,
+        {
         cwd: localRepoRoot,
         env: {
           ...process.env,
@@ -351,10 +353,14 @@ describe("CLI infrastructure command smoke tests", () => {
           USERPROFILE: home,
           NEOTOMA_REPO_ROOT: "",
         },
-      });
+        }
+      );
 
       const localEnv = await readFile(join(localRepoRoot, ".env"), "utf-8");
-      expect(localEnv).toMatch(/VITE_GA_MEASUREMENT_ID=G-LOCALTEST/);
+      expect(localEnv).toMatch(/VITE_UMAMI_URL=https:\/\/umami\.local\.test/);
+      expect(localEnv).toMatch(
+        /VITE_UMAMI_WEBSITE_ID=11111111-1111-1111-1111-111111111111/
+      );
       await expect(readFile(join(configuredRepoRoot, ".env"), "utf-8")).rejects.toBeDefined();
     });
 

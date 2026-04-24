@@ -88,6 +88,12 @@ const FEEDBACK_FIELDS: FieldSpec = [
   { name: "data_source", type: "string", description: "Provenance — e.g. 'agent-site netlify submit 2026-04-22'" },
   { name: "source_file", type: "string" },
   { name: "original_submission_payload", type: "object" },
+  {
+    name: "inspector_scratch",
+    type: "object",
+    description:
+      "Namespace for Inspector-local scratch annotations authored during triage. Never propagated back to agent.neotoma.io unless explicitly promoted via the admin proxy. Shape: { status?, triage_notes?, issue_urls?, pr_urls?, duplicate_of_feedback_id?, updated_at? }.",
+  },
 ];
 
 function buildSchemaDefinition(): SchemaDefinition {

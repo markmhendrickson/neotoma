@@ -2,7 +2,6 @@
 
 interface ImportMetaEnv {
   readonly VITE_AUTO_SEED_RECORDS?: string;
-  readonly VITE_GA_MEASUREMENT_ID?: string;
   /** Production / `vite build`: Umami origin (no trailing slash). No default in app code. */
   readonly VITE_UMAMI_URL?: string;
   /** Production / `vite build`: website UUID from Umami. */

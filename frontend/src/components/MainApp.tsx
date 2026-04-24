@@ -17,6 +17,10 @@ import { ApiReferencePage } from "@/components/subpages/ApiReferencePage";
 import { McpReferencePage } from "@/components/subpages/McpReferencePage";
 import { CliReferencePage } from "@/components/subpages/CliReferencePage";
 import { InstallPage } from "@/components/subpages/InstallPage";
+import { SandboxLandingPage } from "@/components/subpages/SandboxLandingPage";
+import { SandboxTermsOfUsePage } from "@/components/subpages/SandboxTermsOfUsePage";
+import { HostedLandingPage } from "@/components/subpages/HostedLandingPage";
+import { ConnectIndexPage } from "@/components/subpages/ConnectIndexPage";
 import { ArchitecturePage } from "@/components/subpages/ArchitecturePage";
 import { AiInfrastructureEngineersPage } from "@/components/subpages/AiInfrastructureEngineersPage";
 import { AiNativeOperatorsPage } from "@/components/subpages/AiNativeOperatorsPage";
@@ -78,10 +82,13 @@ import { LogisticsLandingPage } from "@/components/subpages/LogisticsLandingPage
 import { PersonalDataLandingPage } from "@/components/subpages/PersonalDataLandingPage";
 import { TradingLandingPage } from "@/components/subpages/TradingLandingPage";
 import { VerticalsIndexPage } from "@/components/subpages/VerticalsIndexPage";
+import { CryptoEngineeringLandingPage } from "@/components/subpages/CryptoEngineeringLandingPage";
 import { BuildVsBuyPage } from "@/components/subpages/BuildVsBuyPage";
 import { MultiAgentStatePage } from "@/components/subpages/MultiAgentStatePage";
 import { EvaluatePage } from "@/components/subpages/EvaluatePage";
 import { MeetPage } from "@/components/subpages/MeetPage";
+import { PrivacyPage } from "@/components/subpages/PrivacyPage";
+import { TermsPage } from "@/components/subpages/TermsPage";
 
 import { FaqPage } from "@/components/subpages/FaqPage";
 import {
@@ -121,6 +128,10 @@ const APP_ROUTES: readonly AppRoute[] = [
   { path: "/mcp", element: <McpReferencePage /> },
   { path: "/cli", element: <CliReferencePage /> },
   { path: "/install", element: <InstallPage /> },
+  { path: "/sandbox", element: <SandboxLandingPage /> },
+  { path: "/sandbox/terms-of-use", element: <SandboxTermsOfUsePage /> },
+  { path: "/hosted", element: <HostedLandingPage /> },
+  { path: "/connect", element: <ConnectIndexPage /> },
   { path: "/walkthrough", element: <DeveloperWalkthroughPage /> },
   { path: "/developer-walkthrough", element: <Navigate to="/walkthrough" replace /> },
   { path: "/data-model", element: <Navigate to="/walkthrough" replace /> },
@@ -186,12 +197,15 @@ const APP_ROUTES: readonly AppRoute[] = [
   { path: "/logistics", element: <LogisticsLandingPage /> },
   { path: "/personal-data", element: <PersonalDataLandingPage /> },
   { path: "/trading", element: <TradingLandingPage /> },
+  { path: "/crypto-engineering", element: <CryptoEngineeringLandingPage /> },
   { path: "/verticals", element: <VerticalsIndexPage /> },
   { path: "/build-vs-buy", element: <BuildVsBuyPage /> },
   { path: "/multi-agent-state", element: <MultiAgentStatePage /> },
   { path: "/evaluate", element: <EvaluatePage /> },
 
   { path: "/meet", element: <MeetPage /> },
+  { path: "/privacy", element: <PrivacyPage /> },
+  { path: "/terms", element: <TermsPage /> },
   { path: "/faq", element: <FaqPage /> },
   { path: "/neotoma-vs-platform-memory", element: <NeotomaVsPlatformMemoryPage /> },
   { path: "/neotoma-vs-mem0", element: <NeotomaVsMem0Page /> },

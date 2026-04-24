@@ -47,5 +47,15 @@
   to = "/.netlify/functions/jwks"
   status = 200
 
+[[redirects]]
+  from = "/sandbox/report/submit"
+  to = "/.netlify/functions/sandbox_report_submit"
+  status = 200
+
+[[redirects]]
+  from = "/sandbox/report/status"
+  to = "/.netlify/functions/sandbox_report_status"
+  status = 200
+
 [functions."push_webhook_worker"]
   schedule = "*/5 * * * *"

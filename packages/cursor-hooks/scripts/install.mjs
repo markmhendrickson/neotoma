@@ -67,13 +67,18 @@ const NEOTOMA_HOOK_SCRIPTS = [
 ];
 
 function neotomaTag(entry) {
-  if (!Array.isArray(entry?.args)) return false;
-  return entry.args.some((a) => {
-    if (typeof a !== "string") return false;
-    if (a.includes("@neotoma/cursor-hooks")) return true;
+  const commandParts = [];
+  if (typeof entry?.command === "string") commandParts.push(entry.command);
+  if (Array.isArray(entry?.args)) {
+    for (const arg of entry.args) {
+      if (typeof arg === "string") commandParts.push(arg);
+    }
+  }
+  return commandParts.some((part) => {
+    if (part.includes("@neotoma/cursor-hooks")) return true;
     return (
-      a.includes("cursor-hooks") &&
-      NEOTOMA_HOOK_SCRIPTS.some((name) => a.endsWith(name) || a.includes(`dist/${name}`))
+      part.includes("cursor-hooks") &&
+      NEOTOMA_HOOK_SCRIPTS.some((name) => part.endsWith(name) || part.includes(`dist/${name}`))
     );
   });
 }
@@ -83,10 +88,14 @@ function mergeHooks(existing, additions) {
     version: existing.version ?? 1,
     hooks: { ...(existing.hooks ?? {}) },
   };
+  for (const [event, entries] of Object.entries(out.hooks)) {
+    const filtered = (entries ?? []).filter((e) => !neotomaTag(e));
+    if (filtered.length > 0) out.hooks[event] = filtered;
+    else delete out.hooks[event];
+  }
   for (const [event, entries] of Object.entries(additions.hooks)) {
     const prior = out.hooks[event] ?? [];
-    const filtered = prior.filter((e) => !neotomaTag(e));
-    out.hooks[event] = [...filtered, ...entries];
+    out.hooks[event] = [...prior, ...entries];
   }
   return out;
 }

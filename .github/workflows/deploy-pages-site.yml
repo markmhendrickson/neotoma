@@ -53,7 +53,6 @@ jobs:
         env:
           VITE_UMAMI_URL: ${{ secrets.VITE_UMAMI_URL }}
           VITE_UMAMI_WEBSITE_ID: ${{ secrets.VITE_UMAMI_WEBSITE_ID }}
-          VITE_GA_MEASUREMENT_ID: ${{ secrets.VITE_GA_MEASUREMENT_ID }}
         run: npm run build:ui
 
       - name: Install Playwright browser (Chromium)

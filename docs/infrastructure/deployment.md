@@ -412,6 +412,98 @@ curl -sS -o /dev/null -w "%{http_code}\n" -X POST https://mcp.neotoma.io/mcp \
 
 After the host is live, publish **`https://mcp.neotoma.io/mcp`**. See `docs/integrations/smithery_external_url.md`.
 
+## Sandbox host (sandbox.neotoma.io)
+
+Public demo host combining the Neotoma API, MCP, and Inspector SPA on a single
+Fly app. Full architecture and operator runbook:
+[docs/subsystems/sandbox_deployment.md](../subsystems/sandbox_deployment.md).
+
+### Provision
+
+```bash
+./scripts/provision_sandbox_fly.sh       # creates app + volume + TLS cert
+flyctl deploy --config fly.sandbox.toml  # bakes Inspector via [build.args] in fly.sandbox.toml
+```
+
+After the first deploy, add repository secret **`FLY_API_TOKEN`** and enable
+the **Sandbox weekly reset** workflow (`.github/workflows/sandbox-weekly-reset.yml`),
+or run `./scripts/schedule_sandbox_reset.sh` manually (uses `fly ssh` into the
+app; Fly volumes cannot attach to a second scheduled Machine).
+
+### Secrets
+
+Set on the `neotoma-sandbox` app:
+
+- `NEOTOMA_ENCRYPTION_KEY`
+- `NEOTOMA_AAUTH_AUTHORITY=https://sandbox.neotoma.io`
+- `NEOTOMA_SANDBOX_REPORT_FORWARD_URL=https://agent.neotoma.io/sandbox/report/submit`
+- `NEOTOMA_SANDBOX_REPORT_FORWARD_BEARER` (must equal Netlify **`AGENT_SITE_SANDBOX_BEARER`**)
+- Optional: `OPENAI_API_KEY`, etc., only if the sandbox exposes those tools.
+
+Public-facing sandbox toggles live in `fly.sandbox.toml` (`NEOTOMA_SANDBOX_MODE`,
+`NEOTOMA_DATA_DIR`, `NEOTOMA_INSPECTOR_STATIC_DIR`,
+`NEOTOMA_INSPECTOR_BASE_PATH`) and do not need to be set as secrets.
+
+### Root landing page (`GET /`)
+
+Every Neotoma host — local dev, personal tunnel, public sandbox, future
+managed prod — renders a content-negotiated root page at `/` (HTML for
+browsers, JSON for agents/curl) that identifies the instance, surfaces
+harness-specific connect snippets pre-filled with the resolved host URL,
+and mirrors the marketing-site navigation. Source lives at
+`src/services/root_landing/`.
+
+Two environment variables control its behavior; both are optional:
+
+- `NEOTOMA_ROOT_LANDING_MODE` — explicit mode override. Valid values:
+  `sandbox`, `personal`, `prod`, `local`. Precedence is:
+
+  1. `NEOTOMA_ROOT_LANDING_MODE` (explicit).
+  2. `NEOTOMA_SANDBOX_MODE=1` → `sandbox`.
+  3. Loopback request (`127.0.0.1`, `::1`) → `local`.
+  4. Default → `personal`.
+
+  Set this for hosted personal tunnels where the default `personal` copy is
+  still correct, or to `prod` for the future managed-prod deployment.
+
+- `NEOTOMA_PUBLIC_DOCS_URL` — base URL used by the landing page to link
+  back to the marketing site (`/docs`, `/install`, `/connect`, etc.).
+  Defaults to `https://neotoma.io`. Override only if you host a private
+  documentation mirror for a managed deployment.
+
+The landing page also emits a mode-aware `GET /robots.txt`: `sandbox` and
+`local` disallow crawling; `personal` and `prod` allow crawling, disallow
+`/mcp` and `/sandbox/`, and advertise `{NEOTOMA_PUBLIC_DOCS_URL}/sitemap.xml`
+as the external sitemap.
+
+### DNS
+
+Add a Cloudflare CNAME: `sandbox` → `neotoma-sandbox.fly.dev` (proxied off
+so Fly-issued TLS serves directly).
+
+### Verify
+
+```bash
+curl -sS -o /dev/null -w "%{http_code}\n" https://sandbox.neotoma.io/health
+# Expect 200
+
+curl -sI https://sandbox.neotoma.io/health | grep -i x-neotoma-sandbox
+# Expect: X-Neotoma-Sandbox: 1
+
+curl -sS https://sandbox.neotoma.io/sandbox/terms | head -20
+# Terms JSON with weekly_reset_utc + abuse_report_email
+```
+
+Browse the Inspector at <https://sandbox.neotoma.io/app>. The sandbox banner
+should appear immediately and link to `/app/sandbox` (terms + abuse form).
+
+### Netlify Functions for abuse reports
+
+The sandbox forwards abuse reports to `services/agent-site/` Netlify
+functions `sandbox_report_submit` and `sandbox_report_status`. Set
+`AGENT_SITE_SANDBOX_BEARER` on the Netlify site alongside the existing
+feedback bearers.
+
 ## Agent feedback pipeline (agent.neotoma.io)
 
 The hosted intake service for `submit_feedback` / `get_feedback_status` runs on Netlify as a set of functions under `services/agent-site/`. See [docs/subsystems/agent_feedback_pipeline.md](../subsystems/agent_feedback_pipeline.md) for the full architecture.

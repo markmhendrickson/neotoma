@@ -3597,8 +3597,22 @@ export class NeotomaServer {
       delete fieldsToValidate.entity_type;
       delete fieldsToValidate.type;
 
-      // Load schema for validation from database
+      const { getSchemaDefinition, resolveEntityTypeFromAlias } = await import(
+        "./services/schema_definitions.js"
+      );
+
+      // Prefer a code-defined canonical alias before deciding this type is
+      // truly "unknown". This keeps `conversation_message` on the seeded
+      // identity-bearing schema even when the DB only has legacy rows (for
+      // example `agent_message`) or no active row yet.
+      const canonicalFromAlias = resolveEntityTypeFromAlias(entityType);
+      if (!getSchemaDefinition(entityType) && canonicalFromAlias) {
+        entityType = canonicalFromAlias;
+      }
+
+      // Load schema for validation from database.
       let schema = await schemaRegistry.loadActiveSchema(entityType, userId);
+      let codeSchema = getSchemaDefinition(entityType);
 
       // Schema-agnostic duplicate-type collapse: before auto-creating a new
       // schema for this candidate, check whether an existing registered type
@@ -3616,7 +3630,25 @@ export class NeotomaServer {
           );
           entityType = match.canonical_entity_type;
           schema = await schemaRegistry.loadActiveSchema(entityType, userId);
+          codeSchema = getSchemaDefinition(entityType);
         }
+      }
+
+      // R2 regression fix: structured-store validation must honor the same
+      // code-defined fallback that entity resolution already uses. Without
+      // this, known types like `conversation_message` are misclassified as
+      // unknown when no active DB schema row exists, which wrongly routes them
+      // into schema inference and triggers the R2 registration error.
+      if (!schema && codeSchema) {
+        schema = {
+          id: "",
+          entity_type: codeSchema.entity_type,
+          schema_version: codeSchema.schema_version || "1.0",
+          schema_definition: codeSchema.schema_definition,
+          reducer_config: codeSchema.reducer_config,
+          active: true,
+          created_at: new Date().toISOString(),
+        };
       }
 
       if (!schema) {

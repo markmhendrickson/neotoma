@@ -1,0 +1,47 @@
+{
+  "title": "Planning a weekend hike",
+  "create_time": "2026-03-15T09:30:00Z",
+  "update_time": "2026-03-15T10:12:00Z",
+  "mapping": {
+    "msg-1": {
+      "id": "msg-1",
+      "author": { "role": "user" },
+      "create_time": "2026-03-15T09:30:00Z",
+      "content": {
+        "parts": ["I want to plan a weekend hike somewhere within two hours of the city. Conditions matter — prefer a shaded route under 10km with a view at the top."]
+      }
+    },
+    "msg-2": {
+      "id": "msg-2",
+      "author": { "role": "assistant" },
+      "create_time": "2026-03-15T09:30:30Z",
+      "content": {
+        "parts": ["Three solid candidates: Cedar Ridge (8km loop, eastern exposure), Hollow Creek (6km out-and-back, riverside shade), and Painted Bluff (9km point-to-point, panoramic summit but exposed last kilometre). Given your shade preference, Hollow Creek is the safest pick; Cedar Ridge is the best all-rounder."]
+      }
+    },
+    "msg-3": {
+      "id": "msg-3",
+      "author": { "role": "user" },
+      "create_time": "2026-03-15T09:32:00Z",
+      "content": {
+        "parts": ["Book me on the Cedar Ridge option. Saturday morning, early start."]
+      }
+    },
+    "msg-4": {
+      "id": "msg-4",
+      "author": { "role": "assistant" },
+      "create_time": "2026-03-15T09:32:45Z",
+      "content": {
+        "parts": ["Cedar Ridge trailhead is drop-in only (no booking). Leaving the city by 06:30 puts you on the trail by 08:00 with comfortable heat margin. I'll add a reminder and pack list."]
+      }
+    },
+    "msg-5": {
+      "id": "msg-5",
+      "author": { "role": "user" },
+      "create_time": "2026-03-15T10:11:00Z",
+      "content": {
+        "parts": ["Remind me Friday night to prep water, snacks, and sun hat."]
+      }
+    }
+  }
+}

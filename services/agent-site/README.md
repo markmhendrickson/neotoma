@@ -18,6 +18,8 @@ See `docs/subsystems/agent_feedback_pipeline.md` for the full architecture.
 | `POST /feedback/{id}/mirror_replay` | `AGENT_SITE_ADMIN_BEARER` | Admin: force a Neotoma mirror attempt (operator replay) |
 | `GET /feedback/by_commit/:sha`    | `AGENT_SITE_ADMIN_BEARER`  | Admin: reverse lookup commit → feedback    |
 | `GET /healthz`                    | none                       | Service liveness                           |
+| `POST /sandbox/report/submit`     | `AGENT_SITE_SANDBOX_BEARER` | Durable store for public `sandbox.neotoma.io` abuse reports |
+| `GET /sandbox/report/status`      | `AGENT_SITE_SANDBOX_BEARER` | Poll by `access_token` or `token` query param |
 | `push_webhook_worker` (scheduled) | internal, every 5 min      | Drains `webhooks_pending` and `mirror_pending` |
 
 ## Environment variables
@@ -26,6 +28,7 @@ See `docs/subsystems/agent_feedback_pipeline.md` for the full architecture.
 | --- | -------- | ------- |
 | `AGENT_SITE_BEARER`       | yes | Shared with Neotoma MCP server for public routes |
 | `AGENT_SITE_ADMIN_BEARER` | yes | Used by Mark's local cron for admin routes      |
+| `AGENT_SITE_SANDBOX_BEARER` | yes (sandbox forwarder) | Same value as Fly secret `NEOTOMA_SANDBOX_REPORT_FORWARD_BEARER` on `neotoma-sandbox` |
 | `REDACTION_MODE`          | no  | `strip` (default) or `reject`                   |
 
 ### Neotoma forwarder (mirror to `neotoma_feedback` entity)

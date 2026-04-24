@@ -2,6 +2,7 @@ import {
   ArrowRight,
   Briefcase,
   Building2,
+  Cpu,
   DollarSign,
   FileText,
   Gavel,
@@ -213,6 +214,18 @@ export const VERTICALS: VerticalCard[] = [
     accent: "text-emerald-600 dark:text-emerald-400",
     accentBg: "bg-emerald-500/5",
     accentBorder: "border-emerald-500/20",
+  },
+  {
+    href: "/crypto-engineering",
+    icon: Cpu,
+    label: "Crypto engineering",
+    title: "AI-assisted crypto & security-sensitive engineering",
+    tagline: "Agent-session replay, review-cost reduction, and bounty-report provenance for codebases with a real stakes ceiling",
+    entityExamples: ["agent_session", "commit", "review", "security_finding", "bounty_report"],
+    thenQuestion: "Which agent wrote this commit, what did it verify, what did it skip, and why?",
+    accent: "text-orange-600 dark:text-orange-400",
+    accentBg: "bg-orange-500/5",
+    accentBorder: "border-orange-500/20",
   },
 ];
 

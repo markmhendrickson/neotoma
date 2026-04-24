@@ -1,0 +1,5 @@
+{"role":"user","content":"Help me review my sourdough notes from last month. Crumb was too tight despite longer bulk. What am I missing?","timestamp":"2026-02-12T18:04:00Z"}
+{"role":"assistant","content":"Two likely culprits: insufficient hydration (under ~75% for your flour mix tightens the crumb) and under-proofed final shape. Long bulk without matching final proof frequently produces this pattern. Try dropping to 72% hydration first if the dough felt slack, otherwise extend final proof 30-45 minutes at room temperature.","timestamp":"2026-02-12T18:04:25Z"}
+{"role":"user","content":"Hydration was 74%. Final proof 1 hour. Room was cool — maybe 18C.","timestamp":"2026-02-12T18:06:10Z"}
+{"role":"assistant","content":"That's consistent with under-proofing. At 18C the yeast slows substantially; 1h final proof is closer to a 22C schedule. Next bake: 2h final proof at 18C, or shift to a warmer spot (oven with light on is ~24-26C, aim for 75-90min there).","timestamp":"2026-02-12T18:06:40Z"}
+{"role":"user","content":"Got it. I'll try extended proof this weekend and log results.","timestamp":"2026-02-12T18:07:05Z"}

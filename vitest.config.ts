@@ -29,6 +29,8 @@ export default defineConfig({
       "frontend/src/**/*.spec.ts",
       "frontend/src/**/*.test.tsx",
       "frontend/src/**/*.spec.tsx",
+      "inspector/src/**/*.test.ts",
+      "inspector/src/**/*.spec.ts",
     ],
     environmentMatchGlobs: [
       ["frontend/src/**/*.test.tsx", "jsdom"],

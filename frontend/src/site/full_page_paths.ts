@@ -19,10 +19,11 @@ const MARKETING_FULL_PAGE_FIRST_SEGMENTS = new Set([
   "customer-ops",
   "logistics",
   "personal-data",
+  "crypto-engineering",
 ]);
 
 /**
- * @param normalizedPath — output of {@link normalizeToDefaultRoute} (locale stripped, no trailing slash except `/`).
+ * @param normalizedPath - output of {@link normalizeToDefaultRoute} (locale stripped, no trailing slash except `/`).
  */
 export function isMarketingFullPageRoute(normalizedPath: string): boolean {
   if (normalizedPath === "/") return false;

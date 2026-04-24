@@ -1,13 +1,47 @@
 # Neotoma Legal & Compliance Documentation
 This directory contains legal and compliance documentation for Neotoma operations.
-## Documents
+
+## Live (published) documents
+
+These are the authoritative sources for the pages currently rendered on
+`neotoma.io` while Neotoma is operated by Mark Hendrickson as an individual
+publisher (no registered entity):
+
+- **[`site_privacy_notice.md`](site_privacy_notice.md)** — live at <https://neotoma.io/privacy>; React source is `frontend/src/components/subpages/PrivacyPage.tsx`
+- **[`site_terms_of_use.md`](site_terms_of_use.md)** — live at <https://neotoma.io/terms>; React source is `frontend/src/components/subpages/TermsPage.tsx`
+
+The sandbox has its own additional terms: readable HTML at
+<https://neotoma.io/sandbox/terms-of-use> and versioned JSON from
+<https://sandbox.neotoma.io/sandbox/terms> (`GET /sandbox/terms` on the
+sandbox host). The canonical markdown string lives in
+`src/shared/sandbox_terms_content.ts` (re-exported from
+`src/services/sandbox/terms.ts` for the API).
+
+When editing the live documents, update BOTH the markdown source and the
+React page in the same commit, and append a revision-history entry at the
+bottom of the markdown.
+
+## Post-incorporation templates (not currently published)
+
+The original templates below are retained for publication **after** Neotoma
+transitions to a registered legal entity. Do not link to or publish these
+files until they have been filled in with a real company name, address,
+and jurisdiction and reviewed by qualified legal counsel:
+
+- **[`privacy_policy.md`](privacy_policy.md)** — fuller Privacy Policy template (paid SaaS model; includes Stripe, DPO, DPAs)
+- **[`terms_of_service.md`](terms_of_service.md)** — fuller Terms of Service template (paid SaaS model; includes subscription/billing clauses)
+
+Triggers that flip the posture from "individual publisher" to
+"registered entity" are tracked in
+[`docs/foundation/incorporation_plan.md`](../foundation/incorporation_plan.md).
+
 ### Core Compliance
-- **[`compliance.md`](compliance.md)** — GDPR compliance procedures, data breach response, incident management, vendor compliance
-- **[`privacy_policy.md`](privacy_policy.md)** — Privacy Policy template (requires legal review)
-- **[`terms_of_service.md`](terms_of_service.md)** — Terms of Service template (requires legal review)
+
+- **[`compliance.md`](compliance.md)** — GDPR compliance procedures, data breach response, incident management, vendor compliance (reference document; covers both live and post-incorporation postures)
+
 ### Supporting Documents
-- **[`privacy_policy_changelog.md`](privacy_policy_changelog.md)** — Privacy Policy version history
-- **[`terms_of_service_changelog.md`](terms_of_service_changelog.md)** — Terms of Service version history
+- **[`privacy_policy_changelog.md`](privacy_policy_changelog.md)** — Privacy Policy version history (post-incorporation template)
+- **[`terms_of_service_changelog.md`](terms_of_service_changelog.md)** — Terms of Service version history (post-incorporation template)
 ### Vendor Documentation
 - **`dpas/`** — Data Processing Agreements (DPAs) with vendors
 - **`vendor_assessments/`** — Vendor security and compliance assessments

@@ -48,12 +48,18 @@ export interface VerticalScenario {
   failTitle: string;
   failDesc: string;
   Icon: LucideIcon;
+  /** Optional link at the bottom of the scenario row pointing to a deeper explanation. */
+  learnMoreHref?: string;
+  /** Override label for the scenario link (defaults to "Learn more"). */
+  learnMoreLabel?: string;
 }
 
 export interface VerticalProblemCard {
   Icon: LucideIcon;
   title: string;
   desc: string;
+  /** Optional link at the bottom of the card pointing to a deeper explanation. */
+  learnMoreHref?: string;
 }
 
 export interface VerticalCapability {
@@ -61,6 +67,8 @@ export interface VerticalCapability {
   title: string;
   desc: string;
   tags: string[];
+  /** Optional link at the bottom of the capability card. */
+  learnMoreHref?: string;
 }
 
 export interface VerticalStep {
@@ -68,6 +76,8 @@ export interface VerticalStep {
   title: string;
   desc: string;
   detail: string;
+  /** Optional link at the bottom of the step card. */
+  learnMoreHref?: string;
 }
 
 export interface VerticalArchConfig {
@@ -1183,7 +1193,7 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
                 </p>
               </div>
               <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-                {config.problemCards.map(({ Icon, title, desc }) => (
+                {config.problemCards.map(({ Icon, title, desc, learnMoreHref }) => (
                   <div
                     key={title}
                     className="rounded-lg border border-rose-500/15 bg-rose-500/[0.03] p-4 space-y-2"
@@ -1193,6 +1203,15 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
                       <span className="text-[13px] font-medium text-foreground">{title}</span>
                     </div>
                     <p className="text-[13px] leading-5 text-muted-foreground">{desc}</p>
+                    {learnMoreHref ? (
+                      <Link
+                        to={learnMoreHref}
+                        className={`inline-flex items-center gap-1 text-[12px] no-underline ${t.text} hover:underline`}
+                      >
+                        Learn more
+                        <ArrowRight className="h-3 w-3" />
+                      </Link>
+                    ) : null}
                   </div>
                 ))}
               </div>
@@ -1226,7 +1245,20 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-10">
                 {config.scenarios.map(
-                  ({ category, human, fail, succeed, failTitle, failDesc, Icon }, idx) => {
+                  (
+                    {
+                      category,
+                      human,
+                      fail,
+                      succeed,
+                      failTitle,
+                      failDesc,
+                      Icon,
+                      learnMoreHref,
+                      learnMoreLabel,
+                    },
+                    idx
+                  ) => {
                     const hidden = !showAllMobileOutcomes && idx >= MOBILE_OUTCOME_PREVIEW_COUNT;
                     return (
                       <div
@@ -1248,6 +1280,15 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
                             {failTitle}
                           </p>
                           <p className="text-[13px] leading-5 text-muted-foreground">{failDesc}</p>
+                          {learnMoreHref ? (
+                            <Link
+                              to={learnMoreHref}
+                              className={`inline-flex items-center gap-1 pt-1 text-[12px] no-underline ${t.text} hover:underline`}
+                            >
+                              {learnMoreLabel ?? "Learn more"}
+                              <ArrowRight className="h-3 w-3" />
+                            </Link>
+                          ) : null}
                         </div>
                       </div>
                     );
@@ -1282,7 +1323,7 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
                 </h2>
               </div>
               <div className="grid gap-6 md:grid-cols-3">
-                {config.steps.map(({ Icon, title, desc, detail }, i) => (
+                {config.steps.map(({ Icon, title, desc, detail, learnMoreHref }, i) => (
                   <div
                     key={title}
                     className="rounded-lg border border-border bg-card p-5 space-y-4 relative"
@@ -1302,6 +1343,15 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
                     </div>
                     <p className="text-[14px] leading-6 text-muted-foreground">{desc}</p>
                     <p className={`text-[12px] font-medium ${t.textDetail}`}>{detail}</p>
+                    {learnMoreHref ? (
+                      <Link
+                        to={learnMoreHref}
+                        className={`inline-flex items-center gap-1 text-[12px] no-underline ${t.text} hover:underline`}
+                      >
+                        Learn more
+                        <ArrowRight className="h-3 w-3" />
+                      </Link>
+                    ) : null}
                   </div>
                 ))}
               </div>
@@ -1325,7 +1375,7 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
                 </p>
               </div>
               <div className="grid gap-4 md:grid-cols-2">
-                {config.capabilities.map(({ Icon, title, desc, tags }) => (
+                {config.capabilities.map(({ Icon, title, desc, tags, learnMoreHref }) => (
                   <div
                     key={title}
                     className="rounded-lg border border-border bg-card p-5 space-y-3"
@@ -1335,15 +1385,26 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
                       <span className="text-[15px] font-medium text-foreground">{title}</span>
                     </div>
                     <p className="text-[13px] leading-6 text-muted-foreground">{desc}</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {tags.map((tag) => (
-                        <span
-                          key={tag}
-                          className={`rounded border px-2 py-0.5 text-[10px] font-mono ${t.borderLight} ${t.bg5} ${t.text}`}
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap gap-1.5">
+                        {tags.map((tag) => (
+                          <span
+                            key={tag}
+                            className={`rounded border px-2 py-0.5 text-[10px] font-mono ${t.borderLight} ${t.bg5} ${t.text}`}
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                      {learnMoreHref ? (
+                        <Link
+                          to={learnMoreHref}
+                          className={`inline-flex items-center gap-1 text-[12px] no-underline ${t.text} hover:underline`}
                         >
-                          {tag}
-                        </span>
-                      ))}
+                          Learn more
+                          <ArrowRight className="h-3 w-3" />
+                        </Link>
+                      ) : null}
                     </div>
                   </div>
                 ))}

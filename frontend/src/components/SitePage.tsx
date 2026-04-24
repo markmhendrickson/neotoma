@@ -1625,9 +1625,9 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                         </div>
 
                         <div className="flex justify-center pt-4 lg:justify-start">
-                          <div className="inline-flex max-w-full items-start gap-2">
+                          <div className="inline-flex max-w-full items-center gap-2">
                             <Workflow
-                              className="mt-[0.35em] h-3.5 w-3.5 shrink-0 text-muted-foreground/60"
+                              className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60"
                               aria-hidden
                             />
                             <p className="min-w-0 text-left text-[10.5px] font-mono leading-snug tracking-[0.04em] text-muted-foreground/60 uppercase">

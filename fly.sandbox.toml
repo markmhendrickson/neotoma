@@ -1,0 +1,74 @@
+# Fly.io config for the public sandbox deployment at https://sandbox.neotoma.io.
+#
+# Separate app from the production `neotoma` app so:
+#   - anonymous writes land on a fresh Fly volume (persistent_sandbox)
+#   - a weekly Sunday 00:00 UTC scheduled Machine runs scripts/reset_sandbox.ts
+#   - destructive admin routes + strict AAuth can be gated without affecting prod
+#
+# Deploy:
+#   flyctl apps create neotoma-sandbox
+#   flyctl volumes create persistent_sandbox --region lhr --size 3 -a neotoma-sandbox
+#   flyctl certs create sandbox.neotoma.io -a neotoma-sandbox
+#   flyctl deploy -c fly.sandbox.toml
+#
+# Weekly reset: run `./scripts/schedule_sandbox_reset.sh` (SSH into the app VM;
+# Fly volumes cannot mount on a second Machine). Or enable the GitHub Action
+# `.github/workflows/sandbox-weekly-reset.yml` with repo secret FLY_API_TOKEN.
+
+app = 'neotoma-sandbox'
+primary_region = 'lhr'
+
+[build]
+  dockerfile = "Dockerfile"
+
+[build.args]
+  BUILD_INSPECTOR = "1"
+  VITE_NEOTOMA_API_URL = "https://sandbox.neotoma.io"
+  VITE_PUBLIC_BASE_PATH = "/app/"
+  VITE_NEOTOMA_SANDBOX_UI = "1"
+
+[env]
+  NODE_ENV = "production"
+  NEOTOMA_ENV = "production"
+  # Must match internal_port (Fly routes to this port on the machine)
+  HTTP_PORT = "3180"
+  NEOTOMA_HTTP_PORT = "3180"
+
+  # Sandbox-specific behavior: anonymous callers get SANDBOX_PUBLIC_USER_ID,
+  # destructive routes gated, X-Neotoma-Sandbox stamped on every response.
+  NEOTOMA_SANDBOX_MODE = "1"
+
+  # Tighter per-IP write rate limit on the public host.
+  NEOTOMA_SANDBOX_WRITE_RATE_LIMIT_PER_MIN = "30"
+
+  # Mounted volume lives at /data; the neotoma server writes its sqlite DB +
+  # sources/ blobs here.
+  NEOTOMA_DATA_DIR = "/data"
+
+  # Serve the Inspector SPA from /app on the same host (Phase 4).
+  NEOTOMA_INSPECTOR_STATIC_DIR = "/app/inspector"
+  NEOTOMA_INSPECTOR_BASE_PATH = "/app"
+
+  # Canonical AAuth authority for both verification + `/session` diagnostics.
+  NEOTOMA_AAUTH_AUTHORITY = "https://sandbox.neotoma.io"
+
+  # Abuse reports are forwarded to the agent-site Netlify pipeline, then on to
+  # the central production Neotoma (see Phase 6). The endpoint + bearer are
+  # set as secrets, not env.
+
+[http_service]
+  internal_port = 3180
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ['app']
+
+[[mounts]]
+  source = "persistent_sandbox"
+  destination = "/data"
+
+[[vm]]
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1

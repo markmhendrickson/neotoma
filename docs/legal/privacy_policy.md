@@ -1,4 +1,18 @@
-# Neotoma Privacy Policy
+# Neotoma Privacy Policy (Post-Incorporation Template)
+
+> **Status:** Draft template. **Not currently published.**
+>
+> The live pre-incorporation privacy notice for `neotoma.io` is
+> [`site_privacy_notice.md`](./site_privacy_notice.md) and is rendered at
+> <https://neotoma.io/privacy>. This document is the fuller post-incorporation
+> template intended for publication **after** Neotoma transitions to a
+> registered legal entity (typically triggered by the first paying customer,
+> an enterprise DPA, or hosting production PII on behalf of users).
+>
+> Do not link to or publish this file until it has been filled in with a real
+> company name, address, and jurisdiction and reviewed by qualified legal
+> counsel.
+
 **Last Updated:** [Date]
 **Version:** 1.0
 ## ⚠️ Legal Review Required

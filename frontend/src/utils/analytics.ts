@@ -1,17 +1,16 @@
 /**
- * Site analytics: GA4 (gtag) and/or Umami. Each backend loads only when its env vars are set.
- * Page views fire on SPA navigations via MainApp. Typed event helpers mirror the same schema to both.
- * Outbound `<a href>` clicks are tracked via delegated listeners from `installOutboundLinkTracking()` (main.tsx).
+ * Site analytics: Umami only. Page views fire on SPA navigations via MainApp.
+ * Outbound `<a href>` clicks are tracked via delegated listeners from
+ * `installOutboundLinkTracking()` (main.tsx).
  *
- * Umami (no in-repo defaults): `import.meta.env.DEV` uses VITE_UMAMI_WEBSITE_ID_DEV and optional
- * VITE_UMAMI_URL_DEV; production bundles use VITE_UMAMI_WEBSITE_ID and VITE_UMAMI_URL. Dev falls
- * back to VITE_UMAMI_URL only when VITE_UMAMI_URL_DEV is unset (shared origin is still env-only).
+ * Umami (no in-repo defaults): `import.meta.env.DEV` uses
+ * VITE_UMAMI_WEBSITE_ID_DEV and optional VITE_UMAMI_URL_DEV; production
+ * bundles use VITE_UMAMI_WEBSITE_ID and VITE_UMAMI_URL. Dev falls back to
+ * VITE_UMAMI_URL only when VITE_UMAMI_URL_DEV is unset.
  */
 
 declare global {
   interface Window {
-    dataLayer?: unknown[];
-    gtag?: (...args: unknown[]) => void;
     umami?: {
       track(
         arg?:
@@ -70,26 +69,6 @@ function flushUmamiQueue(): void {
   }
 }
 
-export function initGoogleAnalytics(): void {
-  const measurementId = import.meta.env.VITE_GA_MEASUREMENT_ID as string | undefined;
-  if (!measurementId || typeof window === "undefined") return;
-
-  window.dataLayer = window.dataLayer ?? [];
-  window.gtag = function gtag() {
-    window.dataLayer?.push(arguments);
-  };
-  window.gtag("js", new Date());
-
-  const script = document.createElement("script");
-  script.async = true;
-  script.src = `https://www.googletagmanager.com/gtag/js?id=${measurementId}`;
-  document.head.appendChild(script);
-
-  window.gtag("config", measurementId, {
-    send_page_view: false,
-  });
-}
-
 /** Loads Umami tracker from {origin}/script.js when mode-specific env URL and website ID are set. */
 export function initUmami(): void {
   if (!isUmamiConfigured() || typeof window === "undefined") return;
@@ -108,14 +87,13 @@ export function initUmami(): void {
   document.head.appendChild(script);
 }
 
-/** Initialize every analytics backend enabled via env. */
+/** Initialize site analytics when Umami env vars are configured. */
 export function initSiteAnalytics(): void {
-  initGoogleAnalytics();
   initUmami();
 }
 
 function isAnyAnalyticsBackendConfigured(): boolean {
-  return Boolean(trimViteEnv("VITE_GA_MEASUREMENT_ID")) || isUmamiConfigured();
+  return isUmamiConfigured();
 }
 
 function rawHrefFromAnchor(anchor: HTMLAnchorElement): string | null {
@@ -147,19 +125,8 @@ function linkLabelFromAnchor(anchor: HTMLAnchorElement): string {
   return t.length > 200 ? `${t.slice(0, 200)}…` : t;
 }
 
-function isGaReady(): boolean {
-  return !!(import.meta.env.VITE_GA_MEASUREMENT_ID && window.gtag);
-}
-
 /** Send a page_view for SPA navigation. No-op when no backend is active. */
 export function sendPageView(path: string): void {
-  if (isGaReady()) {
-    window.gtag!("event", "page_view", {
-      page_path: path,
-      page_title: document.title,
-    });
-  }
-
   if (isUmamiConfigured()) {
     const title = document.title;
     runWhenUmamiReady(() => {
@@ -214,6 +181,9 @@ export type CtaName =
   | "logistics_install_neotoma_bottom"
   | "personal_data_install_neotoma"
   | "personal_data_install_neotoma_bottom"
+  | "crypto_engineering_install_neotoma"
+  | "crypto_engineering_install_neotoma_bottom"
+  | "crypto_engineering_case_study_install"
   | "crm_case_study_install"
   | "compliance_case_study_install"
   | "contracts_case_study_install"
@@ -245,12 +215,6 @@ export type CtaName =
 /** Track a CTA button/link click with the CTA name and current page. */
 export function sendCtaClick(ctaName: CtaName, pagePath?: string): void {
   const page_path = pagePath ?? (typeof window !== "undefined" ? window.location.pathname : "/");
-  if (isGaReady()) {
-    window.gtag!("event", "cta_click", {
-      cta_name: ctaName,
-      page_path,
-    });
-  }
   if (isUmamiConfigured()) {
     runWhenUmamiReady(() => {
       window.umami!.track("cta_click", { cta_name: ctaName, page_path });
@@ -262,13 +226,6 @@ export function sendCtaClick(ctaName: CtaName, pagePath?: string): void {
 /** Track an outbound link click (GitHub, npm, blog, etc.). */
 export function sendOutboundClick(url: string, linkText?: string): void {
   const page_path = typeof window !== "undefined" ? window.location.pathname : "/";
-  if (isGaReady()) {
-    window.gtag!("event", "outbound_click", {
-      link_url: url,
-      link_text: linkText ?? "",
-      page_path,
-    });
-  }
   if (isUmamiConfigured()) {
     runWhenUmamiReady(() => {
       window.umami!.track("outbound_click", {
@@ -315,13 +272,6 @@ export function installOutboundLinkTracking(): void {
 export function sendDocsNavClick(destination: string, source?: string): void {
   const page_path = typeof window !== "undefined" ? window.location.pathname : "/";
   const src = source ?? "header_nav";
-  if (isGaReady()) {
-    window.gtag!("event", "docs_nav_click", {
-      destination,
-      source: src,
-      page_path,
-    });
-  }
   if (isUmamiConfigured()) {
     runWhenUmamiReady(() => {
       window.umami!.track("docs_nav_click", {
@@ -340,7 +290,7 @@ export function sendDocsNavClick(destination: string, source?: string): void {
 
 export type ProductNavTarget = "evaluate" | "install";
 
-/** Stable `nav_source` values for `product_nav_click` (GA4 + Umami). */
+/** Stable `nav_source` values for `product_nav_click`. */
 export const PRODUCT_NAV_SOURCES = {
   installPageEvaluateCta: "install_page_evaluate_cta",
   installPageInlineEvaluate: "install_page_inline_evaluate",
@@ -389,13 +339,6 @@ export function sendProductNavClick(
   pagePath?: string,
 ): void {
   const page_path = pagePath ?? (typeof window !== "undefined" ? window.location.pathname : "/");
-  if (isGaReady()) {
-    window.gtag!("event", "product_nav_click", {
-      nav_target: target,
-      nav_source: source,
-      page_path,
-    });
-  }
   if (isUmamiConfigured()) {
     runWhenUmamiReady(() => {
       window.umami!.track("product_nav_click", {
@@ -413,7 +356,8 @@ export function sendProductNavClick(
 // ---------------------------------------------------------------------------
 
 /**
- * Where the evaluate prompt was copied from — one Umami event `funnel_evaluate_prompt_copy`; segment by this.
+ * Where the evaluate prompt was copied from - one Umami event
+ * `funnel_evaluate_prompt_copy`; segment by this.
  * Joint “any evaluate prompt copy”: count the event; for the two marketing paths use `home` vs `evaluate_page`.
  */
 export type EvaluatePromptCopySurface = "home" | "evaluate_page" | "integration_doc";
@@ -424,13 +368,6 @@ export type EvaluatePromptCopySurface = "home" | "evaluate_page" | "integration_
  */
 export function sendFunnelEvaluatePromptCopy(surface: EvaluatePromptCopySurface): void {
   const page_path = typeof window !== "undefined" ? window.location.pathname : "/";
-  if (isGaReady()) {
-    window.gtag!("event", "funnel_evaluate_prompt_copy", {
-      funnel: "evaluate_prompt",
-      copy_surface: surface,
-      page_path,
-    });
-  }
   if (isUmamiConfigured()) {
     runWhenUmamiReady(() => {
       window.umami!.track("funnel_evaluate_prompt_copy", {
@@ -443,7 +380,7 @@ export function sendFunnelEvaluatePromptCopy(surface: EvaluatePromptCopySurface)
   }
 }
 
-/** Which install page code block was copied — filter `funnel_install_prompt_copy` in Umami by this. */
+/** Which install page code block was copied - filter `funnel_install_prompt_copy` in Umami by this. */
 export type InstallPromptCopyBlock =
   | "agent_assisted"
   | "manual_commands"
@@ -461,18 +398,9 @@ export type InstallPromptCopyBlock =
   | "doc_codex_connect_local_stdio"
   | "doc_openclaw_connect_local_stdio";
 
-/**
- * Install page prompt/command copy. Funnel: pageview `/` → pageview `/install` → this event (filter `install_block: agent_assisted` for the main agent prompt).
- */
+/** Install page prompt/command copy. Filter by `install_block` in Umami. */
 export function sendFunnelInstallPromptCopy(block: InstallPromptCopyBlock): void {
   const page_path = typeof window !== "undefined" ? window.location.pathname : "/";
-  if (isGaReady()) {
-    window.gtag!("event", "funnel_install_prompt_copy", {
-      funnel: "install_prompt",
-      install_block: block,
-      page_path,
-    });
-  }
   if (isUmamiConfigured()) {
     runWhenUmamiReady(() => {
       window.umami!.track("funnel_install_prompt_copy", {
@@ -494,13 +422,6 @@ export type PreflightHarness = "claude-code" | "cursor" | "codex";
  */
 export function sendFunnelPreflightCopy(harness: PreflightHarness): void {
   const page_path = typeof window !== "undefined" ? window.location.pathname : "/";
-  if (isGaReady()) {
-    window.gtag!("event", "funnel_preflight_copy", {
-      funnel: "install_prompt",
-      preflight_harness: harness,
-      page_path,
-    });
-  }
   if (isUmamiConfigured()) {
     runWhenUmamiReady(() => {
       window.umami!.track("funnel_preflight_copy", {

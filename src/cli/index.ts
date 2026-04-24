@@ -6487,16 +6487,15 @@ initCommand
     );
   });
 
-// ── Site configure (Google Analytics and env vars) ─────────────────────────
+// ── Site configure (site env vars) ─────────────────────────
 
 const siteCommand = program.command("site").description("Site and frontend configuration");
 
 siteCommand
   .command("configure")
   .description(
-    "Configure site env vars: GA4, Umami (prod + optional dev keys), and optional Google API credentials"
+    "Configure site env vars: Umami (prod + optional dev keys) and optional Google API credentials"
   )
-  .option("--ga-measurement-id <id>", "GA4 measurement ID (e.g. G-XXXXXXXXXX)")
   .option(
     "--umami-url <url>",
     "Umami origin for production builds (no trailing slash); required in .env when using Umami on the live site"
@@ -6520,7 +6519,6 @@ siteCommand
   )
   .action(
     async (opts: {
-      gaMeasurementId?: string;
       umamiUrl?: string;
       umamiWebsiteId?: string;
       umamiUrlDev?: string;
@@ -6561,7 +6559,6 @@ siteCommand
         }
       }
 
-      let gaId = opts.gaMeasurementId?.trim();
       let umamiUrl =
         opts.umamiUrl !== undefined ? opts.umamiUrl.trim() : undefined;
       let umamiWebsiteId =
@@ -6573,12 +6570,6 @@ siteCommand
       let googleAppCreds = opts.googleApplicationCredentials?.trim();
       let googleOauthCreds = opts.googleOauthCredentials?.trim();
       if (process.stdout.isTTY && outputMode === "pretty") {
-        if (gaId === undefined || gaId === "") {
-          const raw = await askQuestion(
-            "VITE_GA_MEASUREMENT_ID (GA4 measurement ID, e.g. G-XXXXXXXXXX) [optional, Enter to skip]: "
-          );
-          gaId = raw.trim();
-        }
         if (umamiUrl === undefined || umamiUrl === "") {
           const raw = await askQuestion(
             "VITE_UMAMI_URL (Umami origin, no trailing slash) [optional, Enter to skip]: "
@@ -6619,13 +6610,6 @@ siteCommand
 
       const updated: string[] = [];
       // Apply when option was explicitly passed (including empty) or user entered non-empty at prompt
-      if (opts.gaMeasurementId !== undefined) {
-        await updateOrInsertEnvVar(envPath, "VITE_GA_MEASUREMENT_ID", opts.gaMeasurementId.trim());
-        updated.push("VITE_GA_MEASUREMENT_ID");
-      } else if (gaId !== undefined && gaId !== "") {
-        await updateOrInsertEnvVar(envPath, "VITE_GA_MEASUREMENT_ID", gaId);
-        updated.push("VITE_GA_MEASUREMENT_ID");
-      }
       if (opts.umamiUrl !== undefined) {
         await updateOrInsertEnvVar(envPath, "VITE_UMAMI_URL", opts.umamiUrl.trim());
         updated.push("VITE_UMAMI_URL");
@@ -6700,9 +6684,6 @@ siteCommand
       } else {
         process.stdout.write(
           dim("No values provided. Use options or run interactively to set vars.") + "\n"
-        );
-        process.stdout.write(
-          dim("  ") + pathStyle("neotoma site configure --ga-measurement-id G-XXXXXXXXXX") + "\n"
         );
         process.stdout.write(
           dim("  ") +

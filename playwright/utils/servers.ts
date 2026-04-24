@@ -21,6 +21,24 @@ type BranchPorts = {
   wsPort: number;
 };
 
+function parsePort(value?: string): number | undefined {
+  if (!value) return undefined;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric < 1 || numeric > 65535) {
+    return undefined;
+  }
+  return numeric;
+}
+
+function parsePortFromUrl(value?: string): number | undefined {
+  if (!value) return undefined;
+  try {
+    return parsePort(new URL(value).port);
+  } catch {
+    return undefined;
+  }
+}
+
 async function runGetBranchPorts(): Promise<BranchPorts> {
   const scriptPath = path.join(repoRoot, 'scripts', 'get_branch_ports.js');
   const { stdout } = await execFileAsync('node', [scriptPath], {
@@ -58,7 +76,18 @@ async function runGetBranchPorts(): Promise<BranchPorts> {
 }
 
 export async function getBranchPorts(): Promise<BranchPorts> {
-  return runGetBranchPorts();
+  const branchPorts = await runGetBranchPorts();
+  const overriddenHttpPort =
+    parsePort(process.env.NEOTOMA_HTTP_PORT) ?? parsePort(process.env.HTTP_PORT);
+  const overriddenVitePort =
+    parsePortFromUrl(process.env.PLAYWRIGHT_UI_BASE_URL) ?? parsePort(process.env.VITE_PORT);
+  const overriddenWsPort = parsePort(process.env.WS_PORT);
+
+  return {
+    httpPort: overriddenHttpPort ?? branchPorts.httpPort,
+    vitePort: overriddenVitePort ?? branchPorts.vitePort,
+    wsPort: overriddenWsPort ?? branchPorts.wsPort,
+  };
 }
 
 export type KeyExportBundle = {

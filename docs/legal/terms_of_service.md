@@ -1,4 +1,17 @@
-# Neotoma Terms of Service
+# Neotoma Terms of Service (Post-Incorporation Template)
+
+> **Status:** Draft template. **Not currently published.**
+>
+> The live pre-incorporation site terms for `neotoma.io` are
+> [`site_terms_of_use.md`](./site_terms_of_use.md) and are rendered at
+> <https://neotoma.io/terms>. This document is the fuller post-incorporation
+> template intended for publication **after** Neotoma transitions to a
+> registered legal entity and begins offering paid subscriptions.
+>
+> Do not link to or publish this file until it has been filled in with a real
+> company name, jurisdiction, pricing, and reviewed by qualified legal
+> counsel.
+
 **Last Updated:** [Date]
 **Version:** 1.0
 ## ⚠️ Legal Review Required
