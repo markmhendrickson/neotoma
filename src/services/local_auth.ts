@@ -40,9 +40,13 @@ function verifyPassword(password: string, salt: string, expectedHash: string): b
   return timingSafeEqual(Buffer.from(computed, "hex"), Buffer.from(expectedHash, "hex"));
 }
 
-function hashEmailToUserId(email: string): string {
-  const hash = createHash("sha256").update(email).digest("hex");
+function hashStringToUserId(input: string): string {
+  const hash = createHash("sha256").update(input).digest("hex");
   return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-${hash.slice(12, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;
+}
+
+function hashEmailToUserId(email: string): string {
+  return hashStringToUserId(email);
 }
 
 export function getLocalAuthUserByEmail(email: string): LocalAuthUser | null {
@@ -181,6 +185,44 @@ export function ensureSandboxPublicUser(): LocalAuthUser {
   ).run(SANDBOX_PUBLIC_USER_ID, email, hash, salt, now, now, null);
   return {
     id: SANDBOX_PUBLIC_USER_ID,
+    email,
+    created_at: now,
+    updated_at: now,
+    last_login_at: null,
+  };
+}
+
+/**
+ * Ensure a deterministic per-thumbprint sandbox user exists for AAuth-verified
+ * requests on `sandbox.neotoma.io`. The same thumbprint always resolves to the
+ * same user_id (via sha256("aauth:" + thumbprint) mapped to UUID shape), so
+ * sandbox writes signed by a given AAuth key are partitioned away from the
+ * public sandbox user and from other agents' keys.
+ *
+ * The synthetic user is functionally inert for login: the password hash is
+ * derived from the thumbprint itself (not user-supplied) and the
+ * `@sandbox.neotoma.local` email is not exposed to `authenticateLocalUser`
+ * via any external surface. Idempotent; safe to call on every request.
+ */
+export function ensureSandboxAauthUser(thumbprint: string): LocalAuthUser {
+  if (!thumbprint || typeof thumbprint !== "string") {
+    throw new Error("ensureSandboxAauthUser requires a non-empty thumbprint");
+  }
+  const db = getSqliteDb();
+  const userId = hashStringToUserId(`aauth:${thumbprint}`);
+  const existing = getLocalAuthUserById(userId);
+  if (existing) {
+    return existing;
+  }
+  const short = thumbprint.replace(/[^a-zA-Z0-9]/g, "").slice(0, 12).toLowerCase();
+  const email = `aauth-${short}@sandbox.neotoma.local`;
+  const now = new Date().toISOString();
+  const { salt, hash } = hashPassword(`sandbox-aauth-no-password:${thumbprint}`);
+  db.prepare(
+    "INSERT INTO local_auth_users (id, email, password_hash, password_salt, created_at, updated_at, last_login_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+  ).run(userId, email, hash, salt, now, now, null);
+  return {
+    id: userId,
     email,
     created_at: now,
     updated_at: now,

@@ -57,6 +57,7 @@ import { logger } from "./utils/logger.js";
 import { OAuthError } from "./services/mcp_oauth_errors.js";
 import {
   ensureLocalDevUser,
+  ensureSandboxAauthUser,
   ensureSandboxPublicUser,
   LOCAL_DEV_USER_ID,
   SANDBOX_PUBLIC_USER_ID,
@@ -493,6 +494,30 @@ app.get("/.well-known/oauth-protected-resource", async (req, res) => {
   res.setHeader("Content-Type", "application/json");
   res.json({
     authorization_servers: [base],
+  });
+});
+
+// AAuth resource server metadata. Exposed publicly so AAuth client libraries
+// can auto-configure issuer / supported algs / signature window without an
+// out-of-band conversation. Neotoma is verifier-only: it never hosts agent
+// JWKs, so jwks_uri is null and agents convey their public keys per-request
+// via the Signature-Key header (with thumbprint binding via the jkt claim).
+// See docs/proposals/agent-trust-framework.md and src/middleware/aauth_verify.ts.
+app.get("/.well-known/aauth-resource.json", (_req, res) => {
+  const authorityHost = canonicalAauthAuthority();
+  const issuer = authorityHost.startsWith("http")
+    ? authorityHost
+    : `https://${authorityHost}`;
+  res.setHeader("Content-Type", "application/json");
+  res.json({
+    issuer,
+    client_name: "Neotoma",
+    signature_window: 60,
+    supported_algs: ["ES256", "EdDSA"],
+    supported_typ: ["aa-agent+jwt"],
+    jwks_uri: null,
+    jwks_uri_reason:
+      "Neotoma is verifier-only; agent JWKs are conveyed per-request via the Signature-Key header (with thumbprint binding via the jkt claim).",
   });
 });
 
@@ -2111,6 +2136,22 @@ app.use(async (req, res, next) => {
   // full AAuth roundtrip get their hardware/software tier. Destructive admin
   // routes are separately gated by sandboxDestructiveGuard.
   if (isSandboxMode() && !headerAuth.startsWith("Bearer ")) {
+    // α (sandbox attribution partitioning): when the request carries a verified
+    // AAuth signature, attribute writes/reads to a deterministic per-thumbprint
+    // user instead of the shared SANDBOX_PUBLIC_USER_ID. Same key on two
+    // requests resolves to the same user_id; different keys → different
+    // user_ids. Unsigned requests keep the public-user fallback unchanged.
+    // Read partitioning falls out automatically because every read path scopes
+    // queries by req.authenticatedUserId.
+    const aauthCtx = (req as express.Request & { aauth?: { verified?: boolean; thumbprint?: string } }).aauth;
+    if (aauthCtx?.verified === true && typeof aauthCtx.thumbprint === "string") {
+      const aauthUser = ensureSandboxAauthUser(aauthCtx.thumbprint);
+      (req as any).authenticatedUserId = aauthUser.id;
+      logger.info(
+        `[Auth] ${req.method} ${req.path} auth_method=sandbox_aauth user_id=${aauthUser.id} thumbprint=${aauthCtx.thumbprint}`,
+      );
+      return next();
+    }
     const sandboxUser = ensureSandboxPublicUser();
     (req as any).authenticatedUserId = sandboxUser.id;
     logger.info(
@@ -4803,8 +4844,16 @@ async function storeUnstructuredForApi(params: {
   };
 }
 
-// POST /api/store - Unified store for structured, unstructured, or combined payloads
-app.post("/store", writeRateLimit, async (req, res) => {
+// Shared handler body for the unified /store endpoint. Extracted so that the
+// sandbox-only POST /sandbox/aauth-only/store route below can reuse the exact
+// same write semantics (validation, auth, structured + unstructured flows,
+// error envelopes) without duplicating logic. Both routes funnel through
+// getAuthenticatedUserId, which honors the α attribution partitioning applied
+// in the sandbox bypass above.
+async function handleStorePost(
+  req: express.Request,
+  res: express.Response,
+): Promise<express.Response | void> {
   const parsed = StoreRequestSchema.safeParse(req.body);
   if (!parsed.success) {
     logWarn("ValidationError:store", req, {
@@ -4963,7 +5012,43 @@ app.post("/store", writeRateLimit, async (req, res) => {
     const message = error instanceof Error ? error.message : "Failed to store payload";
     return sendError(res, 500, "DB_QUERY_FAILED", message);
   }
-});
+}
+
+// POST /api/store - Unified store for structured, unstructured, or combined payloads
+app.post("/store", writeRateLimit, handleStorePost);
+
+// γ-write: sandbox-only route that EXPLICITLY requires a verified AAuth
+// signature before delegating to the same handleStorePost handler. Unlike the
+// global /store endpoint (which accepts bearer auth, sandbox public-user
+// fallback, OR AAuth-derived attribution), this route makes AAuth admission
+// the gate: unsigned requests get 401 here. The route is only registered when
+// isSandboxMode() is true, so it does not exist in production. Demo value:
+// shows identity-bound provenance — a write performed by an AAuth-signed
+// agent lands under the per-thumbprint user from α and is round-trippable via
+// /entities/query, /entities/:id, and /stats scoped to that same identity.
+if (isSandboxMode()) {
+  const aauthRequired: express.RequestHandler = (req, res, next) => {
+    const aauthCtx = (req as express.Request & { aauth?: { verified?: boolean; thumbprint?: string } }).aauth;
+    if (aauthCtx?.verified === true && typeof aauthCtx.thumbprint === "string") {
+      return next();
+    }
+    return sendError(
+      res,
+      401,
+      "AAUTH_REQUIRED",
+      "POST /sandbox/aauth-only/store requires a verified AAuth signature (RFC 9421 + aa-agent+jwt).",
+    );
+  };
+  app.post(
+    "/sandbox/aauth-only/store",
+    writeRateLimit,
+    aauthRequired,
+    handleStorePost,
+  );
+  logger.info(
+    "[Sandbox] AAuth-required write route enabled at POST /sandbox/aauth-only/store",
+  );
+}
 
 // POST /api/store/unstructured - Store raw file (base64), optional AI interpretation
 app.post("/store/unstructured", async (req, res) => {
