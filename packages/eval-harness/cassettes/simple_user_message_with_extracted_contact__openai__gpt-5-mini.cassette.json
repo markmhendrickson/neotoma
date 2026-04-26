@@ -1,0 +1,129 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "simple_user_message_with_extracted_contact",
+    "provider": "openai",
+    "model": "gpt-5-mini",
+    "instruction_profile": "compact",
+    "recorded_at": "2026-04-26T12:40:07.283Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Quick note: I just had coffee with Sara Lin from Acme Corp — she's\ninterested in our trading vertical. Can you remember her for me?\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. In one store_structured call, persist (a) a `conversation` entity, (b) a `conversation_message` for the user's message linked to the conversation via PART_OF, and (c) every entity the user mentions (people, companies, meetings) linked from the message via REFERS_TO. Then reply briefly.\n",
+  "tool_calls": [
+    {
+      "name": "store_structured",
+      "input": {
+        "idempotency_key": "conv-2026-04-26-168-remember-sara-lin-1",
+        "observation_source": "human",
+        "entities": [
+          {
+            "entity_type": "conversation",
+            "conversation_id": "conv-2026-04-26-1",
+            "canonical_name": "Conversation with user (2026-04-26)"
+          },
+          {
+            "entity_type": "conversation_message",
+            "turn_key": "conv-2026-04-26-1-turn-1",
+            "conversation_id": "conv-2026-04-26-1",
+            "author": "user",
+            "message_text": "Quick note: I just had coffee with Sara Lin from Acme Corp — she's interested in our trading vertical. Can you remember her for me?"
+          },
+          {
+            "entity_type": "person",
+            "canonical_name": "Sara Lin",
+            "full_name": "Sara Lin",
+            "employer": "Acme Corp"
+          },
+          {
+            "entity_type": "company",
+            "canonical_name": "Acme Corp",
+            "name": "Acme Corp"
+          }
+        ],
+        "relationships": [
+          {
+            "relationship_type": "PART_OF",
+            "source_index": 1,
+            "target_index": 0
+          },
+          {
+            "relationship_type": "REFERS_TO",
+            "source_index": 1,
+            "target_index": 2
+          },
+          {
+            "relationship_type": "REFERS_TO",
+            "source_index": 1,
+            "target_index": 3
+          }
+        ],
+        "commit": true
+      },
+      "output": {
+        "type": "text",
+        "text": "An error occurred while running the tool. Please try again. Error: McpError: MCP error -32602: MCP error -32602: Observation 2 (person): Cannot derive canonical_name for \"person\". Declare `canonical_name_fields` on the person schema to make this deterministic, or supply one of: canonical_name, name, full_name, title, email, url. See docs/foundation/schema_agnostic_design_rules.md. No usable name/identifier fields were provided."
+      },
+      "sequence": 0
+    },
+    {
+      "name": "store_structured",
+      "input": {
+        "idempotency_key": "conv-2026-04-26-168-remember-sara-lin-2",
+        "observation_source": "human",
+        "entities": [
+          {
+            "entity_type": "conversation",
+            "conversation_id": "conv-2026-04-26-1",
+            "canonical_name": "Conversation with user (2026-04-26)"
+          },
+          {
+            "entity_type": "conversation_message",
+            "turn_key": "conv-2026-04-26-1-turn-1",
+            "conversation_id": "conv-2026-04-26-1",
+            "author": "user",
+            "message_text": "Quick note: I just had coffee with Sara Lin from Acme Corp — she's interested in our trading vertical. Can you remember her for me?"
+          },
+          {
+            "entity_type": "person",
+            "canonical_name": "Sara Lin",
+            "name": "Sara Lin",
+            "full_name": "Sara Lin",
+            "employer": "Acme Corp"
+          },
+          {
+            "entity_type": "company",
+            "canonical_name": "Acme Corp",
+            "name": "Acme Corp"
+          }
+        ],
+        "relationships": [
+          {
+            "relationship_type": "PART_OF",
+            "source_index": 1,
+            "target_index": 0
+          },
+          {
+            "relationship_type": "REFERS_TO",
+            "source_index": 1,
+            "target_index": 2
+          },
+          {
+            "relationship_type": "REFERS_TO",
+            "source_index": 1,
+            "target_index": 3
+          }
+        ],
+        "commit": true
+      },
+      "output": [
+        {
+          "type": "input_text",
+          "text": "{\"source_id\":\"28a45e1b-856f-fe8d-0fad-7add737f1367\",\"entities\":[{\"observation_index\":0,\"entity_id\":\"ent_bb1fd90884d6073371204e74\",\"entity_type\":\"conversation\",\"observation_id\":\"6e57fdca-1c16-ec04-0d37-f3b34b3bb792\",\"action\":\"matched_existing\",\"canonical_name\":\"conversation:conv-2026-04-26-1\",\"resolver_path\":[\"schema:canonical_name_fields:conversation_id\",\"existing_row:matched\"],\"identity_basis\":\"schema_rule\",\"identity_rule\":\"composite:conversation_id\",\"entity_snapshot_after\":{\"conversation_id\":\"conv-2026-04-26-1\"}},{\"observation_index\":1,\"entity_id\":\"ent_9ce5fe714e860577bfc5b56d\",\"entity_type\":\"conversation_message\",\"observation_id\":\"0a5a9aec-0eae-99a2-6ff2-6871fe49160b\",\"action\":\"matched_existing\",\"canonical_name\":\"conversation_message:conv-2026-04-26-1-turn-1\",\"resolver_path\":[\"schema:canonical_name_fields:turn_key\",\"existing_row:matched\"],\"identity_basis\":\"schema_rule\",\"identity_rule\":\"composite:turn_key\",\"entity_snapshot_after\":{\"turn_key\":\"conv-2026-04-26-1-turn-1\"}},{\"observation_index\":2,\"entity_id\":\"ent_4914cfde8cd72803eff78845\",\"entity_type\":\"person\",\"observation_id\":\"b948f96b-62bf-8d33-dda5-816400f3d4b4\",\"action\":\"created\",\"canonical_name\":\"person:Sara Lin\",\"resolver_path\":[\"schema:canonical_name_fields:name\",\"existing_row:none\"],\"identity_basis\":\"schema_rule\",\"identity_rule\":\"name\",\"entity_snapshot_after\":{\"name\":\"Sara Lin\"}},{\"observation_index\":3,\"entity_id\":\"ent_af939bedafbd1838b259772a\",\"entity_type\":\"company\",\"observation_id\":\"981963c0-3792-e0ca-6a87-4e69de310321\",\"action\":\"created\",\"canonical_name\":\"Acme\",\"resolver_path\":[\"name_key:name\",\"existing_row:none\"],\"identity_basis\":\"heuristic_name\",\"identity_rule\":\"name_key:name\",\"entity_snapshot_after\":{\"name\":\"Acme Corp\"}}],\"unknown_fields_count\":8,\"related_entities\":[{\"id\":\"ent_4914cfde8cd72803eff78845\",\"entity_type\":\"person\",\"canonical_name\":\"person:Sara Lin\",\"aliases\":[],\"created_at\":\"2026-04-26T12:40:03.628Z\",\"updated_at\":\"2026-04-26T12:40:03.628Z\",\"user_id\":\"00000000-0000-0000-0000-000000000000\",\"first_seen_at\":null,\"last_seen_at\":null,\"merged_to_entity_id\":null,\"merged_at\":null,\"merged_into\":null,\"snapshot\":{\"entity_id\":\"ent_4914cfde8cd72803eff78845\",\"entity_type\":\"person\",\"schema_version\":\"1.0\",\"canonical_name\":\"Sara Lin\",\"snapshot\":{\"name\":\"Sara Lin\"},\"computed_at\":\"2026-04-26T12:40:03.628Z\",\"observation_count\":1,\"last_observation_at\":\"2026-04-26T12:40:03.628Z\",\"provenance\":{\"name\":\"b948f96b-62bf-8d33-dda5-816400f3d4b4\"},\"user_id\":\"00000000-0000-0000-0000-000000000000\"}},{\"id\":\"ent_9ce5fe714e860577bfc5b56d\",\"entity_type\":\"conversation_message\",\"canonical_name\":\"conversation_message:conv-2026-04-26-1-turn-1\",\"aliases\":[],\"created_at\":\"2026-04-26T12:39:55.362Z\",\"updated_at\":\"2026-04-26T12:40:03.625Z\",\"user_id\":\"00000000-0000-0000-0000-000000000000\",\"first_seen_at\":null,\"last_seen_at\":null,\"merged_to_entity_id\":null,\"merged_at\":null,\"merged_into\":null,\"snapshot\":{\"entity_id\":\"ent_9ce5fe714e860577bfc5b56d\",\"entity_type\":\"conversation_message\",\"schema_version\":\"1.2\",\"canonical_name\":null,\"snapshot\":{\"turn_key\":\"conv-2026-04-26-1-turn-1\"},\"computed_at\":\"2026-04-26T12:40:03.625Z\",\"observation_count\":2,\"last_observation_at\":\"2026-04-26T12:40:03.625Z\",\"provenance\":{\"turn_key\":\"0a5a9aec-0eae-99a2-6ff2-6871fe49160b\"},\"user_id\":\"00000000-0000-0000-0000-000000000000\"}},{\"id\":\"ent_af939bedafbd1838b259772a\",\"entity_type\":\"company\",\"canonical_name\":\"Acme\",\"aliases\":[],\"created_at\":\"2026-04-26T12:40:03.630Z\",\"updated_at\":\"2026-04-26T12:40:03.630Z\",\"user_id\":\"00000000-0000-0000-0000-000000000000\",\"first_seen_at\":null,\"last_seen_at\":null,\"merged_to_entity_id\":null,\"merged_at\":null,\"merged_into\":null,\"snapshot\":{\"entity_id\":\"ent_af939bedafbd1838b259772a\",\"entity_type\":\"company\",\"schema_version\":\"1.0\",\"canonical_name\":\"Acme Corp\",\"snapshot\":{\"name\":\"Acme Corp\"},\"computed_at\":\"2026-04-26T12:40:03.630Z\",\"observation_count\":1,\"last_observation_at\":\"2026-04-26T12:40:03.630Z\",\"provenance\":{\"name\":\"981963c0-3792-e0ca-6a87-4e69de310321\"},\"user_id\":\"00000000-0000-0000-0000-000000000000\"}},{\"id\":\"ent_bb1fd90884d6073371204e74\",\"entity_type\":\"conversation\",\"canonical_name\":\"conversation:conv-2026-04-26-1\",\"aliases\":[],\"created_at\":\"2026-04-26T12:39:55.359Z\",\"updated_at\":\"2026-04-26T12:40:03.622Z\",\"user_id\":\"00000000-0000-0000-0000-000000000000\",\"first_seen_at\":null,\"last_seen_at\":null,\"merged_to_entity_id\":null,\"merged_at\":null,\"merged_into\":null,\"snapshot\":{\"entity_id\":\"ent_bb1fd90884d6073371204e74\",\"entity_type\":\"conversation\",\"schema_version\":\"1.2\",\"canonical_name\":null,\"snapshot\":{\"conversation_id\":\"conv-2026-04-26-1\"},\"computed_at\":\"2026-04-26T12:40:03.623Z\",\"observation_count\":2,\"last_observation_at\":\"2026-04-26T12:40:03.623Z\",\"provenance\":{\"conversation_id\":\"6e57fdca-1c16-ec04-0d37-f3b34b3bb792\"},\"user_id\":\"00000000-0000-0000-0000-000000000000\"}}],\"related_relationships\":[{\"relationship_key\":\"PART_OF:ent_9ce5fe714e860577bfc5b56d:ent_bb1fd90884d6073371204e74\",\"relationship_type\":\"PART_OF\",\"source_entity_id\":\"ent_9ce5fe714e860577bfc5b56d\",\"target_entity_id\":\"ent_bb1fd90884d6073371204e74\",\"schema_version\":\"1.0\",\"snapshot\":{},\"computed_at\":\"2026-04-26T12:40:04.440Z\",\"observation_count\":1,\"last_observation_at\":\"2026-04-26T12:40:04.440Z\",\"provenance\":{},\"user_id\":\"00000000-0000-0000-0000-000000000000\"},{\"relationship_key\":\"REFERS_TO:ent_9ce5fe714e860577bfc5b56d:ent_4914cfde8cd72803eff78845\",\"relationship_type\":\"REFERS_TO\",\"source_entity_id\":\"ent_9ce5fe714e860577bfc5b56d\",\"target_entity_id\":\"ent_4914cfde8cd72803eff78845\",\"schema_version\":\"1.0\",\"snapshot\":{},\"computed_at\":\"2026-04-26T12:40:04.441Z\",\"observation_count\":1,\"last_observation_at\":\"2026-04-26T12:40:04.441Z\",\"provenance\":{},\"user_id\":\"00000000-0000-0000-0000-000000000000\"},{\"relationship_key\":\"REFERS_TO:ent_9ce5fe714e860577bfc5b56d:ent_af939bedafbd1838b259772a\",\"relationship_type\":\"REFERS_TO\",\"source_entity_id\":\"ent_9ce5fe714e860577bfc5b56d\",\"target_entity_id\":\"ent_af939bedafbd1838b259772a\",\"schema_version\":\"1.0\",\"snapshot\":{},\"computed_at\":\"2026-04-26T12:40:04.442Z\",\"observation_count\":1,\"last_observation_at\":\"2026-04-26T12:40:04.442Z\",\"provenance\":{},\"user_id\":\"00000000-0000-0000-0000-000000000000\"},{\"relationship_key\":\"PART_OF:ent_9ce5fe714e860577bfc5b56d:ent_bb1fd90884d6073371204e74\",\"relationship_type\":\"PART_OF\",\"source_entity_id\":\"ent_9ce5fe714e860577bfc5b56d\",\"target_entity_id\":\"ent_bb1fd90884d6073371204e74\",\"schema_version\":\"1.0\",\"snapshot\":{},\"computed_at\":\"2026-04-26T12:40:04.440Z\",\"observation_count\":1,\"last_observation_at\":\"2026-04-26T12:40:04.440Z\",\"provenance\":{},\"user_id\":\"00000000-0000-0000-0000-000000000000\"},{\"relationship_key\":\"REFERS_TO:ent_9ce5fe714e860577bfc5b56d:ent_4914cfde8cd72803eff78845\",\"relationship_type\":\"REFERS_TO\",\"source_entity_id\":\"ent_9ce5fe714e860577bfc5b56d\",\"target_entity_id\":\"ent_4914cfde8cd72803eff78845\",\"schema_version\":\"1.0\",\"snapshot\":{},\"computed_at\":\"2026-04-26T12:40:04.441Z\",\"observation_count\":1,\"last_observation_at\":\"2026-04-26T12:40:04.441Z\",\"provenance\":{},\"user_id\":\"00000000-0000-0000-0000-000000000000\"},{\"relationship_key\":\"REFERS_TO:ent_9ce5fe714e860577bfc5b56d:ent_af939bedafbd1838b259772a\",\"relationship_type\":\"REFERS_TO\",\"source_entity_id\":\"ent_9ce5fe714e860577bfc5b56d\",\"target_entity_id\":\"ent_af939bedafbd1838b259772a\",\"schema_version\":\"1.0\",\"snapshot\":{},\"computed_at\":\"2026-04-26T12:40:04.442Z\",\"observation_count\":1,\"last_observation_at\":\"2026-04-26T12:40:04.442Z\",\"provenance\":{},\"user_id\":\"00000000-0000-0000-0000-000000000000\"}]}"
+        }
+      ],
+      "sequence": 1
+    }
+  ],
+  "assistant_text": "Done — I saved Sara Lin (person) and Acme Corp (company) and linked them to your note about the coffee meeting. Would you like me to add any contact details or follow-up reminders?"
+}

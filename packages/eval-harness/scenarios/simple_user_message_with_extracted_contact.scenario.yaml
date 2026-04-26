@@ -1,0 +1,60 @@
+meta:
+  id: simple_user_message_with_extracted_contact
+  description: >
+    User mentions a contact in a single-turn message. Agent must store the
+    conversation, the user message, and the extracted contact, with PART_OF
+    edges from the message to the conversation and REFERS_TO from the
+    message to the contact.
+  tags:
+    - tier2
+    - extraction
+    - baseline
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system. In one
+  store_structured call, persist (a) a `conversation` entity, (b) a
+  `conversation_message` for the user's message linked to the conversation
+  via PART_OF, and (c) every entity the user mentions (people, companies,
+  meetings) linked from the message via REFERS_TO. Then reply briefly.
+
+user_prompt: |
+  Quick note: I just had coffee with Sara Lin from Acme Corp — she's
+  interested in our trading vertical. Can you remember her for me?
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+  - provider: claude
+    model: claude-haiku-4-20250929
+  - provider: claude
+    model: claude-sonnet-4-5-20250929
+  - provider: openai
+    model: gpt-5-mini
+  - provider: openai
+    model: gpt-5
+
+instruction_profile: auto
+hooks_enabled: true
+
+driver_options:
+  temperature: 0
+  max_tokens: 2048
+
+expected:
+  - type: store_structured.calls
+    op: gte
+    value: 1
+  - type: entity.exists
+    entity_type: conversation
+  - type: entity.exists
+    entity_type: conversation_message
+  - type: entity.exists
+    entity_type_any_of: [contact, person]
+  - type: relationship.exists
+    relationship_type: PART_OF
+  - type: relationship.exists
+    relationship_type_any_of: [REFERS_TO, works_at, related_to]
+  - type: turn_compliance.backfilled
+    value: false

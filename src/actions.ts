@@ -6704,7 +6704,17 @@ function tryListen(
 ): Promise<{ server: ReturnType<express.Express["listen"]>; port: number }> {
   return new Promise((resolve, reject) => {
     const server = app.listen(port, () => {
-      resolve({ server, port });
+      // When `port === 0` the OS assigns an ephemeral port. We must report
+      // the actually-bound port back to callers (the eval harness's
+      // isolated server fixture writes it to NEOTOMA_SESSION_PORT_FILE so
+      // the test harness can hit /health). Without this, a port file would
+      // contain the literal "0" and the health probe would never connect.
+      const addr = server.address();
+      const boundPort =
+        addr && typeof addr === "object" && typeof addr.port === "number"
+          ? addr.port
+          : port;
+      resolve({ server, port: boundPort });
     });
     server.once("error", (err: NodeJS.ErrnoException) => {
       server.close();
@@ -6740,25 +6750,29 @@ export async function startHTTPServer() {
   const basePort = httpPortEnv ? parseInt(httpPortEnv, 10) : config.httpPort || 3080;
   const portFile = process.env.NEOTOMA_SESSION_PORT_FILE;
   const maxTries = 20;
+  // basePort === 0 means OS-assigned ephemeral port; retrying on EADDRINUSE
+  // makes no sense (and would try port 1, 2, ...). The eval harness uses
+  // ephemeral ports to avoid colliding with the operator's dev server.
+  const triesLimit = basePort === 0 ? 1 : maxTries;
 
-  for (let offset = 0; offset < maxTries; offset++) {
+  for (let offset = 0; offset < triesLimit; offset++) {
     const port = basePort + offset;
     try {
-      const { server } = await tryListen(port);
+      const { server, port: boundPort } = await tryListen(port);
       if (portFile) {
-        fs.writeFileSync(portFile, String(port), "utf-8");
+        fs.writeFileSync(portFile, String(boundPort), "utf-8");
       }
       // eslint-disable-next-line no-console
-      console.log(`HTTP Actions listening on :${port}`);
+      console.log(`HTTP Actions listening on :${boundPort}`);
 
       // Start background OAuth state cleanup job
       import("./services/mcp_oauth.js").then((oauth) => {
         oauth.startStateCleanupJob();
       });
-      return { server, port };
+      return { server, port: boundPort };
     } catch (err: unknown) {
       const code = (err as NodeJS.ErrnoException)?.code;
-      if (code === "EADDRINUSE" && offset < maxTries - 1) {
+      if (code === "EADDRINUSE" && offset < triesLimit - 1) {
         continue;
       }
       throw err;

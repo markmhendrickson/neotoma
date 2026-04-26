@@ -1,0 +1,84 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "simple_user_message_with_extracted_contact",
+    "provider": "openai",
+    "model": "gpt-5",
+    "instruction_profile": "full",
+    "recorded_at": "2026-04-26T12:40:47.506Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Quick note: I just had coffee with Sara Lin from Acme Corp — she's\ninterested in our trading vertical. Can you remember her for me?\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. In one store_structured call, persist (a) a `conversation` entity, (b) a `conversation_message` for the user's message linked to the conversation via PART_OF, and (c) every entity the user mentions (people, companies, meetings) linked from the message via REFERS_TO. Then reply briefly.\n",
+  "tool_calls": [
+    {
+      "name": "store_structured",
+      "input": {
+        "idempotency_key": "conversation-20260426-1",
+        "observation_source": "human",
+        "relationships": [
+          {
+            "relationship_type": "PART_OF",
+            "source_index": 1,
+            "target_index": 0
+          },
+          {
+            "relationship_type": "REFERS_TO",
+            "source_index": 1,
+            "target_index": 2
+          },
+          {
+            "relationship_type": "REFERS_TO",
+            "source_index": 1,
+            "target_index": 3
+          },
+          {
+            "relationship_type": "REFERS_TO",
+            "source_index": 1,
+            "target_index": 4
+          }
+        ],
+        "entities": [
+          {
+            "entity_type": "conversation",
+            "conversation_id": "conv-2026-04-26-sara-lin-acme",
+            "title": "Coffee with Sara Lin (Acme Corp)",
+            "topic": "Trading vertical interest"
+          },
+          {
+            "entity_type": "conversation_message",
+            "turn_key": "turn-2026-04-26T00:00:00Z-user",
+            "sender_role": "user",
+            "text": "Quick note: I just had coffee with Sara Lin from Acme Corp — she's interested in our trading vertical."
+          },
+          {
+            "entity_type": "person",
+            "canonical_name": "Sara Lin",
+            "full_name": "Sara Lin",
+            "company": "Acme Corp",
+            "notes": "Interested in our trading vertical."
+          },
+          {
+            "entity_type": "company",
+            "canonical_name": "Acme Corp",
+            "name": "Acme Corp"
+          },
+          {
+            "entity_type": "meeting",
+            "canonical_name": "Coffee with Sara Lin",
+            "meeting_type": "coffee",
+            "notes": "Met with Sara Lin from Acme Corp; interest in trading vertical."
+          }
+        ]
+      },
+      "output": [
+        {
+          "type": "input_text",
+          "text": "{\"source_id\":\"02db0f71-10a7-7df1-372e-d8da1bafe32b\",\"entities\":[{\"observation_index\":0,\"entity_id\":\"ent_65e58537afa00336b4d40817\",\"entity_type\":\"conversation\",\"observation_id\":\"abb8c348-6ec8-d012-1ea7-924891891035\",\"action\":\"created\",\"canonical_name\":\"conversation:conv-2026-04-26-sara-lin-acme\",\"resolver_path\":[\"schema:canonical_name_fields:conversation_id\",\"existing_row:none\"],\"identity_basis\":\"schema_rule\",\"identity_rule\":\"composite:conversation_id\",\"entity_snapshot_after\":{\"conversation_id\":\"conv-2026-04-26-sara-lin-acme\",\"title\":\"Coffee with Sara Lin (Acme Corp)\"}},{\"observation_index\":1,\"entity_id\":\"ent_2e7e90cb9e89abf4e8ebb9ed\",\"entity_type\":\"conversation_message\",\"observation_id\":\"8e4200e3-5a32-6c17-4341-6633bffd76f7\",\"action\":\"created\",\"canonical_name\":\"conversation_message:turn-2026-04-26T00:00:00Z-user\",\"resolver_path\":[\"schema:canonical_name_fields:turn_key\",\"existing_row:none\"],\"identity_basis\":\"schema_rule\",\"identity_rule\":\"composite:turn_key\",\"entity_snapshot_after\":{\"turn_key\":\"turn-2026-04-26T00:00:00Z-user\"}},{\"observation_index\":2,\"entity_id\":\"ent_199cd35b1dbefe1e17b14c16\",\"entity_type\":\"person\",\"observation_id\":\"1306b4d0-1dcd-0ae3-69ff-4da04f35bec1\",\"action\":\"created\",\"canonical_name\":\"Interested in our trading vertical\",\"resolver_path\":[\"heuristic:notes\",\"existing_row:none\"],\"identity_basis\":\"heuristic_fallback\",\"identity_rule\":\"first_string_field:notes\",\"entity_snapshot_after\":{\"notes\":\"Interested in our trading vertical.\"}},{\"observation_index\":3,\"entity_id\":\"ent_af939bedafbd1838b259772a\",\"entity_type\":\"company\",\"observation_id\":\"7aa8a95f-f07b-2510-32db-946b01c2446c\",\"action\":\"created\",\"canonical_name\":\"Acme\",\"resolver_path\":[\"name_key:name\",\"existing_row:none\"],\"identity_basis\":\"heuristic_name\",\"identity_rule\":\"name_key:name\",\"entity_snapshot_after\":{\"name\":\"Acme Corp\"}},{\"observation_index\":4,\"entity_id\":\"ent_b5b0475ae084ac6f6fcf05cf\",\"entity_type\":\"event\",\"observation_id\":\"eb9b8f0c-41bf-fbcf-7f13-0d7ab5550b3c\",\"action\":\"created\",\"canonical_name\":\"Met with Sara Lin from Acme Corp interest in trading vertical\",\"resolver_path\":[\"heuristic:notes\",\"existing_row:none\"],\"identity_basis\":\"heuristic_fallback\",\"identity_rule\":\"first_string_field:notes\",\"entity_snapshot_after\":{\"notes\":\"Met with Sara Lin from Acme Corp; interest in trading vertical.\"}}],\"unknown_fields_count\":9,\"related_entities\":[{\"id\":\"ent_199cd35b1dbefe1e17b14c16\",\"entity_type\":\"person\",\"canonical_name\":\"Interested in our trading vertical\",\"aliases\":[],\"created_at\":\"2026-04-26T12:40:44.040Z\",\"updated_at\":\"2026-04-26T12:40:44.040Z\",\"user_id\":\"00000000-0000-0000-0000-000000000000\",\"first_seen_at\":null,\"last_seen_at\":null,\"merged_to_entity_id\":null,\"merged_at\":null,\"merged_into\":null,\"snapshot\":{\"entity_id\":\"ent_199cd35b1dbefe1e17b14c16\",\"entity_type\":\"person\",\"schema_version\":\"1.0\",\"canonical_name\":null,\"snapshot\":{\"notes\":\"Interested in our trading vertical.\"},\"computed_at\":\"2026-04-26T12:40:44.041Z\",\"observation_count\":1,\"last_observation_at\":\"2026-04-26T12:40:44.041Z\",\"provenance\":{\"notes\":\"1306b4d0-1dcd-0ae3-69ff-4da04f35bec1\"},\"user_id\":\"00000000-0000-0000-0000-000000000000\"}},{\"id\":\"ent_2e7e90cb9e89abf4e8ebb9ed\",\"entity_type\":\"conversation_message\",\"canonical_name\":\"conversation_message:turn-2026-04-26T00:00:00Z-user\",\"aliases\":[],\"created_at\":\"2026-04-26T12:40:44.037Z\",\"updated_at\":\"2026-04-26T12:40:44.037Z\",\"user_id\":\"00000000-0000-0000-0000-000000000000\",\"first_seen_at\":null,\"last_seen_at\":null,\"merged_to_entity_id\":null,\"merged_at\":null,\"merged_into\":null,\"snapshot\":{\"entity_id\":\"ent_2e7e90cb9e89abf4e8ebb9ed\",\"entity_type\":\"conversation_message\",\"schema_version\":\"1.2\",\"canonical_name\":null,\"snapshot\":{\"turn_key\":\"turn-2026-04-26T00:00:00Z-user\"},\"computed_at\":\"2026-04-26T12:40:44.037Z\",\"observation_count\":1,\"last_observation_at\":\"2026-04-26T12:40:44.037Z\",\"provenance\":{\"turn_key\":\"8e4200e3-5a32-6c17-4341-6633bffd76f7\"},\"user_id\":\"00000000-0000-0000-0000-000000000000\"}},{\"id\":\"ent_65e58537afa00336b4d40817\",\"entity_type\":\"conversation\",\"canonical_name\":\"conversation:conv-2026-04-26-sara-lin-acme\",\"aliases\":[],\"created_at\":\"2026-04-26T12:40:44.032Z\",\"updated_at\":\"2026-04-26T12:40:44.032Z\",\"user_id\":\"00000000-0000-0000-0000-000000000000\",\"first_seen_at\":null,\"last_seen_at\":null,\"merged_to_entity_id\":null,\"merged_at\":null,\"merged_into\":null,\"snapshot\":{\"entity_id\":\"ent_65e58537afa00336b4d40817\",\"entity_type\":\"conversation\",\"schema_version\":\"1.2\",\"canonical_name\":\"Coffee with Sara Lin (Acme Corp)\",\"snapshot\":{\"conversation_id\":\"conv-2026-04-26-sara-lin-acme\",\"title\":\"Coffee with Sara Lin (Acme Corp)\"},\"computed_at\":\"2026-04-26T12:40:44.032Z\",\"observation_count\":1,\"last_observation_at\":\"2026-04-26T12:40:44.032Z\",\"provenance\":{\"conversation_id\":\"abb8c348-6ec8-d012-1ea7-924891891035\",\"title\":\"abb8c348-6ec8-d012-1ea7-924891891035\"},\"user_id\":\"00000000-0000-0000-0000-000000000000\"}},{\"id\":\"ent_af939bedafbd1838b259772a\",\"entity_type\":\"company\",\"canonical_name\":\"Acme\",\"aliases\":[],\"created_at\":\"2026-04-26T12:40:44.042Z\",\"updated_at\":\"2026-04-26T12:40:44.042Z\",\"user_id\":\"00000000-0000-0000-0000-000000000000\",\"first_seen_at\":null,\"last_seen_at\":null,\"merged_to_entity_id\":null,\"merged_at\":null,\"merged_into\":null,\"snapshot\":{\"entity_id\":\"ent_af939bedafbd1838b259772a\",\"entity_type\":\"company\",\"schema_version\":\"1.0\",\"canonical_name\":\"Acme Corp\",\"snapshot\":{\"name\":\"Acme Corp\"},\"computed_at\":\"2026-04-26T12:40:44.043Z\",\"observation_count\":1,\"last_observation_at\":\"2026-04-26T12:40:44.043Z\",\"provenance\":{\"name\":\"7aa8a95f-f07b-2510-32db-946b01c2446c\"},\"user_id\":\"00000000-0000-0000-0000-000000000000\"}},{\"id\":\"ent_b5b0475ae084ac6f6fcf05cf\",\"entity_type\":\"event\",\"canonical_name\":\"Met with Sara Lin from Acme Corp interest in trading vertical\",\"aliases\":[],\"created_at\":\"2026-04-26T12:40:44.045Z\",\"updated_at\":\"2026-04-26T12:40:44.045Z\",\"user_id\":\"00000000-0000-0000-0000-000000000000\",\"first_seen_at\":null,\"last_seen_at\":null,\"merged_to_entity_id\":null,\"merged_at\":null,\"merged_into\":null,\"snapshot\":{\"entity_id\":\"ent_b5b0475ae084ac6f6fcf05cf\",\"entity_type\":\"event\",\"schema_version\":\"1.0\",\"canonical_name\":null,\"snapshot\":{\"notes\":\"Met with Sara Lin from Acme Corp; interest in trading vertical.\"},\"computed_at\":\"2026-04-26T12:40:44.045Z\",\"observation_count\":1,\"last_observation_at\":\"2026-04-26T12:40:44.045Z\",\"provenance\":{\"notes\":\"eb9b8f0c-41bf-fbcf-7f13-0d7ab5550b3c\"},\"user_id\":\"00000000-0000-0000-0000-000000000000\"}}],\"related_relationships\":[{\"relationship_key\":\"PART_OF:ent_2e7e90cb9e89abf4e8ebb9ed:ent_65e58537afa00336b4d40817\",\"relationship_type\":\"PART_OF\",\"source_entity_id\":\"ent_2e7e90cb9e89abf4e8ebb9ed\",\"target_entity_id\":\"ent_65e58537afa00336b4d40817\",\"schema_version\":\"1.0\",\"snapshot\":{},\"computed_at\":\"2026-04-26T12:40:44.909Z\",\"observation_count\":1,\"last_observation_at\":\"2026-04-26T12:40:44.908Z\",\"provenance\":{},\"user_id\":\"00000000-0000-0000-0000-000000000000\"},{\"relationship_key\":\"REFERS_TO:ent_2e7e90cb9e89abf4e8ebb9ed:ent_199cd35b1dbefe1e17b14c16\",\"relationship_type\":\"REFERS_TO\",\"source_entity_id\":\"ent_2e7e90cb9e89abf4e8ebb9ed\",\"target_entity_id\":\"ent_199cd35b1dbefe1e17b14c16\",\"schema_version\":\"1.0\",\"snapshot\":{},\"computed_at\":\"2026-04-26T12:40:44.909Z\",\"observation_count\":1,\"last_observation_at\":\"2026-04-26T12:40:44.909Z\",\"provenance\":{},\"user_id\":\"00000000-0000-0000-0000-000000000000\"},{\"relationship_key\":\"REFERS_TO:ent_2e7e90cb9e89abf4e8ebb9ed:ent_af939bedafbd1838b259772a\",\"relationship_type\":\"REFERS_TO\",\"source_entity_id\":\"ent_2e7e90cb9e89abf4e8ebb9ed\",\"target_entity_id\":\"ent_af939bedafbd1838b259772a\",\"schema_version\":\"1.0\",\"snapshot\":{},\"computed_at\":\"2026-04-26T12:40:44.910Z\",\"observation_count\":1,\"last_observation_at\":\"2026-04-26T12:40:44.910Z\",\"provenance\":{},\"user_id\":\"00000000-0000-0000-0000-000000000000\"},{\"relationship_key\":\"REFERS_TO:ent_2e7e90cb9e89abf4e8ebb9ed:ent_b5b0475ae084ac6f6fcf05cf\",\"relationship_type\":\"REFERS_TO\",\"source_entity_id\":\"ent_2e7e90cb9e89abf4e8ebb9ed\",\"target_entity_id\":\"ent_b5b0475ae084ac6f6fcf05cf\",\"schema_version\":\"1.0\",\"snapshot\":{},\"computed_at\":\"2026-04-26T12:40:44.911Z\",\"observation_count\":1,\"last_observation_at\":\"2026-04-26T12:40:44.911Z\",\"provenance\":{},\"user_id\":\"00000000-0000-0000-0000-000000000000\"},{\"relationship_key\":\"PART_OF:ent_2e7e90cb9e89abf4e8ebb9ed:ent_65e58537afa00336b4d40817\",\"relationship_type\":\"PART_OF\",\"source_entity_id\":\"ent_2e7e90cb9e89abf4e8ebb9ed\",\"target_entity_id\":\"ent_65e58537afa00336b4d40817\",\"schema_version\":\"1.0\",\"snapshot\":{},\"computed_at\":\"2026-04-26T12:40:44.909Z\",\"observation_count\":1,\"last_observation_at\":\"2026-04-26T12:40:44.908Z\",\"provenance\":{},\"user_id\":\"00000000-0000-0000-0000-000000000000\"},{\"relationship_key\":\"REFERS_TO:ent_2e7e90cb9e89abf4e8ebb9ed:ent_199cd35b1dbefe1e17b14c16\",\"relationship_type\":\"REFERS_TO\",\"source_entity_id\":\"ent_2e7e90cb9e89abf4e8ebb9ed\",\"target_entity_id\":\"ent_199cd35b1dbefe1e17b14c16\",\"schema_version\":\"1.0\",\"snapshot\":{},\"computed_at\":\"2026-04-26T12:40:44.909Z\",\"observation_count\":1,\"last_observation_at\":\"2026-04-26T12:40:44.909Z\",\"provenance\":{},\"user_id\":\"00000000-0000-0000-0000-000000000000\"},{\"relationship_key\":\"REFERS_TO:ent_2e7e90cb9e89abf4e8ebb9ed:ent_af939bedafbd1838b259772a\",\"relationship_type\":\"REFERS_TO\",\"source_entity_id\":\"ent_2e7e90cb9e89abf4e8ebb9ed\",\"target_entity_id\":\"ent_af939bedafbd1838b259772a\",\"schema_version\":\"1.0\",\"snapshot\":{},\"computed_at\":\"2026-04-26T12:40:44.910Z\",\"observation_count\":1,\"last_observation_at\":\"2026-04-26T12:40:44.910Z\",\"provenance\":{},\"user_id\":\"00000000-0000-0000-0000-000000000000\"},{\"relationship_key\":\"REFERS_TO:ent_2e7e90cb9e89abf4e8ebb9ed:ent_b5b0475ae084ac6f6fcf05cf\",\"relationship_type\":\"REFERS_TO\",\"source_entity_id\":\"ent_2e7e90cb9e89abf4e8ebb9ed\",\"target_entity_id\":\"ent_b5b0475ae084ac6f6fcf05cf\",\"schema_version\":\"1.0\",\"snapshot\":{},\"computed_at\":\"2026-04-26T12:40:44.911Z\",\"observation_count\":1,\"last_observation_at\":\"2026-04-26T12:40:44.911Z\",\"provenance\":{},\"user_id\":\"00000000-0000-0000-0000-000000000000\"}]}"
+        }
+      ],
+      "sequence": 0
+    }
+  ],
+  "assistant_text": "Saved. I’ll remember: Sara Lin at Acme Corp is interested in our trading vertical. Want me to set a follow-up reminder?"
+}

@@ -1,0 +1,83 @@
+{
+  "name": "@neotoma/eval-harness",
+  "version": "0.1.0",
+  "description": "Tier 2 real-LLM replay harness for Neotoma agentic eval. Drives real LLMs (or recorded cassettes) against isolated Neotoma servers and asserts on resulting graph state.",
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "private": true,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./runner": {
+      "types": "./dist/runner.d.ts",
+      "import": "./dist/runner.js"
+    },
+    "./assertions": {
+      "types": "./dist/assertions.d.ts",
+      "import": "./dist/assertions.js"
+    },
+    "./cassette": {
+      "types": "./dist/cassette.d.ts",
+      "import": "./dist/cassette.js"
+    },
+    "./isolated_server": {
+      "types": "./dist/isolated_server.d.ts",
+      "import": "./dist/isolated_server.js"
+    }
+  },
+  "bin": {
+    "neotoma-eval": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "scenarios",
+    "cassettes",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "keywords": [
+    "neotoma",
+    "eval",
+    "agent",
+    "compliance"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "yaml": "^2.5.0"
+  },
+  "peerDependencies": {
+    "@anthropic-ai/claude-agent-sdk": "*",
+    "@openai/agents": "*",
+    "neotoma": ">=0.7.0",
+    "openai": "*"
+  },
+  "peerDependenciesMeta": {
+    "@anthropic-ai/claude-agent-sdk": {
+      "optional": true
+    },
+    "@openai/agents": {
+      "optional": true
+    },
+    "openai": {
+      "optional": true
+    },
+    "neotoma": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.119",
+    "@openai/agents": "^0.8.5",
+    "@types/node": "^20.10.0",
+    "openai": "^6.34.0",
+    "typescript": "^5.4.0"
+  }
+}

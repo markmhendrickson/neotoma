@@ -1,0 +1,69 @@
+meta:
+  id: multi_tool_research_then_synthesis
+  description: >
+    Agent reads three planning documents via the Read tool, synthesizes a
+    research note, and stores it in Neotoma with REFERS_TO edges back to
+    the source documents.
+  tags:
+    - tier2
+    - tool-use
+    - synthesis
+
+system_prompt: >
+  You research and synthesize. Use the Read tool to fetch the three docs
+  the user names, then write a single `research` entity into Neotoma
+  capturing the key findings. Link the research to the conversation and
+  the source documents.
+
+user_prompt: |
+  I have three planning docs in the repo: docs/specs/A.md,
+  docs/specs/B.md, and docs/specs/C.md. Read each one and store a
+  short synthesis as a `research` entity. Cite each doc.
+
+host_tools:
+  - name: Read
+    responses:
+      '{"path":"docs/specs/A.md"}':
+        output: |
+          # Plan A
+          Goal: ship the compact instruction profile to small models by Q2.
+      '{"path":"docs/specs/B.md"}':
+        output: |
+          # Plan B
+          Goal: roll out per-turn compliance hooks to Cursor + Claude Code.
+      '{"path":"docs/specs/C.md"}':
+        output: |
+          # Plan C
+          Goal: backfill missed store_structured calls via the stop hook.
+    default:
+      error: "Read stub: no canned response for that path"
+
+models:
+  - provider: stub
+    model: replay-only
+  - provider: claude
+    model: claude-sonnet-4-5-20250929
+  - provider: openai
+    model: gpt-5-mini
+
+instruction_profile: full
+hooks_enabled: true
+
+driver_options:
+  temperature: 0
+  max_tokens: 4096
+
+expected:
+  - type: host_tool.invocations
+    tool_name: Read
+    op: eq
+    value: 3
+  - type: entity.exists
+    entity_type: research
+  - type: entity.exists
+    entity_type: conversation_message
+  - type: relationship.exists
+    relationship_type: REFERS_TO
+  - type: store_structured.calls
+    op: gte
+    value: 1

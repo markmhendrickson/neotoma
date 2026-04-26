@@ -1,0 +1,55 @@
+meta:
+  id: attachment_extraction
+  description: >
+    User attaches a small image (e.g. a screenshot of a receipt). Agent
+    must store the file_asset, extract a structured receipt entity, and
+    create an EMBEDS edge from the user message to the file_asset plus a
+    REFERS_TO edge to the receipt.
+  tags:
+    - tier2
+    - attachment
+    - extraction
+
+system_prompt: >
+  You handle file attachments. Always call store_structured with the
+  user message and the inferred entity, and ensure the file is
+  registered as a file_asset and embedded into the user message.
+
+user_prompt: |
+  Attached is the receipt from dinner last night. Please remember it.
+
+attachments:
+  - name: receipt.txt
+    mime_type: text/plain
+    content_b64: |
+      UmVjZWlwdAoKVmVuZG9yOiBUYW5kZW0gQ2FmZQpEYXRlOiAyMDI2LTA0LTI1ClRvdGFsOiAkNDIuMTcKSXRlbXM6CiAtIENvZmZlZSAkNC4yNQogLSBQYXN0cnkgJDUuOTI=
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+  - provider: claude
+    model: claude-sonnet-4-5-20250929
+  - provider: openai
+    model: gpt-5-mini
+
+instruction_profile: full
+hooks_enabled: true
+
+driver_options:
+  temperature: 0
+  max_tokens: 2048
+
+expected:
+  - type: store_structured.calls
+    op: gte
+    value: 1
+  - type: entity.exists
+    entity_type: file_asset
+  - type: entity.exists
+    entity_type: receipt
+  - type: relationship.exists
+    relationship_type: EMBEDS
+  - type: relationship.exists
+    relationship_type: REFERS_TO

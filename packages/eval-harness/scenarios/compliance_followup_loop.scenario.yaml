@@ -1,0 +1,47 @@
+meta:
+  id: compliance_followup_loop
+  description: >
+    Small model that skips store_structured on the first pass; the stop
+    hook emits a follow-up prompt; on the second pass the agent should
+    call store_structured. We verify the second-pass invocation by
+    asserting that the turn ends with store_structured.calls >= 1 and
+    the conversation_message entity exists.
+  tags:
+    - tier2
+    - compliance
+    - followup
+
+system_prompt: >
+  You are a small assistant. When you receive a system follow-up
+  reminding you to store the conversation, comply by calling
+  store_structured with the conversation, the user message, and any
+  entities you observed.
+
+user_prompt: |
+  My phone number changed — it's +1 415 555 0177 now.
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+  - provider: claude
+    model: claude-haiku-4-20250929
+
+instruction_profile: compact
+hooks_enabled: true
+
+driver_options:
+  temperature: 0
+  max_tokens: 1024
+
+expected:
+  - type: store_structured.calls
+    op: gte
+    value: 1
+  - type: entity.exists
+    entity_type: conversation_message
+  - type: entity.exists
+    entity_type: contact
+  - type: turn_compliance.backfilled
+    value: false

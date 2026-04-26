@@ -1,0 +1,42 @@
+meta:
+  id: agent_under_load_skips_store
+  description: >
+    Minimal user prompt that a small model under load tends to answer
+    without first calling store_structured. With hooks enabled the stop
+    hook should backfill the missing turn record; without hooks the
+    skip should be observable.
+  tags:
+    - tier2
+    - compliance
+    - small-model
+
+system_prompt: >
+  You are a small model with limited capacity. Answer concisely.
+
+user_prompt: |
+  Hi.
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+  - provider: claude
+    model: claude-haiku-4-20250929
+  - provider: openai
+    model: gpt-5-nano
+
+instruction_profile: compact
+hooks_enabled: true
+
+driver_options:
+  temperature: 0
+  max_tokens: 256
+
+expected:
+  - type: turn_compliance.backfilled
+    value: true
+  - type: entity.exists
+    entity_type: conversation_message
+  - type: instruction_profile.served
+    profile: compact
