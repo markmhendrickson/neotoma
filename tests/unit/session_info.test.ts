@@ -62,6 +62,10 @@ describe("buildSessionInfo", () => {
       clientName: "ateles",
       clientVersion: "0.1.0",
       connectionId: "conn_1",
+      // Hardware tier requires verified attestation; the AAuth middleware
+      // stamps the tier on the identity in production. Tests construct an
+      // identity directly so they pin the tier explicitly.
+      tier: "hardware",
     });
 
     const session = buildSessionInfo({
@@ -144,5 +148,112 @@ describe("buildSessionInfo", () => {
     });
     expect(session.policy.per_path).toEqual({ observations: "reject" });
     expect(session.eligible_for_trusted_writes).toBe(false);
+  });
+
+  describe("aauth admission diagnostics", () => {
+    it("reports verified=false admitted=false reason=not_signed for unsigned sessions", () => {
+      const session = buildSessionInfo({
+        userId: "user-anon",
+        identity: null,
+      });
+      expect(session.aauth).toEqual({
+        verified: false,
+        admitted: false,
+        grant_id: null,
+        admission_reason: "not_signed",
+      });
+    });
+
+    it("reports verified=true admitted=true grant_id when admission matched", () => {
+      const session = buildSessionInfo({
+        userId: "user-admitted",
+        identity: createAgentIdentity({
+          publicKey: '{"kty":"EC"}',
+          thumbprint: "tp-ok",
+          algorithm: "ES256",
+          sub: "agent:ok",
+          tier: "software",
+        }),
+        middlewareDecision: {
+          signature_present: true,
+          signature_verified: true,
+          resolved_tier: "software",
+        },
+        admission: {
+          admitted: true,
+          user_id: "user-admitted",
+          grant_id: "ent_grant_1",
+          agent_label: "Cursor on macbook-pro",
+          capabilities: [],
+          reason: "admitted",
+        },
+      });
+      expect(session.aauth).toEqual({
+        verified: true,
+        admitted: true,
+        grant_id: "ent_grant_1",
+        admission_reason: "admitted",
+        agent_label: "Cursor on macbook-pro",
+      });
+    });
+
+    it("reports verified=true admitted=false reason=no_match when signature is good but no grant matches", () => {
+      const session = buildSessionInfo({
+        userId: "user-unknown",
+        identity: createAgentIdentity({
+          publicKey: '{"kty":"EC"}',
+          thumbprint: "tp-unknown",
+          algorithm: "ES256",
+          sub: "agent:unknown",
+          tier: "software",
+        }),
+        middlewareDecision: {
+          signature_present: true,
+          signature_verified: true,
+          resolved_tier: "software",
+        },
+        admission: { admitted: false, reason: "no_match" },
+      });
+      expect(session.aauth.verified).toBe(true);
+      expect(session.aauth.admitted).toBe(false);
+      expect(session.aauth.grant_id).toBeNull();
+      expect(session.aauth.admission_reason).toBe("no_match");
+    });
+
+    it("preserves grant context on suspended/revoked admission denials", () => {
+      const session = buildSessionInfo({
+        userId: "user-suspended",
+        identity: null,
+        middlewareDecision: {
+          signature_present: true,
+          signature_verified: true,
+          resolved_tier: "software",
+        },
+        admission: {
+          admitted: false,
+          reason: "grant_suspended",
+          grant_id: "ent_grant_susp",
+          agent_label: "old grant",
+          user_id: "user-suspended",
+        },
+      });
+      // grant_id is gated on `admitted: true` by design — clients are
+      // told why their admission failed via admission_reason / agent_label
+      // but cannot use the grant_id as if it were actively trusted.
+      expect(session.aauth.admitted).toBe(false);
+      expect(session.aauth.grant_id).toBeNull();
+      expect(session.aauth.admission_reason).toBe("grant_suspended");
+      expect(session.aauth.agent_label).toBe("old grant");
+    });
+
+    it("synthesises not_signed when admission is omitted and signature is missing", () => {
+      const session = buildSessionInfo({
+        userId: "user-stdio",
+        identity: null,
+        middlewareDecision: null,
+      });
+      expect(session.aauth.verified).toBe(false);
+      expect(session.aauth.admission_reason).toBe("not_signed");
+    });
   });
 });

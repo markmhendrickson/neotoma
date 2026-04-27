@@ -65,6 +65,11 @@ describe("AAuth attribution stamping", () => {
       algorithm: "ES256",
       sub: "agent:test:hw",
       iss: "https://agent.example",
+      // The AAuth middleware promotes verified-attestation requests to
+      // `hardware`. We simulate that decision here because the unit
+      // contract for `deriveAttributionTier` is `software` for any AAuth
+      // verified request without an explicit middleware-resolved tier.
+      tier: "hardware",
     });
 
     const observation = await runWithRequestContext(

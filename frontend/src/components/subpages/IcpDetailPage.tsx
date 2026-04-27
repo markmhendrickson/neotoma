@@ -247,7 +247,7 @@ export function IcpDetailPage({
     <>
       <SeoHead routePath={`/${profile.slug}`} />
       <div className="min-h-0 bg-background text-foreground">
-        <div className="max-w-[52em] mx-auto px-4 py-10 md:py-16">
+        <div className="post-prose max-w-[52em] mx-auto px-4 py-10 md:py-16">
           {/* Mode badge */}
           <div className="mb-4">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-500/25 bg-indigo-500/10 px-3 py-1 text-[11px] font-medium uppercase tracking-wide text-indigo-700 dark:text-indigo-300">

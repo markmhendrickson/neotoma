@@ -1,0 +1,1 @@
+../../docs/foundation/schema_agnostic_design_rules.md

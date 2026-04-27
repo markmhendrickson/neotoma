@@ -29,6 +29,10 @@ describe("request_context", () => {
       thumbprint: "tp",
       algorithm: "ES256",
       sub: "agent:x",
+      // Hardware tier requires attestation; tests that pass-through identity
+      // need to stamp the tier explicitly. Algorithm-only inference is gone
+      // (see docs/subsystems/aauth_attestation.md).
+      tier: "hardware",
     });
 
     await runWithRequestContext({ agentIdentity: identity }, async () => {

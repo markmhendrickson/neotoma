@@ -73,6 +73,7 @@ import type { SubmitFeedbackArgs } from "./services/feedback/types.js";
 import { buildSessionInfo } from "./services/session_info.js";
 import { AttributionPolicyError } from "./services/attribution_policy.js";
 import {
+  getCurrentAAuthAdmission,
   getCurrentAttributionDecision,
   runWithRequestContext,
 } from "./services/request_context.js";
@@ -682,6 +683,7 @@ export class NeotomaServer {
       identity,
       middlewareDecision: getCurrentAttributionDecision(),
       rawClientInfoName: this.sessionClientInfo?.name ?? null,
+      admission: getCurrentAAuthAdmission(),
     });
     return this.buildTextResponse(session);
   }
@@ -3695,6 +3697,26 @@ export class NeotomaServer {
           `[STORE] Auto-created ${isDefaultUser ? "global" : "user-specific"} schema for "${entityType}" ` +
             `(version 1.0, ${Object.keys(inferredSchema.schemaDefinition.fields).length} fields)`
         );
+      }
+
+      // Protected-entity-types guard: reject agent-authored writes to
+      // governance state (e.g. `agent_grant`) unless the caller's grant
+      // explicitly authorises them. Runs here so the MCP path matches
+      // the HTTP `storeStructuredForApi` capability gate.
+      {
+        const { assertCanWriteProtected } = await import(
+          "./services/protected_entity_types.js"
+        );
+        const {
+          getCurrentAgentIdentity,
+          getCurrentAAuthAdmission,
+        } = await import("./services/request_context.js");
+        assertCanWriteProtected({
+          entity_type: entityType,
+          op: "store_structured",
+          identity: getCurrentAgentIdentity(),
+          admission: getCurrentAAuthAdmission(),
+        });
       }
 
       // Validate fields against schema (with converter support)

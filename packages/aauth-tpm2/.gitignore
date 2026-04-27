@@ -1,0 +1,4 @@
+# Build outputs (generated at install time via node-gyp)
+build/
+node_modules/
+*.tsbuildinfo

@@ -1,0 +1,55 @@
+{
+  "name": "@neotoma/aauth-mac-se",
+  "version": "0.1.0",
+  "description": "Optional macOS Secure Enclave native binding for Neotoma AAuth. Generates SE-backed P-256 keys and produces Apple App Attestation chains for the AAuth `cnf.attestation` envelope.",
+  "type": "commonjs",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "files": [
+    "lib",
+    "src",
+    "binding.gyp",
+    "prebuilds",
+    "README.md",
+    "LICENSE"
+  ],
+  "os": [
+    "darwin"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "build:native": "node-gyp rebuild",
+    "prebuild": "prebuildify --napi --strip --tag-libc",
+    "install": "node-gyp-build || true",
+    "test": "node --test tests/"
+  },
+  "keywords": [
+    "neotoma",
+    "aauth",
+    "secure-enclave",
+    "apple",
+    "attestation",
+    "macos"
+  ],
+  "author": "Mark Hendrickson",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/markmhendrickson/neotoma.git",
+    "directory": "packages/aauth-mac-se"
+  },
+  "homepage": "https://neotoma.io",
+  "bugs": {
+    "url": "https://github.com/markmhendrickson/neotoma/issues"
+  },
+  "dependencies": {
+    "node-addon-api": "^7.1.0",
+    "node-gyp-build": "^4.8.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.6",
+    "node-gyp": "^10.0.0",
+    "prebuildify": "^6.0.0",
+    "typescript": "^5.3.3"
+  }
+}

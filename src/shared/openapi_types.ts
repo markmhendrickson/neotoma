@@ -641,6 +641,122 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/agents/grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List agent grants for the authenticated user
+         * @description Returns the user's `agent_grant` entities. Grants gate AAuth
+         *     admission: a request signed by an agent identity that matches an
+         *     `active` grant authenticates as the grant's owning user, with the
+         *     capabilities listed on the grant. Suspended and revoked grants
+         *     are returned for inspection but never admit a request.
+         */
+        get: operations["listAgentGrants"];
+        put?: never;
+        /**
+         * Create an agent grant
+         * @description Creates a new `agent_grant` for the authenticated user. At least
+         *     one of `match_sub` or `match_thumbprint` must be supplied. The
+         *     grant's `capabilities` follow the same shape used by the
+         *     admitted-request authorization check.
+         */
+        post: operations["createAgentGrant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/grants/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get one agent grant */
+        get: operations["getAgentGrant"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update editable fields on an agent grant
+         * @description Patches `label`, `capabilities`, `notes`, or any of the
+         *     `match_*` identity fields. Status transitions go through the
+         *     dedicated `suspend`, `revoke`, and `restore` endpoints.
+         */
+        patch: operations["updateAgentGrant"];
+        trace?: never;
+    };
+    "/agents/grants/{id}/suspend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Suspend an agent grant
+         * @description Sets the grant's `status` to `suspended`. Suspended grants do
+         *     not admit requests, but can be restored later.
+         */
+        post: operations["suspendAgentGrant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/grants/{id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke an agent grant
+         * @description Sets the grant's `status` to `revoked`. Revoked grants stay in
+         *     history for audit but never admit a request.
+         */
+        post: operations["revokeAgentGrant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/grants/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore an agent grant to active
+         * @description Transitions a `suspended` or `revoked` grant back to `active`.
+         */
+        post: operations["restoreAgentGrant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/agents/{key}": {
         parameters: {
             query?: never;
@@ -1567,7 +1683,7 @@ export interface components {
              * @description Derived trust tier; see `src/crypto/agent_identity.ts`.
              * @enum {string}
              */
-            attribution_tier?: "hardware" | "software" | "unverified_client" | "anonymous";
+            attribution_tier?: "hardware" | "operator_attested" | "software" | "unverified_client" | "anonymous";
             /**
              * Format: date-time
              * @description ISO-8601 timestamp when the attribution block was stamped.
@@ -1592,7 +1708,7 @@ export interface components {
              *     floor are rejected with `ATTRIBUTION_REQUIRED`.
              * @enum {string}
              */
-            min_tier?: "hardware" | "software" | "unverified_client";
+            min_tier?: "hardware" | "operator_attested" | "software" | "unverified_client";
             /**
              * @description Optional per-write-path overrides keyed by canonical write
              *     path (`observations`, `relationships`, `sources`,
@@ -1616,7 +1732,31 @@ export interface components {
             /** @enum {string} */
             client_info_normalised_to_null_reason?: "too_generic" | "empty" | "not_a_string";
             /** @enum {string} */
-            resolved_tier: "hardware" | "software" | "unverified_client" | "anonymous";
+            resolved_tier: "hardware" | "operator_attested" | "software" | "unverified_client" | "anonymous";
+            /**
+             * @description Outcome of the `cnf.attestation` envelope verifier. Always
+             *     present on AAuth-verified requests (with `verified: false,
+             *     format: "unknown", reason: "not_present"` when no envelope
+             *     was supplied) and absent on unsigned requests.
+             */
+            attestation?: {
+                verified: boolean;
+                /** @enum {string} */
+                format: "apple-secure-enclave" | "webauthn-packed" | "tpm2" | "unknown";
+                /**
+                 * @description Failure reason; only present when `verified=false`.
+                 * @enum {string}
+                 */
+                reason?: "not_present" | "unsupported_format" | "key_binding_failed" | "challenge_mismatch" | "chain_invalid" | "signature_invalid" | "aaguid_not_trusted" | "pubarea_mismatch" | "not_implemented" | "malformed";
+            } | null;
+            /**
+             * @description Set when the operator allowlist promoted the request to
+             *     `operator_attested`. `"issuer"` means a hit on
+             *     `NEOTOMA_OPERATOR_ATTESTED_ISSUERS`; `"issuer_subject"` means
+             *     a hit on `NEOTOMA_OPERATOR_ATTESTED_SUBS`.
+             * @enum {string}
+             */
+            operator_allowlist_source?: "issuer" | "issuer_subject";
         };
         /**
          * @description Resolved attribution and policy for the current session. Returned
@@ -1626,7 +1766,7 @@ export interface components {
             user_id: string;
             attribution: {
                 /** @enum {string} */
-                tier: "hardware" | "software" | "unverified_client" | "anonymous";
+                tier: "hardware" | "operator_attested" | "software" | "unverified_client" | "anonymous";
                 agent_thumbprint?: string;
                 agent_sub?: string;
                 agent_iss?: string;
@@ -1637,11 +1777,29 @@ export interface components {
                 connection_id?: string;
                 decision?: components["schemas"]["SessionAttributionDecision"] | null;
             };
+            /**
+             * @description AAuth admission summary. Verified means the request carried a
+             *     verified AAuth signature. Admitted means Neotoma resolved
+             *     that signature to one of this user's `agent_grant` entities
+             *     and is treating the caller as authenticated. The two are
+             *     independent: a verified-but-unmatched signature stays
+             *     attribution-only and `admitted` is `false`.
+             */
+            aauth: {
+                verified: boolean;
+                admitted: boolean;
+                grant_id: string | null;
+                /** @enum {string|null} */
+                admission_reason: "admitted" | "no_grants_for_user" | "no_match" | "grant_revoked" | "grant_suspended" | "strict_rejected" | "aauth_disabled" | "not_signed" | null;
+                agent_label?: string;
+            };
             policy: components["schemas"]["AttributionPolicySnapshot"];
             /**
              * @description Convenience flag mirroring the check
              *     `enforceAttributionPolicy('observations', identity)` would
-             *     make on the default write path.
+             *     make on the default write path. Admission alone does NOT
+             *     override this — admitted callers still need a tier that
+             *     satisfies the active write attribution policy.
              */
             eligible_for_trusted_writes: boolean;
         };
@@ -1659,7 +1817,7 @@ export interface components {
             /** @description Short human-readable label for display. */
             label: string;
             /** @enum {string} */
-            tier: "hardware" | "software" | "unverified_client" | "anonymous";
+            tier: "hardware" | "operator_attested" | "software" | "unverified_client" | "anonymous";
             agent_thumbprint?: string | null;
             agent_public_key?: string | null;
             agent_algorithm?: string | null;
@@ -1678,6 +1836,70 @@ export interface components {
             record_counts: {
                 [key: string]: number;
             };
+        };
+        AgentCapabilityEntry: {
+            /** @enum {string} */
+            op: "store_structured" | "create_relationship" | "correct" | "retrieve";
+            /**
+             * @description Allowed entity types for this op. The single string `*` widens
+             *     to any entity_type that is not protected (see
+             *     `protected_entity_types`).
+             */
+            entity_types: string[];
+        };
+        /**
+         * @description First-class persistent grant that admits a verified AAuth
+         *     identity as the owning user, with the listed capabilities. See
+         *     `docs/subsystems/agent_attribution_integration.md` for the
+         *     admission flow.
+         */
+        AgentGrant: {
+            grant_id: string;
+            user_id: string;
+            label: string;
+            capabilities: components["schemas"]["AgentCapabilityEntry"][];
+            /** @enum {string} */
+            status: "active" | "suspended" | "revoked";
+            match_sub?: string | null;
+            match_iss?: string | null;
+            match_thumbprint?: string | null;
+            notes?: string | null;
+            last_used_at?: string | null;
+            /**
+             * @description Provenance marker (e.g. `env_config`) when the grant was
+             *     backfilled from legacy capability configuration via the
+             *     `neotoma agents grants import` CLI.
+             */
+            import_source?: string | null;
+            created_at?: string | null;
+            last_observation_at?: string | null;
+        };
+        AgentGrantCreate: {
+            label: string;
+            capabilities: components["schemas"]["AgentCapabilityEntry"][];
+            /**
+             * @default active
+             * @enum {string}
+             */
+            status?: "active" | "suspended" | "revoked";
+            match_sub?: string | null;
+            match_iss?: string | null;
+            match_thumbprint?: string | null;
+            notes?: string | null;
+            /**
+             * @description Optional owner override; only honoured when the caller is
+             *     authenticated as that user (or the local-dev override is
+             *     active). Admitted AAuth requests cannot pivot owners.
+             */
+            user_id?: string | null;
+        };
+        AgentGrantUpdate: {
+            label?: string;
+            capabilities?: components["schemas"]["AgentCapabilityEntry"][];
+            notes?: string | null;
+            match_sub?: string | null;
+            match_iss?: string | null;
+            match_thumbprint?: string | null;
         };
         Entity: {
             id?: string;
@@ -3215,7 +3437,7 @@ export interface operations {
                              *     attribution or predates AAuth.
                              * @enum {string|null}
                              */
-                            attribution_tier?: "hardware" | "software" | "unverified_client" | "anonymous" | null;
+                            attribution_tier?: "hardware" | "operator_attested" | "software" | "unverified_client" | "anonymous" | null;
                             /**
                              * @description Best-effort human-readable agent label. Priority:
                              *     `client_name` (+ `client_version`) → `agent_sub` →
@@ -3226,6 +3448,220 @@ export interface operations {
                         has_more?: boolean;
                         limit?: number;
                         offset?: number;
+                    };
+                };
+            };
+        };
+    };
+    listAgentGrants: {
+        parameters: {
+            query?: {
+                user_id?: string;
+                status?: "active" | "suspended" | "revoked" | "all";
+                /** @description Substring filter against `label`, `match_sub`, or `match_thumbprint`. */
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Grant list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        grants?: components["schemas"]["AgentGrant"][];
+                    };
+                };
+            };
+        };
+    };
+    createAgentGrant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentGrantCreate"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        grant?: components["schemas"]["AgentGrant"];
+                    };
+                };
+            };
+            /** @description Validation error (e.g. `agent_grant_invalid`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Identity already mapped to another grant for this user */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getAgentGrant: {
+        parameters: {
+            query?: {
+                user_id?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Grant detail */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        grant?: components["schemas"]["AgentGrant"];
+                    };
+                };
+            };
+            /** @description Grant not found for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    updateAgentGrant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentGrantUpdate"];
+            };
+        };
+        responses: {
+            /** @description Updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        grant?: components["schemas"]["AgentGrant"];
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Grant not found for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    suspendAgentGrant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Suspended */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        grant?: components["schemas"]["AgentGrant"];
+                    };
+                };
+            };
+        };
+    };
+    revokeAgentGrant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revoked */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        grant?: components["schemas"]["AgentGrant"];
+                    };
+                };
+            };
+        };
+    };
+    restoreAgentGrant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Restored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        grant?: components["schemas"]["AgentGrant"];
                     };
                 };
             };

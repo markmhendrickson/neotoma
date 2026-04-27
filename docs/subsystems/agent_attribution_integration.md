@@ -57,17 +57,102 @@ OAuth connection id                →  connection_id
 (nothing)                          →  anonymous
 ```
 
-The resulting **trust tier** is derived once per request:
+The resulting **trust tier** is derived once per request. After v0.8.0
+the cascade is attestation-aware (see §2a):
 
-| Tier                 | When                                                      |
-| -------------------- | --------------------------------------------------------- |
-| `hardware`           | AAuth verified AND algorithm in `{ES256, EdDSA}`.         |
-| `software`           | AAuth verified with any other algorithm.                  |
-| `unverified_client`  | No AAuth, but clientInfo.name survived normalisation.     |
-| `anonymous`          | Nothing else. `client_info` may have been too generic.    |
+| Tier                 | When                                                                                          |
+| -------------------- | --------------------------------------------------------------------------------------------- |
+| `hardware`           | AAuth verified AND the JWT carries a `cnf.attestation` envelope that the verifier accepts AND, in v0.12.0+, the bound key has not been revoked. |
+| `operator_attested`  | AAuth verified AND `iss` (or `iss:sub`) is in `NEOTOMA_OPERATOR_ATTESTED_ISSUERS` / `NEOTOMA_OPERATOR_ATTESTED_SUBS`. |
+| `software`           | AAuth verified but no attestation envelope (or attestation failed and operator allowlist did not match), regardless of algorithm. |
+| `unverified_client`  | No AAuth, but clientInfo.name survived normalisation.                                         |
+| `anonymous`          | Nothing else. `client_info` may have been too generic.                                        |
 
 The Inspector colour-codes rows by tier; the `AttributionCard` component
-renders the full identity on detail pages.
+renders the full identity on detail pages, including the resolved
+attestation format and revocation status when present.
+
+## 2a. Cryptographic attestation
+
+When the writing agent attaches a `cnf.attestation` envelope to its
+`aa-agent+jwt` agent token, Neotoma cryptographically verifies the
+envelope before promoting the request to `hardware`. The
+[`docs/subsystems/aauth_attestation.md`](./aauth_attestation.md) page is
+the upstream spec; this section is the integrator-facing summary.
+
+### Format / platform / revocation matrix
+
+After v0.12.0 every supported attestation format is verified end-to-end
+and participates in revocation:
+
+| Format                  | CLI source(s)                                                    | Platforms             | Server verifier shipped in | Revocation channel                                        | Revocation default behaviour from v0.12.0 |
+|-------------------------|------------------------------------------------------------------|-----------------------|----------------------------|-----------------------------------------------------------|-------------------------------------------|
+| `apple-secure-enclave`  | `aauth-mac-se` via `neotoma auth keygen --hardware`              | darwin                | v0.8.0                     | Apple anonymous-attestation revocation endpoint           | `enforce`: revoked leaf demotes to `software`, reason `revoked`. |
+| `webauthn-packed`       | `aauth-yubikey` via `neotoma auth keygen --hardware --backend=yubikey` | darwin / linux / win32 | v0.9.0                    | OCSP via leaf AIA, CRL fallback via leaf CDP              | `enforce`: revoked leaf demotes to `software`, reason `revoked`. |
+| `tpm2` (linux)          | `aauth-tpm2` via `neotoma auth keygen --hardware`                | linux                 | v0.9.0 (FU-3)              | OCSP via AIK leaf AIA, CRL fallback via AIK leaf CDP      | `enforce`: revoked AIK demotes to `software`, reason `revoked`. |
+| `tpm2` (win32)          | `aauth-win-tbs` via `neotoma auth keygen --hardware`             | win32                 | v0.9.0 (FU-3, reused)      | OCSP via AIK leaf AIA, CRL fallback via AIK leaf CDP      | `enforce`: revoked AIK demotes to `software`, reason `revoked`. |
+
+### Attestation diagnostics on `/session`
+
+The `attribution.decision.attestation` block on `GET /session`
+(and the equivalent `get_session_identity` MCP tool) carries the
+verifier outcome:
+
+```json
+{
+  "attribution": {
+    "decision": {
+      "attestation": {
+        "verified": true,
+        "format": "apple-secure-enclave",
+        "revocation": {
+          "checked": true,
+          "status": "good",
+          "source": "apple",
+          "mode": "enforce",
+          "demoted": false
+        }
+      }
+    }
+  }
+}
+```
+
+When the verifier rejects the envelope the block carries
+`{ verified: false, format, reason }` instead, with `reason` drawn from
+`AttestationFailureReason` (`unsupported_format`, `key_binding_failed`,
+`challenge_mismatch`, `chain_invalid`, `signature_invalid`,
+`aaguid_not_trusted`, `pubarea_mismatch`, `malformed`, or `revoked`).
+`reason: "revoked"` is set by the FU-7 revocation service in `enforce`
+mode after a previously-verified outcome is demoted; the underlying
+`revocation` block carries `demoted: true` in that case.
+
+### Revocation policy
+
+Operators control revocation behaviour via three knobs (defaults shown
+for v0.12.0 and later):
+
+| Variable                                           | Default     | Effect                                                                                                  |
+|----------------------------------------------------|-------------|---------------------------------------------------------------------------------------------------------|
+| `NEOTOMA_AAUTH_REVOCATION_MODE`                    | `enforce`   | `disabled` skips lookups entirely; `log_only` runs lookups and surfaces the diagnostic without demoting tiers; `enforce` demotes revoked (and, when `NEOTOMA_AAUTH_REVOCATION_FAIL_OPEN=0`, unknown) outcomes from `hardware` to `software`. |
+| `NEOTOMA_AAUTH_REVOCATION_CACHE_TTL_SECONDS`       | `3600`      | TTL for the in-memory LRU cache keyed by `SHA-256(leaf DER || channel)`. Cache hits surface as `source: "cache"`. |
+| `NEOTOMA_AAUTH_REVOCATION_TIMEOUT_MS`              | `2000`      | Per-lookup network timeout. Timeouts surface as `status: "unknown"`, `source: "error"`.                |
+| `NEOTOMA_AAUTH_REVOCATION_FAIL_OPEN`               | `1`         | When `1`, treat `unknown` as `good` for tier purposes (still surfaced on the diagnostic). When `0`, demote `unknown` like `revoked` in `enforce` mode. |
+| `NEOTOMA_AAUTH_APPLE_REVOCATION_URL`               | Apple's production endpoint | Override the Apple anonymous-attestation revocation URL (used in tests and air-gapped deployments). |
+
+Operators piloting the v0.11.0 `log_only` window can keep
+`NEOTOMA_AAUTH_REVOCATION_MODE=log_only` after upgrading to v0.12.0+ to
+preserve the audit-only behaviour.
+
+### Trust configuration
+
+Trust roots and operator allowlists are documented in
+[`docs/subsystems/aauth_attestation.md`](./aauth_attestation.md#trust-configuration).
+The CLI does not consume them; the server merges the bundled roots
+(`config/aauth/apple_attestation_root.pem`,
+`config/aauth/tpm_attestation_roots/`,
+`config/aauth/yubico_piv_roots.pem`) with any operator-supplied PEMs
+from `NEOTOMA_AAUTH_ATTESTATION_CA_PATH`.
 
 ## 3. Generic-name normalisation
 
@@ -119,6 +204,13 @@ Expected shape:
       "resolved_tier": "software"
     }
   },
+  "aauth": {
+    "verified": true,
+    "admitted": true,
+    "grant_id": "ent_…",
+    "admission_reason": "admitted",
+    "agent_label": "Cursor on macbook-pro"
+  },
   "policy": { "anonymous_writes": "allow" },
   "eligible_for_trusted_writes": true
 }
@@ -128,6 +220,25 @@ Expected shape:
 `attribution.tier === "hardware"` or `"software"`,
 `attribution.decision.signature_verified === true`, and
 `eligible_for_trusted_writes === true`.
+
+`aauth.verified` ≠ `aauth.admitted` on purpose. Verified means the
+signature checked out. Admitted means Neotoma matched that signature to
+one of the user's `agent_grant` entities and is treating the caller as
+authenticated without OAuth/Bearer. A verified-but-unmatched signature
+stays attribution-only — the caller can still write under existing
+Bearer/OAuth flows but cannot use AAuth alone for admission. The
+`admission_reason` field reports the resolver outcome:
+
+| Reason                 | Meaning                                                                    |
+| ---------------------- | -------------------------------------------------------------------------- |
+| `admitted`             | Active grant matched. AAuth alone is sufficient on this request.           |
+| `no_grants_for_user`   | The owner user has no grants at all yet (Inspector → Agent grants → New).  |
+| `no_match`             | This identity does not match any of the user's grants.                     |
+| `grant_revoked`        | Identity matched a grant whose status is `revoked`.                        |
+| `grant_suspended`      | Identity matched a grant whose status is `suspended`.                      |
+| `strict_rejected`      | Strict-AAuth gating rejected the signature before admission ran.           |
+| `aauth_disabled`       | This deployment has AAuth disabled; admission did not run.                 |
+| `not_signed`           | No AAuth signature was presented; only attribution-only paths are open.    |
 
 If `signature_verified === false`, inspect
 `attribution.decision.signature_error_code` — it mirrors the Phase 2 log
@@ -163,27 +274,46 @@ The Neotoma server publishes its active attribution policy on the
 | `min_tier`         | `NEOTOMA_MIN_ATTRIBUTION_TIER=hardware|software|unverified_client` | unset   |
 | `per_path`         | `NEOTOMA_ATTRIBUTION_POLICY_JSON={"observations": "reject", …}`  | unset   |
 
-### Per-agent capability scoping
+### Per-agent capability scoping (grants)
 
 Independent of the tier-based policy above, Neotoma supports per-agent
-`(op, entity_type)` allow-lists. A caller whose verified AAuth identity
-matches a registry entry can only perform the listed operations against
-the listed entity types; every other call returns 403
-`capability_denied` — even when the tier is `hardware`. This is the
-layer `agent.neotoma.io` relies on: the forwarder is pinned to
-`neotoma_feedback` and nothing else.
+`(op, entity_type)` allow-lists, modelled as first-class
+`agent_grant` entities (one per (user, agent identity) pair). A caller
+whose verified AAuth identity matches an `active` grant can only
+perform the listed operations against the listed entity types; every
+other call returns 403 `capability_denied` — even when the tier is
+`hardware`. This is the layer `agent.neotoma.io` relies on: the
+forwarder is pinned to `neotoma_feedback` and nothing else.
 
-| Env var                              | Purpose                                                                                                    |
-| ------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
-| `NEOTOMA_AGENT_CAPABILITIES_JSON`    | Inline JSON registry. Takes precedence when set.                                                           |
-| `NEOTOMA_AGENT_CAPABILITIES_FILE`    | Path to a registry file. Used when the inline variable is unset.                                           |
-| (committed default)                  | `config/agent_capabilities.default.json` — scopes `agent-site@neotoma.io` to `neotoma_feedback`.           |
-| `NEOTOMA_AGENT_CAPABILITIES_ENFORCE` | `1` rejects out-of-scope calls; `0` (default during rollout) logs a warning and allows through for a soak. |
-| `NEOTOMA_STRICT_AAUTH_SUBS`          | Comma-separated `sub`s that MUST present a valid AAuth signature when claimed via `X-Agent-Label`.         |
+Grants are managed in the Inspector under **Agents → Agent grants**
+(`/agents/grants`). Each grant carries:
 
-See [`docs/subsystems/agent_capabilities.md`](./agent_capabilities.md)
-for the registry format, matching order, rollout runbook, and rollback
-steps.
+- An identity matcher: `agent_sub` + `agent_iss` (preferred) or
+  `agent_thumbprint`, optionally with a human label.
+- A `capabilities[]` list of `{ op, entity_types[] }` entries.
+- A `status`: `active`, `suspended`, or `revoked`.
+- An `owner_user_id` scope — grants are user-scoped and never
+  authenticate calls against a different user.
+
+The previous environment variables
+(`NEOTOMA_AGENT_CAPABILITIES_JSON`, `NEOTOMA_AGENT_CAPABILITIES_FILE`,
+`NEOTOMA_AGENT_CAPABILITIES_ENFORCE`,
+`config/agent_capabilities.default.json`) have been removed in favour
+of grants. Operators upgrading from the env-config era should run:
+
+```bash
+neotoma agents grants import --owner-user-id <usr_…> \
+  [--file path/to/agent_capabilities.json]
+```
+
+The command reads the legacy registry shape (inline JSON or file) and
+creates one `agent_grant` per entry, idempotent on re-runs. See
+[`docs/subsystems/agent_capabilities.md`](./agent_capabilities.md) for
+the full grant lifecycle (create / suspend / revoke / restore) and the
+matching order admission uses.
+
+`NEOTOMA_STRICT_AAUTH_SUBS` (comma-separated `sub`s that MUST present a
+valid AAuth signature when claimed via `X-Agent-Label`) is unchanged.
 
 Per-path overrides accept any of the canonical write paths:
 `observations`, `relationships`, `sources`, `interpretations`,

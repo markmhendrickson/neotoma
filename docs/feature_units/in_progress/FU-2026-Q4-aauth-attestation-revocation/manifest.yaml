@@ -1,0 +1,248 @@
+feature_id: "FU-2026-Q4-aauth-attestation-revocation"
+version: "0.1.0"
+status: "in_progress"
+priority: "p1"
+risk_level: "medium"
+
+tags:
+  - "aauth"
+  - "attestation"
+  - "revocation"
+  - "ocsp"
+  - "crl"
+  - "apple-app-attestation"
+  - "trust-lifecycle"
+
+metadata:
+  title: "Attestation Revocation (Apple OCSP + generic CRL/OCSP)"
+  description: >-
+    Add post-chain-validation revocation checks to all three AAuth
+    attestation format verifiers (apple-secure-enclave,
+    webauthn-packed, tpm2). A new shared revocation service
+    (src/services/aauth_attestation_revocation.ts) consults Apple's
+    anonymous-attestation revocation endpoint or standard X.509
+    OCSP/CRL based on envelope format, with LRU-cached results and a
+    per-check timeout. Three operational modes (`disabled` /
+    `log_only` / `enforce`) gate behaviour; v0.11.0 ships
+    `log_only` as default and v0.12.0 flips to `enforce` with a
+    documented breaking-change note. Decision diagnostics gain a
+    `revocation_status` field that the Inspector renders alongside
+    the existing chain summary.
+  owner: "engineering@neotoma.com"
+  created_at: "2026-04-27"
+  target_release: "v0.11.0"
+  follow_up_release: "v0.12.0 (enforce flip)"
+
+subsystems:
+  - name: "src/services/aauth_attestation_revocation.ts"
+    changes: "New shared revocation service. Apple endpoint client + standard X.509 OCSP fetcher (via node:http2) + CRL fallback. In-memory LRU cache keyed by (issuer_thumbprint, serial_number) with TTL bounded by NEOTOMA_AAUTH_REVOCATION_CACHE_TTL_SECONDS and the OCSP `nextUpdate` / CRL `nextUpdate`. Pure function over (envelope, chain) → RevocationOutcome."
+  - name: "src/services/aauth_attestation_apple_se.ts"
+    changes: "Add post-chain-validation hook calling checkRevocation. Apple endpoint URL configurable via NEOTOMA_AAUTH_APPLE_REVOCATION_ENDPOINT."
+  - name: "src/services/aauth_attestation_webauthn_packed.ts"
+    changes: "Add post-chain-validation, pre-key-binding-result hook calling checkRevocation. Standard X.509 OCSP via leaf AIA with CRL fallback via leaf CDP."
+  - name: "src/services/aauth_attestation_tpm2.ts"
+    changes: "Add post-chain-validation, pre-pubArea-binding-result hook calling checkRevocation. Standard X.509 OCSP via AIK leaf AIA with CRL fallback via CDP."
+  - name: "src/services/aauth_attestation_verifier.ts"
+    changes: "Extend AttestationOutcome with revocation_status / revocation_check_at / revocation_source / revocation_reason_code / revocation_mode fields. Mode resolution + tier demotion logic lives here."
+  - name: "src/services/session_info.ts"
+    changes: "Surface the new revocation fields in decision.attestation so they reach the Inspector and audit log."
+  - name: "inspector/src/components/shared/attestation_envelope_panel.tsx"
+    changes: "Render revocation_status / revocation_check_at / revocation_source / revocation_reason_code in the existing AttestationEnvelopePanel layout (FU-1 already shipped the panel scaffolding)."
+  - name: "inspector/src/components/shared/agent_badge.tsx"
+    changes: "Tier badge tooltip mentions revocation_status when present (alongside existing format / AAGUID rows)."
+
+env_additions:
+  - name: "NEOTOMA_AAUTH_REVOCATION_MODE"
+    purpose: "One of `disabled` / `log_only` / `enforce`. Default `log_only` in v0.11.0; default flips to `enforce` in v0.12.0. Process-wide; no per-request overrides."
+  - name: "NEOTOMA_AAUTH_REVOCATION_CACHE_TTL_SECONDS"
+    purpose: "LRU cache TTL ceiling for revocation outcomes. Default 21600 (6 hours). The effective TTL is min(this, OCSP nextUpdate, CRL nextUpdate)."
+  - name: "NEOTOMA_AAUTH_REVOCATION_TIMEOUT_MS"
+    purpose: "Per-check network timeout. Default 5000ms. Verifier short-circuits to revocation_status: error on timeout."
+  - name: "NEOTOMA_AAUTH_REVOCATION_FAIL_OPEN"
+    purpose: "When 1 (default), `unknown` outcomes are treated as `valid` for tier resolution in `enforce` mode. Set to 0 for high-assurance environments that prefer fail-closed behaviour (treat unknown as revoked)."
+  - name: "NEOTOMA_AAUTH_APPLE_REVOCATION_ENDPOINT"
+    purpose: "Override Apple's anonymous attestation revocation endpoint URL. Default points at Apple's published endpoint; override is intended for air-gapped or pinned-endpoint deployments."
+
+testing:
+  unit_tests:
+    - file: "tests/unit/aauth_attestation_revocation.test.ts"
+      tests:
+        - "checkRevocation returns valid when OCSP responder reports good"
+        - "checkRevocation returns revoked when OCSP responder reports revoked"
+        - "checkRevocation returns unknown when OCSP responder is unreachable and fail_open=1"
+        - "checkRevocation returns revoked when OCSP responder is unreachable and fail_open=0"
+        - "checkRevocation returns error on per-check timeout"
+        - "Cache hits return revocation_source=cache and skip network"
+        - "Cache TTL is honoured (entries expire after NEOTOMA_AAUTH_REVOCATION_CACHE_TTL_SECONDS)"
+        - "Cache TTL never exceeds OCSP nextUpdate when present"
+        - "CRL fallback engages when AIA does not advertise OCSP"
+        - "Apple endpoint client returns valid / revoked / unknown for the documented response shapes"
+    - file: "tests/unit/aauth_attestation_apple_se_revocation.test.ts"
+      tests:
+        - "Apple SE verifier invokes checkRevocation only after chain validation succeeds"
+        - "Revocation evidence does not skip key binding check"
+        - "revocation_status surfaced in AttestationOutcome for Apple SE envelopes"
+    - file: "tests/unit/aauth_attestation_webauthn_packed_revocation.test.ts"
+      tests:
+        - "WebAuthn-packed verifier invokes checkRevocation only after chain validation succeeds"
+        - "Revocation evidence does not skip key binding check"
+        - "AIA-driven OCSP path produces revocation_source=ocsp"
+        - "CDP-driven CRL fallback produces revocation_source=crl"
+        - "YubiKey-rooted chain (Yubico PIV CA) produces a valid revocation outcome under FU-6 fixtures"
+    - file: "tests/unit/aauth_attestation_tpm2_revocation.test.ts"
+      tests:
+        - "TPM 2.0 verifier invokes checkRevocation only after chain validation succeeds"
+        - "Revocation evidence does not skip pubArea binding check"
+        - "AIK chain OCSP path surfaces revocation_status correctly"
+    - file: "tests/unit/aauth_attestation_revocation_modes.test.ts"
+      tests:
+        - "disabled mode produces revocation_status=unchecked and tier unchanged"
+        - "log_only mode populates revocation_status without changing tier"
+        - "enforce mode demotes hardware to software when revoked"
+        - "enforce mode preserves hardware when revocation_status=valid"
+        - "enforce mode with fail_open=1 preserves hardware on revocation_status=unknown"
+        - "enforce mode with fail_open=0 demotes hardware on revocation_status=unknown"
+  integration_tests:
+    - file: "tests/integration/aauth_revocation_e2e.test.ts"
+      tests:
+        - "log_only mode end-to-end: revoked leaf produces revocation_status=revoked, decision.attestation.outcome.tier=hardware (unchanged)"
+        - "enforce mode end-to-end: revoked leaf produces revocation_status=revoked, decision.attestation.outcome.tier=software with failure_reason=revoked"
+        - "Revoked attestation surfaces in audit log structured event aauth.revocation.check"
+        - "Apple SE revoked envelope flows through all three mode behaviours correctly"
+    - file: "tests/integration/aauth_revocation_cache.test.ts"
+      tests:
+        - "Cache hit on second verification of the same chain produces revocation_source=cache and < 1ms revocation latency"
+        - "Cache miss after TTL expiry re-fetches OCSP and produces revocation_source=ocsp"
+        - "Cache is bounded at 4096 entries (verified by capacity overflow test)"
+
+dependencies:
+  requires:
+    - reason: "FU-1 (Inspector attestation envelope visualisation) — provides the AttestationEnvelopePanel scaffolding that this FU extends with revocation fields"
+    - reason: "FU-2 (WebAuthn-packed server-side verifier) — needed before adding a revocation hook to it"
+    - reason: "FU-3 (TPM 2.0 server-side verifier) — needed before adding a revocation hook to it"
+    - reason: "v0.8.0 Apple SE verifier (src/services/aauth_attestation_apple_se.ts) — needed before adding a revocation hook to it"
+  blocks:
+    - "v0.12.0 release (enforce-mode flip)"
+
+feature_flags:
+  enabled: true
+  flags:
+    - name: "NEOTOMA_AAUTH_REVOCATION_MODE"
+      default_v0_11_0: "log_only"
+      default_v0_12_0: "enforce"
+      override_path: "Operators set in env to opt out of the v0.12.0 flip (NEOTOMA_AAUTH_REVOCATION_MODE=log_only)"
+
+rollout:
+  strategy: "two_release_observability_first"
+  phases:
+    - phase: "v0.11.0"
+      mode: "log_only"
+      description: "Revocation checks run; results surfaced in decision.attestation.revocation_status and Inspector AttestationEnvelopePanel; tier resolution unchanged. Operators observe revocation outcomes for one release window."
+    - phase: "v0.12.0"
+      mode: "enforce"
+      description: "Default flips to enforce. Revoked attestations demote hardware to software with failure_reason=revoked. Documented breaking change for operators with revoked agents in their fleet. Operators who explicitly set NEOTOMA_AAUTH_REVOCATION_MODE=log_only retain v0.11.0 behaviour."
+  rollback:
+    steps:
+      - "Set NEOTOMA_AAUTH_REVOCATION_MODE=disabled to fully disable revocation checks (preserves v0.10.x behaviour)"
+      - "Or set NEOTOMA_AAUTH_REVOCATION_MODE=log_only to retain checks but disable tier impact"
+      - "Or revert the per-format hook calls in aauth_attestation_apple_se.ts / aauth_attestation_webauthn_packed.ts / aauth_attestation_tpm2.ts to remove the new code path entirely"
+  monitoring:
+    key_metrics:
+      - "Count of decision.attestation rows per revocation_status value (unchecked / valid / revoked / unknown / error)"
+      - "p50 / p99 revocation check latency by source (cache / ocsp / crl / apple-endpoint)"
+      - "Cache hit rate (target > 90% in steady state for active fleets)"
+      - "Count of tier demotions in enforce mode (revocation_status=revoked → tier=software)"
+      - "Count of revocation_status=error events with reason=timeout (canary for OCSP responder availability)"
+
+documentation:
+  files_created:
+    - path: "src/services/aauth_attestation_revocation.ts"
+      purpose: "Shared revocation service: Apple endpoint client + OCSP fetcher + CRL fallback + LRU cache + mode-resolution glue"
+    - path: "tests/unit/aauth_attestation_revocation.test.ts"
+      purpose: "Service-level unit tests covering all revocation_status values, cache TTL, fail_open semantics, timeout handling"
+    - path: "tests/unit/aauth_attestation_apple_se_revocation.test.ts"
+      purpose: "Apple SE hook integration tests"
+    - path: "tests/unit/aauth_attestation_webauthn_packed_revocation.test.ts"
+      purpose: "WebAuthn-packed hook integration tests including YubiKey-rooted chain coverage"
+    - path: "tests/unit/aauth_attestation_tpm2_revocation.test.ts"
+      purpose: "TPM 2.0 hook integration tests"
+    - path: "tests/unit/aauth_attestation_revocation_modes.test.ts"
+      purpose: "Mode-resolution behaviour tests across disabled / log_only / enforce + fail_open variants"
+    - path: "tests/integration/aauth_revocation_e2e.test.ts"
+      purpose: "End-to-end revocation flow with mocked OCSP responder + Apple endpoint"
+    - path: "tests/integration/aauth_revocation_cache.test.ts"
+      purpose: "Cache behaviour under repeated verification load"
+  files_updated:
+    - path: "src/services/aauth_attestation_apple_se.ts"
+      changes: "Add post-chain-validation hook calling checkRevocation"
+    - path: "src/services/aauth_attestation_webauthn_packed.ts"
+      changes: "Add post-chain-validation, pre-key-binding-result hook calling checkRevocation"
+    - path: "src/services/aauth_attestation_tpm2.ts"
+      changes: "Add post-chain-validation, pre-pubArea-binding-result hook calling checkRevocation"
+    - path: "src/services/aauth_attestation_verifier.ts"
+      changes: "Extend AttestationOutcome with revocation_status / revocation_check_at / revocation_source / revocation_reason_code / revocation_mode fields; tier demotion logic"
+    - path: "src/services/session_info.ts"
+      changes: "Surface revocation fields in decision.attestation"
+    - path: "inspector/src/components/shared/attestation_envelope_panel.tsx"
+      changes: "Render revocation fields in the existing panel structure"
+    - path: "inspector/src/components/shared/agent_badge.tsx"
+      changes: "Tier badge tooltip mentions revocation_status when present"
+    - path: "docs/subsystems/aauth_attestation.md"
+      changes: "Add Revocation section; flip every format row from `verified` to `verified + revocation-aware`; document v0.11→v0.12 enforce-mode migration plan"
+    - path: "docs/subsystems/aauth_cli_attestation.md"
+      changes: "Note that the new env vars are server-side only; CLI surface unchanged"
+    - path: "docs/subsystems/agent_attribution_integration.md"
+      changes: "Update Cryptographic attestation section to mention revocation as part of the verification pipeline"
+    - path: ".env.example"
+      changes: "Document NEOTOMA_AAUTH_REVOCATION_MODE, NEOTOMA_AAUTH_REVOCATION_CACHE_TTL_SECONDS, NEOTOMA_AAUTH_REVOCATION_TIMEOUT_MS, NEOTOMA_AAUTH_REVOCATION_FAIL_OPEN, NEOTOMA_AAUTH_APPLE_REVOCATION_ENDPOINT"
+    - path: "docs/releases/in_progress/v0.11.0/github_release_supplement.md"
+      changes: "Document log_only rollout, new env vars, observation guidance"
+    - path: "docs/releases/in_progress/v0.12.0/github_release_supplement.md"
+      changes: "Document enforce flip as a documented breaking change"
+
+risks:
+  - category: "ocsp_responder_unavailable"
+    likelihood: "medium"
+    impact: "medium"
+    mitigation: "Per-check timeout caps blocking time at NEOTOMA_AAUTH_REVOCATION_TIMEOUT_MS (default 5000ms). LRU cache absorbs steady-state load. Fail-open default treats unknown as valid; operators can flip to fail-closed for high-assurance deployments. Structured log entries surface every error so operators can monitor OCSP availability."
+  - category: "apple_endpoint_contract_drift"
+    likelihood: "low"
+    impact: "medium"
+    mitigation: "Treat any non-{valid,revoked} response as `unknown`. Document the contract dependency in docs/subsystems/aauth_attestation.md so operators know which Apple endpoint we depend on. Pin the URL via NEOTOMA_AAUTH_APPLE_REVOCATION_ENDPOINT for air-gapped deployments."
+  - category: "v0_12_0_mass_demotion_surprise"
+    likelihood: "medium"
+    impact: "high"
+    mitigation: "One-release log_only window in v0.11.0 with full Inspector visibility. Release supplement for v0.12.0 explicitly calls out the breaking-change implication. Operators can opt out of the flip by setting NEOTOMA_AAUTH_REVOCATION_MODE=log_only in their environment. Structured monitoring metric `tier_demotions_due_to_revocation` lets operators see the impact before it lands."
+  - category: "cache_pollution_by_adversary"
+    likelihood: "low"
+    impact: "high"
+    mitigation: "Cache key is (issuer_thumbprint, serial_number); an adversary cannot poison entries for other certs. OCSP responses are signature-verified against the issuer key before caching. CRL responses are signature-verified against the CRL issuer."
+  - category: "revocation_check_added_latency"
+    likelihood: "high"
+    impact: "low"
+    mitigation: "Cache hits add < 1ms. Cache misses bounded by per-check timeout (default 5000ms). LRU cache capped at 4096 entries with < 2MB memory budget. NFR-1 mandates p99 verification latency must not exceed v0.10.x p99 + 50ms in steady state."
+  - category: "fail_open_masks_real_revocations"
+    likelihood: "medium"
+    impact: "medium"
+    mitigation: "Document NEOTOMA_AAUTH_REVOCATION_FAIL_OPEN=0 as the high-assurance opt-in. Emit structured logs on every `unknown` outcome so operators can track cases where OCSP is unreachable. Inspector renders revocation_status=unknown distinctly from valid so operators can spot it."
+
+notes: |
+  Two-release rollout (v0.11.0 log_only → v0.12.0 enforce) is a
+  deliberate observability-before-enforcement contract. Operators see
+  the impact of revocation on their fleet for one release window
+  before tier resolution changes. Operators who never want enforce
+  mode keep `NEOTOMA_AAUTH_REVOCATION_MODE=log_only` in their env.
+
+  No external OCSP library dependency. Use node:http2 for OCSP
+  requests. CRL parsing uses node:crypto.X509Certificate to walk
+  extension OIDs and a small Buffer-backed manual ASN.1 parse for the
+  revoked-cert list. Apple's endpoint is a regular HTTPS POST.
+
+  Privacy: revocation requests transmit only (issuer_thumbprint,
+  serial_number) — never agent identity (iss / sub / jkt). The OCSP
+  responder cannot link a revocation check to an agent.
+
+  The new fields land in AttestationOutcome additively. Existing
+  v0.10.x consumers that ignore the new fields keep working
+  unchanged. The Inspector renders them in the existing
+  AttestationEnvelopePanel from FU-1.

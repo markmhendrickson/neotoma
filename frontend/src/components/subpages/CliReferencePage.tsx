@@ -140,6 +140,15 @@ neotoma watch --tail --human`}</pre>
           <code>neotoma auth logout</code> - clear stored OAuth credentials
         </li>
       </ul>
+      <p className="text-[15px] leading-7 mb-4">
+        For agent identity (cryptographically verifiable writes), use{" "}
+        <code>neotoma auth keygen</code> (software or hardware-backed) and{" "}
+        <code>neotoma auth session</code> to inspect the resolved trust tier. See{" "}
+        <Link to="/aauth" className="text-foreground underline underline-offset-2 hover:no-underline">
+          AAuth reference
+        </Link>{" "}
+        for the full agent authentication contract.
+      </p>
 
       <h2 className="text-[18px] font-medium tracking-[-0.01em] mt-8 mb-3">Storage and configuration</h2>
       <p className="text-[15px] leading-7 mb-4">
@@ -165,7 +174,11 @@ neotoma watch --tail --human`}</pre>
         <Link to="/api" className="text-foreground underline underline-offset-2 hover:no-underline">
           REST API reference
         </Link>
-        {" "}for HTTP endpoints, and{" "}
+        {" "}for HTTP endpoints,{" "}
+        <Link to="/aauth" className="text-foreground underline underline-offset-2 hover:no-underline">
+          AAuth reference
+        </Link>
+        {" "}for agent identity, and{" "}
         <Link to="/troubleshooting" className="text-foreground underline underline-offset-2 hover:no-underline">
           troubleshooting
         </Link>

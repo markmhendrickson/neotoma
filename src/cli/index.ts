@@ -8260,6 +8260,48 @@ program
     }
   );
 
+const agentsCommand = program
+  .command("agents")
+  .description("Agent attribution / admission management commands");
+
+const grantsCommand = agentsCommand
+  .command("grants")
+  .description("Agent grant management (admission tokens stored as agent_grant entities)");
+
+grantsCommand
+  .command("import")
+  .description(
+    "Import legacy NEOTOMA_AGENT_CAPABILITIES_* registry into agent_grant entities. " +
+      "Reads NEOTOMA_AGENT_CAPABILITIES_JSON, NEOTOMA_AGENT_CAPABILITIES_FILE, or " +
+      "config/agent_capabilities.default.json. Idempotent on (match_sub, match_iss, match_thumbprint).",
+  )
+  .requiredOption(
+    "--owner-user-id <userId>",
+    "User id that will own the imported grants (Inspector manages them under this user)",
+  )
+  .action(async (opts: { ownerUserId: string }) => {
+    const outputMode = resolveOutputMode();
+    const { runAgentsGrantsImport, formatImportResult } = await import(
+      "./agents_grants_import.js"
+    );
+    try {
+      const result = await runAgentsGrantsImport({ ownerUserId: opts.ownerUserId });
+      if (outputMode === "json") {
+        writeOutput(result, outputMode);
+      } else {
+        process.stdout.write(formatImportResult(result) + "\n");
+      }
+    } catch (err) {
+      const message = (err as Error).message;
+      if (outputMode === "json") {
+        writeOutput({ ok: false, error: message }, outputMode);
+      } else {
+        process.stderr.write(`Import failed: ${message}\n`);
+      }
+      process.exitCode = 1;
+    }
+  });
+
 const feedbackCommand = program
   .command("feedback")
   .description("Agent-feedback pipeline preferences (reporting mode, activation state)");

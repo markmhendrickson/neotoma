@@ -146,7 +146,8 @@ const TIER_RANK: Record<AttributionTier, number> = {
   anonymous: 0,
   unverified_client: 1,
   software: 2,
-  hardware: 3,
+  operator_attested: 3,
+  hardware: 4,
 };
 
 /**

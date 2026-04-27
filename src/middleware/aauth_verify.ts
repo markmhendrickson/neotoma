@@ -34,6 +34,14 @@ import type {
   AttributionDecisionDiagnostics,
   AttributionTier,
 } from "../crypto/agent_identity.js";
+import {
+  computeExpectedChallenge,
+  verifyAttestation,
+  type AttestationEnvelope,
+  type AttestationOutcome,
+} from "../services/aauth_attestation_verifier.js";
+import { loadAttestationTrustConfig } from "../services/aauth_attestation_trust_config.js";
+import { isOperatorAttested } from "../services/aauth_operator_allowlist.js";
 import { logger } from "../utils/logger.js";
 
 /**
@@ -179,6 +187,8 @@ function serialisePublicKey(publicKey: unknown): string | undefined {
 function validateAgentTokenJwt(raw: string | undefined): {
   sub?: string;
   iss?: string;
+  iat?: number;
+  attestation?: AttestationEnvelope;
   valid: boolean;
   reason?: string;
 } {
@@ -196,10 +206,20 @@ function validateAgentTokenJwt(raw: string | undefined): {
         return { valid: false, reason: "jwt_expired" };
       }
     }
+    let attestation: AttestationEnvelope | undefined;
+    const cnf = (payload as Record<string, unknown>)["cnf"];
+    if (cnf && typeof cnf === "object" && !Array.isArray(cnf)) {
+      const candidate = (cnf as Record<string, unknown>)["attestation"];
+      if (candidate && typeof candidate === "object" && !Array.isArray(candidate)) {
+        attestation = candidate as AttestationEnvelope;
+      }
+    }
     return {
       valid: true,
       sub: typeof payload.sub === "string" ? payload.sub : undefined,
       iss: typeof payload.iss === "string" ? payload.iss : undefined,
+      iat: typeof payload.iat === "number" ? payload.iat : undefined,
+      attestation,
     };
   } catch (error) {
     return {
@@ -207,6 +227,54 @@ function validateAgentTokenJwt(raw: string | undefined): {
       reason: `jwt_decode_failed:${(error as Error).message}`,
     };
   }
+}
+
+/**
+ * Translate an {@link AttestationOutcome} into the diagnostic shape
+ * persisted on the request (and surfaced through `/session`). Mirrors the
+ * verifier output 1:1 so operators can map a decision back to a verifier
+ * code without translation.
+ */
+function attestationOutcomeForDiagnostics(
+  outcome: AttestationOutcome,
+): NonNullable<AttributionDecisionDiagnostics["attestation"]> {
+  const revocation = outcome.revocation
+    ? {
+        checked: outcome.revocation.checked,
+        ...(outcome.revocation.status
+          ? { status: outcome.revocation.status }
+          : {}),
+        ...(outcome.revocation.source
+          ? { source: outcome.revocation.source }
+          : {}),
+        ...(outcome.revocation.detail
+          ? { detail: outcome.revocation.detail }
+          : {}),
+        ...(outcome.revocation.mode
+          ? { mode: outcome.revocation.mode }
+          : {}),
+        ...(outcome.revocation.demoted !== undefined
+          ? { demoted: outcome.revocation.demoted }
+          : {}),
+      }
+    : undefined;
+  if (outcome.verified) {
+    return revocation
+      ? { verified: true, format: outcome.format, revocation }
+      : { verified: true, format: outcome.format };
+  }
+  return revocation
+    ? {
+        verified: false,
+        format: outcome.format,
+        reason: outcome.reason,
+        revocation,
+      }
+    : {
+        verified: false,
+        format: outcome.format,
+        reason: outcome.reason,
+      };
 }
 
 /**
@@ -354,6 +422,8 @@ export function aauthVerify(options: AAuthVerifyOptions) {
 
       let sub: string | undefined;
       let iss: string | undefined;
+      let iat: number | undefined;
+      let attestationEnvelope: AttestationEnvelope | undefined;
       if (result.keyType === "jwt" && result.jwt) {
         const jwtCheck = validateAgentTokenJwt(result.jwt.raw);
         if (!jwtCheck.valid) {
@@ -378,6 +448,8 @@ export function aauthVerify(options: AAuthVerifyOptions) {
         }
         sub = jwtCheck.sub;
         iss = jwtCheck.iss;
+        iat = jwtCheck.iat;
+        attestationEnvelope = jwtCheck.attestation;
       }
 
       const algorithm =
@@ -393,10 +465,6 @@ export function aauthVerify(options: AAuthVerifyOptions) {
         iss,
       };
 
-      // Strict-require path: when the request claims a pinned identity via
-      // `x-agent-label`, the AAuth `sub` MUST match. Otherwise we have a
-      // valid signature from *some* agent, but not the one being claimed —
-      // reject so the capability registry's `sub` match cannot be spoofed.
       if (labelClaimsStrictSub) {
         const verifiedSub = (sub ?? "").toLowerCase();
         if (!verifiedSub || verifiedSub !== claimedLabel) {
@@ -422,21 +490,48 @@ export function aauthVerify(options: AAuthVerifyOptions) {
 
       (req as Request & { aauth?: AAuthRequestContext }).aauth = ctx;
 
-      const resolvedTier: AttributionTier =
-        algorithm && (algorithm.toUpperCase() === "ES256" || algorithm.toUpperCase() === "EDDSA")
-          ? "hardware"
-          : "software";
+      // Tier resolution cascade (docs/subsystems/aauth_attestation.md):
+      //   1. verified attestation envelope -> hardware
+      //   2. operator allowlist hit        -> operator_attested
+      //   3. plain verified signature      -> software
+      // The attestation verifier always runs (even when no envelope is
+      // present) because operators want a structured `not_present`
+      // diagnostic instead of an absent field.
+      const trustConfig = loadAttestationTrustConfig();
+      const expectedChallenge = computeExpectedChallenge({ iss, sub, iat });
+      const boundJkt = result.thumbprint ?? "";
+      const attestationOutcome = await verifyAttestation(
+        attestationEnvelope ?? null,
+        { expectedChallenge, boundJkt, trustConfig },
+      );
+
+      let resolvedTier: AttributionTier;
+      let allowlistSource: "issuer" | "issuer_subject" | undefined;
+      if (attestationOutcome.verified) {
+        resolvedTier = "hardware";
+      } else {
+        const allow = isOperatorAttested({ iss, sub });
+        if (allow.matched && allow.source) {
+          resolvedTier = "operator_attested";
+          allowlistSource = allow.source;
+        } else {
+          resolvedTier = "software";
+        }
+      }
+
       const decision: AttributionDecisionDiagnostics = {
         signature_present: true,
         signature_verified: true,
         resolved_tier: resolvedTier,
+        attestation: attestationOutcomeForDiagnostics(attestationOutcome),
       };
+      if (allowlistSource) decision.operator_allowlist_source = allowlistSource;
       setAttributionDecision(req, decision);
       logAttributionDecision(decision);
 
       if (verbose) {
         logger.info(
-          `[aauth] Verified: thumbprint=${ctx.thumbprint ?? "?"} sub=${ctx.sub ?? "?"} iss=${ctx.iss ?? "?"}`
+          `[aauth] Verified: thumbprint=${ctx.thumbprint ?? "?"} sub=${ctx.sub ?? "?"} iss=${ctx.iss ?? "?"} tier=${resolvedTier}`
         );
       }
 

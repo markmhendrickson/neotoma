@@ -436,6 +436,18 @@ async function detectCycle(
   return ancestors.includes(sourceId);
 }
 ```
+
+## Related Documents
+
+- [`docs/subsystems/sources.md`](./sources.md) — Source storage and reinterpretation
+- [`docs/subsystems/interpretations.md`](./interpretations.md) — Interpretation record type (versioned extraction attempts)
+- [`docs/subsystems/observation_architecture.md`](./observation_architecture.md) — Observation-snapshot model that relationship snapshots follow
+- [`docs/subsystems/timeline_events.md`](./timeline_events.md) — Timeline event record type
+- [`docs/subsystems/entities.md`](./entities.md) — Canonical entity row at the ends of every relationship
+- [`docs/subsystems/entity_snapshots.md`](./entity_snapshots.md) — Reducer output for entities connected by relationships
+- [`docs/subsystems/entity_merge.md`](./entity_merge.md) — Entity merge mechanics
+- [`docs/architecture/determinism.md`](../architecture/determinism.md) — Determinism doctrine
+
 ## Agent Instructions
 ### When to Load This Document
 Load `docs/subsystems/relationships.md` when:

@@ -9,10 +9,12 @@
 import { db } from "../db.js";
 import { generateObservationId } from "./observation_identity.js";
 import {
+  getCurrentAAuthAdmission,
   getCurrentAgentIdentity,
   getCurrentAttribution,
 } from "./request_context.js";
 import { enforceAttributionPolicy } from "./attribution_policy.js";
+import { assertCanWriteProtected } from "./protected_entity_types.js";
 import type { ObservationSource } from "../shared/action_schemas.js";
 
 /**
@@ -78,6 +80,12 @@ export async function createObservation(
   params: CreateObservationParams
 ): Promise<ObservationRecord> {
   enforceAttributionPolicy("observations", getCurrentAgentIdentity());
+  assertCanWriteProtected({
+    entity_type: params.entity_type,
+    op: "store_structured",
+    identity: getCurrentAgentIdentity(),
+    admission: getCurrentAAuthAdmission(),
+  });
   const observationId = generateObservationId(
     params.source_id,
     params.interpretation_id,

@@ -315,6 +315,23 @@
     background: linear-gradient(to bottom, rgba(15, 23, 42, 0.8), rgba(2, 6, 23, 0.65));
     box-shadow: none;
   }
+
+  /**
+   * Doc / article body links: underline + offset, clear on hover.
+   * Excludes CTAs (`data-post-prose-cta`), explicit `no-underline`, and integration "Getting started" rows.
+   */
+  .post-prose a:not([data-post-prose-cta]):not([class*="no-underline"]) {
+    @apply text-foreground underline underline-offset-2;
+  }
+  .post-prose a:not([data-post-prose-cta]):not([class*="no-underline"]):hover {
+    @apply text-foreground no-underline;
+  }
+  .post-prose section[data-integration-section="getting-started"] a {
+    @apply no-underline;
+  }
+  .post-prose section[data-integration-section="getting-started"] a:hover {
+    @apply no-underline;
+  }
 }
 
 /* Hero: rotating record-type word swap */

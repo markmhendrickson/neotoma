@@ -25,9 +25,16 @@ import type { Request } from "express";
 /**
  * Trust tier shown in the Inspector and surfaced in API responses.
  *
- * - `hardware` — AAuth verified and the signing algorithm indicates a
- *   hardware-bound key (ES256 via Secure Enclave, EdDSA via YubiKey, etc.).
- * - `software` — AAuth verified but software-only key material.
+ * - `hardware` — AAuth verified AND a `cnf.attestation` envelope was
+ *   cryptographically verified against a trusted attestation root (Apple
+ *   Secure Enclave, WebAuthn `packed`, or TPM 2.0). Algorithm alone is
+ *   never enough — see docs/subsystems/aauth_attestation.md.
+ * - `operator_attested` — AAuth verified and the resolved `iss` (or
+ *   `iss:sub` composite) is in the operator-managed allowlist
+ *   (`NEOTOMA_OPERATOR_ATTESTED_ISSUERS` / `NEOTOMA_OPERATOR_ATTESTED_SUBS`).
+ *   Trust is operator-vouched rather than hardware-attested.
+ * - `software` — AAuth verified but neither attestation nor the operator
+ *   allowlist promoted the request further.
  * - `unverified_client` — No AAuth, but `clientInfo.name` was provided on
  *   the MCP `initialize` handshake. Self-reported, not verified.
  * - `anonymous` — No AAuth and no useful `clientInfo` (or generic values
@@ -35,6 +42,7 @@ import type { Request } from "express";
  */
 export type AttributionTier =
   | "hardware"
+  | "operator_attested"
   | "software"
   | "unverified_client"
   | "anonymous";
@@ -85,6 +93,27 @@ export interface AAuthRequestContext {
 }
 
 /**
+ * Mirror of {@link import('../services/aauth_attestation_verifier.js').AttestationRevocationDiagnostic}
+ * narrowed to the surface that is safe to expose on `/session`. Tag
+ * values follow the revocation service's discriminator.
+ */
+export interface AttestationRevocationDiagnosticsField {
+  checked: boolean;
+  status?: "good" | "revoked" | "unknown";
+  source?:
+    | "disabled"
+    | "cache"
+    | "apple"
+    | "ocsp"
+    | "crl"
+    | "no_endpoint"
+    | "error";
+  detail?: string;
+  mode?: "disabled" | "log_only" | "enforce";
+  demoted?: boolean;
+}
+
+/**
  * Diagnostic summary of the attribution resolution decision for a single
  * request. Mirrored onto the Express request as `req.attributionDecision`
  * by the AAuth middleware and returned verbatim in the
@@ -102,14 +131,66 @@ export interface AttributionDecisionDiagnostics {
   client_info_normalised_to_null_reason?: ClientNameNormalisationReason;
   /** Tier resolved for this request. */
   resolved_tier: AttributionTier;
+  /**
+   * Outcome of the `cnf.attestation` envelope verifier (when the request
+   * carried one). Always present on AAuth-verified requests; absent on
+   * unsigned requests. Mirrors the
+   * {@link import('../services/aauth_attestation_verifier.js').AttestationOutcome}
+   * shape so the diagnostic can be forwarded as-is.
+   */
+  attestation?:
+    | {
+        verified: true;
+        format:
+          | "apple-secure-enclave"
+          | "webauthn-packed"
+          | "tpm2";
+        /**
+         * Revocation evidence captured by the attestation verifier when
+         * `NEOTOMA_AAUTH_REVOCATION_MODE` is `log_only` or `enforce`.
+         * Always absent in `disabled` mode.
+         */
+        revocation?: AttestationRevocationDiagnosticsField;
+      }
+    | {
+        verified: false;
+        format:
+          | "apple-secure-enclave"
+          | "webauthn-packed"
+          | "tpm2"
+          | "unknown";
+        reason:
+          | "not_present"
+          | "unsupported_format"
+          | "key_binding_failed"
+          | "challenge_mismatch"
+          | "chain_invalid"
+          | "signature_invalid"
+          | "aaguid_not_trusted"
+          | "pubarea_mismatch"
+          | "not_implemented"
+          | "malformed"
+          | "revoked";
+        revocation?: AttestationRevocationDiagnosticsField;
+      };
+  /**
+   * Set when the operator allowlist promoted this request to
+   * `operator_attested`. `"issuer"` means the `iss` matched
+   * `NEOTOMA_OPERATOR_ATTESTED_ISSUERS`; `"issuer_subject"` means the
+   * `iss:sub` composite matched `NEOTOMA_OPERATOR_ATTESTED_SUBS`. Absent
+   * when the resolved tier is anything else (including `hardware` — the
+   * cascade short-circuits at the first verified hit).
+   */
+  operator_allowlist_source?: "issuer" | "issuer_subject";
 }
 
 /**
- * Generic "looks like a hardware-backed key" heuristic. This is deliberately
- * conservative: ES256 and EdDSA are the algorithms emitted by
- * `@aauth/local-keys` when using Secure Enclave / YubiKey backends. Anything
- * else is treated as software-only until we can inspect key metadata more
- * precisely in Phase 2.
+ * @deprecated Algorithm-based heuristics no longer drive tier resolution.
+ * Tier promotion to `hardware` requires a verified `cnf.attestation`
+ * envelope; promotion to `operator_attested` requires the operator
+ * allowlist. This helper is retained only for legacy diagnostic purposes
+ * (e.g. log lines that want to flag "looks SE-ish") and MUST NOT be used
+ * to set {@link AttributionTier}. Will be removed once no callers remain.
  */
 export function algorithmLooksHardwareBacked(
   algorithm: string | undefined
@@ -174,15 +255,18 @@ export function normaliseClientNameWithReason(
  * Derive the {@link AttributionTier} from the fields on an
  * {@link AgentIdentity}-in-progress. Pure function; safe to call multiple
  * times while assembling attribution.
+ *
+ * NOTE: this fallback ONLY returns `software` for AAuth-verified requests.
+ * Promotion to `hardware` or `operator_attested` is decided by the AAuth
+ * middleware, which has access to the `cnf.attestation` envelope and the
+ * operator allowlist; pure derivation cannot make those calls.
  */
 export function deriveAttributionTier(
   input: Omit<AgentIdentity, "tier">
 ): AttributionTier {
   const aauthVerified = !!(input.publicKey && input.thumbprint);
   if (aauthVerified) {
-    return algorithmLooksHardwareBacked(input.algorithm)
-      ? "hardware"
-      : "software";
+    return "software";
   }
   if (input.clientName) {
     return "unverified_client";
@@ -311,6 +395,16 @@ export function getAgentIdentityFromRequest(
   const hasAnything =
     !!aauth?.verified || !!clientName || !!clientVersion || !!connectionId;
   if (!hasAnything) return null;
+  // Prefer the tier resolved by the AAuth middleware (which has the
+  // attestation envelope and operator allowlist in scope) over the
+  // pure-derivation fallback. `createAgentIdentity` will only run
+  // `deriveAttributionTier` when `tier` is undefined.
+  const decision = (
+    req as Request & { attributionDecision?: AttributionDecisionDiagnostics }
+  ).attributionDecision;
+  const decisionTier = decision?.signature_verified
+    ? decision.resolved_tier
+    : undefined;
   return createAgentIdentity({
     publicKey: aauth?.publicKey,
     thumbprint: aauth?.thumbprint,
@@ -320,6 +414,7 @@ export function getAgentIdentityFromRequest(
     clientName,
     clientVersion: clientVersion ?? undefined,
     connectionId: connectionId ?? undefined,
+    tier: decisionTier,
   });
 }
 
@@ -338,6 +433,7 @@ export function validateAgentIdentity(identity: AgentIdentity): boolean {
   const tier = identity.tier;
   return (
     tier === "hardware" ||
+    tier === "operator_attested" ||
     tier === "software" ||
     tier === "unverified_client" ||
     tier === "anonymous"

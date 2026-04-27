@@ -1,0 +1,58 @@
+{
+  "name": "@neotoma/aauth-tpm2",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Optional Linux TPM 2.0 native binding for Neotoma AAuth. Generates TPM-resident keys via libtss2 (tpm2-tss) and produces WebAuthn-`tpm`-format attestation envelopes for the AAuth `cnf.attestation` claim.",
+  "type": "commonjs",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "files": [
+    "lib",
+    "src",
+    "binding.gyp",
+    "prebuilds",
+    "README.md",
+    "LICENSE"
+  ],
+  "os": [
+    "linux"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "build:native": "node-gyp rebuild",
+    "prebuild": "prebuildify --napi --strip --tag-libc",
+    "install": "node-gyp-build || true",
+    "test": "node --test tests/"
+  },
+  "keywords": [
+    "neotoma",
+    "aauth",
+    "tpm",
+    "tpm2",
+    "tpm2-tss",
+    "libtss2",
+    "attestation",
+    "linux"
+  ],
+  "author": "Mark Hendrickson",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/markmhendrickson/neotoma.git",
+    "directory": "packages/aauth-tpm2"
+  },
+  "homepage": "https://neotoma.io",
+  "bugs": {
+    "url": "https://github.com/markmhendrickson/neotoma/issues"
+  },
+  "dependencies": {
+    "node-addon-api": "^7.1.0",
+    "node-gyp-build": "^4.8.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.6",
+    "node-gyp": "^10.0.0",
+    "prebuildify": "^6.0.0",
+    "typescript": "^5.3.3"
+  }
+}

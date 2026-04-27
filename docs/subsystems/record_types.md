@@ -1,11 +1,20 @@
 # Neotoma Record Types — Canonical Type Catalog
 ## Scope
 This document covers:
-- Complete catalog of MVP record types
+- Complete catalog of MVP **application-level record types** (`invoice`, `receipt`, `contact`, `event`, etc.)
 - Two-tier type system (application types + schema families)
 - Field mappings and extraction rules per type
 - Schema detection patterns (regex-based, deterministic)
+
 This document does NOT cover:
+- **Primitive (system) record types** — `source`, `interpretation`, `observation`, `relationship`, `timeline_event`, `entity`, `entity_snapshot`. Those are documented in their own dedicated subsystem references:
+  - [`docs/subsystems/sources.md`](./sources.md)
+  - [`docs/subsystems/interpretations.md`](./interpretations.md)
+  - [`docs/subsystems/observation_architecture.md`](./observation_architecture.md)
+  - [`docs/subsystems/relationships.md`](./relationships.md)
+  - [`docs/subsystems/timeline_events.md`](./timeline_events.md)
+  - [`docs/subsystems/entities.md`](./entities.md)
+  - [`docs/subsystems/entity_snapshots.md`](./entity_snapshots.md)
 - Database schema (see `docs/subsystems/schema.md`)
 - MCP action implementations (see `docs/specs/MCP_SPEC.md`)
 - UI component structure (see `docs/ui/`)

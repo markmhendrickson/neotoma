@@ -425,6 +425,9 @@ docs/subsystems/relationships.md:
     - path: docs/architecture/architecture.md
       type: explicit
       reason: Architecture references relationships
+    - path: docs/subsystems/record_types.md
+      type: explicit
+      reason: Record types catalog points to relationships as a primitive record type
     - path: docs/feature_units/completed/*/FU-*_spec.md
       type: implicit
       reason: Feature units may implement relationship features
@@ -443,9 +446,96 @@ docs/subsystems/events.md:
     - path: docs/architecture/architecture.md
       type: explicit
       reason: Architecture references events
+    - path: docs/subsystems/timeline_events.md
+      type: explicit
+      reason: Timeline events doc cross-references the observability event stream to disambiguate scope
+
+docs/subsystems/timeline_events.md:
+  downstream:
+    - path: docs/architecture/architecture.md
+      type: implicit
+      reason: Architecture references the timeline event record type
     - path: docs/foundation/timeline_events.md
       type: explicit
-      reason: References events subsystem
+      reason: Doctrine document points to the architectural reference
+    - path: docs/subsystems/events.md
+      type: explicit
+      reason: Observability events doc references timeline events for disambiguation
+    - path: docs/subsystems/sources.md
+      type: explicit
+      reason: Sources doc cross-references timeline events derived from sources
+    - path: docs/subsystems/observation_architecture.md
+      type: explicit
+      reason: Observation architecture references timeline event derivation
+    - path: docs/subsystems/relationships.md
+      type: explicit
+      reason: Relationships doc cross-references timeline events
+    - path: docs/subsystems/record_types.md
+      type: explicit
+      reason: Record types catalog points to primitive record types
+
+docs/subsystems/interpretations.md:
+  downstream:
+    - path: docs/subsystems/sources.md
+      type: explicit
+      reason: Sources doc cross-references the dedicated interpretations reference
+    - path: docs/subsystems/observation_architecture.md
+      type: explicit
+      reason: Observation architecture references interpretations
+    - path: docs/subsystems/relationships.md
+      type: explicit
+      reason: Relationships doc cross-references interpretations
+    - path: docs/subsystems/record_types.md
+      type: explicit
+      reason: Record types catalog points to primitive record types
+    - path: docs/architecture/determinism.md
+      type: implicit
+      reason: Determinism doctrine bounds non-deterministic interpretations
+
+docs/subsystems/entities.md:
+  downstream:
+    - path: docs/subsystems/entity_snapshots.md
+      type: explicit
+      reason: Snapshot doc references the canonical entity row this snapshot is derived for
+    - path: docs/subsystems/entity_merge.md
+      type: explicit
+      reason: Merge mechanics operate on the entities table
+    - path: docs/subsystems/observation_architecture.md
+      type: explicit
+      reason: Observation architecture references entities as observation targets
+    - path: docs/subsystems/relationships.md
+      type: explicit
+      reason: Relationships connect entities
+    - path: docs/subsystems/record_types.md
+      type: explicit
+      reason: Record types catalog points to primitive record types
+    - path: docs/subsystems/schema.md
+      type: explicit
+      reason: Schema doc owns the entities table DDL
+
+docs/subsystems/entity_snapshots.md:
+  downstream:
+    - path: docs/subsystems/entities.md
+      type: explicit
+      reason: Entities doc cross-references the snapshot view it is derived into
+    - path: docs/subsystems/reducer.md
+      type: explicit
+      reason: Reducer doc owns snapshot computation; snapshot doc cross-references it
+    - path: docs/subsystems/observation_architecture.md
+      type: explicit
+      reason: Observation architecture references snapshots as the reducer output layer
+    - path: docs/subsystems/vector_ops.md
+      type: explicit
+      reason: Vector ops doc owns embedding generation and indexing for snapshots
+    - path: docs/subsystems/auth.md
+      type: explicit
+      reason: Auth doc enumerates encrypted columns including snapshot and provenance
+    - path: docs/subsystems/record_types.md
+      type: explicit
+      reason: Record types catalog points to primitive record types
+    - path: docs/architecture/determinism.md
+      type: implicit
+      reason: Determinism doctrine bounds reducer output reproducibility
 
 docs/subsystems/privacy.md:
   downstream:

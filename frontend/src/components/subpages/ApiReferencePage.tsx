@@ -70,6 +70,15 @@ export function ApiReferencePage() {
             MCP reference
           </Link>
         </li>
+        <li className="text-[15px] leading-7 text-muted-foreground">
+          For agent identity (cryptographically verifiable writes via RFC 9421 signatures and the{" "}
+          <code>aa-agent+jwt</code> token), see the{" "}
+          <Link to="/aauth" className="text-foreground underline underline-offset-2 hover:no-underline">
+            AAuth reference
+          </Link>
+          . Bearer auth and AAuth are independent and stack: Bearer authorizes the connection,
+          AAuth attributes individual writes.
+        </li>
       </ul>
 
       <h2 className="text-[18px] font-medium tracking-[-0.01em] mt-8 mb-3">Request examples</h2>

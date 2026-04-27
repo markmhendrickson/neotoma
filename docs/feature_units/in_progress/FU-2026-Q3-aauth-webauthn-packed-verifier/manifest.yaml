@@ -1,0 +1,111 @@
+feature_id: "FU-2026-Q3-aauth-webauthn-packed-verifier"
+version: "0.2.0"
+status: "ready_for_review"
+priority: "p1"
+risk_level: "medium"
+
+tags:
+  - "aauth"
+  - "attestation"
+  - "verifier"
+  - "webauthn"
+  - "fido2"
+
+metadata:
+  title: "WebAuthn `packed` Server-Side Verifier"
+  description: >-
+    Replace the v0.8.0 stub at src/services/aauth_attestation_webauthn_packed.ts
+    with a real verifier for the W3C WebAuthn §8.2 `packed` attestation
+    statement format. Supports ECDSA-P256/P384 + RSA-PKCS1/PSS-SHA256,
+    AAGUID admission via NEOTOMA_AAUTH_AAGUID_TRUST_LIST_PATH, X.509
+    chain validation against the merged trust set, and RFC 7638
+    key-binding to cnf.jwk.
+  owner: "engineering@neotoma.com"
+  created_at: "2026-04-27"
+  target_release: "v0.9.0"
+
+subsystems:
+  - name: "aauth_attestation_webauthn_packed"
+    changes: "Stub replaced with chain validation + AAGUID admission + signature verify + key binding"
+  - name: "aauth_attestation_verifier"
+    changes: "AttestationFailureReason gains `aaguid_not_trusted`"
+  - name: "aauth_attestation_trust_config"
+    changes: "Existing webauthnAaguidAllowlist field consumed; no code change required"
+
+env_additions: []
+
+testing:
+  unit_tests:
+    - file: "tests/unit/aauth_attestation_webauthn_packed.test.ts"
+      tests:
+        - "verified outcome for well-formed synthetic chain + ES256 signature + matching AAGUID + matching thumbprint"
+        - "chain_invalid when terminal cert is not rooted in merged trust set"
+        - "aaguid_not_trusted when AAGUID is missing from non-empty operator allowlist"
+        - "signature_invalid when sig does not verify under leaf public key"
+        - "signature_invalid when COSE alg is unsupported (e.g. -8 / EdDSA)"
+        - "key_binding_failed when leaf thumbprint does not match cnf.jwk thumbprint"
+        - "malformed for missing/empty x5c, missing alg, missing sig, missing challenge"
+        - "AAGUID admission skipped when operator allowlist is empty"
+  integration_tests:
+    - file: "tests/integration/aauth_webauthn_packed_e2e.test.ts"
+      tests:
+        - "Runtime-generated CA + leaf chain produces verified outcome end-to-end through the AAuth middleware"
+        - "Tampering with the leaf signature produces signature_invalid and the request still succeeds at software tier"
+        - "AAGUID trust list mismatch produces aaguid_not_trusted with software tier fallback"
+
+dependencies:
+  requires:
+    - reason: "v0.8.0 envelope dispatcher (src/services/aauth_attestation_verifier.ts)"
+    - reason: "v0.8.0 trust config (src/services/aauth_attestation_trust_config.ts)"
+  blocks:
+    - "FU-2026-Q4-aauth-yubikey-cli — YubiKey CLI routes its slot-9c attestations through this verifier"
+
+feature_flags:
+  enabled: true
+
+rollout:
+  strategy: "instant"
+  rollback:
+    steps:
+      - "Revert src/services/aauth_attestation_webauthn_packed.ts to the not_implemented stub"
+      - "Revert AttestationFailureReason addition (remove aaguid_not_trusted) — no DB schema change"
+  monitoring:
+    key_metrics:
+      - "Count of decision.attestation rows with format=webauthn-packed and outcome=verified"
+      - "Count of failure_reason=aaguid_not_trusted (operator misconfiguration signal)"
+
+documentation:
+  files_created:
+    - path: "tests/unit/aauth_attestation_webauthn_packed.test.ts"
+      purpose: "Unit tests covering verified / chain_invalid / aaguid_not_trusted / signature_invalid / key_binding_failed / malformed"
+    - path: "tests/integration/aauth_webauthn_packed_e2e.test.ts"
+      purpose: "End-to-end test using a runtime-generated CA + leaf chain through the AAuth middleware"
+    - path: "tests/fixtures/aauth_webauthn_packed/README.md"
+      purpose: "Notes on fixture generation (synthetic CA + leaf cert with AAGUID extension)"
+  files_updated:
+    - path: "src/services/aauth_attestation_webauthn_packed.ts"
+      changes: "Stub body replaced with full verification (parse statement, walk x5c, verify sig over SHA-256(challenge||jkt), bind leaf to cnf.jwk, AAGUID admission)"
+    - path: "src/services/aauth_attestation_verifier.ts"
+      changes: "AttestationFailureReason gains 'aaguid_not_trusted'"
+    - path: "docs/subsystems/aauth_attestation.md"
+      changes: "webauthn-packed row flips from 'stub' to 'verified'; supported COSE algs (-7, -35, -257, -37) documented"
+    - path: "docs/subsystems/agent_attribution_integration.md"
+      changes: "Failure reason taxonomy gains aaguid_not_trusted; decision.attestation.failure_reason notes WebAuthn-specific values"
+
+risks:
+  - category: "tier_resolution_regression"
+    likelihood: "low"
+    impact: "medium"
+    mitigation: "Verifier failures cascade to operator allowlist or software tier; agents are never rejected. Existing `key_binding_failed` / `chain_invalid` semantics inherited from Apple SE verifier."
+  - category: "operator_misconfiguration"
+    likelihood: "medium"
+    impact: "low"
+    mitigation: "Empty AAGUID trust list is treated as 'no admission gate', matching v0.8.0 trust-config fail-open semantics. Failure_reason=aaguid_not_trusted surfaces in decision diagnostics so operators can spot misconfigurations in the Inspector."
+
+notes: |
+  Server-side verifier only. No CLI-side change in this FU; FU-6 (YubiKey CLI)
+  consumes this verifier through its `webauthn-packed` envelope output.
+  Apple SE verifier semantics are inherited where reasonable (constant-time
+  comparisons, structured failure outcomes, no throwing). The hand-written
+  AAGUID extension parser stays inside this file so the cross-format
+  trust-config module remains generic.

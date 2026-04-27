@@ -1,18 +1,18 @@
 /**
- * Integration test: capability scoping blocks out-of-scope writes at the
- * action boundary when a matched agent identity is active in the request
- * context.
+ * Integration test: capability scoping at the action boundary now reads
+ * from the AAuth admission record stored on the request context (set
+ * by `aauth_admission` middleware), not from the legacy env registry.
  *
- * Because end-to-end HTTP signing requires a full JWKS + key pair (see
- * `tests/integration/aauth_attribution_stamping.test.ts` for the rationale),
- * this test plugs directly into the request-context ALS the same way the
- * REST middleware does. It asserts that `createCorrection` — exercised via
- * the POST /correct capability check — rejects out-of-scope entity types
- * and allows in-scope ones.
+ * The legacy env-config code paths have been removed by the Stronger
+ * AAuth Admission plan. This test plugs directly into the request-
+ * context AsyncLocalStorage the same way the admission middleware does
+ * and asserts that `enforceAgentCapability` behaves correctly when:
  *
- * The /correct handler is the simplest end-to-end proof because
- * `storeStructuredForApi` triggers a lot of DB I/O that is orthogonal to
- * the capability check.
+ * 1. The admitted grant covers the requested (op, entity_type).
+ * 2. The admitted grant does NOT cover the (op, entity_type).
+ * 3. The agent is signature-verified but unadmitted (no grant matched)
+ *    and `NEOTOMA_AGENT_DEFAULT_DENY` is unset → allowed.
+ * 4. Same as (3) but with `NEOTOMA_AGENT_DEFAULT_DENY=1` → denied.
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -20,7 +20,6 @@ import {
   AgentCapabilityError,
   contextFromAgentIdentity,
   enforceAgentCapability,
-  resetAgentCapabilitiesCache,
 } from "../../src/services/agent_capabilities.js";
 import { createAgentIdentity } from "../../src/crypto/agent_identity.js";
 import {
@@ -28,13 +27,23 @@ import {
   runWithRequestContext,
 } from "../../src/services/request_context.js";
 
-const ENV_KEYS = [
-  "NEOTOMA_AGENT_CAPABILITIES_JSON",
-  "NEOTOMA_AGENT_CAPABILITIES_FILE",
-  "NEOTOMA_AGENT_CAPABILITIES_ENFORCE",
-] as const;
+const ENV_KEYS = ["NEOTOMA_AGENT_DEFAULT_DENY"] as const;
 
-describe("agent capabilities (integration: request-context → action boundary)", () => {
+const FEEDBACK_GRANT = {
+  admitted: true as const,
+  user_id: "usr_owner",
+  grant_id: "ent_grant_feedback",
+  agent_label: "agent-site@neotoma.io",
+  capabilities: [
+    { op: "store_structured" as const, entity_types: ["neotoma_feedback"] },
+    { op: "correct" as const, entity_types: ["neotoma_feedback"] },
+    { op: "create_relationship" as const, entity_types: ["neotoma_feedback"] },
+    { op: "retrieve" as const, entity_types: ["neotoma_feedback"] },
+  ],
+  reason: "admitted" as const,
+};
+
+describe("agent capabilities (integration: admission → action boundary)", () => {
   const originalEnv: Record<string, string | undefined> = {};
 
   beforeEach(() => {
@@ -42,24 +51,6 @@ describe("agent capabilities (integration: request-context → action boundary)"
       originalEnv[key] = process.env[key];
       delete process.env[key];
     }
-    process.env.NEOTOMA_AGENT_CAPABILITIES_ENFORCE = "true";
-    process.env.NEOTOMA_AGENT_CAPABILITIES_JSON = JSON.stringify({
-      agents: {
-        "agent-site@neotoma.io": {
-          match: {
-            sub: "agent-site@neotoma.io",
-            iss: "https://agent.neotoma.io",
-          },
-          capabilities: [
-            { op: "store_structured", entity_types: ["neotoma_feedback"] },
-            { op: "correct", entity_types: ["neotoma_feedback"] },
-            { op: "create_relationship", entity_types: ["neotoma_feedback"] },
-            { op: "retrieve", entity_types: ["neotoma_feedback"] },
-          ],
-        },
-      },
-    });
-    resetAgentCapabilitiesCache();
   });
 
   afterEach(() => {
@@ -67,10 +58,9 @@ describe("agent capabilities (integration: request-context → action boundary)"
       if (originalEnv[key] === undefined) delete process.env[key];
       else process.env[key] = originalEnv[key];
     }
-    resetAgentCapabilitiesCache();
   });
 
-  it("allows in-scope entity_type when identity matches the registry", async () => {
+  it("allows in-scope entity_type when admission attached a matching grant", async () => {
     const identity = createAgentIdentity({
       publicKey: '{"kty":"EC","crv":"P-256","alg":"ES256"}',
       thumbprint: "tp-scoped",
@@ -79,20 +69,24 @@ describe("agent capabilities (integration: request-context → action boundary)"
       iss: "https://agent.neotoma.io",
     });
 
-    await runWithRequestContext({ agentIdentity: identity }, async () => {
-      const ctx = contextFromAgentIdentity(getCurrentAgentIdentity());
-      expect(ctx).not.toBeNull();
-      expect(() =>
-        enforceAgentCapability(
-          "store_structured",
-          ["neotoma_feedback"],
-          ctx!,
-        ),
-      ).not.toThrow();
-    });
+    await runWithRequestContext(
+      { agentIdentity: identity, aauthAdmission: FEEDBACK_GRANT },
+      async () => {
+        const ctx = contextFromAgentIdentity(getCurrentAgentIdentity());
+        expect(ctx).not.toBeNull();
+        expect(ctx!.admitted).toBe(true);
+        expect(() =>
+          enforceAgentCapability(
+            "store_structured",
+            ["neotoma_feedback"],
+            ctx!,
+          ),
+        ).not.toThrow();
+      },
+    );
   });
 
-  it("denies out-of-scope entity_type when identity matches the registry", async () => {
+  it("denies out-of-scope entity_type even when admitted", async () => {
     const identity = createAgentIdentity({
       publicKey: '{"kty":"EC","crv":"P-256","alg":"ES256"}',
       thumbprint: "tp-scoped-deny",
@@ -101,19 +95,23 @@ describe("agent capabilities (integration: request-context → action boundary)"
       iss: "https://agent.neotoma.io",
     });
 
-    await runWithRequestContext({ agentIdentity: identity }, async () => {
-      const ctx = contextFromAgentIdentity(getCurrentAgentIdentity())!;
-      try {
-        enforceAgentCapability("store_structured", ["task"], ctx);
-        throw new Error("expected capability_denied");
-      } catch (err) {
-        expect(err).toBeInstanceOf(AgentCapabilityError);
-        expect((err as AgentCapabilityError).code).toBe("capability_denied");
-      }
-    });
+    await runWithRequestContext(
+      { agentIdentity: identity, aauthAdmission: FEEDBACK_GRANT },
+      async () => {
+        const ctx = contextFromAgentIdentity(getCurrentAgentIdentity())!;
+        try {
+          enforceAgentCapability("store_structured", ["task"], ctx);
+          throw new Error("expected capability_denied");
+        } catch (err) {
+          expect(err).toBeInstanceOf(AgentCapabilityError);
+          expect((err as AgentCapabilityError).code).toBe("capability_denied");
+          expect((err as AgentCapabilityError).entityType).toBe("task");
+        }
+      },
+    );
   });
 
-  it("passes through unknown agents when default_deny is not set", async () => {
+  it("passes through unadmitted agents when default_deny is unset", async () => {
     const identity = createAgentIdentity({
       publicKey: '{"kty":"EC","crv":"P-256","alg":"ES256"}',
       thumbprint: "tp-other",
@@ -124,9 +122,34 @@ describe("agent capabilities (integration: request-context → action boundary)"
 
     await runWithRequestContext({ agentIdentity: identity }, async () => {
       const ctx = contextFromAgentIdentity(getCurrentAgentIdentity())!;
+      expect(ctx.admitted).toBe(false);
       expect(() =>
         enforceAgentCapability("store_structured", ["task"], ctx),
       ).not.toThrow();
+    });
+  });
+
+  it("denies unadmitted verified agents when default_deny=1", async () => {
+    process.env.NEOTOMA_AGENT_DEFAULT_DENY = "1";
+    const identity = createAgentIdentity({
+      publicKey: '{"kty":"EC","crv":"P-256","alg":"ES256"}',
+      thumbprint: "tp-strict",
+      algorithm: "ES256",
+      sub: "stranger@example.com",
+      iss: "https://stranger.example",
+    });
+
+    await runWithRequestContext({ agentIdentity: identity }, async () => {
+      const ctx = contextFromAgentIdentity(getCurrentAgentIdentity())!;
+      try {
+        enforceAgentCapability("store_structured", ["task"], ctx);
+        throw new Error("expected capability_denied");
+      } catch (err) {
+        expect(err).toBeInstanceOf(AgentCapabilityError);
+        expect((err as AgentCapabilityError).hint).toContain(
+          "No active agent_grant matches",
+        );
+      }
     });
   });
 });

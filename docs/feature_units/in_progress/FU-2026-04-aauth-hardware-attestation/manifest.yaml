@@ -1,0 +1,147 @@
+feature_id: "FU-2026-04-aauth-hardware-attestation"
+version: "0.1.0"
+status: "in_progress"
+priority: "p0"
+risk_level: "medium"
+
+tags:
+  - "aauth"
+  - "attribution"
+  - "attestation"
+  - "crypto"
+  - "cli"
+
+metadata:
+  title: "AAuth Tier Honesty + Hardware Attestation"
+  description: >-
+    Replace algorithm-only hardware heuristic with a four-tier resolution
+    cascade, introduce a JSON-native cnf.attestation envelope, verify Apple
+    Secure Enclave attestations server-side, and ship a CLI-side attestation
+    generator for macOS so the hardware tier reflects cryptographic proof.
+  owner: "engineering@neotoma.com"
+  created_at: "2026-04-27"
+  target_release: "v0.8.0"
+
+subsystems:
+  - name: "aauth_middleware"
+    changes: "Replace algorithm-based tier with cascade (attestation > allowlist > signature)"
+  - name: "attribution_policy"
+    changes: "Add operator_attested tier; update TIER_RANK and default_deny gating"
+  - name: "aauth_attestation"
+    changes: "New verifier core, Apple SE verifier, format stubs, trust config"
+  - name: "operator_allowlist"
+    changes: "Env-driven allowlist for operator_attested tier"
+  - name: "cli_signer"
+    changes: "Native package + keygen --hardware + attest subcommand + cnf.attestation embedding"
+
+env_additions:
+  - name: "NEOTOMA_AAUTH_ATTESTATION_CA_PATH"
+    purpose: "PEM bundle of trusted attestation root CAs (Apple root bundled by default)"
+  - name: "NEOTOMA_AAUTH_AAGUID_TRUST_LIST_PATH"
+    purpose: "JSON array of approved AAGUIDs / Apple key model strings"
+  - name: "NEOTOMA_OPERATOR_ATTESTED_ISSUERS"
+    purpose: "Comma-separated issuers granted operator_attested tier on verified signature"
+  - name: "NEOTOMA_OPERATOR_ATTESTED_SUBS"
+    purpose: "Comma-separated <iss>:<sub> pairs granted operator_attested tier"
+
+testing:
+  unit_tests:
+    - file: "tests/unit/aauth_attestation_apple_se.test.ts"
+      tests:
+        - "valid Apple SE chain + matching challenge + key-binding -> verified"
+        - "tampered leaf signature -> rejected"
+        - "challenge mismatch -> rejected"
+        - "key-binding thumbprint mismatch -> rejected"
+        - "untrusted root -> rejected"
+    - file: "tests/unit/aauth_operator_allowlist.test.ts"
+      tests:
+        - "issuer match -> operator_attested"
+        - "iss:sub match -> operator_attested"
+        - "no match -> software"
+        - "empty env -> tier disabled"
+    - file: "tests/unit/aauth_attestation_trust_config.test.ts"
+      tests:
+        - "bundled Apple root always present"
+        - "override path replaces bundled list"
+        - "AAGUID trust list parsed and cached"
+    - file: "tests/unit/aauth_attestation_verifier.test.ts"
+      tests:
+        - "dispatch by format"
+        - "unknown format -> not verified, falls back"
+        - "stub formats return not_implemented"
+  integration_tests:
+    - file: "tests/integration/aauth_tier_resolution.test.ts"
+      tests:
+        - "no signature -> anonymous / unverified_client"
+        - "verified signature only -> software"
+        - "verified signature + allowlist -> operator_attested"
+        - "verified signature + verified attestation -> hardware"
+        - "verified signature + invalid attestation -> software (with reason)"
+    - file: "tests/integration/aauth_apple_se_e2e.test.ts"
+      tests:
+        - "fixture SE attestation passes end-to-end via /session"
+  native_tests:
+    - file: "packages/aauth-mac-se/tests/keygen_attest.test.ts"
+      tests:
+        - "darwin-only: keygen + attest produces verifiable statement"
+
+dependencies:
+  requires:
+    - reason: "AAuth middleware + agent attribution integration must be present"
+  blocks:
+    - reason: "v0.8.0 release blocked until cascade + Apple SE verifier land"
+
+feature_flags:
+  enabled: true
+
+rollout:
+  strategy: "instant"
+  rollback:
+    steps:
+      - "Revert middleware to prior cascade (no operator_attested)"
+      - "Disable attestation verifier (treat all cnf.attestation as not_verified)"
+  monitoring:
+    key_metrics:
+      - metric: "aauth_tier_total{tier=hardware}"
+        threshold: "Should drop to attested-only volume after release"
+      - metric: "aauth_tier_total{tier=operator_attested}"
+        threshold: "Non-zero only when operator allowlist env vars set"
+
+documentation:
+  files_created:
+    - path: "docs/subsystems/aauth_attestation.md"
+      purpose: "JSON cnf.attestation envelope + verifier dispatch + trust config"
+    - path: "docs/subsystems/aauth_cli_attestation.md"
+      purpose: "macOS Secure Enclave keygen/attest UX + platform support"
+  files_updated:
+    - path: "docs/subsystems/agent_attribution_integration.md"
+      changes: "Four-tier ladder + operator_attested + attestation section"
+    - path: "docs/developer/mcp/instructions.md"
+      changes: "Tier cascade + cnf.attestation + eligible_for_trusted_writes JSON path"
+    - path: "docs/developer/cli_agent_instructions.md"
+      changes: "Parity-anchored mirror of MCP instructions"
+    - path: "docs/releases/in_progress/v0.8.0/github_release_supplement.md"
+      changes: "Document attestation, breaking change, operator allowlist, ops migration"
+    - path: "docs/developer/mcp_chatgpt_setup.md"
+      changes: "Add Cursor MCP-reload note"
+    - path: "AGENTS.md"
+      changes: "Cross-reference Cursor MCP-reload note"
+
+risks:
+  - category: "breaking_change"
+    likelihood: "high"
+    impact: "medium"
+    mitigation: "Document downgrade path in v0.8.0 supplement; operator_attested tier covers vouched issuers"
+  - category: "native_build_failure"
+    likelihood: "medium"
+    impact: "low"
+    mitigation: "Native package is optional; CLI falls back to software signing"
+  - category: "trust_config_misuse"
+    likelihood: "low"
+    impact: "high"
+    mitigation: "Bundled defaults are conservative; logs show which roots and AAGUIDs were accepted"
+
+notes: |
+  This FU collapses three related fixes (tier honesty, eligible_for_trusted_writes JSON path,
+  Cursor MCP-reload note) under one release-blocking unit because they share the same first
+  impression of get_session_identity and tier display.

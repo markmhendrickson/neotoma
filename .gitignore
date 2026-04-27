@@ -74,3 +74,7 @@ keys.backup.*
 
 # Builds
 neotoma*.tgz
+*.tsbuildinfo
+
+# Native package build outputs (node-gyp; generated at install time)
+packages/*/build/

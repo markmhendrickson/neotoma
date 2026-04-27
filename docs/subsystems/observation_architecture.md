@@ -350,6 +350,18 @@ async function queryEntities(userId: string, filters: any) {
 }
 ```
 See [`docs/subsystems/entity_merge.md`](./entity_merge.md) for complete merge semantics.
+
+## Related Documents
+
+- [`docs/subsystems/sources.md`](./sources.md) — Source storage and the source ↔ interpretation lifecycle
+- [`docs/subsystems/interpretations.md`](./interpretations.md) — Dedicated reference for the interpretations record type
+- [`docs/subsystems/relationships.md`](./relationships.md) — Typed graph edges between entities
+- [`docs/subsystems/timeline_events.md`](./timeline_events.md) — Timeline events derived from observations and snapshots
+- [`docs/subsystems/entities.md`](./entities.md) — Canonical entity row that observations describe
+- [`docs/subsystems/entity_snapshots.md`](./entity_snapshots.md) — Deterministic reducer output from observations, with provenance map
+- [`docs/subsystems/entity_merge.md`](./entity_merge.md) — Merge semantics for observations across entities
+- [`docs/architecture/determinism.md`](../architecture/determinism.md) — Determinism doctrine
+
 ## Agent Instructions
 ### When to Load This Document
 Load `docs/subsystems/observation_architecture.md` when:

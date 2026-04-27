@@ -1,0 +1,164 @@
+feature_id: "FU-2026-Q4-aauth-windows-tbs-cli"
+version: "0.1.0"
+status: "in_progress"
+priority: "p1"
+risk_level: "medium"
+
+tags:
+  - "aauth"
+  - "attestation"
+  - "cli"
+  - "windows"
+  - "tbs"
+  - "ncrypt"
+  - "tpm2"
+  - "native"
+
+metadata:
+  title: "Windows TBS CLI Attestation Source"
+  description: >-
+    Add packages/aauth-win-tbs/ — an N-API binding to the Windows TBS API +
+    CNG (NCrypt against MS_PLATFORM_KEY_STORAGE_PROVIDER) — and wire it into
+    the CLI signer so `neotoma auth keygen --hardware` on Windows mints
+    TPM-resident keys via NCryptCreatePersistedKey and emits WebAuthn-`tpm`-
+    format attestation envelopes via NCryptCreateClaim that FU-3's server
+    verifier consumes. Bridges the gap between the v0.9.0 server-side TPM
+    2.0 verifier and a first-party Windows client, matching the macOS SE
+    (FU shipped earlier) and Linux TPM2 (FU-4) clients in shape.
+  owner: "engineering@neotoma.com"
+  created_at: "2026-04-27"
+  target_release: "v0.10.0"
+
+subsystems:
+  - name: "packages/aauth-win-tbs"
+    changes: "New native package. N-API binding to Windows TBS + NCrypt exposing is_supported / generate_key / sign / attest. prebuildify config for win32-x64 + win32-arm64."
+  - name: "src/cli/aauth_signer.ts"
+    changes: "New `tbs` backend value; deterministic backend ladder (SE on darwin → TBS on win32 → TPM2 on linux → YubiKey (FU-6) → software)."
+  - name: "src/cli/aauth_tbs_attestation.ts"
+    changes: "New `buildTbsAttestationEnvelope({ config, iat })` helper producing a WebAuthn-`tpm`-format envelope (format=tpm2 on the wire)."
+  - name: "src/cli/describe_signer.ts"
+    changes: "Surface `backend: 'tbs'`, `tbs_key_name`, `tbs_provider`, `tbs_scope`, `hardware_supported_reason` for Windows."
+  - name: "package.json"
+    changes: "Add `@neotoma/aauth-win-tbs` to optionalDependencies; mirror the pattern used for `@neotoma/aauth-mac-se` and `@neotoma/aauth-tpm2`."
+
+env_additions:
+  - name: "NEOTOMA_AAUTH_WIN_TBS_PROVIDER"
+    purpose: "Override NCrypt provider name (default `Microsoft Platform Crypto Provider`); used to pin to a specific HSM provider."
+  - name: "NEOTOMA_AAUTH_WIN_TBS_SCOPE"
+    purpose: "Override key scope (`user` | `machine`); default `user`."
+  - name: "NEOTOMA_AAUTH_WIN_TBS_KEY_NAME"
+    purpose: "Override NCrypt key name; used when integrating with pre-provisioned MDM-managed keys."
+  - name: "NEOTOMA_AAUTH_WIN_TBS_TEST_ENABLED"
+    purpose: "Gate hardware-bound test paths (set to `1` only on Windows hosts where TBS is enabled and the TPM is owned by the test user)."
+
+testing:
+  unit_tests:
+    - file: "tests/unit/cli_aauth_signer_tbs.test.ts"
+      tests:
+        - "Backend dispatch chooses tbs on win32 when binding reports supported"
+        - "Backend dispatch falls back to software when binding reports unsupported"
+        - "signer.json persists backend / tbs_key_name / tbs_provider / tbs_scope round-trip"
+        - "mintCliAgentTokenJwt routes ES256 sign through binding without exposing private key"
+        - "Refuses to mint envelope when key's pubArea thumbprint disagrees with cnf.jwk"
+    - file: "tests/unit/cli_aauth_tbs_attestation.test.ts"
+      tests:
+        - "computeAttestationChallenge is deterministic and matches buildTpm2AttestationEnvelope helper"
+        - "isTbsBackendAvailable returns supported=false on non-windows hosts"
+        - "isTbsBackendAvailable converts thrown probe errors into structured reasons"
+        - "buildTbsAttestationEnvelope wraps binding's attest() output into the FU-3 envelope shape (format=tpm2)"
+        - "buildTbsAttestationEnvelope rejects malformed attest() shapes"
+    - file: "packages/aauth-win-tbs/tests/smoke.test.js"
+      tests:
+        - "is_supported gated by process.platform=win32 and NEOTOMA_AAUTH_WIN_TBS_TEST_ENABLED"
+        - "generate_key returns NCrypt key name and JWK that round-trips through createPublicKey"
+        - "sign + attest pair verifies under FU-3 verifier with trust roots from packages/aauth-win-tbs/test_roots/"
+  integration_tests:
+    - file: "tests/integration/cli_aauth_keygen_tbs.test.ts"
+      tests:
+        - "neotoma auth keygen --hardware on win32 with mocked binding writes signer.json with backend=tbs"
+        - "neotoma auth session reports hardware_supported and tbs_key_name when binding mock is supported"
+        - "neotoma auth keygen --hardware on win32 without binding errors cleanly and does not corrupt existing signer.json"
+        - "End-to-end mint + post against test API with TBS-produced envelope reports decision.attestation.format=tpm2 and resolved_tier=hardware (mocked binding)"
+
+dependencies:
+  requires:
+    - reason: "FU-3 (TPM 2.0 server-side verifier) — hard prerequisite; without it the envelopes are rejected"
+    - reason: "v0.8.0 CLI signer scaffolding (src/cli/aauth_signer.ts)"
+    - reason: "v0.8.0 CLI attestation builder pattern (src/cli/aauth_tpm2_attestation.ts from FU-4 as template)"
+  blocks:
+    - "FU-7 attestation revocation (TBS-produced TPM2 leaf OCSP path) — FU-7 may exercise this CLI as a producer of revocable AIK envelopes"
+
+feature_flags:
+  enabled: true
+
+rollout:
+  strategy: "instant"
+  rollback:
+    steps:
+      - "Remove `@neotoma/aauth-win-tbs` from optionalDependencies in package.json"
+      - "Revert src/cli/aauth_signer.ts to remove the tbs backend dispatch"
+      - "Existing software-backed signers remain untouched; SE-backed signers on darwin and TPM2-backed signers on linux remain untouched"
+  monitoring:
+    key_metrics:
+      - "Count of agents with backend=tbs in describe-signer telemetry"
+      - "Count of decision.attestation rows with format=tpm2 verified=true on Windows producers (server-side; depends on FU-3 metrics)"
+      - "Count of CLI keygen --hardware failures on win32 with reason=binding_unavailable"
+
+documentation:
+  files_created:
+    - path: "packages/aauth-win-tbs/"
+      purpose: "Native package source tree (binding.gyp, src/native/binding.cc, src/ts/index.ts, lib/index.js, lib/index.d.ts, README.md, tests/)"
+    - path: "docs/integrations/aauth_tbs_windows.md"
+      purpose: "Windows SDK install prerequisites, TBS service troubleshooting, MS Platform Crypto Provider activation guide"
+    - path: "src/cli/aauth_tbs_attestation.ts"
+      purpose: "CLI-side helper for building Windows TBS attestation envelopes (format=tpm2 on the wire)"
+    - path: "src/types/aauth-win-tbs.d.ts"
+      purpose: "Ambient module declaration for @neotoma/aauth-win-tbs"
+    - path: "tests/unit/cli_aauth_signer_tbs.test.ts"
+      purpose: "Backend dispatch unit tests with binding mocked"
+    - path: "tests/unit/cli_aauth_tbs_attestation.test.ts"
+      purpose: "Helper unit tests with binding mocked"
+    - path: "tests/integration/cli_aauth_keygen_tbs.test.ts"
+      purpose: "Keygen CLI integration tests on win32 with binding mocked"
+  files_updated:
+    - path: "src/cli/aauth_signer.ts"
+      changes: "Add `tbs` backend; extend backend preference ladder; persist tbs fields in signer.json"
+    - path: "package.json"
+      changes: "Add `@neotoma/aauth-win-tbs` to optionalDependencies"
+    - path: "docs/subsystems/aauth_cli_attestation.md"
+      changes: "Add Windows platform-support row, tbs backend row, fallback behaviour"
+    - path: ".env.example"
+      changes: "Document NEOTOMA_AAUTH_WIN_TBS_PROVIDER, NEOTOMA_AAUTH_WIN_TBS_SCOPE, NEOTOMA_AAUTH_WIN_TBS_KEY_NAME, NEOTOMA_AAUTH_WIN_TBS_TEST_ENABLED"
+
+risks:
+  - category: "native_build_breakage"
+    likelihood: "medium"
+    impact: "medium"
+    mitigation: "Pin Windows SDK version in prebuildify; ship prebuilds for win32-x64 + win32-arm64; install-time fallback to source build with a clear actionable error if the SDK is missing."
+  - category: "tbs_service_disabled"
+    likelihood: "medium"
+    impact: "low"
+    mitigation: "is_supported() reports `tbs_unavailable` with a remediation hint pointing at services.msc / `Get-Service TbsService` / Group Policy; CLI surfaces the reason via describeConfiguredSigner; never auto-elevates to enable the service."
+  - category: "ms_platform_crypto_provider_missing"
+    likelihood: "low"
+    impact: "medium"
+    mitigation: "Probe NCryptOpenStorageProvider against MS_PLATFORM_KEY_STORAGE_PROVIDER; surface a typed reason if it fails; documentation includes diagnostic steps for the provider being absent on Windows Server Core."
+  - category: "tier_resolution_regression_for_existing_signers"
+    likelihood: "low"
+    impact: "high"
+    mitigation: "Existing `software`, `apple-secure-enclave`, and `tpm2` backends are untouched. Backend dispatch is gated by an explicit `backend` discriminator in signer.json; legacy signer.json files default to software."
+  - category: "envelope_format_drift_from_FU3"
+    likelihood: "low"
+    impact: "high"
+    mitigation: "buildTbsAttestationEnvelope shares the challenge-derivation helper (computeAttestationChallenge) with FU-4's TPM2 helper; integration test rounds the envelope through verifyTpm2Attestation against a runtime-generated AIK chain. Wire format is identical to FU-4 (format=tpm2) so the server doesn't distinguish producers."
+
+notes: |
+  Windows-only client surface; no behavioural change for darwin or linux
+  hosts. The native package is an optionalDependency, so non-Windows
+  installs are untouched. The CLI's existing software path remains the
+  terminal fallback for any Windows host without TBS / the MS Platform
+  Crypto Provider. The wire format is identical to FU-4 (format=tpm2) so
+  the server-side TPM 2.0 verifier (FU-3) consumes envelopes from both
+  Linux and Windows producers without distinguishing them. FU-6 (YubiKey)
+  reuses the existing WebAuthn-packed envelope from FU-2 instead of
+  producing a TPM 2.0 quote.

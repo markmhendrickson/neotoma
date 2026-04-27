@@ -1,0 +1,136 @@
+feature_id: "FU-2026-Q3-aauth-tpm2-verifier"
+version: "1.0.0"
+status: "completed"
+priority: "p1"
+risk_level: "medium"
+
+tags:
+  - "aauth"
+  - "attestation"
+  - "verifier"
+  - "tpm"
+  - "tpm2"
+
+metadata:
+  title: "TPM 2.0 Server-Side Verifier"
+  description: >-
+    Replace the v0.8.0 stub at src/services/aauth_attestation_tpm2.ts with a
+    real verifier for the WebAuthn `tpm` attestation statement format
+    (TPM 2.0 quotes). Includes a hand-written TPMS_ATTEST + TPMT_PUBLIC
+    parser with no external TPM library dependency, AIK chain validation
+    against bundled TPM CA roots, RFC 7638 key binding via pubArea, and
+    extraData / pubArea-digest binding to the JWT challenge derivation.
+  owner: "engineering@neotoma.com"
+  created_at: "2026-04-27"
+  target_release: "v0.9.0"
+
+subsystems:
+  - name: "aauth_attestation_tpm2"
+    changes: "Stub replaced with chain validation + signature verify + pubArea key binding + extraData challenge binding + certify-name digest binding"
+  - name: "aauth_tpm_structures"
+    changes: "New module: hand-written TPMS_ATTEST + TPMT_PUBLIC big-endian parser"
+  - name: "aauth_attestation_verifier"
+    changes: "AttestationFailureReason gains `pubarea_mismatch`"
+  - name: "aauth_attestation_trust_config"
+    changes: "Extended to load config/aauth/tpm_attestation_roots/ in addition to existing roots"
+
+env_additions: []
+
+testing:
+  unit_tests:
+    - file: "tests/unit/aauth_attestation_tpm2.test.ts"
+      tests:
+        - "verified outcome for well-formed synthetic AIK chain + ES256 signature + matching pubArea + matching extraData"
+        - "chain_invalid when terminal AIK is not rooted in merged trust set"
+        - "signature_invalid when sig does not verify under AIK leaf public key"
+        - "signature_invalid when COSE alg is unsupported"
+        - "key_binding_failed when pubArea-extracted thumbprint disagrees with cnf.jwk"
+        - "pubarea_mismatch when certInfo.attested.name digest disagrees with SHA-256(pubArea)"
+        - "challenge_mismatch when certInfo.extraData disagrees with SHA-256(challenge||jkt)"
+        - "unsupported_format when ver != '2.0'"
+        - "malformed when statement lacks ver / alg / sig / certInfo / pubArea"
+        - "malformed when TPMS_ATTEST magic != 0xff544347"
+    - file: "tests/unit/aauth_tpm_structures.test.ts"
+      tests:
+        - "TPMT_PUBLIC RSA-2048 parser yields { type: 'rsa', n, e } and a Node-compatible public key"
+        - "TPMT_PUBLIC ECC-P256 parser yields { type: 'ecc', curve: 'P-256', x, y }"
+        - "TPMS_ATTEST quote-type parser yields magic + type + qualifiedSigner + extraData + clockInfo + firmwareVersion + attested-quote body"
+        - "TPMS_ATTEST certify-type parser yields attested.name decoded as nameAlg||digest"
+        - "Big-endian length-prefixed reads survive truncated input by throwing typed errors caught upstream as `malformed`"
+  integration_tests:
+    - file: "tests/integration/aauth_tpm2_e2e.test.ts"
+      tests:
+        - "Runtime-generated AIK chain + synthesised TPMS_ATTEST quote produces verified outcome end-to-end through the AAuth middleware (hardware tier)"
+        - "Tampering with the AIK signature produces signature_invalid and the request still succeeds at software tier"
+        - "Mismatched pubArea digest in certify-attest produces pubarea_mismatch with software tier fallback"
+
+dependencies:
+  requires:
+    - reason: "v0.8.0 envelope dispatcher (src/services/aauth_attestation_verifier.ts)"
+    - reason: "v0.8.0 trust config (src/services/aauth_attestation_trust_config.ts)"
+  blocks:
+    - "FU-2026-Q4-aauth-linux-tpm2-cli — Linux TPM2 CLI source produces TPM 2.0 quote envelopes that this verifier consumes"
+    - "FU-2026-Q4-aauth-windows-tbs-cli — Windows TBS CLI source produces TPM 2.0 quote envelopes that this verifier consumes"
+
+feature_flags:
+  enabled: true
+
+rollout:
+  strategy: "instant"
+  rollback:
+    steps:
+      - "Revert src/services/aauth_attestation_tpm2.ts to the not_implemented stub"
+      - "Revert AttestationFailureReason addition (remove pubarea_mismatch) — no DB schema change"
+      - "Optionally revert config/aauth/tpm_attestation_roots/ if bundled roots are not yet referenced elsewhere"
+  monitoring:
+    key_metrics:
+      - "Count of decision.attestation rows with format=tpm2 and outcome=verified"
+      - "Count of failure_reason=pubarea_mismatch (signal of envelope mis-construction by a CLI source)"
+      - "Count of failure_reason=challenge_mismatch (signal of clock skew or stale challenge derivation)"
+
+documentation:
+  files_created:
+    - path: "tests/unit/aauth_attestation_tpm2.test.ts"
+      purpose: "Unit tests covering the verifier outcomes against synthesised TPMS_ATTEST + AIK fixtures"
+    - path: "tests/unit/aauth_tpm_structures.test.ts"
+      purpose: "Pure parser unit tests for TPMT_PUBLIC + TPMS_ATTEST"
+    - path: "tests/integration/aauth_tpm2_e2e.test.ts"
+      purpose: "End-to-end test using a runtime-generated AIK chain through the AAuth middleware"
+    - path: "src/services/aauth_tpm_structures.ts"
+      purpose: "Hand-written big-endian length-prefixed parser for TPMT_PUBLIC and TPMS_ATTEST"
+    - path: "config/aauth/tpm_attestation_roots/README.md"
+      purpose: "Sourcing notes for bundled Infineon / STMicro / Intel / AMD TPM CAs (URL + SHA-256 fingerprint)"
+  files_updated:
+    - path: "src/services/aauth_attestation_tpm2.ts"
+      changes: "Stub body replaced with full verification (parse statement, walk x5c, verify sig over certInfo, parse pubArea + bind to cnf.jwk, validate extraData + certify name)"
+    - path: "src/services/aauth_attestation_verifier.ts"
+      changes: "AttestationFailureReason gains 'pubarea_mismatch'"
+    - path: "src/services/aauth_attestation_trust_config.ts"
+      changes: "Loads bundled TPM CA roots from config/aauth/tpm_attestation_roots/ in addition to Apple root + operator-supplied CAs"
+    - path: "docs/subsystems/aauth_attestation.md"
+      changes: "tpm2 row flips from 'stub' to 'verified'; supported COSE algs documented; new TPMS_ATTEST/TPMT_PUBLIC parser referenced"
+    - path: "docs/subsystems/agent_attribution_integration.md"
+      changes: "Failure reason taxonomy gains pubarea_mismatch; decision.attestation.failure_reason notes TPM-specific values"
+
+risks:
+  - category: "tier_resolution_regression"
+    likelihood: "low"
+    impact: "medium"
+    mitigation: "Verifier failures cascade to operator allowlist or software tier; agents are never rejected. Existing `key_binding_failed` / `chain_invalid` semantics inherited from Apple SE + WebAuthn-packed verifiers."
+  - category: "binary_parser_correctness"
+    likelihood: "medium"
+    impact: "medium"
+    mitigation: "Hand-written parser is tested in isolation against synthetic TPMS_ATTEST + TPMT_PUBLIC fixtures (RSA + ECC variants, quote + certify variants, truncated input). Big-endian length-prefixed primitives kept in dedicated module so logic stays auditable."
+  - category: "trust_root_drift"
+    likelihood: "low"
+    impact: "medium"
+    mitigation: "Bundled TPM CAs versioned in config/aauth/tpm_attestation_roots/README.md with source URLs and SHA-256 fingerprints. Operators can supplement via NEOTOMA_AAUTH_ATTESTATION_CA_PATH."
+
+notes: |
+  Server-side verifier only. No CLI-side change in this FU; FU-4 (Linux TPM2)
+  and FU-5 (Windows TBS) consume this verifier through their `tpm2` envelope
+  output. Apple SE / WebAuthn-packed verifier semantics are inherited where
+  reasonable (constant-time comparisons, structured failure outcomes, no
+  throwing). The hand-written TPMS_ATTEST + TPMT_PUBLIC parser stays inside
+  src/services/aauth_tpm_structures.ts so the cross-format trust-config
+  module remains generic and the parser can be unit-tested in isolation.

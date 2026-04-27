@@ -1,0 +1,203 @@
+feature_id: "FU-2026-Q4-aauth-yubikey-cli"
+version: "0.1.0"
+status: "in_progress"
+priority: "p1"
+risk_level: "medium"
+
+tags:
+  - "aauth"
+  - "attestation"
+  - "cli"
+  - "yubikey"
+  - "piv"
+  - "pkcs11"
+  - "webauthn-packed"
+  - "native"
+
+metadata:
+  title: "YubiKey CLI Attestation Source"
+  description: >-
+    Add packages/aauth-yubikey/ — an N-API binding to the Yubico PKCS#11
+    provider (libykcs11) plus the YKPIV_INS_ATTEST APDU — and wire it
+    into the CLI signer so `neotoma auth keygen --hardware` on any
+    supported host (darwin, linux, win32) with a YubiKey 5 series
+    device connected mints PIV slot 9c-resident keys and emits
+    WebAuthn-`packed`-format attestation envelopes that the v0.9.0
+    server-side WebAuthn-packed verifier (FU-2) consumes to promote
+    the agent to the `hardware` tier. Cross-platform fallback when
+    no platform-native backend (SE / TBS / TPM2) is available.
+  owner: "engineering@neotoma.com"
+  created_at: "2026-04-27"
+  target_release: "v0.10.0"
+
+subsystems:
+  - name: "packages/aauth-yubikey"
+    changes: "New native package. N-API binding to Yubico PKCS#11 + YKPIV_INS_ATTEST exposing is_supported / generate_key / sign / attest. prebuildify config for darwin-x64, darwin-arm64, linux-x64, linux-arm64, win32-x64."
+  - name: "src/cli/aauth_signer.ts"
+    changes: "New `yubikey` backend value; extend backend ladder so YubiKey is the cross-platform fallback after the platform-native backend declines (SE on darwin → TBS on win32 → TPM2 on linux → YubiKey → software)."
+  - name: "src/cli/aauth_yubikey_attestation.ts"
+    changes: "New `buildYubikeyAttestationEnvelope({ config, iat })` helper producing a WebAuthn-`packed` envelope (format=webauthn-packed on the wire — reuses FU-2 verifier path)."
+  - name: "src/cli/describe_signer.ts"
+    changes: "Surface `backend: 'yubikey'`, `yubikey_serial`, `yubikey_slot`, `yubikey_pkcs11_path`, `hardware_supported_reason` for cross-platform YubiKey hosts."
+  - name: "src/services/aauth_attestation_trust_config.ts"
+    changes: "Bundle Yubico PIV CA roots; load via NEOTOMA_AAUTH_YUBICO_PIV_ROOTS_PATH (default config/aauth/yubico_piv_roots.pem). Extend AAGUID trust list config to admit YubiKey 5 series AAGUIDs."
+  - name: "package.json"
+    changes: "Add `@neotoma/aauth-yubikey` to optionalDependencies; mirror the pattern used for `@neotoma/aauth-mac-se`, `@neotoma/aauth-tpm2`, and `@neotoma/aauth-win-tbs`."
+
+env_additions:
+  - name: "NEOTOMA_AAUTH_YUBIKEY_PKCS11_PATH"
+    purpose: "Override path to libykcs11 (default: search well-known paths). Used when YubiKey Manager is installed in a non-default location or when running against a vendored libykcs11."
+  - name: "NEOTOMA_AAUTH_YUBIKEY_PIN"
+    purpose: "Non-interactive PIN injection for CI / headless environments. Redacted in logs and never persisted to signer.json."
+  - name: "NEOTOMA_AAUTH_YUBIKEY_SLOT"
+    purpose: "Override PIV slot identifier (default `9c`). Currently only `9c` is supported; other values produce a typed error."
+  - name: "NEOTOMA_AAUTH_YUBIKEY_SERIAL"
+    purpose: "Pin to a specific YubiKey serial number when multiple YubiKeys are connected. Mismatches at sign time produce a structured error."
+  - name: "NEOTOMA_AAUTH_YUBIKEY_TEST_ENABLED"
+    purpose: "Gate hardware-bound test paths (set to `1` only on hosts where a test YubiKey is connected and the PIN policy is acceptable)."
+  - name: "NEOTOMA_AAUTH_YUBICO_PIV_ROOTS_PATH"
+    purpose: "Override path to the Yubico PIV CA roots PEM bundle (default: bundled config/aauth/yubico_piv_roots.pem)."
+
+testing:
+  unit_tests:
+    - file: "tests/unit/cli_aauth_signer_yubikey.test.ts"
+      tests:
+        - "Backend dispatch chooses yubikey when binding reports supported and platform-native backend declined"
+        - "Backend dispatch on darwin prefers SE over yubikey when both are available"
+        - "Backend dispatch on win32 prefers TBS over yubikey when both are available"
+        - "Backend dispatch on linux prefers TPM2 over yubikey when both are available"
+        - "Backend dispatch falls back to software when both platform-native and yubikey decline"
+        - "signer.json persists backend / yubikey_serial / yubikey_slot / yubikey_pkcs11_path round-trip"
+        - "mintCliAgentTokenJwt routes ES256 sign through binding without exposing private key"
+        - "Refuses to sign when connected YubiKey serial does not match signer.json"
+        - "Refuses to mint envelope when slot 9c attestation cert thumbprint disagrees with cnf.jwk"
+    - file: "tests/unit/cli_aauth_yubikey_attestation.test.ts"
+      tests:
+        - "computeAttestationChallenge is deterministic and matches buildYubikeyAttestationEnvelope helper"
+        - "isYubikeyBackendAvailable returns supported=false when libykcs11 is unloadable"
+        - "isYubikeyBackendAvailable returns supported=false when no YubiKey is detected"
+        - "isYubikeyBackendAvailable returns supported=false for YubiKey firmware < 5.0.0"
+        - "isYubikeyBackendAvailable converts thrown probe errors into structured reasons (PIN locked, slot empty, etc.)"
+        - "buildYubikeyAttestationEnvelope wraps binding's attest() output into the WebAuthn-packed envelope shape"
+        - "buildYubikeyAttestationEnvelope rejects malformed attest() shapes"
+        - "buildYubikeyAttestationEnvelope refuses unsupported slot overrides"
+    - file: "packages/aauth-yubikey/tests/smoke.test.js"
+      tests:
+        - "is_supported gated by NEOTOMA_AAUTH_YUBIKEY_TEST_ENABLED and a hardware-present probe"
+        - "generate_key returns YubiKey serial + slot 9c attestation cert + JWK that round-trips through createPublicKey"
+        - "sign + attest pair verifies as WebAuthn-packed under FU-2 verifier with trust roots from packages/aauth-yubikey/test_roots/"
+  integration_tests:
+    - file: "tests/integration/cli_aauth_keygen_yubikey.test.ts"
+      tests:
+        - "neotoma auth keygen --hardware with mocked YubiKey binding writes signer.json with backend=yubikey + serial"
+        - "neotoma auth session reports hardware_supported and yubikey_serial when binding mock is supported"
+        - "neotoma auth keygen --hardware without a YubiKey connected falls through to platform-native or software backend without corrupting existing signer.json"
+        - "neotoma auth keygen --hardware with mismatching yubikey_serial in env vs connected serial errors cleanly"
+        - "End-to-end mint + post against test API with YubiKey-produced envelope reports decision.attestation.format=webauthn-packed and resolved_tier=hardware (mocked binding, FU-2 verifier path)"
+
+dependencies:
+  requires:
+    - reason: "FU-2 (WebAuthn-packed server-side verifier) — hard prerequisite; without it the envelopes are rejected"
+    - reason: "v0.8.0 CLI signer scaffolding (src/cli/aauth_signer.ts)"
+    - reason: "v0.8.0 CLI attestation builder pattern (src/cli/aauth_tpm2_attestation.ts and src/cli/aauth_tbs_attestation.ts as templates)"
+  blocks:
+    - "FU-7 attestation revocation (Yubico PIV CA OCSP path) — FU-7 may exercise this CLI as a producer of revocable WebAuthn-packed envelopes from a Yubico-rooted chain"
+
+feature_flags:
+  enabled: true
+
+rollout:
+  strategy: "instant"
+  rollback:
+    steps:
+      - "Remove `@neotoma/aauth-yubikey` from optionalDependencies in package.json"
+      - "Revert src/cli/aauth_signer.ts to remove the yubikey backend dispatch"
+      - "Revert src/services/aauth_attestation_trust_config.ts to drop Yubico PIV roots loading"
+      - "Existing software-, SE-, TPM2-, and TBS-backed signers remain untouched"
+  monitoring:
+    key_metrics:
+      - "Count of agents with backend=yubikey in describe-signer telemetry"
+      - "Count of decision.attestation rows with format=webauthn-packed verified=true and chain_root=yubico_piv_ca"
+      - "Count of CLI keygen --hardware failures with reason=yubikey_libykcs11_not_loadable / yubikey_no_device / yubikey_firmware_too_old"
+
+documentation:
+  files_created:
+    - path: "packages/aauth-yubikey/"
+      purpose: "Native package source tree (binding.gyp, src/native/binding.cc, src/ts/index.ts, lib/index.js, lib/index.d.ts, README.md, tests/)"
+    - path: "docs/integrations/aauth_yubikey.md"
+      purpose: "YubiKey Manager install prerequisites (darwin / linux / win32), libykcs11 path discovery guide, PIN policy + slot 9c choice rationale, AAGUID configuration, troubleshooting"
+    - path: "src/cli/aauth_yubikey_attestation.ts"
+      purpose: "CLI-side helper for building YubiKey attestation envelopes (format=webauthn-packed on the wire — reuses FU-2 verifier)"
+    - path: "src/types/aauth-yubikey.d.ts"
+      purpose: "Ambient module declaration for @neotoma/aauth-yubikey"
+    - path: "tests/unit/cli_aauth_signer_yubikey.test.ts"
+      purpose: "Backend dispatch unit tests with binding mocked"
+    - path: "tests/unit/cli_aauth_yubikey_attestation.test.ts"
+      purpose: "Helper unit tests with binding mocked"
+    - path: "tests/integration/cli_aauth_keygen_yubikey.test.ts"
+      purpose: "Keygen CLI integration tests with binding mocked"
+    - path: "config/aauth/yubico_piv_roots.pem"
+      purpose: "Bundled Yubico PIV CA roots with sourcing notes pointing at Yubico's developer documentation"
+  files_updated:
+    - path: "src/cli/aauth_signer.ts"
+      changes: "Add `yubikey` backend; extend backend preference ladder so YubiKey is the cross-platform fallback after platform-native backends decline; persist yubikey fields in signer.json"
+    - path: "src/services/aauth_attestation_trust_config.ts"
+      changes: "Bundle and load Yubico PIV CA roots; extend AAGUID trust list to admit YubiKey 5 series AAGUIDs"
+    - path: "package.json"
+      changes: "Add `@neotoma/aauth-yubikey` to optionalDependencies"
+    - path: "docs/subsystems/aauth_cli_attestation.md"
+      changes: "Add cross-platform YubiKey row to platform-support matrix; add yubikey backend row; document fallback behaviour in the backend ladder"
+    - path: ".env.example"
+      changes: "Document NEOTOMA_AAUTH_YUBIKEY_PKCS11_PATH, NEOTOMA_AAUTH_YUBIKEY_PIN, NEOTOMA_AAUTH_YUBIKEY_SLOT, NEOTOMA_AAUTH_YUBIKEY_SERIAL, NEOTOMA_AAUTH_YUBIKEY_TEST_ENABLED, NEOTOMA_AAUTH_YUBICO_PIV_ROOTS_PATH"
+
+risks:
+  - category: "libykcs11_not_installed"
+    likelihood: "high"
+    impact: "low"
+    mitigation: "is_supported() reports `libykcs11_not_loadable` with a remediation hint pointing at YubiKey Manager / yubico-piv-tool install per OS; CLI surfaces the reason via describeConfiguredSigner. The package is an optionalDependency so npm install never fails."
+  - category: "yubikey_4_or_neo_firmware"
+    likelihood: "low"
+    impact: "low"
+    mitigation: "is_supported() probes firmware version via PIV GET DATA and returns `yubikey_firmware_too_old` for < 5.0.0; documentation enumerates supported firmware ranges."
+  - category: "pin_lockout_in_ci"
+    likelihood: "medium"
+    impact: "medium"
+    mitigation: "PIN policy is `ONCE` per session for slot 9c — three failed PIN attempts lock the YubiKey. CI test paths use NEOTOMA_AAUTH_YUBIKEY_PIN with a known test PIN; smoke test guards via NEOTOMA_AAUTH_YUBIKEY_TEST_ENABLED to avoid accidental lockout."
+  - category: "multiple_yubikeys_attached"
+    likelihood: "low"
+    impact: "low"
+    mitigation: "Default behaviour binds to the first detected slot. NEOTOMA_AAUTH_YUBIKEY_SERIAL pins to a specific device. signer.json persists the resolved serial so subsequent runs detect device swaps."
+  - category: "envelope_format_drift_from_FU2"
+    likelihood: "low"
+    impact: "high"
+    mitigation: "buildYubikeyAttestationEnvelope produces an envelope shape identical to FU-2's WebAuthn-packed expectation; integration test rounds the envelope through verifyWebAuthnPackedAttestation against a runtime-generated Yubico-rooted chain. The format=webauthn-packed wire identifier is shared with all other producers using the packed format."
+  - category: "tier_resolution_regression_for_existing_signers"
+    likelihood: "low"
+    impact: "high"
+    mitigation: "Existing `software`, `apple-secure-enclave`, `tpm2`, and `tbs` backends are untouched. Backend dispatch is gated by an explicit `backend` discriminator in signer.json; legacy signer.json files default to their existing backend value."
+  - category: "yubico_piv_ca_root_drift"
+    likelihood: "low"
+    impact: "medium"
+    mitigation: "Bundled config/aauth/yubico_piv_roots.pem is sourced from Yubico's published developer documentation with a checked-in SHA-256 fingerprint. Operators can override via NEOTOMA_AAUTH_YUBICO_PIV_ROOTS_PATH for air-gapped or pinned-root deployments. FU-7 will add OCSP-driven revocation against the same roots."
+
+notes: |
+  Cross-platform client surface; the only AAuth attestation source
+  that is portable across darwin, linux, and win32. Routes through
+  FU-2's existing WebAuthn-packed verifier rather than introducing a
+  fourth envelope format and verifier — the YubiKey 5 series PIV
+  slot attestation is envelope-compatible with WebAuthn `packed` out
+  of the box.
+
+  YubiKey is intentionally a fallback in the backend ladder rather
+  than the default: a host with a TPM 2.0 chip on linux or win32 (or
+  a Secure Enclave on darwin) will prefer the platform-native backend
+  because that path requires no operator action beyond `--hardware`.
+  YubiKey is preferred only when the platform-native backend declines
+  (no TPM, no SE, virtualised host without TPM passthrough), or when
+  operators explicitly pin via NEOTOMA_AAUTH_HARDWARE_BACKEND=yubikey.
+
+  PIN policy: slot 9c is gated by `PIN ONCE` (one PIN entry per
+  session unlocks the slot for the lifetime of the PKCS#11 session,
+  not the YubiKey lifetime). This gives operators a meaningful
+  presence gate per CLI run without forcing PIN entry on every
+  signature.

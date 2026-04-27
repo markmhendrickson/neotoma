@@ -48,12 +48,13 @@ export function modeCopy(mode: LandingMode): { title: string; subtitle: string; 
       return {
         title: "Neotoma MCP server",
         subtitle:
-          "Personal instance. Public endpoints are read-only discovery; MCP writes require auth.",
+          "Personal instance. Public endpoints are read-only discovery; MCP writes require OAuth, a Bearer token, or a verified AAuth signature matching one of your active agent grants.",
       };
     case "prod":
       return {
         title: "Neotoma MCP server",
-        subtitle: "Hosted production instance. MCP writes require auth.",
+        subtitle:
+          "Hosted production instance. MCP writes require OAuth, a Bearer token, or a verified AAuth signature matching one of your active agent grants.",
       };
     case "local":
       return {

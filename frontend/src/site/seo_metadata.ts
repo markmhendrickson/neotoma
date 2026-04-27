@@ -301,6 +301,298 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "CLI", path: "/cli" },
     ],
   },
+  "/aauth": {
+    title: "AAuth (Agent Authentication) | Neotoma",
+    description:
+      "Cryptographically verifiable agent identity for Neotoma writes: RFC 9421 HTTP Message Signatures, the aa-agent+jwt token, trust tiers, hardware attestation, and operator policy.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "AAuth", path: "/aauth" },
+    ],
+  },
+  "/inspector": {
+    title: "Inspector | Neotoma",
+    description:
+      "The Neotoma Inspector: a web UI for entities, observations, sources, relationships, the timeline, schemas, conversations, agents, and grants.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Inspector", path: "/inspector" },
+    ],
+  },
+  "/inspector/dashboard": {
+    title: "Inspector, Dashboard & health | Neotoma",
+    description:
+      "The Inspector dashboard surfaces top-level stats, entity-type breakdown, attribution coverage, and live system health for a Neotoma instance.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Inspector", path: "/inspector" },
+      { name: "Dashboard", path: "/inspector/dashboard" },
+    ],
+  },
+  "/inspector/entities": {
+    title: "Inspector, Entities | Neotoma",
+    description:
+      "Entity list, snapshots, per-field provenance, observations, relationships, graph context, multi-field corrections, and duplicate detection in the Neotoma Inspector.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Inspector", path: "/inspector" },
+      { name: "Entities", path: "/inspector/entities" },
+    ],
+  },
+  "/inspector/observations-and-sources": {
+    title: "Inspector, Observations & sources | Neotoma",
+    description:
+      "Inspect immutable observations, the reducer that produces snapshots, the source registry, and the file-backed provenance chain behind every entity.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Inspector", path: "/inspector" },
+      {
+        name: "Observations & sources",
+        path: "/inspector/observations-and-sources",
+      },
+    ],
+  },
+  "/inspector/relationships-and-graph": {
+    title: "Inspector, Relationships & graph | Neotoma",
+    description:
+      "Typed relationships, the Graph Explorer, edge inspection, and the workflows for reasoning about Neotoma entities as a graph.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Inspector", path: "/inspector" },
+      {
+        name: "Relationships & graph",
+        path: "/inspector/relationships-and-graph",
+      },
+    ],
+  },
+  "/inspector/schemas": {
+    title: "Inspector, Schemas | Neotoma",
+    description:
+      "Browse registered entity types, fields, identity rules, version history, and live cardinality through the Neotoma Inspector.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Inspector", path: "/inspector" },
+      { name: "Schemas", path: "/inspector/schemas" },
+    ],
+  },
+  "/inspector/timeline": {
+    title: "Inspector, Timeline & interpretations | Neotoma",
+    description:
+      "The Inspector timeline turns Neotoma's per-row history into a chronological event stream and exposes derived interpretation entities.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Inspector", path: "/inspector" },
+      {
+        name: "Timeline & interpretations",
+        path: "/inspector/timeline",
+      },
+    ],
+  },
+  "/inspector/conversations": {
+    title: "Inspector, Conversations & turns | Neotoma",
+    description:
+      "Reconstruct chat history from conversation_message rows: per-turn transcripts, embedded files, references, and per-row compliance auditing.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Inspector", path: "/inspector" },
+      {
+        name: "Conversations & turns",
+        path: "/inspector/conversations",
+      },
+    ],
+  },
+  "/inspector/agents": {
+    title: "Inspector, Agents, attribution & grants | Neotoma",
+    description:
+      "Per-agent attribution surface in the Neotoma Inspector: trust tiers, AAuth thumbprints, capability grants, and per-identity activity feeds.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Inspector", path: "/inspector" },
+      {
+        name: "Agents, attribution & grants",
+        path: "/inspector/agents",
+      },
+    ],
+  },
+  "/inspector/search": {
+    title: "Inspector, Search | Neotoma",
+    description:
+      "Global ⌘K search across entities, observations, sources, conversations, and timeline events in the Neotoma Inspector, with ranking and result-kind details.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Inspector", path: "/inspector" },
+      { name: "Search", path: "/inspector/search" },
+    ],
+  },
+  "/inspector/settings": {
+    title: "Inspector, Settings | Neotoma",
+    description:
+      "Inspector settings overview: connection, attribution policy, retention, and feedback, the operator-side configuration surfaced in the Inspector app.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Inspector", path: "/inspector" },
+      { name: "Settings", path: "/inspector/settings" },
+    ],
+  },
+  "/inspector/settings/connection": {
+    title: "Inspector, Settings · Connection | Neotoma",
+    description:
+      "Configure the Neotoma API base URL, environment, SQLite path, and health probes from the Inspector settings panel.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Inspector", path: "/inspector" },
+      { name: "Settings", path: "/inspector/settings" },
+      { name: "Connection", path: "/inspector/settings/connection" },
+    ],
+  },
+  "/inspector/settings/attribution-policy": {
+    title: "Inspector, Settings · Attribution policy | Neotoma",
+    description:
+      "Configure the AAuth attribution policy from the Inspector: global allow/warn/reject mode, minimum trust tier, per-path overrides, and a live decision summary.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Inspector", path: "/inspector" },
+      { name: "Settings", path: "/inspector/settings" },
+      {
+        name: "Attribution policy",
+        path: "/inspector/settings/attribution-policy",
+      },
+    ],
+  },
+  "/inspector/settings/retention": {
+    title: "Inspector, Settings · Retention | Neotoma",
+    description:
+      "Configure per-store retention windows for observations, source files, timeline events, and conversation messages from the Inspector retention panel.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Inspector", path: "/inspector" },
+      { name: "Settings", path: "/inspector/settings" },
+      { name: "Retention", path: "/inspector/settings/retention" },
+    ],
+  },
+  "/inspector/feedback": {
+    title: "Inspector, Feedback | Neotoma",
+    description:
+      "Neotoma Inspector feedback route (/feedback): submission mode, PII redaction, status feed, and fix-verification round-trips, top-level in the app, not under Settings.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Inspector", path: "/inspector" },
+      { name: "Feedback", path: "/inspector/feedback" },
+    ],
+  },
+  "/aauth/spec": {
+    title: "AAuth wire format and verification | Neotoma",
+    description:
+      "Canonical reference for the AAuth wire format, RFC 9421 signature components, JWT confirmation key contract, and Neotoma's trust-tier derivation cascade.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "AAuth", path: "/aauth" },
+      { name: "Spec", path: "/aauth/spec" },
+    ],
+  },
+  "/aauth/attestation": {
+    title: "AAuth attestation | Neotoma",
+    description:
+      "Hardware attestation envelopes for AAuth: Apple Secure Enclave, WebAuthn-packed, and TPM 2.0 verifiers, the cnf.attestation claim, and revocation policy.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "AAuth", path: "/aauth" },
+      { name: "Attestation", path: "/aauth/attestation" },
+    ],
+  },
+  "/aauth/cli-keys": {
+    title: "AAuth CLI keys and hardware backends | Neotoma",
+    description:
+      "How the Neotoma CLI generates AAuth keypairs and mints aa-agent+jwt tokens across software, Apple Secure Enclave, TPM 2.0, Windows TBS, and YubiKey 5 backends.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "AAuth", path: "/aauth" },
+      { name: "CLI keys", path: "/aauth/cli-keys" },
+    ],
+  },
+  "/aauth/integration": {
+    title: "AAuth integration guide | Neotoma",
+    description:
+      "End-to-end wiring guide for new agents: wire format, fallback precedence, generic-name normalisation, /session preflight, policy knobs, diagnostics, and transport parity.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "AAuth", path: "/aauth" },
+      { name: "Integration", path: "/aauth/integration" },
+    ],
+  },
+  "/aauth/capabilities": {
+    title: "Agent capability scoping | Neotoma",
+    description:
+      "Per-agent (op, entity_type) allow-lists modelled as agent_grant entities, the protected-entity-types guard, status lifecycle, and operator runbook for grant management.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "AAuth", path: "/aauth" },
+      { name: "Capabilities", path: "/aauth/capabilities" },
+    ],
+  },
   "/architecture": {
     title: "Architecture | Neotoma",
     description:
@@ -1098,7 +1390,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       {
         question: "Agent is not storing memory entries",
         answer:
-          "Confirm the MCP server is configured and running, then verify tool calls include store actions. Recheck client config (.cursor/mcp.json, .mcp.json, or .codex/config.toml) and restart the client.",
+          "Confirm the MCP server is configured and running, then verify tool calls include store actions. Recheck client config (.cursor/mcp.json.mcp.json, or .codex/config.toml) and restart the client.",
       },
       {
         question: "Entity query returns empty results",
@@ -1406,6 +1698,279 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Events guide", path: "/types/events" },
     ],
     keywords: ["events", "meetings", "milestones", "calendar", "entity type"],
+  },
+  "/primitives": {
+    title: "Primitive Record Types | Sources, Interpretations, Observations, Relationships, Timeline Events | Neotoma",
+    description:
+      "Neotoma's five primitive record types: sources, interpretations, observations, relationships, and timeline events. The system-level building blocks behind every entity, snapshot, and audit trail.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Primitive record types", path: "/primitives" },
+    ],
+    keywords: [
+      "primitive record types",
+      "sources",
+      "interpretations",
+      "observations",
+      "relationships",
+      "timeline events",
+      "three-layer truth model",
+      "deterministic state",
+    ],
+  },
+  "/primitives/sources": {
+    title: "Sources | Primitive Record Type | Neotoma",
+    description:
+      "Sources are content-addressed raw storage for every byte that ever entered Neotoma. SHA-256 deduplicated per user, immutable, and the foundation of every observation, interpretation, and timeline event.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Primitive record types", path: "/primitives" },
+      { name: "Sources", path: "/primitives/sources" },
+    ],
+    keywords: [
+      "sources",
+      "content addressing",
+      "deduplication",
+      "raw storage",
+      "primitive record type",
+      "provenance",
+    ],
+  },
+  "/primitives/interpretations": {
+    title: "Interpretations | Primitive Record Type | Neotoma",
+    description:
+      "Interpretations are versioned, audited extraction attempts that turn a source into structured observations. interpretation_config records the model, prompt, and schema version active at run start.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Primitive record types", path: "/primitives" },
+      { name: "Interpretations", path: "/primitives/interpretations" },
+    ],
+    keywords: [
+      "interpretations",
+      "extraction",
+      "reinterpret",
+      "interpretation_config",
+      "primitive record type",
+      "audit log",
+    ],
+  },
+  "/primitives/observations": {
+    title: "Observations | Primitive Record Type | Neotoma",
+    description:
+      "Observations are granular, immutable facts that the reducer composes into entity snapshots. Every snapshot field traces back to the observation, source, and interpretation that produced it.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Primitive record types", path: "/primitives" },
+      { name: "Observations", path: "/primitives/observations" },
+    ],
+    keywords: [
+      "observations",
+      "three-layer truth model",
+      "immutable",
+      "source priority",
+      "primitive record type",
+      "reducer",
+    ],
+  },
+  "/primitives/relationships": {
+    title: "Relationships | Primitive Record Type | Neotoma",
+    description:
+      "Relationships are first-class typed graph edges that follow the same observation-snapshot pattern as entities. Open ontology, deterministic merging, and full per-field provenance.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Primitive record types", path: "/primitives" },
+      { name: "Relationships", path: "/primitives/relationships" },
+    ],
+    keywords: [
+      "relationships",
+      "graph edges",
+      "PART_OF",
+      "REFERS_TO",
+      "EMBEDS",
+      "primitive record type",
+      "open ontology",
+    ],
+  },
+  "/primitives/timeline-events": {
+    title: "Timeline Events | Primitive Record Type | Neotoma",
+    description:
+      "Timeline events are immutable, source-anchored temporal records derived deterministically from extracted source date fields. Distinct from system observability events and from the application-level event entity type.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Primitive record types", path: "/primitives" },
+      { name: "Timeline events", path: "/primitives/timeline-events" },
+    ],
+    keywords: [
+      "timeline events",
+      "deterministic timeline",
+      "source-anchored",
+      "primitive record type",
+      "temporal records",
+    ],
+  },
+  "/primitives/entities": {
+    title: "Entities | Primitive Record Type | Neotoma",
+    description:
+      "Entities are the canonical, durable rows that observations, relationships, and timeline events point at. Deterministic hash-based IDs, per-user identity isolation, and merge tracking via merged_to_entity_id.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Primitive record types", path: "/primitives" },
+      { name: "Entities", path: "/primitives/entities" },
+    ],
+    keywords: [
+      "entities",
+      "canonical record",
+      "deterministic id",
+      "entity merge",
+      "primitive record type",
+    ],
+  },
+  "/primitives/entity-snapshots": {
+    title: "Entity Snapshots | Primitive Record Type | Neotoma",
+    description:
+      "Entity snapshots are the deterministic reducer output for each entity, with per-field provenance back to observations and an optional embedding column for semantic search.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Primitive record types", path: "/primitives" },
+      { name: "Entity snapshots", path: "/primitives/entity-snapshots" },
+    ],
+    keywords: [
+      "entity snapshot",
+      "reducer output",
+      "provenance map",
+      "embedding",
+      "deterministic",
+      "primitive record type",
+    ],
+  },
+  "/schemas": {
+    title: "Schemas | Neotoma",
+    description:
+      "Versioned, config-driven entity schemas in Neotoma, the schema registry, declarative merge policies, three-layer storage, and additive versioning that gives the immutable primitives their domain shape.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Schemas", path: "/schemas" },
+    ],
+    keywords: [
+      "schema",
+      "schema registry",
+      "merge policies",
+      "storage layers",
+      "schema versioning",
+      "reducer config",
+    ],
+  },
+  "/schemas/registry": {
+    title: "Schema Registry | Schemas | Neotoma",
+    description:
+      "The schema registry table holds every versioned entity schema in Neotoma, schema_definition, reducer_config, semantic versions, global vs user-specific scopes, and auto-enhancement from raw_fragments.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Schemas", path: "/schemas" },
+      { name: "Schema registry", path: "/schemas/registry" },
+    ],
+    keywords: [
+      "schema registry",
+      "schema definition",
+      "reducer config",
+      "schema version",
+      "user-specific schema",
+      "auto-enhancement",
+    ],
+  },
+  "/schemas/merge-policies": {
+    title: "Merge Policies | Schemas | Neotoma",
+    description:
+      "Merge policies are per-field declarative rules that turn many observations into one deterministic snapshot, last_write, highest_priority, most_specific, and merge_array, with explicit tie-breakers.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Schemas", path: "/schemas" },
+      { name: "Merge policies", path: "/schemas/merge-policies" },
+    ],
+    keywords: [
+      "merge policies",
+      "reducer",
+      "last_write",
+      "highest_priority",
+      "most_specific",
+      "merge_array",
+      "deterministic merge",
+    ],
+  },
+  "/schemas/storage-layers": {
+    title: "Storage Layers | Schemas | Neotoma",
+    description:
+      "Three-layer storage in Neotoma: raw_text on the source, schema-compliant properties on the observation, and raw_fragments for unknown fields and converter inputs, never silently dropped.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Schemas", path: "/schemas" },
+      { name: "Storage layers", path: "/schemas/storage-layers" },
+    ],
+    keywords: [
+      "storage layers",
+      "raw_text",
+      "properties",
+      "raw_fragments",
+      "schema handling",
+      "field preservation",
+    ],
+  },
+  "/schemas/versioning": {
+    title: "Schema Versioning & Evolution | Schemas | Neotoma",
+    description:
+      "Semantic versioning for schemas: additive minor bumps, breaking major bumps, immutable observation.schema_version, schema-projection filtering, and the public schema snapshots dump.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Schemas", path: "/schemas" },
+      { name: "Versioning & evolution", path: "/schemas/versioning" },
+    ],
+    keywords: [
+      "schema versioning",
+      "semver",
+      "breaking changes",
+      "schema snapshots",
+      "schema evolution",
+      "updateSchemaIncremental",
+    ],
   },
   "/data-model": {
     title: "Walkthrough | Neotoma",

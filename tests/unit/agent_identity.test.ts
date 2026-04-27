@@ -54,24 +54,25 @@ describe("normaliseClientName", () => {
 });
 
 describe("deriveAttributionTier", () => {
-  it("returns 'hardware' when AAuth verified with ES256/EdDSA", () => {
+  // The pure helper deliberately never returns `hardware` /
+  // `operator_attested` — those tiers require attestation envelope
+  // verification or operator-allowlist evaluation, which the AAuth
+  // middleware performs (and stamps onto the request decision).
+  it("returns 'software' when AAuth verified, regardless of algorithm", () => {
     expect(
       deriveAttributionTier({
         publicKey: "{}",
         thumbprint: "tp",
         algorithm: "ES256",
       })
-    ).toBe("hardware");
+    ).toBe("software");
     expect(
       deriveAttributionTier({
         publicKey: "{}",
         thumbprint: "tp",
         algorithm: "EdDSA",
       })
-    ).toBe("hardware");
-  });
-
-  it("returns 'software' when AAuth verified with non-hardware alg", () => {
+    ).toBe("software");
     expect(
       deriveAttributionTier({
         publicKey: "{}",

@@ -27,6 +27,7 @@ import type {
   AttributionProvenance,
 } from "../crypto/agent_identity.js";
 import { toAttributionProvenance } from "../crypto/agent_identity.js";
+import type { AAuthAdmissionContext } from "./protected_entity_types.js";
 
 export interface RequestContext {
   /** Resolved agent identity, or null when we have nothing to attribute. */
@@ -37,6 +38,15 @@ export interface RequestContext {
    * same shape `/session` returns. Optional: absent on stdio / CLI paths.
    */
   attributionDecision?: AttributionDecisionDiagnostics | null;
+  /**
+   * Result of the AAuth admission service for this request, when the
+   * AAuth identity matched (or failed to match) an `agent_grant` entity.
+   * Used by the protected-entity-types guard to decide whether an
+   * admitted agent may mutate governance state. Absent on requests that
+   * did not pass through admission (e.g. unsigned local stdio, public
+   * discovery routes).
+   */
+  aauthAdmission?: AAuthAdmissionContext | null;
 }
 
 const storage = new AsyncLocalStorage<RequestContext>();
@@ -78,4 +88,13 @@ export function getCurrentAttribution(): AttributionProvenance {
 /** Read the middleware-stashed decision from the active async context. */
 export function getCurrentAttributionDecision(): AttributionDecisionDiagnostics | null {
   return storage.getStore()?.attributionDecision ?? null;
+}
+
+/**
+ * Read the AAuth admission record (set by the admission service in the
+ * HTTP middleware chain) from the active async context. Returns `null`
+ * when admission did not run for this request.
+ */
+export function getCurrentAAuthAdmission(): AAuthAdmissionContext | null {
+  return storage.getStore()?.aauthAdmission ?? null;
 }

@@ -548,7 +548,12 @@ policy breach. See
 ## 12. Related Documents
 
 - [`docs/subsystems/schema.md`](./schema.md) — Database schema (includes sources, interpretations tables)
+- [`docs/subsystems/interpretations.md`](./interpretations.md) — Dedicated reference for the interpretations record type (lifecycle, status state machine, quality signals)
 - [`docs/subsystems/observation_architecture.md`](./observation_architecture.md) — [Observation](../vocabulary/canonical_terms.md#observation) layer
+- [`docs/subsystems/relationships.md`](./relationships.md) — Typed graph edges between entities
+- [`docs/subsystems/timeline_events.md`](./timeline_events.md) — Timeline event record type derived from sources
+- [`docs/subsystems/entities.md`](./entities.md) — Canonical entity row that observations from this source describe
+- [`docs/subsystems/entity_snapshots.md`](./entity_snapshots.md) — Reducer output that composes observations from this source into current truth
 - [`docs/subsystems/ingestion/ingestion.md`](./ingestion/ingestion.md) — [Ingestion](../vocabulary/canonical_terms.md#ingestion) pipeline
 - [`docs/subsystems/entity_merge.md`](./entity_merge.md) — [Entity](../vocabulary/canonical_terms.md#entity) merge mechanism
 - [`docs/architecture/determinism.md`](../architecture/determinism.md) — Determinism doctrine

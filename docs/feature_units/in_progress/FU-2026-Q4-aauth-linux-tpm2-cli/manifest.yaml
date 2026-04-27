@@ -1,0 +1,140 @@
+feature_id: "FU-2026-Q4-aauth-linux-tpm2-cli"
+version: "0.1.0"
+status: "in_progress"
+priority: "p1"
+risk_level: "medium"
+
+tags:
+  - "aauth"
+  - "attestation"
+  - "cli"
+  - "linux"
+  - "tpm"
+  - "tpm2"
+  - "native"
+
+metadata:
+  title: "Linux TPM 2.0 CLI Attestation Source"
+  description: >-
+    Add packages/aauth-tpm2/ — an N-API binding to libtss2 — and wire it into
+    the CLI signer so `neotoma auth keygen --hardware` on Linux mints
+    TPM-resident keys and emits WebAuthn-`tpm`-format attestation envelopes
+    consumed by FU-3's server-side verifier. Bridges the gap between the
+    server-side TPM 2.0 verifier (v0.9.0) and a first-party Linux client.
+  owner: "engineering@neotoma.com"
+  created_at: "2026-04-27"
+  target_release: "v0.10.0"
+
+subsystems:
+  - name: "packages/aauth-tpm2"
+    changes: "New native package. N-API binding to libtss2 exposing is_supported / generate_key / sign / attest. prebuildify config for linux-x64 + linux-arm64."
+  - name: "src/cli/aauth_signer.ts"
+    changes: "New `tpm2` backend value; deterministic backend ladder (SE on darwin → TBS on win32 (FU-5) → TPM2 on linux → YubiKey (FU-6) → software)."
+  - name: "src/cli/aauth_attestation.ts"
+    changes: "New `buildTpm2AttestationEnvelope({ config, iat })` helper producing a WebAuthn-`tpm`-format envelope."
+  - name: "src/cli/describe_signer.ts"
+    changes: "Surface `backend: 'tpm2'`, `tpm2_handle`, `tpm2_hierarchy`, `hardware_supported_reason` for Linux."
+  - name: "package.json"
+    changes: "Add `@neotoma/aauth-tpm2` to optionalDependencies; mirror the pattern used for `@neotoma/aauth-mac-se`."
+
+env_additions:
+  - name: "NEOTOMA_AAUTH_TPM2_HANDLE"
+    purpose: "Override persistent TPM2 handle for binding (default 0x81010000); used when integrating with pre-provisioned fleets."
+  - name: "NEOTOMA_AAUTH_TPM2_HIERARCHY"
+    purpose: "Override default hierarchy (`owner` | `endorsement`); default `owner`."
+  - name: "NEOTOMA_TPM2_TEST_ENABLED"
+    purpose: "Gate hardware-bound test paths (set to `1` only on hosts with /dev/tpmrm0 owned by the test user)."
+
+testing:
+  unit_tests:
+    - file: "tests/unit/cli_aauth_signer_tpm2.test.ts"
+      tests:
+        - "Backend dispatch chooses tpm2 on linux when binding reports supported"
+        - "Backend dispatch falls back to software when binding reports unsupported"
+        - "signer.json persists backend / tpm2_handle / tpm2_hierarchy round-trip"
+        - "mintCliAgentTokenJwt routes ES256 sign through binding without exposing private key"
+        - "Refuses to mint envelope when handle's pubArea thumbprint disagrees with cnf.jwk"
+    - file: "packages/aauth-tpm2/tests/smoke.test.ts"
+      tests:
+        - "is_supported gated by NEOTOMA_TPM2_TEST_ENABLED + /dev/tpmrm0 presence"
+        - "generate_key returns persistent handle and JWK that round-trips through createPublicKey"
+        - "sign + attest pair verifies under FU-3 verifier with trust roots from packages/aauth-tpm2/test_roots/"
+  integration_tests:
+    - file: "tests/integration/cli_aauth_keygen_tpm2.test.ts"
+      tests:
+        - "neotoma auth keygen --hardware on linux with mocked binding writes signer.json with backend=tpm2"
+        - "neotoma auth session reports hardware_supported and tpm2_handle when binding mock is supported"
+        - "neotoma auth keygen --hardware on linux without binding errors cleanly and does not corrupt existing signer.json"
+        - "End-to-end mint + post against test API with TPM2 envelope reports decision.attestation.format=tpm2 and resolved_tier=hardware (mocked binding)"
+
+dependencies:
+  requires:
+    - reason: "FU-3 (TPM 2.0 server-side verifier) — hard prerequisite; without it the envelopes are rejected"
+    - reason: "v0.8.0 CLI signer scaffolding (src/cli/aauth_signer.ts)"
+    - reason: "v0.8.0 CLI attestation builder (src/cli/aauth_attestation.ts)"
+  blocks:
+    - "FU-7 attestation revocation (TPM2 leaf OCSP path) — FU-7 may exercise this CLI as a producer of revocable AIK envelopes"
+
+feature_flags:
+  enabled: true
+
+rollout:
+  strategy: "instant"
+  rollback:
+    steps:
+      - "Remove `@neotoma/aauth-tpm2` from optionalDependencies in package.json"
+      - "Revert src/cli/aauth_signer.ts to remove the tpm2 backend dispatch"
+      - "Existing software-backed signers remain untouched; SE-backed signers on darwin remain untouched"
+  monitoring:
+    key_metrics:
+      - "Count of agents with backend=tpm2 in describe-signer telemetry"
+      - "Count of decision.attestation rows with format=tpm2 verified=true (server-side; depends on FU-3 metrics)"
+      - "Count of CLI keygen --hardware failures on linux with reason=binding_unavailable"
+
+documentation:
+  files_created:
+    - path: "packages/aauth-tpm2/"
+      purpose: "Native package source tree (binding.gyp, src/aauth_tpm2.cc, src/index.js, index.d.ts, README.md, tests/)"
+    - path: "docs/integrations/aauth_tpm2_linux.md"
+      purpose: "Per-distro libtss2-dev install instructions and resource-manager troubleshooting"
+    - path: "tests/unit/cli_aauth_signer_tpm2.test.ts"
+      purpose: "Backend dispatch unit tests with binding mocked"
+    - path: "tests/integration/cli_aauth_keygen_tpm2.test.ts"
+      purpose: "Keygen CLI integration tests on linux with binding mocked"
+  files_updated:
+    - path: "src/cli/aauth_signer.ts"
+      changes: "Add `tpm2` backend; extend backend preference ladder; persist tpm2 fields in signer.json"
+    - path: "src/cli/aauth_attestation.ts"
+      changes: "Add `buildTpm2AttestationEnvelope({ config, iat })`"
+    - path: "package.json"
+      changes: "Add `@neotoma/aauth-tpm2` to optionalDependencies"
+    - path: "docs/subsystems/aauth_cli_attestation.md"
+      changes: "Add Linux platform-support row, tpm2 backend row, fallback behaviour"
+    - path: ".env.example"
+      changes: "Document NEOTOMA_AAUTH_TPM2_HANDLE, NEOTOMA_AAUTH_TPM2_HIERARCHY, NEOTOMA_TPM2_TEST_ENABLED"
+
+risks:
+  - category: "native_build_breakage"
+    likelihood: "medium"
+    impact: "medium"
+    mitigation: "Pin libtss2 ABI in prebuildify; ship prebuilds for ubuntu-22.04 + ubuntu-24.04 + debian-12 + fedora-40 x64+arm64; install-time fallback to source build with a clear actionable error if libtss2-dev is missing."
+  - category: "linux_rm_permissions"
+    likelihood: "high"
+    impact: "low"
+    mitigation: "is_supported() reports `not_accessible` with a remediation hint pointing at the tss group / udev rule; CLI surfaces the reason via describeConfiguredSigner; never auto-provisions device permissions."
+  - category: "tier_resolution_regression_for_existing_signers"
+    likelihood: "low"
+    impact: "high"
+    mitigation: "Existing `software` and `apple-secure-enclave` backends are untouched. Backend dispatch is gated by an explicit `backend` discriminator in signer.json; legacy signer.json files default to software."
+  - category: "envelope_format_drift_from_FU3"
+    likelihood: "low"
+    impact: "high"
+    mitigation: "buildTpm2AttestationEnvelope shares the challenge-derivation helper (computeBoundChallengeDigest / buildAttestationChallenge) with FU-3's verifier; integration test rounds the envelope through verifyTpm2Attestation against a runtime-generated AIK chain."
+
+notes: |
+  Linux-only client surface; no behavioural change for darwin or win32 hosts.
+  The native package is an optionalDependency, so non-Linux installs are
+  untouched. The CLI's existing software path remains the terminal fallback
+  for any Linux host without libtss2 / a TPM 2.0 device. FU-5 (Windows TBS)
+  follows the same packaging shape; FU-6 (YubiKey) reuses the existing
+  WebAuthn-packed envelope from FU-2 instead of producing a TPM 2.0 quote.

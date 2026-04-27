@@ -55,6 +55,7 @@ describe("CLI command coverage guard", () => {
       "feedback", // thin preference setter; behavior is covered in feedback activation/service tests
       "triage", // thin dispatcher over ingest/admin flows covered by feedback pipeline tests
       "list-recent-changes", // read-only reporting command; behavior is covered by recent/activity integration tests
+      "agents", // namespace dispatcher; subcommands (e.g. `agents grants import`) are covered by their own integration tests
     ]);
 
     const uncovered = commandNames.filter(

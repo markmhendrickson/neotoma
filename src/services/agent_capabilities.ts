@@ -1,38 +1,31 @@
 /**
- * Agent capability registry — per-agent, per-entity-type authorization.
+ * Agent capability enforcement — grant-driven authorization.
  *
- * This layer sits **above** {@link enforceAttributionPolicy} (which gates by
- * {@link AttributionTier}) and **below** ordinary user auth. Where the
- * attribution policy asks "is this write attributable at all?", the
- * capability registry asks "is *this* specific agent allowed to touch
- * *this* specific entity_type via *this* operation?".
+ * This layer sits **above** {@link enforceAttributionPolicy} (which gates
+ * by {@link AttributionTier}) and **below** ordinary user auth. Where
+ * the attribution policy asks "is this write attributable at all?",
+ * capability enforcement asks "is *this* specific agent allowed to
+ * touch *this* specific entity_type via *this* operation?".
  *
- * Use cases:
- *   - Scope the agent-site Netlify forwarder (sub `agent-site@neotoma.io`)
- *     to write only `neotoma_feedback` entities — not observations for
- *     arbitrary entity types, not corrections of unrelated records.
- *   - Give partner agents read-only access to a single entity type.
- *   - Preserve today's behaviour for unscoped agents (humans, general MCP
- *     clients) so rollout is additive.
+ * Source of truth (Stronger AAuth Admission plan):
+ *   - Capabilities live on `agent_grant` entities, scoped per
+ *     `user_id`, managed in the Inspector or via the standard
+ *     entity-store toolkit when the caller has the bootstrap grant.
+ *   - The admission service ({@link ./aauth_admission.js}) resolves
+ *     a verified AAuth identity to the matching grant and stamps the
+ *     resolved `capabilities` onto `req.aauthAdmission` /
+ *     {@link RequestContext.aauthAdmission} before any handler runs.
+ *   - {@link enforceAgentCapability} reads those capabilities directly.
  *
- * Configuration sources (resolved in priority order, most specific wins):
- *   1. `NEOTOMA_AGENT_CAPABILITIES_JSON` — inline JSON registry.
- *   2. `NEOTOMA_AGENT_CAPABILITIES_FILE` — path to a JSON registry file.
- *   3. `config/agent_capabilities.default.json` — committed default (if
- *      present and readable from the process cwd).
- *
- * Enforcement is gated by `NEOTOMA_AGENT_CAPABILITIES_ENFORCE`:
- *   - `true`  — deny on mismatch (throws {@link AgentCapabilityError}).
- *   - anything else — observe-only (logs would-be-denials, returns allow).
- *
- * Pure module, no DB/network access. Callers inject context explicitly so
- * tests can exercise every branch.
+ * The legacy environment-variable registry (`NEOTOMA_AGENT_CAPABILITIES_*`)
+ * is REMOVED in this release. {@link assertNoLegacyCapabilityEnv} runs
+ * during boot and fails fast with a structured pointer to the
+ * `neotoma agents grants import` migration command.
  */
 
-import fs from "node:fs";
-import path from "node:path";
-import type { AttributionTier } from "../crypto/agent_identity.js";
+import type { AttributionTier, AgentIdentity } from "../crypto/agent_identity.js";
 import { logger } from "../utils/logger.js";
+import { getCurrentAAuthAdmission } from "./request_context.js";
 
 /**
  * Canonical operation identifier. Mirrors the top-level MCP/REST entry
@@ -44,23 +37,13 @@ export type AgentCapabilityOp =
   | "correct"
   | "retrieve";
 
-/**
- * Context describing the acting agent on this request. Populated from the
- * resolved {@link AgentIdentity} in the active request context.
- */
-export interface AgentCapabilityContext {
-  sub?: string;
-  iss?: string;
-  thumbprint?: string;
-  tier: AttributionTier;
-}
-
 export interface AgentCapabilityEntry {
   op: AgentCapabilityOp;
   /** Allowed entity types for this op. `"*"` widens to any entity_type. */
   entity_types: string[];
 }
 
+/** Identity match shape (still used by import / Inspector serialisation). */
 export interface AgentCapabilityMatch {
   /** Match by AAuth `sub` claim. */
   sub?: string;
@@ -70,27 +53,30 @@ export interface AgentCapabilityMatch {
   thumbprint?: string;
 }
 
+/** Legacy registry shape — used only by the env-config import command. */
 export interface AgentCapabilityAgent {
   match: AgentCapabilityMatch;
   capabilities: AgentCapabilityEntry[];
 }
 
-export interface AgentCapabilityRegistry {
-  /**
-   * Keyed by agent label (human-readable). Only matters for logs and
-   * registry admin — matching is performed via `match` fields.
-   */
-  agents: Record<string, AgentCapabilityAgent>;
-  /**
-   * When true, any AAuth-verified agent whose identity does NOT match an
-   * entry in `agents` is denied. Defaults to `false` so rollout is
-   * additive: unknown agents keep their pre-plan behaviour.
-   */
-  default_deny?: boolean;
+/**
+ * Acting agent on the current request. Built from the resolved
+ * {@link AgentIdentity}, possibly enriched by the admission service.
+ *
+ * `capabilities` is non-null only when the request was admitted via an
+ * `agent_grant` — otherwise the registry has no information about
+ * this caller and {@link enforceAgentCapability} relies on
+ * `default_deny` to decide.
+ */
+export interface AgentCapabilityContext {
+  sub?: string;
+  iss?: string;
+  thumbprint?: string;
+  tier: AttributionTier;
+  capabilities: AgentCapabilityEntry[] | null;
+  agentLabel: string;
+  admitted: boolean;
 }
-
-/** Empty registry — every agent falls through to attribution policy. */
-export const EMPTY_REGISTRY: AgentCapabilityRegistry = { agents: {} };
 
 /** Structured denial. HTTP handlers surface this as 403 `capability_denied`. */
 export class AgentCapabilityError extends Error {
@@ -137,203 +123,122 @@ export class AgentCapabilityError extends Error {
   }
 }
 
-function isAllowedOp(value: unknown): value is AgentCapabilityOp {
-  return (
-    value === "store_structured" ||
-    value === "create_relationship" ||
-    value === "correct" ||
-    value === "retrieve"
-  );
-}
+/** ---------- Boot-time legacy env removal check ---------- */
 
-function parseRegistryFromJson(raw: string): AgentCapabilityRegistry | null {
-  try {
-    const parsed = JSON.parse(raw);
-    return coerceRegistry(parsed);
-  } catch {
-    return null;
-  }
-}
+const LEGACY_CAPABILITY_ENV_VARS = [
+  "NEOTOMA_AGENT_CAPABILITIES_JSON",
+  "NEOTOMA_AGENT_CAPABILITIES_FILE",
+  "NEOTOMA_AGENT_CAPABILITIES_ENFORCE",
+] as const;
 
-function coerceRegistry(input: unknown): AgentCapabilityRegistry | null {
-  if (!input || typeof input !== "object" || Array.isArray(input)) {
-    return null;
-  }
-  const obj = input as Record<string, unknown>;
-  const agentsRaw = obj.agents;
-  if (!agentsRaw || typeof agentsRaw !== "object" || Array.isArray(agentsRaw)) {
-    return null;
-  }
-  const agents: Record<string, AgentCapabilityAgent> = {};
-  for (const [label, entryRaw] of Object.entries(
-    agentsRaw as Record<string, unknown>,
-  )) {
-    if (!entryRaw || typeof entryRaw !== "object") continue;
-    const entry = entryRaw as Record<string, unknown>;
-    const matchRaw = entry.match as Record<string, unknown> | undefined;
-    if (!matchRaw || typeof matchRaw !== "object") continue;
-    const match: AgentCapabilityMatch = {};
-    if (typeof matchRaw.sub === "string") match.sub = matchRaw.sub;
-    if (typeof matchRaw.iss === "string") match.iss = matchRaw.iss;
-    if (typeof matchRaw.thumbprint === "string") {
-      match.thumbprint = matchRaw.thumbprint;
-    }
-    if (!match.sub && !match.thumbprint) {
-      // No usable match key — skip silently; an administrator can fix.
-      continue;
-    }
-    const capsRaw = entry.capabilities;
-    if (!Array.isArray(capsRaw)) continue;
-    const capabilities: AgentCapabilityEntry[] = [];
-    for (const capRaw of capsRaw) {
-      if (!capRaw || typeof capRaw !== "object") continue;
-      const cap = capRaw as Record<string, unknown>;
-      if (!isAllowedOp(cap.op)) continue;
-      if (!Array.isArray(cap.entity_types)) continue;
-      const entityTypes = cap.entity_types.filter(
-        (t): t is string => typeof t === "string" && t.length > 0,
-      );
-      if (entityTypes.length === 0) continue;
-      capabilities.push({ op: cap.op, entity_types: entityTypes });
-    }
-    if (capabilities.length === 0) continue;
-    agents[label] = { match, capabilities };
-  }
-  const registry: AgentCapabilityRegistry = { agents };
-  if (obj.default_deny === true) registry.default_deny = true;
-  return registry;
-}
+export class LegacyAgentCapabilityEnvError extends Error {
+  readonly code = "legacy_agent_capabilities_env" as const;
+  readonly variables: string[];
+  readonly migrationCommand =
+    "neotoma agents grants import --owner-user-id <user_id>";
 
-let cachedRegistry: AgentCapabilityRegistry | null = null;
-let cachedRegistrySource: string | null = null;
-
-/**
- * Load and cache the registry from env. Returns an empty registry when no
- * configuration is present so callers never need null-guards.
- *
- * Exposed as a thin layer so tests can reset the cache with
- * {@link resetAgentCapabilitiesCache} between runs.
- */
-export function loadAgentCapabilities(): AgentCapabilityRegistry {
-  if (cachedRegistry) return cachedRegistry;
-
-  const jsonEnv = process.env.NEOTOMA_AGENT_CAPABILITIES_JSON;
-  if (jsonEnv) {
-    const parsed = parseRegistryFromJson(jsonEnv);
-    if (parsed) {
-      cachedRegistry = parsed;
-      cachedRegistrySource = "NEOTOMA_AGENT_CAPABILITIES_JSON";
-      return cachedRegistry;
-    }
-    logger.warn(
-      JSON.stringify({
-        event: "agent_capabilities_parse_failed",
-        source: "NEOTOMA_AGENT_CAPABILITIES_JSON",
-      }),
+  constructor(variables: string[]) {
+    super(
+      "NEOTOMA_AGENT_CAPABILITIES_* environment variables are no longer " +
+        "supported. Capabilities are now stored on agent_grant entities. " +
+        `Run \`${"neotoma agents grants import --owner-user-id <user_id>"}\` ` +
+        "once before this release, then unset these variables: " +
+        variables.join(", ") +
+        ".",
     );
+    this.name = "LegacyAgentCapabilityEnvError";
+    this.variables = variables;
   }
-
-  const fileEnv = process.env.NEOTOMA_AGENT_CAPABILITIES_FILE;
-  if (fileEnv) {
-    try {
-      const resolved = path.isAbsolute(fileEnv)
-        ? fileEnv
-        : path.resolve(process.cwd(), fileEnv);
-      const body = fs.readFileSync(resolved, "utf-8");
-      const parsed = parseRegistryFromJson(body);
-      if (parsed) {
-        cachedRegistry = parsed;
-        cachedRegistrySource = `file:${resolved}`;
-        return cachedRegistry;
-      }
-    } catch (err) {
-      logger.warn(
-        JSON.stringify({
-          event: "agent_capabilities_file_read_failed",
-          source: fileEnv,
-          error: (err as Error).message,
-        }),
-      );
-    }
-  }
-
-  // Committed default — opportunistic, ignore if absent.
-  try {
-    const defaultPath = path.resolve(
-      process.cwd(),
-      "config/agent_capabilities.default.json",
-    );
-    if (fs.existsSync(defaultPath)) {
-      const body = fs.readFileSync(defaultPath, "utf-8");
-      const parsed = parseRegistryFromJson(body);
-      if (parsed) {
-        cachedRegistry = parsed;
-        cachedRegistrySource = `file:${defaultPath}`;
-        return cachedRegistry;
-      }
-    }
-  } catch {
-    // fall through
-  }
-
-  cachedRegistry = EMPTY_REGISTRY;
-  cachedRegistrySource = "empty";
-  return cachedRegistry;
-}
-
-/** Test/runtime hook to drop the cached registry. */
-export function resetAgentCapabilitiesCache(): void {
-  cachedRegistry = null;
-  cachedRegistrySource = null;
-}
-
-/** Diagnostic: which config source built the active registry. */
-export function getAgentCapabilitiesSource(): string {
-  if (!cachedRegistry) loadAgentCapabilities();
-  return cachedRegistrySource ?? "empty";
 }
 
 /**
- * Whether enforcement actually rejects. When `false` (observe-only), the
- * check still logs would-be denials so operators can soak the change.
+ * Throws {@link LegacyAgentCapabilityEnvError} when any of the legacy
+ * `NEOTOMA_AGENT_CAPABILITIES_*` variables are still set. Call once
+ * during server boot (see {@link assertCapabilityEnvOnBoot} for the
+ * Express-friendly wrapper used in `src/server.ts`).
  */
-export function isAgentCapabilitiesEnforced(): boolean {
-  const raw = process.env.NEOTOMA_AGENT_CAPABILITIES_ENFORCE;
+export function assertNoLegacyCapabilityEnv(
+  env: NodeJS.ProcessEnv = process.env,
+): void {
+  const present = LEGACY_CAPABILITY_ENV_VARS.filter((name) => {
+    const value = env[name];
+    return typeof value === "string" && value.trim().length > 0;
+  });
+  if (present.length > 0) {
+    throw new LegacyAgentCapabilityEnvError(present);
+  }
+}
+
+/** ---------- Default-deny configuration ---------- */
+
+/**
+ * Whether to deny otherwise-unrecognised AAuth-verified agents. Mirrors
+ * the legacy `default_deny` registry flag: an admitted agent always
+ * follows its grant capabilities; an UN-admitted but signature-verified
+ * agent is denied iff this flag is true and its tier is sufficient.
+ */
+export function isAgentDefaultDenyEnabled(): boolean {
+  const raw = process.env.NEOTOMA_AGENT_DEFAULT_DENY;
   if (!raw) return false;
   const normalised = raw.trim().toLowerCase();
   return normalised === "true" || normalised === "1" || normalised === "yes";
 }
 
-/** Find the registry entry (if any) matching this context. */
-export function findMatchingAgent(
-  registry: AgentCapabilityRegistry,
-  ctx: AgentCapabilityContext,
-): { label: string; agent: AgentCapabilityAgent } | null {
-  // Thumbprint pin wins over sub so a rotated JWT issuer cannot quietly
-  // change scope against a pinned key.
-  if (ctx.thumbprint) {
-    for (const [label, agent] of Object.entries(registry.agents)) {
-      if (agent.match.thumbprint === ctx.thumbprint) {
-        return { label, agent };
-      }
-    }
-  }
-  if (ctx.sub) {
-    for (const [label, agent] of Object.entries(registry.agents)) {
-      if (agent.match.sub !== ctx.sub) continue;
-      if (agent.match.iss && agent.match.iss !== ctx.iss) continue;
-      return { label, agent };
-    }
-  }
-  return null;
+/** ---------- Context assembly ---------- */
+
+function agentLabelFor(
+  identity: AgentIdentity | null | undefined,
+  admittedLabel?: string,
+): string {
+  if (admittedLabel && admittedLabel.length > 0) return admittedLabel;
+  if (identity?.sub) return identity.sub;
+  if (identity?.thumbprint) return `thumb:${identity.thumbprint.slice(0, 12)}`;
+  if (identity?.clientName) return identity.clientName;
+  return "anonymous";
 }
 
-function agentHasCapability(
-  agent: AgentCapabilityAgent,
+/**
+ * Assemble an {@link AgentCapabilityContext} for the current request.
+ *
+ * Returns `null` when the request has no agent identity at all — pure
+ * user-authenticated traffic (Bearer / OAuth / local / Inspector)
+ * should not flow through capability enforcement.
+ *
+ * Admission context is read from {@link getCurrentAAuthAdmission}
+ * (lazy-imported to break a module cycle): when an `admitted` grant is
+ * resolved, its capabilities and label are surfaced; otherwise the
+ * caller is treated as an unrecognised agent.
+ */
+export function contextFromAgentIdentity(
+  identity: AgentIdentity | null | undefined,
+): AgentCapabilityContext | null {
+  if (!identity) return null;
+  if (!identity.sub && !identity.thumbprint && !identity.clientName) {
+    return null;
+  }
+  // Static import is fine here — request_context has no transitive
+  // dependency on agent_capabilities, so there is no real cycle. We
+  // call `getCurrentAAuthAdmission()` lazily on the existing AsyncLocalStorage.
+  const admission = getCurrentAAuthAdmission();
+  return {
+    sub: identity.sub,
+    iss: identity.iss,
+    thumbprint: identity.thumbprint,
+    tier: identity.tier,
+    capabilities: admission?.admitted ? admission.capabilities ?? [] : null,
+    agentLabel: agentLabelFor(identity, admission?.agent_label),
+    admitted: Boolean(admission?.admitted),
+  };
+}
+
+/** ---------- Enforcement ---------- */
+
+function entryCovers(
+  caps: AgentCapabilityEntry[],
   op: AgentCapabilityOp,
   entityType: string,
 ): boolean {
-  for (const cap of agent.capabilities) {
+  for (const cap of caps) {
     if (cap.op !== op) continue;
     if (cap.entity_types.includes("*")) return true;
     if (cap.entity_types.includes(entityType)) return true;
@@ -341,26 +246,19 @@ function agentHasCapability(
   return false;
 }
 
-function agentLabelFor(ctx: AgentCapabilityContext): string {
-  if (ctx.sub) return ctx.sub;
-  if (ctx.thumbprint) return `thumb:${ctx.thumbprint.slice(0, 12)}`;
-  return "anonymous";
-}
-
 /**
- * Enforce capability-based authorization for an operation touching one or
- * more entity types. Rules:
+ * Enforce capability-based authorization. Behaviour:
  *
- * 1. If `entityTypes` is empty the call is a no-op (nothing to gate).
- * 2. If the registry has no matching agent for this context:
- *    - `default_deny === true` AND `tier in {hardware, software}` → deny
- *      (the caller is an AAuth-verified agent we do not recognise).
- *    - otherwise → allow (preserves legacy behaviour).
- * 3. If a matching agent is found, every entity_type must be covered by a
- *    `{op, entity_types}` capability on that agent.
+ *   1. `entityTypes` empty → no-op.
+ *   2. Admitted agent → every `(op, entity_type)` pair must be covered
+ *      by the grant's capabilities. Mismatch → throw.
+ *   3. Unadmitted but signature-verified agent (`tier in {hardware,
+ *      software, operator_attested}`) AND
+ *      {@link isAgentDefaultDenyEnabled} → throw.
+ *   4. Otherwise → allow (preserves legacy behaviour for unknown
+ *      agents during rollout).
  *
- * When {@link isAgentCapabilitiesEnforced} returns `false`, denials are
- * logged but never thrown — useful for a soak period.
+ * Throws {@link AgentCapabilityError} on denial.
  */
 export function enforceAgentCapability(
   op: AgentCapabilityOp,
@@ -368,98 +266,75 @@ export function enforceAgentCapability(
   ctx: AgentCapabilityContext,
 ): void {
   if (!entityTypes || entityTypes.length === 0) return;
-  const registry = loadAgentCapabilities();
   const distinctTypes = Array.from(new Set(entityTypes.filter(Boolean)));
   if (distinctTypes.length === 0) return;
 
-  const match = findMatchingAgent(registry, ctx);
-  const enforced = isAgentCapabilitiesEnforced();
-
-  if (!match) {
-    if (
-      registry.default_deny &&
-      (ctx.tier === "hardware" || ctx.tier === "software")
-    ) {
-      const err = new AgentCapabilityError({
+  if (ctx.admitted && ctx.capabilities) {
+    const denied: string[] = [];
+    for (const entityType of distinctTypes) {
+      if (!entryCovers(ctx.capabilities, op, entityType)) {
+        denied.push(entityType);
+      }
+    }
+    if (denied.length === 0) return;
+    const err = new AgentCapabilityError({
+      op,
+      entityType: denied[0],
+      agentLabel: ctx.agentLabel,
+      hint:
+        `Admitted agent "${ctx.agentLabel}" has no "${op}" capability for ` +
+        `entity_type${denied.length > 1 ? "s" : ""} ` +
+        `${denied.map((t) => `"${t}"`).join(", ")}. ` +
+        `Edit the grant in Inspector → Agents → Grants and add ` +
+        `{ op: "${op}", entity_types: [${denied
+          .map((t) => `"${t}"`)
+          .join(", ")}] }.`,
+    });
+    logger.warn(
+      JSON.stringify({
+        event: "agent_capability_denied",
+        reason: "entity_type_out_of_scope",
         op,
-        entityType: distinctTypes[0],
-        agentLabel: agentLabelFor(ctx),
-        hint:
-          "No capability grant found for this agent. Add an entry to the " +
-          "agent capability registry or set default_deny=false.",
-      });
-      logger.warn(
-        JSON.stringify({
-          event: "agent_capability_denied",
-          enforced,
-          reason: "default_deny_no_match",
-          op,
-          entity_types: distinctTypes,
-          agent_label: err.agentLabel,
-        }),
-      );
-      if (enforced) throw err;
-    }
-    return;
+        entity_types: denied,
+        agent_label: ctx.agentLabel,
+        admitted: true,
+      }),
+    );
+    throw err;
   }
 
-  const denied: string[] = [];
-  for (const entityType of distinctTypes) {
-    if (!agentHasCapability(match.agent, op, entityType)) {
-      denied.push(entityType);
-    }
-  }
-
-  if (denied.length === 0) return;
+  // Unadmitted: optionally apply default-deny for verified-signature tiers.
+  const enforcedTier =
+    ctx.tier === "hardware" ||
+    ctx.tier === "software" ||
+    ctx.tier === "operator_attested";
+  if (!enforcedTier) return;
+  if (!isAgentDefaultDenyEnabled()) return;
 
   const err = new AgentCapabilityError({
     op,
-    entityType: denied[0],
-    agentLabel: match.label,
+    entityType: distinctTypes[0],
+    agentLabel: ctx.agentLabel,
     hint:
-      `Agent "${match.label}" is registered but has no "${op}" capability ` +
-      `for entity_type${denied.length > 1 ? "s" : ""} ` +
-      `${denied.map((t) => `"${t}"`).join(", ")}. Grant it in the ` +
-      "capability registry if intentional.",
+      "No active agent_grant matches this AAuth identity and " +
+      "NEOTOMA_AGENT_DEFAULT_DENY is enabled. Create a grant in " +
+      "Inspector → Agents → Grants for this agent or unset the env var.",
   });
-
   logger.warn(
     JSON.stringify({
       event: "agent_capability_denied",
-      enforced,
-      reason: "entity_type_out_of_scope",
+      reason: "default_deny_no_match",
       op,
-      entity_types: denied,
-      agent_label: match.label,
+      entity_types: distinctTypes,
+      agent_label: ctx.agentLabel,
+      admitted: false,
     }),
   );
-
-  if (enforced) throw err;
+  throw err;
 }
 
-/**
- * Pull an {@link AgentCapabilityContext} out of the current request's
- * AgentIdentity. Returns null when there is no useful identity — callers
- * should skip capability enforcement in that case (attribution policy
- * handles anonymous writes).
- */
-export function contextFromAgentIdentity(
-  identity:
-    | {
-        sub?: string;
-        iss?: string;
-        thumbprint?: string;
-        tier: AttributionTier;
-      }
-    | null
-    | undefined,
-): AgentCapabilityContext | null {
-  if (!identity) return null;
-  if (!identity.sub && !identity.thumbprint) return null;
-  return {
-    sub: identity.sub,
-    iss: identity.iss,
-    thumbprint: identity.thumbprint,
-    tier: identity.tier,
-  };
+/** ---------- Test/diagnostic helpers ---------- */
+
+export function getAgentCapabilitiesSource(): string {
+  return "agent_grant_entities";
 }

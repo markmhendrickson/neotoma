@@ -94,7 +94,7 @@ function LayoutShell({
       >
         {isHomeShell ? (
           <>
-            <div data-site-markdown-root className="contents">
+            <div data-site-markdown-root className="post-prose contents">
               {children}
             </div>
             {!omitHomeShellSeoDevMeta ? <SeoDevMetaFooter /> : null}
@@ -106,7 +106,7 @@ function LayoutShell({
               data-site-header-scroll-root
               className="min-h-0 min-w-0 flex-1 overflow-y-auto"
             >
-              <div data-site-markdown-root className="contents min-w-0">
+              <div data-site-markdown-root className="post-prose contents min-w-0">
                 {children}
               </div>
               <SiteTailpiece />

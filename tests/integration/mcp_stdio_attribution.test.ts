@@ -127,9 +127,11 @@ describe("MCP stdio attribution parity", () => {
       iss: "https://agent.example",
     } as unknown as Parameters<NeotomaServer["setSessionAgentIdentity"]>[0]);
 
-    // With a hardware-tier identity in place, the policy gate passes.
-    // The write itself may still fail for DB-shape reasons (missing
-    // entities) — we only care that it is NOT an attribution rejection.
+    // With an AAuth-verified identity in place (resolved to `software`
+    // on stdio because no attestation envelope is available), the
+    // policy gate passes. The write itself may still fail for DB-shape
+    // reasons (missing entities) - we only care that it is NOT an
+    // attribution rejection.
     let rejected: unknown = null;
     try {
       await server.executeToolForCli(
@@ -166,7 +168,12 @@ describe("MCP stdio attribution parity", () => {
     expect(decision).toBeDefined();
     expect(decision?.signature_present).toBe(true);
     expect(decision?.signature_verified).toBe(true);
-    expect(decision?.resolved_tier).toBe("hardware");
+    // Stdio path resolves AAuth-verified requests to `software` because
+    // the server has the public key/thumbprint/algorithm but not the
+    // verified `cnf.attestation` envelope required for `hardware`. HTTP
+    // `/mcp` performs the additional attestation check; stdio cannot.
+    // See docs/subsystems/agent_attribution_integration.md.
+    expect(decision?.resolved_tier).toBe("software");
 
     // Without an identity, the decision is null.
     server.setSessionAgentIdentity(null);
@@ -204,7 +211,9 @@ describe("MCP stdio attribution parity", () => {
     }
 
     expect(observedIdentity).not.toBeNull();
-    expect(observedIdentity?.tier).toBe("hardware");
+    // See above: stdio derivation lands at `software` without an
+    // attestation envelope, even with AAuth-verified ES256.
+    expect(observedIdentity?.tier).toBe("software");
     expect(observedDecision).not.toBeNull();
     expect(observedDecision?.signature_verified).toBe(true);
   });

@@ -1,0 +1,98 @@
+feature_id: "FU-2026-Q3-aauth-inspector-attestation-viz"
+version: "0.2.0"
+status: "ready_for_review"
+priority: "p2"
+risk_level: "low"
+
+tags:
+  - "aauth"
+  - "attribution"
+  - "attestation"
+  - "inspector"
+  - "frontend"
+
+metadata:
+  title: "Inspector Attestation Envelope Visualisation"
+  description: >-
+    Surface attestation diagnostic data (decision.attestation,
+    decision.operator_allowlist_source) through the Inspector via expanded
+    AgentBadge tooltip rows and a collapsible AttestationEnvelopePanel on
+    agent detail views. Drive-by fix for the missing operator_attested
+    tier-icon case.
+  owner: "engineering@neotoma.com"
+  created_at: "2026-04-27"
+  target_release: "v0.9.0"
+
+subsystems:
+  - name: "inspector_agent_badge"
+    changes: "Extend tooltip rows for attestation outcome / format / failure reason"
+  - name: "inspector_agent_detail"
+    changes: "Add AttestationEnvelopePanel with chain summary + verification gates"
+  - name: "inspector_types_api"
+    changes: "Type-safe surface for decision.attestation and decision.operator_allowlist_source"
+
+env_additions: []
+
+testing:
+  unit_tests:
+    - file: "tests/unit/features/FU-2026-Q3-aauth-inspector-attestation-viz/agent_badge_tier_icon.test.ts"
+      tests:
+        - "tierIcon returns a distinct glyph for each of the five tiers"
+        - "operator_attested no longer falls through to the anonymous glyph"
+        - "extractAgentAttribution reads attestation outcome when present"
+        - "extractAgentAttribution rejects malformed attestation blobs without throwing"
+        - "operator_allowlist_source is normalised to a known enum or null"
+  manual_verification:
+    - "Settings page renders SessionAttestationCard with format, outcome, and operator-allowlist source for the live session"
+    - "Agent detail page renders AttestationEnvelopePanel when the agent's AgentDirectoryEntry carries attestation; renders an operator-allowlist-only summary when only operator_allowlist_source is set; renders nothing when both are absent"
+    - "AttributionSummary on the Settings page now shows a dedicated bar for operator_attested"
+
+dependencies:
+  requires:
+    - reason: "v0.8.0 server-side decision.attestation diagnostics"
+  blocks: []
+
+feature_flags:
+  enabled: true
+
+rollout:
+  strategy: "instant"
+  rollback:
+    steps:
+      - "Revert the new component and tooltip rows (no schema change)"
+  monitoring:
+    key_metrics: []
+
+documentation:
+  files_created:
+    - path: "inspector/src/components/shared/attestation_envelope_panel.tsx"
+      purpose: "Collapsible panel rendering attestation diagnostic block on agent detail views"
+    - path: "inspector/src/components/shared/session_attestation_card.tsx"
+      purpose: "Session-scope attestation diagnostic card rendered on the Settings page"
+    - path: "tests/unit/features/FU-2026-Q3-aauth-inspector-attestation-viz/agent_badge_tier_icon.test.ts"
+      purpose: "Pin tierIcon glyph mapping and extractAgentAttribution attestation parsing"
+  files_updated:
+    - path: "inspector/src/components/shared/agent_badge.tsx"
+      changes: "tierIcon adds operator_attested glyph; tooltip rows surface attestation outcome / format / AAGUID / key-binding / failure reason / operator-allowlist source when present; extractAgentAttribution forwards the attestation outcome and operator_allowlist_source"
+    - path: "inspector/src/components/shared/attribution_summary.tsx"
+      changes: "Statistical summary breaks out the operator_attested tier alongside hardware/software/unverified/anonymous"
+    - path: "inspector/src/types/api.ts"
+      changes: "AgentAttestationOutcome / AttestationFormat / AttestationFailureReason types added; AgentAttribution and AgentDirectoryEntry carry optional attestation + operator_allowlist_source fields"
+    - path: "inspector/src/api/endpoints/session.ts"
+      changes: "SessionAttestationOutcome / SessionAttribution.decision.attestation / decision.operator_allowlist_source mirrors the v0.8.0 server diagnostic shape"
+    - path: "inspector/src/pages/agent_detail.tsx"
+      changes: "Renders AttestationEnvelopePanel below the identity card; passes attestation + operator_allowlist_source from AgentDirectoryEntry"
+    - path: "inspector/src/pages/settings.tsx"
+      changes: "Renders SessionAttestationCard alongside AttributionSummary"
+    - path: "docs/subsystems/aauth_attestation.md"
+      changes: "Inspector visualisation note flips from 'tier badge update only' to 'session card + envelope panel + per-row tooltip'; per-row attestation drill-down remains a follow-up; Related-documents links to this FU"
+
+risks:
+  - category: "ui_regression"
+    likelihood: "low"
+    impact: "low"
+    mitigation: "Component renders only when decision.attestation present; otherwise unchanged"
+
+notes: |
+  Frontend-only FU. No schema migration, no server-side change, no new env vars.
+  Drive-by fix: agent_badge.tsx tierIcon() switch missing operator_attested case.

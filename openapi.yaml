@@ -301,6 +301,7 @@ components:
           type: string
           enum:
             - hardware
+            - operator_attested
             - software
             - unverified_client
             - anonymous
@@ -327,7 +328,7 @@ components:
             `attribution_tier` is `anonymous`.
         min_tier:
           type: string
-          enum: [hardware, software, unverified_client]
+          enum: [hardware, operator_attested, software, unverified_client]
           description: |
             Optional floor tier; writes with a resolved tier below this
             floor are rejected with `ATTRIBUTION_REQUIRED`.
@@ -365,7 +366,51 @@ components:
           enum: [too_generic, empty, not_a_string]
         resolved_tier:
           type: string
-          enum: [hardware, software, unverified_client, anonymous]
+          enum: [hardware, operator_attested, software, unverified_client, anonymous]
+        attestation:
+          type: object
+          nullable: true
+          description: |
+            Outcome of the `cnf.attestation` envelope verifier. Always
+            present on AAuth-verified requests (with `verified: false,
+            format: "unknown", reason: "not_present"` when no envelope
+            was supplied) and absent on unsigned requests.
+          required:
+            - verified
+            - format
+          properties:
+            verified:
+              type: boolean
+            format:
+              type: string
+              enum:
+                - apple-secure-enclave
+                - webauthn-packed
+                - tpm2
+                - unknown
+            reason:
+              type: string
+              description: |
+                Failure reason; only present when `verified=false`.
+              enum:
+                - not_present
+                - unsupported_format
+                - key_binding_failed
+                - challenge_mismatch
+                - chain_invalid
+                - signature_invalid
+                - aaguid_not_trusted
+                - pubarea_mismatch
+                - not_implemented
+                - malformed
+        operator_allowlist_source:
+          type: string
+          description: |
+            Set when the operator allowlist promoted the request to
+            `operator_attested`. `"issuer"` means a hit on
+            `NEOTOMA_OPERATOR_ATTESTED_ISSUERS`; `"issuer_subject"` means
+            a hit on `NEOTOMA_OPERATOR_ATTESTED_SUBS`.
+          enum: [issuer, issuer_subject]
     SessionInfo:
       type: object
       description: |
@@ -374,6 +419,7 @@ components:
       required:
         - user_id
         - attribution
+        - aauth
         - policy
         - eligible_for_trusted_writes
       properties:
@@ -386,7 +432,7 @@ components:
           properties:
             tier:
               type: string
-              enum: [hardware, software, unverified_client, anonymous]
+              enum: [hardware, operator_attested, software, unverified_client, anonymous]
             agent_thumbprint:
               type: string
             agent_sub:
@@ -407,6 +453,42 @@ components:
               nullable: true
               allOf:
                 - $ref: "#/components/schemas/SessionAttributionDecision"
+        aauth:
+          type: object
+          description: |
+            AAuth admission summary. Verified means the request carried a
+            verified AAuth signature. Admitted means Neotoma resolved
+            that signature to one of this user's `agent_grant` entities
+            and is treating the caller as authenticated. The two are
+            independent: a verified-but-unmatched signature stays
+            attribution-only and `admitted` is `false`.
+          required:
+            - verified
+            - admitted
+            - grant_id
+            - admission_reason
+          properties:
+            verified:
+              type: boolean
+            admitted:
+              type: boolean
+            grant_id:
+              type: string
+              nullable: true
+            admission_reason:
+              type: string
+              nullable: true
+              enum:
+                - admitted
+                - no_grants_for_user
+                - no_match
+                - grant_revoked
+                - grant_suspended
+                - strict_rejected
+                - aauth_disabled
+                - not_signed
+            agent_label:
+              type: string
         policy:
           $ref: "#/components/schemas/AttributionPolicySnapshot"
         eligible_for_trusted_writes:
@@ -414,7 +496,9 @@ components:
           description: |
             Convenience flag mirroring the check
             `enforceAttributionPolicy('observations', identity)` would
-            make on the default write path.
+            make on the default write path. Admission alone does NOT
+            override this — admitted callers still need a tier that
+            satisfies the active write attribution policy.
     AgentDirectoryEntry:
       type: object
       description: |
@@ -442,6 +526,7 @@ components:
           type: string
           enum:
             - hardware
+            - operator_attested
             - software
             - unverified_client
             - anonymous
@@ -482,6 +567,138 @@ components:
             Per record-type count (`observation`, `source`,
             `interpretation`, `timeline_event`, `relationship`).
             Missing buckets mean zero.
+    AgentCapabilityEntry:
+      type: object
+      required:
+        - op
+        - entity_types
+      properties:
+        op:
+          type: string
+          enum:
+            - store_structured
+            - create_relationship
+            - correct
+            - retrieve
+        entity_types:
+          type: array
+          items:
+            type: string
+          description: |
+            Allowed entity types for this op. The single string `*` widens
+            to any entity_type that is not protected (see
+            `protected_entity_types`).
+    AgentGrant:
+      type: object
+      description: |
+        First-class persistent grant that admits a verified AAuth
+        identity as the owning user, with the listed capabilities. See
+        `docs/subsystems/agent_attribution_integration.md` for the
+        admission flow.
+      required:
+        - grant_id
+        - user_id
+        - label
+        - capabilities
+        - status
+      properties:
+        grant_id:
+          type: string
+        user_id:
+          type: string
+        label:
+          type: string
+        capabilities:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentCapabilityEntry"
+        status:
+          type: string
+          enum: [active, suspended, revoked]
+        match_sub:
+          type: string
+          nullable: true
+        match_iss:
+          type: string
+          nullable: true
+        match_thumbprint:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        last_used_at:
+          type: string
+          nullable: true
+        import_source:
+          type: string
+          nullable: true
+          description: |
+            Provenance marker (e.g. `env_config`) when the grant was
+            backfilled from legacy capability configuration via the
+            `neotoma agents grants import` CLI.
+        created_at:
+          type: string
+          nullable: true
+        last_observation_at:
+          type: string
+          nullable: true
+    AgentGrantCreate:
+      type: object
+      required:
+        - label
+        - capabilities
+      properties:
+        label:
+          type: string
+        capabilities:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentCapabilityEntry"
+        status:
+          type: string
+          enum: [active, suspended, revoked]
+          default: active
+        match_sub:
+          type: string
+          nullable: true
+        match_iss:
+          type: string
+          nullable: true
+        match_thumbprint:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        user_id:
+          type: string
+          nullable: true
+          description: |
+            Optional owner override; only honoured when the caller is
+            authenticated as that user (or the local-dev override is
+            active). Admitted AAuth requests cannot pivot owners.
+    AgentGrantUpdate:
+      type: object
+      properties:
+        label:
+          type: string
+        capabilities:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentCapabilityEntry"
+        notes:
+          type: string
+          nullable: true
+        match_sub:
+          type: string
+          nullable: true
+        match_iss:
+          type: string
+          nullable: true
+        match_thumbprint:
+          type: string
+          nullable: true
     Entity:
       type: object
       properties:
@@ -2293,6 +2510,7 @@ paths:
                           nullable: true
                           enum:
                             - hardware
+                            - operator_attested
                             - software
                             - unverified_client
                             - anonymous
@@ -2345,6 +2563,207 @@ paths:
                       $ref: "#/components/schemas/AgentDirectoryEntry"
                   total:
                     type: integer
+
+  /agents/grants:
+    get:
+      summary: List agent grants for the authenticated user
+      description: |
+        Returns the user's `agent_grant` entities. Grants gate AAuth
+        admission: a request signed by an agent identity that matches an
+        `active` grant authenticates as the grant's owning user, with the
+        capabilities listed on the grant. Suspended and revoked grants
+        are returned for inspection but never admit a request.
+      operationId: listAgentGrants
+      parameters:
+        - in: query
+          name: user_id
+          schema:
+            type: string
+          required: false
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [active, suspended, revoked, all]
+          required: false
+        - in: query
+          name: q
+          schema:
+            type: string
+          required: false
+          description: Substring filter against `label`, `match_sub`, or `match_thumbprint`.
+      responses:
+        "200":
+          description: Grant list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  grants:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AgentGrant"
+    post:
+      summary: Create an agent grant
+      description: |
+        Creates a new `agent_grant` for the authenticated user. At least
+        one of `match_sub` or `match_thumbprint` must be supplied. The
+        grant's `capabilities` follow the same shape used by the
+        admitted-request authorization check.
+      operationId: createAgentGrant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentGrantCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  grant:
+                    $ref: "#/components/schemas/AgentGrant"
+        "400":
+          description: Validation error (e.g. `agent_grant_invalid`)
+        "409":
+          description: Identity already mapped to another grant for this user
+
+  /agents/grants/{id}:
+    get:
+      summary: Get one agent grant
+      operationId: getAgentGrant
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: user_id
+          schema:
+            type: string
+          required: false
+      responses:
+        "200":
+          description: Grant detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  grant:
+                    $ref: "#/components/schemas/AgentGrant"
+        "404":
+          description: Grant not found for this user
+    patch:
+      summary: Update editable fields on an agent grant
+      description: |
+        Patches `label`, `capabilities`, `notes`, or any of the
+        `match_*` identity fields. Status transitions go through the
+        dedicated `suspend`, `revoke`, and `restore` endpoints.
+      operationId: updateAgentGrant
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentGrantUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  grant:
+                    $ref: "#/components/schemas/AgentGrant"
+        "400":
+          description: Validation error
+        "404":
+          description: Grant not found for this user
+
+  /agents/grants/{id}/suspend:
+    post:
+      summary: Suspend an agent grant
+      description: |
+        Sets the grant's `status` to `suspended`. Suspended grants do
+        not admit requests, but can be restored later.
+      operationId: suspendAgentGrant
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Suspended
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  grant:
+                    $ref: "#/components/schemas/AgentGrant"
+
+  /agents/grants/{id}/revoke:
+    post:
+      summary: Revoke an agent grant
+      description: |
+        Sets the grant's `status` to `revoked`. Revoked grants stay in
+        history for audit but never admit a request.
+      operationId: revokeAgentGrant
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  grant:
+                    $ref: "#/components/schemas/AgentGrant"
+
+  /agents/grants/{id}/restore:
+    post:
+      summary: Restore an agent grant to active
+      description: |
+        Transitions a `suspended` or `revoked` grant back to `active`.
+      operationId: restoreAgentGrant
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Restored
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  grant:
+                    $ref: "#/components/schemas/AgentGrant"
 
   /agents/{key}:
     get:

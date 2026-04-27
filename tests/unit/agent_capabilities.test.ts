@@ -1,336 +1,312 @@
 /**
  * Unit tests for `src/services/agent_capabilities.ts`.
  *
- * Exercises the pure registry matching + enforcement logic without touching
- * the HTTP stack. Integration coverage through `/store` lives in
- * `tests/integration/agent_capabilities_store.test.ts`.
+ * The capability layer is now grant-driven: capabilities flow in via
+ * the admission service (AsyncLocalStorage `RequestContext`) rather
+ * than from environment-variable registries. The legacy env-config
+ * code paths have been removed and are replaced here by:
+ *
+ * - `enforceAgentCapability` against the resolved grant (admitted path)
+ * - `assertNoLegacyCapabilityEnv` boot-time guard that fails fast if
+ *   any of the deprecated `NEOTOMA_AGENT_CAPABILITIES_*` env vars are
+ *   still set.
+ *
+ * Integration coverage of the protected-entity-types guard lives in
+ * `tests/unit/protected_entity_types.test.ts`.
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   AgentCapabilityError,
+  LegacyAgentCapabilityEnvError,
+  assertNoLegacyCapabilityEnv,
   contextFromAgentIdentity,
   enforceAgentCapability,
-  findMatchingAgent,
-  isAgentCapabilitiesEnforced,
-  loadAgentCapabilities,
-  resetAgentCapabilitiesCache,
+  isAgentDefaultDenyEnabled,
+  getAgentCapabilitiesSource,
   type AgentCapabilityContext,
-  type AgentCapabilityRegistry,
 } from "../../src/services/agent_capabilities.js";
+import { runWithRequestContext } from "../../src/services/request_context.js";
+import type { AgentIdentity } from "../../src/crypto/agent_identity.js";
 
-const ENV_KEYS = [
+const LEGACY_ENV_KEYS = [
   "NEOTOMA_AGENT_CAPABILITIES_JSON",
   "NEOTOMA_AGENT_CAPABILITIES_FILE",
   "NEOTOMA_AGENT_CAPABILITIES_ENFORCE",
+  "NEOTOMA_AGENT_DEFAULT_DENY",
 ] as const;
 
-function withRegistry(registry: AgentCapabilityRegistry): void {
-  process.env.NEOTOMA_AGENT_CAPABILITIES_JSON = JSON.stringify(registry);
-  resetAgentCapabilitiesCache();
+function admittedCtx(
+  caps: AgentCapabilityContext["capabilities"] = [
+    { op: "store_structured", entity_types: ["neotoma_feedback"] },
+    { op: "correct", entity_types: ["neotoma_feedback"] },
+  ],
+): AgentCapabilityContext {
+  return {
+    sub: "agent-site@neotoma.io",
+    iss: "https://agent.neotoma.io",
+    thumbprint: "thumb-abc",
+    tier: "software",
+    capabilities: caps,
+    agentLabel: "agent-site@neotoma.io",
+    admitted: true,
+  };
 }
 
-function enableEnforcement(value = true): void {
-  if (value) {
-    process.env.NEOTOMA_AGENT_CAPABILITIES_ENFORCE = "true";
-  } else {
-    delete process.env.NEOTOMA_AGENT_CAPABILITIES_ENFORCE;
-  }
+function unadmittedCtx(
+  overrides: Partial<AgentCapabilityContext> = {},
+): AgentCapabilityContext {
+  return {
+    sub: "unknown@example.com",
+    tier: "software",
+    capabilities: null,
+    agentLabel: "unknown@example.com",
+    admitted: false,
+    ...overrides,
+  };
 }
-
-const softwareCtx: AgentCapabilityContext = {
-  sub: "agent-site@neotoma.io",
-  iss: "https://agent.neotoma.io",
-  thumbprint: "thumb-abc",
-  tier: "software",
-};
 
 describe("agent_capabilities", () => {
   const originalEnv: Record<string, string | undefined> = {};
 
   beforeEach(() => {
-    for (const key of ENV_KEYS) {
+    for (const key of LEGACY_ENV_KEYS) {
       originalEnv[key] = process.env[key];
       delete process.env[key];
     }
-    resetAgentCapabilitiesCache();
   });
 
   afterEach(() => {
-    for (const key of ENV_KEYS) {
+    for (const key of LEGACY_ENV_KEYS) {
       if (originalEnv[key] === undefined) delete process.env[key];
       else process.env[key] = originalEnv[key];
     }
-    resetAgentCapabilitiesCache();
   });
 
-  describe("loadAgentCapabilities", () => {
-    it("loads the committed default when no env is set", () => {
-      const registry = loadAgentCapabilities();
-      // The committed config/agent_capabilities.default.json pins the
-      // Netlify forwarder to neotoma_feedback. When that file disappears
-      // (fresh checkout, CI image without config), the loader returns an
-      // empty registry — both shapes are valid defaults.
-      if (Object.keys(registry.agents).length === 0) {
-        expect(registry).toEqual({ agents: {} });
-      } else {
-        expect(registry.agents["agent-site@neotoma.io"]).toBeDefined();
-      }
-    });
-
-    it("parses inline JSON via NEOTOMA_AGENT_CAPABILITIES_JSON", () => {
-      withRegistry({
-        agents: {
-          "agent-site@neotoma.io": {
-            match: { sub: "agent-site@neotoma.io" },
-            capabilities: [
-              { op: "store_structured", entity_types: ["neotoma_feedback"] },
-            ],
-          },
-        },
-      });
-      const registry = loadAgentCapabilities();
-      expect(Object.keys(registry.agents)).toEqual(["agent-site@neotoma.io"]);
-    });
-
-    it("drops entries with no usable match key", () => {
-      process.env.NEOTOMA_AGENT_CAPABILITIES_JSON = JSON.stringify({
-        agents: {
-          "broken@example.com": {
-            match: {},
-            capabilities: [
-              { op: "store_structured", entity_types: ["x"] },
-            ],
-          },
-          "ok@example.com": {
-            match: { sub: "ok@example.com" },
-            capabilities: [
-              { op: "store_structured", entity_types: ["x"] },
-            ],
-          },
-        },
-      });
-      resetAgentCapabilitiesCache();
-      const registry = loadAgentCapabilities();
-      expect(Object.keys(registry.agents)).toEqual(["ok@example.com"]);
-    });
-
-    it("ignores unknown ops and non-string entity_types", () => {
-      process.env.NEOTOMA_AGENT_CAPABILITIES_JSON = JSON.stringify({
-        agents: {
-          "partial@example.com": {
-            match: { sub: "partial@example.com" },
-            capabilities: [
-              { op: "teleport", entity_types: ["x"] },
-              { op: "store_structured", entity_types: [1, null, "neotoma_feedback"] },
-              { op: "correct", entity_types: [] },
-            ],
-          },
-        },
-      });
-      resetAgentCapabilitiesCache();
-      const registry = loadAgentCapabilities();
-      expect(registry.agents["partial@example.com"].capabilities).toEqual([
-        { op: "store_structured", entity_types: ["neotoma_feedback"] },
-      ]);
+  describe("getAgentCapabilitiesSource", () => {
+    it("identifies the source of truth as agent_grant entities", () => {
+      expect(getAgentCapabilitiesSource()).toBe("agent_grant_entities");
     });
   });
 
-  describe("findMatchingAgent", () => {
-    it("matches by sub alone", () => {
-      const registry: AgentCapabilityRegistry = {
-        agents: {
-          s: {
-            match: { sub: "agent-site@neotoma.io" },
-            capabilities: [{ op: "store_structured", entity_types: ["x"] }],
-          },
-        },
-      };
-      const m = findMatchingAgent(registry, { sub: "agent-site@neotoma.io", tier: "software" });
-      expect(m?.label).toBe("s");
+  describe("assertNoLegacyCapabilityEnv (boot guard)", () => {
+    it("returns silently when no legacy env vars are set", () => {
+      expect(() => assertNoLegacyCapabilityEnv()).not.toThrow();
     });
 
-    it("requires iss when configured", () => {
-      const registry: AgentCapabilityRegistry = {
-        agents: {
-          s: {
-            match: { sub: "a@b", iss: "https://expected" },
-            capabilities: [{ op: "store_structured", entity_types: ["x"] }],
-          },
-        },
-      };
-      expect(
-        findMatchingAgent(registry, { sub: "a@b", iss: "https://wrong", tier: "software" }),
-      ).toBeNull();
-      expect(
-        findMatchingAgent(registry, { sub: "a@b", iss: "https://expected", tier: "software" })
-          ?.label,
-      ).toBe("s");
-    });
-
-    it("matches by thumbprint and prefers it over sub", () => {
-      const registry: AgentCapabilityRegistry = {
-        agents: {
-          byThumb: {
-            match: { thumbprint: "thumb-abc" },
-            capabilities: [{ op: "store_structured", entity_types: ["x"] }],
-          },
-          bySub: {
-            match: { sub: "agent-site@neotoma.io" },
-            capabilities: [{ op: "store_structured", entity_types: ["y"] }],
-          },
-        },
-      };
-      const m = findMatchingAgent(registry, softwareCtx);
-      expect(m?.label).toBe("byThumb");
-    });
-  });
-
-  describe("enforceAgentCapability", () => {
-    beforeEach(() => {
-      withRegistry({
-        agents: {
-          "agent-site@neotoma.io": {
-            match: { sub: "agent-site@neotoma.io", iss: "https://agent.neotoma.io" },
-            capabilities: [
-              { op: "store_structured", entity_types: ["neotoma_feedback"] },
-              { op: "correct", entity_types: ["neotoma_feedback"] },
-            ],
-          },
-          "wildcard@example.com": {
-            match: { sub: "wildcard@example.com" },
-            capabilities: [{ op: "retrieve", entity_types: ["*"] }],
-          },
-        },
-      });
-      enableEnforcement(true);
-    });
-
-    it("allows in-scope entity type", () => {
-      expect(() =>
-        enforceAgentCapability("store_structured", ["neotoma_feedback"], softwareCtx),
-      ).not.toThrow();
-    });
-
-    it("throws for out-of-scope entity type when enforced", () => {
+    it("throws when NEOTOMA_AGENT_CAPABILITIES_JSON is still set", () => {
+      process.env.NEOTOMA_AGENT_CAPABILITIES_JSON = '{"agents":{}}';
       try {
-        enforceAgentCapability("store_structured", ["task"], softwareCtx);
+        assertNoLegacyCapabilityEnv();
         throw new Error("expected throw");
       } catch (err) {
-        expect(err).toBeInstanceOf(AgentCapabilityError);
-        expect((err as AgentCapabilityError).code).toBe("capability_denied");
-        expect((err as AgentCapabilityError).op).toBe("store_structured");
-        expect((err as AgentCapabilityError).entityType).toBe("task");
+        expect(err).toBeInstanceOf(LegacyAgentCapabilityEnvError);
+        const legacy = err as LegacyAgentCapabilityEnvError;
+        expect(legacy.code).toBe("legacy_agent_capabilities_env");
+        expect(legacy.variables).toEqual(["NEOTOMA_AGENT_CAPABILITIES_JSON"]);
+        expect(legacy.migrationCommand).toContain(
+          "neotoma agents grants import",
+        );
       }
     });
 
-    it("throws for unknown op even if entity type is otherwise allowed", () => {
-      expect(() =>
-        enforceAgentCapability("create_relationship", ["neotoma_feedback"], softwareCtx),
-      ).toThrow(AgentCapabilityError);
+    it("collects every legacy variable that is still set", () => {
+      process.env.NEOTOMA_AGENT_CAPABILITIES_JSON = '{"agents":{}}';
+      process.env.NEOTOMA_AGENT_CAPABILITIES_FILE = "/tmp/x.json";
+      process.env.NEOTOMA_AGENT_CAPABILITIES_ENFORCE = "1";
+      try {
+        assertNoLegacyCapabilityEnv();
+        throw new Error("expected throw");
+      } catch (err) {
+        expect(err).toBeInstanceOf(LegacyAgentCapabilityEnvError);
+        expect((err as LegacyAgentCapabilityEnvError).variables).toEqual([
+          "NEOTOMA_AGENT_CAPABILITIES_JSON",
+          "NEOTOMA_AGENT_CAPABILITIES_FILE",
+          "NEOTOMA_AGENT_CAPABILITIES_ENFORCE",
+        ]);
+      }
     });
 
-    it("allows wildcard entity_types", () => {
-      const ctx: AgentCapabilityContext = {
-        sub: "wildcard@example.com",
-        tier: "software",
-      };
-      expect(() =>
-        enforceAgentCapability("retrieve", ["anything", "else"], ctx),
-      ).not.toThrow();
+    it("ignores empty-string variables (pristine .env keeps shipping)", () => {
+      process.env.NEOTOMA_AGENT_CAPABILITIES_JSON = "";
+      process.env.NEOTOMA_AGENT_CAPABILITIES_FILE = "   ";
+      expect(() => assertNoLegacyCapabilityEnv()).not.toThrow();
+    });
+  });
+
+  describe("isAgentDefaultDenyEnabled", () => {
+    it("defaults to false", () => {
+      expect(isAgentDefaultDenyEnabled()).toBe(false);
     });
 
-    it("does nothing when entityTypes is empty", () => {
-      expect(() =>
-        enforceAgentCapability("store_structured", [], softwareCtx),
-      ).not.toThrow();
+    it("honours common truthy values", () => {
+      for (const value of ["true", "TRUE", "1", "yes"]) {
+        process.env.NEOTOMA_AGENT_DEFAULT_DENY = value;
+        expect(isAgentDefaultDenyEnabled()).toBe(true);
+      }
     });
 
-    it("observe-only mode never throws but logs denials", () => {
-      enableEnforcement(false);
-      expect(isAgentCapabilitiesEnforced()).toBe(false);
-      expect(() =>
-        enforceAgentCapability("store_structured", ["task"], softwareCtx),
-      ).not.toThrow();
-    });
-
-    it("allows unknown agents when default_deny is false (legacy behaviour)", () => {
-      withRegistry({
-        agents: {
-          "agent-site@neotoma.io": {
-            match: { sub: "agent-site@neotoma.io" },
-            capabilities: [
-              { op: "store_structured", entity_types: ["neotoma_feedback"] },
-            ],
-          },
-        },
-      });
-      const strangerCtx: AgentCapabilityContext = {
-        sub: "other@example.com",
-        tier: "software",
-      };
-      expect(() =>
-        enforceAgentCapability("store_structured", ["task"], strangerCtx),
-      ).not.toThrow();
-    });
-
-    it("denies unknown AAuth-verified agents when default_deny is true", () => {
-      withRegistry({
-        default_deny: true,
-        agents: {
-          "agent-site@neotoma.io": {
-            match: { sub: "agent-site@neotoma.io" },
-            capabilities: [
-              { op: "store_structured", entity_types: ["neotoma_feedback"] },
-            ],
-          },
-        },
-      });
-      enableEnforcement(true);
-      const strangerCtx: AgentCapabilityContext = {
-        sub: "other@example.com",
-        tier: "software",
-      };
-      expect(() =>
-        enforceAgentCapability("store_structured", ["task"], strangerCtx),
-      ).toThrow(AgentCapabilityError);
-    });
-
-    it("does not apply default_deny to anonymous/unverified tiers", () => {
-      withRegistry({ default_deny: true, agents: {} });
-      enableEnforcement(true);
-      const anonCtx: AgentCapabilityContext = { tier: "anonymous" };
-      expect(() =>
-        enforceAgentCapability("store_structured", ["task"], anonCtx),
-      ).not.toThrow();
+    it("treats unrecognised strings as false", () => {
+      process.env.NEOTOMA_AGENT_DEFAULT_DENY = "maybe";
+      expect(isAgentDefaultDenyEnabled()).toBe(false);
     });
   });
 
   describe("contextFromAgentIdentity", () => {
-    it("returns null for missing identity", () => {
+    it("returns null when there is no agent identity", () => {
       expect(contextFromAgentIdentity(null)).toBeNull();
       expect(contextFromAgentIdentity(undefined)).toBeNull();
     });
 
-    it("returns null when identity has neither sub nor thumbprint", () => {
-      expect(
-        contextFromAgentIdentity({ tier: "unverified_client" }),
-      ).toBeNull();
+    it("returns null for an identity with no usable match key", () => {
+      const ident: AgentIdentity = { tier: "anonymous" } as AgentIdentity;
+      expect(contextFromAgentIdentity(ident)).toBeNull();
     });
 
-    it("projects sub/iss/thumbprint/tier", () => {
-      const ctx = contextFromAgentIdentity({
-        sub: "a@b",
-        iss: "https://c",
-        thumbprint: "t",
+    it("surfaces the admitted grant's capabilities from the request context", () => {
+      const ident: AgentIdentity = {
+        sub: "agent-cli@example.com",
+        iss: "https://agent.example.com",
+        thumbprint: "thumb-xyz",
         tier: "software",
-      });
-      expect(ctx).toEqual({
-        sub: "a@b",
-        iss: "https://c",
-        thumbprint: "t",
+      } as AgentIdentity;
+      const caps = [
+        { op: "store_structured" as const, entity_types: ["task"] },
+      ];
+      const ctx = runWithRequestContext(
+        {
+          agentIdentity: ident,
+          aauthAdmission: {
+            admitted: true,
+            user_id: "usr_1",
+            grant_id: "ent_1",
+            agent_label: "Cursor on macbook-pro",
+            capabilities: caps,
+            reason: "admitted",
+          },
+        },
+        () => contextFromAgentIdentity(ident),
+      ) as AgentCapabilityContext | null;
+      expect(ctx).not.toBeNull();
+      expect(ctx!.admitted).toBe(true);
+      expect(ctx!.capabilities).toEqual(caps);
+      expect(ctx!.agentLabel).toBe("Cursor on macbook-pro");
+    });
+
+    it("treats unadmitted but signed identities as unrecognised", () => {
+      const ident: AgentIdentity = {
+        sub: "agent-cli@example.com",
         tier: "software",
-      });
+      } as AgentIdentity;
+      const ctx = contextFromAgentIdentity(ident);
+      expect(ctx).not.toBeNull();
+      expect(ctx!.admitted).toBe(false);
+      expect(ctx!.capabilities).toBeNull();
+      expect(ctx!.agentLabel).toBe("agent-cli@example.com");
+    });
+  });
+
+  describe("enforceAgentCapability (admitted)", () => {
+    it("allows in-scope (op, entity_type) pairs", () => {
+      expect(() =>
+        enforceAgentCapability(
+          "store_structured",
+          ["neotoma_feedback"],
+          admittedCtx(),
+        ),
+      ).not.toThrow();
+    });
+
+    it("rejects out-of-scope entity types", () => {
+      try {
+        enforceAgentCapability(
+          "store_structured",
+          ["task"],
+          admittedCtx(),
+        );
+        throw new Error("expected throw");
+      } catch (err) {
+        expect(err).toBeInstanceOf(AgentCapabilityError);
+        const cap = err as AgentCapabilityError;
+        expect(cap.code).toBe("capability_denied");
+        expect(cap.op).toBe("store_structured");
+        expect(cap.entityType).toBe("task");
+        expect(cap.hint).toContain("Inspector → Agents → Grants");
+      }
+    });
+
+    it("rejects an op that the grant does not include", () => {
+      expect(() =>
+        enforceAgentCapability(
+          "create_relationship",
+          ["neotoma_feedback"],
+          admittedCtx(),
+        ),
+      ).toThrow(AgentCapabilityError);
+    });
+
+    it("supports wildcard entity_types in the grant", () => {
+      const ctx = admittedCtx([
+        { op: "retrieve", entity_types: ["*"] },
+      ]);
+      expect(() =>
+        enforceAgentCapability("retrieve", ["any", "thing"], ctx),
+      ).not.toThrow();
+    });
+
+    it("dedupes entity_types before checking", () => {
+      expect(() =>
+        enforceAgentCapability(
+          "store_structured",
+          ["neotoma_feedback", "neotoma_feedback"],
+          admittedCtx(),
+        ),
+      ).not.toThrow();
+    });
+
+    it("no-ops on empty entity_types", () => {
+      expect(() =>
+        enforceAgentCapability("store_structured", [], admittedCtx()),
+      ).not.toThrow();
+    });
+  });
+
+  describe("enforceAgentCapability (unadmitted)", () => {
+    it("allows by default for unadmitted, signature-verified agents", () => {
+      // Mirrors the v0.7 behaviour: unknown agents fall through to
+      // attribution policy unless default_deny is set.
+      expect(() =>
+        enforceAgentCapability(
+          "store_structured",
+          ["task"],
+          unadmittedCtx(),
+        ),
+      ).not.toThrow();
+    });
+
+    it("denies when NEOTOMA_AGENT_DEFAULT_DENY is enabled and tier is verifying", () => {
+      process.env.NEOTOMA_AGENT_DEFAULT_DENY = "1";
+      try {
+        enforceAgentCapability(
+          "store_structured",
+          ["task"],
+          unadmittedCtx(),
+        );
+        throw new Error("expected throw");
+      } catch (err) {
+        expect(err).toBeInstanceOf(AgentCapabilityError);
+        expect((err as AgentCapabilityError).hint).toContain(
+          "No active agent_grant matches",
+        );
+      }
+    });
+
+    it("does NOT deny anonymous tier even with default_deny enabled", () => {
+      process.env.NEOTOMA_AGENT_DEFAULT_DENY = "1";
+      const ctx = unadmittedCtx({ tier: "anonymous" });
+      expect(() =>
+        enforceAgentCapability("store_structured", ["task"], ctx),
+      ).not.toThrow();
     });
   });
 });

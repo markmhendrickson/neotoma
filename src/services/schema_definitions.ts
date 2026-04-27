@@ -2466,6 +2466,55 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       },
     },
   },
+
+  agent_grant: {
+    entity_type: "agent_grant",
+    schema_version: "1.0.0",
+    metadata: {
+      label: "Agent grant",
+      description:
+        "AAuth admission grant. Maps a verified AAuth identity (sub / iss / thumbprint) to a Neotoma user with scoped capabilities. Created by the user (Inspector) or the env-config import command; mutated through the standard entity store. Status transitions (active → suspended ↔ active → revoked) are written as ordinary observations so the observation history doubles as an audit log.",
+      category: "agent_runtime",
+      aliases: [],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: false },
+        label: { type: "string", required: true },
+        match_sub: { type: "string", required: false },
+        match_iss: { type: "string", required: false },
+        match_thumbprint: { type: "string", required: false },
+        capabilities: { type: "array", required: true },
+        status: { type: "string", required: true },
+        notes: { type: "string", required: false },
+        last_used_at: { type: "date", required: false },
+        import_source: { type: "string", required: false },
+      },
+      // Identity rules: thumbprint pin wins (rotated JWT issuer cannot
+      // quietly replace the grant); otherwise a (sub, iss) composite; else
+      // sub alone. Enforced in the grants service so resolution upserts on
+      // re-imports and Inspector edits.
+      canonical_name_fields: [
+        { composite: ["match_thumbprint"] },
+        { composite: ["match_sub", "match_iss"] },
+        { composite: ["match_sub"] },
+      ],
+      name_collision_policy: "merge",
+    },
+    reducer_config: {
+      merge_policies: {
+        label: { strategy: "last_write" },
+        capabilities: { strategy: "last_write" },
+        status: { strategy: "last_write" },
+        notes: { strategy: "last_write" },
+        last_used_at: { strategy: "last_write" },
+        match_sub: { strategy: "last_write" },
+        match_iss: { strategy: "last_write" },
+        match_thumbprint: { strategy: "last_write" },
+        import_source: { strategy: "last_write" },
+      },
+    },
+  },
 };
 
 /**

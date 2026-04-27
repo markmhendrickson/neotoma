@@ -71,6 +71,19 @@ export function McpReferencePage() {
         inferred from the auth context. Run <code>neotoma auth login</code> for OAuth setup, or set{" "}
         <code>NEOTOMA_BEARER_TOKEN</code> for token-based auth.
       </p>
+      <p className="text-[15px] leading-7 mb-4">
+        For agent identity (separate from human user auth), MCP supports{" "}
+        <strong>AAuth</strong> (RFC 9421 HTTP Message Signatures plus an <code>aa-agent+jwt</code>{" "}
+        token on the <code>initialize</code> handshake). Verified agents render with a{" "}
+        <code>hardware</code> or <code>software</code> trust badge in the Inspector. When AAuth is
+        not present, <code>clientInfo.name</code> / <code>clientInfo.version</code> on the MCP{" "}
+        <code>initialize</code> handshake serve as a fallback identifier (rendered as{" "}
+        <code>unverified_client</code>). See the{" "}
+        <Link to="/aauth" className="text-foreground underline underline-offset-2 hover:no-underline">
+          AAuth reference
+        </Link>{" "}
+        for the full attribution contract.
+      </p>
 
       <h2 className="text-[18px] font-medium tracking-[-0.01em] mt-8 mb-3">Common action patterns</h2>
       <pre className="rounded-lg border code-block-palette p-4 overflow-x-auto font-mono text-[14px] whitespace-pre-wrap break-words mb-6">{`# 1) Retrieve target entities before writing

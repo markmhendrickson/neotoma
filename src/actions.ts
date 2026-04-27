@@ -25,6 +25,10 @@ import {
   getAttributionDecisionFromRequest,
 } from "./middleware/aauth_verify.js";
 import { attributionContext } from "./middleware/attribution_context.js";
+import {
+  aauthAdmission,
+  getAAuthAdmissionFromRequest,
+} from "./middleware/aauth_admission.js";
 import { buildSessionInfo } from "./services/session_info.js";
 import { AttributionPolicyError } from "./services/attribution_policy.js";
 import { registerFeedbackAdminProxyRoutes } from "./services/feedback/admin_proxy.js";
@@ -34,9 +38,11 @@ import {
   enforceAgentCapability,
 } from "./services/agent_capabilities.js";
 import {
+  getCurrentAAuthAdmission,
   getCurrentAgentIdentity,
   runWithRequestContext,
 } from "./services/request_context.js";
+import { assertCanWriteProtectedBatch } from "./services/protected_entity_types.js";
 import {
   createAgentIdentity as buildAgentIdentity,
   getAgentIdentityFromRequest,
@@ -827,9 +833,19 @@ function setOAuthKeySessionCookie(req: express.Request, res: express.Response): 
  * the request path — an attacker could smuggle signatures authored against
  * a different authority. See src/middleware/aauth_verify.ts.
  */
-function canonicalAauthAuthority(): string {
+export function canonicalAauthAuthority(): string {
   const explicit = process.env.NEOTOMA_AAUTH_AUTHORITY?.trim();
-  if (explicit) return explicit;
+  if (explicit) {
+    if (/^[a-z][a-z0-9+.-]*:\/\//i.test(explicit)) {
+      try {
+        const url = new URL(explicit);
+        return url.host;
+      } catch {
+        return explicit;
+      }
+    }
+    return explicit;
+  }
   try {
     const url = new URL(config.apiBase);
     return url.host;
@@ -861,6 +877,14 @@ app.use(
 // may nest a more specific `runWithRequestContext` — nested scopes
 // shadow outer ones exactly as intended.
 app.use(attributionContext());
+
+// Stronger AAuth Admission plan: resolve verified AAuth identities to
+// `agent_grant` entities and stamp `req.aauthAdmission` /
+// `req.authenticatedUserId`. Runs after attributionContext so the
+// admission middleware can nest a richer request context (admission +
+// identity) for downstream guards. Cheap public discovery routes are
+// short-circuited inside the middleware.
+app.use(aauthAdmission());
 
 // MCP StreamableHTTP endpoint (GET, POST, DELETE)
 // This endpoint enables Cursor's "Connect" button for OAuth authentication
@@ -916,7 +940,14 @@ app.all("/mcp", async (req, res) => {
       }
     }
 
-    const hasAuth = !!(authHeader?.startsWith("Bearer ") || connectionIdHeader);
+    // Stronger AAuth Admission: a verified AAuth identity that resolves
+    // to an active `agent_grant` for some user is a valid remote auth
+    // path. Bearer / OAuth / X-Connection-Id remain fully supported.
+    const aauthAdmissionForRequest = getAAuthAdmissionFromRequest(req);
+    const aauthAdmitted = !!(
+      aauthAdmissionForRequest && aauthAdmissionForRequest.admitted
+    );
+    const hasAuth = !!(authHeader?.startsWith("Bearer ") || connectionIdHeader || aauthAdmitted);
 
     // When encryption is on, only the key-derived token is accepted
     if (config.encryption.enabled && connectionIdHeader !== "dev-local") {
@@ -2198,10 +2229,33 @@ app.use(async (req, res, next) => {
     }
   }
 
+  // Stronger AAuth Admission: a verified AAuth identity that resolved
+  // to an active `agent_grant` is a valid remote auth path. The
+  // admission middleware has already populated `req.aauthAdmission`
+  // and `req.authenticatedUserId`. We accept it here even when no
+  // Bearer is present so agents holding an active grant can reach
+  // direct write routes (`/store`, `/observations/create`,
+  // `/create_relationship`, `/correct`) without OAuth/Bearer.
+  const admissionForRequest = getAAuthAdmissionFromRequest(req);
+  if (
+    admissionForRequest?.admitted &&
+    admissionForRequest.user_id &&
+    (req as any).authenticatedUserId === admissionForRequest.user_id
+  ) {
+    logger.info(
+      `[Auth] ${req.method} ${req.path} auth_method=aauth_admitted user_id=${admissionForRequest.user_id} grant_id=${admissionForRequest.grant_id ?? "?"}`,
+    );
+    return next();
+  }
+
   // Bearer required for remaining paths (Ed25519, OAuth)
   if (!headerAuth.startsWith("Bearer ")) {
     logWarn("AuthMissingBearer", req);
-    return sendError(res, 401, "AUTH_REQUIRED", "Missing Bearer token");
+    return sendError(res, 401, "AUTH_REQUIRED", "Missing Bearer token", {
+      hint:
+        "AAuth-signed agents can authenticate without Bearer once an active agent_grant matches their identity. " +
+        "Create a grant via Inspector → Agents → Grants.",
+    });
   }
 
   const bearerToken = headerAuth.slice("Bearer ".length).trim();
@@ -2292,8 +2346,17 @@ app.get("/me", async (req, res) => {
 });
 
 /**
- * Helper to extract authenticated user_id from request
- * Supports: middleware-set user (e.g. dev-local when encryption off), session token, Ed25519 bearer
+ * Helper to extract authenticated user_id from request.
+ * Supports: middleware-set user (Bearer / OAuth / dev-local / AAuth admission),
+ * session token, Ed25519 bearer.
+ *
+ * Stronger AAuth Admission plan: admitted AAuth callers carry
+ * `req.authenticatedUserId` resolved from the matching `agent_grant`'s
+ * owner. This helper applies the same `user_id` mismatch rules to them
+ * as to OAuth/Bearer — payload-driven user pivots are rejected. The
+ * local-dev override remains available only for the local dev user;
+ * AAuth admission can never resolve to that id, so admitted agents are
+ * structurally locked to their grant owner.
  * @param req - Express request object
  * @param providedUserId - Optional user_id from request body/query
  * @returns Authenticated user_id
@@ -2303,10 +2366,18 @@ async function getAuthenticatedUserId(
   req: express.Request,
   providedUserId?: string
 ): Promise<string> {
-  // Use user already set by auth middleware (e.g. dev-local when encryption off and no Bearer)
   const authenticatedUserId = (req as any).authenticatedUserId;
+  const aauthAdmissionForRequest = getAAuthAdmissionFromRequest(req);
   if (authenticatedUserId) {
     if (providedUserId && providedUserId !== authenticatedUserId) {
+      // AAuth admission: never honour payload user_id overrides — the
+      // grant owner is the only valid scope for an admitted agent.
+      // Bearer/OAuth flows fall through to the existing rules below.
+      if (aauthAdmissionForRequest?.admitted) {
+        throw new Error(
+          `user_id parameter (${providedUserId}) does not match admitted AAuth user (${authenticatedUserId}); grants only resolve to their owner`
+        );
+      }
       // When authenticated as local dev user, allow body/query user_id override for CLI tests and dev flows.
       // The sandbox public user is intentionally excluded so public sandbox
       // callers cannot pivot into other users' data by spoofing user_id.
@@ -3556,6 +3627,173 @@ app.get("/agents", async (req, res) => {
   }
 });
 
+// ============================================================================
+// /agents/grants — Stronger AAuth Admission management surface
+//
+// Ergonomic wrappers over the agent_grant entity store for the Inspector
+// grants page and CLI tooling. The structured-store routes
+// (`store_structured`, `correct`) remain available for agents that hold
+// the bootstrap capability and want to manage grants programmatically.
+// All routes require an authenticated user and operate strictly within
+// that user's scope. Cross-user grant access is rejected at the route
+// layer (not just the UI). See docs/subsystems/agent_attribution_integration.md.
+//
+// REGISTERED BEFORE `/agents/:key` so Express's first-match ordering does
+// not route `/agents/grants` into the observed-agents handler.
+// ============================================================================
+
+const grantsCommonHandlers = {
+  errorEnvelopeFromGrantError: (err: unknown) => {
+    const e = err as { code?: string; statusCode?: number; message?: string };
+    if (e && typeof e === "object" && typeof e.code === "string" && typeof e.statusCode === "number") {
+      return {
+        statusCode: e.statusCode,
+        envelope: buildErrorEnvelope(e.code.toUpperCase(), e.message ?? "Grant error", {
+          code: e.code,
+        }),
+      };
+    }
+    return null;
+  },
+};
+
+app.get("/agents/grants", async (req, res) => {
+  try {
+    const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+    const { listGrantsForUser } = await import("./services/agent_grants.js");
+    const status = typeof req.query.status === "string" ? req.query.status : undefined;
+    const query = typeof req.query.q === "string" ? req.query.q : undefined;
+    const grants = await listGrantsForUser(userId, {
+      status: (status as any) || "all",
+      query,
+    });
+    return res.json({ grants });
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to list agent grants",
+      "DB_QUERY_FAILED",
+      "APIError:agents_grants_list",
+    );
+  }
+});
+
+app.get("/agents/grants/:id", async (req, res) => {
+  try {
+    const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+    const { getGrant } = await import("./services/agent_grants.js");
+    const grant = await getGrant(userId, req.params.id);
+    if (!grant) {
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", `Agent grant not found: ${req.params.id}`);
+    }
+    return res.json({ grant });
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to fetch agent grant",
+      "DB_QUERY_FAILED",
+      "APIError:agents_grants_detail",
+    );
+  }
+});
+
+app.post("/agents/grants", async (req, res) => {
+  try {
+    const userId = await getAuthenticatedUserId(req, (req.body?.user_id as string | undefined) ?? undefined);
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const { createGrant } = await import("./services/agent_grants.js");
+    const grant = await createGrant(userId, {
+      label: typeof body.label === "string" ? body.label : "",
+      capabilities: Array.isArray(body.capabilities) ? (body.capabilities as any) : [],
+      status: (body.status as any) ?? "active",
+      match_sub: typeof body.match_sub === "string" ? body.match_sub : null,
+      match_iss: typeof body.match_iss === "string" ? body.match_iss : null,
+      match_thumbprint: typeof body.match_thumbprint === "string" ? body.match_thumbprint : null,
+      notes: typeof body.notes === "string" ? body.notes : null,
+    });
+    return res.status(201).json({ grant });
+  } catch (error) {
+    const mapped = grantsCommonHandlers.errorEnvelopeFromGrantError(error);
+    if (mapped) {
+      return res.status(mapped.statusCode).json(mapped.envelope);
+    }
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to create agent grant",
+      "DB_QUERY_FAILED",
+      "APIError:agents_grants_create",
+    );
+  }
+});
+
+app.patch("/agents/grants/:id", async (req, res) => {
+  try {
+    const userId = await getAuthenticatedUserId(req, (req.body?.user_id as string | undefined) ?? undefined);
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const { updateGrantFields } = await import("./services/agent_grants.js");
+    const updates: Record<string, unknown> = {};
+    if (typeof body.label === "string") updates.label = body.label;
+    if (Array.isArray(body.capabilities)) updates.capabilities = body.capabilities;
+    if (body.notes === null || typeof body.notes === "string") updates.notes = body.notes;
+    if (body.match_sub === null || typeof body.match_sub === "string") updates.match_sub = body.match_sub;
+    if (body.match_iss === null || typeof body.match_iss === "string") updates.match_iss = body.match_iss;
+    if (body.match_thumbprint === null || typeof body.match_thumbprint === "string") {
+      updates.match_thumbprint = body.match_thumbprint;
+    }
+    const grant = await updateGrantFields(userId, req.params.id, updates as any);
+    return res.json({ grant });
+  } catch (error) {
+    const mapped = grantsCommonHandlers.errorEnvelopeFromGrantError(error);
+    if (mapped) {
+      return res.status(mapped.statusCode).json(mapped.envelope);
+    }
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to update agent grant",
+      "DB_QUERY_FAILED",
+      "APIError:agents_grants_update",
+    );
+  }
+});
+
+async function setGrantStatusRoute(
+  req: express.Request,
+  res: express.Response,
+  next: "active" | "suspended" | "revoked",
+) {
+  try {
+    const userId = await getAuthenticatedUserId(req, (req.body?.user_id as string | undefined) ?? undefined);
+    const { setStatus } = await import("./services/agent_grants.js");
+    const grant = await setStatus(userId, req.params.id, next);
+    return res.json({ grant });
+  } catch (error) {
+    const mapped = grantsCommonHandlers.errorEnvelopeFromGrantError(error);
+    if (mapped) {
+      return res.status(mapped.statusCode).json(mapped.envelope);
+    }
+    return handleApiError(
+      req,
+      res,
+      error,
+      `Failed to ${next === "active" ? "restore" : next} agent grant`,
+      "DB_QUERY_FAILED",
+      `APIError:agents_grants_${next}`,
+    );
+  }
+}
+
+app.post("/agents/grants/:id/suspend", (req, res) => setGrantStatusRoute(req, res, "suspended"));
+app.post("/agents/grants/:id/revoke", (req, res) => setGrantStatusRoute(req, res, "revoked"));
+app.post("/agents/grants/:id/restore", (req, res) => setGrantStatusRoute(req, res, "active"));
+
 // GET /api/agents/:key — One agent's identity + rollup counts
 // REQUIRES AUTHENTICATION
 app.get("/agents/:key", async (req, res) => {
@@ -4273,7 +4511,7 @@ app.post("/observations/create", async (req, res) => {
   }
 });
 
-async function storeStructuredForApi(params: {
+export async function storeStructuredForApi(params: {
   userId: string;
   entities: Record<string, unknown>[];
   sourcePriority: number;
@@ -4316,6 +4554,22 @@ async function storeStructuredForApi(params: {
     if (relationshipOp) {
       enforceAgentCapability("create_relationship", entityTypes, capabilityCtx);
     }
+  }
+
+  // Protected-entity-types guard: governance state (`agent_grant`, etc.)
+  // is gated by an explicit capability on the admitted grant. Mirrors
+  // the same check made deep in `createObservation` so callers see a
+  // structured `capability_denied` envelope before any writes.
+  {
+    const entityTypes = entities
+      .map((entity) => entity?.entity_type)
+      .filter((t): t is string => typeof t === "string" && t.length > 0);
+    assertCanWriteProtectedBatch({
+      entity_types: entityTypes,
+      op: "store_structured",
+      identity: getCurrentAgentIdentity(),
+      admission: getCurrentAAuthAdmission(),
+    });
   }
 
   const { resolveEntityWithTrace, CanonicalNameUnresolvedError, MergeRefusedError } =
@@ -6369,6 +6623,12 @@ app.post("/correct", async (req, res) => {
     if (correctCtx) {
       enforceAgentCapability("correct", [entity_type], correctCtx);
     }
+    assertCanWriteProtectedBatch({
+      entity_types: [entity_type],
+      op: "correct",
+      identity: getCurrentAgentIdentity(),
+      admission: getCurrentAAuthAdmission(),
+    });
 
     const { createCorrection } = await import("./services/correction.js");
     const result = await createCorrection({
@@ -6453,6 +6713,7 @@ app.get("/session", async (req, res) => {
       identity,
       middlewareDecision: getAttributionDecisionFromRequest(req),
       rawClientInfoName: rawClientName,
+      admission: getAAuthAdmissionFromRequest(req),
     });
     return res.json(session);
   } catch (error) {
@@ -6810,6 +7071,29 @@ function tryListen(
 
 // Export function to start HTTP server (called explicitly, not on import)
 export async function startHTTPServer() {
+  // Stronger AAuth Admission plan: capabilities now live on agent_grant
+  // entities. If the legacy NEOTOMA_AGENT_CAPABILITIES_* env vars are
+  // still set, fail fast with a structured pointer to the migration
+  // command. See docs/subsystems/agent_attribution_integration.md.
+  const { assertNoLegacyCapabilityEnv, LegacyAgentCapabilityEnvError } =
+    await import("./services/agent_capabilities.js");
+  try {
+    assertNoLegacyCapabilityEnv();
+  } catch (err) {
+    if (err instanceof LegacyAgentCapabilityEnvError) {
+      logger.error(
+        JSON.stringify({
+          event: "boot_failed_legacy_agent_capabilities_env",
+          variables: err.variables,
+          migration_command: err.migrationCommand,
+          message: err.message,
+        }),
+      );
+      throw err;
+    }
+    throw err;
+  }
+
   // Initialize encryption service
   await initServerKeys();
 

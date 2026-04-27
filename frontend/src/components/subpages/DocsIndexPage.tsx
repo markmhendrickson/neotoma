@@ -115,11 +115,6 @@ const DOC_CATEGORIES = [
       },
       { label: "Terminology", href: "/terminology", desc: "Glossary of key concepts" },
       {
-        label: "Schema management",
-        href: "/schema-management",
-        desc: "Define, inspect, and evolve schema constraints safely",
-      },
-      {
         label: "Troubleshooting",
         href: "/troubleshooting",
         desc: "Common failure modes and practical fixes",
@@ -133,6 +128,86 @@ const DOC_CATEGORIES = [
         label: "All pages (Markdown)",
         href: "/site-markdown",
         desc: "Every indexable route as Markdown (SEO summaries)",
+      },
+    ],
+  },
+  {
+    title: "Primitive record types",
+    items: [
+      {
+        label: "Overview",
+        href: "/primitives",
+        desc: "The seven system-level building blocks behind every entity, snapshot, and audit trail",
+      },
+      {
+        label: "Entities",
+        href: "/primitives/entities",
+        desc: "Canonical row for every person, company, or thing, deterministic ID, aliases, and merge tracking",
+      },
+      {
+        label: "Entity snapshots",
+        href: "/primitives/entity-snapshots",
+        desc: "Reducer output with per-field provenance back to observations and an optional embedding column",
+      },
+      {
+        label: "Sources",
+        href: "/primitives/sources",
+        desc: "Content-addressed raw storage with SHA-256 deduplication per user",
+      },
+      {
+        label: "Interpretations",
+        href: "/primitives/interpretations",
+        desc: "Versioned, audited extraction attempts with full interpretation_config provenance",
+      },
+      {
+        label: "Observations",
+        href: "/primitives/observations",
+        desc: "Granular, immutable facts that the reducer composes into entity snapshots",
+      },
+      {
+        label: "Relationships",
+        href: "/primitives/relationships",
+        desc: "First-class typed graph edges that follow the same observation-snapshot pattern",
+      },
+      {
+        label: "Timeline events",
+        href: "/primitives/timeline-events",
+        desc: "Source-anchored temporal records derived deterministically from extracted dates",
+      },
+    ],
+  },
+  {
+    title: "Schemas",
+    items: [
+      {
+        label: "Overview",
+        href: "/schemas",
+        desc: "Versioned, config-driven definitions that give the immutable primitives their domain shape",
+      },
+      {
+        label: "Schema registry",
+        href: "/schemas/registry",
+        desc: "The table that holds every versioned schema_definition + reducer_config, global or per-user",
+      },
+      {
+        label: "Merge policies",
+        href: "/schemas/merge-policies",
+        desc: "Per-field declarative rules, last_write, highest_priority, most_specific, merge_array",
+      },
+      {
+        label: "Storage layers",
+        href: "/schemas/storage-layers",
+        desc: "raw_text, properties, and raw_fragments, the three places extracted data can land",
+      },
+      {
+        label: "Versioning & evolution",
+        href: "/schemas/versioning",
+        desc: "Semver, additive minor bumps, breaking major bumps, and the public schema snapshots dump",
+      },
+      {
+        label: "Schema management (CLI)",
+        href: "/schema-management",
+        desc: "CLI workflows for listing, validating, evolving, and registering schemas at runtime",
       },
     ],
   },

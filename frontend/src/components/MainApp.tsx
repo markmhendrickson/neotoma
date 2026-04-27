@@ -13,9 +13,30 @@ import { SitePage } from "@/components/SitePage";
 import { SitePageAlt } from "@/components/SitePageAlt";
 import { TerminologyPage } from "@/components/subpages/TerminologyPage";
 import { AgentInstructionsPage } from "@/components/subpages/AgentInstructionsPage";
+import { AauthReferencePage } from "@/components/subpages/AauthReferencePage";
+import { AauthSpecPage } from "@/components/subpages/AauthSpecPage";
+import { AauthAttestationPage } from "@/components/subpages/AauthAttestationPage";
+import { AauthCliKeysPage } from "@/components/subpages/AauthCliKeysPage";
+import { AauthIntegrationPage } from "@/components/subpages/AauthIntegrationPage";
+import { AauthCapabilitiesPage } from "@/components/subpages/AauthCapabilitiesPage";
 import { ApiReferencePage } from "@/components/subpages/ApiReferencePage";
 import { McpReferencePage } from "@/components/subpages/McpReferencePage";
 import { CliReferencePage } from "@/components/subpages/CliReferencePage";
+import { InspectorReferencePage } from "@/components/subpages/InspectorReferencePage";
+import { InspectorDashboardPage } from "@/components/subpages/InspectorDashboardPage";
+import { InspectorEntitiesPage } from "@/components/subpages/InspectorEntitiesPage";
+import { InspectorObservationsAndSourcesPage } from "@/components/subpages/InspectorObservationsAndSourcesPage";
+import { InspectorRelationshipsAndGraphPage } from "@/components/subpages/InspectorRelationshipsAndGraphPage";
+import { InspectorSchemasPage } from "@/components/subpages/InspectorSchemasPage";
+import { InspectorTimelinePage } from "@/components/subpages/InspectorTimelinePage";
+import { InspectorConversationsPage } from "@/components/subpages/InspectorConversationsPage";
+import { InspectorAgentsPage } from "@/components/subpages/InspectorAgentsPage";
+import { InspectorSearchPage } from "@/components/subpages/InspectorSearchPage";
+import { InspectorSettingsPage } from "@/components/subpages/InspectorSettingsPage";
+import { InspectorSettingsConnectionPage } from "@/components/subpages/InspectorSettingsConnectionPage";
+import { InspectorSettingsAttributionPolicyPage } from "@/components/subpages/InspectorSettingsAttributionPolicyPage";
+import { InspectorSettingsRetentionPage } from "@/components/subpages/InspectorSettingsRetentionPage";
+import { InspectorSettingsFeedbackPage } from "@/components/subpages/InspectorSettingsFeedbackPage";
 import { InstallPage } from "@/components/subpages/InstallPage";
 import { SandboxLandingPage } from "@/components/subpages/SandboxLandingPage";
 import { SandboxTermsOfUsePage } from "@/components/subpages/SandboxTermsOfUsePage";
@@ -104,6 +125,14 @@ import { SiteMarkdownHubPage } from "@/components/subpages/SiteMarkdownHubPage";
 import { SiteMarkdownMirrorPage } from "@/components/subpages/SiteMarkdownMirrorPage";
 import { DeveloperWalkthroughPage } from "@/components/subpages/DeveloperWalkthroughPage";
 import { EntityTypeGuideRouter } from "@/components/subpages/EntityTypeGuidePage";
+import {
+  PrimitiveRecordTypeRouter,
+  PrimitivesIndexPage,
+} from "@/components/subpages/PrimitiveRecordTypePage";
+import {
+  SchemaConceptRouter,
+  SchemasIndexPage,
+} from "@/components/subpages/SchemaConceptPage";
 import { sendPageView } from "@/utils/analytics";
 import { DEFAULT_LOCALE, isSupportedLocale, NON_DEFAULT_LOCALES } from "@/i18n/config";
 import {
@@ -127,6 +156,50 @@ const APP_ROUTES: readonly AppRoute[] = [
   { path: "/api", element: <ApiReferencePage /> },
   { path: "/mcp", element: <McpReferencePage /> },
   { path: "/cli", element: <CliReferencePage /> },
+  { path: "/aauth", element: <AauthReferencePage /> },
+  { path: "/aauth/spec", element: <AauthSpecPage /> },
+  { path: "/aauth/attestation", element: <AauthAttestationPage /> },
+  { path: "/aauth/cli-keys", element: <AauthCliKeysPage /> },
+  { path: "/aauth/integration", element: <AauthIntegrationPage /> },
+  { path: "/aauth/capabilities", element: <AauthCapabilitiesPage /> },
+  { path: "/inspector", element: <InspectorReferencePage /> },
+  { path: "/inspector/dashboard", element: <InspectorDashboardPage /> },
+  { path: "/inspector/entities", element: <InspectorEntitiesPage /> },
+  {
+    path: "/inspector/observations-and-sources",
+    element: <InspectorObservationsAndSourcesPage />,
+  },
+  {
+    path: "/inspector/relationships-and-graph",
+    element: <InspectorRelationshipsAndGraphPage />,
+  },
+  { path: "/inspector/schemas", element: <InspectorSchemasPage /> },
+  { path: "/inspector/timeline", element: <InspectorTimelinePage /> },
+  { path: "/inspector/conversations", element: <InspectorConversationsPage /> },
+  { path: "/inspector/agents", element: <InspectorAgentsPage /> },
+  { path: "/inspector/search", element: <InspectorSearchPage /> },
+  {
+    path: "/inspector/search-and-settings",
+    element: <Navigate to="/inspector/settings" replace />,
+  },
+  { path: "/inspector/feedback", element: <InspectorSettingsFeedbackPage /> },
+  { path: "/inspector/settings", element: <InspectorSettingsPage /> },
+  {
+    path: "/inspector/settings/connection",
+    element: <InspectorSettingsConnectionPage />,
+  },
+  {
+    path: "/inspector/settings/attribution-policy",
+    element: <InspectorSettingsAttributionPolicyPage />,
+  },
+  {
+    path: "/inspector/settings/retention",
+    element: <InspectorSettingsRetentionPage />,
+  },
+  {
+    path: "/inspector/settings/feedback",
+    element: <Navigate to="/inspector/feedback" replace />,
+  },
   { path: "/install", element: <InstallPage /> },
   { path: "/sandbox", element: <SandboxLandingPage /> },
   { path: "/sandbox/terms-of-use", element: <SandboxTermsOfUsePage /> },
@@ -219,6 +292,10 @@ const APP_ROUTES: readonly AppRoute[] = [
   { path: "/privacy-first", element: <Navigate to="/foundations#privacy-first" replace /> },
   { path: "/cross-platform", element: <Navigate to="/foundations#cross-platform" replace /> },
   { path: "/types/:slug", element: <EntityTypeGuideRouter /> },
+  { path: "/primitives", element: <PrimitivesIndexPage /> },
+  { path: "/primitives/:slug", element: <PrimitiveRecordTypeRouter /> },
+  { path: "/schemas", element: <SchemasIndexPage /> },
+  { path: "/schemas/:slug", element: <SchemaConceptRouter /> },
 ];
 
 const APP_ROUTE_PATHS = new Set([
