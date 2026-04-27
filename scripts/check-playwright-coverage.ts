@@ -23,6 +23,7 @@ const EXEMPT_PATTERNS = [
   /\.prettierrc/,
   /\.gitignore$/,
   /sample-data/, // Data files don't require UI test coverage
+  /frontend\/src\/site\/seo_metadata\.ts$/, // SEO metadata is data, validated by scripts/validate_site_route_parity.ts
 ];
 
 /**

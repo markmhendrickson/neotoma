@@ -457,6 +457,13 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Search", path: "/inspector/search" },
     ],
   },
+  "/inspector/search-and-settings": {
+    title: "Inspector, Settings | Neotoma",
+    description:
+      "Inspector settings overview: connection, attribution policy, retention, and feedback, the operator-side configuration surfaced in the Inspector app.",
+    robots: "noindex,follow",
+    jsonLdType: "WebPage",
+  },
   "/inspector/settings": {
     title: "Inspector, Settings | Neotoma",
     description:
@@ -527,6 +534,13 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Inspector", path: "/inspector" },
       { name: "Feedback", path: "/inspector/feedback" },
     ],
+  },
+  "/inspector/settings/feedback": {
+    title: "Inspector, Feedback | Neotoma",
+    description:
+      "Neotoma Inspector feedback route (/feedback): submission mode, PII redaction, status feed, and fix-verification round-trips, top-level in the app, not under Settings.",
+    robots: "noindex,follow",
+    jsonLdType: "WebPage",
   },
   "/aauth/spec": {
     title: "AAuth wire format and verification | Neotoma",
