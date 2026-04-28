@@ -1,10 +1,10 @@
 /**
- * First URL segment (after {@link normalizeToDefaultRoute}) for marketing vertical
+ * First URL segment (after {@link normalizeToDefaultRoute}) for marketing use case
  * pages that use the full-page shell: no docs sidebar, no developer-preview badge.
- * Covers `/verticals`, `/verticals/…`, locale-prefixed `/es/verticals`, trailing slashes, etc.
+ * Covers `/use-cases`, `/use-cases/…`, locale-prefixed `/es/use-cases`, trailing slashes, etc.
  */
 const MARKETING_FULL_PAGE_FIRST_SEGMENTS = new Set([
-  "verticals",
+  "use-cases",
   "crm",
   "compliance",
   "contracts",

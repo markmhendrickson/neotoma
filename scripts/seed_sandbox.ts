@@ -63,6 +63,12 @@ export interface SeedOptions {
   repoRoot?: string;
   fetchImpl?: typeof fetch;
   logger?: (message: string) => void;
+  /** Override manifest path (absolute). When set, loadManifest uses this instead of the default. */
+  manifestPath?: string;
+  /** Seed into a specific user_id (used by session-based seeding). */
+  targetUserId?: string;
+  /** Skip seeding entirely (returns zeroed result). */
+  skipSeeding?: boolean;
 }
 
 export interface SeedResult {
@@ -199,10 +205,20 @@ function stableIdempotencyKey(prefix: string, entityIndex: number): string {
 }
 
 export async function seedSandbox(options: SeedOptions): Promise<SeedResult> {
+  if (options.skipSeeding) {
+    return {
+      entity_batches_submitted: 0,
+      entities_planned: 0,
+      unstructured_sources_submitted: 0,
+      dry_run: false,
+    };
+  }
   const logger = options.logger ?? ((msg: string) => process.stdout.write(msg + "\n"));
   const fetchFn = options.fetchImpl ?? fetch;
   const repoRoot = options.repoRoot ?? process.cwd();
-  const manifest = await loadManifest(repoRoot);
+  const manifest = options.manifestPath
+    ? (JSON.parse(await fs.readFile(options.manifestPath, "utf8")) as SandboxManifest)
+    : await loadManifest(repoRoot);
 
   const baseUrl = options.baseUrl.replace(/\/$/, "");
 

@@ -15,7 +15,16 @@
  * binding.
  */
 
-import { NeotomaClient } from "@neotoma/client";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+
+import { NeotomaClient, recordConversationTurn, type StoreEntityInput } from "@neotoma/client";
 
 export interface NeotomaSdkAdapterOptions {
   baseUrl?: string;
@@ -85,6 +94,302 @@ function harnessProvenance(
     cwd: process.cwd(),
     ...(extra ?? {}),
   };
+}
+
+/**
+ * Returns true when the given tool name looks Neotoma-relevant (MCP tool
+ * against the Neotoma server, the `neotoma` CLI, or a direct HTTP call
+ * into a Neotoma endpoint). We use this to scope post-tool failure
+ * capture so the hook only signals friction the user or agent can act on.
+ */
+function isNeotomaRelevantTool(
+  toolName: unknown,
+  toolInput: unknown
+): boolean {
+  if (typeof toolName === "string") {
+    const lower = toolName.toLowerCase();
+    if (
+      lower.includes("neotoma") ||
+      lower.startsWith("mcp_neotoma") ||
+      lower.startsWith("mcp_user-neotoma") ||
+      lower === "submit_feedback" ||
+      lower === "get_feedback_status" ||
+      lower === "store_structured" ||
+      lower === "retrieve_entities" ||
+      lower === "retrieve_entity_by_identifier" ||
+      lower === "create_relationship" ||
+      lower === "list_entity_types" ||
+      lower === "list_timeline_events"
+    ) {
+      return true;
+    }
+  }
+  if (toolInput && typeof toolInput === "object") {
+    const record = toolInput as Record<string, unknown>;
+    const commandLike = record.command ?? record.cmd ?? record.url;
+    if (typeof commandLike === "string") {
+      const lower = commandLike.toLowerCase();
+      if (
+        lower.includes("neotoma ") ||
+        lower.startsWith("neotoma") ||
+        lower.includes("/neotoma/") ||
+        lower.includes("neotoma.io")
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function homeDirPattern(): RegExp | null {
+  try {
+    const dir = homedir();
+    if (!dir) return null;
+    return new RegExp(dir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Light PII scrub suitable for passing a short error message through the
+ * hook layer into a structured entity. The agent is still expected to
+ * apply the full PII redaction contract when it decides to call
+ * `submit_feedback` — this is a defence in depth only.
+ */
+function scrubErrorMessage(raw: unknown): string {
+  if (raw == null) return "";
+  const text = typeof raw === "string" ? raw : String(raw);
+  let out = text;
+  out = out.replace(
+    /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g,
+    "<EMAIL>"
+  );
+  out = out.replace(
+    /\b(?:sk|pk|ghp|ghs|ntk|aa)_[A-Za-z0-9_-]{16,}\b/g,
+    "<TOKEN>"
+  );
+  out = out.replace(
+    /\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b/g,
+    "<UUID>"
+  );
+  out = out.replace(/\b(?:\+?\d[\s-]?){7,}\d\b/g, "<PHONE>");
+  const homePattern = homeDirPattern();
+  if (homePattern) {
+    out = out.replace(homePattern, "<HOME>");
+  }
+  if (out.length > 400) {
+    out = `${out.slice(0, 397)}...`;
+  }
+  return out;
+}
+
+/**
+ * Classify an error message into a coarse-grained error class for
+ * counter keying.
+ */
+function classifyErrorMessage(raw: unknown): string {
+  if (raw == null) return "unknown";
+  const text = typeof raw === "string" ? raw : String(raw);
+  const errMatch = text.match(/ERR_[A-Z0-9_]+/);
+  if (errMatch) return errMatch[0];
+  const codeMatch = text.match(
+    /\b(ECONNREFUSED|ENOTFOUND|ECONNRESET|ETIMEDOUT|EACCES|EPIPE|EPERM|EEXIST|ENOENT)\b/
+  );
+  if (codeMatch) return codeMatch[1];
+  const statusMatch = text.match(/\bHTTP\s*(\d{3})\b/i);
+  if (statusMatch) return `HTTP_${statusMatch[1]}`;
+  if (/fetch failed/i.test(text)) return "fetch_failed";
+  if (/timeout/i.test(text)) return "timeout";
+  return "generic_error";
+}
+
+function extractErrorMessage(toolOutput: unknown): string {
+  if (!toolOutput) return "";
+  if (typeof toolOutput === "string") return toolOutput;
+  if (typeof toolOutput !== "object") return "";
+  const record = toolOutput as Record<string, unknown>;
+  const candidate =
+    record.error ?? record.message ?? record.error_message ?? record.stderr;
+  if (typeof candidate === "string") return candidate;
+  if (candidate && typeof candidate === "object") {
+    const nested = candidate as { message?: unknown };
+    if (typeof nested.message === "string") return nested.message;
+    try {
+      return JSON.stringify(candidate);
+    } catch {
+      return "";
+    }
+  }
+  return "";
+}
+
+function extractInvocationShape(toolInput: unknown): Record<string, unknown> {
+  if (!toolInput || typeof toolInput !== "object") return {};
+  const record = toolInput as Record<string, unknown>;
+  const shape: Record<string, unknown> = {};
+  for (const key of [
+    "command",
+    "cmd",
+    "url",
+    "method",
+    "endpoint",
+    "path",
+    "operation",
+  ]) {
+    const value = record[key];
+    if (typeof value === "string") {
+      shape[key] = value.length > 120 ? `${value.slice(0, 117)}...` : value;
+    }
+  }
+  if (Array.isArray(record.entities)) {
+    shape.entity_count = record.entities.length;
+  }
+  return shape;
+}
+
+function hookStateDir(): string {
+  return (
+    process.env.NEOTOMA_HOOK_STATE_DIR ??
+    join(homedir(), ".neotoma", "hook-state")
+  );
+}
+
+function failureStatePath(sessionId: string): string {
+  const safe = sessionId.replace(/[^A-Za-z0-9_.-]/g, "_") || "unknown";
+  return join(hookStateDir(), `failures-${safe}.json`);
+}
+
+interface FailureCounterEntry {
+  count: number;
+  first_at: string;
+  last_at: string;
+  hinted: boolean;
+}
+
+interface FailureCounterState {
+  session_id: string;
+  updated_at: string;
+  entries: Record<string, FailureCounterEntry>;
+}
+
+const FAILURE_TTL_MS = 24 * 60 * 60 * 1000;
+
+function readFailureStateFile(sessionId: string): FailureCounterState {
+  const path = failureStatePath(sessionId);
+  if (!existsSync(path)) {
+    return { session_id: sessionId, updated_at: "", entries: {} };
+  }
+  try {
+    const raw = JSON.parse(readFileSync(path, "utf-8"));
+    return {
+      session_id: raw.session_id ?? sessionId,
+      updated_at: raw.updated_at ?? "",
+      entries: raw.entries ?? {},
+    };
+  } catch {
+    return { session_id: sessionId, updated_at: "", entries: {} };
+  }
+}
+
+function writeFailureStateFile(state: FailureCounterState): void {
+  try {
+    mkdirSync(hookStateDir(), { recursive: true });
+    writeFileSync(failureStatePath(state.session_id), JSON.stringify(state));
+  } catch {
+    // best-effort
+  }
+}
+
+function pruneExpired(state: FailureCounterState): FailureCounterState {
+  const now = Date.now();
+  const entries: Record<string, FailureCounterEntry> = {};
+  for (const [key, entry] of Object.entries(state.entries)) {
+    const ts = Date.parse(entry.last_at);
+    if (Number.isFinite(ts) && now - ts <= FAILURE_TTL_MS) {
+      entries[key] = entry;
+    }
+  }
+  return { ...state, entries };
+}
+
+function failureCounterKey(toolName: string, errorClass: string): string {
+  return `${toolName}::${errorClass}`;
+}
+
+function incrementFailureCounter(
+  sessionId: string,
+  toolName: string,
+  errorClass: string
+): FailureCounterEntry {
+  const state = pruneExpired(readFailureStateFile(sessionId));
+  const key = failureCounterKey(toolName, errorClass);
+  const nowIso = new Date().toISOString();
+  const prior = state.entries[key];
+  const next: FailureCounterEntry = prior
+    ? {
+        count: prior.count + 1,
+        first_at: prior.first_at,
+        last_at: nowIso,
+        hinted: prior.hinted,
+      }
+    : { count: 1, first_at: nowIso, last_at: nowIso, hinted: false };
+  state.entries[key] = next;
+  state.updated_at = nowIso;
+  writeFailureStateFile(state);
+  return next;
+}
+
+interface FailureHint {
+  tool_name: string;
+  error_class: string;
+  count: number;
+}
+
+function readFailureHint(sessionId: string): FailureHint | null {
+  if (
+    (process.env.NEOTOMA_HOOK_FEEDBACK_HINT ?? "on").toLowerCase() === "off"
+  ) {
+    return null;
+  }
+  const threshold = Math.max(
+    1,
+    Number.parseInt(
+      process.env.NEOTOMA_HOOK_FEEDBACK_HINT_THRESHOLD ?? "2",
+      10
+    ) || 2
+  );
+  const state = pruneExpired(readFailureStateFile(sessionId));
+  let best: { key: string; entry: FailureCounterEntry } | null = null;
+  for (const [key, entry] of Object.entries(state.entries)) {
+    if (entry.hinted) continue;
+    if (entry.count < threshold) continue;
+    if (!best || entry.count > best.entry.count) {
+      best = { key, entry };
+    }
+  }
+  if (!best) return null;
+  const [toolName, errorClass] = best.key.split("::");
+  state.entries[best.key] = { ...best.entry, hinted: true };
+  state.updated_at = new Date().toISOString();
+  writeFailureStateFile(state);
+  return {
+    tool_name: toolName ?? "unknown",
+    error_class: errorClass ?? "unknown",
+    count: best.entry.count,
+  };
+}
+
+function formatFailureHint(hint: FailureHint): string {
+  return [
+    `Neotoma hook note: ${hint.count} recent failures this session for`,
+    `tool \`${hint.tool_name}\` with error class \`${hint.error_class}\`.`,
+    `If this is blocking your task, consider calling \`submit_feedback\``,
+    `with kind=incident, PII-redacted title/body, and metadata.environment`,
+    `per docs/developer/mcp/instructions.md. This is informational —`,
+    `do not auto-submit.`,
+  ].join(" ");
 }
 
 /**
@@ -161,6 +466,15 @@ export function createNeotomaAgentHooks(
         log("warn", `UserPromptSubmit store failed: ${(err as Error).message}`);
       }
 
+      recordConversationTurn(client, {
+        sessionId,
+        turnId,
+        hookEvent: "UserPromptSubmit",
+        harness: "claude-agent-sdk",
+        startedAt: new Date().toISOString(),
+        cwd: process.cwd(),
+      }).catch(() => {});
+
       if (!injectContext) return {};
 
       const sections: Array<{ heading: string; body: unknown }> = [];
@@ -178,11 +492,16 @@ export function createNeotomaAgentHooks(
       } catch (err) {
         log("debug", `listTimelineEvents failed: ${(err as Error).message}`);
       }
-      if (sections.length === 0) return {};
+
+      const formatted = sections.length === 0 ? "" : formatContext(sections);
+      const hint = readFailureHint(sessionId);
+      const hintText = hint ? formatFailureHint(hint) : "";
+      const additional = [formatted, hintText].filter(Boolean).join("\n\n");
+      if (!additional) return {};
       return {
         hookSpecificOutput: {
           hookEventName: "UserPromptSubmit",
-          additionalContext: formatContext(sections),
+          additionalContext: additional,
         },
       };
     },
@@ -194,6 +513,40 @@ export function createNeotomaAgentHooks(
       const toolInput = (input.tool_input as unknown) ?? {};
       const toolOutput =
         (input.tool_response as unknown) ?? (input.tool_output as unknown) ?? {};
+      const hasError = Boolean(
+        toolOutput &&
+          typeof toolOutput === "object" &&
+          (toolOutput as { error?: unknown }).error
+      );
+
+      if (hasError && isNeotomaRelevantTool(toolName, toolInput)) {
+        const errorMessage = extractErrorMessage(toolOutput);
+        const errorClass = classifyErrorMessage(errorMessage);
+        const scrubbed = scrubErrorMessage(errorMessage);
+        const counter = incrementFailureCounter(sessionId, toolName, errorClass);
+        try {
+          const failureEntity: StoreEntityInput = {
+            entity_type: "tool_invocation_failure",
+            tool_name: toolName,
+            error_class: errorClass,
+            error_message_redacted: scrubbed,
+            invocation_shape: extractInvocationShape(toolInput),
+            turn_key: `${sessionId}:${turnId}`,
+            hit_count_session: counter.count,
+            ...harnessProvenance({ hook_event: "PostToolUse.failure" }),
+          };
+          await client.store({
+            entities: [failureEntity],
+            idempotency_key: idemp(
+              turnId,
+              `tool-failure-${toolName}-${counter.count}`
+            ),
+          });
+        } catch (err) {
+          log("debug", `PostToolUse failure store failed: ${(err as Error).message}`);
+        }
+        return {};
+      }
 
       try {
         await client.store({
@@ -202,9 +555,7 @@ export function createNeotomaAgentHooks(
               entity_type: "tool_invocation",
               tool_name: toolName,
               turn_key: `${sessionId}:${turnId}`,
-              has_error: Boolean(
-                (toolOutput as { error?: unknown }).error ?? false
-              ),
+              has_error: hasError,
               input_summary: summarize(toolInput),
               output_summary: summarize(toolOutput),
               ...harnessProvenance({ hook_event: "PostToolUse" }),
@@ -266,6 +617,15 @@ export function createNeotomaAgentHooks(
       } catch (err) {
         log("debug", `Stop store failed: ${(err as Error).message}`);
       }
+
+      recordConversationTurn(client, {
+        sessionId,
+        turnId,
+        hookEvent: "Stop",
+        harness: "claude-agent-sdk",
+        endedAt: new Date().toISOString(),
+      }).catch(() => {});
+
       return {};
     },
   };

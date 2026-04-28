@@ -91,6 +91,47 @@ describe("reject-policy schemas have reachable canonical rules (R1/R2 regression
     expect(convFields.some((f) => f === "conversation_id")).toBe(true);
     expect(msgFields.some((f) => f === "turn_key")).toBe(true);
   });
+
+  it("conversation_turn is reject-policy with composite [session_id, turn_id] canonical", () => {
+    const schema = getSchemaDefinition("conversation_turn");
+    expect(schema).not.toBeNull();
+    const def = (schema as { schema_definition?: Record<string, unknown> } | null)?.schema_definition;
+    expect(def?.name_collision_policy).toBe("reject");
+    const fields = (def?.canonical_name_fields ?? []) as unknown[];
+    expect(fields).toEqual([{ composite: ["session_id", "turn_id"] }]);
+  });
+
+  it("turn_compliance and turn_activity resolve to conversation_turn", () => {
+    expect(resolveEntityTypeFromAlias("turn_compliance")).toBe("conversation_turn");
+    expect(resolveEntityTypeFromAlias("turn_activity")).toBe("conversation_turn");
+  });
+
+  it("tool_invocation has composite [turn_key, tool_name, invoked_at] canonical", () => {
+    const schema = getSchemaDefinition("tool_invocation");
+    expect(schema).not.toBeNull();
+    const def = (schema as { schema_definition?: Record<string, unknown> } | null)?.schema_definition;
+    expect(def?.name_collision_policy).toBe("reject");
+    const fields = (def?.canonical_name_fields ?? []) as unknown[];
+    expect(fields).toEqual([{ composite: ["turn_key", "tool_name", "invoked_at"] }]);
+  });
+
+  it("tool_invocation_failure has composite [turn_key, tool_name, error_class, observed_at] canonical", () => {
+    const schema = getSchemaDefinition("tool_invocation_failure");
+    expect(schema).not.toBeNull();
+    const def = (schema as { schema_definition?: Record<string, unknown> } | null)?.schema_definition;
+    expect(def?.name_collision_policy).toBe("reject");
+    const fields = (def?.canonical_name_fields ?? []) as unknown[];
+    expect(fields).toEqual([{ composite: ["turn_key", "tool_name", "error_class", "observed_at"] }]);
+  });
+
+  it("context_event has composite [turn_key, event, observed_at] canonical", () => {
+    const schema = getSchemaDefinition("context_event");
+    expect(schema).not.toBeNull();
+    const def = (schema as { schema_definition?: Record<string, unknown> } | null)?.schema_definition;
+    expect(def?.name_collision_policy).toBe("reject");
+    const fields = (def?.canonical_name_fields ?? []) as unknown[];
+    expect(fields).toEqual([{ composite: ["turn_key", "event", "observed_at"] }]);
+  });
 });
 
 describe("refineEntityTypeFromExtractedFields", () => {

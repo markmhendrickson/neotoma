@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0",
+  "description": "Personal life use case sandbox seed. Habits, health metrics, goals.",
+  "agent_identities": [
+    {
+      "agent_sub": "sandbox-agent-personal@neotoma.sandbox",
+      "client_name": "sandbox-seed-personal",
+      "client_version": "0.1.0",
+      "label": "Personal life seed runner"
+    }
+  ],
+  "entity_batches": [
+    {
+      "agent_index": 0,
+      "idempotency_prefix": "sandbox-seed-personal-habits",
+      "fixture": "reuse://tests/fixtures/json/habit.json",
+      "entity_type_override": "habit",
+      "note": "Reuses existing habit fixture."
+    }
+  ],
+  "unstructured_sources": [],
+  "excluded_fixtures": []
+}

@@ -38,10 +38,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
     <title>Neotoma with Claude | Integration Guide (Markdown) | Neotoma</title>
-    <script type="module" crossorigin="" src="../../../assets/main-Jf-itxVT.js"></script>
-    <link rel="stylesheet" crossorigin="" href="../../../assets/main-DWQ-Fl-1.css">
+    <script type="module" crossorigin="" src="/assets/main-CaoWcp2k.js"></script>
+    <link rel="stylesheet" crossorigin="" href="/assets/main-BBds_bdF.css">
   
-    <!-- build: local-1776078353914 -->
+    <!-- build: local-1777360387837 -->
       <link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/neotoma-with-claude">
     <link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/neotoma-with-claude">
     <link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/neotoma-with-claude">
@@ -61,7 +61,7 @@
     <div id="root"><iframe title="Markdown capture" aria-hidden="true" width="1280" height="900" class="pointer-events-none fixed left-[-9999px] top-0 z-[-1] border-0 opacity-0" sandbox="allow-same-origin allow-scripts allow-forms"></iframe><div class="min-h-screen bg-background text-foreground"><pre class="whitespace-pre-wrap break-words p-4 font-mono text-[13px] leading-relaxed text-foreground">&lt;!--
   Full-page Markdown export (rendered HTML → GFM).
   Source: https://neotoma.io/ar/neotoma-with-claude
-  Generated: 2026-04-13T11:07:32.656Z
+  Generated: 2026-04-28T07:16:16.999Z
 --&gt;
 # Neotoma with Claude
 
@@ -120,7 +120,21 @@ Claude [Projects](https://www.anthropic.com/news/projects) let you attach persis
 
 Open your project's settings and paste the following into the **Custom instructions** field. This tells Claude to route all factual retrieval through Neotoma and refuse to answer from internal memory alone.
 
-`For any request that depends on stored facts, history, lists, counts, records, timelines, prior work, or "what do you know / show me / list / summarize":  1. Call Neotoma MCP tools before answering. 2. Do not answer from Claude memory or chat history alone. 3. If Neotoma is unavailable or tool call fails, respond:    "Neotoma retrieval failed: &lt;error&gt;. Please check the connector." 4. If no matching records are found, say so explicitly and stop. 5. Every factual claim must be traceable to Neotoma tool output from this turn.`
+Code snippet
+
+Copy the exact snippet shown below.
+
+```
+For any request that depends on stored facts, history, lists, counts, records,
+timelines, prior work, or "what do you know / show me / list / summarize":
+
+1. Call Neotoma MCP tools before answering.
+2. Do not answer from Claude memory or chat history alone.
+3. If Neotoma is unavailable or tool call fails, respond:
+   "Neotoma retrieval failed: &lt;error&gt;. Please check the connector."
+4. If no matching records are found, say so explicitly and stop.
+5. Every factual claim must be traceable to Neotoma tool output from this turn.
+```
 
 This is a fail-closed policy: if Neotoma is unreachable, Claude says so instead of guessing from chat history. You can customize the wording, but the key constraints are:
 
@@ -134,7 +148,13 @@ This is a fail-closed policy: if Neotoma is unreachable, Claude says so instead 
 
 Start a new chat inside the project and test with a query like:
 
-`show me all my posts`
+Code snippet
+
+Copy the exact snippet shown below.
+
+```
+show me all my posts
+```
 
 Claude should call Neotoma tools before answering. Look for tool-use indicators (e.g. “Ran commands, used Neotoma integration”) in the response. If Claude answers from memory instead, check that:
 
@@ -246,22 +266,6 @@ Store a task
 Recall across sessions
 
 “What do I know about Sarah? What did I commit to doing for her?”
-
-* * *
-
-## Known limitations
-
-MCP tool calls may time out for very large stores (100+ entities in one call).
-
-Workaround: Batch into groups of 20–50 entities per store call.
-
-Neotoma runs locally — data is not synced across machines by default.
-
-Workaround: Use the remote HTTP transport or deploy Neotoma as a remote MCP server for multi-machine access.
-
-Schema evolution is additive. Removing fields requires a major version bump.
-
-Workaround: Plan schemas with future fields in mind. Use flexible entity types for exploratory data.
 
 Start with [evaluation](/evaluate), see the [install guide](/install) for more options, [MCP reference](/mcp) for full setup, [CLI reference](/cli) for terminal usage, and [agent instructions](/agent-instructions) for behavioral details.</pre></div><div role="region" aria-label="Notifications (F8)" tabindex="-1" style="pointer-events: none;"><ol tabindex="-1" class="fixed top-0 z-[100] flex w-full flex-col-reverse p-4 sm:bottom-4 sm:right-4 sm:top-auto sm:flex-col sm:max-h-[calc(100vh-1rem)] sm:overflow-y-auto md:max-w-[420px]"></ol></div></div>
   

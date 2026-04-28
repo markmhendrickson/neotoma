@@ -125,7 +125,7 @@ export const MEMORY_GUARANTEE_ROWS: MemoryGuaranteeRow[] = [
     property: "Schema constraints",
     slug: "schema-constraints",
     tooltip:
-      "Entities conform to defined types and validation rules. The system rejects malformed or invalid data rather than silently accepting it, preventing garbage-in-garbage-out failures across agents.",
+      "Entities conform to defined types and validation rules. Type mismatches are flagged at store time and missing fields generate warnings, preventing garbage-in-garbage-out failures across agents.",
     platform: "not-provided",
     retrieval: "not-provided",
     file: "not-provided",
@@ -330,11 +330,11 @@ export interface DocNavCategory {
 }
 
 /**
- * Industry vertical marketing routes. Excluded from doc sidebar, header search, and sitemap (noindex in SEO).
- * Routes remain reachable via direct URL and in-page links (e.g. Build vs buy, verticals index).
+ * Use case marketing routes. Excluded from doc sidebar, header search, and sitemap (noindex in SEO).
+ * Routes remain reachable via direct URL and in-page links (e.g. Build vs buy, use cases index).
  */
-export const VERTICAL_LANDING_PATHS: readonly string[] = [
-  "/verticals",
+export const USE_CASE_LANDING_PATHS: readonly string[] = [
+  "/use-cases",
   "/compliance",
   "/crm",
   "/contracts",
@@ -545,7 +545,7 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
 
 export const SITE_CODE_SNIPPETS = {
   onboardingSequence: "evaluation -> installation -> activation -> tooling config",
-  activationSequence: "discover -> propose -> preview -> ingest -> reconstruct -> query -> correct",
+  activationSequence: "detect context -> discover -> propose -> preview -> ingest -> reconstruct -> query -> correct",
   installCommands: `# 1. Install globally (required for agent harnesses — avoids per-repo PATH prompts)
 npm install -g neotoma
 
@@ -563,7 +563,7 @@ Avoid ad-hoc shell introspection or arbitrary repo scripts. Then activate Neotom
 neotoma api start --env dev
 
 # Run API server (production)
-neotoma api start --env production`,
+neotoma api start --env prod`,
   stdioConfigJson: `{
   "mcpServers": {
     "neotoma-dev": {
@@ -643,9 +643,9 @@ allow = [
   "neotoma *",
   "npm install -g neotoma",
 ]`,
-  cliUploadExample: `neotoma upload ./fixtures/invoice.pdf
-neotoma upload ./doc.pdf --no-interpret --mime-type application/pdf
-neotoma upload --local ./invoice.pdf   # run in-process, no API server required`,
+  cliUploadExample: `neotoma ingest ./fixtures/invoice.pdf
+neotoma ingest ./doc.pdf --no-interpret --mime-type application/pdf
+neotoma ingest --offline ./invoice.pdf   # run in-process, no API server required`,
   chatgptCustomGptInstructions: `You are an assistant that uses Neotoma MCP actions for memory persistence and retrieval.
 
 Execution order (mandatory every turn):
@@ -685,7 +685,7 @@ Turn identity fallback:
 Tool-usage constraints for chat/attachment/entity extraction flows:
 - Do NOT list, glob, or read MCP tool descriptor/schema files for these storage flows.
 - Use only:
-  - store(entities, idempotency_key, relationships, file_path | file_content+mime_type, file_idempotency_key?)
+  - store_structured(entities, idempotency_key, relationships, file_path | file_content+mime_type, file_idempotency_key?)
   - create_relationship(relationship_type, source_entity_id, target_entity_id)
 
 Behavior requirements:
@@ -858,7 +858,7 @@ export const FUNCTIONALITY_MATRIX: FunctionalityRow[] = [
     endpointDescriptions: ["Search for an entity by identifier or semantic."],
     endpointParameters: ["body: identifier, entity_type?"],
     cli: "entities search",
-    cliParameters: ["--query, --type"],
+    cliParameters: ["--query, --entity-type"],
     mcp: "retrieve_entity_by_identifier",
     mcpParameters: ["identifier, entity_type?"],
     testCoverage: "cli_query_commands, mcp_entity_variations",
@@ -998,7 +998,7 @@ export const FUNCTIONALITY_MATRIX: FunctionalityRow[] = [
       "body: entity_type, new_fields",
       "body: schema",
     ],
-    cli: "schemas analyze-candidates, schemas recommendations, schemas update-incremental, schemas register",
+    cli: "schemas analyze, schemas recommend, schemas update, schemas register",
     cliParameters: ["--entity-type", "--entity-type", "--entity-type", "—"],
     mcp: "analyze_schema_candidates, get_schema_recommendations, update_schema_incremental, register_schema",
     mcpParameters: ["entity_type, entity_id?", "entity_type", "entity_type, new_fields", "schema"],
@@ -1080,7 +1080,7 @@ export const FUNCTIONALITY_MATRIX: FunctionalityRow[] = [
     openapi: "—",
     endpointDescriptions: [],
     endpointParameters: [],
-    cli: "analyze <filePath>",
+    cli: "schemas analyze <filePath>",
     cliParameters: ["<filePath>"],
     mcp: "parse_file",
     mcpParameters: ["file_path or file_content+mime_type"],
@@ -1464,7 +1464,7 @@ export const ICP_PROFILES: IcpProfile[] = [
       "travel docs",
       "meeting notes",
     ],
-    schemaHotSpots: ["conversation", "message", "agent_message", "note", "task"],
+    schemaHotSpots: ["conversation", "conversation_message", "note", "task"],
     solutionSummary:
       "Neotoma removes the tax you pay re-explaining your world to every tool. Store a fact once and it's available everywhere — Claude, Cursor, Codex, ChatGPT. Correct once and it sticks.",
   },

@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
-import { Check } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui/collapsible";
 import { PRODUCT_NAV_SOURCES } from "@/utils/analytics";
 import { TrackedProductLink } from "../TrackedProductNav";
 import {
@@ -168,6 +169,25 @@ export function ArchitecturePage() {
       <p className="text-[16px] leading-7 font-medium text-foreground mb-6">
         Neotoma's architecture is built on three foundations: append-only observation logs for immutability, deterministic reducers for consistent state composition, and schema-bound entity types for structural guarantees.
       </p>
+
+      <nav className="rounded-lg border toc-panel p-4 mb-8">
+        <p className="text-[14px] font-medium mb-2">On this page</p>
+        <ul className="list-none pl-0 space-y-1 text-[14px]">
+          <li><a href="#state-flow" className="text-foreground underline hover:text-foreground">How state flows</a></li>
+          <li><a href="#how-data-enters" className="text-foreground underline hover:text-foreground">How data enters Neotoma</a></li>
+          <li><a href="#guarantees" className="text-foreground underline hover:text-foreground">Guarantees</a></li>
+          <li><a href="#foundations" className="text-foreground underline hover:text-foreground">Three foundations</a></li>
+          <li><a href="#agent-loop" className="text-foreground underline hover:text-foreground">How agents remember</a></li>
+          <li><a href="#what-this-is-not" className="text-foreground underline hover:text-foreground">What this is not</a></li>
+          <li><a href="#problems-solved" className="text-foreground underline hover:text-foreground">Problems solved</a></li>
+          <li><a href="#terminology" className="text-foreground underline hover:text-foreground">Core terminology</a></li>
+          <li><a href="#interfaces" className="text-foreground underline hover:text-foreground">Interfaces</a></li>
+          <li><a href="#principles" className="text-foreground underline hover:text-foreground">Core principles</a></li>
+          <li><a href="#preview-status" className="text-foreground underline hover:text-foreground">Developer preview status</a></li>
+          <li><a href="#go-deeper" className="text-foreground underline hover:text-foreground">Go deeper</a></li>
+        </ul>
+      </nav>
+
       {/* The invariant */}
       <section className="mb-6">
         <p className="text-[15px] leading-7 font-medium text-foreground mb-4">
@@ -356,7 +376,16 @@ export function ArchitecturePage() {
       <SectionDivider />
 
       {/* Problems solved */}
-      <SectionHeading id="problems-solved">Problems solved</SectionHeading>
+      <Collapsible defaultOpen={false}>
+        <CollapsibleTrigger asChild>
+          <button type="button" className="group flex items-center gap-2 w-full text-left focus:outline-none">
+            <h2 id="problems-solved" className="scroll-mt-6 text-[20px] font-medium tracking-[-0.02em] mt-14 mb-3">
+              Problems solved
+            </h2>
+            <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" aria-hidden />
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
       <TableScrollWrapper className={DOC_TABLE_SCROLL_OUTER_CLASS}>
         <table className={RESPONSIVE_TABLE_CLASS}>
           <thead>
@@ -379,6 +408,8 @@ export function ArchitecturePage() {
           </tbody>
         </table>
       </TableScrollWrapper>
+        </CollapsibleContent>
+      </Collapsible>
 
       <SectionDivider />
 
@@ -512,7 +543,16 @@ export function ArchitecturePage() {
       <SectionDivider />
 
       {/* Go deeper */}
-      <SectionHeading id="go-deeper">Go deeper</SectionHeading>
+      <Collapsible defaultOpen={false}>
+        <CollapsibleTrigger asChild>
+          <button type="button" className="group flex items-center gap-2 w-full text-left focus:outline-none">
+            <h2 id="go-deeper" className="scroll-mt-6 text-[20px] font-medium tracking-[-0.02em] mt-14 mb-3">
+              Go deeper
+            </h2>
+            <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" aria-hidden />
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
       <ul className="list-none pl-0 space-y-2 text-[15px] leading-7">
         <li>
           <Link to="/" className="text-foreground underline underline-offset-2 hover:no-underline">
@@ -590,6 +630,8 @@ export function ArchitecturePage() {
           {" \u2014 rationale essay"}
         </li>
       </ul>
+        </CollapsibleContent>
+      </Collapsible>
     </DetailPage>
   );
 }

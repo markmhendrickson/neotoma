@@ -18,9 +18,9 @@ import {
   Upload,
   Users,
 } from "lucide-react";
-import { VerticalLandingShell, type VerticalConfig } from "./vertical_landing/VerticalLandingShell";
+import { UseCaseLandingShell, type UseCaseConfig } from "./use_case_landing/UseCaseLandingShell";
 
-const CONFIG: VerticalConfig = {
+const CONFIG: UseCaseConfig = {
   accentColor: "orange",
   badgeIcon: Scale,
   badgeText: "Neotoma for Procurement",
@@ -260,5 +260,5 @@ const CONFIG: VerticalConfig = {
 };
 
 export function ProcurementLandingPage() {
-  return <VerticalLandingShell config={CONFIG} />;
+  return <UseCaseLandingShell config={CONFIG} />;
 }

@@ -61,8 +61,10 @@ function renderTemplate(hookDir) {
 }
 
 const NEOTOMA_HOOK_SCRIPTS = [
+  "session_start.js",
   "before_submit_prompt.js",
   "after_tool_use.js",
+  "post_tool_use_failure.js",
   "stop.js",
 ];
 

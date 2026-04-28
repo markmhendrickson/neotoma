@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<!DOCTYPE html><html lang="hi" dir="ltr"><head>
+    <meta charset="UTF-8">
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="application-name" content="Neotoma">
+    <meta name="theme-color" content="#130918">
+    <meta name="description" content="Markdown export of the rendered /multi-agent-state page. When multiple agents write to shared state, one bad observation propagates at machine speed. Learn how write integrity prevents cascade failures across multi-agent topologies: contradiction amplification, silent overwrites, and trust boundary collapse.">
+    <meta name="author" content="Neotoma">
+    <meta name="robots" content="noindex,nofollow">
+    <link rel="canonical" href="https://neotoma.io/hi/markdown/multi-agent-state">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Neotoma">
+    <meta property="og:locale" content="hi_IN">
+    <meta property="og:title" content="Multi-Agent Shared State | Write Integrity for Multi-Agent Systems (Markdown) | Neotoma">
+    <meta property="og:description" content="Markdown export of the rendered /multi-agent-state page. When multiple agents write to shared state, one bad observation propagates at machine speed. Learn how write integrity prevents cascade failures across multi-agent topologies: contradiction amplification, silent overwrites, and trust boundary collapse.">
+    <meta property="og:url" content="https://neotoma.io/hi/markdown/multi-agent-state">
+    <meta property="og:image" content="https://neotoma.io/neotoma-og-1200x630.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Multi-Agent Shared State | Write Integrity for Multi-Agent Systems (Markdown) | Neotoma. Markdown export of the rendered /multi-agent-state page. When multiple agents write to shared state, one bad...">
+    <meta name="keywords" content="Multi, Agent Shared State, Write Integrity for Multi, Agent Systems (Markdown), Neotoma, MCP, Model Context Protocol, AI agents, agent memory, deterministic state">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:site" content="@markmhendrickson">
+    <meta name="twitter:title" content="Multi-Agent Shared State | Write Integrity for Multi-Agent Systems (Markdown) | Neotoma">
+    <meta name="twitter:description" content="Markdown export of the rendered /multi-agent-state page. When multiple agents write to shared state, one bad observation propagates at machine speed. Learn how write integrity prevents cascade failures across multi-agent topologies: contradiction amplification, silent overwrites, and trust boundary collapse.">
+    <meta name="twitter:image" content="https://neotoma.io/neotoma-og-1200x630.png">
+    <meta name="twitter:image:width" content="1200">
+    <meta name="twitter:image:height" content="630">
+    <meta name="twitter:image:alt" content="Multi-Agent Shared State | Write Integrity for Multi-Agent Systems (Markdown) | Neotoma. Markdown export of the rendered /multi-agent-state page. When multiple agents write to shared state, one bad...">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"Multi-Agent Shared State | Write Integrity for Multi-Agent Systems (Markdown) | Neotoma","description":"Markdown export of the rendered /multi-agent-state page. When multiple agents write to shared state, one bad observation propagates at machine speed. Learn how write integrity prevents cascade failures across multi-agent topologies: contradiction amplification, silent overwrites, and trust boundary collapse.","url":"https://neotoma.io/hi/markdown/multi-agent-state","publisher":{"@type":"Organization","name":"Neotoma"},"image":{"@type":"ImageObject","url":"https://neotoma.io/neotoma-og-1200x630.png","width":1200,"height":630,"caption":"Multi-Agent Shared State | Write Integrity for Multi-Agent Systems (Markdown) | Neotoma. Markdown export of the rendered /multi-agent-state page. When multiple agents write to shared state, one bad..."}}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://neotoma.io/"},{"@type":"ListItem","position":2,"name":"Compare","item":"https://neotoma.io/build-vs-buy"},{"@type":"ListItem","position":3,"name":"Multi-Agent State","item":"https://neotoma.io/multi-agent-state"}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why is multi-agent shared state different from single-agent memory?","acceptedAnswer":{"@type":"Answer","text":"Single-agent write corruption degrades quality gradually. Multi-agent shared state creates cascade failures: one bad write propagates at machine speed, triggering downstream actions before any human can intervene."}},{"@type":"Question","name":"What are the main failure modes of multi-agent shared state?","acceptedAnswer":{"@type":"Answer","text":"Contradiction amplification (conflicting facts with no adjudication), silent overwrite cascades (stale reads reverting other agents' changes), and trust boundary collapse (different agents with different capabilities having equal write authority)."}},{"@type":"Question","name":"Does Neotoma replace my existing database for multi-agent systems?","acceptedAnswer":{"@type":"Answer","text":"No. Your existing database remains the system of record for business data. Neotoma sits between your agents and your database as a write-integrity layer for agent-generated observational state: observations, inferences, entity resolutions, and decisions."}}]}</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
+    <title>Multi-Agent Shared State | Write Integrity for Multi-Agent Systems (Markdown) | Neotoma</title>
+    <script type="module" crossorigin="" src="/assets/main-CaoWcp2k.js"></script>
+    <link rel="stylesheet" crossorigin="" href="/assets/main-BBds_bdF.css">
+  
+    <!-- build: local-1777360387837 -->
+      <link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/multi-agent-state">
+    <link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/multi-agent-state">
+    <link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/multi-agent-state">
+    <link rel="alternate" hreflang="ca" href="https://neotoma.io/ca/markdown/multi-agent-state">
+    <link rel="alternate" hreflang="zh" href="https://neotoma.io/zh/markdown/multi-agent-state">
+    <link rel="alternate" hreflang="hi" href="https://neotoma.io/hi/markdown/multi-agent-state">
+    <link rel="alternate" hreflang="ar" href="https://neotoma.io/ar/markdown/multi-agent-state">
+    <link rel="alternate" hreflang="fr" href="https://neotoma.io/fr/markdown/multi-agent-state">
+    <link rel="alternate" hreflang="pt" href="https://neotoma.io/pt/markdown/multi-agent-state">
+    <link rel="alternate" hreflang="ru" href="https://neotoma.io/ru/markdown/multi-agent-state">
+    <link rel="alternate" hreflang="bn" href="https://neotoma.io/bn/markdown/multi-agent-state">
+    <link rel="alternate" hreflang="ur" href="https://neotoma.io/ur/markdown/multi-agent-state">
+    <link rel="alternate" hreflang="id" href="https://neotoma.io/id/markdown/multi-agent-state">
+    <link rel="alternate" hreflang="de" href="https://neotoma.io/de/markdown/multi-agent-state">
+  <link rel="icon" href="/favicon.ico" sizes="any" data-rh="true"><link rel="icon" type="image/svg+xml" href="/favicon.svg" data-rh="true"><link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png" data-rh="true"><link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" data-rh="true"><link rel="manifest" href="/site.webmanifest" data-rh="true"><link rel="canonical" href="https://neotoma.io/hi/markdown/multi-agent-state" data-rh="true"><link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/multi-agent-state" data-rh="true"><link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/multi-agent-state" data-rh="true"><link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/multi-agent-state" data-rh="true"><link rel="alternate" hreflang="ca" href="https://neotoma.io/ca/markdown/multi-agent-state" data-rh="true"><link rel="alternate" hreflang="zh" href="https://neotoma.io/zh/markdown/multi-agent-state" data-rh="true"><link rel="alternate" hreflang="hi" href="https://neotoma.io/hi/markdown/multi-agent-state" data-rh="true"><link rel="alternate" hreflang="ar" href="https://neotoma.io/ar/markdown/multi-agent-state" data-rh="true"><link rel="alternate" hreflang="fr" href="https://neotoma.io/fr/markdown/multi-agent-state" data-rh="true"><link rel="alternate" hreflang="pt" href="https://neotoma.io/pt/markdown/multi-agent-state" data-rh="true"><link rel="alternate" hreflang="ru" href="https://neotoma.io/ru/markdown/multi-agent-state" data-rh="true"><link rel="alternate" hreflang="bn" href="https://neotoma.io/bn/markdown/multi-agent-state" data-rh="true"><link rel="alternate" hreflang="ur" href="https://neotoma.io/ur/markdown/multi-agent-state" data-rh="true"><link rel="alternate" hreflang="id" href="https://neotoma.io/id/markdown/multi-agent-state" data-rh="true"><link rel="alternate" hreflang="de" href="https://neotoma.io/de/markdown/multi-agent-state" data-rh="true"><meta name="description" content="Markdown export of the rendered /multi-agent-state page. When multiple agents write to shared state, one bad observation propagates at machine speed. Learn how write integrity prevents cascade failures across multi-agent topologies: contradiction amplification, silent overwrites, and trust boundary collapse." data-rh="true"><meta name="author" content="Neotoma" data-rh="true"><meta name="application-name" content="Neotoma" data-rh="true"><meta name="robots" content="noindex,nofollow" data-rh="true"><meta name="theme-color" content="#130918" data-rh="true"><meta property="og:type" content="website" data-rh="true"><meta property="og:site_name" content="Neotoma" data-rh="true"><meta property="og:locale" content="hi_IN" data-rh="true"><meta property="og:title" content="Multi-Agent Shared State | Write Integrity for Multi-Agent Systems (Markdown) | Neotoma" data-rh="true"><meta property="og:description" content="Markdown export of the rendered /multi-agent-state page. When multiple agents write to shared state, one bad observation propagates at machine speed. Learn how write integrity prevents cascade failures across multi-agent topologies: contradiction amplification, silent overwrites, and trust boundary collapse." data-rh="true"><meta property="og:url" content="https://neotoma.io/hi/markdown/multi-agent-state" data-rh="true"><meta property="og:image" content="https://neotoma.io/neotoma-og-1200x630.png" data-rh="true"><meta property="og:image:width" content="1200" data-rh="true"><meta property="og:image:height" content="630" data-rh="true"><meta property="og:image:alt" content="Multi-Agent Shared State | Write Integrity for Multi-Agent Systems (Markdown) | Neotoma. Markdown export of the rendered /multi-agent-state page. When multiple agents write to shared state, one bad..." data-rh="true"><meta name="keywords" content="Multi, Agent Shared State, Write Integrity for Multi, Agent Systems (Markdown), Neotoma, MCP, Model Context Protocol, AI agents, agent memory, deterministic state" data-rh="true"><meta name="twitter:card" content="summary_large_image" data-rh="true"><meta name="twitter:site" content="@markmhendrickson" data-rh="true"><meta name="twitter:title" content="Multi-Agent Shared State | Write Integrity for Multi-Agent Systems (Markdown) | Neotoma" data-rh="true"><meta name="twitter:description" content="Markdown export of the rendered /multi-agent-state page. When multiple agents write to shared state, one bad observation propagates at machine speed. Learn how write integrity prevents cascade failures across multi-agent topologies: contradiction amplification, silent overwrites, and trust boundary collapse." data-rh="true"><meta name="twitter:image" content="https://neotoma.io/neotoma-og-1200x630.png" data-rh="true"><meta name="twitter:image:width" content="1200" data-rh="true"><meta name="twitter:image:height" content="630" data-rh="true"><meta name="twitter:image:alt" content="Multi-Agent Shared State | Write Integrity for Multi-Agent Systems (Markdown) | Neotoma. Markdown export of the rendered /multi-agent-state page. When multiple agents write to shared state, one bad..." data-rh="true"><script type="application/ld+json" data-rh="true">{"@context":"https://schema.org","@type":"WebPage","name":"Multi-Agent Shared State | Write Integrity for Multi-Agent Systems (Markdown) | Neotoma","description":"Markdown export of the rendered /multi-agent-state page. When multiple agents write to shared state, one bad observation propagates at machine speed. Learn how write integrity prevents cascade failures across multi-agent topologies: contradiction amplification, silent overwrites, and trust boundary collapse.","url":"https://neotoma.io/hi/markdown/multi-agent-state","publisher":{"@type":"Organization","name":"Neotoma"},"image":{"@type":"ImageObject","url":"https://neotoma.io/neotoma-og-1200x630.png","width":1200,"height":630,"caption":"Multi-Agent Shared State | Write Integrity for Multi-Agent Systems (Markdown) | Neotoma. Markdown export of the rendered /multi-agent-state page. When multiple agents write to shared state, one bad..."}}</script><script type="application/ld+json" data-rh="true">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://neotoma.io/"},{"@type":"ListItem","position":2,"name":"Compare","item":"https://neotoma.io/build-vs-buy"},{"@type":"ListItem","position":3,"name":"Multi-Agent State","item":"https://neotoma.io/multi-agent-state"}]}</script><script type="application/ld+json" data-rh="true">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why is multi-agent shared state different from single-agent memory?","acceptedAnswer":{"@type":"Answer","text":"Single-agent write corruption degrades quality gradually. Multi-agent shared state creates cascade failures: one bad write propagates at machine speed, triggering downstream actions before any human can intervene."}},{"@type":"Question","name":"What are the main failure modes of multi-agent shared state?","acceptedAnswer":{"@type":"Answer","text":"Contradiction amplification (conflicting facts with no adjudication), silent overwrite cascades (stale reads reverting other agents' changes), and trust boundary collapse (different agents with different capabilities having equal write authority)."}},{"@type":"Question","name":"Does Neotoma replace my existing database for multi-agent systems?","acceptedAnswer":{"@type":"Answer","text":"No. Your existing database remains the system of record for business data. Neotoma sits between your agents and your database as a write-integrity layer for agent-generated observational state: observations, inferences, entity resolutions, and decisions."}}]}</script></head>
+  <body>
+    <div id="root"><iframe title="Markdown capture" aria-hidden="true" width="1280" height="900" class="pointer-events-none fixed left-[-9999px] top-0 z-[-1] border-0 opacity-0" sandbox="allow-same-origin allow-scripts allow-forms"></iframe><div class="min-h-screen bg-background text-foreground"><pre class="whitespace-pre-wrap break-words p-4 font-mono text-[13px] leading-relaxed text-foreground">&lt;!--
+  Full-page Markdown export (rendered HTML → GFM).
+  Source: https://neotoma.io/hi/multi-agent-state
+  Generated: 2026-04-28T07:16:49.698Z
+--&gt;
+Multi-Agent State
+
+# When agents share state, write integrity stops being optional
+
+A single agent writing to a single memory store degrades gracefully: bad writes erode quality over time. When multiple agents write to shared state, one bad observation propagates at machine speed, triggering downstream actions before any human can intervene. The failure mode shifts from gradual drift to cascade failure.
+
+The masking effect
+
+## Single-agent systems hide write-integrity failures
+
+With one agent writing to one memory store, write corruption degrades quality slowly. The agent summarizes an observation slightly wrong, overwrites an entity attribute, or stores contradictory facts. The system still works—it just gets less reliable over time. The memory layer never gets blamed because the failure looks like an LLM problem.
+
+Retrieval pain is legible; write corruption is not. Developers notice when the agent forgets or retrieves the wrong thing. They do not notice when the agent acts confidently on state that was corrupted at write time—until downstream consequences surface.
+
+Failure modes
+
+## What breaks when agents share state
+
+When Agent A writes observations that Agent B reads and acts on, a fundamentally different failure topology emerges. These are not edge cases—they are structural properties of any multi-writer system without integrity guarantees.
+
+Contradiction amplification
+
+Two agents store conflicting facts about the same entity from different interactions. A third agent takes action on whichever fact the retrieval layer surfaces, with no basis for adjudicating between them.
+
+Without write integrity
+
+No forensic path. The retrieval layer returns one version; the contradiction is invisible until downstream consequences surface.
+
+With write integrity
+
+Append-only observation log with timestamps and source attribution. Both facts are preserved. The reducer surfaces the conflict deterministically.
+
+Silent overwrite cascades
+
+Agent A updates a record. Agent B, operating on a stale read, writes its own update that implicitly reverts Agent A's change. Neither agent throws an error.
+
+Without write integrity
+
+In a mutable database, this is nearly undetectable. The overwrite looks like a normal write. Previous state is gone.
+
+With write integrity
+
+In an append-only log with hash-linked observations, implicit overwrites are structurally impossible. Every write is a new observation, not a mutation.
+
+Trust boundary collapse
+
+Shared state implicitly means each agent trusts the other's writes. But agents have different capabilities, prompt contexts, and error profiles.
+
+Without write integrity
+
+A financial analysis agent and a support chatbot have equal write authority over the same entity state. No schema constraint distinguishes them.
+
+With write integrity
+
+Schema-constrained writes enforce what each agent can write. Observations carry writer identity and context. The reducer applies priority rules.
+
+Cascade example
+
+## How one bad write triggers a chain reaction
+
+A SaaS company runs three agents sharing state about customer accounts: inbound support, account health scoring, and renewal/upsell recommendations.
+
+1
+
+Support agent
+
+Processes a frustrated customer and stores: "customer expressed dissatisfaction with pricing, considering alternatives."
+
+The customer was frustrated with a billing error, not pricing. The LLM-mediated extraction compressed the interaction into a misleading summary.
+
+2
+
+Health-scoring agent
+
+Reads the support observation, downgrades the account, stores: "high churn risk, recommend retention intervention."
+
+Acted on unfaithful source data. The downgrade is a correct inference from wrong premises.
+
+3
+
+Renewal agent
+
+Reads the downgraded score, generates and sends a discount offer—within minutes, no human in the loop.
+
+Retrieval worked at every step. The failure was in the write. Nothing in the system could trace the chain from bad observation to wrong action.
+
+What write integrity changes
+
+-   Every observation links to its source interaction, not a summarized derivative
+-   The health-scoring agent sees the raw observation with provenance, not a flat fact
+-   Contradiction between billing-error and pricing-dissatisfaction surfaces as a conflict, not a silent overwrite
+-   The full causal chain from observation to action is traversable after the fact
+
+Multi-agent topologies
+
+## How multi-agent systems emerge (and where database decisions lock in)
+
+Most multi-agent systems are not designed as multi-agent systems. They accrete: one agent for support, another for ops, then someone connects them. Database choices made at topology 1 are baked in by topology 3. Migrating from mutable to append-only state is a rearchitecture, not a library swap.
+
+Hub-and-spoke
+
+Low write risk
+
+Current dominant pattern
+
+One primary agent faces the user and delegates subtasks to specialized agents. Shared state is the primary agent's context window. Subordinate agents are stateless tool calls.
+
+Cursor delegates to code, research, and analysis sub-agents. The hub manages all state.
+
+Pipeline agents
+
+Medium write risk
+
+Now – 12 months
+
+Sequential handoffs where each agent processes and enriches a work item. Each agent reads state written by the previous agent and appends its own.
+
+Lead qualification → company research → outreach drafting → meeting scheduling. A bad write at step 2 calibrates every downstream agent wrong.
+
+Event-driven with shared context
+
+High write risk
+
+12 – 24 months
+
+Multiple agents subscribe to events from a shared environment, maintain their own perspectives, and write observations back to a common store. No orchestrator.
+
+CRM agents, support agents, and billing agents all react to customer events independently. Concurrent writes from different interpretive frameworks, no coordinator to catch contradictions.
+
+Persistent autonomous agents
+
+Critical write risk
+
+18 – 36 months
+
+Agents running continuously, maintaining evolving world models, periodically synchronizing with other agents or a shared truth store. Context windows cannot serve as memory.
+
+Always-on monitoring agents maintaining state across days or weeks, synchronizing findings with planning agents that act on the accumulated picture.
+
+Integration model
+
+## Between your agents and your database (not instead of it)
+
+Your existing database remains the system of record for business data: customer records, transactions, product catalog. Agent-generated state—observations, inferences, entity resolutions, decisions—lives in a purpose-built write-integrity layer.
+
+Human-written business data
+
+-   →Customer records, product catalog, pricing
+-   →Transactions, invoices, financial ledger
+-   →Configuration, feature flags, system settings
+-   →Content, documents, media assets
+
+Stays in your existing Postgres, MySQL, or managed database. Mutable CRUD is appropriate here.
+
+Agent-written observational state
+
+-   Observations from agent interactions
+-   Inferences, extractions, entity resolutions
+-   Decisions with provenance chains
+-   Cross-agent entity state and conflict resolution
+
+Belongs in a write-integrity layer: append-only, schema-constrained, provenance-tracked, deterministically reducible.
+
+## Every observation is traceable from day one
+
+Teams that adopt write integrity early gain a compounding advantage: every agent write is auditable and consistent from the start. Teams that retrofit have a gap in their audit history—everything before the migration is a black box.
+
+[Install Neotoma](/install)[Build vs buy assessment](/build-vs-buy)[Read the architecture](/architecture)
+
+Open-source
+
+MIT-licensed
+
+5-minute install
+
+Fully reversible</pre></div><div role="region" aria-label="Notifications (F8)" tabindex="-1" style="pointer-events: none;"><ol tabindex="-1" class="fixed top-0 z-[100] flex w-full flex-col-reverse p-4 sm:bottom-4 sm:right-4 sm:top-auto sm:flex-col sm:max-h-[calc(100vh-1rem)] sm:overflow-y-auto md:max-w-[420px]"></ol></div></div>
+  
+
+
+</body></html>

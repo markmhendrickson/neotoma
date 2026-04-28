@@ -38,10 +38,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
     <title>Agent Instructions (Markdown) | Neotoma</title>
-    <script type="module" crossorigin="" src="../../../assets/main-Jf-itxVT.js"></script>
-    <link rel="stylesheet" crossorigin="" href="../../../assets/main-DWQ-Fl-1.css">
+    <script type="module" crossorigin="" src="/assets/main-CaoWcp2k.js"></script>
+    <link rel="stylesheet" crossorigin="" href="/assets/main-BBds_bdF.css">
   
-    <!-- build: local-1776078353914 -->
+    <!-- build: local-1777360387837 -->
       <link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/agent-instructions">
     <link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/agent-instructions">
     <link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/agent-instructions">
@@ -61,24 +61,204 @@
     <div id="root"><iframe title="Markdown capture" aria-hidden="true" width="1280" height="900" class="pointer-events-none fixed left-[-9999px] top-0 z-[-1] border-0 opacity-0" sandbox="allow-same-origin allow-scripts allow-forms"></iframe><div class="min-h-screen bg-background text-foreground"><pre class="whitespace-pre-wrap break-words p-4 font-mono text-[13px] leading-relaxed text-foreground">&lt;!--
   Full-page Markdown export (rendered HTML → GFM).
   Source: https://neotoma.io/ur/agent-instructions
-  Generated: 2026-04-13T11:07:24.670Z
+  Generated: 2026-04-28T07:15:46.036Z
 --&gt;
 # Agent instructions
 
-Agents use Neotoma via MCP when it is installed and running, or via the CLI when MCP is not available. The same behaviors apply either way.
+These are the mandatory behavioral rules every agent follows when using Neotoma. They apply equally to [MCP](/mcp) (preferred when installed and running) and the [CLI](/cli) (used as a backup), so chat persistence, entity extraction, retrieval, attribution, and display behavior are identical across transports.
 
-The instructions below are mandatory requirements for all agents using Neotoma. For the full text, see [MCP instructions](https://github.com/markmhendrickson/neotoma/blob/main/docs/developer/mcp/instructions.md) and [CLI agent instructions](https://github.com/markmhendrickson/neotoma/blob/main/docs/developer/cli_agent_instructions.md).
+This page mirrors the canonical instruction block shipped to MCP clients at runtime. For the verbatim source see [docs/developer/mcp/instructions.md](https://github.com/markmhendrickson/neotoma/blob/main/docs/developer/mcp/instructions.md); the CLI-equivalent rules live in [docs/developer/cli\_agent\_instructions.md](https://github.com/markmhendrickson/neotoma/blob/main/docs/developer/cli_agent_instructions.md). The two are kept in parity by the sync rules under `.cursor/rules/developer_agent_instructions_sync_rules.mdc`.
 
--   **Store first:** Every turn, the agent persists the conversation and current user message (plus any implied entities) in one store call before responding. Responding before storing is forbidden.
--   **Retrieval before store:** The agent runs bounded retrieval for entities implied by the message and uses results when storing to link or reuse existing records.
--   **Entity extraction:** Facts from the message become stored entities with descriptive types and fields; the message is linked to each extracted entity (REFERS\_TO).
--   **Proactive retrieval:** After persistence, the agent runs bounded retrieval when the prompt may depend on stored memory (targeted queries first, expand only when needed).
--   **Attachments and images:** Attachments are stored in the same request and linked via EMBEDS. For screenshots or images, the agent extracts visible entities (people, events, tasks, etc.) and stores them before responding.
--   **Tasks:** When the user expresses intent, obligation, or future action ("I need to", "remind me", deadlines), the agent creates a task with due date when present and relates it to person or entity.
--   **External data (store-first):** Data from other tools (email, calendar, search) is stored in Neotoma before the agent responds; the agent does not reply until storage is complete.
--   **User identity:** When the user provides or implies their identity (name, email, "me"), the agent stores them as contact or person in the same turn.
--   **Conventions:** The agent does not mention storage or linking unless the user asked; when confirming something was stored, uses language like "remember" or "stored in memory." It checks for existing records before storing to avoid duplicates.
--   **Report or fix bugs:** When the agent sees a Neotoma error or you describe a bug, it will suggest filing an issue on GitHub or, when it has access to a clone or fork, contributing a fix via a fork and pull request.</pre></div><div role="region" aria-label="Notifications (F8)" tabindex="-1" style="pointer-events: none;"><ol tabindex="-1" class="fixed top-0 z-[100] flex w-full flex-col-reverse p-4 sm:bottom-4 sm:right-4 sm:top-auto sm:flex-col sm:max-h-[calc(100vh-1rem)] sm:overflow-y-auto md:max-w-[420px]"></ol></div></div>
+## Turn lifecycle
+
+Every turn MUST complete in this order: (1) bounded retrieval, (2) user-phase store, (3) other MCP calls or host tool use, (4) compose the assistant reply, (5) closing store of the assistant reply. Do not respond before steps 1 and 2 are complete, and do not end the turn before step 5 unless the user explicitly waived persistence or the turn produced no user-visible reply.
+
+-   **Step 1, Bounded retrieval.** Use `retrieve_entity_by_identifier` for concrete identifiers (names, emails, ids, exact titles) and `retrieve_entities` for category or list queries; reuse or link existing records when matches surface.
+-   **Step 2, User-phase store.** Persist the conversation, the current user message, and any entities implied by the message in one `store_structured` call. If the user attached a file, include it in the same request and add the EMBEDS link. MUST NOT skip this for greetings or minimal messages.
+-   **Step 3, Other actions.** Host IDE tools (read\_file, apply\_patch, run\_terminal\_cmd, grep, codebase\_search, web fetch) and other MCP tools may run only after steps 1 and 2 are complete. Host tools are not exempt from store-first.
+-   **Step 4, Compose reply.** Synthesize the answer using retrieval results and tool output.
+-   **Step 5a, Closing store.** After the user-visible reply is finalized, call `store_structured` with a single`conversation_message` entity (`role: "assistant"`, `sender_kind: "assistant"`, exact reply text, `turn_key: "{conversation_id}:{turn_id}:assistant"`) and an `idempotency_key` of `conversation-{conversation_id}-{turn_id}-assistant-{suffix}`.
+-   **Step 5b, Closing relationship.** Add `create_relationship(PART_OF, assistant_message_id, conversation_id)` targeting the conversation already created in step 2, never a new conversation.
+-   **Step 5b.1, Reply-cited edges.** Add `REFERS_TO` from the assistant message to every entity the reply materially cites or produces (synthesized notes/reports created this turn, existing entities named in the reply text). Skip when the edge already exists; chat bookkeeping (conversation, message) is excluded.
+-   **Step 5c, Skip rules.** Skip the closing store only when there is no user-visible assistant reply or the user explicitly waived persistence. FORBIDDEN: persisting the user message without storing the assistant reply when you did reply.
+-   **Rapid-fire sessions.** The store-first rule applies even during many small, fast instructions. If batching, store at minimum every 3-5 turns; never go an entire session without storing.
+-   **Backfill.** If asked to capture missed earlier turns or run `/learn` after a gap, store those user messages and assistant replies in the same turn (verbatim preferred; concise paraphrase when the transcript is unavailable). Do not defer to a later session.
+-   **MCP availability detection.** Do not infer availability from a workspace `.mcp.json` alone. If the host exposes Neotoma MCP tools or another active Neotoma transport, treat Neotoma as available and follow store-first.
+
+◆
+
+## Store recipes
+
+Use only the recipes below. MUST NOT list, glob, or read MCP tool descriptor or schema files for chat, attachment, or entity-extraction flows. Tool parameters: `store_structured(entities, idempotency_key, relationships, file_path|file_content+mime_type, file_idempotency_key?)` and `create_relationship(relationship_type, source_entity_id, target_entity_id)`. Response IDs come back as `structured.entities[].entity_id` and `unstructured.asset_entity_id`.
+
+-   **Relationship batching.** When related entities are created in the same call, define ALL their links via the `relationships` array using `{ relationship_type, source_index, target_index }` entries. Do not issue one `create_relationship` call per link when batching is possible.
+-   **Turn identity.** Use host conversation and turn ids when available. If absent, build a synthetic `conversation_id` (never a generic prefix like `cursor` alone) plus a turn index/timestamp; set `turn_key = "{conversation_id}:{turn_id}"` and a unique `idempotency_key`. Unscoped turn keys cause cross-conversation entity collisions.
+-   **Fallback IDs.** When the host gives no ids at all, use `idempotency_key "conversation-chat-&lt;turn&gt;-&lt;timestamp_ms&gt;"` and `turn_key "chat:&lt;turn&gt;"`.
+-   **observation\_source.** Optional flag describing the kind of write, `sensor` (deterministic tool/telemetry), `workflow_state` (state-machine transitions), `llm_summary` (the default; omit it for ordinary chat), `human` (direct edit/acceptance), or `import` (batch/ETL). Used as a tie-break after `source_priority`; one value applies to every observation produced by the request.
+
+### User-phase (one call per user message)
+
+-   **Shape.** entities = \[`{ entity_type: "conversation", title? }`, `{ entity_type: "conversation_message", role: "user", sender_kind: "user", content: "&lt;exact message&gt;", turn_key: "{conversation_id}:{turn_id}" }`, …optional extracted entities\]. Indices: 0 = conversation, 1 = message, 2+ = extracted. The legacy `agent_message` type is accepted as an alias and resolved to `conversation_message` for pre-v0.6 clients.
+-   **Relationships.** Always `PART_OF` from message (1) to conversation (0). For every entity created OR updated this turn, add `REFERS_TO` from the message to that entity. Skip when the edge already exists.
+-   **Naming.** Keep names human-readable. For `conversation_message`, set `canonical_name` to a concise summary; never use turn keys, raw ids, timestamps, or tool names as the primary label. For `conversation`, keep `title` topical and update only when the central topic materially changes.
+-   **Canonical-name scope.** `canonical_name` is a short label, not a container for every detail. Put message body in `content` and extra semantics in fields like `title`, `subject`, `summary`, `description`, `turn_key`, `role`, `status`, etc.
+-   **Extraction.** If the message implies an entity (purchase, task, event, person, place, etc.), append it with a descriptive `entity_type` and the properties the message implies, no fixed schema. Do not call `list_entity_types` before storing.
+-   **idempotency\_key.** `conversation-{conversation_id}-{turn_id}-{suffix}` or, on fallback, `conversation-chat-&lt;turn&gt;-{suffix}`.
+
+### Attachments (one call: file + entities together)
+
+1.  **Parse.** PDFs go through `parse_file`; text/CSV/JSON/Markdown read directly; images use vision. If parsing yields no usable text, store the raw file only.
+2.  **Extract.** One snake\_case field per fact, no invention. Use a descriptive `entity_type` matching the document (receipt, invoice, note, contract, person, contact, company, task, event, transaction, etc.).
+3.  **Store.** One `store_structured` with \[conversation, user message, …extracted entities\], idempotency key, `relationships` with `PART_OF` (message→conversation) and any `REFERS_TO` edges, plus `file_path` (resolve to absolute) or `file_content + mime_type`. Optional `file_idempotency_key: "file-&lt;short-slug&gt;"`.
+4.  **EMBEDS.** `create_relationship(EMBEDS, user_message_id, asset_entity_id)` using the ids returned by step 3.
+
+### Screenshots and images
+
+Use the attachment recipe. Extract every distinct entity visible in the image (people, messages, dates, criteria, tasks, events, offers, transactions) before responding. Add `PART_OF` (message→conversation), `REFERS_TO` (message→each extracted entity), and `EMBEDS` (message→file entity).
+
+### Chat fallbacks
+
+-   Overwriting between branches is acceptable; users can audit history via `list_observations`. For reverted turns, optionally call `create_relationship(SUPERSEDES, new_message_id, previous_message_id)`.
+-   When a client does not support inline relationships: call `store_structured` first, then `create_relationship(PART_OF, message_id, conversation_id)` and one `REFERS_TO` per extracted entity.
+
+◆
+
+## Retrieval
+
+-   **Query shape.** `retrieve_entity_by_identifier` for concrete identifiers (names, emails, ids, exact titles); `retrieve_entities` scoped by entity\_type with an explicit limit or time window for plural/category queries ("last N transactions", "recent tasks").
+-   **Guardrails.** Start with small, targeted queries. Avoid broad scans unless necessary. Use retrieved facts when relevant; if bounded retrieval finds nothing, proceed normally without inventing memory-backed claims.
+-   **Publication-recency.** For "recently published" questions, sort by publication timestamp (`published_date` / `published_at`) descending, not by observation recency. Use a sufficient page size and dedupe by `entity_id`.
+-   **Entity-type cardinality.** For "how many entities per type" questions, answer from `getStats` / `GET /stats` → `entities_by_type` first. `list_entity_types` reports schema field width, not row counts; never substitute one for the other.
+-   **Bounded completeness.** For list/count answers from entity graphs, check likely equivalent containers/identifiers and relationship variants, dedupe by `entity_id`, and report the reconciled total (or note remaining ambiguity).
+
+◆
+
+## Provenance
+
+-   **Source provenance is required.** Every entity carries traceable source data. For file-derived data, use the combined store path (entities + `file_path` or `file_content+mime_type`) and include `source_file`. For API or tool-sourced data, set `data_source` (tool, endpoint, date) and store the raw payload as `api_response_data`. FORBIDDEN: storing entities with no traceable source unless the data is purely user-stated in chat.
+-   **Three-layer analysis.** When analyzing a named entity from source material, persist all three layers in the same turn: (1) the raw source artifact, (2) the named entity updated with sourced facts, (3) a synthesized note/report capturing derived conclusions. Link with `REFERS_TO` or `EMBEDS`.
+-   **Reuse pre-existing sources.** If a raw source already exists in Neotoma, retrieve it and link the current conversation-derived entities to it in the same turn, do not rely on an earlier store remaining discoverable without a relationship.
+-   **Source content retrieval.** Files stored via the combined path are downloadable at `GET /sources/:id/content`; observations carry `source_id` for linkage. UIs should expose this endpoint so users can inspect the original artifact.
+-   **Unstructured payload retention.** User-provided files, paths, @-references, attachments, uploads, and pasted blobs MUST be persisted in the same turn via the unstructured path with the attachment recipe. Host-only copies (Desktop, Downloads, repo folders) are not sufficient retention.
+-   **Synthesized deliverables.** Reviews, reports, plans, audits, comparative analyses, legal/competitive/market/technical research are stored as a structured entity (e.g. `legal_research`, `competitive_analysis`, `technical_research`, `report`) with title, subject, conclusion, key\_findings, sources, caveats, and research\_date. Do not respond with findings without storing them in the same turn.
+-   **Analysis durability.** When asked for analysis or a briefing, do not rely only on chat message rows, persist a structured note/report/research entity rich enough to reconstruct the answer, then link it to the analyzed entity and source.
+-   **Agent-authored deliverables.** When the agent creates or materially edits a markdown, text, JSON, CSV, or similar file that is the substantive deliverable, store the file via the combined path, persist a structured entity describing it, and link the file asset, deliverable entity, and originating message. Repo-only or working-tree copies are not durable.
+-   **Session-derived artifacts.** Any entity created from the current conversation in a separate store call MUST be linked back via `REFERS_TO` in the same turn (from the prompting user message or from the new entity to the conversation). Multi-file loops must not end the turn until every new entity is linked.
+-   **Per-turn linkage invariant.** Every non-bookkeeping entity touched in a turn MUST carry a `REFERS_TO` edge from either the user message (creates/updates) or the assistant message (reply-cited).
+
+◆
+
+## Tasks and commitments
+
+-   **Base rule.** Create a task when the user expresses intent, obligation, or future action ("I need to", "remind me", deadlines). Set `due_date` when available and link to the relevant person or entity.
+-   **Outreach and reply-drafting.** When you produce or refine outbound text that commits the user to a future step with a named counterparty ("I'll reach out when…", "I'll send X after Y", "I'll loop back once…"), create a task and link it to the counterparty contact via `REFERS_TO`. Reuse the contact after retrieval; create if missing. Closers without a concrete follow-up do not require a task.
+-   **Scheduling cues.** When email, chat, screenshot, or pasted text implies arranging a future meeting or call ("pencil in", "another for \[month\]", "sync again", "catch up later"), create a task in the same extraction/store turn. Set `due_date` when a month or date is inferable; link the task to the relevant contact.
+
+◆
+
+## Entity types and schema
+
+-   **Schema-agnostic for chat.** Use a descriptive `entity_type` and whatever properties the message implies; the server accepts arbitrary fields. Do not call `list_entity_types` before storing.
+-   **Type reuse.** Before introducing a new type, check for semantic equivalents (singular vs plural, person/contact, social\_post/social\_media\_post). Prefer the type with more existing entities; consult `list_entity_types` with a keyword search if the cached list is stale. FORBIDDEN: creating a new type when an equivalent exists.
+-   **Schema evolution.** Use `update_schema_incremental` to add fields (minor bump) or remove fields via `fields_to_remove` (major bump). Removed fields are excluded from snapshots but observation data is preserved; re-adding restores them. At least one field must remain.
+-   **Existing-entity correction.** When fixing inaccurate values or normalizing ad hoc fields into an established schema, use `correct` on the existing entity rather than creating a duplicate. Prefer canonical schema fields over ad hoc additions.
+-   **Type consistency in a workflow.** Within one import or workflow, pick one canonical type and keep it consistent. For generic financial rows, default to `transaction` and store source-specific details as fields (provider, account\_suffix, value\_date, concept).
+-   **conversation\_message sender semantics.** Always set `sender_kind` (one of `user`, `assistant`, `agent`, `system`, `tool`) alongside the legacy `role` field. For agent-to-agent traffic, set `sender_kind: "agent"` with `sender_agent_id` and optional `recipient_agent_id`. For the parent `conversation`, set `thread_kind` to `human_agent`, `agent_agent`, or `multi_party`.
+
+◆
+
+## Communication and display
+
+-   **Silent storage default.** Do not mention storage, memory, or linking unless the user asked, except when a turn created, updated, or retrieved entities (then the display rule below applies). Do not narrate internal persistence ("Storing the conversation first"). When confirming, use memory-related language ("remember", "recall", "stored in memory").
+-   **Proactive storage.** Store when the user states relevant information; store first, then respond. Do not skip storage just because the user did not ask to save.
+-   **Repo canon is additive.** When asked to capture a durable principle or standing rule in a repo document, persist the durable fact in Neotoma in the same turn, then update the repo document if the repo is also a source of truth. "This belongs in the repo" is not a reason to skip Neotoma.
+-   **External tool store-first.** When you pull data from any external source (email, calendar, search, web fetch, scrape, API, file read), extract and store people, companies, locations, events, tasks, notifications, device status, and relationships in the same turn, before responding. Create tasks for action items.
+-   **Depth of capture.** List/summary responses are index rows, not the final payload. Hydrate via the matching detail endpoint and persist both layers under `api_response_data.list` and `api_response_data.detail`.
+    -   *Scope cap:* hydrate up to ~10 items per turn unless the user asks for more.
+    -   *Size cap:* if a detail body exceeds ~100 KB, persist via the unstructured path and link with `EMBEDS`.
+    -   *Sensitivity:* for email/DM/document sources, persist the body but do not echo it into chat beyond what answering requires.
+    -   *Idempotent upgrade:* hydrate via `correct` on an existing `entity_id` rather than creating a duplicate.
+    -   *Tool-capability awareness:* only hydrate when a detail endpoint exists and is cheap. Otherwise persist what the list returned and set `capture_depth: "summary_only"` for later enrichment.
+-   **Embedded entity extraction.** Once a payload is in hand, scan for first-class entities (a subscription charge in a billing email → `transaction`; a meeting proposal → `event` + `task`; an order in a receipt → one `order_item` per line). Store each alongside the container in the same call, with its own `data_source`, `source_quote`, and normalized fields. Link container→embedded with `REFERS_TO`. Cap embedded extractions per container at ~20 items.
+-   **User identity.** When the user provides or implies their identity (name, email, "me"), store as contact or person in the same turn.
+-   **Extract-all.** Extract every distinct entity from the user, people, tasks, events, commitments, preferences, possessions, relationships, places. For container+asset, use `EMBEDS` when the asset is in Neotoma; otherwise store only a reference on the container.
+-   **Display rule.** When a turn creates, updates, or retrieves non-bookkeeping entities, render a section headed `🧠 Neotoma` with a horizontal rule above it.
+    -   *Groups:* only non-empty `Created (N)`, `Updated (N)`, `Retrieved (N)`, and `Ambiguous (N)`; `Ambiguous` appears when the store response includes `warnings[]` with `code: "HEURISTIC_MERGE"`.
+    -   *Store disambiguation:* entities created or observation-updated this turn (including external-tool ingestion) appear under `Created` or `Updated`, never under `Retrieved`.
+    -   *Bullet format:* each bullet starts with one schema-typed emoji (✅ task, 👤 contact, 🏢 company, 📅 event, ✉️ email\_message, 🧾 receipt, 💸 transaction, 📝 note, 📍 place, 📎 file\_asset, 🔍 research, 💬 product\_feedback; default 🗂️), uses a short primary label, omits verbs already in the group header, and ends with the schema `entity_type` in inline-code parentheses.
+    -   *Empty state:* before rendering an empty-state or `Suggestions` block, run a final capture pass, store any concrete candidate (synthesized note/report, implied task, authored artifact) and render it under `Created`/`Updated` instead of suggesting it.
+    -   *Override scope:* the display rule overrides the silent-storage default and the no-emoji style for this disclosure only; do not narrate internal sequencing.
+-   **Weekly value surfacing.** When the conversation is the first of the day or the user has not interacted for several days, run a bounded retrieval (recent time window or `list_timeline_events` for the past 7 days) and surface a 1-2 sentence summary. Do not surface this more than once per day.
+
+◆
+
+## Attribution and agent identity
+
+Every write to Neotoma is attributed per row and surfaces in the Inspector, `/stats`, and audit trails. Self-identification is a user-facing contract, see the [AAuth reference](/aauth) for the full attribution flow.
+
+-   **Preferred, AAuth.** Sign requests with AAuth (RFC 9421 HTTP Message Signatures plus an `aa-agent+jwt` agent token). Verified agents render with a `hardware` trust badge for ES256/EdDSA keys or `software` for other algorithms. Honoured on `/mcp`, direct write routes, and `/session`; the same identity threads into the write-path services regardless of transport.
+-   **Fallback, clientInfo.** When AAuth is unavailable, set `clientInfo.name` and `clientInfo.version` on the MCP `initialize` handshake to a recognisable identifier (e.g. `cursor-agent` + build, `claude-code` + release). Generic values like `mcp`, `client`, `unknown`, or `anonymous` are normalised to the `anonymous` tier.
+-   **Optional free-form label.** Scripts and CI jobs may include `agent_label` or `agent_id` on the payload. Copied to provenance but never used for authorization.
+-   **Do not spoof.** Copying another agent's `clientInfo`, reusing a public-key thumbprint, or inventing `agent_sub`/`agent_iss` pairs is a policy breach. Future releases will enforce per-tier ACLs.
+-   **Inspector contract.** The Inspector exposes an Agent column and filter across entities, observations, relationships, sources, timeline events, and interpretations; the Settings page summarises attribution coverage.
+-   **Preflight your session.** Before enabling writes from a new client or proxy, call `get_session_identity` (or `GET /session`, or `neotoma auth session`) and verify `attribution.tier` is `software`/`hardware` and `eligible_for_trusted_writes` is true.
+
+◆
+
+## Conventions
+
+-   **Transport precedence.** When both `neotoma` (prod) and `neotoma-dev` MCP servers are available, default to `neotoma`; use `neotoma-dev` only when the user requests dev or the task is clearly dev-only.
+-   **Avoid get\_authenticated\_user** unless the next action needs it.
+-   **Pre-check before storing.** Look for existing records by name/type before inserting; reuse the existing `entity_id` for relationships if found.
+-   **Include all fields from source** when storing.
+-   **User scope vs CLI.** MCP infers `user_id` from authentication; omit it on tool calls. Operators using `NEOTOMA_API_ONLY` can scope reads via `--user-id` or `NEOTOMA_USER_ID` in the CLI.
+-   **Combined-store remote files.** When Neotoma is reachable over HTTP but not on the same host as the attachment, use `file_content + mime_type` (and `original_filename` when known); `file_path` only works when the server can read that path.
+-   **Store resolution errors.** On `ERR_STORE_RESOLUTION_FAILED`, inspect `issues[].hint` for payload-shape guidance and surface the error envelope. Do not treat `entities_created=0` as success when `replayed` is not true and no entities matched.
+-   **Structured vs unstructured path.** Use the entities array for conversation-sourced data (omit `original_filename`). For tool- or file-derived data, prefer the combined path so the raw source is preserved. Use the unstructured path for raw file preservation; pass raw bytes, do not interpret.
+-   **CLI parity.** In CLI backup mode, `entities search` accepts a positional identifier or `--identifier`; structured `store` accepts `--entities`/`--file` and the alias `--json=&lt;json&gt;`.
+-   **CLI backup transport.** When MCP is available or when reconciling counts with MCP, run CLI reads/writes via API transport (`--api-only` or explicit `--base-url`); do not rely on the offline-default transport unless the user requests local data.
+-   **Summarization after MCP actions.** Follow the display rule exactly. Do not dump raw snapshot keys or internal ids into prose; do not repeat the same phrase as both thought and section heading.
+-   **Update check.** At session start, optionally call `npm_check_update` with `packageName: "neotoma"` and prompt the user to upgrade if an update is available.
+
+◆
+
+## Feedback reporting
+
+When you hit friction using Neotoma, a failing tool call, an opaque error, a missing surface, or a doc gap, submit feedback proactively via `submit_feedback`. This is how fixes get prioritized.
+
+-   **Reporting modes.** Default is proactive. If the user runs `neotoma feedback mode consent`, ask once per submission; if `off`, only submit when the user explicitly asks.
+-   **PII redaction.** Redact emails, phone numbers, API tokens, UUIDs, and home-directory path fragments with `&lt;LABEL:hash&gt;` placeholders before submission. The server applies a backstop redaction pass and returns `redaction_preview` for audit.
+-   **metadata.environment.** MUST include at minimum `neotoma_version`, `client_name`, `os`; add `tool_name`, `invocation_shape`, `error_message`, and best-effort `error_class`/`hit_count` when applicable.
+-   **Persist a product\_feedback record.** Immediately after `submit_feedback` returns, store or update a Neotoma `product_feedback` entity with `feedback_id`, `access_token`, `kind`, title, `submitted_at`, `next_check_suggested_at`, and current status. Treat `access_token` as sensitive, keep it inside Neotoma, never in logs or user-visible prose.
+-   **Polling.** Poll via `get_feedback_status(access_token)`; respect `next_check_suggested_at` and do not poll more frequently. The token is single-purpose, do not share or log it beyond your own agent context.
+-   **Upgrade and verification.** When `upgrade_guidance` is present, treat it as actionable: run or propose `install_commands`, follow `verification_steps`, then re-attempt the original invocation. If `verification_request` is present, submit a `kind=fix_verification` follow-up with `parent_feedback_id` and `verification_outcome` by `verify_by`; silence is treated as `unable_to_verify`.
+
+◆
+
+## Errors and recovery
+
+-   **Store retry policy.** If `store_structured` fails, retry once with the same payload. If it fails again, surface the error to the user ("Storage failed: \[error message\]") before responding with any retrieved data. Do not silently skip storage and respond as if it succeeded.
+-   **SQLite corruption.** On `database disk image is malformed`, `SQLITE_CORRUPT`, `btreeInitPage`, or failed integrity checks, tell the user the local SQLite file is likely corrupted and suggest `neotoma storage recover-db` first, then `neotoma storage recover-db --recover` after the user stops Neotoma. Do not auto-swap the recovered DB without explicit approval.
+-   **getStats unreachable.** If `getStats` is unreachable when answering entity-type cardinality questions, state that explicitly rather than substituting an expensive per-type count or a schema-width value.
+
+◆
+
+## Onboarding
+
+-   **Discovery flow.** When Neotoma has little or no data (first run or empty state), follow the install workflow: (1) ask the user which data types matter most (project files, chat transcripts, meeting notes, journals, code context, email, financial docs, custom paths) and which mode they prefer (quick win, guided, power user); (2) discover high-value local files by shallow scan, ranked by entity density, temporal signals, recency, and relationship potential; (3) group results into domains and explain why each was selected; (4) confirm per-folder or per-file with a reconstruction preview; (5) ingest confirmed files and reconstruct the strongest timeline with provenance; (6) show the timeline immediately, not a file count; (7) offer one targeted follow-up plus 2-4 leveraged next actions; (8) demonstrate correction.
+-   **Output rule (Installation Aha).** After first-run ingestion, the first visible output MUST be a reconstructed timeline with provenance, not a file count. Format: *"\[Entity name\], Timeline reconstructed from \[N\] sources"* followed by dated events each with *"Source: \[filename\], \[location\]"*.
+-   **Chat transcript discovery.** Check for chat transcript exports (ChatGPT JSON, Slack exports, Claude history, meeting transcripts). They are the highest-signal ingestion source, they encode decisions, commitments, and project discussions with timestamps, ideal for timeline reconstruction.
+
+◆
+
+## Related references
+
+-   [MCP server](/mcp), actions catalog, transport modes, client configuration.
+-   [CLI](/cli), commands, flags, and environment selection for the backup transport.
+-   [REST API](/api), HTTP endpoints, including `GET /sources/:id/content` and `GET /stats`.
+-   [AAuth](/aauth), agent attribution, trust tiers, and verification.
+-   [Architecture](/architecture), state-layer boundaries, determinism, and consistency model.
+-   [Schema management](/schema-management), how to evolve types safely.</pre></div><div role="region" aria-label="Notifications (F8)" tabindex="-1" style="pointer-events: none;"><ol tabindex="-1" class="fixed top-0 z-[100] flex w-full flex-col-reverse p-4 sm:bottom-4 sm:right-4 sm:top-auto sm:flex-col sm:max-h-[calc(100vh-1rem)] sm:overflow-y-auto md:max-w-[420px]"></ol></div></div>
   
 
 

@@ -14,6 +14,8 @@ export type LandingMode = "sandbox" | "personal" | "prod" | "local";
 
 export interface LandingHtmlContext {
   mode: LandingMode;
+  /** Resolved `NEOTOMA_ENV` (default `development`); DB and path profile, distinct from {@link mode}. */
+  configEnvironment: string;
   base: string;
   mcpUrl: string;
   version: string;
@@ -23,6 +25,9 @@ export interface LandingHtmlContext {
   harnesses: HarnessSnippetResult[];
   index: RootLandingNavCategory[];
   endpoints: Record<string, string>;
+  sandboxPacks?: { id: string; kind: string; label: string }[];
+  sandboxDefaultPackId?: string;
+  activeSessionBearer?: string | null;
 }
 
 export function escapeHtml(s: string): string {
@@ -320,10 +325,74 @@ const INLINE_SCRIPT = `
 })();
 `;
 
+function renderPackPicker(ctx: LandingHtmlContext): string {
+  const packs = ctx.sandboxPacks;
+  if (!packs || packs.length === 0) return "";
+  const defaultId = ctx.sandboxDefaultPackId ?? "generic";
+  const starters = packs.filter((p) => p.kind !== "use_case");
+  const useCases = packs.filter((p) => p.kind === "use_case");
+  const option = (p: { id: string; label: string }) =>
+    `<option value="${escapeHtml(p.id)}"${p.id === defaultId ? " selected" : ""}>${escapeHtml(p.label)}</option>`;
+  const starterOpts = starters.map(option).join("\n");
+  const useCaseOpts = useCases.map(option).join("\n");
+  const options = [
+    `<optgroup label="Starter">\n${starterOpts}\n</optgroup>`,
+    useCaseOpts ? `<optgroup label="Use cases">\n${useCaseOpts}\n</optgroup>` : "",
+  ].filter(Boolean).join("\n");
+  return `
+<section>
+<h2>Start a sandbox session</h2>
+<p class="muted">Choose a data pack to seed your ephemeral workspace, then click <strong>Start</strong>. Your session data is deleted when the session expires or you end it.</p>
+<form id="sandbox-session-form" style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+  <select name="pack_id" id="sandbox-pack-select" style="padding:.4rem .6rem;border-radius:4px;border:1px solid #555;background:#1e1e1e;color:#e0e0e0;font-size:.9rem">
+${options}
+  </select>
+  <button type="submit" style="padding:.4rem .8rem;border-radius:4px;border:none;background:#4f8ef7;color:#fff;cursor:pointer;font-size:.9rem">Start session</button>
+</form>
+<p id="sandbox-session-status" class="muted" style="margin-top:.5rem"></p>
+<script>
+(function(){
+  var form = document.getElementById('sandbox-session-form');
+  var status = document.getElementById('sandbox-session-status');
+  if (!form) return;
+  form.addEventListener('submit', function(e) {
+    e.preventDefault();
+    var packId = document.getElementById('sandbox-pack-select').value;
+    status.textContent = 'Creating session…';
+    fetch('/sandbox/session/new', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pack_id: packId })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.error) { status.textContent = 'Error: ' + data.error; return; }
+      status.innerHTML = 'Session active — expires ' + data.expires_at +
+        '. <a href="/inspector#session=' + encodeURIComponent(data.one_time_code) + '">Open Inspector</a>' +
+        ' or <a href="#" id="sandbox-end-session">end session</a>.';
+      var endLink = document.getElementById('sandbox-end-session');
+      if (endLink) {
+        endLink.addEventListener('click', function(ev) {
+          ev.preventDefault();
+          fetch('/sandbox/session', { method: 'DELETE' })
+          .then(function() { status.textContent = 'Session ended.'; })
+          .catch(function() { status.textContent = 'Failed to end session.'; });
+        });
+      }
+    })
+    .catch(function(err) { status.textContent = 'Request failed: ' + err.message; });
+  });
+})();
+</script>
+</section>
+`;
+}
+
 export function renderLandingHtml(ctx: LandingHtmlContext): string {
   const copy = modeCopy(ctx.mode);
   const badges: string[] = [
     `<span class="badge"><strong>mode</strong> ${escapeHtml(ctx.mode)}</span>`,
+    `<span class="badge"><strong>config</strong> ${escapeHtml(ctx.configEnvironment)}</span>`,
     `<span class="badge"><strong>version</strong> ${escapeHtml(ctx.version)}</span>`,
   ];
   if (ctx.gitSha) {
@@ -381,6 +450,8 @@ ${inspectorNote}
 ${sandboxEndpointsNote}
 </section>
 
+${ctx.mode === "sandbox" ? renderPackPicker(ctx) : ""}
+
 <section>
 <h2>Connect your harness</h2>
 <p class="muted">${harnessLede}</p>
@@ -396,7 +467,7 @@ ${ctx.index.map((c) => renderIndexCategory(c, ctx.publicDocsUrl)).join("\n")}
 </section>
 
 <footer>
-<p>Served by Neotoma ${escapeHtml(ctx.version)}${ctx.gitSha ? ` · ${escapeHtml(ctx.gitSha.slice(0, 7))}` : ""} — mode ${escapeHtml(ctx.mode)}.</p>
+<p>Served by Neotoma ${escapeHtml(ctx.version)}${ctx.gitSha ? ` · ${escapeHtml(ctx.gitSha.slice(0, 7))}` : ""} — mode ${escapeHtml(ctx.mode)} · config ${escapeHtml(ctx.configEnvironment)}.</p>
 <p>Programmatic clients: send <code>Accept: application/json</code> for structured JSON, or <code>Accept: text/markdown</code> for the same content as Markdown. Default (no <code>Accept</code> / generic <code>*/*</code>) is JSON.</p>
 </footer>
 </div>

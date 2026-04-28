@@ -33,7 +33,7 @@ export function Layout({ children, siteName = DEFAULT_SITE_NAME }: LayoutProps) 
   const isMarkdownMirrorRoute = stripped === "/markdown" || stripped.startsWith("/markdown/");
   const isRouteHome = stripped === "/";
   const isFullPageLanding = isMarketingFullPageRoute(stripped);
-  /** Full-bleed shell: home, marketing vertical landings, product-at-root basenames. */
+  /** Full-bleed shell: home, marketing use case landings, product-at-root basenames. */
   const isHomeShell = (isRouteHome && !isProductBasePath()) || isFullPageLanding;
   const showDocsSidebar = !isHomeShell && isPathUnderDocsSidebarNav(stripped);
   /** Expanded by default; cookie `sidebar_state` overrides after first toggle. */

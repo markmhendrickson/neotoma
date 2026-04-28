@@ -1,0 +1,59 @@
+{
+  "meta": {
+    "id": "multi_tool_then_reply",
+    "description": "Read tool then Grep tool then assistant reply. The hook stack must persist the user message at submit time, observe each tool call (incrementing tool_invocation_count on the conversation_turn), and persist the assistant message at stop.",
+    "harnesses": ["cursor-hooks"],
+    "models": ["composer-2", "gpt-5.5-fast", "claude-haiku-4", "claude-sonnet-4.5", "gpt-5.5-medium"],
+    "tags": ["turn-lifecycle", "tool-loop"]
+  },
+  "events": [
+    {
+      "hook": "beforeSubmitPrompt",
+      "payload": { "prompt": "Find the auth flow in this repo." }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "Read",
+        "tool_input": { "path": "src/auth/index.ts" },
+        "tool_output": { "ok": true, "bytes_read": 1024 }
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "Grep",
+        "tool_input": { "pattern": "createSession" },
+        "tool_output": { "ok": true, "matches": 3 }
+      }
+    },
+    {
+      "hook": "stop",
+      "payload": { "text": "Found 3 references to createSession across src/auth/." }
+    }
+  ],
+  "assertions": {
+    "default": [
+      {
+        "type": "entity_stored",
+        "entity_type": "conversation_message",
+        "where": { "role": "user" }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "conversation_message",
+        "where": { "role": "assistant" }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "conversation_turn"
+      },
+      {
+        "type": "request_count",
+        "endpoint": "/store",
+        "op": "gte",
+        "value": 3
+      }
+    ]
+  }
+}

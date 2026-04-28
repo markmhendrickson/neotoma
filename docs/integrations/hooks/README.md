@@ -34,6 +34,16 @@ Each integration implements the same five capabilities, adjusted for what its ha
 
 Deep entity extraction is never done in a hook — that remains the agent's job via MCP, preserving Neotoma's "no inference" invariant.
 
+## Per-turn telemetry: `conversation_turn`
+
+Every hook accretes onto a single `conversation_turn` entity keyed by `(session_id, turn_id)`, using the idempotency key `conversation-{sessionId}-{turnId}-turn`. Each hook adds only the fields it observes; the server reducer merges all contributions onto a single entity.
+
+Key fields: `hook_events`, `tool_invocation_count`, `store_structured_calls`, `retrieve_calls`, `stored_entity_ids`, `retrieved_entity_ids`, `missed_steps`, `status`, `model`, `safety_net_used`, `started_at`, `ended_at`.
+
+The legacy `turn_compliance` entity is now an alias of `conversation_turn`; historical rows continue to resolve. `turn_activity` is also accepted as an alias.
+
+The Inspector surfaces these via a `/turns` index page, per-turn detail pages, a "Turn provenance" card on entity detail, and a "Hook activity" chip on the conversations page. See [`docs/subsystems/conversation_turn.md`](../../subsystems/conversation_turn.md) for the full data model and lifecycle.
+
 ## Guides
 
 - [Claude Code](./claude_code.md)

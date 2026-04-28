@@ -1,0 +1,276 @@
+{
+  "requests": [
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "content": "Find the auth flow in this repo.",
+            "cwd": "/Users/markmhendrickson/repos/neotoma",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_message",
+            "harness": "cursor",
+            "hook_event": "beforeSubmitPrompt",
+            "role": "user",
+            "sender_kind": "user",
+            "turn_key": "multi_tool_then_reply__cursor-hooks__claude-haiku-4:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:1>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "conversation_id": "<id:2>",
+            "cwd": "/Users/markmhendrickson/repos/neotoma",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_turn",
+            "harness": "cursor",
+            "hook_event": "before_submit_prompt",
+            "hook_events": [
+              "before_submit_prompt"
+            ],
+            "model": "claude-haiku-4",
+            "session_id": "<id:2>",
+            "started_at": "<ts>",
+            "turn_id": "<id:3>",
+            "turn_key": "multi_tool_then_reply__cursor-hooks__claude-haiku-4:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:4>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "cwd": "/Users/markmhendrickson/repos/neotoma",
+            "data_source": "cursor-hook",
+            "entity_type": "tool_invocation",
+            "harness": "cursor",
+            "has_error": false,
+            "hook_event": "postToolUse",
+            "input_summary": "{\"path\":\"src/auth/index.ts\"}",
+            "invoked_at": "<ts>",
+            "output_summary": "{\"ok\":true,\"bytes_read\":1024}",
+            "status": null,
+            "tool_name": "Read",
+            "turn_key": "multi_tool_then_reply__cursor-hooks__claude-haiku-4:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:5>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "cwd": "/Users/markmhendrickson/repos/neotoma",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_turn",
+            "harness": "cursor",
+            "hook_event": "post_tool_use",
+            "hook_events": [
+              "post_tool_use"
+            ],
+            "model": "claude-haiku-4",
+            "neotoma_tool_failures": 0,
+            "retrieve_calls": 0,
+            "session_id": "<id:2>",
+            "store_structured_calls": 0,
+            "tool_invocation_count": 1,
+            "turn_id": "<id:3>",
+            "turn_key": "multi_tool_then_reply__cursor-hooks__claude-haiku-4:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:4>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "cwd": "/Users/markmhendrickson/repos/neotoma",
+            "data_source": "cursor-hook",
+            "entity_type": "tool_invocation",
+            "harness": "cursor",
+            "has_error": false,
+            "hook_event": "postToolUse",
+            "input_summary": "{\"pattern\":\"createSession\"}",
+            "invoked_at": "<ts>",
+            "output_summary": "{\"ok\":true,\"matches\":3}",
+            "status": null,
+            "tool_name": "Grep",
+            "turn_key": "multi_tool_then_reply__cursor-hooks__claude-haiku-4:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:6>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "cwd": "/Users/markmhendrickson/repos/neotoma",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_turn",
+            "harness": "cursor",
+            "hook_event": "post_tool_use",
+            "hook_events": [
+              "post_tool_use"
+            ],
+            "model": "claude-haiku-4",
+            "neotoma_tool_failures": 0,
+            "retrieve_calls": 0,
+            "session_id": "<id:2>",
+            "store_structured_calls": 0,
+            "tool_invocation_count": 2,
+            "turn_id": "<id:3>",
+            "turn_key": "multi_tool_then_reply__cursor-hooks__claude-haiku-4:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:4>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "content": "Found 3 references to createSession across src/auth/.",
+            "cwd": "/Users/markmhendrickson/repos/neotoma",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_message",
+            "harness": "cursor",
+            "hook_event": "stop",
+            "observed_at": "<ts>",
+            "role": "assistant",
+            "sender_kind": "assistant",
+            "turn_key": "multi_tool_then_reply__cursor-hooks__claude-haiku-4:turn-1:assistant"
+          }
+        ],
+        "idempotency_key": "<id:7>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "canonical_name": "Cursor session multi_tool_then_reply__cursor-hooks__claude-haiku-4",
+            "cwd": "/Users/markmhendrickson/repos/neotoma",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation",
+            "harness": "cursor",
+            "hook_event": "stop_backfill",
+            "turn_key": "multi_tool_then_reply__cursor-hooks__claude-haiku-4"
+          }
+        ],
+        "idempotency_key": "<id:8>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "conversation_id": "<id:2>",
+            "cwd": "/Users/markmhendrickson/repos/neotoma",
+            "data_source": "cursor-hook",
+            "diagnosis_confidence": "high",
+            "ended_at": "<ts>",
+            "entity_type": "conversation_turn",
+            "harness": "cursor",
+            "harness_loop_count": 0,
+            "hook_event": "stop",
+            "hook_events": [
+              "stop"
+            ],
+            "instruction_diagnostics": {
+              "classification": "agent_ignored_available_instructions",
+              "local_build": true,
+              "reason": "Compact reminder was injected and Neotoma tooling was reachable, but the agent did not call store_structured.",
+              "signals": {
+                "had_final_text": true,
+                "model": "claude-haiku-4",
+                "neotoma_connection_failure": false,
+                "neotoma_tool_failures": 0,
+                "reminder_hooks": [
+                  "post_tool_use"
+                ],
+                "reminder_injected": true,
+                "tool_invocation_count": 2,
+                "user_message_stored": false
+              }
+            },
+            "missed_steps": [
+              "user_message_store",
+              "user_phase_store_structured"
+            ],
+            "model": "claude-haiku-4",
+            "neotoma_tool_failures": 0,
+            "recommended_repairs": [
+              "Add or extend a Tier 1 fixture in `tests/fixtures/agentic_eval/` that asserts the `agent_ignored_available_instructions` classification for this model.",
+              "Tighten the small-model gate (`NEOTOMA_HOOK_SMALL_MODEL_PATTERNS`) so this model receives the compliance follow-up automatically.",
+              "Investigate whether the MCP `[COMPACT MODE]` block omits a contract this model needs; expand `docs/developer/mcp/instructions.md` accordingly."
+            ],
+            "reminder_injected": true,
+            "retrieve_calls": 0,
+            "safety_net_used": true,
+            "session_id": "<id:2>",
+            "status": "backfilled_by_hook",
+            "store_structured_calls": 0,
+            "tool_invocation_count": 2,
+            "turn_id": "<id:3>",
+            "turn_key": "multi_tool_then_reply__cursor-hooks__claude-haiku-4:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:4>"
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "hook": "beforeSubmitPrompt",
+      "exitCode": 0,
+      "output": {}
+    },
+    {
+      "hook": "postToolUse",
+      "exitCode": 0,
+      "output": {
+        "additional_context": "Neotoma turn must-do (compact; full rules at MCP `instructions`):\n1. Bounded retrieval first when the user message implies known entities (retrieve_entity_by_identifier for ids, retrieve_entities for category lists).\n2. User-phase store (one store_structured call): conversation + user conversation_message (sender_kind=user) + any extracted entities; PART_OF message->conversation; REFERS_TO message->each extracted entity.\n3. Tool calls and host edits run AFTER step 2.\n4. Closing store: assistant conversation_message (sender_kind=assistant, exact reply text) with REFERS_TO to every entity the reply cites or produced; PART_OF same conversation.\n5. Display rule: when this turn created/updated/retrieved non-bookkeeping entities, the visible reply ends with a `🧠 Neotoma` section listing them as bullets.\nForbidden: skipping store on greetings, persisting only the user message, ending the turn without the assistant store. Idempotency keys are per-turn unique.\nNote: this client (claude-haiku-4) is on a small/fast model. Treat the above as a hard checklist — run it every turn even when the answer feels trivial."
+      }
+    },
+    {
+      "hook": "postToolUse",
+      "exitCode": 0,
+      "output": {
+        "additional_context": "Neotoma turn must-do (compact; full rules at MCP `instructions`):\n1. Bounded retrieval first when the user message implies known entities (retrieve_entity_by_identifier for ids, retrieve_entities for category lists).\n2. User-phase store (one store_structured call): conversation + user conversation_message (sender_kind=user) + any extracted entities; PART_OF message->conversation; REFERS_TO message->each extracted entity.\n3. Tool calls and host edits run AFTER step 2.\n4. Closing store: assistant conversation_message (sender_kind=assistant, exact reply text) with REFERS_TO to every entity the reply cites or produced; PART_OF same conversation.\n5. Display rule: when this turn created/updated/retrieved non-bookkeeping entities, the visible reply ends with a `🧠 Neotoma` section listing them as bullets.\nForbidden: skipping store on greetings, persisting only the user message, ending the turn without the assistant store. Idempotency keys are per-turn unique.\nNote: this client (claude-haiku-4) is on a small/fast model. Treat the above as a hard checklist — run it every turn even when the answer feels trivial."
+      }
+    },
+    {
+      "hook": "stop",
+      "exitCode": 0,
+      "output": {
+        "followup_message": "Neotoma compliance pass: the previous turn skipped the required Neotoma writes. Please re-run this turn now using one batched store_structured call: (1) bounded retrieval if the user message implied known entities, (2) user-phase store with conversation + user conversation_message + extracted entities + PART_OF/REFERS_TO links, (3) closing assistant store with the exact reply text. Reply with a one-line summary noting the entity_ids stored. Likely cause: agent ignored available instructions — Compact reminder was injected and Neotoma tooling was reachable, but the agent did not call store_structured.\n\nNeotoma turn must-do (compact; full rules at MCP `instructions`):\n1. Bounded retrieval first when the user message implies known entities (retrieve_entity_by_identifier for ids, retrieve_entities for category lists).\n2. User-phase store (one store_structured call): conversation + user conversation_message (sender_kind=user) + any extracted entities; PART_OF message->conversation; REFERS_TO message->each extracted entity.\n3. Tool calls and host edits run AFTER step 2.\n4. Closing store: assistant conversation_message (sender_kind=assistant, exact reply text) with REFERS_TO to every entity the reply cites or produced; PART_OF same conversation.\n5. Display rule: when this turn created/updated/retrieved non-bookkeeping entities, the visible reply ends with a `🧠 Neotoma` section listing them as bullets.\nForbidden: skipping store on greetings, persisting only the user message, ending the turn without the assistant store. Idempotency keys are per-turn unique.\nNote: this client (claude-haiku-4) is on a small/fast model. Treat the above as a hard checklist — run it every turn even when the answer feels trivial."
+      }
+    }
+  ]
+}

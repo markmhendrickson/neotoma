@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<!DOCTYPE html><html lang="de" dir="ltr"><head>
+    <meta charset="UTF-8">
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="application-name" content="Neotoma">
+    <meta name="theme-color" content="#130918">
+    <meta name="description" content="Markdown export of the rendered /schemas/merge-policies page. Merge policies are per-field declarative rules that turn many observations into one deterministic snapshot, last_write, highest_priority, most_specific, and merge_array, with explicit tie-breakers.">
+    <meta name="author" content="Neotoma">
+    <meta name="robots" content="noindex,nofollow">
+    <link rel="canonical" href="https://neotoma.io/de/markdown/schemas/merge-policies">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Neotoma">
+    <meta property="og:locale" content="de_DE">
+    <meta property="og:title" content="Merge Policies | Schemas (Markdown) | Neotoma">
+    <meta property="og:description" content="Markdown export of the rendered /schemas/merge-policies page. Merge policies are per-field declarative rules that turn many observations into one deterministic snapshot, last_write, highest_priority, most_specific, and merge_array, with explicit tie-breakers.">
+    <meta property="og:url" content="https://neotoma.io/de/markdown/schemas/merge-policies">
+    <meta property="og:image" content="https://neotoma.io/neotoma-og-1200x630.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Merge Policies | Schemas (Markdown) | Neotoma. Markdown export of the rendered /schemas/merge-policies page. Merge policies are per-field declarative rules that turn many observations...">
+    <meta name="keywords" content="merge policies, reducer, last_write, highest_priority, most_specific, merge_array, deterministic merge, Merge Policies, Schemas (Markdown), Neotoma, MCP, Model Context Protocol, AI agents, agent memory, deterministic state">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:site" content="@markmhendrickson">
+    <meta name="twitter:title" content="Merge Policies | Schemas (Markdown) | Neotoma">
+    <meta name="twitter:description" content="Markdown export of the rendered /schemas/merge-policies page. Merge policies are per-field declarative rules that turn many observations into one deterministic snapshot, last_write, highest_priority, most_specific, and merge_array, with explicit tie-breakers.">
+    <meta name="twitter:image" content="https://neotoma.io/neotoma-og-1200x630.png">
+    <meta name="twitter:image:width" content="1200">
+    <meta name="twitter:image:height" content="630">
+    <meta name="twitter:image:alt" content="Merge Policies | Schemas (Markdown) | Neotoma. Markdown export of the rendered /schemas/merge-policies page. Merge policies are per-field declarative rules that turn many observations...">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"Merge Policies | Schemas (Markdown) | Neotoma","description":"Markdown export of the rendered /schemas/merge-policies page. Merge policies are per-field declarative rules that turn many observations into one deterministic snapshot, last_write, highest_priority, most_specific, and merge_array, with explicit tie-breakers.","url":"https://neotoma.io/de/markdown/schemas/merge-policies","publisher":{"@type":"Organization","name":"Neotoma"},"image":{"@type":"ImageObject","url":"https://neotoma.io/neotoma-og-1200x630.png","width":1200,"height":630,"caption":"Merge Policies | Schemas (Markdown) | Neotoma. Markdown export of the rendered /schemas/merge-policies page. Merge policies are per-field declarative rules that turn many observations..."}}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://neotoma.io/"},{"@type":"ListItem","position":2,"name":"Docs","item":"https://neotoma.io/docs"},{"@type":"ListItem","position":3,"name":"Schemas","item":"https://neotoma.io/schemas"},{"@type":"ListItem","position":4,"name":"Merge policies","item":"https://neotoma.io/schemas/merge-policies"}]}</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
+    <title>Merge Policies | Schemas (Markdown) | Neotoma</title>
+    <script type="module" crossorigin="" src="/assets/main-CaoWcp2k.js"></script>
+    <link rel="stylesheet" crossorigin="" href="/assets/main-BBds_bdF.css">
+  
+    <!-- build: local-1777360387837 -->
+      <link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/schemas/merge-policies">
+    <link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/schemas/merge-policies">
+    <link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/schemas/merge-policies">
+    <link rel="alternate" hreflang="ca" href="https://neotoma.io/ca/markdown/schemas/merge-policies">
+    <link rel="alternate" hreflang="zh" href="https://neotoma.io/zh/markdown/schemas/merge-policies">
+    <link rel="alternate" hreflang="hi" href="https://neotoma.io/hi/markdown/schemas/merge-policies">
+    <link rel="alternate" hreflang="ar" href="https://neotoma.io/ar/markdown/schemas/merge-policies">
+    <link rel="alternate" hreflang="fr" href="https://neotoma.io/fr/markdown/schemas/merge-policies">
+    <link rel="alternate" hreflang="pt" href="https://neotoma.io/pt/markdown/schemas/merge-policies">
+    <link rel="alternate" hreflang="ru" href="https://neotoma.io/ru/markdown/schemas/merge-policies">
+    <link rel="alternate" hreflang="bn" href="https://neotoma.io/bn/markdown/schemas/merge-policies">
+    <link rel="alternate" hreflang="ur" href="https://neotoma.io/ur/markdown/schemas/merge-policies">
+    <link rel="alternate" hreflang="id" href="https://neotoma.io/id/markdown/schemas/merge-policies">
+    <link rel="alternate" hreflang="de" href="https://neotoma.io/de/markdown/schemas/merge-policies">
+  <link rel="icon" href="/favicon.ico" sizes="any" data-rh="true"><link rel="icon" type="image/svg+xml" href="/favicon.svg" data-rh="true"><link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png" data-rh="true"><link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" data-rh="true"><link rel="manifest" href="/site.webmanifest" data-rh="true"><link rel="canonical" href="https://neotoma.io/de/markdown/schemas/merge-policies" data-rh="true"><link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/schemas/merge-policies" data-rh="true"><link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/schemas/merge-policies" data-rh="true"><link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/schemas/merge-policies" data-rh="true"><link rel="alternate" hreflang="ca" href="https://neotoma.io/ca/markdown/schemas/merge-policies" data-rh="true"><link rel="alternate" hreflang="zh" href="https://neotoma.io/zh/markdown/schemas/merge-policies" data-rh="true"><link rel="alternate" hreflang="hi" href="https://neotoma.io/hi/markdown/schemas/merge-policies" data-rh="true"><link rel="alternate" hreflang="ar" href="https://neotoma.io/ar/markdown/schemas/merge-policies" data-rh="true"><link rel="alternate" hreflang="fr" href="https://neotoma.io/fr/markdown/schemas/merge-policies" data-rh="true"><link rel="alternate" hreflang="pt" href="https://neotoma.io/pt/markdown/schemas/merge-policies" data-rh="true"><link rel="alternate" hreflang="ru" href="https://neotoma.io/ru/markdown/schemas/merge-policies" data-rh="true"><link rel="alternate" hreflang="bn" href="https://neotoma.io/bn/markdown/schemas/merge-policies" data-rh="true"><link rel="alternate" hreflang="ur" href="https://neotoma.io/ur/markdown/schemas/merge-policies" data-rh="true"><link rel="alternate" hreflang="id" href="https://neotoma.io/id/markdown/schemas/merge-policies" data-rh="true"><link rel="alternate" hreflang="de" href="https://neotoma.io/de/markdown/schemas/merge-policies" data-rh="true"><meta name="description" content="Markdown export of the rendered /schemas/merge-policies page. Merge policies are per-field declarative rules that turn many observations into one deterministic snapshot, last_write, highest_priority, most_specific, and merge_array, with explicit tie-breakers." data-rh="true"><meta name="author" content="Neotoma" data-rh="true"><meta name="application-name" content="Neotoma" data-rh="true"><meta name="robots" content="noindex,nofollow" data-rh="true"><meta name="theme-color" content="#130918" data-rh="true"><meta property="og:type" content="website" data-rh="true"><meta property="og:site_name" content="Neotoma" data-rh="true"><meta property="og:locale" content="de_DE" data-rh="true"><meta property="og:title" content="Merge Policies | Schemas (Markdown) | Neotoma" data-rh="true"><meta property="og:description" content="Markdown export of the rendered /schemas/merge-policies page. Merge policies are per-field declarative rules that turn many observations into one deterministic snapshot, last_write, highest_priority, most_specific, and merge_array, with explicit tie-breakers." data-rh="true"><meta property="og:url" content="https://neotoma.io/de/markdown/schemas/merge-policies" data-rh="true"><meta property="og:image" content="https://neotoma.io/neotoma-og-1200x630.png" data-rh="true"><meta property="og:image:width" content="1200" data-rh="true"><meta property="og:image:height" content="630" data-rh="true"><meta property="og:image:alt" content="Merge Policies | Schemas (Markdown) | Neotoma. Markdown export of the rendered /schemas/merge-policies page. Merge policies are per-field declarative rules that turn many observations..." data-rh="true"><meta name="keywords" content="merge policies, reducer, last_write, highest_priority, most_specific, merge_array, deterministic merge, Merge Policies, Schemas (Markdown), Neotoma, MCP, Model Context Protocol, AI agents, agent memory, deterministic state" data-rh="true"><meta name="twitter:card" content="summary_large_image" data-rh="true"><meta name="twitter:site" content="@markmhendrickson" data-rh="true"><meta name="twitter:title" content="Merge Policies | Schemas (Markdown) | Neotoma" data-rh="true"><meta name="twitter:description" content="Markdown export of the rendered /schemas/merge-policies page. Merge policies are per-field declarative rules that turn many observations into one deterministic snapshot, last_write, highest_priority, most_specific, and merge_array, with explicit tie-breakers." data-rh="true"><meta name="twitter:image" content="https://neotoma.io/neotoma-og-1200x630.png" data-rh="true"><meta name="twitter:image:width" content="1200" data-rh="true"><meta name="twitter:image:height" content="630" data-rh="true"><meta name="twitter:image:alt" content="Merge Policies | Schemas (Markdown) | Neotoma. Markdown export of the rendered /schemas/merge-policies page. Merge policies are per-field declarative rules that turn many observations..." data-rh="true"><script type="application/ld+json" data-rh="true">{"@context":"https://schema.org","@type":"WebPage","name":"Merge Policies | Schemas (Markdown) | Neotoma","description":"Markdown export of the rendered /schemas/merge-policies page. Merge policies are per-field declarative rules that turn many observations into one deterministic snapshot, last_write, highest_priority, most_specific, and merge_array, with explicit tie-breakers.","url":"https://neotoma.io/de/markdown/schemas/merge-policies","publisher":{"@type":"Organization","name":"Neotoma"},"image":{"@type":"ImageObject","url":"https://neotoma.io/neotoma-og-1200x630.png","width":1200,"height":630,"caption":"Merge Policies | Schemas (Markdown) | Neotoma. Markdown export of the rendered /schemas/merge-policies page. Merge policies are per-field declarative rules that turn many observations..."}}</script><script type="application/ld+json" data-rh="true">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://neotoma.io/"},{"@type":"ListItem","position":2,"name":"Docs","item":"https://neotoma.io/docs"},{"@type":"ListItem","position":3,"name":"Schemas","item":"https://neotoma.io/schemas"},{"@type":"ListItem","position":4,"name":"Merge policies","item":"https://neotoma.io/schemas/merge-policies"}]}</script></head>
+  <body>
+    <div id="root"><iframe title="Markdown capture" aria-hidden="true" width="1280" height="900" class="pointer-events-none fixed left-[-9999px] top-0 z-[-1] border-0 opacity-0" sandbox="allow-same-origin allow-scripts allow-forms"></iframe><div class="min-h-screen bg-background text-foreground"><pre class="whitespace-pre-wrap break-words p-4 font-mono text-[13px] leading-relaxed text-foreground">&lt;!--
+  Full-page Markdown export (rendered HTML → GFM).
+  Source: https://neotoma.io/de/schemas/merge-policies
+  Generated: 2026-04-28T07:17:18.718Z
+--&gt;
+# Merge policies
+
+Merge policies are the per-field configuration the reducer uses to collapse a stream of observations into a single entity snapshot. They are declarative, every policy is a strategy plus an optional tie-breaker, no inline code. This is what makes snapshot composition deterministic and replayable: the same observations and the same merge\_policies always produce the same snapshot.
+
+Sit inside reducer\_config on every schema\_registry row. Read once per snapshot recomputation. The reducer never falls back to ad-hoc logic, fields without an explicit policy use the documented default last\_write.
+
+## Schema[#](#schema)
+
+ReducerConfig and MergePolicy (TypeScript)
+
+SQL / TS
+
+Schema or pattern reference for this concept.
+
+interface ReducerConfig { merge\_policies: Record&lt;string, MergePolicy&gt;; } interface MergePolicy { strategy: | "last\_write" | "highest\_priority" | "most\_specific" | "merge\_array"; tie\_breaker?: "observed\_at" | "source\_priority"; } // Example: invoice { "merge\_policies": { "vendor\_name": { "strategy": "highest\_priority" }, "amount\_due": { "strategy": "last\_write" }, "status": { "strategy": "last\_write" }, "aliases": { "strategy": "merge\_array" }, "line\_items": { "strategy": "merge\_array" } } }
+
+## Four strategies[#](#strategies)
+
+last\_write picks the most recent observation by observed\_at, the right default for fields that change over time (status, amount, address). highest\_priority picks the observation with the highest source\_priority, the right choice for identity-shaped fields where a user correction (1000) should always beat a structured agent write (100) or AI extraction (0). most\_specific picks the observation with the highest specificity\_score, useful when one source produces dense, schema-aligned facts and another produces shallow ones. merge\_array unions array values across observations, used for aliases, tags, and other accumulating sets.
+
+◆
+
+## Tie-breakers[#](#tie-breakers)
+
+When two observations score equally under the chosen strategy, the tie\_breaker decides. observed\_at favours the more recent observation; source\_priority favours the higher-priority writer. The default tie-breaker for last\_write and most\_specific is observed\_at; for highest\_priority it is source\_priority. Ties are resolved deterministically, the reducer never picks at random.
+
+◆
+
+## Default behaviour for unmapped fields[#](#default-behaviour)
+
+If a field appears in observations but has no entry in merge\_policies, for instance, a removed field that still has historical observations, the reducer falls back to last\_write. This keeps schema removal from corrupting historic snapshots: removed fields drop out of new snapshots via schema-projection filtering, but until then the policy is well-defined.
+
+◆
+
+## Source priority ladder[#](#priority-ladder)
+
+highest\_priority leans on the source\_priority ladder set on each observation: 0 for AI interpretations, 100 for structured agent writes (store\_structured), 1000 for explicit user corrections via the correct() path. This is what guarantees user corrections always win without requiring the reducer to know what 'a correction' is, corrections are just observations at priority 1000.
+
+## Invariants[#](#invariants)
+
+MUST
+
+-   Be declarative, strategy + optional tie\_breaker, no inline code
+-   Be deterministic, same observations + same policies ⇒ same snapshot
+-   Cover identity-shaped fields with highest\_priority so corrections override AI
+-   Use merge\_array for accumulating sets (aliases, tags, line items, …)
+-   Resolve ties with the documented tie\_breaker, never randomly
+
+MUST NOT
+
+-   Run arbitrary code, merge logic lives in the reducer, not in policies
+-   Use confidence as a merge signal, confidence is advisory only
+-   Mix strategy types within a single field across versions without a major version bump
+-   Override schema-projection filtering, removed fields drop out of snapshots regardless of policy
+
+## Related[#](#related)
+
+-   [Reducer subsystem doc](https://github.com/markmhendrickson/neotoma/blob/main/docs/subsystems/reducer.md) , Reducer architecture, merge implementation, snapshot computation
+-   [Schema registry](/schemas/registry) , Where reducer\_config lives
+-   [Observations](/primitives/observations) , Source priority ladder and observation shape
+-   [Entity snapshots](/primitives/entity-snapshots) , Reducer output and per-field provenance map
+-   [Determinism doctrine](https://github.com/markmhendrickson/neotoma/blob/main/docs/architecture/determinism.md) , Why declarative merge keeps snapshots reproducible
+
+## Where to go next[#](#more)
+
+-   [All schema concepts](/schemas) , registry, merge policies, storage layers, versioning
+-   [Primitive record types](/primitives) , sources, observations, snapshots, and the rest of Neotoma's atoms
+-   [Schema management workflows](/schema-management) , CLI commands for listing, validating, and evolving schemas</pre></div><div role="region" aria-label="Notifications (F8)" tabindex="-1" style="pointer-events: none;"><ol tabindex="-1" class="fixed top-0 z-[100] flex w-full flex-col-reverse p-4 sm:bottom-4 sm:right-4 sm:top-auto sm:flex-col sm:max-h-[calc(100vh-1rem)] sm:overflow-y-auto md:max-w-[420px]"></ol></div></div>
+  
+
+
+</body></html>

@@ -1,0 +1,158 @@
+{
+  "requests": [
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "content": "What does this receipt total?",
+            "cwd": "/Users/markmhendrickson/repos/neotoma",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_message",
+            "harness": "cursor",
+            "hook_event": "beforeSubmitPrompt",
+            "role": "user",
+            "sender_kind": "user",
+            "turn_key": "attachment_with_extracted_entities__cursor-hooks__claude-sonnet-4.5:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:1>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "conversation_id": "<id:2>",
+            "cwd": "/Users/markmhendrickson/repos/neotoma",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_turn",
+            "harness": "cursor",
+            "hook_event": "before_submit_prompt",
+            "hook_events": [
+              "before_submit_prompt"
+            ],
+            "model": "claude-sonnet-4.5",
+            "session_id": "<id:2>",
+            "started_at": "<ts>",
+            "turn_id": "<id:3>",
+            "turn_key": "attachment_with_extracted_entities__cursor-hooks__claude-sonnet-4.5:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:4>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "content": "I cannot read the image directly; please paste the line items as text.",
+            "cwd": "/Users/markmhendrickson/repos/neotoma",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_message",
+            "harness": "cursor",
+            "hook_event": "stop",
+            "observed_at": "<ts>",
+            "role": "assistant",
+            "sender_kind": "assistant",
+            "turn_key": "attachment_with_extracted_entities__cursor-hooks__claude-sonnet-4.5:turn-1:assistant"
+          }
+        ],
+        "idempotency_key": "<id:5>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "canonical_name": "Cursor session attachment_with_extracted_entities__cursor-hooks__claude-sonnet-4.5",
+            "cwd": "/Users/markmhendrickson/repos/neotoma",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation",
+            "harness": "cursor",
+            "hook_event": "stop_backfill",
+            "turn_key": "attachment_with_extracted_entities__cursor-hooks__claude-sonnet-4.5"
+          }
+        ],
+        "idempotency_key": "<id:6>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "conversation_id": "<id:2>",
+            "cwd": "/Users/markmhendrickson/repos/neotoma",
+            "data_source": "cursor-hook",
+            "diagnosis_confidence": "high",
+            "ended_at": "<ts>",
+            "entity_type": "conversation_turn",
+            "harness": "cursor",
+            "harness_loop_count": 0,
+            "hook_event": "stop",
+            "hook_events": [
+              "stop"
+            ],
+            "instruction_diagnostics": {
+              "classification": "hook_state_incomplete",
+              "local_build": true,
+              "reason": "No reminders were injected and no tool calls were observed this turn — sessionStart/postToolUse may not be wired up.",
+              "signals": {
+                "had_final_text": true,
+                "model": "claude-sonnet-4.5",
+                "neotoma_connection_failure": false,
+                "neotoma_tool_failures": 0,
+                "reminder_hooks": [],
+                "reminder_injected": false,
+                "tool_invocation_count": 0,
+                "user_message_stored": false
+              }
+            },
+            "missed_steps": [
+              "user_message_store",
+              "user_phase_store_structured"
+            ],
+            "model": "claude-sonnet-4.5",
+            "neotoma_tool_failures": 0,
+            "recommended_repairs": [
+              "Re-run the cursor-hooks installer (`packages/cursor-hooks/scripts/install.mjs`) and confirm `.cursor/hooks.json` references the compiled hooks.",
+              "Verify NEOTOMA_HOOK_STATE_DIR is writable and that hooks are emitting JSON on stdout.",
+              "Run `npm run eval:tier1` against `tests/fixtures/agentic_eval/agent_skips_store.json` to spot regressions."
+            ],
+            "reminder_injected": false,
+            "retrieve_calls": 0,
+            "safety_net_used": true,
+            "session_id": "<id:2>",
+            "status": "backfilled_by_hook",
+            "store_structured_calls": 0,
+            "tool_invocation_count": 0,
+            "turn_id": "<id:3>",
+            "turn_key": "attachment_with_extracted_entities__cursor-hooks__claude-sonnet-4.5:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:4>"
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "hook": "beforeSubmitPrompt",
+      "exitCode": 0,
+      "output": {}
+    },
+    {
+      "hook": "stop",
+      "exitCode": 0,
+      "output": {}
+    }
+  ]
+}

@@ -18,6 +18,7 @@ import {
   buildRootLandingJson,
   buildRootLandingMarkdown,
   buildRobotsTxt,
+  readNeotomaConfigEnvironment,
   wantsHtml,
   wantsMarkdown,
 } from "../../src/services/root_landing/index.js";
@@ -136,6 +137,7 @@ describe("root landing — content negotiation", () => {
     const body = (await res.json()) as {
       name: string;
       mode: string;
+      neotoma_env: string;
       mcp_url: string;
       endpoints: Record<string, string>;
       harnesses: Array<{ id: string; human_config: { format: string; code: string } }>;
@@ -143,6 +145,7 @@ describe("root landing — content negotiation", () => {
     };
     expect(body.name).toBe("Neotoma MCP");
     expect(body.mode).toBe("personal");
+    expect(body.neotoma_env).toBe(readNeotomaConfigEnvironment(process.env));
     expect(body.mcp_url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/mcp$/);
     expect(body.endpoints.mcp).toBe("/mcp");
     expect(body.endpoints.server_info).toBe("/server-info");
@@ -159,6 +162,7 @@ describe("root landing — content negotiation", () => {
     const body = await res.text();
     expect(body).toContain("<!doctype html>");
     expect(body).toContain("Neotoma");
+    expect(body).toMatch(/<strong>config<\/strong>\s+[^<]+/);
     // Host-aware URL interpolation in the body
     expect(body).toContain("/mcp");
   });
@@ -172,8 +176,16 @@ describe("root landing — content negotiation", () => {
     const body = await res.text();
     expect(body.startsWith("#")).toBe(true);
     expect(body).toContain("## Connect your harness");
+    expect(body).toContain("**config:**");
     expect(body).toContain("http://127.0.0.1");
     expect(body).toMatch(/```(?:json|shell|toml|text)?\n/);
+  });
+
+  it("JSON response does not include sandbox_packs in personal mode", async () => {
+    const res = await fetch(baseUrl + "/");
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.sandbox_packs).toBeUndefined();
+    expect(body.sandbox_default_pack_id).toBeUndefined();
   });
 
   it("embeds the resolved host in harness snippets (JSON)", async () => {
@@ -258,6 +270,30 @@ describe("root landing — sandbox mode", () => {
     expect(body).toMatch(/public/i);
     expect(body).toMatch(/Sunday/);
   });
+
+  it("JSON response includes sandbox_packs and sandbox_default_pack_id", async () => {
+    const res = await fetch(baseUrl + "/");
+    const body = (await res.json()) as {
+      sandbox_packs: Array<{ id: string; kind: string; label: string }>;
+      sandbox_default_pack_id: string;
+    };
+    expect(Array.isArray(body.sandbox_packs)).toBe(true);
+    expect(body.sandbox_packs.length).toBeGreaterThan(0);
+    expect(body.sandbox_packs[0]).toHaveProperty("id");
+    expect(body.sandbox_packs[0]).toHaveProperty("kind");
+    expect(body.sandbox_packs[0]).toHaveProperty("label");
+    expect(body.sandbox_default_pack_id).toBe("generic");
+  });
+
+  it("HTML response includes pack picker form in sandbox mode", async () => {
+    const res = await fetch(baseUrl + "/", {
+      headers: { Accept: "text/html" },
+    });
+    const body = await res.text();
+    expect(body).toContain("sandbox-session-form");
+    expect(body).toContain("sandbox-pack-select");
+    expect(body).toContain("Start a sandbox session");
+  });
 });
 
 describe("buildLandingContext — explicit mode precedence", () => {
@@ -307,5 +343,60 @@ describe("buildLandingContext — explicit mode precedence", () => {
     } as unknown as express.Request;
     const ctx = buildLandingContext(req);
     expect(ctx.mode).toBe("personal");
+  });
+});
+
+describe("readNeotomaConfigEnvironment", () => {
+  it("defaults to development when unset or whitespace-only", () => {
+    expect(readNeotomaConfigEnvironment({})).toBe("development");
+    expect(readNeotomaConfigEnvironment({ NEOTOMA_ENV: "" })).toBe("development");
+    expect(readNeotomaConfigEnvironment({ NEOTOMA_ENV: "   " })).toBe("development");
+  });
+
+  it("returns trimmed NEOTOMA_ENV when set", () => {
+    expect(readNeotomaConfigEnvironment({ NEOTOMA_ENV: "production" })).toBe("production");
+    expect(readNeotomaConfigEnvironment({ NEOTOMA_ENV: "  production  " })).toBe("production");
+  });
+});
+
+describe("buildLandingContext — NEOTOMA_ENV display", () => {
+  const remoteReq = {
+    header: () => "example.com",
+    socket: { remoteAddress: "203.0.113.10" },
+    protocol: "https",
+  } as unknown as express.Request;
+
+  it("surfaces NEOTOMA_ENV from the env bag (orthogonal to landing mode)", () => {
+    const ctx = buildLandingContext(remoteReq, {
+      NEOTOMA_ROOT_LANDING_MODE: "personal",
+      NEOTOMA_ENV: "production",
+    } as NodeJS.ProcessEnv);
+    expect(ctx.mode).toBe("personal");
+    expect(ctx.configEnvironment).toBe("production");
+  });
+});
+
+describe("buildLandingContext — Inspector URL", () => {
+  const remoteReq = {
+    header: () => "example.com",
+    socket: { remoteAddress: "203.0.113.10" },
+    protocol: "https",
+    cookies: {},
+  } as unknown as express.Request;
+
+  it("returns null when NEOTOMA_INSPECTOR_DISABLE=1", () => {
+    const ctx = buildLandingContext(remoteReq, {
+      NEOTOMA_ROOT_LANDING_MODE: "personal",
+      NEOTOMA_INSPECTOR_DISABLE: "1",
+    } as NodeJS.ProcessEnv);
+    expect(ctx.inspectorUrl).toBeNull();
+  });
+
+  it("returns external URL when NEOTOMA_PUBLIC_INSPECTOR_URL is set", () => {
+    const ctx = buildLandingContext(remoteReq, {
+      NEOTOMA_ROOT_LANDING_MODE: "personal",
+      NEOTOMA_PUBLIC_INSPECTOR_URL: "https://external.test/inspector",
+    } as NodeJS.ProcessEnv);
+    expect(ctx.inspectorUrl).toBe("https://external.test/inspector");
   });
 });

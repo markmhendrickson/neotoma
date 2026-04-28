@@ -1,24 +1,36 @@
 /**
  * beforeSubmitPrompt hook.
  *
- * Runs immediately before Cursor sends the user prompt to the agent.
- * Does two things:
+ * Cursor's `beforeSubmitPrompt` output schema is `{ continue, user_message
+ * }` only — see https://cursor.com/docs/agent/hooks. Earlier versions of
+ * this hook returned `additionalContext`, which Cursor silently dropped.
  *
- * 1. Retrieval injection — runs a bounded retrieval against Neotoma
- *    and returns it as `additionalContext` (Cursor prepends it to the
- *    system prompt). This is the reliability floor for recall.
- * 2. Persistence safety net — captures the user message as an
- *    agent_message entity linked to the current Cursor session.
+ * What we still do here (the parts Cursor honors or that are useful as a
+ * passive floor regardless):
  *
- * Deep entity extraction is the agent's job via MCP, not this hook's.
+ *   1. Persist the user message as a `conversation_message` so the turn is
+ *      recorded even if the agent forgets the user-phase store. This is
+ *      idempotent with the agent's own MCP write via the shared
+ *      idempotency key.
+ *   2. Track the user message + entity id + extracted-identifier list in
+ *      per-turn state so `stop.ts` can decide whether to backfill.
+ *   3. Bump the failure-hint counter so the next `postToolUse`
+ *      `additional_context` injection (the real surface Cursor honors) can
+ *      surface a one-shot hint about repeated tool failures.
+ *
+ * Retrieval injection moved to `sessionStart.additional_context` (initial
+ * system context) and `postToolUse.additional_context` (per-tool nudges).
  */
 
 import {
   getClient,
   harnessProvenance,
+  isExpectedNetworkError,
   log,
   makeIdempotencyKey,
+  recordConversationTurn,
   runHook,
+  updateTurnState,
 } from "./_common.js";
 
 const IDENTIFIER_PATTERN = /@([A-Za-z0-9_][A-Za-z0-9_.\-]{2,})/g;
@@ -34,23 +46,12 @@ function extractIdentifiers(prompt: string): string[] {
   return [...found];
 }
 
-function formatContext(
-  sections: Array<{ heading: string; body: unknown }>
-): string {
-  const lines: string[] = [];
-  for (const { heading, body } of sections) {
-    if (!body) continue;
-    lines.push(`## ${heading}`);
-    if (Array.isArray(body)) {
-      for (const item of body.slice(0, 10)) {
-        lines.push(`- ${JSON.stringify(item)}`);
-      }
-    } else {
-      lines.push(JSON.stringify(body));
-    }
-    lines.push("");
-  }
-  return lines.join("\n").trim();
+function extractEntityId(result: unknown): string | undefined {
+  if (!result || typeof result !== "object") return undefined;
+  const r = result as { structured?: { entities?: Array<{ entity_id?: string }> } };
+  const first = r.structured?.entities?.[0];
+  if (first && typeof first.entity_id === "string") return first.entity_id;
+  return undefined;
 }
 
 async function handle(
@@ -58,34 +59,35 @@ async function handle(
 ): Promise<Record<string, unknown>> {
   const prompt = (input.prompt as string) ?? (input.userPrompt as string) ?? "";
   const sessionId =
-    (input.sessionId as string) ?? (input.conversationId as string) ?? "cursor-unknown";
-  const turnId = (input.turnId as string) ?? String(Date.now());
+    (input.sessionId as string) ??
+    (input.session_id as string) ??
+    (input.conversationId as string) ??
+    (input.conversation_id as string) ??
+    "cursor-unknown";
+  const turnId =
+    (input.turnId as string) ??
+    (input.turn_id as string) ??
+    (input.generationId as string) ??
+    (input.generation_id as string) ??
+    String(Date.now());
+  const model = (input.model as string) ?? "";
+
+  const identifiers = extractIdentifiers(prompt);
 
   const client = getClient();
-  if (!client) return {};
-
-  const sections: Array<{ heading: string; body: unknown }> = [];
-  try {
-    for (const identifier of extractIdentifiers(prompt)) {
-      try {
-        const match = await client.retrieveEntityByIdentifier({ identifier });
-        if (match) sections.push({ heading: `Entity: ${identifier}`, body: match });
-      } catch (err) {
-        log("debug", `retrieveEntityByIdentifier(${identifier}) failed: ${(err as Error).message}`);
-      }
-    }
-    try {
-      const timeline = await client.listTimelineEvents({ limit: 5 });
-      if (timeline) sections.push({ heading: "Recent timeline", body: timeline });
-    } catch (err) {
-      log("debug", `listTimelineEvents failed: ${(err as Error).message}`);
-    }
-  } catch (err) {
-    log("warn", `retrieval pass failed: ${(err as Error).message}`);
+  if (!client) {
+    updateTurnState(sessionId, turnId, (s) => ({
+      ...s,
+      conversation_id: sessionId,
+      generation_id: turnId,
+      model,
+    }));
+    return {};
   }
 
+  let userEntityId: string | undefined;
   try {
-    await client.store({
+    const result = await client.store({
       entities: [
         {
           entity_type: "conversation_message",
@@ -98,12 +100,68 @@ async function handle(
       ],
       idempotency_key: makeIdempotencyKey(sessionId, turnId, "user"),
     });
+    userEntityId = extractEntityId(result);
   } catch (err) {
-    log("warn", `beforeSubmitPrompt store failed: ${(err as Error).message}`);
+    const level = isExpectedNetworkError(err) ? "debug" : "warn";
+    log(level, `beforeSubmitPrompt store failed: ${(err as Error).message}`);
   }
 
-  if (sections.length === 0) return {};
-  return { additionalContext: formatContext(sections) };
+  updateTurnState(sessionId, turnId, (s) => ({
+    ...s,
+    conversation_id: sessionId,
+    generation_id: turnId,
+    model: model || s.model,
+    user_message_stored: s.user_message_stored || Boolean(userEntityId),
+    user_message_entity_id: userEntityId ?? s.user_message_entity_id,
+  }));
+
+  // Best-effort: warm up @-identifier retrievals into the in-process Neotoma
+  // server so subsequent agent retrieval calls hit hot data. Results are
+  // intentionally NOT returned here — Cursor drops `additional_context` from
+  // beforeSubmitPrompt, and retrieval surfaces are sessionStart + postToolUse.
+  const retrievedEntityIds: string[] = [];
+  if (identifiers.length > 0) {
+    for (const identifier of identifiers) {
+      try {
+        const match = (await client.retrieveEntityByIdentifier({
+          identifier,
+        })) as
+          | {
+              entity_id?: string;
+              entity?: { entity_id?: string };
+            }
+          | null;
+        const id =
+          (typeof match?.entity_id === "string" && match.entity_id) ||
+          (typeof match?.entity?.entity_id === "string" &&
+            match.entity.entity_id) ||
+          undefined;
+        if (id) retrievedEntityIds.push(id);
+      } catch (err) {
+        log(
+          "debug",
+          `retrieveEntityByIdentifier(${identifier}) failed: ${
+            (err as Error).message
+          }`
+        );
+      }
+    }
+  }
+
+  await recordConversationTurn(client, {
+    sessionId,
+    turnId,
+    hookEvent: "before_submit_prompt",
+    harness: "cursor",
+    model: model || undefined,
+    conversationEntityId: sessionId,
+    storedEntityIds: userEntityId ? [userEntityId] : undefined,
+    retrievedEntityIds:
+      retrievedEntityIds.length > 0 ? retrievedEntityIds : undefined,
+    startedAt: new Date().toISOString(),
+  });
+
+  return {};
 }
 
 void runHook("beforeSubmitPrompt", handle);

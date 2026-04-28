@@ -7,23 +7,18 @@
  * here:
  *
  *   - `GET /admin/feedback/preflight` is always safe to call and reports
- *     whether the env vars are configured, so the Inspector can flip
- *     between "mirrored-only" and "maintainer triage surface" without a
- *     401.
+ *     the current mode (`hosted` / `local` / `disabled`) plus whether
+ *     the env vars are configured, so the Inspector can flip between
+ *     "mirrored-only" and "maintainer triage surface" without a 401.
  *   - Write-capable routes (`pending`, `by_commit`, `status`) refuse to
  *     proxy for anonymous / unverified_client tiers even when the env
  *     vars are set. The UI relies on the 403 body shape to surface a
  *     clear "requires hardware/software AAuth tier" message.
- *   - When env vars are missing, the same routes return 501 with the
- *     sentinel `admin_proxy_unconfigured` error the Inspector keys off
- *     to disable the UI.
- *
- * The upstream fetch itself is exercised against the internal helpers
- * exported from `admin_proxy.ts` rather than a live agent.neotoma.io —
- * we don't want the integration suite to depend on the pipeline being
- * online, and producing real RFC 9421 signatures just to hit the
- * forward path is a lot of ceremony for a branch that is already unit
- * covered by the identity stack.
+ *   - When `NEOTOMA_FEEDBACK_ADMIN_MODE=disabled`, the same routes
+ *     return 501 with the sentinel `admin_proxy_unconfigured` error the
+ *     Inspector keys off to disable the UI.
+ *   - When mode is `local` (default), admin routes serve live responses
+ *     from the `LocalFeedbackStore`.
  */
 
 import { createServer } from "node:http";
@@ -39,6 +34,7 @@ describe("/admin/feedback proxy", () => {
   let httpServer: ReturnType<typeof createServer>;
   const originalBaseUrl = process.env.AGENT_SITE_BASE_URL;
   const originalBearer = process.env.AGENT_SITE_ADMIN_BEARER;
+  const originalMode = process.env.NEOTOMA_FEEDBACK_ADMIN_MODE;
 
   beforeAll(async () => {
     httpServer = createServer(app);
@@ -55,42 +51,63 @@ describe("/admin/feedback proxy", () => {
     if (originalBearer !== undefined)
       process.env.AGENT_SITE_ADMIN_BEARER = originalBearer;
     else delete process.env.AGENT_SITE_ADMIN_BEARER;
+    if (originalMode !== undefined)
+      process.env.NEOTOMA_FEEDBACK_ADMIN_MODE = originalMode;
+    else delete process.env.NEOTOMA_FEEDBACK_ADMIN_MODE;
 
     await new Promise<void>((resolve, reject) => {
       httpServer.close((err) => (err ? reject(err) : resolve()));
     });
   });
 
-  it("preflight reports configured=false when env vars are missing", async () => {
+  it("preflight defaults to mode=local with configured=true when env vars are missing", async () => {
     delete process.env.AGENT_SITE_BASE_URL;
     delete process.env.AGENT_SITE_ADMIN_BEARER;
+    delete process.env.NEOTOMA_FEEDBACK_ADMIN_MODE;
     const res = await fetch(`${API_BASE}/admin/feedback/preflight`);
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       configured: boolean;
+      mode: string;
+      mode_env: string;
       base_url_env: string;
       bearer_env: string;
       allowed_tiers: string[];
     };
-    expect(body.configured).toBe(false);
+    expect(body.configured).toBe(true);
+    expect(body.mode).toBe("local");
+    expect(body.mode_env).toBe("NEOTOMA_FEEDBACK_ADMIN_MODE");
     expect(body.base_url_env).toBe("AGENT_SITE_BASE_URL");
     expect(body.bearer_env).toBe("AGENT_SITE_ADMIN_BEARER");
     expect(body.allowed_tiers).toContain("hardware");
     expect(body.allowed_tiers).toContain("software");
   });
 
-  it("preflight reports configured=true once both env vars are set", async () => {
+  it("preflight reports mode=hosted and configured=true once both env vars are set", async () => {
     process.env.AGENT_SITE_BASE_URL = "https://agent.example.test";
     process.env.AGENT_SITE_ADMIN_BEARER = "test-bearer";
+    delete process.env.NEOTOMA_FEEDBACK_ADMIN_MODE;
     const res = await fetch(`${API_BASE}/admin/feedback/preflight`);
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { configured: boolean };
+    const body = (await res.json()) as { configured: boolean; mode: string };
     expect(body.configured).toBe(true);
+    expect(body.mode).toBe("hosted");
   });
 
-  it("write-capable routes reject anonymous sessions with 403 admin_proxy_forbidden", async () => {
+  it("preflight reports mode=disabled and configured=false when explicitly disabled", async () => {
+    process.env.NEOTOMA_FEEDBACK_ADMIN_MODE = "disabled";
+    const res = await fetch(`${API_BASE}/admin/feedback/preflight`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { configured: boolean; mode: string };
+    expect(body.configured).toBe(false);
+    expect(body.mode).toBe("disabled");
+    delete process.env.NEOTOMA_FEEDBACK_ADMIN_MODE;
+  });
+
+  it("write-capable routes reject anonymous sessions with 403 admin_proxy_forbidden (hosted mode)", async () => {
     process.env.AGENT_SITE_BASE_URL = "https://agent.example.test";
     process.env.AGENT_SITE_ADMIN_BEARER = "test-bearer";
+    delete process.env.NEOTOMA_FEEDBACK_ADMIN_MODE;
     const res = await fetch(
       `${API_BASE}/admin/feedback/pending?user_id=${TEST_USER_ID}`,
     );
@@ -103,6 +120,21 @@ describe("/admin/feedback proxy", () => {
     expect(["anonymous", "unverified_client"]).toContain(body.tier);
   });
 
+  it("write-capable routes reject anonymous sessions with 403 even in local mode", async () => {
+    delete process.env.AGENT_SITE_BASE_URL;
+    delete process.env.AGENT_SITE_ADMIN_BEARER;
+    delete process.env.NEOTOMA_FEEDBACK_ADMIN_MODE;
+    const res = await fetch(
+      `${API_BASE}/admin/feedback/pending?user_id=${TEST_USER_ID}`,
+    );
+    expect(res.status).toBe(403);
+    const body = (await res.json()) as {
+      error: string;
+      tier: string;
+    };
+    expect(body.error).toBe("admin_proxy_forbidden");
+  });
+
   it("by_commit also refuses anonymous — only hardware/software may drive admin writes", async () => {
     process.env.AGENT_SITE_BASE_URL = "https://agent.example.test";
     process.env.AGENT_SITE_ADMIN_BEARER = "test-bearer";
@@ -112,16 +144,28 @@ describe("/admin/feedback proxy", () => {
     expect(res.status).toBe(403);
     const body = (await res.json()) as { error: string; tier: string };
     expect(body.error).toBe("admin_proxy_forbidden");
-    // HTTP-level requests without an AAuth signature and without a
-    // client_name propagated through MCP initialize resolve to
-    // `anonymous`. Inspector callers hit hardware/software in practice
-    // because the IDE propagates AAuth via the session.
     expect(body.tier).toBe("anonymous");
+  });
+
+  it("write-capable routes return 501 admin_proxy_unconfigured when mode=disabled", async () => {
+    process.env.NEOTOMA_FEEDBACK_ADMIN_MODE = "disabled";
+    const res = await fetch(
+      `${API_BASE}/admin/feedback/fbk_test_1/status`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ status: "triaged" }),
+      },
+    );
+    // Tier gate fires first for anonymous, so we get 403 before the mode branch
+    expect(res.status).toBe(403);
+    delete process.env.NEOTOMA_FEEDBACK_ADMIN_MODE;
   });
 
   it("POST /admin/feedback/:id/status also requires tier before considering env", async () => {
     delete process.env.AGENT_SITE_BASE_URL;
     delete process.env.AGENT_SITE_ADMIN_BEARER;
+    delete process.env.NEOTOMA_FEEDBACK_ADMIN_MODE;
     const res = await fetch(
       `${API_BASE}/admin/feedback/fbk_test_1/status?user_id=${TEST_USER_ID}`,
       {
@@ -135,8 +179,13 @@ describe("/admin/feedback proxy", () => {
 });
 
 describe("admin_proxy helpers", () => {
-  const { readAdminProxyEnv, preflightPayload, enforceTier, sendUnconfigured } =
-    FEEDBACK_ADMIN_PROXY_INTERNALS;
+  const {
+    readAdminProxyEnv,
+    preflightPayload,
+    enforceTier,
+    sendUnconfigured,
+    resolveAdminFeedbackMode,
+  } = FEEDBACK_ADMIN_PROXY_INTERNALS;
 
   it("readAdminProxyEnv returns null unless both vars are set", () => {
     const originalBaseUrl = process.env.AGENT_SITE_BASE_URL;
@@ -162,14 +211,35 @@ describe("admin_proxy helpers", () => {
     }
   });
 
+  it("resolveAdminFeedbackMode honors explicit mode and falls back to env-aware default", () => {
+    expect(resolveAdminFeedbackMode({ NEOTOMA_FEEDBACK_ADMIN_MODE: "disabled" })).toBe("disabled");
+    expect(resolveAdminFeedbackMode({ NEOTOMA_FEEDBACK_ADMIN_MODE: "local" })).toBe("local");
+    expect(resolveAdminFeedbackMode({ NEOTOMA_FEEDBACK_ADMIN_MODE: "hosted" })).toBe("hosted");
+    expect(resolveAdminFeedbackMode({ NEOTOMA_FEEDBACK_ADMIN_MODE: "Hosted " })).toBe("hosted");
+    expect(
+      resolveAdminFeedbackMode({
+        AGENT_SITE_BASE_URL: "https://agent.example.test",
+        AGENT_SITE_ADMIN_BEARER: "secret",
+      }),
+    ).toBe("hosted");
+    expect(resolveAdminFeedbackMode({})).toBe("local");
+    expect(
+      resolveAdminFeedbackMode({ AGENT_SITE_BASE_URL: "https://agent.example.test" }),
+    ).toBe("local");
+  });
+
   it("preflightPayload surfaces env-var names so the UI can instruct operators", () => {
-    expect(preflightPayload(true)).toEqual({
+    expect(preflightPayload(true, "hosted")).toEqual({
       configured: true,
+      mode: "hosted",
       base_url_env: "AGENT_SITE_BASE_URL",
       bearer_env: "AGENT_SITE_ADMIN_BEARER",
+      mode_env: "NEOTOMA_FEEDBACK_ADMIN_MODE",
       allowed_tiers: ["hardware", "software"],
     });
-    expect(preflightPayload(false).configured).toBe(false);
+    expect(preflightPayload(true, "local").mode).toBe("local");
+    expect(preflightPayload(false, "disabled").mode).toBe("disabled");
+    expect(preflightPayload(false, "disabled").configured).toBe(false);
   });
 
   it("enforceTier accepts hardware and software tiers", () => {
@@ -198,12 +268,10 @@ describe("admin_proxy helpers", () => {
       return res;
     };
 
-    // hardware tier (ES256) passes
     const res1 = mkRes();
     expect(enforceTier(mkReq("hardware"), res1 as any)).toBe(true);
     expect(res1.statusCode).toBe(0);
 
-    // software tier (EdDSA) passes
     const res2 = mkRes();
     expect(enforceTier(mkReq("software"), res2 as any)).toBe(true);
     expect(res2.statusCode).toBe(0);

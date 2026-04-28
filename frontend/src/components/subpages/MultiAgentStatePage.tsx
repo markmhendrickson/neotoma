@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   Check,
+  ChevronDown,
   GitBranch,
   Layers,
   Network,
@@ -11,6 +12,7 @@ import {
   Zap,
 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui/collapsible";
 import { SeoHead } from "../SeoHead";
 import { sendCtaClick } from "@/utils/analytics";
 
@@ -163,13 +165,25 @@ export function MultiAgentStatePage() {
             </p>
           </section>
 
+          <nav className="rounded-lg border toc-panel p-4 mb-8 mt-12">
+            <p className="text-[14px] font-medium mb-2">On this page</p>
+            <ul className="list-none pl-0 space-y-1 text-[14px]">
+              <li><a href="#single-agent-systems-hide-write-integrity-failures" className="text-foreground underline hover:text-foreground">Single-agent systems hide write-integrity failures</a></li>
+              <li><a href="#what-breaks-when-agents-share-state" className="text-foreground underline hover:text-foreground">What breaks when agents share state</a></li>
+              <li><a href="#how-one-bad-write-triggers-a-chain-reaction" className="text-foreground underline hover:text-foreground">How one bad write triggers a chain reaction</a></li>
+              <li><a href="#how-multi-agent-systems-emerge" className="text-foreground underline hover:text-foreground">How multi-agent systems emerge</a></li>
+              <li><a href="#between-your-agents-and-your-database" className="text-foreground underline hover:text-foreground">Between your agents and your database</a></li>
+              <li><a href="#every-observation-is-traceable-from-day-one" className="text-foreground underline hover:text-foreground">Every observation is traceable from day one</a></li>
+            </ul>
+          </nav>
+
           {/* Why single-agent masks the problem */}
           <section className="py-20 border-b border-border space-y-8">
             <div className="space-y-2">
               <p className="text-[11px] font-mono uppercase tracking-widest text-muted-foreground">
                 The masking effect
               </p>
-              <h2 className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
+              <h2 id="single-agent-systems-hide-write-integrity-failures" className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
                 Single-agent systems hide write-integrity failures
               </h2>
             </div>
@@ -202,14 +216,19 @@ export function MultiAgentStatePage() {
 
           {/* Three failure modes */}
           <section className="py-20 border-b border-border space-y-8">
-            <div className="space-y-2">
-              <p className="text-[11px] font-mono uppercase tracking-widest text-rose-600 dark:text-rose-400">
-                Failure modes
-              </p>
-              <h2 className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
-                What breaks when agents share state
-              </h2>
-            </div>
+            <p className="text-[11px] font-mono uppercase tracking-widest text-rose-600 dark:text-rose-400">
+              Failure modes
+            </p>
+            <Collapsible defaultOpen={false}>
+              <CollapsibleTrigger asChild>
+                <button type="button" className="group flex items-center gap-2 w-full text-left focus:outline-none">
+                  <h2 id="what-breaks-when-agents-share-state" className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
+                    What breaks when agents share state
+                  </h2>
+                  <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" aria-hidden />
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-8 pt-8">
             <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl">
               When Agent A writes observations that Agent B reads and acts on, a
               fundamentally different failure topology emerges. These are not
@@ -266,18 +285,25 @@ export function MultiAgentStatePage() {
                 ),
               )}
             </div>
+              </CollapsibleContent>
+            </Collapsible>
           </section>
 
           {/* Cascade scenario */}
           <section className="py-20 border-b border-border space-y-8">
-            <div className="space-y-2">
-              <p className="text-[11px] font-mono uppercase tracking-widest text-muted-foreground">
-                Cascade example
-              </p>
-              <h2 className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
-                How one bad write triggers a chain reaction
-              </h2>
-            </div>
+            <p className="text-[11px] font-mono uppercase tracking-widest text-muted-foreground">
+              Cascade example
+            </p>
+            <Collapsible defaultOpen={false}>
+              <CollapsibleTrigger asChild>
+                <button type="button" className="group flex items-center gap-2 w-full text-left focus:outline-none">
+                  <h2 id="how-one-bad-write-triggers-a-chain-reaction" className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
+                    How one bad write triggers a chain reaction
+                  </h2>
+                  <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" aria-hidden />
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-8 pt-8">
             <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl">
               A SaaS company runs three agents sharing state about customer
               accounts: inbound support, account health scoring, and
@@ -354,21 +380,28 @@ export function MultiAgentStatePage() {
                 ))}
               </ul>
             </div>
+              </CollapsibleContent>
+            </Collapsible>
           </section>
 
           {/* Topology progression */}
           <section className="py-20 border-b border-border space-y-8">
-            <div className="space-y-2">
-              <p className="text-[11px] font-mono uppercase tracking-widest text-muted-foreground">
-                Multi-agent topologies
-              </p>
-              <h2 className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
-                How multi-agent systems emerge{" "}
-                <span className="text-muted-foreground">
-                  (and where database decisions lock in)
-                </span>
-              </h2>
-            </div>
+            <p className="text-[11px] font-mono uppercase tracking-widest text-muted-foreground">
+              Multi-agent topologies
+            </p>
+            <Collapsible defaultOpen={false}>
+              <CollapsibleTrigger asChild>
+                <button type="button" className="group flex items-center gap-2 w-full text-left focus:outline-none">
+                  <h2 id="how-multi-agent-systems-emerge" className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
+                    How multi-agent systems emerge{" "}
+                    <span className="text-muted-foreground">
+                      (and where database decisions lock in)
+                    </span>
+                  </h2>
+                  <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" aria-hidden />
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-8 pt-8">
             <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl">
               Most multi-agent systems are not designed as multi-agent
               systems. They accrete: one agent for support, another for ops,
@@ -414,6 +447,8 @@ export function MultiAgentStatePage() {
                 ),
               )}
             </div>
+              </CollapsibleContent>
+            </Collapsible>
           </section>
 
           {/* Integration surface */}
@@ -422,7 +457,7 @@ export function MultiAgentStatePage() {
               <p className="text-[11px] font-mono uppercase tracking-widest text-muted-foreground">
                 Integration model
               </p>
-              <h2 className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
+              <h2 id="between-your-agents-and-your-database" className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
                 Between your agents and your database{" "}
                 <span className="text-muted-foreground">
                   (not instead of it)
@@ -496,7 +531,7 @@ export function MultiAgentStatePage() {
           {/* CTA */}
           <section className="pt-20 text-center space-y-8">
             <div className="space-y-4 max-w-xl mx-auto">
-              <h2 className="text-[28px] md:text-[32px] font-medium tracking-[-0.02em]">
+              <h2 id="every-observation-is-traceable-from-day-one" className="text-[28px] md:text-[32px] font-medium tracking-[-0.02em]">
                 Every observation is traceable from day one
               </h2>
               <p className="text-[15px] md:text-[17px] leading-7 text-muted-foreground">

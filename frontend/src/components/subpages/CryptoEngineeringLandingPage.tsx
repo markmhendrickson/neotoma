@@ -21,9 +21,9 @@ import {
   Upload,
   Users,
 } from "lucide-react";
-import { VerticalLandingShell, type VerticalConfig } from "./vertical_landing/VerticalLandingShell";
+import { UseCaseLandingShell, type UseCaseConfig } from "./use_case_landing/UseCaseLandingShell";
 
-const CONFIG: VerticalConfig = {
+const CONFIG: UseCaseConfig = {
   accentColor: "orange",
   badgeIcon: Cpu,
   badgeText: "Neotoma for crypto & security-sensitive engineering",
@@ -285,5 +285,5 @@ const CONFIG: VerticalConfig = {
 };
 
 export function CryptoEngineeringLandingPage() {
-  return <VerticalLandingShell config={CONFIG} />;
+  return <UseCaseLandingShell config={CONFIG} />;
 }

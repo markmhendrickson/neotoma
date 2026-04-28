@@ -19,23 +19,25 @@ import {
   Terminal,
   TimerOff,
   UserCheck,
+  Vote,
 } from "lucide-react";
-import { VerticalLandingShell, type VerticalConfig } from "./vertical_landing/VerticalLandingShell";
+import { UseCaseLandingShell, type UseCaseConfig } from "./use_case_landing/UseCaseLandingShell";
 
-const CONFIG: VerticalConfig = {
+const CONFIG: UseCaseConfig = {
   accentColor: "blue",
   badgeIcon: Shield,
   badgeText: "Neotoma for Agent Authorization",
   heroTitle: "Authorization state that survives",
   heroHighlight: "policy changes, session boundaries, and multi-agent delegation",
   heroDesc:
-    "When an agent acts on behalf of a user, the authorization decision, policy inputs, and delegation chain must be reconstructable after the fact. Neotoma versions every authorization entity so you can answer who authorized what, when, and under which policy state.",
+    "When an agent acts on behalf of a user, organization, or DAO, the authorization decision, policy inputs, delegation chain, and governance vote must be reconstructable after the fact. Neotoma versions every authorization entity so you can answer who (or which proposal) authorized what, when, and under which policy state.",
   heroTags: [
     { tag: "auth_decision", Icon: ShieldCheck },
     { tag: "agent_session", Icon: Cpu },
     { tag: "policy_evaluation", Icon: Scale },
     { tag: "consent_grant", Icon: UserCheck },
     { tag: "delegation_chain", Icon: Share2 },
+    { tag: "governance_vote", Icon: Vote },
   ],
   heroFeatures: ["Open-source", "Enterprise SSO & RBAC", "Team deployment", "SOC 2 compatible"],
   analyticsPrefix: "agent_auth",
@@ -120,6 +122,19 @@ const CONFIG: VerticalConfig = {
       failDesc:
         "The assistant confirmed the agent has access but could not trace how authority was delegated from the human admin through the orchestrator to the deployment agent, or whether the delegation was still valid at execution time.",
     },
+    {
+      category: "DAO governance reconstruction",
+      human:
+        "Who approved the $120K treasury transfer to LaunchPad Studios on April 3, and under which proposal was it authorized?",
+      fail: "The DAO treasury agent executes approved proposals automatically. The transfer was successful.",
+      succeed:
+        "On 2026-04-03 at 17:12 UTC, treasury-agent evaluated governance_vote\u00B7v47 on proposal prop_treasury_089 (submitted Mar 28, voting window Mar 28\u2013Apr 2). Vote tally: 412 YES (84.2M token weight), 87 NO (11.1M token weight), 14 ABSTAIN. Quorum of 50M token weight met at Apr 1 22:31 UTC. Proposal passed under governance policy gov_policy\u00B7v6 (supermajority threshold 66.7%, actual 88.4%). Delegation chain: DAO snapshot space \u2192 governance-orchestrator (session sess_gov_0089) \u2192 treasury-agent (session sess_tx_0291). Authorized action: transfer 120,000 USDC to 0x7b\u2026f21 (LaunchPad Studios multisig). Full lineage at governance_vote\u00B7v47 linked to dao_proposal\u00B7v23 and auth_decision\u00B7v88.",
+      version: "governance_vote\u00B7v47",
+      Icon: Vote,
+      failTitle: "Transfer confirmed, governance lineage missing",
+      failDesc:
+        "The assistant confirmed the transfer happened but could not cite the proposal, vote tally, quorum threshold, or governance policy version that authorized it.",
+    },
   ],
   outcomeTitle: "From opaque access logs to reconstructable authorization state",
   outcomeSubtitle: "Before and after Neotoma",
@@ -190,6 +205,12 @@ const CONFIG: VerticalConfig = {
       desc: "Map the authorization relationships across agent fleets: which agents can delegate, what scope constraints apply, and how authority propagates through orchestration layers.",
       tags: ["delegation_chain", "graph", "governance"],
     },
+    {
+      Icon: Vote,
+      title: "DAO governance lineage",
+      desc: "Link every on-chain or agent-executed action to the proposal, vote tally, governance policy version, and quorum state that authorized it. Prove that a treasury transfer, parameter change, or code upgrade followed the DAO's rules at the time the vote closed, not today's rules.",
+      tags: ["governance_vote", "dao_proposal", "audit"],
+    },
   ],
   archHeadline: "Neotoma sits beneath your auth layer and agent orchestrator",
   archDesc:
@@ -209,6 +230,7 @@ const CONFIG: VerticalConfig = {
       "Agent orchestrators (LangGraph, CrewAI, etc.)",
       "Consent management platforms",
       "Session and token management services",
+      "DAO governance platforms (Snapshot, Tally, on-chain voting contracts)",
     ],
   },
   archSteps: [
@@ -237,7 +259,7 @@ const CONFIG: VerticalConfig = {
     features: [
       "Bind software agents to subjects with explicit scopes (payments, PII, infra changes) instead of ad hoc API keys",
       "Issue, narrow, time-box, and revoke agent bindings with onboarding and offboarding lifecycle events auditors can replay",
-      "Emit consent grants and revocations as structured state for policy engines, orchestrators, and incident response",
+      "Emit consent grants, revocations, and DAO governance votes as structured state for policy engines, orchestrators, and incident response",
     ],
     guarantees: [
       "Immutable observations for every binding change, consent edge, delegation hop, and policy evaluation the stack emits",
@@ -248,7 +270,7 @@ const CONFIG: VerticalConfig = {
     generalizesTitle:
       "The same integrity pattern fits any agent authorization stack",
     generalizesDesc:
-      "Whether you build on decentralized identity providers, standalone authorization frameworks, or custom policy engines, any production agent that moves money, touches PII, or changes systems needs reconstructable authorization state. Neotoma generalizes the pattern underneath.",
+      "Whether you build on decentralized identity providers, standalone authorization frameworks, custom policy engines, or DAO governance contracts, any production agent that moves money, touches PII, or changes systems needs reconstructable authorization state. Neotoma generalizes the pattern underneath.",
   },
   ctaHeadline: "Ship agents that can prove",
   ctaHighlight: "every authorization decision they made",
@@ -264,5 +286,5 @@ const CONFIG: VerticalConfig = {
 };
 
 export function AgentAuthLandingPage() {
-  return <VerticalLandingShell config={CONFIG} />;
+  return <UseCaseLandingShell config={CONFIG} />;
 }

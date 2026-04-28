@@ -36,8 +36,9 @@ export function InspectorAgentsPage() {
         Neotoma has seen, derived from AAuth thumbprints, JWT subjects, and{" "}
         <code>clientInfo.name</code> fallbacks. Each row shows the resolved{" "}
         <strong className="text-foreground">trust tier</strong> (
-        <code>hardware</code>, <code>software</code>,{" "}
-        <code>unverified_client</code>, <code>anonymous</code>), write
+        <code>hardware</code>, <code>operator_attested</code>,{" "}
+        <code>software</code>, <code>unverified_client</code>,{" "}
+        <code>anonymous</code>), write
         counts, last-seen timestamp, and the active grant (if any).
       </p>
 

@@ -38,10 +38,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
     <title>Neotoma with OpenClaw | Integration Guide (Markdown) | Neotoma</title>
-    <script type="module" crossorigin="" src="../../../assets/main-Jf-itxVT.js"></script>
-    <link rel="stylesheet" crossorigin="" href="../../../assets/main-DWQ-Fl-1.css">
+    <script type="module" crossorigin="" src="/assets/main-CaoWcp2k.js"></script>
+    <link rel="stylesheet" crossorigin="" href="/assets/main-BBds_bdF.css">
   
-    <!-- build: local-1776078353914 -->
+    <!-- build: local-1777360387837 -->
       <link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/neotoma-with-openclaw">
     <link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/neotoma-with-openclaw">
     <link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/neotoma-with-openclaw">
@@ -61,7 +61,7 @@
     <div id="root"><iframe title="Markdown capture" aria-hidden="true" width="1280" height="900" class="pointer-events-none fixed left-[-9999px] top-0 z-[-1] border-0 opacity-0" sandbox="allow-same-origin allow-scripts allow-forms"></iframe><div class="min-h-screen bg-background text-foreground"><pre class="whitespace-pre-wrap break-words p-4 font-mono text-[13px] leading-relaxed text-foreground">&lt;!--
   Full-page Markdown export (rendered HTML → GFM).
   Source: https://neotoma.io/ar/neotoma-with-openclaw
-  Generated: 2026-04-13T11:07:42.848Z
+  Generated: 2026-04-28T07:16:28.947Z
 --&gt;
 # Neotoma with OpenClaw
 
@@ -110,7 +110,7 @@ OpenClaw is the execution layer: it gives the agent a machine and the ability to
 
 ## Getting started
 
-Copy this prompt into an AI coding agent such as Claude Code, Cursor, or Codex to have it read the evaluation page, inspect your tool, workspace, and configuration context, then judge whether Neotoma fits your real workflow and what to persist first.
+Copy this prompt into an AI coding agent such as Claude Code, Cursor, or Codex to have it read the [evaluation page](/evaluate), inspect your tool, workspace, and configuration context, then judge whether Neotoma fits your real workflow and what to persist first.
 
 Evaluation prompt
 
@@ -118,13 +118,43 @@ Reads the page, then evaluates fit against your real workflow.
 
 Copy
 
-`Read https://neotoma.io/evaluate. Before you answer, inspect any broader tool, workspace, and configuration context you can access so you assess my real workflow rather than just this chat. Then assess whether Neotoma fits my workflow, what data would be highest value to persist first, and what I should do next.`
+``Read https://neotoma.io/evaluate. Use any tool, workspace, and chat context already available in this session to assess my real workflow. Avoid ad-hoc shell introspection just to profile me; if Neotoma is already installed, use `neotoma doctor --json` for status instead. Then tell me whether Neotoma fits my workflow, what data would be highest value to persist first, and what I should do next.``Copy prompt
 
-[View evaluation page](/evaluate)
+The evaluation flow handles install, activation, and OpenClaw connection (including the native plugin path) automatically. If you prefer to configure the connection yourself, use one of these options:
 
-Once Neotoma has been evaluated, installed if needed, and activated with your first data, choose an integration path:
+Native plugin
 
-[Local setup (stdio)Install with an agent prompt and add Neotoma to OpenClaw local configuration.](/neotoma-with-openclaw-connect-local-stdio)
+Neotoma is published on [ClawHub](https://clawhub.ai) as a native OpenClaw plugin with `kind: "memory"`. All 30+ MCP tools are registered as agent tools with zero extra configuration.
+
+ClawHub install
+
+Register Neotoma from ClawHub on the machine where OpenClaw runs.
+
+```
+openclaw plugins install clawhub:neotoma
+```
+
+Memory slot
+
+Assign the plugin to the memory slot in your OpenClaw configuration.
+
+```
+plugins:
+  slots:
+    memory: neotoma
+  entries:
+    neotoma:
+      enabled: true
+      config:
+        dataDir: ~/.local/share/neotoma
+        environment: production
+```
+
+Verify with `openclaw plugins inspect neotoma` to confirm `Format: native` and `Kind: memory`.
+
+Or use manual MCP configuration:
+
+[Local setup (stdio)Install Neotoma and add it to OpenClaw local configuration.](/neotoma-with-openclaw-connect-local-stdio)
 
 [Remote setup (HTTP)Expose Neotoma API with a tunnel and connect OpenClaw to remote MCP endpoints.](/neotoma-with-openclaw-connect-remote-http)
 
@@ -136,6 +166,7 @@ Once Neotoma has been evaluated, installed if needed, and activated with your fi
 -   →[Configuration](https://www.getopenclaw.ai/docs/configuration) (setup wizard and settings reference)
 -   →[Tools](https://openclaw-ai.com/en/docs/tools/index) (browser, canvas, cron, and access control)
 -   →[Skills](https://docs.openclaw.ai/skills) (extensible skill folders and ClawHub registry)
+-   →[ClawHub](https://docs.openclaw.ai/tools/clawhub) (plugin and skill registry where Neotoma is published)
 
 * * *
 
@@ -188,22 +219,6 @@ Store a task
 Recall across sessions
 
 “What do I know about Sarah? What did I commit to doing for her?”
-
-* * *
-
-## Known limitations
-
-MCP tool calls may time out for very large stores (100+ entities in one call).
-
-Workaround: Batch into groups of 20–50 entities per store call.
-
-Neotoma runs locally — data is not synced across machines by default.
-
-Workaround: Use the remote HTTP transport or deploy Neotoma as a remote MCP server for multi-machine access.
-
-Schema evolution is additive. Removing fields requires a major version bump.
-
-Workaround: Plan schemas with future fields in mind. Use flexible entity types for exploratory data.
 
 Start with [evaluation](/evaluate), see the [install guide](/install) for more options, [MCP reference](/mcp) for full setup, [CLI reference](/cli) for terminal usage, and [agent instructions](/agent-instructions) for behavioral details.</pre></div><div role="region" aria-label="Notifications (F8)" tabindex="-1" style="pointer-events: none;"><ol tabindex="-1" class="fixed top-0 z-[100] flex w-full flex-col-reverse p-4 sm:bottom-4 sm:right-4 sm:top-auto sm:flex-col sm:max-h-[calc(100vh-1rem)] sm:overflow-y-auto md:max-w-[420px]"></ol></div></div>
   

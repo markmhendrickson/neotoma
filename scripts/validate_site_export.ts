@@ -136,6 +136,36 @@ if (missingPages === 0 && emptyPages === 0) {
 }
 
 // ---------------------------------------------------------------------------
+// 3b. Bundled assets must be root-absolute (/assets/), never ../assets/
+// ---------------------------------------------------------------------------
+function collectHtmlFiles(dir: string): string[] {
+  const out: string[] = [];
+  const walk = (d: string) => {
+    for (const name of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, name.name);
+      if (name.isDirectory()) walk(p);
+      else if (name.isFile() && name.name.endsWith(".html")) out.push(p);
+    }
+  };
+  walk(dir);
+  return out;
+}
+
+let badAssetPaths = 0;
+for (const htmlPath of collectHtmlFiles(siteDir)) {
+  const html = fs.readFileSync(htmlPath, "utf-8");
+  if (/\.\.\/assets\//.test(html)) {
+    fail(
+      `HTML must not use ../assets/ for bundles (breaks when stale vs /assets/): ${path.relative(repoRoot, htmlPath)}`,
+    );
+    badAssetPaths++;
+  }
+}
+if (badAssetPaths === 0) {
+  pass("All HTML files use root /assets/ for bundled scripts and stylesheets");
+}
+
+// ---------------------------------------------------------------------------
 // 4. 404.html must render the not-found page, not the homepage
 // ---------------------------------------------------------------------------
 const notFoundPath = path.join(siteDir, "404.html");

@@ -39,10 +39,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
     <title>Codex local setup (stdio) (Markdown) | Neotoma</title>
-    <script type="module" crossorigin="" src="../../../assets/main-Jf-itxVT.js"></script>
-    <link rel="stylesheet" crossorigin="" href="../../../assets/main-DWQ-Fl-1.css">
+    <script type="module" crossorigin="" src="/assets/main-CaoWcp2k.js"></script>
+    <link rel="stylesheet" crossorigin="" href="/assets/main-BBds_bdF.css">
   
-    <!-- build: local-1776078353914 -->
+    <!-- build: local-1777360387837 -->
       <link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/neotoma-with-codex-connect-local-stdio">
     <link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/neotoma-with-codex-connect-local-stdio">
     <link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/neotoma-with-codex-connect-local-stdio">
@@ -62,7 +62,7 @@
     <div id="root"><iframe title="Markdown capture" aria-hidden="true" width="1280" height="900" class="pointer-events-none fixed left-[-9999px] top-0 z-[-1] border-0 opacity-0" sandbox="allow-same-origin allow-scripts allow-forms"></iframe><div class="min-h-screen bg-background text-foreground"><pre class="whitespace-pre-wrap break-words p-4 font-mono text-[13px] leading-relaxed text-foreground">&lt;!--
   Full-page Markdown export (rendered HTML → GFM).
   Source: https://neotoma.io/id/neotoma-with-codex-connect-local-stdio
-  Generated: 2026-04-13T11:07:41.421Z
+  Generated: 2026-04-28T07:16:27.488Z
 --&gt;
 # Codex local setup (stdio)
 
@@ -76,7 +76,17 @@ Need a remote MCP URL for sandboxes (HTTP with OAuth)? See [Codex remote setup (
 
 Paste this prompt into Codex. The agent handles npm install, initialization, and MCP configuration.
 
-`Read https://neotoma.io/install and carry me through the install-first Neotoma flow. Install, activate it with my data, and configure my current tool for robust ongoing use.`
+Code snippet
+
+Copy the exact snippet shown below.
+
+```
+Read https://neotoma.io/install and carry me through the install-first Neotoma flow.
+
+Use `neotoma` commands for status and setup. If Neotoma is already installed, start with `neotoma doctor --json`; otherwise install it and run `neotoma setup --tool &lt;my_tool&gt; --yes`.
+
+Avoid ad-hoc shell introspection or arbitrary repo scripts. Then activate Neotoma with my data and configure my current tool for robust ongoing use.
+```
 
 The agent writes to `.codex/config.toml` (project-level) or `~/.codex/config.toml` (user-level). Codex discovers the MCP server from your config automatically.
 

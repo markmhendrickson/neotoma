@@ -320,7 +320,7 @@ export const PRODUCT_NAV_SOURCES = {
   codexConnectLocalStdioFooterInstall: "codex_connect_local_stdio_footer_install",
   openclawConnectLocalStdioFooterInstall: "openclaw_connect_local_stdio_footer_install",
   comparisonPageInstall: "comparison_page_install",
-  verticalsIndexInstall: "verticals_index_install",
+  useCasesIndexInstall: "use_cases_index_install",
   zeroSetupOnboardingInstall: "zero_setup_onboarding_install",
   faqInstallGuide: "faq_install_guide",
   memoryGuaranteesInstall: "memory_guarantees_install",

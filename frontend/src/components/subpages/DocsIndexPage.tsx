@@ -302,7 +302,7 @@ export function DocsIndexPage() {
       return dict.categoryIntegrationGuides;
     if (title === "External") return dict.categoryExternal;
     if (title === "Compare") return dict.categoryCompare;
-    if (title === "Verticals") return dict.categoryVerticals;
+    if (title === "Use Cases") return dict.categoryUseCases;
     return title;
   };
 

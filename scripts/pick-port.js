@@ -7,10 +7,16 @@
  *     Output: port number to stdout (preferred if free, else next available).
  *   node scripts/pick-port.js <preferred_port> -- <command...>
  *     Picks port, sets HTTP_PORT in env, then runs the command (cross-platform).
+ *
+ *   node scripts/pick-port.js --print-resources 3080 5195 -- <command...>
+ *     After picking ports, prints a resource block (URLs and env) to stderr,
+ *     then runs the command so logs appear below the block.
  */
 
 import { execSync, spawnSync } from "child_process";
-import { platform } from "os";
+import fs from "fs";
+import { networkInterfaces, platform } from "os";
+import path from "path";
 
 function isPortInUse(port) {
   const portNum = Number(port);
@@ -50,11 +56,92 @@ function pickPort(preferred, reserved = new Set()) {
 
 const DEFAULT_VAR_NAMES = ["HTTP_PORT", "VITE_PORT", "WS_PORT", "MCP_HTTP_PORT"];
 
+function firstLanIPv4() {
+  const nets = networkInterfaces();
+  for (const list of Object.values(nets)) {
+    if (!list) continue;
+    for (const net of list) {
+      const v4 = net.family === "IPv4" || net.family === 4;
+      if (v4 && !net.internal) {
+        return net.address;
+      }
+    }
+  }
+  return null;
+}
+
+const DEV_RESOURCES_FILE = path.resolve(process.cwd(), ".dev-serve", "dev-resources.txt");
+
+/** @param {string[]} names @param {number[]} ports */
+function buildResourceBlock(names, ports) {
+  const lan = firstLanIPv4();
+  const width = 72;
+  const rule = "─".repeat(width);
+  const lines = [
+    "",
+    rule,
+    " Dev resources (picked ports; child process logs follow this block)",
+    rule,
+  ];
+  for (let i = 0; i < names.length; i++) {
+    const name = names[i];
+    const p = ports[i];
+    let primary = `  ${name}=${p}`;
+    if (name === "HTTP_PORT" || name === "VITE_PORT" || name === "MCP_HTTP_PORT") {
+      primary += `    http://localhost:${p}`;
+      if (lan) {
+        primary += `    http://${lan}:${p}`;
+      }
+    }
+    lines.push(primary);
+  }
+  const cmdHint =
+    ports.length >= 3
+      ? "server (API) · app (Vite) · build (tsc --watch --preserveWatchOutput)"
+      : "child processes";
+  lines.push(rule);
+  lines.push(` ${cmdHint}`);
+  lines.push(" Reprint: npm run dev:resources");
+  lines.push(rule);
+  lines.push("");
+  return lines.join("\n");
+}
+
+function setTerminalTitle(names, ports) {
+  const lookup = Object.fromEntries(names.map((name, i) => [name, ports[i]]));
+  const parts = [
+    lookup.HTTP_PORT ? `API ${lookup.HTTP_PORT}` : null,
+    lookup.VITE_PORT ? `UI ${lookup.VITE_PORT}` : null,
+    lookup.WS_PORT ? `WS ${lookup.WS_PORT}` : null,
+    lookup.MCP_HTTP_PORT ? `MCP ${lookup.MCP_HTTP_PORT}` : null,
+  ].filter(Boolean);
+  if (parts.length > 0) {
+    process.stderr.write(`\u001b]0;Neotoma dev: ${parts.join(" · ")}\u0007`);
+  }
+}
+
+function printResourceBlock(names, ports) {
+  const block = buildResourceBlock(names, ports);
+  fs.mkdirSync(path.dirname(DEV_RESOURCES_FILE), { recursive: true });
+  fs.writeFileSync(DEV_RESOURCES_FILE, `${block}\n`, "utf-8");
+  setTerminalTitle(names, ports);
+  console.error(block);
+}
+
 function main() {
   let argv = process.argv.slice(2);
   const dashIdx = argv.indexOf("--");
   let preferredList = dashIdx >= 0 ? argv.slice(0, dashIdx) : argv;
   let runArgs = dashIdx >= 0 ? argv.slice(dashIdx + 1) : [];
+
+  let printResources = false;
+  preferredList = preferredList.filter((token) => {
+    if (token === "--print-resources") {
+      printResources = true;
+      return false;
+    }
+    return true;
+  });
 
   let varNames = DEFAULT_VAR_NAMES;
   const varsIdx = preferredList.indexOf("--vars");
@@ -64,7 +151,9 @@ function main() {
   }
 
   if (preferredList.length === 0 || preferredList[0] === "") {
-    console.error("Usage: node scripts/pick-port.js <port> [port ...] [--vars A,B] [-- <command...>]");
+    console.error(
+      "Usage: node scripts/pick-port.js [--print-resources] <port> [port ...] [--vars A,B] [-- <command...>]",
+    );
     process.exit(1);
   }
 
@@ -87,6 +176,9 @@ function main() {
     names.forEach((name, i) => {
       env[name] = String(ports[i]);
     });
+    if (printResources) {
+      printResourceBlock(names, ports);
+    }
     // Quote args that contain spaces so the shell does not re-split them (preserves
     // e.g. "tsx watch src/actions.ts" and "tsc --watch" as two commands for concurrently).
     const quote = (arg) => {

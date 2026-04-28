@@ -124,7 +124,7 @@ Users who tried fuzzy or native memory and got burned by corrupted state. Their 
 
 **Strongest conversion trigger:** Corrupted state (been burned), not just missing context (annoyed).
 
-**GTM line:** Start with personal agentic OS builders/operators; expand to toolchain integrators and B2B-by-vertical as personal adoption creates team demand; defer knowledge workers and small teams until post-dev release.
+**GTM line:** Start with personal agentic OS builders/operators; expand to toolchain integrators and B2B-by-use-case as personal adoption creates team demand; defer knowledge workers and small teams until post-dev release.
 
 ---
 

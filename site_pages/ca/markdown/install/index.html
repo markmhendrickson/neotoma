@@ -39,10 +39,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
     <title>Install (Markdown) | Neotoma</title>
-    <script type="module" crossorigin="" src="../../../assets/main-Jf-itxVT.js"></script>
-    <link rel="stylesheet" crossorigin="" href="../../../assets/main-DWQ-Fl-1.css">
+    <script type="module" crossorigin="" src="/assets/main-CaoWcp2k.js"></script>
+    <link rel="stylesheet" crossorigin="" href="/assets/main-BBds_bdF.css">
   
-    <!-- build: local-1776078353914 -->
+    <!-- build: local-1777360387837 -->
       <link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/install">
     <link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/install">
     <link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/install">
@@ -62,7 +62,7 @@
     <div id="root"><iframe title="Markdown capture" aria-hidden="true" width="1280" height="900" class="pointer-events-none fixed left-[-9999px] top-0 z-[-1] border-0 opacity-0" sandbox="allow-same-origin allow-scripts allow-forms"></iframe><div class="min-h-screen bg-background text-foreground"><pre class="whitespace-pre-wrap break-words p-4 font-mono text-[13px] leading-relaxed text-foreground">&lt;!--
   Full-page Markdown export (rendered HTML → GFM).
   Source: https://neotoma.io/ca/install
-  Generated: 2026-04-13T11:07:21.324Z
+  Generated: 2026-04-28T07:15:36.936Z
 --&gt;
 # Install options
 
@@ -74,33 +74,94 @@ Want the full agent-driven sequence? Start with evaluation, then let the agent i
 
 ## Agent-assisted install
 
-If you want to skip the initial evaluation page and proceed directly from install, paste this prompt into Claude, Codex, Cursor, or a similar agent. The prompt is concise; this page contains the full install-first sequence the agent should follow.
+If you want to skip the initial evaluation page and proceed directly from install, paste this prompt into Claude, Codex, Cursor, or a similar agent. The prompt stays intentionally short; this page documents the full install-first sequence it should follow.
 
-`Read https://neotoma.io/install and carry me through the install-first Neotoma flow. Install, activate it with my data, and configure my current tool for robust ongoing use.`
+Agent prompt
 
-### Agent: install-first instructions
+Paste this into an assistant to run the install-first Neotoma flow.
+
+```
+Read https://neotoma.io/install and carry me through the install-first Neotoma flow.
+
+Use `neotoma` commands for status and setup. If Neotoma is already installed, start with `neotoma doctor --json`; otherwise install it and run `neotoma setup --tool &lt;my_tool&gt; --yes`.
+
+Avoid ad-hoc shell introspection or arbitrary repo scripts. Then activate Neotoma with my data and configure my current tool for robust ongoing use.
+```
+
+**This page expands the prompt.** The copied prompt omits detail for readability; the full install-first flow here includes:
+
+1.  Confirming the user wants the install-first path and identifying the current tool.
+2.  Installing only if needed, then verifying state with `neotoma doctor --json`.
+3.  Choosing the first data to store and the onboarding mode.
+4.  Running activation, then configuring the current tool for ongoing use.
+
+### Expanded install-first sequence
 
 Use this path only when the user already wants to proceed with Neotoma and does not need the broader fit-assessment flow on [/evaluate](/evaluate).
 
 1.  **Confirm the install-first path** - verify that the user wants to proceed now, identify their current tool, and note any major tool constraints that affect setup quality.
-2.  **Install only if needed** - check whether Neotoma is already installed. If not, run `npm install -g neotoma` and `neotoma init`. If it is already installed, skip re-installation unless something is broken.
-3.  **Set the first data target** - determine what data should be stored first and, if needed, ask the user which onboarding mode they want: quick win, guided, or power user.
-4.  **Run activation** - execute [discover -&gt; propose -&gt; preview -&gt; ingest -&gt; reconstruct -&gt; query -&gt; correct](https://github.com/markmhendrickson/neotoma/blob/main/install.md): discover candidates, preview them, ingest confirmed sources, reconstruct a timeline, then query and correct.
-5.  **Configure the current tool** - after first value is visible, set up the strongest ongoing Neotoma workflow for the tool in use. If that tool is too constrained, say so explicitly and recommend a better-supported primary environment.
+2.  **Install only if needed** - check whether Neotoma is already installed. If not, branch by tool: for OpenClaw, prefer `openclaw plugins install clawhub:neotoma`; for other local tools, run `npm install -g neotoma`. Then collapse the rest of setup into two calls: `neotoma doctor --json` to inspect consolidated state and `neotoma setup --tool &lt;tool&gt; --yes` to apply init + MCP + CLI instructions + permission files idempotently. If Neotoma is already installed, just run `neotoma doctor --json` to verify.
+3.  **Do not improvise shell introspection.** Do not run `python3 -c`, `grep -r`, `ls`, `cat`, `jq`, `find`, `which`, or `node -e` to introspect Neotoma, and do not run arbitrary `npm run` scripts from the user's repositories. If a permission prompt appears for anything other than `neotoma *` or `npm install -g neotoma`, stop and ask the user to widen the allowlist (see the Permissions pre-flight block above) rather than substituting another command.
+4.  **Set the first data target** - determine what data should be stored first and, if needed, ask the user which onboarding mode they want: quick win, guided, or power user.
+5.  **Run activation** - execute [discover -&gt; propose -&gt; preview -&gt; ingest -&gt; reconstruct -&gt; query -&gt; correct](https://github.com/markmhendrickson/neotoma/blob/main/install.md): discover candidates, preview them, ingest confirmed sources, reconstruct a timeline, then query and correct.
+6.  **Configure the current tool** - after first value is visible, set up the strongest ongoing Neotoma workflow for the tool in use. For OpenClaw, keep the native plugin path as the default and use manual MCP wiring only as fallback. If that tool is too constrained, say so explicitly and recommend a better-supported primary environment.
+
+If your agent requires command allowlists, use the pre-flight snippets before running the prompt.
+
+## Permissions pre-flight (copy once, before running the agent prompt below)
+
+Paste this snippet into the right file for your agent harness so the rest of onboarding only needs two approvals: `neotoma *` and one `npm install -g neotoma`. Without this, directory-scoped harnesses will prompt for every individual command.
+
+Using **OpenClaw**? Skip this — the native plugin handles consent. Just run `openclaw plugins install clawhub:neotoma` and approve the plugin permission prompt once.
+
+Claude CodeCursorCodex
+
+JSON merge into Claude Code's permissions file.
+
+Target: `.claude/settings.local.json (project) — or ~/.claude/settings.json (user)`
+
+Copy
+
+```
+// Paste into .claude/settings.local.json (project) or ~/.claude/settings.json (user).
+// Merge with any existing "permissions.allow" list.
+{
+  "permissions": {
+    "allow": [
+      "Bash(neotoma:*)",
+      "Bash(npm install -g neotoma:*)"
+    ]
+  }
+}
+```
 
 Canonical written reference: [install.md](https://github.com/markmhendrickson/neotoma/blob/main/install.md). If the user wants the broader qualification flow first, send them to [/evaluate](/evaluate).
 
 More options: [Manual install](https://github.com/markmhendrickson/neotoma?tab=readme-ov-file#install) · [Docker](/install#docker) · [CLI reference](/cli)
 
+* * *
+
 ## What changes on your system
 
-`npm install -g neotoma` adds a CLI binary. `neotoma init` creates a config directory, a local SQLite database, and an env file. Optional prompts during init can add MCP config entries and CLI instruction files — you choose at each step. Nothing runs in the background unless you start it. No telemetry, no phone-home.
+`npm install -g neotoma` adds a CLI binary. `neotoma init` creates a config directory, a local SQLite database, and an env file. Optional prompts during init can add MCP config entries and CLI instruction files; you choose at each step. Nothing runs in the background unless you start it. No telemetry, no phone-home.
 
-See full breakdown of files, paths, and how reset reverses each →
+| Created | Path | Scope | neotoma reset |
+| --- | --- | --- | --- |
+| Global npm package | neotoma (global node\_modules) | Global | npm uninstall -g neotoma |
+| Config directory | ~/.config/neotoma/ | User | Backed up, then removed |
+| Environment file | ~/.config/neotoma/.env or &lt;project&gt;/.env | User / Project | Backed up, then removed |
+| SQLite databases | &lt;data-dir&gt;/neotoma.db, neotoma.prod.db | Local | Backed up, then removed |
+| Data directories | &lt;data-dir&gt;/sources/, &lt;data-dir&gt;/logs/ | Local | Backed up, then removed |
+| MCP config entries (optional) | .cursor/mcp.json, claude.json, etc. | User / Project | Entries stripped from configs |
+| CLI instruction rules (optional) | .cursor/rules/, .claude/rules/ | User / Project | Backed up, then removed |
+
+`neotoma reset` backs up every item to a timestamped directory before removing it, then runs `npm uninstall -g neotoma`. If your `.env` sets `NEOTOMA_DATA_DIR`, that directory is protected and not removed.
 
 ◆
 
 ## Direct integration docs
+
+Connecting an agent to a hosted Neotoma instead of installing locally? Hosted Neotoma instances expose harness-specific connect snippets at their own root URL (with the host pre-filled) - see [Connect a remote Neotoma](/connect) or try the [public sandbox](/sandbox).
 
 -   [
     
@@ -175,11 +236,32 @@ See full breakdown of files, paths, and how reset reverses each →
 
 If you prefer to run the commands yourself:
 
-`# Global install npm install -g neotoma  # Initialize neotoma init`
+Manual install
+
+Run these commands yourself on the host machine.
+
+```
+# 1. Install globally (required for agent harnesses — avoids per-repo PATH prompts)
+npm install -g neotoma
+
+# 2. Inspect state in one call (no shell introspection needed)
+neotoma doctor --json
+
+# 3. Run the full idempotent setup for the current harness
+neotoma setup --tool claude-code --yes   # or: --tool cursor | --tool codex | --tool openclaw
+```
 
 ### After installation
 
 Once installation is complete, activation follows. If evaluation already identified the first data to store, carry that forward. Otherwise determine it now, then run **discover -&gt; propose -&gt; preview -&gt; ingest -&gt; reconstruct -&gt; query -&gt; correct**. After first value is visible, configure the current tool for robust ongoing usage.
+
+**Troubleshooting: `which neotoma` fails after install?** Your shell manager (mise, nvm, fnm) is probably not active in the agent's non-interactive shell. Run `neotoma doctor --json` and read `.neotoma.path_fix_hint` for the exact activation line. Common fixes to add to `~/.zshenv` or `~/.zshrc`:
+
+```
+mise:  eval "$(mise activate zsh)"
+nvm:   source "$NVM_DIR/nvm.sh"   # in ~/.zshenv for non-interactive shells
+fnm:   eval "$(fnm env)"
+```
 
 1.  **Preference selection** - if evaluation already established the priority data types and onboarding mode, carry them forward. Otherwise choose which data types matter most (project files, chat transcripts, meeting notes, financial docs, code context, custom paths) and pick a mode: quick win, guided, or power user.
 2.  **Discovery** - continue from any candidate data already identified during evaluation. If that work has not happened yet, the agent scans shallowly based on your preferences, groups results into domains (not file counts), and checks for chat transcript exports and platform memory.
@@ -189,11 +271,45 @@ Once installation is complete, activation follows. If evaluation already identif
 
 ◆
 
+## Try it now
+
+Once Neotoma is running, try these prompts in any connected tool to see it working:
+
+Store a contact
+
+“Remember that Sarah Chen's email is sarah@newstartup.io. She started there in March.”
+
+Then in a different session or tool: “What's Sarah Chen's email?”
+
+Track a commitment
+
+“I told Nick I'd send the architecture doc by Friday.”
+
+Later: “What did I commit to this week?”
+
+Test a correction
+
+“Actually, Sarah's email changed to sarah@acme.co.”
+
+Then: “What's Sarah's email? Show me the history.” Both old and new are preserved with timestamps.
+
+◆
+
 ## Start the API server
 
 The API server provides the HTTP interface that MCP and the CLI communicate through.
 
-`# Run API server (development) neotoma api start --env dev  # Run API server (production) neotoma api start --env production`
+Start API
+
+Bring up the local API so MCP and CLI can connect.
+
+```
+# Run API server (development)
+neotoma api start --env dev
+
+# Run API server (production)
+neotoma api start --env production
+```
 
 ◆
 
@@ -201,7 +317,24 @@ The API server provides the HTTP interface that MCP and the CLI communicate thro
 
 Add Neotoma to your MCP client configuration (Cursor, Claude, or Codex):
 
-`{   "mcpServers": {     "neotoma-dev": {       "command": "/absolute/path/to/neotoma/scripts/run_neotoma_mcp_stdio.sh"     },     "neotoma": {       "command": "/absolute/path/to/neotoma/scripts/run_neotoma_mcp_stdio_prod.sh"     }   } }`
+MCP config
+
+Add this client config to connect Neotoma over stdio.
+
+```
+{
+  "mcpServers": {
+    "neotoma-dev": {
+      "command": "/absolute/path/to/neotoma/scripts/run_neotoma_mcp_stdio.sh"
+    },
+    "neotoma": {
+      "command": "/absolute/path/to/neotoma/scripts/run_neotoma_mcp_stdio_prod.sh"
+    }
+  }
+}
+```
+
+**After adding MCP config:** restart your AI tool (Claude Code, Cursor, Claude Desktop, etc.) so it picks up the new server. MCP servers are loaded at startup.
 
 ◆
 
@@ -211,7 +344,14 @@ AgentHuman
 
 If you want your assistant to handle Docker setup, use a prompt like this:
 
-`Follow the instructions at: https://github.com/markmhendrickson/neotoma/blob/main/docs/developer/agent_docker_instructions.md`
+Docker prompt
+
+Use this when you want an assistant to handle the Docker path.
+
+```
+Follow the instructions at:
+https://github.com/markmhendrickson/neotoma/blob/main/docs/developer/agent_docker_instructions.md
+```
 
 [CLI reference →](/cli)[Full README →](https://github.com/markmhendrickson/neotoma?tab=readme-ov-file#install)</pre></div><div role="region" aria-label="Notifications (F8)" tabindex="-1" style="pointer-events: none;"><ol tabindex="-1" class="fixed top-0 z-[100] flex w-full flex-col-reverse p-4 sm:bottom-4 sm:right-4 sm:top-auto sm:flex-col sm:max-h-[calc(100vh-1rem)] sm:overflow-y-auto md:max-w-[420px]"></ol></div></div>
   

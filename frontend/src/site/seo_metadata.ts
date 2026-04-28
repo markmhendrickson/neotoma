@@ -182,6 +182,30 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       },
     ],
   },
+  "/install/manual": {
+    title: "Manual Install | Neotoma",
+    description:
+      "Install Neotoma manually with npm, verify the installation, start the API server, and connect MCP.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Install", path: "/install" },
+      { name: "Manual Install", path: "/install/manual" },
+    ],
+  },
+  "/install/docker": {
+    title: "Docker Install | Neotoma",
+    description:
+      "Run Neotoma in Docker using docker-compose or standalone containers with persistent storage.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Install", path: "/install" },
+      { name: "Docker Install", path: "/install/docker" },
+    ],
+  },
   "/sandbox": {
     title: "Public sandbox | Neotoma",
     description:
@@ -263,6 +287,45 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Home", path: "/" },
       { name: "Docs", path: "/docs" },
       { name: "Agent Instructions", path: "/agent-instructions" },
+    ],
+  },
+  "/agent-instructions/store-recipes": {
+    title: "Store Recipes and Entity Types | Neotoma Agent Instructions",
+    description:
+      "How agents store entities: user-phase recipes, attachments, screenshots, chat fallbacks, schema-agnostic storage, and type reuse rules.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Agent Instructions", path: "/agent-instructions" },
+      { name: "Store Recipes", path: "/agent-instructions/store-recipes" },
+    ],
+  },
+  "/agent-instructions/retrieval-provenance": {
+    title: "Retrieval, Provenance, and Tasks | Neotoma Agent Instructions",
+    description:
+      "How agents retrieve entities, maintain source provenance, and create tasks and commitments from conversations.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Agent Instructions", path: "/agent-instructions" },
+      { name: "Retrieval and Provenance", path: "/agent-instructions/retrieval-provenance" },
+    ],
+  },
+  "/agent-instructions/display-conventions": {
+    title: "Display, Attribution, and Conventions | Neotoma Agent Instructions",
+    description:
+      "Display rules, agent attribution, transport conventions, feedback reporting, error recovery, and onboarding instructions.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Agent Instructions", path: "/agent-instructions" },
+      { name: "Display and Conventions", path: "/agent-instructions/display-conventions" },
     ],
   },
   "/api": {
@@ -1309,15 +1372,15 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Autonomous Trading", path: "/trading" },
     ],
   },
-  "/verticals": {
-    title: "Use Cases | State Integrity for AI-Driven Verticals | Neotoma",
+  "/use-cases": {
+    title: "Use Cases | State Integrity for AI-Driven Workflows | Neotoma",
     description:
-      "Neotoma fits any workflow where 'what did the agent know then?' matters. Explore vertical use cases: compliance, CRM, contracts, due diligence, portfolio monitoring, case management, financial ops, procurement, agent authorization, healthcare, government, customer ops, logistics, trading, and AI-assisted crypto engineering.",
+      "Neotoma fits any workflow where 'what did the agent know then?' matters. Explore use cases: compliance, CRM, contracts, due diligence, portfolio monitoring, case management, financial ops, procurement, agent authorization, healthcare, government, customer ops, logistics, trading, and AI-assisted crypto engineering.",
     robots: "noindex,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
-      { name: "Verticals", path: "/verticals" },
+      { name: "Use Cases", path: "/use-cases" },
     ],
   },
   "/crypto-engineering": {
@@ -1440,6 +1503,18 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     breadcrumb: [
       { name: "Home", path: "/" },
       { name: "Evaluate", path: "/evaluate" },
+    ],
+  },
+  "/evaluate/agent-instructions": {
+    title: "Agent Evaluation Instructions | Neotoma",
+    description:
+      "Step-by-step evaluation workflow for AI agents: context sweep, install trial, fit assessment, resource map, and qualification scorecard.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Evaluate", path: "/evaluate" },
+      { name: "Agent Instructions", path: "/evaluate/agent-instructions" },
     ],
   },
   "/meet": {

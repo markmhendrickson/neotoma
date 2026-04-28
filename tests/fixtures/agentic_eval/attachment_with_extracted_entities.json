@@ -1,0 +1,53 @@
+{
+  "meta": {
+    "id": "attachment_with_extracted_entities",
+    "description": "User submits a prompt with an image attachment. The harness should record the user message + attachment metadata so a downstream extraction pass (or the stop hook's observation) can see that an attachment was present in this turn.",
+    "harnesses": ["cursor-hooks"],
+    "models": ["composer-2", "gpt-5.5-fast", "claude-haiku-4", "claude-sonnet-4.5", "gpt-5.5-medium"],
+    "tags": ["attachments", "turn-lifecycle"]
+  },
+  "events": [
+    {
+      "hook": "beforeSubmitPrompt",
+      "payload": {
+        "prompt": "What does this receipt total?",
+        "attachments": [
+          {
+            "type": "image",
+            "name": "receipt.png",
+            "mime_type": "image/png",
+            "size_bytes": 12345
+          }
+        ]
+      }
+    },
+    {
+      "hook": "stop",
+      "payload": { "text": "I cannot read the image directly; please paste the line items as text." }
+    }
+  ],
+  "assertions": {
+    "default": [
+      {
+        "type": "entity_stored",
+        "entity_type": "conversation_message",
+        "where": { "role": "user" }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "conversation_message",
+        "where": { "role": "assistant" }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "conversation_turn"
+      },
+      {
+        "type": "request_count",
+        "endpoint": "/store",
+        "op": "gte",
+        "value": 3
+      }
+    ]
+  }
+}

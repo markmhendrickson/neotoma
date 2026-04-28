@@ -38,10 +38,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
     <title>Contracts Guide | Store &amp; Retrieve Agreements, Clauses, Amendments (Markdown) | Neotoma</title>
-    <script type="module" crossorigin="" src="../../../../assets/main-Jf-itxVT.js"></script>
-    <link rel="stylesheet" crossorigin="" href="../../../../assets/main-DWQ-Fl-1.css">
+    <script type="module" crossorigin="" src="/assets/main-CaoWcp2k.js"></script>
+    <link rel="stylesheet" crossorigin="" href="/assets/main-BBds_bdF.css">
   
-    <!-- build: local-1776078353914 -->
+    <!-- build: local-1777360387837 -->
       <link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/types/contracts">
     <link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/types/contracts">
     <link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/types/contracts">
@@ -61,7 +61,7 @@
     <div id="root"><iframe title="Markdown capture" aria-hidden="true" width="1280" height="900" class="pointer-events-none fixed left-[-9999px] top-0 z-[-1] border-0 opacity-0" sandbox="allow-same-origin allow-scripts allow-forms"></iframe><div class="min-h-screen bg-background text-foreground"><pre class="whitespace-pre-wrap break-words p-4 font-mono text-[13px] leading-relaxed text-foreground">&lt;!--
   Full-page Markdown export (rendered HTML → GFM).
   Source: https://neotoma.io/pt/types/contracts
-  Generated: 2026-04-13T11:08:14.821Z
+  Generated: 2026-04-28T07:17:06.026Z
 --&gt;
 # Contracts
 
@@ -73,13 +73,19 @@ Store a contract with any fields that describe it. Neotoma auto-discovers the sc
 
 MCP
 
+Equivalent MCP example for this entity type.
+
 store\_structured({ entities: \[ { entity\_type: "contract", title: "Acme Corp - SaaS License Agreement", counterparty: "Acme Corp", status: "active", effective\_date: "2026-01-15", renewal\_date: "2027-01-15", annual\_value: 48000, currency: "USD" } \], idempotency\_key: "contract-acme-saas-2026" })
 
 CLI
 
+Equivalent CLI example for this entity type.
+
 neotoma store --json='\[{ "entity\_type": "contract", "title": "Acme Corp - SaaS License Agreement", "counterparty": "Acme Corp", "status": "active", "effective\_date": "2026-01-15", "renewal\_date": "2027-01-15", "annual\_value": 48000, "currency": "USD" }\]'
 
 REST API
+
+Equivalent REST API example for this entity type.
 
 curl -X POST http://localhost:3080/api/store \\ -H "Content-Type: application/json" \\ -d '{ "entities": \[{ "entity\_type": "contract", "title": "Acme Corp - SaaS License Agreement", "counterparty": "Acme Corp", "status": "active", "effective\_date": "2026-01-15", "renewal\_date": "2027-01-15", "annual\_value": 48000, "currency": "USD" }\] }'
 
@@ -101,9 +107,13 @@ Query contracts by type, search by keyword, inspect version history, and travers
 
 CLI
 
+Equivalent CLI example for this entity type.
+
 \# List all contracts neotoma entities list --type contract # Search by counterparty neotoma entities search --query "Acme Corp" --type contract # View amendment and renewal history neotoma observations list --entity-id &lt;entity\_id&gt; # Find linked clauses or amendments neotoma relationships list --entity-id &lt;entity\_id&gt;
 
 MCP
+
+Equivalent MCP example for this entity type.
 
 // Find by identifier retrieve\_entity\_by\_identifier({ identifier: "Acme Corp - SaaS License Agreement", entity\_type: "contract" }) // List active contracts retrieve\_entities({ entity\_type: "contract", limit: 20 }) // Reconstruct state at a past date retrieve\_entity\_by\_identifier({ identifier: "Acme Corp - SaaS License Agreement", entity\_type: "contract", as\_of: "2026-06-01" })
 

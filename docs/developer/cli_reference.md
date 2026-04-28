@@ -116,7 +116,9 @@ All `npm run <script>` commands in one place. Scripts follow the three-category 
 | `watch:ui`, `dev:ui`                         | Vite           | Frontend dev server                   |
 | `watch:dev:tunnel`, `dev:api`                | 3080           | API + HTTPS tunnel (Cloudflare/ngrok) |
 | `watch:server+api`, `watch:dev`              | 3080           | API + tunnel + `tsc --watch`          |
-| `watch:full`, `dev:full`                     | 3080, Vite, WS | API + UI + build                      |
+| `watch:full`, `dev:full`                     | 3080, Vite, WS | API + UI + build + resource banner + **`vite build --watch`** for Inspector into `dist/inspector` (`NEOTOMA_INSPECTOR_LIVE_BUILD=1`: no long cache + **full page reload** when `index.html` mtime changes after each rebuild) |
+| `watch:full:prod`, `dev:full:prod`           | 3180, Vite, WS | Same as `watch:full` with `NEOTOMA_ENV=production` and prod-scoped Inspector watch (`watch:inspector:prod`) |
+| `watch:inspector`, `watch:inspector:prod`    | —              | Inspector only: `vite build --watch` → repo `dist/inspector` (use with API already running, or rely on `watch:full` / `watch:full:prod`) |
 | `watch:mcp:stdio`, `dev:mcp:stdio`           | —              | MCP stdio watch                       |
 | `watch:mcp:stdio:prod`, `dev:mcp:stdio:prod` | —              | MCP stdio, production env             |
 | `dev:server+mcp`                             | 3080, 8280     | API + MCP HTTP + build                |

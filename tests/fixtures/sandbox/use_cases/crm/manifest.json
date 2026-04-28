@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0",
+  "description": "CRM use case sandbox seed. Contacts, deals, accounts, and engagements.",
+  "agent_identities": [
+    {
+      "agent_sub": "sandbox-agent-crm@neotoma.sandbox",
+      "client_name": "sandbox-seed-crm",
+      "client_version": "0.1.0",
+      "label": "CRM seed runner"
+    }
+  ],
+  "entity_batches": [
+    {
+      "agent_index": 0,
+      "idempotency_prefix": "sandbox-seed-crm-contacts",
+      "fixture": "reuse://tests/fixtures/json/contact.json",
+      "entity_type_override": "contact",
+      "note": "Reuses existing contact fixture."
+    }
+  ],
+  "unstructured_sources": [],
+  "excluded_fixtures": []
+}

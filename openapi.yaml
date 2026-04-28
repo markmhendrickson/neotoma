@@ -1516,6 +1516,10 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+                properties:
+                  neotoma_env:
+                    type: string
+                    description: Resolved NEOTOMA_ENV for this process (development or production).
 
   /mcp/oauth/initiate:
     post:

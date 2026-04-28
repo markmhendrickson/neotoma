@@ -16,9 +16,9 @@ import {
   Terminal,
   Upload,
 } from "lucide-react";
-import { VerticalLandingShell, type VerticalConfig } from "./vertical_landing/VerticalLandingShell";
+import { UseCaseLandingShell, type UseCaseConfig } from "./use_case_landing/UseCaseLandingShell";
 
-const CONFIG: VerticalConfig = {
+const CONFIG: UseCaseConfig = {
   accentColor: "sky",
   badgeIcon: Search,
   badgeText: "Neotoma for Due Diligence",
@@ -257,5 +257,5 @@ const CONFIG: VerticalConfig = {
 };
 
 export function DiligenceLandingPage() {
-  return <VerticalLandingShell config={CONFIG} />;
+  return <UseCaseLandingShell config={CONFIG} />;
 }

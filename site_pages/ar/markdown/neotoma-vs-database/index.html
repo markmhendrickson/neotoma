@@ -39,10 +39,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
     <title>Neotoma vs Database Memory | SQLite, Postgres vs Deterministic State (Markdown) | Neotoma</title>
-    <script type="module" crossorigin="" src="../../../assets/main-Jf-itxVT.js"></script>
-    <link rel="stylesheet" crossorigin="" href="../../../assets/main-DWQ-Fl-1.css">
+    <script type="module" crossorigin="" src="/assets/main-CaoWcp2k.js"></script>
+    <link rel="stylesheet" crossorigin="" href="/assets/main-BBds_bdF.css">
   
-    <!-- build: local-1776078353914 -->
+    <!-- build: local-1777360387837 -->
       <link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/neotoma-vs-database">
     <link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/neotoma-vs-database">
     <link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/neotoma-vs-database">
@@ -62,13 +62,13 @@
     <div id="root"><iframe title="Markdown capture" aria-hidden="true" width="1280" height="900" class="pointer-events-none fixed left-[-9999px] top-0 z-[-1] border-0 opacity-0" sandbox="allow-same-origin allow-scripts allow-forms"></iframe><div class="min-h-screen bg-background text-foreground"><pre class="whitespace-pre-wrap break-words p-4 font-mono text-[13px] leading-relaxed text-foreground">&lt;!--
   Full-page Markdown export (rendered HTML → GFM).
   Source: https://neotoma.io/ar/neotoma-vs-database
-  Generated: 2026-04-13T11:08:10.997Z
+  Generated: 2026-04-28T07:17:02.087Z
 --&gt;
 # Neotoma vs database memory
 
 A relational database (SQLite, Postgres) provides strong consistency, column types, and fast queries. But standard CRUD usage overwrites previous state on every UPDATE, losing history, provenance, and the ability to reconstruct past entity state. Neotoma uses a database as its storage backend but adds the observation/reducer architecture that delivers memory guarantees.
 
-Relational databases are the default tool for structured data. The question is not whether a database can store agent state - it can. The question is whether standard CRUD patterns deliver the guarantees that production agent memory requires.
+Relational databases are the default tool for structured data. The question is not whether a database can store agent state\\u2014it can. The question is whether standard CRUD patterns deliver the guarantees that production agent memory requires. The distinction that matters: your database is the system of record for human-written business data (customer records, transactions, product catalog). Agent-written observational state\\u2014observations, inferences, entity resolutions, decisions\\u2014is a category of data that did not exist before agents started writing autonomously, and it needs different architectural properties.
 
 ## Why not just use SQLite or Postgres for agent memory?
 
@@ -78,7 +78,7 @@ A database with standard CRUD operations stores the current state of each entity
 
 Neotoma
 
-Neotoma uses SQLite (or Postgres) as its storage backend but imposes an append-only observation log, deterministic reducers, schema validation, and field-level provenance on top. The database stores the data; the architecture delivers the guarantees.
+Neotoma sits between your agents and your database. It uses SQLite (or Postgres) as its storage backend but imposes an append-only observation log, deterministic reducers, schema validation, and field-level provenance on top. Your existing database stays as the system of record for business data. Neotoma adds a layer for agent-generated state that needs write integrity.
 
 ◆
 
@@ -93,6 +93,7 @@ Neotoma uses SQLite (or Postgres) as its storage backend but imposes an append-o
 | Schema constraints | Partial | Guaranteed |
 | Silent mutation risk | Common risk | Prevented |
 | Conflicting facts risk | Common risk | Prevented |
+| False closure risk | Common risk | Prevented |
 | Reproducible state reconstruction | Not provided | Guaranteed |
 | Human inspectability (diffs/lineage) | Partial | Guaranteed |
 | Zero-setup onboarding | Not provided | Not provided |

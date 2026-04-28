@@ -153,7 +153,7 @@ export const FAQ_ITEMS: FaqItem[] = [
   {
     question: "What are Neotoma's memory guarantees?",
     answer:
-      "Neotoma provides nine guarantees: deterministic state evolution, versioned history, replayable timeline, auditable change log, schema constraints, silent mutation prevention, conflicting facts detection, reproducible state reconstruction, and human inspectability.",
+      "Neotoma enforces a set of memory guarantees that cover deterministic state evolution, versioned history, replayable timeline, auditable change log, schema constraints, silent mutation prevention, conflicting facts detection, false closure prevention, reproducible state reconstruction, human inspectability, zero-setup onboarding, semantic similarity search, and direct human editability.",
     link: { href: "/memory-guarantees", label: "Memory guarantees" },
   },
   {

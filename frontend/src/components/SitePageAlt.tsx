@@ -219,7 +219,6 @@ const HERO_QUOTES: { text: string; attribution: string; attributionHref?: string
   {
     text: "CI/CD for agent state.",
     attribution: "Tycho Onnasch, co-founder, Zest Protocol",
-    attributionHref: "https://x.com/TychoOnnasch",
   },
 ];
 

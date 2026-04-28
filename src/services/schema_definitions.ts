@@ -2515,6 +2515,166 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       },
     },
   },
+
+  conversation_turn: {
+    entity_type: "conversation_turn",
+    schema_version: "1.0",
+    metadata: {
+      label: "Conversation Turn",
+      description:
+        "Per-turn telemetry accreted by hook lifecycle events across all harnesses. One entity per (session_id, turn_id) capturing hook events, tool invocations, entity store/retrieve counts, missed steps, and compliance status. Supersedes the legacy `turn_compliance` entity; both `turn_compliance` and `turn_activity` are kept as aliases for backward compatibility.",
+      category: "agent_runtime",
+      aliases: ["turn_compliance", "turn_activity"],
+    },
+    schema_definition: {
+      fields: {
+        session_id: { type: "string", required: true },
+        turn_id: { type: "string", required: true },
+        turn_key: { type: "string", required: false },
+        conversation_id: { type: "string", required: false },
+        harness: { type: "string", required: false },
+        harness_version: { type: "string", required: false },
+        model: { type: "string", required: false },
+        status: { type: "string", required: false },
+        hook_events: { type: "array", required: false },
+        missed_steps: { type: "array", required: false },
+        tool_invocation_count: { type: "number", required: false },
+        store_structured_calls: { type: "number", required: false },
+        retrieve_calls: { type: "number", required: false },
+        neotoma_tool_failures: { type: "number", required: false },
+        harness_loop_count: { type: "number", required: false },
+        injected_context_chars: { type: "number", required: false },
+        retrieved_entity_ids: { type: "array", required: false },
+        stored_entity_ids: { type: "array", required: false },
+        failure_hint_shown: { type: "boolean", required: false },
+        safety_net_used: { type: "boolean", required: false },
+        started_at: { type: "date", required: false },
+        ended_at: { type: "date", required: false },
+        cwd: { type: "string", required: false },
+      },
+      canonical_name_fields: [{ composite: ["session_id", "turn_id"] }],
+      name_collision_policy: "reject",
+    },
+    reducer_config: {
+      merge_policies: {
+        turn_key: { strategy: "last_write" },
+        conversation_id: { strategy: "last_write" },
+        harness: { strategy: "last_write" },
+        harness_version: { strategy: "last_write" },
+        model: { strategy: "last_write" },
+        status: { strategy: "last_write" },
+        hook_events: { strategy: "last_write" },
+        missed_steps: { strategy: "last_write" },
+        tool_invocation_count: { strategy: "last_write" },
+        store_structured_calls: { strategy: "last_write" },
+        retrieve_calls: { strategy: "last_write" },
+        neotoma_tool_failures: { strategy: "last_write" },
+        harness_loop_count: { strategy: "last_write" },
+        injected_context_chars: { strategy: "last_write" },
+        retrieved_entity_ids: { strategy: "last_write" },
+        stored_entity_ids: { strategy: "last_write" },
+        failure_hint_shown: { strategy: "last_write" },
+        safety_net_used: { strategy: "last_write" },
+        started_at: { strategy: "last_write" },
+        ended_at: { strategy: "last_write" },
+        cwd: { strategy: "last_write" },
+      },
+    },
+  },
+
+  tool_invocation: {
+    entity_type: "tool_invocation",
+    schema_version: "1.0",
+    metadata: {
+      label: "Tool Invocation",
+      description:
+        "A single tool call observed during an agent turn. Keyed by (turn_key, tool_name, invoked_at) so each call is a distinct entity.",
+      category: "agent_runtime",
+      aliases: [],
+    },
+    schema_definition: {
+      fields: {
+        turn_key: { type: "string", required: true },
+        tool_name: { type: "string", required: true },
+        invoked_at: { type: "date", required: true },
+        duration_ms: { type: "number", required: false },
+        result_status: { type: "string", required: false },
+        harness: { type: "string", required: false },
+      },
+      canonical_name_fields: [{ composite: ["turn_key", "tool_name", "invoked_at"] }],
+      name_collision_policy: "reject",
+    },
+    reducer_config: {
+      merge_policies: {
+        duration_ms: { strategy: "last_write" },
+        result_status: { strategy: "last_write" },
+        harness: { strategy: "last_write" },
+      },
+    },
+  },
+
+  tool_invocation_failure: {
+    entity_type: "tool_invocation_failure",
+    schema_version: "1.0",
+    metadata: {
+      label: "Tool Invocation Failure",
+      description:
+        "A failed tool call with error classification. Keyed by (turn_key, tool_name, error_class, observed_at).",
+      category: "agent_runtime",
+      aliases: [],
+    },
+    schema_definition: {
+      fields: {
+        turn_key: { type: "string", required: true },
+        tool_name: { type: "string", required: true },
+        error_class: { type: "string", required: true },
+        observed_at: { type: "date", required: true },
+        error_message: { type: "string", required: false },
+        hint_shown: { type: "boolean", required: false },
+        harness: { type: "string", required: false },
+      },
+      canonical_name_fields: [{ composite: ["turn_key", "tool_name", "error_class", "observed_at"] }],
+      name_collision_policy: "reject",
+    },
+    reducer_config: {
+      merge_policies: {
+        error_message: { strategy: "last_write" },
+        hint_shown: { strategy: "last_write" },
+        harness: { strategy: "last_write" },
+      },
+    },
+  },
+
+  context_event: {
+    entity_type: "context_event",
+    schema_version: "1.0",
+    metadata: {
+      label: "Context Event",
+      description:
+        "A discrete event during context assembly for a turn (retrieval injection, system prompt transform, etc.). Keyed by (turn_key, event, observed_at).",
+      category: "agent_runtime",
+      aliases: [],
+    },
+    schema_definition: {
+      fields: {
+        turn_key: { type: "string", required: true },
+        event: { type: "string", required: true },
+        observed_at: { type: "date", required: true },
+        chars_injected: { type: "number", required: false },
+        entity_ids: { type: "array", required: false },
+        harness: { type: "string", required: false },
+      },
+      canonical_name_fields: [{ composite: ["turn_key", "event", "observed_at"] }],
+      name_collision_policy: "reject",
+    },
+    reducer_config: {
+      merge_policies: {
+        chars_injected: { strategy: "last_write" },
+        entity_ids: { strategy: "last_write" },
+        harness: { strategy: "last_write" },
+      },
+    },
+  },
 };
 
 /**

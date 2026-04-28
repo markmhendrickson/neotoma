@@ -4,6 +4,7 @@ import {
   BarChart3,
   Bot,
   Brain,
+  CircleSlash,
   Clock,
   Database,
   GitBranch,
@@ -20,18 +21,19 @@ import {
   TrendingUp,
   Upload,
 } from "lucide-react";
-import { VerticalLandingShell, type VerticalConfig } from "./vertical_landing/VerticalLandingShell";
+import { UseCaseLandingShell, type UseCaseConfig } from "./use_case_landing/UseCaseLandingShell";
 
-const CONFIG: VerticalConfig = {
+const CONFIG: UseCaseConfig = {
   accentColor: "emerald",
   badgeIcon: TrendingUp,
   badgeText: "Neotoma for Autonomous Trading",
   heroTitle: "Trading agent state that survives",
   heroHighlight: "strategy drift, analyst disagreement, and post-trade reconstruction",
   heroDesc:
-    "When multiple specialist agents analyze markets, debate positions, and execute trades autonomously, the decision chain, strategy version, analyst inputs, debate resolution, and risk parameters, must be reconstructable after the fact. Neotoma versions every trading entity so you can answer what the agent knew, what each analyst recommended, and why the final call was made.",
+    "When multiple specialist agents analyze markets, debate positions, and execute trades autonomously, the decision chain, strategy version, analyst inputs, debate resolution, and risk parameters must be reconstructable after the fact, including the trades the agent chose to pass on. Neotoma versions every trading entity so you can answer what the agent knew, what each analyst recommended, and why the final call was made (or deliberately not made).",
   heroTags: [
     { tag: "trade_decision", Icon: Scale },
+    { tag: "pass_decision", Icon: CircleSlash },
     { tag: "strategy", Icon: Brain },
     { tag: "analysis", Icon: BarChart3 },
     { tag: "risk_state", Icon: Shield },
@@ -80,6 +82,19 @@ const CONFIG: VerticalConfig = {
       failTitle: "Current strategy cited, historical reasoning missing",
       failDesc:
         "The assistant used today's strategy and market view to explain a trade made under different conditions. The actual analyst scores, debate outcome, and risk parameters at trade time are unavailable.",
+    },
+    {
+      category: "Pass decision audit",
+      human:
+        "Why did the agent skip the SOL long at 09:42 UTC on March 27 when my manual watchlist flagged it? It ran 14% in the next four hours.",
+      fail: "The agent focuses on high-conviction setups. SOL did not meet its filters on March 27.",
+      succeed:
+        "On 2026-03-27 at 09:42 UTC, pass_decision·v12 was recorded against ticker SOL-PERP. Six analysts reported: Technical OVERWEIGHT (breakout confirmed, confidence 0.74), Sentiment OVERWEIGHT (funding flipped long, 0.68), News NEUTRAL (no catalyst), Fundamentals UNDERWEIGHT (TVL outflow 4% WoW), Tokenomics UNDERWEIGHT (upcoming unlock in 7 days, 2.1% of supply), Competitive NEUTRAL. Debate resolved bull 3-3 with combined confidence 0.52, below the 0.60 entry threshold in strategy strat·v7. Risk state at evaluation: drawdown already 3.4%, two correlated SOL-beta positions open (portfolio_snapshot·v19, correlation gate triggered). PM decision: PASS with rationale 'confidence below threshold and correlated exposure too high'. Pass reason preserved at pass_decision·v12 linked to analysis·v74-79, debate·v23, and strategy·v7.",
+      version: "pass_decision·v12",
+      Icon: CircleSlash,
+      failTitle: "Current filter framing, historical rationale missing",
+      failDesc:
+        "The assistant described today's general posture but could not show the specific analyst scores, debate confidence, correlated-exposure check, or strategy threshold that caused the agent to pass on March 27.",
     },
     {
       category: "Strategy evolution",
@@ -161,6 +176,12 @@ const CONFIG: VerticalConfig = {
       tags: ["trade_decision", "debate", "provenance"],
     },
     {
+      Icon: CircleSlash,
+      title: "Pass decision provenance",
+      desc: "Record every trade the agent chose not to open alongside the trades it executed. Reconstruct which analyst signals fell short, which risk checks blocked entry, and which confidence threshold was not met. Essential for evaluating strategies against counterfactual returns.",
+      tags: ["pass_decision", "counterfactual", "attribution"],
+    },
+    {
       Icon: Brain,
       title: "Strategy version control",
       desc: "Track every strategy mutation, user edits, agent adaptations, and parameter changes, as versioned observations. Compare returns across strategy versions and attribute performance to specific modifications.",
@@ -236,7 +257,7 @@ const CONFIG: VerticalConfig = {
       "AI-native trading co-pilots orchestrate multiple specialist analysts, structured debates, and autonomous execution across chains. Neotoma versions every analyst output, debate resolution, and risk parameter so you can reconstruct the full decision chain for any trade at any point in time.",
     featuresHeading: "What trading teams build",
     features: [
-      "Multi-analyst reasoning chains with versioned assessments, confidence scores, and debate resolutions linked to every trade decision",
+      "Multi-analyst reasoning chains with versioned assessments, confidence scores, and debate resolutions linked to every trade decision, including the pass decisions the agent made and why",
       "Strategy evolution tracking that attributes returns to specific parameter versions and agent adaptations over time",
       "Risk state timelines that prove what limits, caps, and kill switch states were active during any market event",
     ],
@@ -264,5 +285,5 @@ const CONFIG: VerticalConfig = {
 };
 
 export function TradingLandingPage() {
-  return <VerticalLandingShell config={CONFIG} />;
+  return <UseCaseLandingShell config={CONFIG} />;
 }

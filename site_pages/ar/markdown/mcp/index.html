@@ -38,10 +38,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
     <title>MCP Server Reference (Markdown) | Neotoma</title>
-    <script type="module" crossorigin="" src="../../../assets/main-Jf-itxVT.js"></script>
-    <link rel="stylesheet" crossorigin="" href="../../../assets/main-DWQ-Fl-1.css">
+    <script type="module" crossorigin="" src="/assets/main-CaoWcp2k.js"></script>
+    <link rel="stylesheet" crossorigin="" href="/assets/main-BBds_bdF.css">
   
-    <!-- build: local-1776078353914 -->
+    <!-- build: local-1777360387837 -->
       <link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/mcp">
     <link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/mcp">
     <link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/mcp">
@@ -61,7 +61,7 @@
     <div id="root"><iframe title="Markdown capture" aria-hidden="true" width="1280" height="900" class="pointer-events-none fixed left-[-9999px] top-0 z-[-1] border-0 opacity-0" sandbox="allow-same-origin allow-scripts allow-forms"></iframe><div class="min-h-screen bg-background text-foreground"><pre class="whitespace-pre-wrap break-words p-4 font-mono text-[13px] leading-relaxed text-foreground">&lt;!--
   Full-page Markdown export (rendered HTML → GFM).
   Source: https://neotoma.io/ar/mcp
-  Generated: 2026-04-13T11:07:26.169Z
+  Generated: 2026-04-28T07:15:50.448Z
 --&gt;
 # Model Context Protocol (MCP) server
 
@@ -108,6 +108,8 @@ Neotoma exposes 30 MCP actions covering storage, retrieval, relationships, schem
 
 All MCP actions operate under an authenticated user context. Authentication is handled via OAuth (recommended) or Bearer token. The `user_id` parameter is optional and inferred from the auth context. Run `neotoma auth login` for OAuth setup, or set `NEOTOMA_BEARER_TOKEN` for token-based auth.
 
+For agent identity (separate from human user auth), MCP supports **AAuth** (RFC 9421 HTTP Message Signatures plus an `aa-agent+jwt` token on the `initialize` handshake). Verified agents render with a `hardware` or `software` trust badge in the Inspector. When AAuth is not present, `clientInfo.name` / `clientInfo.version` on the MCP `initialize` handshake serve as a fallback identifier (rendered as `unverified_client`). See the [AAuth reference](/aauth) for the full attribution contract.
+
 ◆
 
 ## Common action patterns
@@ -119,7 +121,7 @@ retrieve\_entity\_by\_identifier(identifier="Ana Rivera", entity\_type="contact"
 store\_structured(
   entities=\[
     { entity\_type: "conversation", title: "Project sync" },
-    { entity\_type: "agent\_message", role: "user", content: "...", turn\_key: "conv:1" }
+    { entity\_type: "conversation\_message", role: "user", sender\_kind: "user", content: "...", turn\_key: "conv:1" }
   \],
   relationships=\[{ relationship\_type: "PART\_OF", source\_index: 1, target\_index: 0 }\],
   idempotency\_key="conversation-conv-1-1711900000000"
@@ -192,6 +194,23 @@ Scroll right
 ## Relationship types
 
 Supported relationship types for `create_relationship`: `PART_OF`, `CORRECTS`, `REFERS_TO`, `SETTLES`, `DUPLICATE_OF`, `DEPENDS_ON`, `SUPERSEDES`, `EMBEDS`. Use `EMBEDS` when a container (blog post, document) embeds an asset (image, attachment): source = container, target = asset.
+
+◆
+
+## What the server exposes at its root
+
+A running Neotoma binds a handful of unauthenticated discovery and health endpoints at the host root alongside the MCP transport itself. These exist so agents, proxies, and operators can identify and probe the deployment without credentials.
+
+-   `GET /` - root landing. Content-negotiated: browsers get an HTML page with identity, harness-connect snippets (pre-filled with the actual host URL), and an index of [neotoma.io](/docs) documentation; send `Accept: application/json` for the same content as JSON, or `Accept: text/markdown` for a Markdown document. Default (no HTML/Markdown) is JSON. The content adapts to deployment mode: *sandbox*, *personal* tunnel, *prod*, or *local*.
+-   `GET /robots.txt` - mirrors the deployment mode. Sandbox and local instances disallow crawling; personal and prod allow it and can link an external sitemap via `NEOTOMA_PUBLIC_DOCS_URL`.
+-   `GET /.well-known/mcp/server-card.json` - MCP server card (name, version, capabilities).
+-   `GET /.well-known/oauth-authorization-server` and `/.well-known/oauth-protected-resource` - OAuth discovery documents.
+-   `GET /server-info` - runtime details (version, git sha, build timestamp).
+-   `GET /health` - liveness probe.
+-   `GET /favicon.ico` - site icon for browser tabs.
+-   In sandbox mode: `GET /sandbox/terms` (acceptable-use JSON), `POST /sandbox/report`, and `GET /sandbox/report/status`.
+
+See [Connect a remote Neotoma](/connect) for per-harness snippets, and [Hosted Neotoma](/hosted) for the mode comparison.
 
 ◆
 

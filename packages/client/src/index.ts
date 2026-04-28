@@ -27,6 +27,7 @@ export {
   storeChatTurn,
   retrieveOrStore,
   snapshotOnUpdate,
+  recordConversationTurn,
   type ChatTurnMessage,
   type StoreChatTurnInput,
   type StoreChatTurnResult,
@@ -34,6 +35,8 @@ export {
   type RetrieveOrStoreResult,
   type SnapshotOnUpdateInput,
   type SnapshotOnUpdateResult,
+  type ConversationTurnInput,
+  type ConversationTurnResult,
 } from "./helpers.js";
 
 export {

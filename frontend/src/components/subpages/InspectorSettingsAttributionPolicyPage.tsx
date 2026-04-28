@@ -149,7 +149,7 @@ export function InspectorSettingsAttributionPolicyPage() {
         <li className="text-[15px] leading-7 text-muted-foreground">
           <MockPill tone="danger">reject</MockPill>{" "}
           <span className="ml-2">
-            Refuse writes below the minimum tier with a structured 401 error.
+            Refuse writes below the minimum tier with a structured 403 error.
             The recommended setting for shared/server installs once your
             agents are signing.
           </span>
@@ -170,8 +170,13 @@ export function InspectorSettingsAttributionPolicyPage() {
           attestation (TPM 2.0, Apple Secure Enclave, Yubikey).
         </li>
         <li>
+          <code>operator_attested</code>, verified AAuth signature with{" "}
+          <code>iss</code> (or <code>iss:sub</code>) in the operator
+          allowlist.
+        </li>
+        <li>
           <code>software</code>, verified AAuth signature without an attested
-          hardware backing.
+          hardware backing or operator allowlist match.
         </li>
         <li>
           <code>unverified_client</code>, recognisable <code>clientInfo</code>{" "}

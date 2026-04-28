@@ -1,4 +1,5 @@
 import { getSqliteDb } from "../repositories/sqlite/sqlite_client.js";
+import { listHookSummariesByTurnKeys, type ConversationTurnHookSummary } from "./conversation_turn.js";
 
 const TS_EPOCH = "1970-01-01T00:00:00.000Z";
 
@@ -18,6 +19,7 @@ export interface RecentConversationMessage {
   turn_key: string | null;
   activity_at: string;
   related_entities: RecentConversationRelatedEntity[];
+  hook_summary?: ConversationTurnHookSummary | null;
 }
 
 export interface RecentConversationItem {
@@ -377,10 +379,27 @@ export function listRecentConversations(
     }
   }
 
+  const allTurnKeys = new Set<string>();
+  for (const msgs of messagesByConversation.values()) {
+    for (const m of msgs) {
+      if (m.turn_key) {
+        const baseTurnKey = m.turn_key.replace(/:assistant$/, "");
+        allTurnKeys.add(baseTurnKey);
+      }
+    }
+  }
+  const hookSummaries = allTurnKeys.size > 0
+    ? listHookSummariesByTurnKeys(userId, [...allTurnKeys])
+    : new Map<string, ConversationTurnHookSummary>();
+
   const items: RecentConversationItem[] = conversationsPage.map((row) => {
     const messages = messagesByConversation.get(row.conversation_id) ?? [];
     for (const message of messages) {
       message.related_entities = relatedByMessage.get(message.message_id) ?? [];
+      if (message.turn_key) {
+        const baseTurnKey = message.turn_key.replace(/:assistant$/, "");
+        message.hook_summary = hookSummaries.get(baseTurnKey) ?? null;
+      }
     }
     return {
       conversation_id: row.conversation_id,

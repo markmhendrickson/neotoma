@@ -7,6 +7,22 @@ transport. Related: [`docs/subsystems/agent_feedback_pipeline.md`](./agent_feedb
 for the broader pipeline; [`services/agent-site/README.md`](../../services/agent-site/README.md)
 for the Cloudflare Access setup.
 
+## One of two entity writers
+
+The hosted forwarder is **one of two paths** that produce
+`neotoma_feedback` observations. The other is
+`mirrorLocalFeedbackToEntity`
+(`src/services/feedback/mirror_local_to_entity.ts`), used when Neotoma is
+running in self-contained local mode (no hosted pipeline configured).
+Both writers use the same `storedFeedbackToEntity` projection
+(`src/services/feedback/neotoma_payload.ts`) and the same
+`neotoma_feedback-<feedback_id>` idempotency key, so a record that later
+migrates between modes converges on a single entity rather than
+duplicating. See [Local pipeline mode](./agent_feedback_pipeline.md#local-pipeline-mode)
+for the non-Netlify flow. Nothing in this doc applies to the local
+writer; everything below describes the hosted Netlify → Cloudflare Tunnel
+→ Neotoma path.
+
 ## Goals
 
 1. Make `neotoma_feedback` the **eventual source of truth** for triage,

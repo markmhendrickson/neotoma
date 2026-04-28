@@ -39,6 +39,8 @@ export interface HarnessSnippetContext {
    * {@link PLACEHOLDER_STDIO_MCP_SCRIPT}.
    */
   stdioMcpScriptPath?: string | null;
+  /** Active sandbox session bearer token (if available via cookie). */
+  sessionBearer?: string | null;
 }
 
 function resolvedStdioScript(ctx: HarnessSnippetContext): string {
@@ -241,19 +243,27 @@ command = ${stdioJson}`,
   }
 
   // Remote modes (sandbox, personal, prod)
+  const bearer = ctx.sessionBearer;
+  const bearerNote = bearer ? `\n  // Session bearer pre-filled from active sandbox session` : "";
+  const headerBlock = bearer
+    ? `,\n      "headers": {\n        "Authorization": "Bearer ${bearer}"\n      }`
+    : "";
+
   switch (id) {
     case "claude-code":
       return {
         format: "shell",
-        code: `claude mcp add neotoma --transport http --url ${mcpUrl}`,
+        code: bearer
+          ? `claude mcp add neotoma --transport http --url ${mcpUrl} --header "Authorization: Bearer ${bearer}"`
+          : `claude mcp add neotoma --transport http --url ${mcpUrl}`,
       };
     case "claude-desktop":
       return {
         format: "json",
-        code: `{
+        code: `{${bearerNote}
   "mcpServers": {
     "neotoma": {
-      "url": "${mcpUrl}"
+      "url": "${mcpUrl}"${headerBlock}
     }
   }
 }`,
@@ -269,17 +279,17 @@ command = ${stdioJson}`,
     case "codex":
       return {
         format: "toml",
-        code: `# ~/.codex/config.toml
-[mcp_servers.neotoma]
-url = "${mcpUrl}"`,
+        code: bearer
+          ? `# ~/.codex/config.toml\n[mcp_servers.neotoma]\nurl = "${mcpUrl}"\n\n[mcp_servers.neotoma.headers]\nAuthorization = "Bearer ${bearer}"`
+          : `# ~/.codex/config.toml\n[mcp_servers.neotoma]\nurl = "${mcpUrl}"`,
       };
     case "cursor":
       return {
         format: "json",
-        code: `{
+        code: `{${bearerNote}
   "mcpServers": {
     "neotoma": {
-      "url": "${mcpUrl}"
+      "url": "${mcpUrl}"${headerBlock}
     }
   }
 }`,

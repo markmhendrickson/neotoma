@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { MCP_ACTIONS_TABLE } from "../../site/site_data";
+import { MCP_ACTIONS_TABLE, SITE_CODE_SNIPPETS } from "../../site/site_data";
 import { DetailPage } from "../DetailPage";
 import { DOC_TABLE_SCROLL_OUTER_CLASS, TableScrollWrapper } from "../ui/table-scroll-wrapper";
 
@@ -37,16 +37,7 @@ export function McpReferencePage() {
       <p className="text-[15px] leading-7 mb-3">
         <strong>Cursor</strong> (<code>.cursor/mcp.json</code>):
       </p>
-      <pre className="rounded-lg border code-block-palette p-4 overflow-x-auto font-mono text-[14px] whitespace-pre-wrap break-words mb-4">{`{
-  "mcpServers": {
-    "neotoma-dev": {
-      "command": "/absolute/path/to/neotoma/scripts/run_neotoma_mcp_stdio.sh"
-    },
-    "neotoma": {
-      "command": "/absolute/path/to/neotoma/scripts/run_neotoma_mcp_stdio_prod.sh"
-    }
-  }
-}`}</pre>
+      <pre className="rounded-lg border code-block-palette p-4 overflow-x-auto font-mono text-[14px] whitespace-pre-wrap break-words mb-4">{SITE_CODE_SNIPPETS.stdioConfigJson}</pre>
       <p className="text-[15px] leading-7 mb-3">
         <strong>Claude Code</strong> (<code>claude_desktop_config.json</code>) and{" "}
         <strong>Windsurf</strong> (<code>mcp_config.json</code>) use the same structure.

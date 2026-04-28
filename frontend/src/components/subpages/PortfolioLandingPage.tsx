@@ -20,9 +20,9 @@ import {
   Users,
   Zap,
 } from "lucide-react";
-import { VerticalLandingShell, type VerticalConfig } from "./vertical_landing/VerticalLandingShell";
+import { UseCaseLandingShell, type UseCaseConfig } from "./use_case_landing/UseCaseLandingShell";
 
-const CONFIG: VerticalConfig = {
+const CONFIG: UseCaseConfig = {
   accentColor: "violet",
   badgeIcon: PieChart,
   badgeText: "Neotoma for Portfolio Monitoring",
@@ -258,5 +258,5 @@ const CONFIG: VerticalConfig = {
 };
 
 export function PortfolioLandingPage() {
-  return <VerticalLandingShell config={CONFIG} />;
+  return <UseCaseLandingShell config={CONFIG} />;
 }

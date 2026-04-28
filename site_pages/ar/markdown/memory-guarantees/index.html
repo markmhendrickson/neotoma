@@ -38,10 +38,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
     <title>Memory Guarantees (Markdown) | Neotoma</title>
-    <script type="module" crossorigin="" src="../../../assets/main-Jf-itxVT.js"></script>
-    <link rel="stylesheet" crossorigin="" href="../../../assets/main-DWQ-Fl-1.css">
+    <script type="module" crossorigin="" src="/assets/main-CaoWcp2k.js"></script>
+    <link rel="stylesheet" crossorigin="" href="/assets/main-BBds_bdF.css">
   
-    <!-- build: local-1776078353914 -->
+    <!-- build: local-1777360387837 -->
       <link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/memory-guarantees">
     <link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/memory-guarantees">
     <link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/memory-guarantees">
@@ -61,7 +61,7 @@
     <div id="root"><iframe title="Markdown capture" aria-hidden="true" width="1280" height="900" class="pointer-events-none fixed left-[-9999px] top-0 z-[-1] border-0 opacity-0" sandbox="allow-same-origin allow-scripts allow-forms"></iframe><div class="min-h-screen bg-background text-foreground"><pre class="whitespace-pre-wrap break-words p-4 font-mono text-[13px] leading-relaxed text-foreground">&lt;!--
   Full-page Markdown export (rendered HTML → GFM).
   Source: https://neotoma.io/ar/memory-guarantees
-  Generated: 2026-04-13T11:08:21.142Z
+  Generated: 2026-04-28T07:17:24.874Z
 --&gt;
 # Memory Guarantees
 
@@ -189,7 +189,7 @@ Det.
 
 ✓
 
-عرض المزيد (14)
+عرض المزيد (15)
 
 | Property | Platform | Retrieval / RAG | Files | Database | Deterministic |
 | --- | --- | --- | --- | --- | --- |
@@ -201,6 +201,7 @@ Det.
 | Schema constraints | ✗ | ✗ | ✗ | ⚠ | ✓ |
 | Silent mutation risk | ⚠ | ⚠ | ⚠ | ⚠ | ✓ |
 | Conflicting facts risk | ⚠ | ⚠ | ⚠ | ⚠ | ✓ |
+| False closure risk | ⚠ | ⚠ | ⚠ | ⚠ | ✓ |
 | Reproducible state reconstruction | ✗ | ✗ | ✗ | ✗ | ✓ |
 | Human inspectability (diffs/lineage) | ⚠ | ⚠ | ⚠ | ⚠ | ✓ |
 | Zero-setup onboarding | ✓ | ✗ | ✗ | ✗ | ✗ |
@@ -220,6 +221,7 @@ On this page
 -   [Schema constraints](#schema-constraints)
 -   [Silent mutation risk](#silent-mutation-risk)
 -   [Conflicting facts risk](#conflicting-facts-risk)
+-   [False closure risk](#false-closure-risk)
 -   [Reproducible state reconstruction](#reproducible-state-reconstruction)
 -   [Human inspectability](#human-inspectability)
 -   [Zero-setup onboarding](#zero-setup-onboarding)
@@ -320,12 +322,12 @@ This protects [deterministic state evolution](#deterministic-state-evolution) an
 
 ### Schema extensibility
 
-Schemas are not fixed at deploy time. Store any entity with a descriptive `entity_type` and Neotoma infers the schema from the first observation. New fields are added automatically (minor version bump); unused fields can be pruned via `update_schema_incremental` (major version bump). Removed fields are excluded from snapshots but all observation data is preserved — re-adding a field restores it.
+Schemas are not fixed at deploy time. Store any entity with a descriptive `entity_type` and Neotoma infers the schema from the first observation. New fields are added automatically (minor version bump); unused fields can be pruned via `update_schema_incremental` (major version bump). Removed fields are excluded from snapshots but all observation data is preserved; re-adding a field restores it.
 
-\# Store a new entity type — schema is created automatically
+\# Store a new entity type: schema is created automatically
 neotoma store --json='\[{"entity\_type":"project","name":"Acme Redesign","status":"active","lead":"Ana"}\]'
 
-# Later, add a new field — schema evolves
+# Later, add a new field: schema evolves
 neotoma store --json='\[{"entity\_type":"project","name":"Acme Redesign","priority":"P0"}\]'
 
 # View the current schema
@@ -369,6 +371,24 @@ neotoma store --json='\[{"entity\_type":"contact","name":"Ana Rivera","office\_c
 neotoma entities search --query "Ana Rivera" --type contact
 
 Deterministic merge logic resolves conflicts reproducibly. [Schema constraints](#schema-constraints) support typed conflict handling, and [deterministic state evolution](#deterministic-state-evolution) guarantees the same result on replay.
+
+◆
+
+## False closure risk
+
+False closure risk is the likelihood that an agent confidently answers from stale or superseded context because the system cannot distinguish resolved decisions from open questions. The retrieval is technically correct, the fact exists, but the decision it describes was revised months ago.
+
+### Before vs after
+
+Before: an ops team asks “What is our contractor access policy?” The agent retrieves the Q3 draft discussion instead of the November board-approved version and answers confidently. The team acts on an outdated policy with no indication it was superseded. After: Neotoma’s versioned observations preserve both the draft and the final decision with timestamps and provenance. The reducer surfaces the latest resolved state; the observation trail shows when and why the policy changed.
+
+\# View the full observation history for a policy entity
+neotoma observations list --entity-id &lt;policy\_entity\_id&gt;
+
+# The snapshot reflects the latest resolved state
+neotoma entities search --query "contractor access policy" --type policy
+
+False closure is prevented by the combination of [versioned history](#versioned-history), [auditable change logs](#auditable-change-log), and [deterministic state evolution](#deterministic-state-evolution). Where [silent mutation](#silent-mutation-risk) describes data changing without a trail, false closure describes stale data being served as if it were current.
 
 ◆
 

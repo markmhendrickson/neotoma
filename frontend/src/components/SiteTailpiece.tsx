@@ -41,7 +41,7 @@ const LEGAL_LINKS = [
 const footerMarkdownLinkClass =
   "inline-flex h-9 min-h-9 items-center gap-1.5 rounded-md px-2 text-[13px] text-muted-foreground no-underline transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 
-/** Markdown (when available), language, and theme — shown in the global footer and vertical landing shells. */
+/** Markdown (when available), language, and theme — shown in the global footer and use case landing shells. */
 export function SiteFooterUtilities() {
   const { locale, dict } = useLocale();
   const markdownSourcePath = useIndexableMarkdownSourcePath();

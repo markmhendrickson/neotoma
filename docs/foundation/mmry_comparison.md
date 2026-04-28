@@ -19,7 +19,7 @@ mmry.io and Neotoma operate in adjacent but distinct market segments with minima
 **Market Context:**
 Both products address fragmented personal data but through fundamentally different lenses:
 - mmry = horizontal search tool for web content consumption
-- Neotoma = vertical memory substrate for AI-native workflows
+- Neotoma = use-case-specific memory substrate for AI-native workflows
 ## Executive Summary
 **mmry.io** is a privacy-first personal search engine that indexes content you've already seen online (Twitter, Reddit, YouTube, bookmarks) to enable search across your digital history.
 **Neotoma** is a deterministic state layer that transforms fragmented personal data into structured, queryable knowledge for AI agents via MCP.

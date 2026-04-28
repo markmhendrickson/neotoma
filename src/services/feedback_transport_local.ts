@@ -18,6 +18,7 @@ import {
   hashToken,
   type LocalFeedbackRecord,
 } from "./feedback/local_store.js";
+import { mirrorLocalFeedbackToEntity } from "./feedback/mirror_local_to_entity.js";
 import { generateRedactionSalt, scanAndRedact } from "./feedback/redaction.js";
 import { buildVerificationRequest } from "./feedback/verification_request.js";
 import type {
@@ -135,6 +136,10 @@ export class LocalFeedbackTransport implements FeedbackTransport {
     };
 
     await this.store().upsert(record, tokenHash);
+
+    await mirrorLocalFeedbackToEntity(record, {
+      dataSource: `neotoma local submit ${record.submitted_at.slice(0, 10)}`,
+    });
 
     return {
       feedback_id: id,

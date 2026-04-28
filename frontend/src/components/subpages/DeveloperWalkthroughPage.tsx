@@ -180,20 +180,20 @@ export function DeveloperWalkthroughPage() {
         She&apos;s VP Eng, the rate is $180/hr, and I need to send her the SOW by tomorrow.
       </ChatPrelude>
       <p className="text-[13px] font-mono text-muted-foreground mb-2">MCP store call</p>
-      <CodeBlock>{`store({
+      <CodeBlock>{`store_structured({
   entities: [
     {
       entity_type: "contact",
       name: "Sarah Chen",
       company: "Lattice Health",
-      role: "VP Engineering",
+      title: "VP Engineering",
       context: "Freelance data-pipeline project"
     },
     {
       entity_type: "task",
       title: "Send SOW to Sarah Chen",
       status: "pending",
-      due_date: "2025-04-02",
+      date_due: "2026-04-02",
       rate: "$180/hr"
     }
   ],
@@ -261,11 +261,11 @@ export function DeveloperWalkthroughPage() {
   snapshot: {
     name: "Sarah Chen",
     company: "Lattice Health",
-    role: "VP Engineering",
+    title: "VP Engineering",
     context: "Freelance data-pipeline project"
   },
   observation_count: 1,
-  last_observation_at: "2025-03-31T14:22:00Z"
+  last_observation_at: "2026-03-31T14:22:00Z"
 }`}</CodeBlock>
 
       <p className="text-[15px] leading-7 mb-3">
@@ -277,13 +277,13 @@ export function DeveloperWalkthroughPage() {
         Sarah&apos; task done and note what went out.
       </ChatPrelude>
       <p className="text-[13px] font-mono text-muted-foreground mb-2">Update the task</p>
-      <CodeBlock>{`store({
+      <CodeBlock>{`store_structured({
   entities: [
     {
       entity_type: "task",
       title: "Send SOW to Sarah Chen",
       status: "completed",
-      completed_at: "2025-04-01T09:15:00Z",
+      completed_at: "2026-04-01T09:15:00Z",
       note: "SOW sent via email - 40hr engagement, $180/hr, starts Apr 7"
     }
   ],
@@ -314,13 +314,13 @@ export function DeveloperWalkthroughPage() {
         $195/hr.
       </ChatPrelude>
       <p className="text-[13px] font-mono text-muted-foreground mb-2">Updated store</p>
-      <CodeBlock>{`store({
+      <CodeBlock>{`store_structured({
   entities: [
     {
       entity_type: "contact",
       name: "Sarah Chen",
       company: "Lattice Health",
-      role: "VP Engineering",
+      title: "VP Engineering",
       context: "Scope expanded: data pipeline + monitoring dashboard",
       rate: "$195/hr"
     }
@@ -349,12 +349,12 @@ export function DeveloperWalkthroughPage() {
   snapshot: {
     name: "Sarah Chen",
     company: "Lattice Health",
-    role: "VP Engineering",
+    title: "VP Engineering",
     context: "Scope expanded: data pipeline + monitoring dashboard",
     rate: "$195/hr"
   },
   observation_count: 2,
-  last_observation_at: "2025-04-07T11:30:00Z"
+  last_observation_at: "2026-04-07T11:30:00Z"
 }`}</CodeBlock>
 
       <p className="text-[14px] leading-6 text-muted-foreground mb-2">
@@ -383,11 +383,11 @@ export function DeveloperWalkthroughPage() {
       <CodeBlock>{`$ neotoma observations list --entity-id ent_a7c3f1e209b4d8...
 
 OBSERVATION_ID                  CREATED_AT              SOURCE
-obs_91a0e3cf...                 2025-03-31T14:22:00Z    agent:cursor-session-4f2a
+obs_91a0e3cf...                 2026-03-31T14:22:00Z    agent:cursor-session-4f2a
   context: Freelance data-pipeline project
   rate: (not set)
 
-obs_c8e6b2f4...                 2025-04-07T11:30:00Z    agent:chatgpt-session-7d1b
+obs_c8e6b2f4...                 2026-04-07T11:30:00Z    agent:chatgpt-session-7d1b
   context: Scope expanded: data pipeline + monitoring dashboard
   rate: $195/hr`}</CodeBlock>
 

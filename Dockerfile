@@ -6,24 +6,16 @@ RUN npm ci
 COPY . .
 RUN npm run build:server
 
-# --- Inspector build stage: compile Vite SPA (optional; controlled by BUILD_INSPECTOR ARG).
-# When BUILD_INSPECTOR=1 the sandbox deploy bakes the Inspector into /app/inspector so
-# the API server can serve it from NEOTOMA_INSPECTOR_BASE_PATH (default /app).
+# --- Inspector build stage: compile Vite SPA (always built; served at /inspector).
 FROM node:20-alpine AS inspector-build
 WORKDIR /app/inspector
-ARG BUILD_INSPECTOR=0
-ARG VITE_NEOTOMA_API_URL=""
-ARG VITE_PUBLIC_BASE_PATH="/app/"
 ARG VITE_NEOTOMA_SANDBOX_UI=""
 COPY inspector/package*.json ./
-RUN if [ "$BUILD_INSPECTOR" = "1" ]; then npm ci; else mkdir -p dist && echo '<!doctype html><title>Inspector disabled</title>' > dist/index.html; fi
+RUN npm ci
 COPY inspector/ ./
-RUN if [ "$BUILD_INSPECTOR" = "1" ]; then \
-      VITE_NEOTOMA_API_URL="$VITE_NEOTOMA_API_URL" \
-      VITE_PUBLIC_BASE_PATH="$VITE_PUBLIC_BASE_PATH" \
-      VITE_NEOTOMA_SANDBOX_UI="$VITE_NEOTOMA_SANDBOX_UI" \
-      npm run build; \
-    fi
+RUN VITE_PUBLIC_BASE_PATH="/inspector/" \
+    VITE_NEOTOMA_SANDBOX_UI="$VITE_NEOTOMA_SANDBOX_UI" \
+    npm run build
 
 # --- Runtime stage: CLI + MCP server + API server
 FROM node:20-alpine AS runtime
@@ -44,8 +36,8 @@ COPY --from=build /app/openapi.yaml ./openapi.yaml
 COPY tests/fixtures/json ./tests/fixtures/json
 COPY tests/fixtures/sandbox ./tests/fixtures/sandbox
 
-# Inspector SPA (served at NEOTOMA_INSPECTOR_BASE_PATH when enabled).
-COPY --from=inspector-build /app/inspector/dist /app/inspector
+# Inspector SPA (served at /inspector by default via inspector_mount.ts).
+COPY --from=inspector-build /app/inspector/dist /app/dist/inspector
 
 # Register `neotoma` CLI globally (bin field in package.json → dist/cli/bootstrap.js)
 RUN npm link

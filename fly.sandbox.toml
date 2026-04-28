@@ -22,9 +22,6 @@ primary_region = 'lhr'
   dockerfile = "Dockerfile"
 
 [build.args]
-  BUILD_INSPECTOR = "1"
-  VITE_NEOTOMA_API_URL = "https://sandbox.neotoma.io"
-  VITE_PUBLIC_BASE_PATH = "/app/"
   VITE_NEOTOMA_SANDBOX_UI = "1"
 
 [env]
@@ -44,10 +41,6 @@ primary_region = 'lhr'
   # Mounted volume lives at /data; the neotoma server writes its sqlite DB +
   # sources/ blobs here.
   NEOTOMA_DATA_DIR = "/data"
-
-  # Serve the Inspector SPA from /app on the same host (Phase 4).
-  NEOTOMA_INSPECTOR_STATIC_DIR = "/app/inspector"
-  NEOTOMA_INSPECTOR_BASE_PATH = "/app"
 
   # Canonical AAuth authority for both verification + `/session` diagnostics.
   NEOTOMA_AAUTH_AUTHORITY = "https://sandbox.neotoma.io"

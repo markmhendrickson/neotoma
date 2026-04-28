@@ -324,14 +324,6 @@ open http://localhost:3080/inspector`}</pre>
           >
             Retention
           </Link>
-          , and{" "}
-          <Link
-            to="/inspector/settings/theme"
-            className="text-foreground underline underline-offset-2 hover:no-underline"
-            {...detailPageCtaLinkProps}
-          >
-            Theme &amp; accessibility
-          </Link>
           .
         </li>
       </ul>

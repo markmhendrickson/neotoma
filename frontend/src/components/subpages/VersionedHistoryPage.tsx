@@ -14,7 +14,7 @@ export function VersionedHistoryPage() {
         is appended as a new observation, so historical state is preserved by default.
       </p>
       <pre className="rounded-lg border code-block-palette p-4 overflow-x-auto font-mono text-[14px] whitespace-pre-wrap break-words mb-6">{`# Current snapshot
-neotoma entities search --query "Ana Rivera" --type contact
+neotoma entities search --query "Ana Rivera" --entity-type contact
 
 # Historical lineage
 neotoma observations list --entity-id <entity_id>`}</pre>

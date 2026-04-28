@@ -13,6 +13,9 @@ import { SitePage } from "@/components/SitePage";
 import { SitePageAlt } from "@/components/SitePageAlt";
 import { TerminologyPage } from "@/components/subpages/TerminologyPage";
 import { AgentInstructionsPage } from "@/components/subpages/AgentInstructionsPage";
+import { AgentInstructionsStoreRecipesPage } from "@/components/subpages/AgentInstructionsStoreRecipesPage";
+import { AgentInstructionsRetrievalPage } from "@/components/subpages/AgentInstructionsRetrievalPage";
+import { AgentInstructionsDisplayPage } from "@/components/subpages/AgentInstructionsDisplayPage";
 import { AauthReferencePage } from "@/components/subpages/AauthReferencePage";
 import { AauthSpecPage } from "@/components/subpages/AauthSpecPage";
 import { AauthAttestationPage } from "@/components/subpages/AauthAttestationPage";
@@ -38,6 +41,8 @@ import { InspectorSettingsAttributionPolicyPage } from "@/components/subpages/In
 import { InspectorSettingsRetentionPage } from "@/components/subpages/InspectorSettingsRetentionPage";
 import { InspectorSettingsFeedbackPage } from "@/components/subpages/InspectorSettingsFeedbackPage";
 import { InstallPage } from "@/components/subpages/InstallPage";
+import { InstallManualPage } from "@/components/subpages/InstallManualPage";
+import { InstallDockerPage } from "@/components/subpages/InstallDockerPage";
 import { SandboxLandingPage } from "@/components/subpages/SandboxLandingPage";
 import { SandboxTermsOfUsePage } from "@/components/subpages/SandboxTermsOfUsePage";
 import { HostedLandingPage } from "@/components/subpages/HostedLandingPage";
@@ -102,11 +107,12 @@ import { CustomerOpsLandingPage } from "@/components/subpages/CustomerOpsLanding
 import { LogisticsLandingPage } from "@/components/subpages/LogisticsLandingPage";
 import { PersonalDataLandingPage } from "@/components/subpages/PersonalDataLandingPage";
 import { TradingLandingPage } from "@/components/subpages/TradingLandingPage";
-import { VerticalsIndexPage } from "@/components/subpages/VerticalsIndexPage";
+import { UseCasesIndexPage } from "@/components/subpages/UseCasesIndexPage";
 import { CryptoEngineeringLandingPage } from "@/components/subpages/CryptoEngineeringLandingPage";
 import { BuildVsBuyPage } from "@/components/subpages/BuildVsBuyPage";
 import { MultiAgentStatePage } from "@/components/subpages/MultiAgentStatePage";
 import { EvaluatePage } from "@/components/subpages/EvaluatePage";
+import { EvaluateAgentInstructionsPage } from "@/components/subpages/EvaluateAgentInstructionsPage";
 import { MeetPage } from "@/components/subpages/MeetPage";
 import { PrivacyPage } from "@/components/subpages/PrivacyPage";
 import { TermsPage } from "@/components/subpages/TermsPage";
@@ -153,6 +159,9 @@ const APP_ROUTES: readonly AppRoute[] = [
   { path: "/home/x7k9m2vp", element: <SitePageAlt /> },
   { path: "/terminology", element: <TerminologyPage /> },
   { path: "/agent-instructions", element: <AgentInstructionsPage /> },
+  { path: "/agent-instructions/store-recipes", element: <AgentInstructionsStoreRecipesPage /> },
+  { path: "/agent-instructions/retrieval-provenance", element: <AgentInstructionsRetrievalPage /> },
+  { path: "/agent-instructions/display-conventions", element: <AgentInstructionsDisplayPage /> },
   { path: "/api", element: <ApiReferencePage /> },
   { path: "/mcp", element: <McpReferencePage /> },
   { path: "/cli", element: <CliReferencePage /> },
@@ -201,6 +210,8 @@ const APP_ROUTES: readonly AppRoute[] = [
     element: <Navigate to="/inspector/feedback" replace />,
   },
   { path: "/install", element: <InstallPage /> },
+  { path: "/install/manual", element: <InstallManualPage /> },
+  { path: "/install/docker", element: <InstallDockerPage /> },
   { path: "/sandbox", element: <SandboxLandingPage /> },
   { path: "/sandbox/terms-of-use", element: <SandboxTermsOfUsePage /> },
   { path: "/hosted", element: <HostedLandingPage /> },
@@ -271,10 +282,12 @@ const APP_ROUTES: readonly AppRoute[] = [
   { path: "/personal-data", element: <PersonalDataLandingPage /> },
   { path: "/trading", element: <TradingLandingPage /> },
   { path: "/crypto-engineering", element: <CryptoEngineeringLandingPage /> },
-  { path: "/verticals", element: <VerticalsIndexPage /> },
+  { path: "/use-cases", element: <UseCasesIndexPage /> },
+  { path: "/verticals", element: <Navigate to="/use-cases" replace /> },
   { path: "/build-vs-buy", element: <BuildVsBuyPage /> },
   { path: "/multi-agent-state", element: <MultiAgentStatePage /> },
   { path: "/evaluate", element: <EvaluatePage /> },
+  { path: "/evaluate/agent-instructions", element: <EvaluateAgentInstructionsPage /> },
 
   { path: "/meet", element: <MeetPage /> },
   { path: "/privacy", element: <PrivacyPage /> },
@@ -468,7 +481,7 @@ export function MainApp() {
       <Routes>
         <Route path="/site" element={<Navigate to="/" replace />} />
         <Route path="/quick-start" element={<Navigate to="/install" replace />} />
-        <Route path="/docker" element={<Navigate to="/install#docker" replace />} />
+        <Route path="/docker" element={<Navigate to="/install/docker" replace />} />
         {NON_DEFAULT_LOCALES.map((locale) => (
           <Route
             key={`${locale}/site`}

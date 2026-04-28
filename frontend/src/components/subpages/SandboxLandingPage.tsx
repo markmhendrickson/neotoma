@@ -9,7 +9,7 @@ import { InspectorPreviewIllustration } from "../illustrations/InspectorPreviewI
 const extLink = "text-foreground underline underline-offset-2 hover:no-underline";
 
 const SANDBOX_HOST = "sandbox.neotoma.io";
-const SANDBOX_ROOT_PATH = "/";
+const SANDBOX_ROOT_PATH = `https://${SANDBOX_HOST}/`;
 const SANDBOX_MCP_URL = `https://${SANDBOX_HOST}/mcp`;
 
 const CURSOR_REMOTE_MCP = `{
@@ -142,7 +142,7 @@ export function SandboxLandingPage() {
             rel="noopener noreferrer"
             className={extLink}
           >
-            /
+            {SANDBOX_HOST}
           </a>
           {" "}- with copy-paste snippets prefilled to the correct host.
         </p>

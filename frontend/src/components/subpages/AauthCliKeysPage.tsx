@@ -96,7 +96,7 @@ export function AauthCliKeysPage() {
             <code>software</code>
           </strong>{" "}
           (default), private key at{" "}
-          <code>~/.config/neotoma/aauth/private.jwk</code>; any platform;
+          <code>~/.neotoma/aauth/private.jwk</code>; any platform;
           tier <code>software</code>, or <code>operator_attested</code> if
           allowlisted.
         </li>
@@ -516,7 +516,7 @@ export function AauthCliKeysPage() {
         <li className="text-[15px] leading-7 text-muted-foreground">
           <code>NEOTOMA_AAUTH_PRIVATE_JWK_PATH</code>, override JWK location
           for all backends (default{" "}
-          <code>~/.config/neotoma/aauth/private.jwk</code>).
+          <code>~/.neotoma/aauth/private.jwk</code>).
         </li>
         <li className="text-[15px] leading-7 text-muted-foreground">
           <code>NEOTOMA_AAUTH_SE_KEY_TAG</code>, override the keychain tag

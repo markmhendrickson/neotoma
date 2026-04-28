@@ -1,4 +1,5 @@
 import express from "express";
+import cookieParser from "cookie-parser";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
@@ -74,14 +75,25 @@ import {
   sandboxHeaderMiddleware,
 } from "./services/sandbox_mode.js";
 import {
+  createSandboxSession,
+  redeemOneTimeCode,
+  resolveSessionFromRequest,
+  revokeSession,
+  purgeSessionUserData,
+  sweepExpiredSessions,
+  SESSION_COOKIE_NAME,
+} from "./services/sandbox/sessions.js";
+import {
   buildLandingContext,
   buildRootLandingHtml,
   buildRootLandingJson,
   buildRootLandingMarkdown,
   buildRobotsTxt,
+  readNeotomaConfigEnvironment,
   wantsHtml as acceptWantsHtml,
   wantsMarkdown as acceptWantsMarkdown,
 } from "./services/root_landing/index.js";
+import { installInspectorMount } from "./services/inspector_mount.js";
 import { getSandboxTermsResponse } from "./services/sandbox/terms.js";
 import { resolveSandboxReportTransport } from "./services/sandbox/transport.js";
 import type { SandboxReportReason } from "./services/sandbox/types.js";
@@ -132,6 +144,10 @@ import {
   parseRecordActivityTypesQuery,
 } from "./services/recent_record_activity.js";
 import { listRecentConversations } from "./services/recent_conversations.js";
+import {
+  listConversationTurns,
+  getConversationTurn,
+} from "./services/conversation_turn.js";
 import { getAgent, listAgentRecords, listAgents } from "./services/agents_directory.js";
 // import { setupDocumentationRoutes } from "./routes/documentation.js";
 
@@ -199,6 +215,7 @@ app.use(
   })
 );
 app.use(morgan("dev"));
+app.use(cookieParser());
 app.use(unknownFieldsGuard);
 
 // Sandbox-mode response header. Stamped on every response so clients can
@@ -211,44 +228,131 @@ if (isSandboxMode()) {
   );
 }
 
-// Inspector SPA mount. When NEOTOMA_INSPECTOR_STATIC_DIR is set, serve the
-// pre-built Inspector bundle at NEOTOMA_INSPECTOR_BASE_PATH (default /app).
-// Deliberately registered before all auth / rate-limit middleware so the SPA
-// shell + assets are reachable without a bearer — the API calls it makes still
-// flow through the normal auth stack below.
-const inspectorStaticDir = (process.env.NEOTOMA_INSPECTOR_STATIC_DIR || "").trim();
-const inspectorBasePath = (
-  (process.env.NEOTOMA_INSPECTOR_BASE_PATH || "/app").trim() || "/app"
-).replace(/\/$/, "");
-if (inspectorStaticDir) {
-  try {
-    const indexHtmlPath = path.resolve(inspectorStaticDir, "index.html");
-    // express.static with fallthrough so 404s on unknown files fall into the
-    // SPA history handler below rather than short-circuiting.
-    app.use(
-      inspectorBasePath,
-      express.static(inspectorStaticDir, {
-        index: false,
-        fallthrough: true,
-        maxAge: "1h",
-      }),
-    );
-    app.get(
-      [`${inspectorBasePath}`, `${inspectorBasePath}/*`],
-      (req, res, next) => {
-        // Only respond if the request was headed for the SPA (accepts html).
-        if (req.method !== "GET") return next();
-        res.sendFile(indexHtmlPath, (err) => {
-          if (err) next(err);
-        });
-      },
-    );
-    logger.info(
-      `[Inspector] Serving SPA from ${inspectorStaticDir} at ${inspectorBasePath}`,
-    );
-  } catch (err) {
-    logger.warn(`[Inspector] Failed to mount SPA: ${(err as Error).message}`);
-  }
+// Inspector SPA mount. Deliberately registered before all auth / rate-limit
+// middleware so the SPA shell + assets are reachable without a bearer — the
+// API calls the Inspector makes still flow through the normal auth stack below.
+installInspectorMount(app, process.env, logger);
+
+// ── Sandbox session endpoints ───────────────────────────────────────────
+// Registered before general auth so the session handshake works for
+// unauthenticated visitors. Routes exist only when NEOTOMA_SANDBOX_MODE=1.
+if (isSandboxMode()) {
+  const sessionRateLimit = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    limit: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => `ip:${ipKeyGenerator(req.ip || "")}`,
+    validate: { trustProxy: false } as never,
+  });
+
+  app.post("/sandbox/session/new", sessionRateLimit, (req, res) => {
+    try {
+      const packId = typeof req.body?.pack_id === "string" ? req.body.pack_id : "generic";
+      const session = createSandboxSession(packId);
+      res.cookie(SESSION_COOKIE_NAME, session.bearerToken, {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        expires: new Date(session.expiresAt),
+      });
+      res.json({
+        one_time_code: session.oneTimeCode,
+        expires_at: session.expiresAt,
+        pack_id: session.packId,
+      });
+    } catch (err) {
+      logger.error(`[Sandbox] session/new failed: ${(err as Error).message}`);
+      res.status(500).json({ error_code: "SESSION_CREATE_FAILED", message: (err as Error).message });
+    }
+  });
+
+  app.post("/sandbox/session/redeem", (req, res) => {
+    try {
+      const code = typeof req.body?.code === "string" ? req.body.code : "";
+      if (!code) {
+        res.status(400).json({ error_code: "MISSING_CODE", message: "code is required" });
+        return;
+      }
+      const result = redeemOneTimeCode(code);
+      if (!result) {
+        res.status(404).json({ error_code: "INVALID_CODE", message: "Code expired or already redeemed" });
+        return;
+      }
+      res.cookie(SESSION_COOKIE_NAME, result.bearerToken, {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        expires: new Date(result.expiresAt),
+      });
+      res.json({
+        bearer_token: result.bearerToken,
+        user_id: result.userId,
+        expires_at: result.expiresAt,
+        pack_id: result.packId,
+      });
+    } catch (err) {
+      logger.error(`[Sandbox] session/redeem failed: ${(err as Error).message}`);
+      res.status(500).json({ error_code: "SESSION_REDEEM_FAILED", message: (err as Error).message });
+    }
+  });
+
+  app.get("/sandbox/session", (req, res) => {
+    const session = resolveSessionFromRequest(req);
+    if (!session) {
+      res.status(401).json({ error_code: "NO_SESSION", message: "No active sandbox session" });
+      return;
+    }
+    res.json({
+      user_id: session.userId,
+      pack_id: session.packId,
+      created_at: session.createdAt,
+      expires_at: session.expiresAt,
+    });
+  });
+
+  app.post("/sandbox/session/reset", (req, res) => {
+    const session = resolveSessionFromRequest(req);
+    if (!session) {
+      res.status(401).json({ error_code: "NO_SESSION", message: "No active sandbox session" });
+      return;
+    }
+    const packId = typeof req.body?.pack_id === "string" ? req.body.pack_id : undefined;
+    purgeSessionUserData(session.userId);
+    const newSession = createSandboxSession(packId ?? session.packId);
+    res.cookie(SESSION_COOKIE_NAME, newSession.bearerToken, {
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+      expires: new Date(newSession.expiresAt),
+    });
+    res.json({
+      user_id: newSession.userId,
+      pack_id: newSession.packId,
+      expires_at: newSession.expiresAt,
+    });
+  });
+
+  app.delete("/sandbox/session", (req, res) => {
+    const session = resolveSessionFromRequest(req);
+    if (!session) {
+      res.status(401).json({ error_code: "NO_SESSION", message: "No active sandbox session" });
+      return;
+    }
+    revokeSession(session.userId);
+    purgeSessionUserData(session.userId);
+    res.clearCookie(SESSION_COOKIE_NAME, { path: "/" });
+    res.json({ ok: true });
+  });
+
+  setInterval(() => {
+    const purged = sweepExpiredSessions();
+    if (purged > 0) {
+      logger.info(`[Sandbox] Swept ${purged} expired session(s)`);
+    }
+  }, 15 * 60 * 1000);
+
+  logger.info("[Sandbox] Session endpoints registered");
 }
 
 // Rate limiters for OAuth endpoints
@@ -539,6 +643,7 @@ app.get("/server-info", (_req, res) => {
     httpPort,
     apiBase: config.apiBase,
     mcpUrl,
+    neotoma_env: readNeotomaConfigEnvironment(),
   });
 });
 
@@ -2159,6 +2264,19 @@ app.use(async (req, res, next) => {
       `[Auth] ${req.method} ${req.path} auth_method=local_no_bearer user_id=${devUser.id}`
     );
     return next();
+  }
+
+  // Sandbox ephemeral session: resolve from cookie or Bearer token before
+  // falling back to the shared public user. Expired/revoked sessions 401.
+  if (isSandboxMode()) {
+    const sessionInfo = resolveSessionFromRequest(req);
+    if (sessionInfo) {
+      (req as any).authenticatedUserId = sessionInfo.userId;
+      logger.info(
+        `[Auth] ${req.method} ${req.path} auth_method=sandbox_session user_id=${sessionInfo.userId}`,
+      );
+      return next();
+    }
   }
 
   // Sandbox mode: public deployment at sandbox.neotoma.io where anonymous
@@ -3868,6 +3986,43 @@ app.get("/recent_conversations", async (req, res) => {
       "DB_QUERY_FAILED",
       "APIError:recent_conversations"
     );
+  }
+});
+
+// GET /turns — Inspector: paginated conversation_turn index
+app.get("/turns", async (req, res) => {
+  try {
+    const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+    const limit = parseInt(String(req.query.limit ?? "25"), 10) || 25;
+    const offset = parseInt(String(req.query.offset ?? "0"), 10) || 0;
+    const harness = typeof req.query.harness === "string" ? req.query.harness.trim() || null : null;
+    const status = typeof req.query.status === "string" ? req.query.status.trim() || null : null;
+    const activity_after = typeof req.query.activity_after === "string" ? req.query.activity_after.trim() || null : null;
+    const activity_before = typeof req.query.activity_before === "string" ? req.query.activity_before.trim() || null : null;
+    const result = listConversationTurns(userId, limit, offset, {
+      harness,
+      status,
+      activity_after,
+      activity_before,
+    });
+    return res.json(result);
+  } catch (error) {
+    return handleApiError(req, res, error, "Failed to list turns", "DB_QUERY_FAILED", "APIError:turns");
+  }
+});
+
+// GET /turns/:turn_key — Inspector: conversation_turn detail
+app.get("/turns/:turn_key", async (req, res) => {
+  try {
+    const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+    const turnKey = decodeURIComponent(req.params.turn_key);
+    const result = getConversationTurn(userId, turnKey);
+    if (!result) {
+      return res.status(404).json({ error: "Turn not found", code: "NOT_FOUND" });
+    }
+    return res.json(result);
+  } catch (error) {
+    return handleApiError(req, res, error, "Failed to get turn", "DB_QUERY_FAILED", "APIError:turn_detail");
   }
 });
 
@@ -7096,6 +7251,20 @@ export async function startHTTPServer() {
 
   // Initialize encryption service
   await initServerKeys();
+
+  // Seed `neotoma_feedback` schema unconditionally so local-only installs
+  // (no AGENT_SITE_BASE_URL) can mirror feedback into the entity graph.
+  try {
+    const { seedNeotomaFeedbackSchema } = await import(
+      "./services/feedback/seed_schema.js"
+    );
+    await seedNeotomaFeedbackSchema();
+    logger.info("[Feedback] neotoma_feedback schema seeded");
+  } catch (err) {
+    logger.warn(
+      `[Feedback] failed to seed neotoma_feedback schema: ${(err as Error).message}`,
+    );
+  }
 
   // Sandbox mode: ensure the `sandbox_abuse_report` entity type is registered
   // before any report comes in so forwarded records can attach cleanly to the

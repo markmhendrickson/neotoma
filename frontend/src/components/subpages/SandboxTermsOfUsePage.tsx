@@ -68,9 +68,25 @@ function SandboxTermsMarkdownBody({ md }: { md: string }): ReactNode {
     }
     if (line.startsWith("- ")) {
       const items: string[] = [];
-      while (i < lines.length && lines[i]!.startsWith("- ")) {
-        items.push(lines[i]!.slice(2));
+      while (i < lines.length) {
+        const L = lines[i]!;
+        if (!L.startsWith("- ")) {
+          break;
+        }
+        let item = L.slice(2);
         i += 1;
+        while (i < lines.length) {
+          const C = lines[i]!;
+          if (C.trim() === "") {
+            break;
+          }
+          if (C.startsWith("## ") || C.startsWith("- ")) {
+            break;
+          }
+          item += " " + C.trim();
+          i += 1;
+        }
+        items.push(item);
       }
       out.push(
         <ul key={key()} className={ulClass}>
@@ -90,7 +106,10 @@ function SandboxTermsMarkdownBody({ md }: { md: string }): ReactNode {
       paras.push(L);
       i += 1;
     }
-    const text = paras.join(" ");
+    const text = paras
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .join(" ");
     if (text.trim()) {
       out.push(
         <p key={key()} className={pClass}>

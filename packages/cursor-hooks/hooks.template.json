@@ -1,6 +1,11 @@
 {
   "version": 1,
   "hooks": {
+    "sessionStart": [
+      {
+        "command": "node ${HOOK_DIR}/dist/session_start.js"
+      }
+    ],
     "beforeSubmitPrompt": [
       {
         "command": "node ${HOOK_DIR}/dist/before_submit_prompt.js"
@@ -11,9 +16,15 @@
         "command": "node ${HOOK_DIR}/dist/after_tool_use.js"
       }
     ],
+    "postToolUseFailure": [
+      {
+        "command": "node ${HOOK_DIR}/dist/post_tool_use_failure.js"
+      }
+    ],
     "stop": [
       {
-        "command": "node ${HOOK_DIR}/dist/stop.js"
+        "command": "node ${HOOK_DIR}/dist/stop.js",
+        "loop_limit": 1
       }
     ]
   }

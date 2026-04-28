@@ -23,7 +23,7 @@ export function FalseClosureRiskPage() {
 neotoma observations list --entity-id <policy_entity_id>
 
 # The snapshot reflects the latest resolved state
-neotoma entities search --query "contractor access policy" --type policy`}</pre>
+neotoma entities search --query "contractor access policy" --entity-type policy`}</pre>
       <p className="text-[15px] leading-7 mb-4">
         False closure is prevented by the combination of{" "}
         <Link to="/versioned-history" className="text-foreground underline hover:text-foreground">

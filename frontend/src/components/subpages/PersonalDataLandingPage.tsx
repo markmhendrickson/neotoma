@@ -19,9 +19,9 @@ import {
   User,
   Wallet,
 } from "lucide-react";
-import { VerticalLandingShell, type VerticalConfig } from "./vertical_landing/VerticalLandingShell";
+import { UseCaseLandingShell, type UseCaseConfig } from "./use_case_landing/UseCaseLandingShell";
 
-const CONFIG: VerticalConfig = {
+const CONFIG: UseCaseConfig = {
   accentColor: "violet",
   badgeIcon: User,
   badgeText: "Neotoma for Personal Data",
@@ -233,5 +233,5 @@ const CONFIG: VerticalConfig = {
 };
 
 export function PersonalDataLandingPage() {
-  return <VerticalLandingShell config={CONFIG} />;
+  return <UseCaseLandingShell config={CONFIG} />;
 }

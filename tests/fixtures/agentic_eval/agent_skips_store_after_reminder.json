@@ -1,0 +1,86 @@
+{
+  "meta": {
+    "id": "agent_skips_store_after_reminder",
+    "description": "Agent finishes a turn without ever calling store_structured even though sessionStart and postToolUse both injected the compact reminder. The stop hook MUST classify the skip as `agent_ignored_available_instructions` (high confidence) and recommend repairs that mention extending Tier 1 fixtures or tightening the small-model gate.",
+    "harnesses": ["cursor-hooks"],
+    "models": ["composer-2", "gpt-5.5-fast", "claude-haiku-4", "claude-sonnet-4.5", "gpt-5.5-medium"],
+    "tags": ["compliance", "stop-hook", "diagnosis", "after-reminder"]
+  },
+  "events": [
+    {
+      "hook": "sessionStart",
+      "payload": {}
+    },
+    {
+      "hook": "postToolUse",
+      "payload": {
+        "tool_name": "Read",
+        "tool_input": { "path": "/tmp/example.txt" },
+        "tool_output": { "content": "Hello world" }
+      }
+    },
+    {
+      "hook": "stop",
+      "payload": { "text": "Here is the file content: Hello world" }
+    }
+  ],
+  "assertions": {
+    "default": [
+      {
+        "type": "entity_stored",
+        "entity_type": "conversation_message",
+        "where": { "role": "assistant" }
+      },
+      {
+        "type": "turn_compliance",
+        "status": "backfilled_by_hook",
+        "missed_includes": ["user_phase_store_structured"]
+      },
+      {
+        "type": "turn_diagnosis",
+        "classification": "agent_ignored_available_instructions",
+        "confidence": "high",
+        "reminder_injected": true,
+        "recommends_includes": "Tier 1"
+      },
+      {
+        "type": "request_count",
+        "endpoint": "/store",
+        "op": "gte",
+        "value": 4
+      }
+    ]
+  },
+  "expected_outputs": {
+    "by_model": {
+      "composer-2": {
+        "stop": [
+          { "field": "followup_message", "presence": "present", "matches": "Neotoma compliance pass" },
+          { "field": "followup_message", "matches": "Likely cause: agent ignored available instructions" }
+        ]
+      },
+      "gpt-5.5-fast": {
+        "stop": [
+          { "field": "followup_message", "presence": "present", "matches": "Neotoma compliance pass" },
+          { "field": "followup_message", "matches": "Likely cause: agent ignored available instructions" }
+        ]
+      },
+      "claude-haiku-4": {
+        "stop": [
+          { "field": "followup_message", "presence": "present", "matches": "Neotoma compliance pass" },
+          { "field": "followup_message", "matches": "Likely cause: agent ignored available instructions" }
+        ]
+      },
+      "claude-sonnet-4.5": {
+        "stop": [
+          { "field": "followup_message", "presence": "absent" }
+        ]
+      },
+      "gpt-5.5-medium": {
+        "stop": [
+          { "field": "followup_message", "presence": "absent" }
+        ]
+      }
+    }
+  }
+}

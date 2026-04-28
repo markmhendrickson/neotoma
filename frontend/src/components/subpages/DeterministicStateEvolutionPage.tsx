@@ -23,7 +23,7 @@ neotoma store --json='[{"entity_type":"contact","name":"Ana Rivera","city":"Barc
 neotoma store --json='[{"entity_type":"contact","name":"Ana Rivera","city":"San Francisco"}]'
 
 # Deterministic reducer computes one canonical snapshot
-neotoma entities search --query "Ana Rivera" --type contact`}</pre>
+neotoma entities search --query "Ana Rivera" --entity-type contact`}</pre>
 
       <p className="text-[15px] leading-7 mb-4">
         Late-arriving observations are folded in deterministically. If the merge rule prefers stronger

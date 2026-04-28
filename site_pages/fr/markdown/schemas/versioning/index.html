@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<!DOCTYPE html><html lang="fr" dir="ltr"><head>
+    <meta charset="UTF-8">
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="application-name" content="Neotoma">
+    <meta name="theme-color" content="#130918">
+    <meta name="description" content="Markdown export of the rendered /schemas/versioning page. Semantic versioning for schemas: additive minor bumps, breaking major bumps, immutable observation.schema_version, schema-projection filtering, and the public schema snapshots dump.">
+    <meta name="author" content="Neotoma">
+    <meta name="robots" content="noindex,nofollow">
+    <link rel="canonical" href="https://neotoma.io/fr/markdown/schemas/versioning">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Neotoma">
+    <meta property="og:locale" content="fr_FR">
+    <meta property="og:title" content="Schema Versioning &amp; Evolution | Schemas (Markdown) | Neotoma">
+    <meta property="og:description" content="Markdown export of the rendered /schemas/versioning page. Semantic versioning for schemas: additive minor bumps, breaking major bumps, immutable observation.schema_version, schema-projection filtering, and the public schema snapshots dump.">
+    <meta property="og:url" content="https://neotoma.io/fr/markdown/schemas/versioning">
+    <meta property="og:image" content="https://neotoma.io/neotoma-og-1200x630.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Schema Versioning &amp; Evolution | Schemas (Markdown) | Neotoma. Markdown export of the rendered /schemas/versioning page. Semantic versioning for schemas: additive minor bumps, breaking major bumps, ...">
+    <meta name="keywords" content="schema versioning, semver, breaking changes, schema snapshots, schema evolution, updateSchemaIncremental, Schema Versioning &amp; Evolution, Schemas (Markdown), Neotoma, MCP, Model Context Protocol, AI agents, agent memory, deterministic state">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:site" content="@markmhendrickson">
+    <meta name="twitter:title" content="Schema Versioning &amp; Evolution | Schemas (Markdown) | Neotoma">
+    <meta name="twitter:description" content="Markdown export of the rendered /schemas/versioning page. Semantic versioning for schemas: additive minor bumps, breaking major bumps, immutable observation.schema_version, schema-projection filtering, and the public schema snapshots dump.">
+    <meta name="twitter:image" content="https://neotoma.io/neotoma-og-1200x630.png">
+    <meta name="twitter:image:width" content="1200">
+    <meta name="twitter:image:height" content="630">
+    <meta name="twitter:image:alt" content="Schema Versioning &amp; Evolution | Schemas (Markdown) | Neotoma. Markdown export of the rendered /schemas/versioning page. Semantic versioning for schemas: additive minor bumps, breaking major bumps, ...">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"Schema Versioning & Evolution | Schemas (Markdown) | Neotoma","description":"Markdown export of the rendered /schemas/versioning page. Semantic versioning for schemas: additive minor bumps, breaking major bumps, immutable observation.schema_version, schema-projection filtering, and the public schema snapshots dump.","url":"https://neotoma.io/fr/markdown/schemas/versioning","publisher":{"@type":"Organization","name":"Neotoma"},"image":{"@type":"ImageObject","url":"https://neotoma.io/neotoma-og-1200x630.png","width":1200,"height":630,"caption":"Schema Versioning & Evolution | Schemas (Markdown) | Neotoma. Markdown export of the rendered /schemas/versioning page. Semantic versioning for schemas: additive minor bumps, breaking major bumps, ..."}}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://neotoma.io/"},{"@type":"ListItem","position":2,"name":"Docs","item":"https://neotoma.io/docs"},{"@type":"ListItem","position":3,"name":"Schemas","item":"https://neotoma.io/schemas"},{"@type":"ListItem","position":4,"name":"Versioning & evolution","item":"https://neotoma.io/schemas/versioning"}]}</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
+    <title>Schema Versioning &amp; Evolution | Schemas (Markdown) | Neotoma</title>
+    <script type="module" crossorigin="" src="/assets/main-CaoWcp2k.js"></script>
+    <link rel="stylesheet" crossorigin="" href="/assets/main-BBds_bdF.css">
+  
+    <!-- build: local-1777360387837 -->
+      <link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/schemas/versioning">
+    <link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/schemas/versioning">
+    <link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/schemas/versioning">
+    <link rel="alternate" hreflang="ca" href="https://neotoma.io/ca/markdown/schemas/versioning">
+    <link rel="alternate" hreflang="zh" href="https://neotoma.io/zh/markdown/schemas/versioning">
+    <link rel="alternate" hreflang="hi" href="https://neotoma.io/hi/markdown/schemas/versioning">
+    <link rel="alternate" hreflang="ar" href="https://neotoma.io/ar/markdown/schemas/versioning">
+    <link rel="alternate" hreflang="fr" href="https://neotoma.io/fr/markdown/schemas/versioning">
+    <link rel="alternate" hreflang="pt" href="https://neotoma.io/pt/markdown/schemas/versioning">
+    <link rel="alternate" hreflang="ru" href="https://neotoma.io/ru/markdown/schemas/versioning">
+    <link rel="alternate" hreflang="bn" href="https://neotoma.io/bn/markdown/schemas/versioning">
+    <link rel="alternate" hreflang="ur" href="https://neotoma.io/ur/markdown/schemas/versioning">
+    <link rel="alternate" hreflang="id" href="https://neotoma.io/id/markdown/schemas/versioning">
+    <link rel="alternate" hreflang="de" href="https://neotoma.io/de/markdown/schemas/versioning">
+  <link rel="icon" href="/favicon.ico" sizes="any" data-rh="true"><link rel="icon" type="image/svg+xml" href="/favicon.svg" data-rh="true"><link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png" data-rh="true"><link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" data-rh="true"><link rel="manifest" href="/site.webmanifest" data-rh="true"><link rel="canonical" href="https://neotoma.io/fr/markdown/schemas/versioning" data-rh="true"><link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/schemas/versioning" data-rh="true"><link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/schemas/versioning" data-rh="true"><link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/schemas/versioning" data-rh="true"><link rel="alternate" hreflang="ca" href="https://neotoma.io/ca/markdown/schemas/versioning" data-rh="true"><link rel="alternate" hreflang="zh" href="https://neotoma.io/zh/markdown/schemas/versioning" data-rh="true"><link rel="alternate" hreflang="hi" href="https://neotoma.io/hi/markdown/schemas/versioning" data-rh="true"><link rel="alternate" hreflang="ar" href="https://neotoma.io/ar/markdown/schemas/versioning" data-rh="true"><link rel="alternate" hreflang="fr" href="https://neotoma.io/fr/markdown/schemas/versioning" data-rh="true"><link rel="alternate" hreflang="pt" href="https://neotoma.io/pt/markdown/schemas/versioning" data-rh="true"><link rel="alternate" hreflang="ru" href="https://neotoma.io/ru/markdown/schemas/versioning" data-rh="true"><link rel="alternate" hreflang="bn" href="https://neotoma.io/bn/markdown/schemas/versioning" data-rh="true"><link rel="alternate" hreflang="ur" href="https://neotoma.io/ur/markdown/schemas/versioning" data-rh="true"><link rel="alternate" hreflang="id" href="https://neotoma.io/id/markdown/schemas/versioning" data-rh="true"><link rel="alternate" hreflang="de" href="https://neotoma.io/de/markdown/schemas/versioning" data-rh="true"><meta name="description" content="Markdown export of the rendered /schemas/versioning page. Semantic versioning for schemas: additive minor bumps, breaking major bumps, immutable observation.schema_version, schema-projection filtering, and the public schema snapshots dump." data-rh="true"><meta name="author" content="Neotoma" data-rh="true"><meta name="application-name" content="Neotoma" data-rh="true"><meta name="robots" content="noindex,nofollow" data-rh="true"><meta name="theme-color" content="#130918" data-rh="true"><meta property="og:type" content="website" data-rh="true"><meta property="og:site_name" content="Neotoma" data-rh="true"><meta property="og:locale" content="fr_FR" data-rh="true"><meta property="og:title" content="Schema Versioning &amp; Evolution | Schemas (Markdown) | Neotoma" data-rh="true"><meta property="og:description" content="Markdown export of the rendered /schemas/versioning page. Semantic versioning for schemas: additive minor bumps, breaking major bumps, immutable observation.schema_version, schema-projection filtering, and the public schema snapshots dump." data-rh="true"><meta property="og:url" content="https://neotoma.io/fr/markdown/schemas/versioning" data-rh="true"><meta property="og:image" content="https://neotoma.io/neotoma-og-1200x630.png" data-rh="true"><meta property="og:image:width" content="1200" data-rh="true"><meta property="og:image:height" content="630" data-rh="true"><meta property="og:image:alt" content="Schema Versioning &amp; Evolution | Schemas (Markdown) | Neotoma. Markdown export of the rendered /schemas/versioning page. Semantic versioning for schemas: additive minor bumps, breaking major bumps, ..." data-rh="true"><meta name="keywords" content="schema versioning, semver, breaking changes, schema snapshots, schema evolution, updateSchemaIncremental, Schema Versioning &amp; Evolution, Schemas (Markdown), Neotoma, MCP, Model Context Protocol, AI agents, agent memory, deterministic state" data-rh="true"><meta name="twitter:card" content="summary_large_image" data-rh="true"><meta name="twitter:site" content="@markmhendrickson" data-rh="true"><meta name="twitter:title" content="Schema Versioning &amp; Evolution | Schemas (Markdown) | Neotoma" data-rh="true"><meta name="twitter:description" content="Markdown export of the rendered /schemas/versioning page. Semantic versioning for schemas: additive minor bumps, breaking major bumps, immutable observation.schema_version, schema-projection filtering, and the public schema snapshots dump." data-rh="true"><meta name="twitter:image" content="https://neotoma.io/neotoma-og-1200x630.png" data-rh="true"><meta name="twitter:image:width" content="1200" data-rh="true"><meta name="twitter:image:height" content="630" data-rh="true"><meta name="twitter:image:alt" content="Schema Versioning &amp; Evolution | Schemas (Markdown) | Neotoma. Markdown export of the rendered /schemas/versioning page. Semantic versioning for schemas: additive minor bumps, breaking major bumps, ..." data-rh="true"><script type="application/ld+json" data-rh="true">{"@context":"https://schema.org","@type":"WebPage","name":"Schema Versioning & Evolution | Schemas (Markdown) | Neotoma","description":"Markdown export of the rendered /schemas/versioning page. Semantic versioning for schemas: additive minor bumps, breaking major bumps, immutable observation.schema_version, schema-projection filtering, and the public schema snapshots dump.","url":"https://neotoma.io/fr/markdown/schemas/versioning","publisher":{"@type":"Organization","name":"Neotoma"},"image":{"@type":"ImageObject","url":"https://neotoma.io/neotoma-og-1200x630.png","width":1200,"height":630,"caption":"Schema Versioning & Evolution | Schemas (Markdown) | Neotoma. Markdown export of the rendered /schemas/versioning page. Semantic versioning for schemas: additive minor bumps, breaking major bumps, ..."}}</script><script type="application/ld+json" data-rh="true">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://neotoma.io/"},{"@type":"ListItem","position":2,"name":"Docs","item":"https://neotoma.io/docs"},{"@type":"ListItem","position":3,"name":"Schemas","item":"https://neotoma.io/schemas"},{"@type":"ListItem","position":4,"name":"Versioning & evolution","item":"https://neotoma.io/schemas/versioning"}]}</script></head>
+  <body>
+    <div id="root"><iframe title="Markdown capture" aria-hidden="true" width="1280" height="900" class="pointer-events-none fixed left-[-9999px] top-0 z-[-1] border-0 opacity-0" sandbox="allow-same-origin allow-scripts allow-forms"></iframe><div class="min-h-screen bg-background text-foreground"><pre class="whitespace-pre-wrap break-words p-4 font-mono text-[13px] leading-relaxed text-foreground">&lt;!--
+  Full-page Markdown export (rendered HTML → GFM).
+  Source: https://neotoma.io/fr/schemas/versioning
+  Generated: 2026-04-28T07:17:20.178Z
+--&gt;
+# Versioning &amp; evolution
+
+Schemas evolve all the time. Versioning is what keeps that evolution safe: every observation carries the schema\_version it was written under, every snapshot stamps the active schema\_version it was computed against, and every breaking change requires a major version bump. New schemas are exported to docs/subsystems/schema\_snapshots/ on every register/activate so the public reference always matches the database.
+
+Wraps the schema registry. Every schema\_registry mutation goes through versioned register / activate / updateSchemaIncremental calls; every mutation triggers an asynchronous snapshot export.
+
+## Schema[#](#schema)
+
+Semantic versioning rules
+
+SQL / TS
+
+Schema or pattern reference for this concept.
+
+1.0.0 // Initial version 1.1.0 // Minor: additive, backward-compatible // - new optional fields // - new converters on existing fields // - non-breaking reducer strategy changes 1.1.1 // Patch: docs, formatting, no schema structure change 2.0.0 // Major: breaking // - removing fields // - changing field types // - making optional fields required // - removing converters // Migration shape schemaRegistry.updateSchemaIncremental({ entity\_type: "contact", fields\_to\_add: \[ { field\_name: "linkedin\_url", field\_type: "string", required: false } \], fields\_to\_remove: \["legacy\_handle"\], // schema\_version auto-increments based on change type activate: true, migrate\_existing: false // historical raw\_fragments stay put unless you backfill });
+
+## Additive by default[#](#additive-by-default)
+
+The common case is additive evolution: new optional fields are added with a minor version bump (1.0.0 → 1.1.0). Existing observations keep their original schema\_version and remain valid; new observations pick up the new fields. Snapshots are recomputed against the active schema, which must always handle missing fields from older observations gracefully.
+
+◆
+
+## Breaking changes are versioned, not destructive[#](#breaking-changes)
+
+Removing a field, changing a type, or making an optional field required is a major version bump (1.x → 2.0). Old observations are immutable, they keep schema\_version 1.x, but new snapshots are computed under 2.0. Removed fields stop appearing in snapshots via reducer schema-projection filtering, but the underlying observation data is preserved. Re-adding a removed field restores it in snapshots without re-ingesting anything.
+
+◆
+
+## updateSchemaIncremental is the safe path[#](#incremental-updates)
+
+updateSchemaIncremental({ fields\_to\_add, fields\_to\_remove, schema\_version?, scope?, activate?, migrate\_existing? }) is the workhorse for runtime evolution. It auto-increments the version (minor for adds, major for removes), can target a user-specific scope, activates the new version atomically, and optionally backfills raw\_fragments into observations for historical data. At least one field must remain after removal, a schema cannot become empty.
+
+◆
+
+## Public schema snapshots[#](#schema-snapshots)
+
+Every register / activate / deactivate triggers an asynchronous export to docs/subsystems/schema\_snapshots/{entity\_type}/v{version}.json. The export merges the latest definitions from src/services/schema\_definitions.ts (authoritative for current code) with historic versions from the schema\_registry table. Failures don't block schema operations. You can also run npm run schema:export manually.
+
+◆
+
+## Deterministic replay across versions[#](#deterministic-replay)
+
+Because observation.schema\_version is immutable, Neotoma can recompute any historical snapshot under any active schema version. This is what enables breaking-change reconciliation, audit, and rollback. Same observations + same active schema + same reducer config ⇒ same snapshot, regardless of when the version was activated.
+
+## Invariants[#](#invariants)
+
+MUST
+
+-   Use semantic versioning: minor for additive, major for breaking
+-   Preserve schema\_version immutably on every observation
+-   Trigger schema snapshot export on every register / activate / deactivate
+-   Keep at least one field after removal, schemas cannot become empty
+-   Ensure the active schema can read observations from all prior versions gracefully
+
+MUST NOT
+
+-   Mutate schema\_definition in place, always register a new version
+-   Skip a major version bump for breaking changes
+-   Hard-delete observation data when a field is removed, schema-projection filtering handles snapshots
+-   Allow more than one active version per entity\_type within the same scope
+-   Block schema operations on snapshot-export failures
+
+## Related[#](#related)
+
+-   [Schema registry doc](https://github.com/markmhendrickson/neotoma/blob/main/docs/subsystems/schema_registry.md) , Versioning, migration, updateSchemaIncremental
+-   [Schema snapshots README](https://github.com/markmhendrickson/neotoma/blob/main/docs/subsystems/schema_snapshots/README.md) , Exported JSON files for every (entity\_type, version) and the changelog
+-   [Breaking-change reconciliation example](https://github.com/markmhendrickson/neotoma/blob/main/docs/examples/schema_breaking_change_reconciliation.md) , Worked example: how a removed field reconciles in snapshots
+-   [Schema management workflows](/schema-management) , CLI walkthrough: list, validate, evolve, register
+-   [Storage layers](/schemas/storage-layers) , Why removed fields stay queryable as raw\_fragments
+-   [Schema registry](/schemas/registry) , The table that holds every version
+
+## Where to go next[#](#more)
+
+-   [All schema concepts](/schemas) , registry, merge policies, storage layers, versioning
+-   [Primitive record types](/primitives) , sources, observations, snapshots, and the rest of Neotoma's atoms
+-   [Schema management workflows](/schema-management) , CLI commands for listing, validating, and evolving schemas</pre></div><div role="region" aria-label="Notifications (F8)" tabindex="-1" style="pointer-events: none;"><ol tabindex="-1" class="fixed top-0 z-[100] flex w-full flex-col-reverse p-4 sm:bottom-4 sm:right-4 sm:top-auto sm:flex-col sm:max-h-[calc(100vh-1rem)] sm:overflow-y-auto md:max-w-[420px]"></ol></div></div>
+  
+
+
+</body></html>

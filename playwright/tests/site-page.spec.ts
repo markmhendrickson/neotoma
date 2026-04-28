@@ -150,7 +150,7 @@ test.describe("sitePage coverage", () => {
   });
 
   test("evaluate page documents the canonical onboarding sequence", async ({ page }) => {
-    await page.goto("/evaluate");
+    await page.goto("/evaluate/agent-instructions");
     await page.waitForLoadState("networkidle");
 
     await expect(
@@ -198,7 +198,7 @@ test.describe("sitePage coverage", () => {
   test("evaluate page tells agents to inspect broader context before recommending fit", async ({
     page,
   }) => {
-    await page.goto("/evaluate");
+    await page.goto("/evaluate/agent-instructions");
     await page.waitForLoadState("networkidle");
 
     await expect(

@@ -23,6 +23,8 @@ Neotoma is a deterministic state layer for AI agents. It stores structured recor
 
 Not retrieval memory (RAG, vector search, semantic lookup). Neotoma enforces deterministic state evolution: same observations always produce the same entity state, regardless of when or in what order they are processed.
 
+The **Inspector** — Neotoma's visual control plane for browsing the entity graph, timeline, schema editor, and agent attribution — is bundled and served at `/inspector` by default when the server starts. No separate build or configuration required. Override with `NEOTOMA_INSPECTOR_DISABLE`, `NEOTOMA_PUBLIC_INSPECTOR_URL`, `NEOTOMA_INSPECTOR_STATIC_DIR`, or `NEOTOMA_INSPECTOR_BASE_PATH` (see `.env.example`).
+
 ## Architecture
 
 ```mermaid

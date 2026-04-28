@@ -6,6 +6,9 @@ import { fileURLToPath } from "url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
+  // Keep scrollback when running under concurrently (e.g. npm run watch:full) so
+  // pick-port --print-resources and earlier terminal output are not cleared on HMR/restart.
+  clearScreen: false,
   plugins: [react()],
   root: "frontend",
   // Load .env / .env.development / .env.production from repo root (same as neotoma site configure).

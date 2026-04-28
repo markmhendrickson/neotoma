@@ -45,16 +45,16 @@ neotoma store --json='[{"entity_type":"task","title":"Review API rollout","statu
 neotoma entities list --type task --limit 10
 
 # Search by identifier
-neotoma entities search "Ana Rivera" --type contact
+neotoma entities search "Ana Rivera" --entity-type contact
 
 # Inspect provenance
 neotoma observations list --entity-id <entity_id>
 
-# Upload a file with AI interpretation
-neotoma upload ./invoice.pdf
+# Ingest a file with AI interpretation
+neotoma ingest ./invoice.pdf
 
-# Upload locally (no API server needed)
-neotoma upload --local ./invoice.pdf
+# Ingest locally (no API server needed)
+neotoma ingest --offline ./invoice.pdf
 
 # Stream changes in real time
 neotoma watch --tail --human`}</pre>

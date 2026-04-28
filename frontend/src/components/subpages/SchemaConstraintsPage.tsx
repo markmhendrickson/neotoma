@@ -5,8 +5,8 @@ export function SchemaConstraintsPage() {
   return (
     <DetailPage title="Schema constraints">
       <p className="text-[15px] leading-7 mb-4">
-        Entities conform to defined types and validation rules. Invalid writes fail at store time so malformed
-        data does not silently enter the memory graph.
+        Entities conform to defined types and validation rules. Type mismatches are flagged at store time
+        and missing required fields generate warnings, so schema drift does not silently degrade state quality.
       </p>
       <h2 className="text-[18px] font-medium tracking-[-0.01em] mt-8 mb-3">Before vs after</h2>
       <p className="text-[15px] leading-7 mb-4">

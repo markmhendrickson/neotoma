@@ -35,7 +35,7 @@ describe("site_data", () => {
   it("keeps critical code snippets available for rendering", () => {
     expect(SITE_CODE_SNIPPETS.installCommands).toContain("npm install -g neotoma");
     expect(SITE_CODE_SNIPPETS.stdioConfigJson).toContain("\"mcpServers\"");
-    expect(SITE_CODE_SNIPPETS.cliUploadExample).toContain("neotoma upload");
+    expect(SITE_CODE_SNIPPETS.cliUploadExample).toContain("neotoma ingest");
   });
 
   it("exposes repo version, releases count, and stars fallback from repo_info", () => {

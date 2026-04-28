@@ -39,7 +39,7 @@ const ENTITY_TYPE_GUIDES: EntityTypeGuide[] = [
       { field: "name", value: '"Sarah Chen"' },
       { field: "email", value: '"sarah@example.com"' },
       { field: "company", value: '"Acme Corp"' },
-      { field: "role", value: '"VP Engineering"' },
+      { field: "title", value: '"VP Engineering"' },
       { field: "relationship", value: '"client"' },
     ],
     mcpStoreExample: `store_structured({
@@ -49,7 +49,7 @@ const ENTITY_TYPE_GUIDES: EntityTypeGuide[] = [
       name: "Sarah Chen",
       email: "sarah@example.com",
       company: "Acme Corp",
-      role: "VP Engineering",
+      title: "VP Engineering",
       relationship: "client"
     }
   ],
@@ -60,7 +60,7 @@ const ENTITY_TYPE_GUIDES: EntityTypeGuide[] = [
   "name": "Sarah Chen",
   "email": "sarah@example.com",
   "company": "Acme Corp",
-  "role": "VP Engineering",
+  "title": "VP Engineering",
   "relationship": "client"
 }]'`,
     apiStoreExample: `curl -X POST http://localhost:3080/api/store \\
@@ -71,7 +71,7 @@ const ENTITY_TYPE_GUIDES: EntityTypeGuide[] = [
       "name": "Sarah Chen",
       "email": "sarah@example.com",
       "company": "Acme Corp",
-      "role": "VP Engineering",
+      "title": "VP Engineering",
       "relationship": "client"
     }]
   }'`,
@@ -79,7 +79,7 @@ const ENTITY_TYPE_GUIDES: EntityTypeGuide[] = [
 neotoma entities list --type contact
 
 # Search by name or identifier
-neotoma entities search --query "Sarah Chen" --type contact
+neotoma entities search --query "Sarah Chen" --entity-type contact
 
 # Inspect full history for one contact
 neotoma observations list --entity-id <entity_id>
@@ -121,8 +121,8 @@ retrieve_related_entities({
       { field: "title", value: '"Review API rollout plan"' },
       { field: "status", value: '"open"' },
       { field: "priority", value: '"high"' },
-      { field: "due_date", value: '"2026-04-15"' },
-      { field: "assigned_to", value: '"Sarah Chen"' },
+      { field: "date_due", value: '"2026-04-15"' },
+      { field: "assignee", value: '"Sarah Chen"' },
     ],
     mcpStoreExample: `store_structured({
   entities: [
@@ -131,8 +131,8 @@ retrieve_related_entities({
       title: "Review API rollout plan",
       status: "open",
       priority: "high",
-      due_date: "2026-04-15",
-      assigned_to: "Sarah Chen"
+      date_due: "2026-04-15",
+      assignee: "Sarah Chen"
     }
   ],
   idempotency_key: "task-review-api-rollout-1710268800"
@@ -142,8 +142,8 @@ retrieve_related_entities({
   "title": "Review API rollout plan",
   "status": "open",
   "priority": "high",
-  "due_date": "2026-04-15",
-  "assigned_to": "Sarah Chen"
+  "date_due": "2026-04-15",
+  "assignee": "Sarah Chen"
 }]'`,
     apiStoreExample: `curl -X POST http://localhost:3080/api/store \\
   -H "Content-Type: application/json" \\
@@ -153,15 +153,15 @@ retrieve_related_entities({
       "title": "Review API rollout plan",
       "status": "open",
       "priority": "high",
-      "due_date": "2026-04-15",
-      "assigned_to": "Sarah Chen"
+      "date_due": "2026-04-15",
+      "assignee": "Sarah Chen"
     }]
   }'`,
     retrieveCliExample: `# List open tasks
 neotoma entities list --type task
 
 # Search by keyword
-neotoma entities search --query "API rollout" --type task
+neotoma entities search --query "API rollout" --entity-type task
 
 # See how a task changed over time
 neotoma observations list --entity-id <entity_id>
@@ -202,7 +202,7 @@ list_observations({
       { field: "description", value: '"Monthly hosting - AWS"' },
       { field: "amount", value: "-284.50" },
       { field: "currency", value: '"USD"' },
-      { field: "date", value: '"2026-03-01"' },
+      { field: "date_transacted", value: '"2026-03-01"' },
       { field: "category", value: '"infrastructure"' },
     ],
     mcpStoreExample: `store_structured({
@@ -212,7 +212,7 @@ list_observations({
       description: "Monthly hosting - AWS",
       amount: -284.50,
       currency: "USD",
-      date: "2026-03-01",
+      date_transacted: "2026-03-01",
       category: "infrastructure",
       account: "business-checking"
     }
@@ -224,7 +224,7 @@ list_observations({
   "description": "Monthly hosting - AWS",
   "amount": -284.50,
   "currency": "USD",
-  "date": "2026-03-01",
+  "date_transacted": "2026-03-01",
   "category": "infrastructure",
   "account": "business-checking"
 }]'`,
@@ -236,7 +236,7 @@ list_observations({
       "description": "Monthly hosting - AWS",
       "amount": -284.50,
       "currency": "USD",
-      "date": "2026-03-01",
+      "date_transacted": "2026-03-01",
       "category": "infrastructure",
       "account": "business-checking"
     }]
@@ -245,7 +245,7 @@ list_observations({
 neotoma entities list --type transaction
 
 # Search by description
-neotoma entities search --query "AWS" --type transaction
+neotoma entities search --query "AWS" --entity-type transaction
 
 # Trace corrections and reconciliation history
 neotoma observations list --entity-id <entity_id>
@@ -286,21 +286,21 @@ list_timeline_events({
     verticalLabel: "Contracts",
     storeFields: [
       { field: "title", value: '"Acme Corp - SaaS License Agreement"' },
-      { field: "counterparty", value: '"Acme Corp"' },
+      { field: "parties", value: '["Acme Corp"]' },
       { field: "status", value: '"active"' },
-      { field: "effective_date", value: '"2026-01-15"' },
-      { field: "annual_value", value: "48000" },
+      { field: "date_effective", value: '"2026-01-15"' },
+      { field: "value", value: "48000" },
     ],
     mcpStoreExample: `store_structured({
   entities: [
     {
       entity_type: "contract",
       title: "Acme Corp - SaaS License Agreement",
-      counterparty: "Acme Corp",
+      parties: ["Acme Corp"],
       status: "active",
-      effective_date: "2026-01-15",
-      renewal_date: "2027-01-15",
-      annual_value: 48000,
+      date_effective: "2026-01-15",
+      date_expiry: "2027-01-15",
+      value: 48000,
       currency: "USD"
     }
   ],
@@ -309,11 +309,11 @@ list_timeline_events({
     cliStoreExample: `neotoma store --json='[{
   "entity_type": "contract",
   "title": "Acme Corp - SaaS License Agreement",
-  "counterparty": "Acme Corp",
+  "parties": ["Acme Corp"],
   "status": "active",
-  "effective_date": "2026-01-15",
-  "renewal_date": "2027-01-15",
-  "annual_value": 48000,
+  "date_effective": "2026-01-15",
+  "date_expiry": "2027-01-15",
+  "value": 48000,
   "currency": "USD"
 }]'`,
     apiStoreExample: `curl -X POST http://localhost:3080/api/store \\
@@ -322,11 +322,11 @@ list_timeline_events({
     "entities": [{
       "entity_type": "contract",
       "title": "Acme Corp - SaaS License Agreement",
-      "counterparty": "Acme Corp",
+      "parties": ["Acme Corp"],
       "status": "active",
-      "effective_date": "2026-01-15",
-      "renewal_date": "2027-01-15",
-      "annual_value": 48000,
+      "date_effective": "2026-01-15",
+      "date_expiry": "2027-01-15",
+      "value": 48000,
       "currency": "USD"
     }]
   }'`,
@@ -334,7 +334,7 @@ list_timeline_events({
 neotoma entities list --type contract
 
 # Search by counterparty
-neotoma entities search --query "Acme Corp" --type contract
+neotoma entities search --query "Acme Corp" --entity-type contract
 
 # View amendment and renewal history
 neotoma observations list --entity-id <entity_id>
@@ -420,7 +420,7 @@ retrieve_entity_by_identifier({
 neotoma entities list --type decision
 
 # Search by title or keyword
-neotoma entities search --query "PostgreSQL" --type decision
+neotoma entities search --query "PostgreSQL" --entity-type decision
 
 # Full provenance: who decided, when, and what changed
 neotoma observations list --entity-id <entity_id>
@@ -460,8 +460,8 @@ list_observations({
     storeFields: [
       { field: "title", value: '"Q4 Planning - Engineering"' },
       { field: "event_type", value: '"meeting"' },
-      { field: "date", value: '"2026-03-28T10:00:00Z"' },
-      { field: "participants", value: '["Sarah Chen", "Alex Rivera"]' },
+      { field: "date_start", value: '"2026-03-28T10:00:00Z"' },
+      { field: "attendees", value: '["Sarah Chen", "Alex Rivera"]' },
       { field: "outcome", value: '"Agreed on PostgreSQL migration timeline"' },
     ],
     mcpStoreExample: `store_structured({
@@ -470,8 +470,8 @@ list_observations({
       entity_type: "event",
       title: "Q4 Planning - Engineering",
       event_type: "meeting",
-      date: "2026-03-28T10:00:00Z",
-      participants: ["Sarah Chen", "Alex Rivera"],
+      date_start: "2026-03-28T10:00:00Z",
+      attendees: ["Sarah Chen", "Alex Rivera"],
       outcome: "Agreed on PostgreSQL migration timeline",
       follow_ups: ["Draft migration RFC", "Set up staging env"]
     }
@@ -482,8 +482,8 @@ list_observations({
   "entity_type": "event",
   "title": "Q4 Planning - Engineering",
   "event_type": "meeting",
-  "date": "2026-03-28T10:00:00Z",
-  "participants": ["Sarah Chen", "Alex Rivera"],
+  "date_start": "2026-03-28T10:00:00Z",
+  "attendees": ["Sarah Chen", "Alex Rivera"],
   "outcome": "Agreed on PostgreSQL migration timeline",
   "follow_ups": ["Draft migration RFC", "Set up staging env"]
 }]'`,
@@ -494,8 +494,8 @@ list_observations({
       "entity_type": "event",
       "title": "Q4 Planning - Engineering",
       "event_type": "meeting",
-      "date": "2026-03-28T10:00:00Z",
-      "participants": ["Sarah Chen", "Alex Rivera"],
+      "date_start": "2026-03-28T10:00:00Z",
+      "attendees": ["Sarah Chen", "Alex Rivera"],
       "outcome": "Agreed on PostgreSQL migration timeline",
       "follow_ups": ["Draft migration RFC", "Set up staging env"]
     }]
@@ -504,7 +504,7 @@ list_observations({
 neotoma entities list --type event
 
 # Search by title
-neotoma entities search --query "Q4 Planning" --type event
+neotoma entities search --query "Q4 Planning" --entity-type event
 
 # See how meeting notes evolved
 neotoma observations list --entity-id <entity_id>

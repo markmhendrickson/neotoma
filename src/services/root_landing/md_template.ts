@@ -80,7 +80,9 @@ export function renderLandingMarkdown(ctx: LandingHtmlContext): string {
     parts.push(`> **Note:** ${copy.banner}`);
     parts.push("");
   }
-  parts.push(`**mode:** \`${ctx.mode}\` · **version:** \`${ctx.version}\`${ctx.gitSha ? ` · **git:** \`${ctx.gitSha.slice(0, 7)}\`` : ""}`);
+  parts.push(
+    `**mode:** \`${ctx.mode}\` · **config:** \`${ctx.configEnvironment}\` · **version:** \`${ctx.version}\`${ctx.gitSha ? ` · **git:** \`${ctx.gitSha.slice(0, 7)}\`` : ""}`,
+  );
   parts.push("");
 
   parts.push("## This instance");
@@ -100,6 +102,27 @@ export function renderLandingMarkdown(ctx: LandingHtmlContext): string {
       `- **Sandbox terms:** ${mdLink(`${ctx.base}/sandbox/terms`, `${ctx.base}/sandbox/terms`)} (acceptable-use JSON)`,
     );
     parts.push(`- **Abuse / PII reports:** \`POST ${ctx.base}/sandbox/report\``);
+    parts.push("");
+
+    parts.push("## Start a sandbox session");
+    parts.push("");
+    parts.push("Each session creates an ephemeral user with seed data. Data is deleted when the session expires or is ended.");
+    parts.push("");
+    parts.push("```shell");
+    parts.push(`# Start with the generic pack`);
+    parts.push(`curl -s -X POST ${ctx.base}/sandbox/session/new \\`);
+    parts.push(`  -H 'Content-Type: application/json' \\`);
+    parts.push(`  -d '{"pack_id":"generic"}'`);
+    parts.push("```");
+    parts.push("");
+    parts.push("```shell");
+    parts.push(`# Start with a use-case pack (e.g. crm)`);
+    parts.push(`curl -s -X POST ${ctx.base}/sandbox/session/new \\`);
+    parts.push(`  -H 'Content-Type: application/json' \\`);
+    parts.push(`  -d '{"pack_id":"crm"}'`);
+    parts.push("```");
+    parts.push("");
+    parts.push("The response includes `one_time_code` (for browser handoff) and cookie credentials for API access.");
     parts.push("");
   }
 
@@ -125,7 +148,7 @@ export function renderLandingMarkdown(ctx: LandingHtmlContext): string {
   parts.push("---");
   parts.push("");
   parts.push(
-    `Served by Neotoma ${ctx.version}${ctx.gitSha ? ` · \`${ctx.gitSha.slice(0, 7)}\`` : ""} — mode \`${ctx.mode}\`.`,
+    `Served by Neotoma ${ctx.version}${ctx.gitSha ? ` · \`${ctx.gitSha.slice(0, 7)}\`` : ""} — mode \`${ctx.mode}\` · config \`${ctx.configEnvironment}\`.`,
   );
   parts.push("");
   parts.push(

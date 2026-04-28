@@ -6,11 +6,13 @@ Hooks that integrate [Neotoma](https://neotoma.io) into Cursor. Pairs with the N
 
 | Cursor hook | Purpose |
 | --- | --- |
-| `beforeSubmitPrompt` | Injects retrieval context (`@identifier` matches + recent timeline) and captures the user message. |
-| `postToolUse` | Logs a `tool_invocation` observation for each tool call — passive observability. |
-| `stop` | Persists the assistant's final reply as a safety net. |
+| `sessionStart` | Plants a compact "must-do" reminder via `additional_context` (the surface Cursor honors at session boot) and seeds a small recent-timeline retrieval. Also flips the Neotoma server's per-session instruction profile to `compact` for small/fast models. |
+| `beforeSubmitPrompt` | Captures the user message as a `conversation_message` and warms up `@identifier` retrievals. (Cursor drops `additional_context` from this hook, so injection moved to `sessionStart` and `postToolUse`.) |
+| `postToolUse` | Logs a `tool_invocation` observation for each tool call — passive observability. Also injects per-turn reminders + one-shot failure hints via `additional_context` for small-model regimes. |
+| `postToolUseFailure` | When a Neotoma-relevant tool call fails, persists a structured `tool_invocation_failure` entity (with PII-scrubbed `error_message_redacted`) and bumps a session-local failure counter. NEVER calls `submit_feedback` directly. |
+| `stop` | Persists the assistant's final reply as a safety net, backfills the conversation graph + `conversation_turn` row when the agent skipped the user-phase store, and (for small-model regimes) emits a `followup_message` requesting a single compliance pass (`loop_limit: 1`). |
 
-No LLM-based extraction runs in the hook layer — that stays with the agent via MCP.
+No LLM-based extraction runs in the hook layer — that stays with the agent via MCP. The hooks observe friction (`tool_invocation_failure`) and surface a one-shot hint suggesting the agent consider `submit_feedback`, but never call it themselves; PII redaction and `metadata.environment` assembly remain the agent's responsibility per the MCP feedback contract.
 
 ## Install
 
@@ -38,8 +40,28 @@ npx @neotoma/cursor-hooks --uninstall
 | `NEOTOMA_BASE_URL` | `http://127.0.0.1:3080` | Neotoma API root. |
 | `NEOTOMA_TOKEN` | `dev-local` | Auth token. |
 | `NEOTOMA_LOG_LEVEL` | `warn` | `debug` \| `info` \| `warn` \| `error` \| `silent`. |
+| `NEOTOMA_HOOK_FEEDBACK_HINT` | `on` | Set to `off` to disable the one-shot failure hint surfaced by `postToolUse`. |
+| `NEOTOMA_HOOK_FEEDBACK_HINT_THRESHOLD` | `2` | Minimum repeated-failure count for `(tool, error_class)` before a hint is surfaced. |
+| `NEOTOMA_HOOK_STATE_DIR` | `~/.neotoma/hook-state` | Directory used for per-session failure counters and per-turn compliance state. Override per-test for isolation. |
+| `NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP` | `auto` | `on` \| `off` \| `auto` (default `on` for small models). Controls whether `stop` returns `followup_message`. |
+| `NEOTOMA_HOOK_SMALL_MODEL_PATTERNS` | (built-in list) | Comma-separated regex list overriding the small-model detection patterns (case-insensitive). |
+| `NEOTOMA_HOOK_SMALL_MODEL_DETECTED` | (set by `sessionStart`) | Internal hint so downstream hooks avoid re-detecting per call. |
+| `NEOTOMA_HOOK_DETECTED_MODEL` | (set by host) | Optional model id forwarded to `postToolUse` when Cursor's payload omits `model`. |
+| `NEOTOMA_LOCAL_BUILD` | (auto) | `1`/`true` or `0`/`false` to override the auto-detected "running inside the Neotoma repo checkout" classification used by the stop-hook root-cause classifier. |
+| `NEOTOMA_HOOK_CONNECTION_ID` | (unset) | Optional connection id forwarded to `/session/profile` when flipping the per-session instruction profile. |
 
 All hooks are best-effort — any failure is logged to stderr and the agent continues.
+
+### `tool_invocation_failure` entity
+
+When a Neotoma-relevant tool call fails, `postToolUseFailure` persists a `tool_invocation_failure` entity with these fields:
+
+- `tool_name`, `error_class` (e.g. `fetch_failed`, `ECONNREFUSED`, `ERR_*`, `HTTP_4xx`)
+- `error_message_redacted` (light PII scrub: emails, tokens, UUIDs, phone numbers, home directory)
+- `invocation_shape` (top-level keys of the tool input — never values)
+- `turn_key`, `observed_at`, `hit_count_session`
+
+These observations feed the `agent.neotoma.io` feedback pipeline. The agent decides — independently — whether to call `submit_feedback`. The hook MUST NOT.
 
 ## Build
 

@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   ArrowRight,
   Check,
+  ChevronDown,
   Clock,
   FileDown,
   GitBranch,
@@ -17,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui/collapsible";
 import { SeoHead } from "../SeoHead";
 import { sendCtaClick } from "@/utils/analytics";
 
@@ -201,13 +203,27 @@ export function BuildVsBuyPage() {
             </p>
           </section>
 
+          <nav className="rounded-lg border toc-panel p-4 mb-8 mt-12">
+            <p className="text-[14px] font-medium mb-2">On this page</p>
+            <ul className="list-none pl-0 space-y-1 text-[14px]">
+              <li><a href="#how-agent-memory-infrastructure-evolves" className="text-foreground underline hover:text-foreground">How agent memory infrastructure evolves</a></li>
+              <li><a href="#what-existing-tools-cover-well" className="text-foreground underline hover:text-foreground">What existing tools cover well</a></li>
+              <li><a href="#where-observability-ends-and-state-integrity-begins" className="text-foreground underline hover:text-foreground">Where observability ends and state integrity begins</a></li>
+              <li><a href="#how-many-of-these-describe-your-system" className="text-foreground underline hover:text-foreground">How many of these describe your system?</a></li>
+              <li><a href="#where-the-line-shows-up-in-typed-state" className="text-foreground underline hover:text-foreground">Where the line shows up in typed state</a></li>
+              <li><a href="#observability-tells-you-what-happened" className="text-foreground underline hover:text-foreground">Observability tells you what happened</a></li>
+              <li><a href="#between-your-agents-and-your-database" className="text-foreground underline hover:text-foreground">Between your agents and your database</a></li>
+              <li><a href="#every-day-without-write-integrity" className="text-foreground underline hover:text-foreground">Every day without write integrity</a></li>
+            </ul>
+          </nav>
+
           {/* ── Where are you? ── */}
           <section className="py-20 border-b border-border space-y-8">
             <div className="space-y-2">
               <p className="text-[11px] font-mono uppercase tracking-widest text-muted-foreground">
                 Where are you?
               </p>
-              <h2 className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
+              <h2 id="how-agent-memory-infrastructure-evolves" className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
                 How agent memory infrastructure evolves
               </h2>
             </div>
@@ -283,7 +299,7 @@ export function BuildVsBuyPage() {
               <p className="text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
                 Already solved
               </p>
-              <h2 className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
+              <h2 id="what-existing-tools-cover-well" className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
                 What existing tools cover well
               </h2>
             </div>
@@ -336,14 +352,19 @@ export function BuildVsBuyPage() {
 
           {/* ── The gap ── */}
           <section className="py-20 border-b border-border space-y-8">
-            <div className="space-y-2">
-              <p className="text-[11px] font-mono uppercase tracking-widest text-amber-600 dark:text-amber-400">
-                The gap
-              </p>
-              <h2 className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
-                Where observability ends and state integrity begins
-              </h2>
-            </div>
+            <p className="text-[11px] font-mono uppercase tracking-widest text-amber-600 dark:text-amber-400">
+              The gap
+            </p>
+            <Collapsible defaultOpen={false}>
+              <CollapsibleTrigger asChild>
+                <button type="button" className="group flex items-center gap-2 w-full text-left focus:outline-none">
+                  <h2 id="where-observability-ends-and-state-integrity-begins" className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
+                    Where observability ends and state integrity begins
+                  </h2>
+                  <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" aria-hidden />
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-8 pt-8">
             <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl">
               Observability shows you what happened. State integrity tells you
               what was true: the composed entity state at any moment, with
@@ -412,23 +433,30 @@ export function BuildVsBuyPage() {
                 ),
               )}
             </div>
+              </CollapsibleContent>
+            </Collapsible>
           </section>
 
           {/* ── Assessment ── */}
           <section className="py-20 border-b border-border space-y-8">
-            <div className="space-y-2">
-              <p className="text-[11px] font-mono uppercase tracking-widest text-muted-foreground">
-                Self-assessment
-              </p>
-              <h2 className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
-                How many of these describe your system?
-              </h2>
+            <p className="text-[11px] font-mono uppercase tracking-widest text-muted-foreground">
+              Self-assessment
+            </p>
+            <Collapsible defaultOpen={false}>
+              <CollapsibleTrigger asChild>
+                <button type="button" className="group flex items-center gap-2 w-full text-left focus:outline-none">
+                  <h2 id="how-many-of-these-describe-your-system" className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
+                    How many of these describe your system?
+                  </h2>
+                  <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" aria-hidden />
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-8 pt-8">
               <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl">
                 A useful diagnostic: what are you doing today to compensate for
                 unreliable or missing agent state? Each item below is a structural
                 signal-not a vendor checklist.
               </p>
-            </div>
             <div className="space-y-3">
               {ASSESSMENT_ITEMS.map(({ question, detail }, idx) => (
                 <div
@@ -492,17 +520,25 @@ export function BuildVsBuyPage() {
                 </p>
               </div>
             </div>
+              </CollapsibleContent>
+            </Collapsible>
           </section>
 
           {/* ── Entity type examples ── */}
           <section className="py-20 border-b border-border space-y-8">
-            <div className="space-y-2">
-              <p className="text-[11px] font-mono uppercase tracking-widest text-muted-foreground">
-                By entity type
-              </p>
-              <h2 className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
-                Where the line shows up in typed state
-              </h2>
+            <p className="text-[11px] font-mono uppercase tracking-widest text-muted-foreground">
+              By entity type
+            </p>
+            <Collapsible defaultOpen={false}>
+              <CollapsibleTrigger asChild>
+                <button type="button" className="group flex items-center gap-2 w-full text-left focus:outline-none">
+                  <h2 id="where-the-line-shows-up-in-typed-state" className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
+                    Where the line shows up in typed state
+                  </h2>
+                  <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" aria-hidden />
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-8 pt-8">
               <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl">
                 Neotoma is schema-first: each{" "}
                 <span className="text-foreground/90">entity type</span> carries
@@ -511,7 +547,6 @@ export function BuildVsBuyPage() {
                 contact, a task, or a transaction-see the guides for store and
                 retrieval patterns.
               </p>
-            </div>
             <div className="grid gap-4 md:grid-cols-2">
               {ENTITY_TYPE_EXAMPLES.map(
                 ({
@@ -579,6 +614,8 @@ export function BuildVsBuyPage() {
                 </Fragment>
               ))}
             </nav>
+              </CollapsibleContent>
+            </Collapsible>
           </section>
 
           {/* ── The real question ── */}
@@ -587,7 +624,7 @@ export function BuildVsBuyPage() {
               <p className="text-[11px] font-mono uppercase tracking-widest text-muted-foreground">
                 The real question
               </p>
-              <h2 className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
+              <h2 id="observability-tells-you-what-happened" className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
                 Observability tells you what happened.{" "}
                 <span className="text-muted-foreground">
                   State integrity proves what was true.
@@ -655,7 +692,7 @@ export function BuildVsBuyPage() {
               <p className="text-[11px] font-mono uppercase tracking-widest text-muted-foreground">
                 Integration model
               </p>
-              <h2 className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
+              <h2 id="between-your-agents-and-your-database" className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
                 Between your agents and your database{" "}
                 <span className="text-muted-foreground">
                   (not instead of it)
@@ -675,7 +712,7 @@ export function BuildVsBuyPage() {
           {/* ── CTA ── */}
           <section className="pt-20 text-center space-y-8">
             <div className="space-y-4 max-w-xl mx-auto">
-              <h2 className="text-[28px] md:text-[32px] font-medium tracking-[-0.02em]">
+              <h2 id="every-day-without-write-integrity" className="text-[28px] md:text-[32px] font-medium tracking-[-0.02em]">
                 Every day without write integrity is a gap in your audit history
               </h2>
               <p className="text-[15px] md:text-[17px] leading-7 text-muted-foreground">

@@ -38,10 +38,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
     <title>Memory infrastructure for Claude agents | Agent SDK and Managed Agents (Markdown) | Neotoma</title>
-    <script type="module" crossorigin="" src="../../../assets/main-Jf-itxVT.js"></script>
-    <link rel="stylesheet" crossorigin="" href="../../../assets/main-DWQ-Fl-1.css">
+    <script type="module" crossorigin="" src="/assets/main-CaoWcp2k.js"></script>
+    <link rel="stylesheet" crossorigin="" href="/assets/main-BBds_bdF.css">
   
-    <!-- build: local-1776078353914 -->
+    <!-- build: local-1777360387837 -->
       <link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/neotoma-with-claude-agent-sdk">
     <link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/neotoma-with-claude-agent-sdk">
     <link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/neotoma-with-claude-agent-sdk">
@@ -61,7 +61,7 @@
     <div id="root"><iframe title="Markdown capture" aria-hidden="true" width="1280" height="900" class="pointer-events-none fixed left-[-9999px] top-0 z-[-1] border-0 opacity-0" sandbox="allow-same-origin allow-scripts allow-forms"></iframe><div class="min-h-screen bg-background text-foreground"><pre class="whitespace-pre-wrap break-words p-4 font-mono text-[13px] leading-relaxed text-foreground">&lt;!--
   Full-page Markdown export (rendered HTML → GFM).
   Source: https://neotoma.io/bn/neotoma-with-claude-agent-sdk
-  Generated: 2026-04-13T11:07:36.643Z
+  Generated: 2026-04-28T07:16:21.065Z
 --&gt;
 # Memory infrastructure for Claude agents
 
@@ -127,9 +127,17 @@ See the [Agent SDK MCP documentation](https://docs.claude.com/en/api/agent-sdk/m
 
 * * *
 
+## Neotoma SDK adapter (optional)
+
+The [Neotoma Claude Agent SDK adapter](https://github.com/markmhendrickson/neotoma/tree/main/packages/claude-agent-sdk-adapter) returns ready-to-mount callbacks for the SDK's hooks interface (`UserPromptSubmit`, `PostToolUse`, `PreCompact`, `Stop`). MCP remains the path for agent-driven structured writes. The adapter captures lifecycle events the agent cannot see on its own and injects retrieved Neotoma context into each prompt via `additionalContext`.
+
+Install with `npm install @neotoma/claude-agent-sdk-adapter @neotoma/client` alongside the SDK. Pair with MCP for a reliable floor plus a structured ceiling.
+
+* * *
+
 ## Getting started
 
-Copy this prompt into the Claude Agent SDK or Managed Agents to have it read the evaluation page, inspect your tool, workspace, and configuration context, then judge whether Neotoma fits your real workflow and what to persist first.
+Copy this prompt into the Claude Agent SDK or Managed Agents to have it read the [evaluation page](/evaluate), inspect your tool, workspace, and configuration context, then judge whether Neotoma fits your real workflow and what to persist first.
 
 Evaluation prompt
 
@@ -137,13 +145,21 @@ Reads the page, then evaluates fit against your real workflow.
 
 Copy
 
-`Read https://neotoma.io/evaluate. Before you answer, inspect any broader tool, workspace, and configuration context you can access so you assess my real workflow rather than just this chat. Then assess whether Neotoma fits my workflow, what data would be highest value to persist first, and what I should do next.`
-
-[View evaluation page](/evaluate)
+``Read https://neotoma.io/evaluate. Use any tool, workspace, and chat context already available in this session to assess my real workflow. Avoid ad-hoc shell introspection just to profile me; if Neotoma is already installed, use `neotoma doctor --json` for status instead. Then tell me whether Neotoma fits my workflow, what data would be highest value to persist first, and what I should do next.``Copy prompt
 
 If you are ready to proceed, paste this prompt into a Claude agent. The agent handles evaluation, installation if needed, activation, and MCP configuration.
 
-`Read https://neotoma.io/install and carry me through the install-first Neotoma flow. Install, activate it with my data, and configure my current tool for robust ongoing use.`
+Code snippet
+
+Copy the exact snippet shown below.
+
+```
+Read https://neotoma.io/install and carry me through the install-first Neotoma flow.
+
+Use `neotoma` commands for status and setup. If Neotoma is already installed, start with `neotoma doctor --json`; otherwise install it and run `neotoma setup --tool &lt;my_tool&gt; --yes`.
+
+Avoid ad-hoc shell introspection or arbitrary repo scripts. Then activate Neotoma with my data and configure my current tool for robust ongoing use.
+```
 
 * * *
 
@@ -205,22 +221,6 @@ Store a task
 Recall across sessions
 
 “What do I know about Sarah? What did I commit to doing for her?”
-
-* * *
-
-## Known limitations
-
-MCP tool calls may time out for very large stores (100+ entities in one call).
-
-Workaround: Batch into groups of 20–50 entities per store call.
-
-Neotoma runs locally — data is not synced across machines by default.
-
-Workaround: Use the remote HTTP transport or deploy Neotoma as a remote MCP server for multi-machine access.
-
-Schema evolution is additive. Removing fields requires a major version bump.
-
-Workaround: Plan schemas with future fields in mind. Use flexible entity types for exploratory data.
 
 Start with [evaluation](/evaluate), see the [install guide](/install) for more options, [MCP reference](/mcp) for MCP setup, the [platform memory comparison](/neotoma-vs-platform-memory) for a broader picture, and [agent instructions](/agent-instructions) for behavioral details.</pre></div><div role="region" aria-label="Notifications (F8)" tabindex="-1" style="pointer-events: none;"><ol tabindex="-1" class="fixed top-0 z-[100] flex w-full flex-col-reverse p-4 sm:bottom-4 sm:right-4 sm:top-auto sm:flex-col sm:max-h-[calc(100vh-1rem)] sm:overflow-y-auto md:max-w-[420px]"></ol></div></div>
   

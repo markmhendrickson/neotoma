@@ -1697,7 +1697,7 @@ const WATCH_CONCURRENTLY_ARGS = [
   "--prefix={time} [{name}]",
   "--names=api   ,build",
   "tsx watch src/actions.ts",
-  "tsc --watch",
+  "tsc --watch --preserveWatchOutput",
 ];
 
 /** Same as above but with HTTPS tunnel + server + build (dev/prod each get own tunnel via NGROK_*_FILE). */
@@ -1709,7 +1709,7 @@ const WATCH_CONCURRENTLY_ARGS_TUNNEL = [
   "--names=tunnel,api   ,build",
   "bash scripts/setup-https-tunnel.sh",
   "bash scripts/run-dev-server-with-tunnel-url.sh",
-  "tsc --watch",
+  "tsc --watch --preserveWatchOutput",
 ];
 
 const TUNNEL_DEV_URL_FILE = "/tmp/ngrok-mcp-dev-url.txt";
@@ -15464,7 +15464,7 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
           if (preferredEnv === "dev") {
             process.env.NEOTOMA_SESSION_DEV_PORT = String(devPort);
             debugLog(
-              `Spawning dev server: npx concurrently (${tunnel ? "tunnel + run-dev-server-with-tunnel-url.sh + " : ""}tsc --watch), HTTP_PORT=${devPort}`
+              `Spawning dev server: npx concurrently (${tunnel ? "tunnel + run-dev-server-with-tunnel-url.sh + " : ""}tsc --watch --preserveWatchOutput), HTTP_PORT=${devPort}`
             );
             debugLog(`Server stdout/stderr logged to ${sessionLogPath}`);
             devChild = spawn(npxCmd, ["concurrently", ...watchArgs], {
@@ -15482,7 +15482,7 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
           } else {
             process.env.NEOTOMA_SESSION_PROD_PORT = String(prodPort);
             debugLog(
-              `Spawning prod server: npx concurrently (${tunnel ? "tunnel + run-dev-server-with-tunnel-url.sh + " : ""}tsc --watch), HTTP_PORT=${prodPort}, NEOTOMA_ENV=production`
+              `Spawning prod server: npx concurrently (${tunnel ? "tunnel + run-dev-server-with-tunnel-url.sh + " : ""}tsc --watch --preserveWatchOutput), HTTP_PORT=${prodPort}, NEOTOMA_ENV=production`
             );
             debugLog(`Server stdout/stderr logged to ${sessionLogPath}`);
             prodChild = spawn(npxCmd, ["concurrently", ...watchArgs], {

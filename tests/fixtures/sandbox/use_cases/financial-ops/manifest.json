@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0",
+  "description": "Financial ops use case sandbox seed. Transactions, reconciliations, invoices.",
+  "agent_identities": [
+    {
+      "agent_sub": "sandbox-agent-finops@neotoma.sandbox",
+      "client_name": "sandbox-seed-finops",
+      "client_version": "0.1.0",
+      "label": "Financial ops seed runner"
+    }
+  ],
+  "entity_batches": [
+    {
+      "agent_index": 0,
+      "idempotency_prefix": "sandbox-seed-finops-transactions",
+      "fixture": "reuse://tests/fixtures/json/transaction.json",
+      "entity_type_override": "transaction",
+      "note": "Reuses existing transaction fixture."
+    }
+  ],
+  "unstructured_sources": [],
+  "excluded_fixtures": []
+}

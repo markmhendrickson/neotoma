@@ -19,7 +19,8 @@ neotoma schemas get contact`}</pre>
       <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">Store data with schema validation</h2>
       <p className="text-[15px] leading-7 mb-4">
         Store operations validate payloads against the target schema. If required fields are missing or have
-        the wrong type, the write fails and no silent mutation occurs.
+        unexpected types, the observation is still stored but a warning is recorded in the raw fragments
+        layer, so no data is silently lost or misclassified.
       </p>
       <pre className="rounded-lg border code-block-palette p-4 overflow-x-auto font-mono text-[14px] whitespace-pre-wrap break-words mb-6">{`# Valid write
 neotoma store --json='[{"entity_type":"contact","name":"Ana Rivera","email":"ana@acme.com"}]'

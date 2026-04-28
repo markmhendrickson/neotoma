@@ -38,10 +38,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
     <title>Ask Your Agent to Evaluate Neotoma for You (Markdown) | Neotoma</title>
-    <script type="module" crossorigin="" src="../../../assets/main-Jf-itxVT.js"></script>
-    <link rel="stylesheet" crossorigin="" href="../../../assets/main-DWQ-Fl-1.css">
+    <script type="module" crossorigin="" src="/assets/main-CaoWcp2k.js"></script>
+    <link rel="stylesheet" crossorigin="" href="/assets/main-BBds_bdF.css">
   
-    <!-- build: local-1776078353914 -->
+    <!-- build: local-1777360387837 -->
       <link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/evaluate">
     <link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/evaluate">
     <link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/evaluate">
@@ -61,7 +61,7 @@
     <div id="root"><iframe title="Markdown capture" aria-hidden="true" width="1280" height="900" class="pointer-events-none fixed left-[-9999px] top-0 z-[-1] border-0 opacity-0" sandbox="allow-same-origin allow-scripts allow-forms"></iframe><div class="min-h-screen bg-background text-foreground"><pre class="whitespace-pre-wrap break-words p-4 font-mono text-[13px] leading-relaxed text-foreground">&lt;!--
   Full-page Markdown export (rendered HTML → GFM).
   Source: https://neotoma.io/zh/evaluate
-  Generated: 2026-04-13T11:08:03.503Z
+  Generated: 2026-04-28T07:16:51.527Z
 --&gt;
 # Ask your agent to evaluate Neotoma for you
 
@@ -78,14 +78,14 @@ Reads the page, then evaluates fit against your real workflow.
 复制
 
 ```
-Read https://neotoma.io/evaluate. Before you answer, inspect any broader tool, workspace, and configuration context you can access so you assess my real workflow rather than just this chat. Then tell me whether Neotoma is a real fit for my workflow, what data would be highest value to persist first, and what I should do next.
+Read https://neotoma.io/evaluate. Use any tool, workspace, and chat context already available in this session to assess my real workflow. Avoid ad-hoc shell introspection just to profile me; if Neotoma is already installed, use `neotoma doctor --json` for status instead. Then tell me whether Neotoma is a real fit for my workflow, what data would be highest value to persist first, and what I should do next.
 ```
 
-## What Neotoma is
+## What Neotoma does for you
 
-Neotoma is a deterministic state layer for AI agents. It gives your agents versioned, schema-bound, auditable memory that persists across sessions and tools. Distributed as a local npm package with MCP, CLI, and API interfaces.
+Neotoma lets your agents pick up where they left off: across sessions, across tools, without you re-explaining anything. Store a fact once and every agent works from the same truth. Correct something once and the correction sticks everywhere.
 
-Not retrieval memory (RAG, vector search, semantic lookup). Neotoma enforces deterministic state evolution: every change is versioned, every entity is schema-bound, every state can be replayed from the observation log.
+Under the hood, Neotoma is a deterministic state layer: every change is versioned, every entity is schema-bound, and every state can be replayed from the observation log. It runs locally as an npm package with MCP, CLI, and API interfaces. Not retrieval memory (RAG or vector search), but structured, auditable state you control.
 
 ◆
 
@@ -167,11 +167,12 @@ If you assessed a **strong** or **moderate** fit, ask the user directly whether 
 If the user confirms:
 
 1.  Read the [installation guide](/install) at `neotoma.io/install` for the canonical end-to-end workflow.
-2.  If Neotoma is not installed, run `npm install -g neotoma` and `neotoma init`. If it is already installed, skip straight to activation.
-3.  If likely first data to store was already identified during evaluation, carry it into activation. If not, determine it now before discovery.
-4.  Run activation using the sequence [**discover -&gt; propose -&gt; preview -&gt; ingest -&gt; reconstruct -&gt; query -&gt; correct**](/install) - discover candidates, preview them, ingest confirmed sources, reconstruct a timeline, then query and correct. The user should not need to run the onboarding steps manually; you handle the process.
-5.  After the first successful ingest and timeline reconstruction, configure the current tool for the strongest ongoing Neotoma usage: use a Custom GPT or remote MCP for ChatGPT when supported, a Project plus connector and instructions for Claude, or local MCP wiring first for Cursor, Claude Code, Codex, and OpenClaw.
-6.  If the current tool is too constrained for robust Neotoma usage (for example hosted ChatGPT without the right MCP surfaces), say so explicitly and recommend a better-supported primary environment instead of forcing a weak setup.
+2.  If Neotoma is not installed, choose the install path that matches the current tool. For OpenClaw, prefer `openclaw plugins install clawhub:neotoma`. For other local tools, run `npm install -g neotoma`, then collapse setup into two calls: `neotoma doctor --json` to inspect state and `neotoma setup --tool &lt;tool&gt; --yes` to apply init + MCP + CLI instructions + permissions idempotently. If it is already installed, skip straight to activation. Run `neotoma doctor --json` to verify the setup first.
+3.  **Do not improvise shell introspection** (`python3 -c`, `grep -r`, `ls`, `cat`, `jq`, `find`, `which`, `node -e`) during install or activation. Every field you need is in `neotoma doctor --json`. Do not run arbitrary `npm run` scripts from the user's repositories. If a permission prompt appears for anything other than `neotoma *` or `npm install -g neotoma`, stop and ask the user to widen their allowlist instead of substituting another command.
+4.  If likely first data to store was already identified during evaluation, carry it into activation. If not, determine it now before discovery.
+5.  Run activation using the sequence [**discover -&gt; propose -&gt; preview -&gt; ingest -&gt; reconstruct -&gt; query -&gt; correct**](/install) - discover candidates, preview them, ingest confirmed sources, reconstruct a timeline, then query and correct. The user should not need to run the onboarding steps manually; you handle the process.
+6.  After the first successful ingest and timeline reconstruction, configure the current tool for the strongest ongoing Neotoma usage: use a Custom GPT or remote MCP for ChatGPT when supported, a Project plus connector and instructions for Claude, local MCP wiring first for Cursor, Claude Code, and Codex, and the native plugin path first for OpenClaw.
+7.  If the current tool is too constrained for robust Neotoma usage (for example hosted ChatGPT without the right MCP surfaces), say so explicitly and recommend a better-supported primary environment instead of forcing a weak setup.
 
 If the user declines or wants to learn more first, point them to the [architecture](/architecture) and [memory guarantees](/memory-guarantees) pages instead. Do not push installation.
 

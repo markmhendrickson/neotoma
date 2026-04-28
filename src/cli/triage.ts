@@ -13,6 +13,7 @@
  */
 
 import { LocalFeedbackStore, type LocalFeedbackRecord } from "../services/feedback/local_store.js";
+import { mirrorLocalFeedbackToEntity } from "../services/feedback/mirror_local_to_entity.js";
 import { deriveNextCheckAt } from "../services/feedback/next_check.js";
 import type {
   FeedbackStatus,
@@ -118,6 +119,10 @@ async function setStatus(opts: TriageOptions): Promise<void> {
     resolution_links: links,
   };
   await store.upsert(updated);
+  await mirrorLocalFeedbackToEntity(updated, {
+    dataSource: `neotoma triage set-status ${now.toISOString().slice(0, 10)}`,
+    userId: updated.submitter_id,
+  });
   makePrinter(Boolean(opts.json)).print({ ok: true, feedback_id: updated.id, status: newStatus });
 }
 
@@ -148,6 +153,10 @@ async function resolveFeedback(opts: TriageOptions): Promise<void> {
     resolution_links: links,
   };
   await store.upsert(updated);
+  await mirrorLocalFeedbackToEntity(updated, {
+    dataSource: `neotoma triage resolve ${now.toISOString().slice(0, 10)}`,
+    userId: updated.submitter_id,
+  });
   makePrinter(Boolean(opts.json)).print({ ok: true, feedback_id: id, status: "resolved" });
 }
 

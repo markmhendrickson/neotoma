@@ -127,6 +127,9 @@ _Last updated: 2026-01-29T00:00:00.000Z_
 ### contact
 - **v1.1** **(active)**: 2026-01-08
 
+### context_event
+- **v1.0** **(active)**: 2026-04-28 — composite identity `[turn_key, event, observed_at]`, `name_collision_policy: reject`
+
 ### conversation
 - **v1.0**: 2026-01-29
 - **v1.1**: 2026-04-22 — adds `thread_kind` (human_agent | agent_agent | multi_party)
@@ -136,6 +139,9 @@ _Last updated: 2026-01-29T00:00:00.000Z_
 - **v1.0**: 2026-01-29 — renamed from `agent_message` Phase 2 (2026-04-22)
 - **v1.1**: 2026-04-22 — adds `sender_kind`, `sender_agent_id`, `recipient_agent_id`. Canonical replacement for `agent_message`; accepts `agent_message` as an alias.
 - **v1.2** **(active)**: 2026-04-23 — declares `turn_key` as `canonical_name_fields` and `name_collision_policy: reject` so turns with identical content do not collapse across conversations. Removes `identity_opt_out`.
+
+### conversation_turn
+- **v1.0** **(active)**: 2026-04-28 — per-turn telemetry entity. Composite identity `[session_id, turn_id]`, `name_collision_policy: reject`. Aliases: `turn_compliance`, `turn_activity` (both resolve to `conversation_turn` for backward compatibility).
 
 ### contract
 - **v1.0** **(active)**: 2026-01-08
@@ -208,6 +214,12 @@ _Last updated: 2026-01-29T00:00:00.000Z_
 
 ### tax_filing
 - **v1.0** **(active)**: 2026-01-08
+
+### tool_invocation
+- **v1.0** **(active)**: 2026-04-28 — composite identity `[turn_key, tool_name, invoked_at]`, `name_collision_policy: reject`
+
+### tool_invocation_failure
+- **v1.0** **(active)**: 2026-04-28 — composite identity `[turn_key, tool_name, error_class, observed_at]`, `name_collision_policy: reject`
 
 ### transaction
 - **v1.0** **(active)**: 2026-01-08

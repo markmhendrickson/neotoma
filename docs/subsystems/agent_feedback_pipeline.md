@@ -17,6 +17,8 @@ Users and their agents hit friction with Neotoma. Without a durable, machine-ing
 | `GET /feedback/pending` (admin) | `services/agent-site/netlify/functions/pending.ts` | local cron |
 | `POST /feedback/{id}/status` (admin) | `services/agent-site/netlify/functions/update_status.ts` | local cron |
 | `GET /feedback/by_commit/{sha}` (admin) | `services/agent-site/netlify/functions/by_commit.ts` | release ritual |
+| `/admin/feedback/*` proxy | `src/services/feedback/admin_proxy.ts` (mounted from `src/actions.ts`) | Inspector → hosted (agent.neotoma.io) or local JSON store, per `NEOTOMA_FEEDBACK_ADMIN_MODE` |
+| `mirrorLocalFeedbackToEntity` | `src/services/feedback/mirror_local_to_entity.ts` | Second entity writer (alongside the hosted forwarder); fires from `LocalFeedbackTransport.submit`, the ingest cron's `processLocalStore`, `neotoma triage`, and the local-mode admin proxy so every JSON mutation lands as an observation on the `neotoma_feedback` entity |
 | `neotoma triage` | `src/cli/triage.ts` | maintainer |
 | Ingest cron | `scripts/cron/ingest_agent_incidents.ts` | launchd |
 | `process_feedback` skill | `.cursor/skills/process-feedback/`, `.claude/skills/process_feedback/` | maintainer triage |
@@ -76,6 +78,17 @@ Blobs remain the intake of record for submit/status reads. See
 Cloudflare Named Tunnel + Access transport that pushes every record into
 a native `neotoma_feedback` entity (Option B / best-effort).
 
+## Signal sources
+
+The pipeline aggregates a few different signal types. The agent's own `submit_feedback` calls remain the primary intake; alongside that, every harness hook package (cursor-hooks, opencode-plugin, claude-agent-sdk-adapter, claude-code-plugin, codex-hooks) reimplements the same small failure-signal accumulator inline so friction surfaces even when the agent never reasons about feedback explicitly:
+
+- **Tool detection.** `isNeotomaRelevantTool()` (TS) / `is_neotoma_relevant_tool()` (Python) flags MCP tools against the Neotoma server, the `neotoma` CLI, and direct HTTP calls into Neotoma endpoints. Non-Neotoma failures are NOT captured by this layer — that scope keeps the signal actionable.
+- **PII scrub.** `scrubErrorMessage()` / `scrub_error_message()` masks emails, secrets (`sk_*`, `pk_*`, `ghp_*`, `ghs_*`, `ntk_*`, `aa_*`), UUIDs, phone numbers, and the user's home directory before any value is persisted. The scan is defence-in-depth — agents calling `submit_feedback` are still expected to apply the full PII redaction contract.
+- **Error classification.** `classifyErrorMessage()` / `classify_error_message()` collapses raw error text into a coarse `ERR_*`, network code (`ECONNREFUSED`, `ENOTFOUND`, `ETIMEDOUT`, …), `HTTP_<status>`, `fetch_failed`, `timeout`, or `generic_error` class so the per-`(tool, error_class)` counter is meaningful.
+- **Local persistence.** Each harness writes `tool_invocation_failure` entities into Neotoma (with `tool_name`, `error_class`, `error_message_redacted`, `invocation_shape`, `turn_key`, `hit_count_session`) and maintains a per-session counter file under `NEOTOMA_HOOK_STATE_DIR` (`failures-<session>.json`). Counters TTL out after 24 h.
+- **One-shot hint surfacing.** Harnesses with a prompt-injection channel (cursor-hooks `postToolUse`/`afterToolUse`, claude-code `UserPromptSubmit`, claude-agent-sdk-adapter `UserPromptSubmit`) surface a single `Neotoma hook note: …` line via `additional_context` once `NEOTOMA_HOOK_FEEDBACK_HINT_THRESHOLD` (default 2) is hit, recommending that the agent file `submit_feedback` (kind `incident`) if the failure is blocking. The hint is gated by `NEOTOMA_HOOK_FEEDBACK_HINT` and is one-shot per `(tool_name, error_class)` per session. opencode-plugin and codex-hooks are storage-only — they capture the signal but cannot inject context into the agent prompt.
+- **No auto-submit.** Hooks NEVER call `submit_feedback` directly. The agent retains full control over what reaches the pipeline; hooks only ensure the signal exists for the agent (or a triage operator) to act on.
+
 ## PII handling
 
 Agents MUST redact or alter PII in `title`, `body`, and `metadata.environment.error_message` before submitting. Placeholders follow `<LABEL:hash>` (hash-stable across retries). The server runs an additional redaction scan as a backstop — see `services/agent-site/netlify/lib/redaction.ts` and the mirror at `src/services/feedback/redaction.ts`. `submit_feedback` returns a `redaction_preview` so the submitting agent can audit what the scanner did.
@@ -106,8 +119,55 @@ These deferrals are documented here so future planners do not need to re-derive 
 - **v0.5.0 store response shape migration note**: pre-0.5.0 clients reading the flat `attributes` wrapper must upgrade to read `entities[].entity_snapshot_after`. Flagged as `breaking_change: true` in the upgrade_guidance map.
 - **Release ritual — npm publish lag**: after `gh release create`, inspect `npm view neotoma version` before marking the pipeline resolution complete; v0.5.0 surfaced a brief window where the GitHub release existed but npm had not yet accepted the publish. The `create_release` / `release` skills now include this check.
 
+## Local pipeline mode
+
+When no hosted config is present (`AGENT_SITE_BASE_URL` / `AGENT_SITE_ADMIN_BEARER` unset), Neotoma runs the full pipeline locally:
+
+1. `submit_feedback` → `LocalFeedbackTransport.submit` writes the JSON
+   record, then calls `mirrorLocalFeedbackToEntity` to project the same
+   record onto a `neotoma_feedback` entity under the submitter's
+   `user_id`. The mirror key is `neotoma_feedback-<feedback_id>`, stable
+   across every subsequent triage hop.
+2. The ingest cron's `processLocalStore` runs the classifier against the
+   JSON store, re-upserts the classified record, and fires
+   `mirrorLocalFeedbackToEntity` so the `classification` and any
+   `upgrade_guidance` land on the same entity as additional observations.
+3. `neotoma triage --set-status` and `--resolve` hit the JSON store and
+   mirror again.
+4. The Inspector's `POST /admin/feedback/:id/status` (local-mode branch)
+   performs the same JSON + mirror two-step, so scratch-note publishes
+   surface immediately on the Inspector's `/feedback` view.
+
+Every write is best-effort with respect to the mirror: a mirror failure
+is logged and swallowed, and the JSON store remains source-of-record.
+Switching from local to hosted mode does not backfill — existing local
+entities stay in the local Neotoma DB and do not propagate upward.
+
+### Inspector admin proxy
+
+The `/admin/feedback/*` routes run in one of three tri-state modes,
+resolved per request from `NEOTOMA_FEEDBACK_ADMIN_MODE` (explicit) or the
+`AGENT_SITE_BASE_URL` + `AGENT_SITE_ADMIN_BEARER` pair (inferred):
+
+- **`hosted`** — requests forward to `agent.neotoma.io` using the shared
+  admin bearer.
+- **`local`** — requests are served from the on-disk
+  `LocalFeedbackStore`. Reads come from the JSON records, writes update
+  the JSON and then call `mirrorLocalFeedbackToEntity` so the
+  `neotoma_feedback` entity graph stays in sync. This is the default for
+  fresh installs.
+- **`disabled`** — `NEOTOMA_FEEDBACK_ADMIN_MODE=disabled` forces every
+  admin route to return `501 admin_proxy_unconfigured`; the Inspector
+  renders read-only.
+
+All admin routes are gated by the AAuth tier resolver: only `hardware` /
+`software` / `operator_attested` sessions pass `enforceTier`.
+
 ## Test surface
 
 - `tests/integration/feedback_pipeline_local_vs_http.test.ts` — structural parity between local and HTTP transports
 - `tests/integration/feedback_pipeline_smoke.test.ts` — submit → cron → status end-to-end
 - `tests/integration/feedback_replay_simon_apr21.test.ts` — Apr 21 fixtures resolve against the guidance map
+- `tests/unit/feedback_local_mirror.test.ts` — `localRecordToStoredFeedback` adapter + `mirrorLocalFeedbackToEntity` idempotency and user-scoping
+- `tests/integration/feedback_local_pipeline.test.ts` — submit → admin triage → mirror end-to-end
+- `tests/integration/feedback_admin_proxy.test.ts` — tri-state mode resolver + tier gate

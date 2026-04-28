@@ -26,11 +26,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from _common import (  # noqa: E402
+    format_failure_hint,
     get_client,
     harness_provenance,
     log,
     make_idempotency_key,
+    read_failure_hint,
     read_hook_input,
+    record_conversation_turn,
     write_hook_output,
 )
 
@@ -111,15 +114,29 @@ def main() -> int:
         )
     except Exception as exc:
         log("warn", f"UserPromptSubmit store failed: {exc}")
-    finally:
-        try:
-            client.close()
-        except Exception:
-            pass
+
+    record_conversation_turn(
+        client,
+        session_id=session_id,
+        turn_id=turn_id,
+        hook_event="UserPromptSubmit",
+        started_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    )
+
+    try:
+        client.close()
+    except Exception:
+        pass
 
     response: dict[str, object] = {}
+    additional: list[str] = []
     if context_sections:
-        response["additionalContext"] = format_context(context_sections)
+        additional.append(format_context(context_sections))
+    hint = read_failure_hint(session_id)
+    if hint:
+        additional.append(format_failure_hint(hint))
+    if additional:
+        response["additionalContext"] = "\n\n".join(s for s in additional if s)
     write_hook_output(response)
     return 0
 

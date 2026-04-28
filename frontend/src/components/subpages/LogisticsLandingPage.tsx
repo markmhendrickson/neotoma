@@ -15,9 +15,9 @@ import {
   Upload,
   Warehouse,
 } from "lucide-react";
-import { VerticalLandingShell, type VerticalConfig } from "./vertical_landing/VerticalLandingShell";
+import { UseCaseLandingShell, type UseCaseConfig } from "./use_case_landing/UseCaseLandingShell";
 
-const CONFIG: VerticalConfig = {
+const CONFIG: UseCaseConfig = {
   accentColor: "lime",
   badgeIcon: Truck,
   badgeText: "Neotoma for Logistics",
@@ -246,5 +246,5 @@ const CONFIG: VerticalConfig = {
 };
 
 export function LogisticsLandingPage() {
-  return <VerticalLandingShell config={CONFIG} />;
+  return <UseCaseLandingShell config={CONFIG} />;
 }

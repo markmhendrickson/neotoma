@@ -89,6 +89,38 @@ import {
 const MCP_DOCS_SUBDIR = ["docs", "developer", "mcp"] as const;
 const TIMELINE_WIDGET_RESOURCE_URI = "neotoma://ui/timeline_widget";
 
+/**
+ * Compact fallback delivered when `docs/developer/mcp/instructions.md` is
+ * unreadable (packaged app, broken path, empty file). Aligned with the
+ * critical invariants of the canonical [TURN LIFECYCLE] / [STORE RECIPES] /
+ * [COMMUNICATION & DISPLAY] / [ERRORS & RECOVERY] sections so the agent
+ * can still complete a well-formed turn.
+ *
+ * Tested by `tests/unit/mcp_instructions_fallback_invariants.test.ts`.
+ */
+export const MCP_INTERACTION_INSTRUCTIONS_FALLBACK = [
+  "[COMPACT MODE — runtime fallback]",
+  "Every turn, do the following in order — do not skip steps:",
+  "1. Bounded retrieval: for entities implied by the user message, use retrieve_entity_by_identifier for concrete identifiers and retrieve_entities for category/list queries.",
+  "2. User-phase store: store the conversation, the current user message, and any entities implied by the message in ONE store_structured call. entities = [ { entity_type: \"conversation\", title? }, { entity_type: \"conversation_message\", role: \"user\", sender_kind: \"user\", content: \"<exact message>\", turn_key: \"{conversation_id}:{turn_id}\" }, …extracted entities… ]. Relationships: PART_OF from message to conversation; REFERS_TO from message to each extracted entity. MUST NOT skip for greetings or minimal messages.",
+  "3. Other actions: host IDE tools and other MCP tools may run only after steps 1 and 2.",
+  "4. Compose reply: synthesize the answer using retrieval results and tool output.",
+  "5a. Closing store: call store_structured with entities = [ { entity_type: \"conversation_message\", role: \"assistant\", sender_kind: \"assistant\", content: \"<exact reply text>\", turn_key: \"{conversation_id}:{turn_id}:assistant\" } ] and idempotency_key \"conversation-{conversation_id}-{turn_id}-assistant-{suffix}\".",
+  "5b. Closing relationship: create_relationship(PART_OF, source=assistant message entity_id, target=conversation entity_id). Include REFERS_TO from assistant message to every entity the reply materially cites or produces.",
+  "5c. FORBIDDEN: persisting the user message without storing the assistant reply when you did reply; ending the turn without the closing assistant store when you produced a user-visible reply.",
+  "",
+  "Idempotency: use conversation-{conversation_id}-{turn_id}-{timestamp_ms} so each turn store creates a new observation. Include stable turn_key on every message entity.",
+  "Fallback IDs: if the host provides no conversation_id/turn_id, use idempotency_key \"conversation-chat-<turn>-<timestamp_ms>\" and turn_key \"chat:<turn>\".",
+  "",
+  "FORBIDDEN: skipping Neotoma for an entire rapid-fire session; persisting only the user message; ending the turn without the closing assistant store.",
+  "",
+  "Display rule: when a turn creates, updates, or retrieves Neotoma entities other than chat bookkeeping (conversation, conversation_message), the reply MUST render a section headed `🧠 Neotoma` with bullet points. Each bullet: emoji + label + (`entity_type`). Groups: Created (N), Updated (N), Retrieved (N).",
+  "",
+  "Store retry policy: if store_structured fails, (1) retry once with the same payload; (2) if it fails again, surface the error to the user before responding; (3) do not silently skip storage.",
+  "",
+  "(This is the runtime fallback because docs/developer/mcp/instructions.md was unreadable; reconnect after the docs are restored to receive the full instruction block.)",
+].join("\n");
+
 export class NeotomaServer {
   private server: Server;
   private autoEnhancementCleanup?: () => void;
@@ -139,39 +171,18 @@ export class NeotomaServer {
   }
 
   private getMcpInteractionInstructions(): string {
-    const fallback = [
-      "Use MCP actions proactively. Store and retrieve without waiting for explicit requests.",
-      "Always store when the user states relevant information, even in conversational contexts. Store first, then respond. Do not skip store because the user did not explicitly ask to save.",
-      "MANDATORY in chat: every assistant turn you MUST (1) create or update a conversation entity with a stable conversation_id, (2) store this turn as a `conversation_message` (canonical; accepts legacy `agent_message` as an alias) linked to it via PART_OF (message PART_OF conversation). Always set the message's `sender_kind` field (user | assistant | agent | system | tool) alongside `role` so the stored shape is unambiguous; for agent-to-agent (A2A) traffic also set `sender_agent_id` / `recipient_agent_id` and set the parent conversation's `thread_kind` to `agent_agent` or `multi_party` as appropriate. Do NOT skip this for greetings, minimal messages, or when the user message has no extractable entities; chat storage is required every turn.",
-      'In chat contexts (details): prefer host-provided conversation_id, thread_id, or session_id; when host does not provide, use entity id from first turn\'s store if re-exposed, or a deterministic derivative. Store any new attachments via the unstructured path and link them with EMBEDS. Use only Neotoma-supported relationship types (PART_OF, REFERS_TO, EMBEDS, SUPERSEDES, etc.); see MCP spec. Do this in the same turn as your response; do not wait for the user to say "save" or run an end-of-chat command. This is in addition to extracting and storing entities and attachments from the turn as below.',
-      "For conversation/turn idempotency_key: use conversation-{conversation_id}-{turn_id}-{timestamp_ms} or conversation-{conversation_id}-{turn_id}-{uuid} so each turn store creates a new observation. Include stable turn identity in the message entity (e.g. turn_key or id = conversation_id:turn_id). Overwriting between branches is OK; history is available via list_observations.",
-      "For reverted turns: optionally link the new message to the previous one with create_relationship(SUPERSEDES, new_message_entity_id, previous_message_entity_id).",
-      'When you pull data from other MCPs (e.g. email, calendar, search), apply the same proactive storage: extract and store people, companies, locations, events, tasks, notifications, device status, and relationships from that data. Create tasks for action items (e.g. "replace battery", "share feedback", "review security alert", "reply about Madrid trip"). Store locations and link events or tasks to them. Store first, then respond.',
-      "When confirming stored information, you MUST use memory-related language (e.g. “remember”, “recall”, “store in memory”) and include one of those phrases in the confirmation.",
-      "When any MCP action creates or updates Neotoma entities, the user-visible reply MUST include one markdown table per affected entity with action, entity_id, entity_type, and every stored or changed property available from the snapshot or store response.",
-      'Extract and store all relevant entities from what the user says: people, tasks, events, commitments, preferences, possessions, relationships, places, and any other types that fit. Store every distinct entity (e.g. a person and a task and an event from the same message). When the user mentions a place, property, or location (e.g. "our home in Barcelona", "my office", "apartment in Madrid"), store it as an entity (e.g. location, property, or place) and link the task or other entities to it. Create relationships when implied (e.g. friend of, task for person, event attendee, task for location) using create_relationship or relationship fields per schema.',
-      "Proactively create a task when the user expresses intent, obligation, debt, or a future action (e.g. “I need to”, “I have to”, “I owe”, “I should”, “I want to buy”, “remind me”, or any deadline). Unless the user explicitly says no reminders or no tasks, create a task with due date if available and relate it to the relevant person or entity.",
-      'When entity type is not in the known list, use list_entity_types with a keyword (e.g. "device", "asset", "preference", "gift", "reminder") or store with a descriptive entity_type; the system will infer or create schema from the data. Be proactive about storing any type of relevant entity, including types not yet registered.',
-      "Example entity types (use when they fit; more may exist via list_entity_types or neotoma://entity_types): contact, person, company, task, invoice, transaction, receipt, note, contract, event, location, property, place, feature_unit, release, agent_decision, agent_session, validation_result, codebase_entity, architectural_decision. For any other concept, use a descriptive type (e.g. device, asset, preference, gift, home) or discover via list_entity_types.",
-      "Avoid calling get_authenticated_user unless required by the intended follow-up action. If the next actions do not require it, skip get_authenticated_user.",
-      "Check for existing records before storing to avoid duplicates.",
-      "Include all fields from source data when storing entities. Unknown fields must be included.",
-      "Omit user_id. It is inferred from authentication.",
-      "After any MCP action, summarize entities and relationships with all snapshot fields, and do not replace required per-entity tables with prose-only summary.",
-      'If the prompt ends with "via mcp", use MCP actions only and do not read or write local files.',
-    ].join("\n");
     const instructionsPath = join(this.mcpDocsPath(), "instructions.md");
     try {
       const raw = readFileSync(instructionsPath, "utf-8");
       const match = raw.match(/```\s*\n?([\s\S]*?)```/);
       if (match && match[1]) {
         const text = match[1].trim();
-        return text || fallback;
+        return text || MCP_INTERACTION_INSTRUCTIONS_FALLBACK;
       }
     } catch {
       // File missing or unreadable (e.g. packaged app); use fallback
     }
-    return fallback;
+    return MCP_INTERACTION_INSTRUCTIONS_FALLBACK;
   }
 
   private getUnauthenticatedInstructions(): {

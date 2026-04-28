@@ -38,10 +38,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
     <title>Neotoma Documentation | Setup, API, MCP, CLI References (Markdown) | Neotoma</title>
-    <script type="module" crossorigin="" src="../../../assets/main-Jf-itxVT.js"></script>
-    <link rel="stylesheet" crossorigin="" href="../../../assets/main-DWQ-Fl-1.css">
+    <script type="module" crossorigin="" src="/assets/main-CaoWcp2k.js"></script>
+    <link rel="stylesheet" crossorigin="" href="/assets/main-BBds_bdF.css">
   
-    <!-- build: local-1776078353914 -->
+    <!-- build: local-1777360387837 -->
       <link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/docs">
     <link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/docs">
     <link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/docs">
@@ -61,7 +61,7 @@
     <div id="root"><iframe title="Markdown capture" aria-hidden="true" width="1280" height="900" class="pointer-events-none fixed left-[-9999px] top-0 z-[-1] border-0 opacity-0" sandbox="allow-same-origin allow-scripts allow-forms"></iframe><div class="min-h-screen bg-background text-foreground"><pre class="whitespace-pre-wrap break-words p-4 font-mono text-[13px] leading-relaxed text-foreground">&lt;!--
   Full-page Markdown export (rendered HTML → GFM).
   Source: https://neotoma.io/fr/docs
-  Generated: 2026-04-13T11:07:22.536Z
+  Generated: 2026-04-28T07:15:43.843Z
 --&gt;
 # Documentation
 
@@ -286,17 +286,6 @@ Toute la documentation Neotoma organisée par catégorie. Commencez par le guide
     ](/fr/terminology)
 -   [
     
-    Schema managementDefine, inspect, and evolve schema constraints safely
-    
-    
-    
-    
-    
-    
-    
-    ](/fr/schema-management)
--   [
-    
     TroubleshootingCommon failure modes and practical fixes
     
     
@@ -328,6 +317,166 @@ Toute la documentation Neotoma organisée par catégorie. Commencez par le guide
     
     
     ](/fr/site-markdown)
+
+## Primitive record types
+
+-   [
+    
+    OverviewThe seven system-level building blocks behind every entity, snapshot, and audit trail
+    
+    
+    
+    
+    
+    
+    
+    ](/fr/primitives)
+-   [
+    
+    EntitiesCanonical row for every person, company, or thing, deterministic ID, aliases, and merge tracking
+    
+    
+    
+    
+    
+    
+    
+    ](/fr/primitives/entities)
+-   [
+    
+    Entity snapshotsReducer output with per-field provenance back to observations and an optional embedding column
+    
+    
+    
+    
+    
+    
+    
+    ](/fr/primitives/entity-snapshots)
+-   [
+    
+    SourcesContent-addressed raw storage with SHA-256 deduplication per user
+    
+    
+    
+    
+    
+    
+    
+    ](/fr/primitives/sources)
+-   [
+    
+    InterpretationsVersioned, audited extraction attempts with full interpretation\_config provenance
+    
+    
+    
+    
+    
+    
+    
+    ](/fr/primitives/interpretations)
+-   [
+    
+    ObservationsGranular, immutable facts that the reducer composes into entity snapshots
+    
+    
+    
+    
+    
+    
+    
+    ](/fr/primitives/observations)
+-   [
+    
+    RelationshipsFirst-class typed graph edges that follow the same observation-snapshot pattern
+    
+    
+    
+    
+    
+    
+    
+    ](/fr/primitives/relationships)
+-   [
+    
+    Timeline eventsSource-anchored temporal records derived deterministically from extracted dates
+    
+    
+    
+    
+    
+    
+    
+    ](/fr/primitives/timeline-events)
+
+## Schemas
+
+-   [
+    
+    OverviewVersioned, config-driven definitions that give the immutable primitives their domain shape
+    
+    
+    
+    
+    
+    
+    
+    ](/fr/schemas)
+-   [
+    
+    Schema registryThe table that holds every versioned schema\_definition + reducer\_config, global or per-user
+    
+    
+    
+    
+    
+    
+    
+    ](/fr/schemas/registry)
+-   [
+    
+    Merge policiesPer-field declarative rules, last\_write, highest\_priority, most\_specific, merge\_array
+    
+    
+    
+    
+    
+    
+    
+    ](/fr/schemas/merge-policies)
+-   [
+    
+    Storage layersraw\_text, properties, and raw\_fragments, the three places extracted data can land
+    
+    
+    
+    
+    
+    
+    
+    ](/fr/schemas/storage-layers)
+-   [
+    
+    Versioning &amp; evolutionSemver, additive minor bumps, breaking major bumps, and the public schema snapshots dump
+    
+    
+    
+    
+    
+    
+    
+    ](/fr/schemas/versioning)
+-   [
+    
+    Schema management (CLI)CLI workflows for listing, validating, evolving, and registering schemas at runtime
+    
+    
+    
+    
+    
+    
+    
+    ](/fr/schema-management)
 
 ## Where the tax shows up
 

@@ -16,9 +16,9 @@ import {
   UserCheck,
   Users,
 } from "lucide-react";
-import { VerticalLandingShell, type VerticalConfig } from "./vertical_landing/VerticalLandingShell";
+import { UseCaseLandingShell, type UseCaseConfig } from "./use_case_landing/UseCaseLandingShell";
 
-const CONFIG: VerticalConfig = {
+const CONFIG: UseCaseConfig = {
   accentColor: "pink",
   badgeIcon: Headphones,
   badgeText: "Neotoma for Customer Ops",
@@ -247,5 +247,5 @@ const CONFIG: VerticalConfig = {
 };
 
 export function CustomerOpsLandingPage() {
-  return <VerticalLandingShell config={CONFIG} />;
+  return <UseCaseLandingShell config={CONFIG} />;
 }

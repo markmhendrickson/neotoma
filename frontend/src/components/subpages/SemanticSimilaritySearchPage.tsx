@@ -20,7 +20,7 @@ export function SemanticSimilaritySearchPage() {
 neotoma entities search --query "upcoming meetings with the design team"
 
 # Narrow by entity type
-neotoma entities search --query "design review" --type event`}</pre>
+neotoma entities search --query "design review" --entity-type event`}</pre>
       <h2 className="text-[18px] font-medium tracking-[-0.01em] mt-8 mb-3">Structured vs unstructured</h2>
       <p className="text-[15px] leading-7 mb-4">
         Pure retrieval systems search over raw documents and rely on the model to extract relevant facts from

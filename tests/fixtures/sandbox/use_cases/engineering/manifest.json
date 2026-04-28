@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0",
+  "description": "Product engineering use case sandbox seed.",
+  "agent_identities": [
+    {
+      "agent_sub": "sandbox-agent-engineering@neotoma.sandbox",
+      "client_name": "sandbox-seed-engineering",
+      "client_version": "0.1.0",
+      "label": "Engineering seed runner"
+    }
+  ],
+  "entity_batches": [],
+  "unstructured_sources": [],
+  "excluded_fixtures": []
+}

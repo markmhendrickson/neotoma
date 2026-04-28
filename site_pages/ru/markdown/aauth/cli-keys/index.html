@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<!DOCTYPE html><html lang="ru" dir="ltr"><head>
+    <meta charset="UTF-8">
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="application-name" content="Neotoma">
+    <meta name="theme-color" content="#130918">
+    <meta name="description" content="Markdown export of the rendered /aauth/cli-keys page. How the Neotoma CLI generates AAuth keypairs and mints aa-agent+jwt tokens across software, Apple Secure Enclave, TPM 2.0, Windows TBS, and YubiKey 5 backends.">
+    <meta name="author" content="Neotoma">
+    <meta name="robots" content="noindex,nofollow">
+    <link rel="canonical" href="https://neotoma.io/ru/markdown/aauth/cli-keys">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Neotoma">
+    <meta property="og:locale" content="ru_RU">
+    <meta property="og:title" content="AAuth CLI keys and hardware backends (Markdown) | Neotoma">
+    <meta property="og:description" content="Markdown export of the rendered /aauth/cli-keys page. How the Neotoma CLI generates AAuth keypairs and mints aa-agent+jwt tokens across software, Apple Secure Enclave, TPM 2.0, Windows TBS, and YubiKey 5 backends.">
+    <meta property="og:url" content="https://neotoma.io/ru/markdown/aauth/cli-keys">
+    <meta property="og:image" content="https://neotoma.io/neotoma-og-1200x630.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="AAuth CLI keys and hardware backends (Markdown) | Neotoma. Markdown export of the rendered /aauth/cli-keys page. How the Neotoma CLI generates AAuth keypairs and mints aa-agent+jwt tokens across s...">
+    <meta name="keywords" content="AAuth CLI keys and hardware backends (Markdown), Neotoma, MCP, Model Context Protocol, AI agents, agent memory, deterministic state">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:site" content="@markmhendrickson">
+    <meta name="twitter:title" content="AAuth CLI keys and hardware backends (Markdown) | Neotoma">
+    <meta name="twitter:description" content="Markdown export of the rendered /aauth/cli-keys page. How the Neotoma CLI generates AAuth keypairs and mints aa-agent+jwt tokens across software, Apple Secure Enclave, TPM 2.0, Windows TBS, and YubiKey 5 backends.">
+    <meta name="twitter:image" content="https://neotoma.io/neotoma-og-1200x630.png">
+    <meta name="twitter:image:width" content="1200">
+    <meta name="twitter:image:height" content="630">
+    <meta name="twitter:image:alt" content="AAuth CLI keys and hardware backends (Markdown) | Neotoma. Markdown export of the rendered /aauth/cli-keys page. How the Neotoma CLI generates AAuth keypairs and mints aa-agent+jwt tokens across s...">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"AAuth CLI keys and hardware backends (Markdown) | Neotoma","description":"Markdown export of the rendered /aauth/cli-keys page. How the Neotoma CLI generates AAuth keypairs and mints aa-agent+jwt tokens across software, Apple Secure Enclave, TPM 2.0, Windows TBS, and YubiKey 5 backends.","url":"https://neotoma.io/ru/markdown/aauth/cli-keys","publisher":{"@type":"Organization","name":"Neotoma"},"image":{"@type":"ImageObject","url":"https://neotoma.io/neotoma-og-1200x630.png","width":1200,"height":630,"caption":"AAuth CLI keys and hardware backends (Markdown) | Neotoma. Markdown export of the rendered /aauth/cli-keys page. How the Neotoma CLI generates AAuth keypairs and mints aa-agent+jwt tokens across s..."}}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://neotoma.io/"},{"@type":"ListItem","position":2,"name":"Docs","item":"https://neotoma.io/docs"},{"@type":"ListItem","position":3,"name":"AAuth","item":"https://neotoma.io/aauth"},{"@type":"ListItem","position":4,"name":"CLI keys","item":"https://neotoma.io/aauth/cli-keys"}]}</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
+    <title>AAuth CLI keys and hardware backends (Markdown) | Neotoma</title>
+    <script type="module" crossorigin="" src="/assets/main-CaoWcp2k.js"></script>
+    <link rel="stylesheet" crossorigin="" href="/assets/main-BBds_bdF.css">
+  
+    <!-- build: local-1777360387837 -->
+      <link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/aauth/cli-keys">
+    <link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/aauth/cli-keys">
+    <link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/aauth/cli-keys">
+    <link rel="alternate" hreflang="ca" href="https://neotoma.io/ca/markdown/aauth/cli-keys">
+    <link rel="alternate" hreflang="zh" href="https://neotoma.io/zh/markdown/aauth/cli-keys">
+    <link rel="alternate" hreflang="hi" href="https://neotoma.io/hi/markdown/aauth/cli-keys">
+    <link rel="alternate" hreflang="ar" href="https://neotoma.io/ar/markdown/aauth/cli-keys">
+    <link rel="alternate" hreflang="fr" href="https://neotoma.io/fr/markdown/aauth/cli-keys">
+    <link rel="alternate" hreflang="pt" href="https://neotoma.io/pt/markdown/aauth/cli-keys">
+    <link rel="alternate" hreflang="ru" href="https://neotoma.io/ru/markdown/aauth/cli-keys">
+    <link rel="alternate" hreflang="bn" href="https://neotoma.io/bn/markdown/aauth/cli-keys">
+    <link rel="alternate" hreflang="ur" href="https://neotoma.io/ur/markdown/aauth/cli-keys">
+    <link rel="alternate" hreflang="id" href="https://neotoma.io/id/markdown/aauth/cli-keys">
+    <link rel="alternate" hreflang="de" href="https://neotoma.io/de/markdown/aauth/cli-keys">
+  <link rel="icon" href="/favicon.ico" sizes="any" data-rh="true"><link rel="icon" type="image/svg+xml" href="/favicon.svg" data-rh="true"><link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png" data-rh="true"><link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" data-rh="true"><link rel="manifest" href="/site.webmanifest" data-rh="true"><link rel="canonical" href="https://neotoma.io/ru/markdown/aauth/cli-keys" data-rh="true"><link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/aauth/cli-keys" data-rh="true"><link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/aauth/cli-keys" data-rh="true"><link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/aauth/cli-keys" data-rh="true"><link rel="alternate" hreflang="ca" href="https://neotoma.io/ca/markdown/aauth/cli-keys" data-rh="true"><link rel="alternate" hreflang="zh" href="https://neotoma.io/zh/markdown/aauth/cli-keys" data-rh="true"><link rel="alternate" hreflang="hi" href="https://neotoma.io/hi/markdown/aauth/cli-keys" data-rh="true"><link rel="alternate" hreflang="ar" href="https://neotoma.io/ar/markdown/aauth/cli-keys" data-rh="true"><link rel="alternate" hreflang="fr" href="https://neotoma.io/fr/markdown/aauth/cli-keys" data-rh="true"><link rel="alternate" hreflang="pt" href="https://neotoma.io/pt/markdown/aauth/cli-keys" data-rh="true"><link rel="alternate" hreflang="ru" href="https://neotoma.io/ru/markdown/aauth/cli-keys" data-rh="true"><link rel="alternate" hreflang="bn" href="https://neotoma.io/bn/markdown/aauth/cli-keys" data-rh="true"><link rel="alternate" hreflang="ur" href="https://neotoma.io/ur/markdown/aauth/cli-keys" data-rh="true"><link rel="alternate" hreflang="id" href="https://neotoma.io/id/markdown/aauth/cli-keys" data-rh="true"><link rel="alternate" hreflang="de" href="https://neotoma.io/de/markdown/aauth/cli-keys" data-rh="true"><meta name="description" content="Markdown export of the rendered /aauth/cli-keys page. How the Neotoma CLI generates AAuth keypairs and mints aa-agent+jwt tokens across software, Apple Secure Enclave, TPM 2.0, Windows TBS, and YubiKey 5 backends." data-rh="true"><meta name="author" content="Neotoma" data-rh="true"><meta name="application-name" content="Neotoma" data-rh="true"><meta name="robots" content="noindex,nofollow" data-rh="true"><meta name="theme-color" content="#130918" data-rh="true"><meta property="og:type" content="website" data-rh="true"><meta property="og:site_name" content="Neotoma" data-rh="true"><meta property="og:locale" content="ru_RU" data-rh="true"><meta property="og:title" content="AAuth CLI keys and hardware backends (Markdown) | Neotoma" data-rh="true"><meta property="og:description" content="Markdown export of the rendered /aauth/cli-keys page. How the Neotoma CLI generates AAuth keypairs and mints aa-agent+jwt tokens across software, Apple Secure Enclave, TPM 2.0, Windows TBS, and YubiKey 5 backends." data-rh="true"><meta property="og:url" content="https://neotoma.io/ru/markdown/aauth/cli-keys" data-rh="true"><meta property="og:image" content="https://neotoma.io/neotoma-og-1200x630.png" data-rh="true"><meta property="og:image:width" content="1200" data-rh="true"><meta property="og:image:height" content="630" data-rh="true"><meta property="og:image:alt" content="AAuth CLI keys and hardware backends (Markdown) | Neotoma. Markdown export of the rendered /aauth/cli-keys page. How the Neotoma CLI generates AAuth keypairs and mints aa-agent+jwt tokens across s..." data-rh="true"><meta name="keywords" content="AAuth CLI keys and hardware backends (Markdown), Neotoma, MCP, Model Context Protocol, AI agents, agent memory, deterministic state" data-rh="true"><meta name="twitter:card" content="summary_large_image" data-rh="true"><meta name="twitter:site" content="@markmhendrickson" data-rh="true"><meta name="twitter:title" content="AAuth CLI keys and hardware backends (Markdown) | Neotoma" data-rh="true"><meta name="twitter:description" content="Markdown export of the rendered /aauth/cli-keys page. How the Neotoma CLI generates AAuth keypairs and mints aa-agent+jwt tokens across software, Apple Secure Enclave, TPM 2.0, Windows TBS, and YubiKey 5 backends." data-rh="true"><meta name="twitter:image" content="https://neotoma.io/neotoma-og-1200x630.png" data-rh="true"><meta name="twitter:image:width" content="1200" data-rh="true"><meta name="twitter:image:height" content="630" data-rh="true"><meta name="twitter:image:alt" content="AAuth CLI keys and hardware backends (Markdown) | Neotoma. Markdown export of the rendered /aauth/cli-keys page. How the Neotoma CLI generates AAuth keypairs and mints aa-agent+jwt tokens across s..." data-rh="true"><script type="application/ld+json" data-rh="true">{"@context":"https://schema.org","@type":"WebPage","name":"AAuth CLI keys and hardware backends (Markdown) | Neotoma","description":"Markdown export of the rendered /aauth/cli-keys page. How the Neotoma CLI generates AAuth keypairs and mints aa-agent+jwt tokens across software, Apple Secure Enclave, TPM 2.0, Windows TBS, and YubiKey 5 backends.","url":"https://neotoma.io/ru/markdown/aauth/cli-keys","publisher":{"@type":"Organization","name":"Neotoma"},"image":{"@type":"ImageObject","url":"https://neotoma.io/neotoma-og-1200x630.png","width":1200,"height":630,"caption":"AAuth CLI keys and hardware backends (Markdown) | Neotoma. Markdown export of the rendered /aauth/cli-keys page. How the Neotoma CLI generates AAuth keypairs and mints aa-agent+jwt tokens across s..."}}</script><script type="application/ld+json" data-rh="true">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://neotoma.io/"},{"@type":"ListItem","position":2,"name":"Docs","item":"https://neotoma.io/docs"},{"@type":"ListItem","position":3,"name":"AAuth","item":"https://neotoma.io/aauth"},{"@type":"ListItem","position":4,"name":"CLI keys","item":"https://neotoma.io/aauth/cli-keys"}]}</script></head>
+  <body>
+    <div id="root"><iframe title="Markdown capture" aria-hidden="true" width="1280" height="900" class="pointer-events-none fixed left-[-9999px] top-0 z-[-1] border-0 opacity-0" sandbox="allow-same-origin allow-scripts allow-forms"></iframe><div class="min-h-screen bg-background text-foreground"><pre class="whitespace-pre-wrap break-words p-4 font-mono text-[13px] leading-relaxed text-foreground">&lt;!--
+  Full-page Markdown export (rendered HTML → GFM).
+  Source: https://neotoma.io/ru/aauth/cli-keys
+  Generated: 2026-04-28T07:16:09.680Z
+--&gt;
+# AAuth CLI keys and hardware backends
+
+How the Neotoma CLI generates AAuth keypairs, mints `aa-agent+jwt` agent tokens, and attaches a `cnf.attestation` envelope when the operator opts in to hardware-backed signing across macOS, Linux, Windows, and any host with a YubiKey 5 series device. This page is the client-side counterpart to [attestation](/aauth/attestation), which specifies how the server verifies the resulting envelope.
+
+Implementation in `src/cli/aauth_signer.ts` plus optional native packages in `packages/aauth-mac-se/` (darwin), `packages/aauth-tpm2/` (linux), `packages/aauth-win-tbs/` (win32), and `packages/aauth-yubikey/` (cross-platform).
+
+## Platform support matrix
+
+After v0.10.x the `--hardware` flag is supported on every platform Neotoma ships an installer for. The CLI selects a backend per the ladder below; operators can pin a specific backend via `NEOTOMA_AAUTH_HARDWARE_BACKEND`.
+
+-   **darwin**, default `aauth-mac-se` (Secure Enclave); fallback `aauth-yubikey` when an external YubiKey is preferred.
+-   **linux**, default `aauth-tpm2` (TPM 2.0); fallback `aauth-yubikey` when no `/dev/tpmrm0`.
+-   **win32**, default `aauth-win-tbs` (TBS + NCrypt); fallback `aauth-yubikey` when no Microsoft Platform Crypto Provider.
+-   **any host with a YubiKey** , `aauth-yubikey`; pure-fallback path.
+
+The wire format produced by each backend, and therefore the server-side verifier it lands in, is fixed:
+
+-   `apple-secure-enclave` → `apple-secure-enclave` → `verifyAppleSecureEnclaveAttestation`
+-   `tpm2` (linux) → `tpm2` → `verifyTpm2Attestation`
+-   `tbs` (win32) → `tpm2` → `verifyTpm2Attestation`
+-   `yubikey` (any) → `webauthn-packed` → `verifyWebauthnPackedAttestation`
+
+Notably: Windows/TBS reuses the TPM 2.0 verifier unchanged even though the CLI talks to `NCrypt` rather than raw TPM commands; YubiKey reuses the WebAuthn-`packed` verifier because YubiKey PIV chains terminate at Yubico's PIV CA, not a TPM manufacturer chain.
+
+◆
+
+## Signer backends
+
+`src/cli/aauth_signer.ts` supports five key-storage backends, recorded in `signer.json` as `backend`:
+
+-   **`software`** (default), private key at `~/.config/neotoma/aauth/private.jwk`; any platform; tier `software`, or `operator_attested` if allowlisted.
+-   **`apple-secure-enclave`** , macOS Secure Enclave keychain entry, referenced by `se_key_tag`; tier `hardware` when the JWT carries a verified `cnf.attestation`.
+-   **`tpm2`** , Linux TPM 2.0 persistent handle (`tpm2_handle`, default `0x81010000`) under the configured `tpm2_hierarchy`; tier `hardware` when the JWT carries a verified TPM 2.0 envelope.
+-   **`tbs`** , Windows TBS / NCrypt key under the Microsoft Platform Crypto Provider, referenced by `tbs_key_name` (default `neotoma-aauth-aik`); tier `hardware` when the JWT carries a verified TPM 2.0 envelope (TBS reuses the same server verifier).
+-   **`yubikey`** , YubiKey 5 series PIV slot 9c, referenced by `yubikey_serial` and `yubikey_pkcs11_path`; tier `hardware` when the JWT carries a verified WebAuthn-`packed` envelope rooted in the bundled Yubico PIV CA.
+
+For SE-backed keys the on-disk `private.jwk` stores ONLY public material plus a `backend: "apple-secure-enclave"` discriminator, the private scalar never leaves the Enclave. Signing always goes through `@neotoma/aauth-mac-se`'s native `sign()` primitive.
+
+◆
+
+## On-disk schema (`signer.json`)
+
+{
+  "sub": "cli@&lt;hostname&gt;",
+  "iss": "https://neotoma.cli.local",
+  "kid": "&lt;jwk-thumbprint&gt;",
+  "token\_ttl\_sec": 300,
+  "backend": "apple-secure-enclave",
+  "se\_key\_tag": "io.neotoma.aauth.cli.default"
+}
+
+`backend` and `se_key_tag` are optional and absent for legacy software keypairs (treated as `backend: "software"` for back-compat). Software keypairs continue to store a full private JWK in `private.jwk` with mode `0600`. SE-backed `private.jwk` files contain only public coordinates plus the `backend` field; reading them with `jose` produces a public-key import as expected.
+
+◆
+
+## Keygen flows
+
+### `neotoma auth keygen` (software, default)
+
+1.  Generate a P-256 keypair via Web Crypto.
+2.  Write `private.jwk` (full JWK with `d`) at `0600`, `public.jwk` at `0644`, and `signer.json` with `backend: "software"`.
+
+### `neotoma auth keygen --hardware` (darwin / Secure Enclave)
+
+Available on darwin only and requires `@neotoma/aauth-mac-se` installed (ships as an optional dependency on macOS hosts).
+
+1.  Validate `alg === "ES256"` (Secure Enclave only supports P-256).
+2.  Probe `se.isSupported()`; refuse if the host has no usable Secure Enclave or the binding cannot load.
+3.  Call `se.generateKey({ tag: &lt;se_key_tag&gt; })`; the binding creates a fresh P-256 keypair pinned to the Enclave with biometric access policy and returns the public coordinates as a JWK.
+4.  Persist `private.jwk` (public material + `backend: "apple-secure-enclave"`), `public.jwk`, and `signer.json` with `backend` and `se_key_tag`.
+
+### `neotoma auth keygen --hardware` (Linux / TPM 2.0)
+
+Available on linux only and requires `@neotoma/aauth-tpm2`. Ships as an optional dependency on linux x64 / arm64.
+
+1.  Validate `process.platform === "linux"` and that the requested alg is `ES256` or `RS256`.
+2.  Probe `tpm2.isSupported()`; refuse if no usable `/dev/tpmrm0`, the resource manager is unreachable, or the binding cannot load.
+3.  Call `tpm2.generateKey({ hierarchy, alg })`; the binding creates a fresh AIK, persists it at the configured TPM handle (default `0x81010000`, override via `NEOTOMA_AAUTH_TPM2_HANDLE`), and returns the public coordinates as a JWK.
+4.  Persist `private.jwk` (public material + `backend: "tpm2"`), `public.jwk`, and `signer.json` with `backend`, `tpm2_handle`, and `tpm2_hierarchy`.
+
+### `neotoma auth keygen --hardware` (Windows / TBS + NCrypt)
+
+Available on win32 only and requires `@neotoma/aauth-win-tbs`. Ships as an optional dependency on Windows x64 / arm64. Although the wire format is WebAuthn-`tpm` (and the server-side TPM 2.0 verifier is reused unchanged), the CLI uses Trusted Platform Module Base Services (TBS) and Cryptography Next Generation (CNG / NCrypt) APIs rather than direct command-level TPM 2.0 access, because Windows does not expose a stable userspace TPM device.
+
+1.  Validate `process.platform === "win32"` and that the alg is `ES256` or `RS256`.
+2.  Probe `tbs.isSupported()`; refuse if no usable Microsoft Platform Crypto Provider, TBS service disabled, or the binding cannot load.
+3.  Call `tbs.generateKey({ provider, scope, alg, keyName })`; the binding calls `NCryptOpenStorageProvider` followed by `NCryptCreatePersistedKey` against the Microsoft Platform Crypto Provider with `NCRYPT_MACHINE_KEY_FLAG` toggled by `scope`. Finalises with `NCryptFinalizeKey` and returns the public coordinates as a JWK.
+4.  Persist `private.jwk` (public material + `backend: "tbs"`), `public.jwk`, and `signer.json` with `backend`, `tbs_provider`, `tbs_scope`, and `tbs_key_name`.
+
+### `neotoma auth keygen --hardware --backend=yubikey` (cross-platform / YubiKey)
+
+Available on darwin / linux / win32 and requires `@neotoma/aauth-yubikey` plus `libykcs11` (the Yubico PKCS#11 provider) plus a YubiKey 5 series device. The wire format is WebAuthn-`packed`, NOT WebAuthn-`tpm`: YubiKey PIV slot attestations chain to Yubico's PIV CA bundled in `config/aauth/yubico_piv_roots.pem`, so the server reuses the WebAuthn-`packed` verifier rather than the TPM 2.0 verifier.
+
+1.  Validate the alg is `ES256` (YubiKey PIV slot 9c only supports P-256 with stable cross-platform attestation).
+2.  Probe `yk.isSupported({ pkcs11Path? })`; refuse if `libykcs11` not loadable, no YubiKey detected, firmware too old (&lt; 5.0.0), or the binding cannot load.
+3.  Prompt for the PIV PIN (interactive TTY) or honour `NEOTOMA_AAUTH_YUBIKEY_PIN`. Forwarded once via `C_Login` and NEVER persisted to `signer.json`.
+4.  Call `yk.generateKey({ slot: "9c", alg: "ES256", pin, serial })`; binding calls `C_GenerateKeyPair` against the YubiKey's PKCS#11 slot, fetches the per-slot PIV attestation cert and the F9 attestation intermediate via `C_GetAttributeValue`. The private scalar NEVER leaves the YubiKey.
+5.  Persist `private.jwk` (public material + `backend: "yubikey"`), `public.jwk`, and `signer.json` with `backend`, `yubikey_slot`, `yubikey_serial`, and `yubikey_pkcs11_path`. PIN is NEVER persisted to disk.
+
+If a probe fails the command exits with a clear diagnostic and an actionable hint. Operators can re-run without `--hardware` to fall back to the software backend, or with `NEOTOMA_AAUTH_HARDWARE_BACKEND=auto` (the default) to let the CLI pick the best available backend per the ladder above.
+
+◆
+
+## JWT minting (`mintCliAgentTokenJwt`)
+
+`mintCliAgentTokenJwt(config, options)` produces an `aa-agent+jwt` agent token with these standard claims:
+
+-   `iss`, `sub`, `iat`, `exp`, `kid`
+-   `cnf.jwk`, the public JWK (RFC 7800 confirmation key).
+-   `cnf.attestation` (optional), see [attestation](/aauth/attestation).
+
+For `backend: "software"` the function delegates to `jose.SignJWT`. For `backend: "apple-secure-enclave"` it manually composes the JOSE header and payload, computes the SHA-256 digest of the signing input, calls `se.sign()` (the binding returns a DER-encoded ECDSA signature produced inside the Enclave), converts the DER signature to JOSE r||s, and concatenates the three parts. Bit-for-bit compatible with software-signed tokens; private scalar never crosses into the JS runtime.
+
+◆
+
+## HTTP message signing (`cliSignedFetch`)
+
+Single entry point for authenticated CLI → Neotoma API calls. Dispatches on `config.backend`:
+
+-   `software`, hands `signingKey` to `@hellocoop/httpsig`'s `signedFetch`, which signs over the default RFC 9421 component set with the `aasig` label.
+-   `apple-secure-enclave`, routes through `seSignedFetch`. The helper assembles the same component set (`@method`, `@target-uri`, optional `content-type` / `content-digest`, `signature-key`), builds the RFC 9421 signature base, and calls SE-backed `seSignJoseEs256` to produce the `signature` header. The agent token is carried in the `signature-key` header verbatim, exactly like the software path.
+
+Both paths produce an identical wire format from the server's perspective; only the signing primitive differs.
+
+◆
+
+## Generating attestation envelopes
+
+Each backend has a dedicated envelope builder:
+
+-   `buildAppleAttestationEnvelope`, Refuses unless `backend === "apple-secure-enclave"`; computes the challenge as `SHA-256(iss || sub || iat)` via `buildAttestationChallenge`; calls `se.attest({ tag, challenge })`; packages the Apple-issued chain plus key-binding signature. Returns `null` on non-darwin / missing binding / unsupported Enclave; the caller MUST then proceed with a software-tier signed write rather than fabricating an envelope.
+-   `buildTpm2AttestationEnvelope`, Linux/TPM 2.0 counterpart in `src/cli/aauth_tpm2_attestation.ts`. `isTpm2BackendAvailable` probes without throwing; `computeAttestationChallenge` derives bit-for-bit the same value as the server; the helper calls `tpm2.attest({ handle, challenge, jkt })` and packages the AIK chain, `TPMS_ATTEST` quote, and `TPMT_PUBLIC`. Throws `Tpm2BackendUnavailableError` with a structured `reason` when the backend is unavailable.
+-   `buildTbsAttestationEnvelope`, Windows / TBS counterpart in `src/cli/aauth_tbs_attestation.ts`. Even though the underlying call is `NCryptCreateClaim` against the Microsoft Platform Crypto Provider rather than raw TPM 2.0 commands, the wire format is identical to the Linux TPM 2.0 envelope (the server reuses the same verifier). Throws `TbsBackendUnavailableError` with a structured reason when unavailable.
+-   `buildYubikeyAttestationEnvelope`, Cross-platform YubiKey counterpart in `src/cli/aauth_yubikey_attestation.ts`. Wire format is WebAuthn-`packed`, NOT WebAuthn-`tpm`. Helper packages the per-slot YubiKey attestation cert plus the F9 intermediate. The `aaguid` field is hoisted to the envelope top level for convenience; the server-side verifier extracts AAGUID from the leaf cert's `id-fido-gen-ce-aaguid` extension when present and falls back to this hoisted field when the cert lacks it. Throws `YubikeyBackendUnavailableError` with a structured reason when unavailable.
+
+PIN handling for YubiKey: every call that does not pass `pin` explicitly relies on the binding's PIN resolution (in priority order: explicit `pin` argument → `NEOTOMA_AAUTH_YUBIKEY_PIN` env var → interactive TTY prompt). The helper NEVER caches the PIN across invocations and NEVER logs PIN values. Three failed attempts lock the YubiKey; recovery requires `ykman piv access change-pin --puk`.
+
+◆
+
+## `auth session` output
+
+`describeConfiguredSigner()` extends the legacy summary with three new fields so operators can confirm which backend is in use:
+
+-   `backend`, `"software"`, `"apple-secure-enclave"`, `"tpm2"`, `"tbs"`, or `"yubikey"`.
+-   `se_key_tag` / `tpm2_handle` / `tbs_key_name` / `yubikey_serial` (when present).
+-   `hardware_supported` / `hardware_supported_reason` (only when the signer is hardware-backed; reflects the most recent `isSupported()` probe).
+
+`neotoma auth session` renders these fields in its `signer:` block.
+
+◆
+
+## Operator environment
+
+-   `NEOTOMA_AAUTH_PRIVATE_JWK_PATH`, override JWK location for all backends (default `~/.config/neotoma/aauth/private.jwk`).
+-   `NEOTOMA_AAUTH_SE_KEY_TAG`, override the keychain tag on darwin (default `io.neotoma.aauth.cli.default`).
+-   `NEOTOMA_AAUTH_TPM2_HANDLE`, override the TPM 2.0 persistent handle on linux (default `0x81010000`).
+-   `NEOTOMA_AAUTH_TPM2_HIERARCHY`, override the TPM 2.0 hierarchy on linux (`owner` or `endorsement`; default `owner`).
+-   `NEOTOMA_AAUTH_WIN_TBS_PROVIDER` / `NEOTOMA_AAUTH_WIN_TBS_KEY_NAME` / `NEOTOMA_AAUTH_WIN_TBS_SCOPE`, override the NCrypt provider, key name, and scope (`user` or `machine`) on Windows.
+-   `NEOTOMA_AAUTH_YUBIKEY_PKCS11_PATH` / `NEOTOMA_AAUTH_YUBIKEY_SERIAL` / `NEOTOMA_AAUTH_YUBIKEY_PIN`, point at `libykcs11`, pin to a specific YubiKey by decimal serial, or inject the PIV PIN non-interactively.
+-   `NEOTOMA_AAUTH_HARDWARE_BACKEND`, pin the hardware backend selection (`auto`, `apple-secure-enclave`, `tpm2`, `tbs`, `yubikey`; default `auto`).
+
+Server-side trust knobs (`NEOTOMA_AAUTH_ATTESTATION_CA_PATH`, `NEOTOMA_OPERATOR_ATTESTED_ISSUERS`, etc.) are documented on the [attestation](/aauth/attestation) page; the CLI does not consume them directly.
+
+Back to [AAuth overview](/aauth). See also [AAuth spec](/aauth/spec), [attestation](/aauth/attestation), [integration](/aauth/integration).</pre></div><div role="region" aria-label="Notifications (F8)" tabindex="-1" style="pointer-events: none;"><ol tabindex="-1" class="fixed top-0 z-[100] flex w-full flex-col-reverse p-4 sm:bottom-4 sm:right-4 sm:top-auto sm:flex-col sm:max-h-[calc(100vh-1rem)] sm:overflow-y-auto md:max-w-[420px]"></ol></div></div>
+  
+
+
+</body></html>

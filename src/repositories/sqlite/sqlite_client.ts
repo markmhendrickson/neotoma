@@ -376,6 +376,24 @@ function ensureSchema(db: SqliteDatabase): void {
     addColumnIfMissing(db, "auto_enhancement_queue", "last_retry_at", "TEXT");
     addColumnIfMissing(db, "auto_enhancement_queue", "error_message", "TEXT");
 
+    addColumnIfMissing(db, "local_auth_users", "is_ephemeral", "INTEGER NOT NULL DEFAULT 0");
+
+    db.prepare(`CREATE TABLE IF NOT EXISTS sandbox_sessions (
+      user_id TEXT PRIMARY KEY REFERENCES local_auth_users(id) ON DELETE CASCADE,
+      bearer_token_hash TEXT NOT NULL,
+      one_time_code_hash TEXT,
+      pack_id TEXT NOT NULL DEFAULT 'generic',
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      revoked_at TEXT
+    )`).run();
+    db.prepare(
+      "CREATE INDEX IF NOT EXISTS idx_sandbox_sessions_expires ON sandbox_sessions(expires_at)"
+    ).run();
+    db.prepare(
+      "CREATE INDEX IF NOT EXISTS idx_sandbox_sessions_revoked ON sandbox_sessions(revoked_at)"
+    ).run();
+
     // Parity with Postgres: unique constraint on (content_hash, user_id) for deduplication
     db.prepare(
       "CREATE UNIQUE INDEX IF NOT EXISTS idx_sources_content_hash_user ON sources(content_hash, user_id) WHERE content_hash IS NOT NULL AND user_id IS NOT NULL"

@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0",
+  "description": "Content ops use case sandbox seed.",
+  "agent_identities": [
+    {
+      "agent_sub": "sandbox-agent-content@neotoma.sandbox",
+      "client_name": "sandbox-seed-content",
+      "client_version": "0.1.0",
+      "label": "Content ops seed runner"
+    }
+  ],
+  "entity_batches": [],
+  "unstructured_sources": [],
+  "excluded_fixtures": []
+}

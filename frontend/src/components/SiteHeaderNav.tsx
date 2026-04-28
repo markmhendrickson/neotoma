@@ -82,7 +82,7 @@ import { CodexIcon } from "@/components/icons/CodexIcon";
 import { CursorIcon } from "@/components/icons/CursorIcon";
 import { OpenClawIcon } from "@/components/icons/OpenClawIcon";
 import { getLocalizedDocNavCategories } from "@/site/site_data_localized";
-import { VERTICAL_LANDING_PATHS } from "@/site/site_data";
+import { USE_CASE_LANDING_PATHS } from "@/site/site_data";
 import { sendCtaClick, sendDocsNavClick } from "@/utils/analytics";
 import {
   useSiteAppNavBarVisibleSetter,
@@ -436,14 +436,14 @@ function SiteNavSearch({
 
   const localizedDocCategories = useMemo(() => getLocalizedDocNavCategories(dict), [dict]);
 
-  const verticalPathSet = useMemo(() => new Set(VERTICAL_LANDING_PATHS), []);
+  const useCasePathSet = useMemo(() => new Set(USE_CASE_LANDING_PATHS), []);
 
   const pages = useMemo(() => {
     const byHref = new Map<string, SearchablePageItem>();
     for (const category of localizedDocCategories) {
       for (const item of category.items) {
         if (!item.href.startsWith("/") || byHref.has(item.href)) continue;
-        if (verticalPathSet.has(item.href)) continue;
+        if (useCasePathSet.has(item.href)) continue;
         byHref.set(item.href, { label: item.label, href: item.href, category: category.title });
       }
     }
@@ -461,7 +461,7 @@ function SiteNavSearch({
       });
     }
     return [...byHref.values()];
-  }, [localizedDocCategories, verticalPathSet]);
+  }, [localizedDocCategories, useCasePathSet]);
 
   const topPages = useMemo(() => {
     const byHref = new Map(pages.map((p) => [p.href, p]));

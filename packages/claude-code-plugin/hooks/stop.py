@@ -20,6 +20,7 @@ from _common import (  # noqa: E402
     log,
     make_idempotency_key,
     read_hook_input,
+    record_conversation_turn,
     write_hook_output,
 )
 
@@ -64,11 +65,19 @@ def main() -> int:
         )
     except Exception as exc:
         log("debug", f"Stop store failed: {exc}")
-    finally:
-        try:
-            client.close()
-        except Exception:
-            pass
+
+    record_conversation_turn(
+        client,
+        session_id=session_id,
+        turn_id=turn_id,
+        hook_event="Stop",
+        ended_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    )
+
+    try:
+        client.close()
+    except Exception:
+        pass
 
     write_hook_output({})
     return 0

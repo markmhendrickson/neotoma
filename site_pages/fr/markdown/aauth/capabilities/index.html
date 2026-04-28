@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<!DOCTYPE html><html lang="fr" dir="ltr"><head>
+    <meta charset="UTF-8">
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="application-name" content="Neotoma">
+    <meta name="theme-color" content="#130918">
+    <meta name="description" content="Markdown export of the rendered /aauth/capabilities page. Per-agent (op, entity_type) allow-lists modelled as agent_grant entities, the protected-entity-types guard, status lifecycle, and operator runbook for grant management.">
+    <meta name="author" content="Neotoma">
+    <meta name="robots" content="noindex,nofollow">
+    <link rel="canonical" href="https://neotoma.io/fr/markdown/aauth/capabilities">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Neotoma">
+    <meta property="og:locale" content="fr_FR">
+    <meta property="og:title" content="Agent capability scoping (Markdown) | Neotoma">
+    <meta property="og:description" content="Markdown export of the rendered /aauth/capabilities page. Per-agent (op, entity_type) allow-lists modelled as agent_grant entities, the protected-entity-types guard, status lifecycle, and operator runbook for grant management.">
+    <meta property="og:url" content="https://neotoma.io/fr/markdown/aauth/capabilities">
+    <meta property="og:image" content="https://neotoma.io/neotoma-og-1200x630.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Agent capability scoping (Markdown) | Neotoma. Markdown export of the rendered /aauth/capabilities page. Per-agent (op, entity_type) allow-lists modelled as agent_grant entities, the p...">
+    <meta name="keywords" content="Agent capability scoping (Markdown), Neotoma, MCP, Model Context Protocol, AI agents, agent memory, deterministic state">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:site" content="@markmhendrickson">
+    <meta name="twitter:title" content="Agent capability scoping (Markdown) | Neotoma">
+    <meta name="twitter:description" content="Markdown export of the rendered /aauth/capabilities page. Per-agent (op, entity_type) allow-lists modelled as agent_grant entities, the protected-entity-types guard, status lifecycle, and operator runbook for grant management.">
+    <meta name="twitter:image" content="https://neotoma.io/neotoma-og-1200x630.png">
+    <meta name="twitter:image:width" content="1200">
+    <meta name="twitter:image:height" content="630">
+    <meta name="twitter:image:alt" content="Agent capability scoping (Markdown) | Neotoma. Markdown export of the rendered /aauth/capabilities page. Per-agent (op, entity_type) allow-lists modelled as agent_grant entities, the p...">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"Agent capability scoping (Markdown) | Neotoma","description":"Markdown export of the rendered /aauth/capabilities page. Per-agent (op, entity_type) allow-lists modelled as agent_grant entities, the protected-entity-types guard, status lifecycle, and operator runbook for grant management.","url":"https://neotoma.io/fr/markdown/aauth/capabilities","publisher":{"@type":"Organization","name":"Neotoma"},"image":{"@type":"ImageObject","url":"https://neotoma.io/neotoma-og-1200x630.png","width":1200,"height":630,"caption":"Agent capability scoping (Markdown) | Neotoma. Markdown export of the rendered /aauth/capabilities page. Per-agent (op, entity_type) allow-lists modelled as agent_grant entities, the p..."}}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://neotoma.io/"},{"@type":"ListItem","position":2,"name":"Docs","item":"https://neotoma.io/docs"},{"@type":"ListItem","position":3,"name":"AAuth","item":"https://neotoma.io/aauth"},{"@type":"ListItem","position":4,"name":"Capabilities","item":"https://neotoma.io/aauth/capabilities"}]}</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
+    <title>Agent capability scoping (Markdown) | Neotoma</title>
+    <script type="module" crossorigin="" src="/assets/main-CaoWcp2k.js"></script>
+    <link rel="stylesheet" crossorigin="" href="/assets/main-BBds_bdF.css">
+  
+    <!-- build: local-1777360387837 -->
+      <link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/aauth/capabilities">
+    <link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/aauth/capabilities">
+    <link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/aauth/capabilities">
+    <link rel="alternate" hreflang="ca" href="https://neotoma.io/ca/markdown/aauth/capabilities">
+    <link rel="alternate" hreflang="zh" href="https://neotoma.io/zh/markdown/aauth/capabilities">
+    <link rel="alternate" hreflang="hi" href="https://neotoma.io/hi/markdown/aauth/capabilities">
+    <link rel="alternate" hreflang="ar" href="https://neotoma.io/ar/markdown/aauth/capabilities">
+    <link rel="alternate" hreflang="fr" href="https://neotoma.io/fr/markdown/aauth/capabilities">
+    <link rel="alternate" hreflang="pt" href="https://neotoma.io/pt/markdown/aauth/capabilities">
+    <link rel="alternate" hreflang="ru" href="https://neotoma.io/ru/markdown/aauth/capabilities">
+    <link rel="alternate" hreflang="bn" href="https://neotoma.io/bn/markdown/aauth/capabilities">
+    <link rel="alternate" hreflang="ur" href="https://neotoma.io/ur/markdown/aauth/capabilities">
+    <link rel="alternate" hreflang="id" href="https://neotoma.io/id/markdown/aauth/capabilities">
+    <link rel="alternate" hreflang="de" href="https://neotoma.io/de/markdown/aauth/capabilities">
+  <link rel="icon" href="/favicon.ico" sizes="any" data-rh="true"><link rel="icon" type="image/svg+xml" href="/favicon.svg" data-rh="true"><link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png" data-rh="true"><link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" data-rh="true"><link rel="manifest" href="/site.webmanifest" data-rh="true"><link rel="canonical" href="https://neotoma.io/fr/markdown/aauth/capabilities" data-rh="true"><link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/aauth/capabilities" data-rh="true"><link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/aauth/capabilities" data-rh="true"><link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/aauth/capabilities" data-rh="true"><link rel="alternate" hreflang="ca" href="https://neotoma.io/ca/markdown/aauth/capabilities" data-rh="true"><link rel="alternate" hreflang="zh" href="https://neotoma.io/zh/markdown/aauth/capabilities" data-rh="true"><link rel="alternate" hreflang="hi" href="https://neotoma.io/hi/markdown/aauth/capabilities" data-rh="true"><link rel="alternate" hreflang="ar" href="https://neotoma.io/ar/markdown/aauth/capabilities" data-rh="true"><link rel="alternate" hreflang="fr" href="https://neotoma.io/fr/markdown/aauth/capabilities" data-rh="true"><link rel="alternate" hreflang="pt" href="https://neotoma.io/pt/markdown/aauth/capabilities" data-rh="true"><link rel="alternate" hreflang="ru" href="https://neotoma.io/ru/markdown/aauth/capabilities" data-rh="true"><link rel="alternate" hreflang="bn" href="https://neotoma.io/bn/markdown/aauth/capabilities" data-rh="true"><link rel="alternate" hreflang="ur" href="https://neotoma.io/ur/markdown/aauth/capabilities" data-rh="true"><link rel="alternate" hreflang="id" href="https://neotoma.io/id/markdown/aauth/capabilities" data-rh="true"><link rel="alternate" hreflang="de" href="https://neotoma.io/de/markdown/aauth/capabilities" data-rh="true"><meta name="description" content="Markdown export of the rendered /aauth/capabilities page. Per-agent (op, entity_type) allow-lists modelled as agent_grant entities, the protected-entity-types guard, status lifecycle, and operator runbook for grant management." data-rh="true"><meta name="author" content="Neotoma" data-rh="true"><meta name="application-name" content="Neotoma" data-rh="true"><meta name="robots" content="noindex,nofollow" data-rh="true"><meta name="theme-color" content="#130918" data-rh="true"><meta property="og:type" content="website" data-rh="true"><meta property="og:site_name" content="Neotoma" data-rh="true"><meta property="og:locale" content="fr_FR" data-rh="true"><meta property="og:title" content="Agent capability scoping (Markdown) | Neotoma" data-rh="true"><meta property="og:description" content="Markdown export of the rendered /aauth/capabilities page. Per-agent (op, entity_type) allow-lists modelled as agent_grant entities, the protected-entity-types guard, status lifecycle, and operator runbook for grant management." data-rh="true"><meta property="og:url" content="https://neotoma.io/fr/markdown/aauth/capabilities" data-rh="true"><meta property="og:image" content="https://neotoma.io/neotoma-og-1200x630.png" data-rh="true"><meta property="og:image:width" content="1200" data-rh="true"><meta property="og:image:height" content="630" data-rh="true"><meta property="og:image:alt" content="Agent capability scoping (Markdown) | Neotoma. Markdown export of the rendered /aauth/capabilities page. Per-agent (op, entity_type) allow-lists modelled as agent_grant entities, the p..." data-rh="true"><meta name="keywords" content="Agent capability scoping (Markdown), Neotoma, MCP, Model Context Protocol, AI agents, agent memory, deterministic state" data-rh="true"><meta name="twitter:card" content="summary_large_image" data-rh="true"><meta name="twitter:site" content="@markmhendrickson" data-rh="true"><meta name="twitter:title" content="Agent capability scoping (Markdown) | Neotoma" data-rh="true"><meta name="twitter:description" content="Markdown export of the rendered /aauth/capabilities page. Per-agent (op, entity_type) allow-lists modelled as agent_grant entities, the protected-entity-types guard, status lifecycle, and operator runbook for grant management." data-rh="true"><meta name="twitter:image" content="https://neotoma.io/neotoma-og-1200x630.png" data-rh="true"><meta name="twitter:image:width" content="1200" data-rh="true"><meta name="twitter:image:height" content="630" data-rh="true"><meta name="twitter:image:alt" content="Agent capability scoping (Markdown) | Neotoma. Markdown export of the rendered /aauth/capabilities page. Per-agent (op, entity_type) allow-lists modelled as agent_grant entities, the p..." data-rh="true"><script type="application/ld+json" data-rh="true">{"@context":"https://schema.org","@type":"WebPage","name":"Agent capability scoping (Markdown) | Neotoma","description":"Markdown export of the rendered /aauth/capabilities page. Per-agent (op, entity_type) allow-lists modelled as agent_grant entities, the protected-entity-types guard, status lifecycle, and operator runbook for grant management.","url":"https://neotoma.io/fr/markdown/aauth/capabilities","publisher":{"@type":"Organization","name":"Neotoma"},"image":{"@type":"ImageObject","url":"https://neotoma.io/neotoma-og-1200x630.png","width":1200,"height":630,"caption":"Agent capability scoping (Markdown) | Neotoma. Markdown export of the rendered /aauth/capabilities page. Per-agent (op, entity_type) allow-lists modelled as agent_grant entities, the p..."}}</script><script type="application/ld+json" data-rh="true">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://neotoma.io/"},{"@type":"ListItem","position":2,"name":"Docs","item":"https://neotoma.io/docs"},{"@type":"ListItem","position":3,"name":"AAuth","item":"https://neotoma.io/aauth"},{"@type":"ListItem","position":4,"name":"Capabilities","item":"https://neotoma.io/aauth/capabilities"}]}</script></head>
+  <body>
+    <div id="root"><iframe title="Markdown capture" aria-hidden="true" width="1280" height="900" class="pointer-events-none fixed left-[-9999px] top-0 z-[-1] border-0 opacity-0" sandbox="allow-same-origin allow-scripts allow-forms"></iframe><div class="min-h-screen bg-background text-foreground"><pre class="whitespace-pre-wrap break-words p-4 font-mono text-[13px] leading-relaxed text-foreground">&lt;!--
+  Full-page Markdown export (rendered HTML → GFM).
+  Source: https://neotoma.io/fr/aauth/capabilities
+  Generated: 2026-04-28T07:16:11.415Z
+--&gt;
+# Agent capability scoping
+
+The per-agent capability registry sits above the tier-based attribution policy. Where the [attribution policy](/aauth/integration) asks "is this write attributable at all?", the capability registry asks "is *this* specific agent allowed to touch *this* specific `entity_type` via *this* operation?".
+
+Capabilities are modelled as first-class `agent_grant` entities, one per (user, agent identity) pair, managed in the Inspector under **Agents → Agent grants**. The previous environment-variable registry (`NEOTOMA_AGENT_CAPABILITIES_JSON`, `NEOTOMA_AGENT_CAPABILITIES_FILE`, `NEOTOMA_AGENT_CAPABILITIES_ENFORCE`, `config/agent_capabilities.default.json`) has been removed.
+
+## When does this apply?
+
+-   **User-authenticated callers** (Bearer / OAuth / local Inspector session), not enforced; full access to their own user\_id's data, modulo attribution policy.
+-   **AAuth-verified agent matched to an `active` grant** , enforced; restricted to declared `(op, entity_type)` pairs on the grant.
+-   **AAuth-verified agent with no matching grant** , falls through to attribution-only behaviour (no admission, must use Bearer/OAuth).
+-   **Anonymous / unverified-client tier** , no admission; subject to attribution policy.
+
+The canonical use is pinning the Netlify forwarder (`sub: agent-site@neotoma.io`) to the `neotoma_feedback` entity type, so a compromised forwarder key cannot be used to write observations for unrelated entities.
+
+◆
+
+## Grant shape
+
+An `agent_grant` is a normal Neotoma entity, observation history doubles as the audit log. Canonical fields:
+
+{
+  "entity\_type": "agent\_grant",
+  "owner\_user\_id": "usr\_…",
+  "label": "Cursor on macbook-pro",
+  "match\_sub": "agent-cursor@example.com",   // AAuth sub claim
+  "match\_iss": "https://agent.example.com",  // optional; both must match when set
+  "match\_thumbprint": "abcd…",               // optional RFC 7638 JWK thumbprint
+  "capabilities": \[
+    { "op": "store\_structured",    "entity\_types": \["neotoma\_feedback"\] },
+    { "op": "create\_relationship", "entity\_types": \["neotoma\_feedback"\] },
+    { "op": "correct",             "entity\_types": \["neotoma\_feedback"\] },
+    { "op": "retrieve",            "entity\_types": \["neotoma\_feedback"\] }
+  \],
+  "status": "active",   // active | suspended | revoked
+  "notes": "issued 2026-04",
+  "last\_used\_at": "2026-04-26T09:54:00Z"
+}
+
+### Identity rule
+
+At least one of `match_sub` or `match_thumbprint` MUST be set; `match_iss` is optional but, when set, BOTH `match_sub` AND `match_iss` MUST match the verified identity for the grant to admit.
+
+### Capability ops
+
+-   `store_structured`, creating / observing entities (write path).
+-   `create_relationship`, creating relationships between entities.
+-   `correct`, correcting / updating existing observations / fields.
+-   `retrieve`, reading entities and observations.
+
+`entity_types` is a string array of permitted entity types for that op. Use `["*"]` to widen to every type, only do this for trusted grants.
+
+### Matching order
+
+Admission resolves the verified identity to at most one grant:
+
+1.  If the request carries a JWK thumbprint AND any of the user's grants has a matching `match_thumbprint`, that grant wins.
+2.  Otherwise, the first `active` grant whose `match_sub` equals the request's `sub` and (when set on the grant) whose `match_iss` equals the request's `iss`.
+3.  Otherwise, no admission, the request stays attribution-only.
+
+◆
+
+## Status lifecycle
+
+active  ⇄  suspended
+   │           │
+   ▼           ▼
+       revoked (terminal in normal flow)
+       │
+       ▼  restore (within grace window)
+     active
+
+Only the user who owns the grant (or an agent the user has authorised with the bootstrap `(store_structured | correct, agent_grant)` capability) can flip status. Admission caches the resolved grant for a small TTL plus invalidates on observation events, so a revoke propagates to in-flight clients within seconds.
+
+◆
+
+## Protected entity types, the trust mechanism
+
+Writes to `agent_grant` (and any future protected type) are gated by the protected-entity-types guard:
+
+-   User-authenticated callers (Bearer / OAuth / local Inspector session for the same user) pass through.
+-   AAuth-admitted callers must hold an explicit capability in their grant for the protected type. The bootstrap capability is `{ op: "store_structured", entity_types: ["agent_grant"] }` (and `correct`).
+-   Anonymous / unverified-client tier writes to protected types are rejected with `capability_denied`.
+
+This is what lets a user safely delegate grant management to a trusted agent: only that one grant carries the bootstrap capability; every other grant remains locked out of `agent_grant` writes by the protected-types guard, even if it has otherwise broad capabilities.
+
+◆
+
+## Strict-require AAuth for claimed subjects
+
+Set `NEOTOMA_STRICT_AAUTH_SUBS` to a comma-separated list of agent subjects that MUST present a valid AAuth signature whenever the request claims that identity via the `X-Agent-Label` header. This is a second line of defence against a compromised tunnel / edge:
+
+-   `X-Agent-Label: agent-site@neotoma.io` + missing signature → 401.
+-   `X-Agent-Label: agent-site@neotoma.io` + signature verified, but the `sub` claim is something else → 401.
+-   Any label NOT listed in `NEOTOMA_STRICT_AAUTH_SUBS` behaves as before (best-effort attribution hint).
+
+◆
+
+## Error surface
+
+A denial produces HTTP 403 with:
+
+{
+  "error": {
+    "code": "capability\_denied",
+    "message": "Agent \\"agent-site@neotoma.io\\" is not permitted to store\_structured entity\_type \\"person\\".",
+    "op": "store\_structured",
+    "entity\_type": "person",
+    "agent\_label": "agent-site@neotoma.io",
+    "hint": "Agent \\"agent-site@neotoma.io\\" holds an active grant but no \\"store\_structured\\" capability for entity\_type \\"person\\". Edit the grant in Inspector → Agents → Agent grants if intentional."
+  }
+}
+
+◆
+
+## Operator runbook
+
+### Upgrading from the env-config era
+
+The previous release loaded capabilities from `NEOTOMA_AGENT_CAPABILITIES_JSON` / `_FILE` / `config/agent_capabilities.default.json`. After upgrading, starting the server with any of those variables set fails fast with a structured error linking to the import command.
+
+Migrate once, per deployment:
+
+neotoma agents grants import --owner-user-id &lt;usr\_…&gt; \\
+  \[--file path/to/agent\_capabilities.json\]
+
+-   `--owner-user-id` decides which user account owns the imported operational grants. Pick the operator's own user account, or a dedicated account for infrastructure agents.
+-   The command is idempotent on `(match_sub, match_iss, match_thumbprint)`, re-running it after a partial migration upserts grants without duplicating.
+-   Each created/updated grant is stamped with provenance `import_source: "env_config"` so the audit timeline clearly records the migration origin.
+-   Once the import succeeds, unset the legacy variables and redeploy.
+
+### Grant a new scope
+
+1.  In Inspector, go to **Agents → Agent grants → New grant**.
+2.  Paste the agent's AAuth `sub` (and `iss`, or thumbprint) and a readable label.
+3.  Select capabilities by `(op, entity_type)`.
+4.  Save. Admission picks up the new grant within the cache TTL.
+
+### Revoke or suspend a scope
+
+1.  Open the grant in Inspector → **Agents → Agent grants → :id**.
+2.  Click **Suspend** (reversible) or **Revoke** (terminal).
+3.  The next request from that agent reverts to attribution-only after the admission cache TTL.
+
+### Roll back a botched grant edit
+
+Grant edits are observations, open the grant detail view and use the audit timeline to see what changed. Apply a `correct` to restore the prior values (or use the **Restore** action to roll back a recent revoke within the grace window).
+
+Back to [AAuth overview](/aauth). See also [integration](/aauth/integration), [AAuth spec](/aauth/spec), [attestation](/aauth/attestation), [CLI keys](/aauth/cli-keys).</pre></div><div role="region" aria-label="Notifications (F8)" tabindex="-1" style="pointer-events: none;"><ol tabindex="-1" class="fixed top-0 z-[100] flex w-full flex-col-reverse p-4 sm:bottom-4 sm:right-4 sm:top-auto sm:flex-col sm:max-h-[calc(100vh-1rem)] sm:overflow-y-auto md:max-w-[420px]"></ol></div></div>
+  
+
+
+</body></html>

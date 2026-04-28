@@ -528,9 +528,9 @@ Ordered by how quickly each data type delivers value.
 
 **Retention risk:** Observation plateau, single entity type stagnation, reversion to workarounds, no cross-tool setup
 
-**Secondary motion:** B2B-by-vertical, downstream from personal adoption
+**Secondary motion:** B2B-by-use-case, downstream from personal adoption
 
-**One-line GTM:** Start with personal agentic OS builders/operators; expand to toolchain integrators and B2B-by-vertical as personal adoption creates team demand.
+**One-line GTM:** Start with personal agentic OS builders/operators; expand to toolchain integrators and B2B-by-use-case as personal adoption creates team demand.
 
 ---
 

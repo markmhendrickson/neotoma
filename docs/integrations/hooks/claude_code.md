@@ -23,10 +23,12 @@ claude plugin install ./packages/claude-code-plugin
 | Event | Behavior |
 | --- | --- |
 | `SessionStart` | Create a `conversation` entity. |
-| `UserPromptSubmit` | Retrieval injection (`additionalContext`) + user message capture. |
-| `PostToolUse` | `tool_invocation` observation. |
+| `UserPromptSubmit` | Retrieval injection (`additionalContext`) + user message capture + one-shot failure-hint surfacing (see [Failure-signal accumulator](#failure-signal-accumulator)). |
+| `PostToolUse` | `tool_invocation` observation, OR `tool_invocation_failure` capture for Neotoma-relevant tools that errored. |
 | `PreCompact` | `context_event` marker so the timeline reflects compaction. |
-| `Stop` | Assistant `agent_message` safety net. |
+| `Stop` | Assistant `conversation_message` safety net. |
+
+Every hook above also accretes onto a single `conversation_turn` keyed by `(session_id, turn_id)` (idempotency key `conversation-{sessionId}-{turnId}-turn`). The legacy `turn_compliance` entity remains as a registered alias so historical rows continue to surface under `/turns`. See [`docs/subsystems/conversation_turn.md`](../../subsystems/conversation_turn.md).
 
 ## Configuration
 
@@ -35,6 +37,13 @@ claude plugin install ./packages/claude-code-plugin
 | `NEOTOMA_BASE_URL` | `http://127.0.0.1:3080` | API root. |
 | `NEOTOMA_TOKEN` | `dev-local` | Auth token. |
 | `NEOTOMA_LOG_LEVEL` | `warn` | `debug` through `silent`. |
+| `NEOTOMA_HOOK_STATE_DIR` | `~/.neotoma/hook-state` | Where the hook layer keeps per-session failure-counter state. |
+| `NEOTOMA_HOOK_FEEDBACK_HINT` | `on` | Set to `off` to disable the one-shot failure hint. |
+| `NEOTOMA_HOOK_FEEDBACK_HINT_THRESHOLD` | `2` | Failures (per tool + error class, per session) before a hint is surfaced. |
+
+## Failure-signal accumulator
+
+`PostToolUse` branches on `tool_response.error`: when the failing tool is Neotoma-relevant (MCP tool against the Neotoma server, the `neotoma` CLI, or a direct HTTP call into a Neotoma endpoint), it persists a `tool_invocation_failure` entity (with PII-scrubbed `error_message_redacted`, `error_class`, and `invocation_shape`) and increments a per-`(tool, error_class)` counter on disk. `UserPromptSubmit` then surfaces a single `Neotoma hook note: …` informational line via `additionalContext` once the threshold trips, suggesting the agent call `submit_feedback` (kind `incident`) if friction is blocking. Hooks NEVER call `submit_feedback` themselves. Counters TTL out after 24h.
 
 ## Coexistence with MCP
 

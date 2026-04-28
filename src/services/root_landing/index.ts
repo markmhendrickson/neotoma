@@ -20,6 +20,13 @@ import type express from "express";
 import { config } from "../../config.js";
 import { isSandboxMode } from "../sandbox_mode.js";
 import {
+  SANDBOX_PACKS as PACK_REGISTRY,
+  DEFAULT_SANDBOX_PACK_ID,
+  type SandboxPack,
+} from "../sandbox/pack_registry.js";
+import { SESSION_COOKIE_NAME } from "../sandbox/sessions.js";
+import { resolveInspectorLandingUrl } from "../inspector_mount.js";
+import {
   buildAllHarnessSnippets,
   type HarnessSnippetContext,
   type HarnessSnippetResult,
@@ -37,6 +44,7 @@ const VALID_MODES: ReadonlySet<LandingMode> = new Set(["sandbox", "personal", "p
 
 export interface RootLandingContext {
   mode: LandingMode;
+  configEnvironment: string;
   base: string;
   mcpUrl: string;
   version: string;
@@ -48,6 +56,9 @@ export interface RootLandingContext {
   harnesses: HarnessSnippetResult[];
   index: RootLandingNavCategory[];
   endpoints: Record<string, string>;
+  sandboxPacks: SandboxPack[];
+  sandboxDefaultPackId: string;
+  activeSessionBearer: string | null;
 }
 
 function resolveStdioMcpScriptPath(): string | null {
@@ -78,6 +89,15 @@ function readEnvMode(env: NodeJS.ProcessEnv = process.env): LandingMode | null {
   const raw = (env.NEOTOMA_ROOT_LANDING_MODE || "").trim().toLowerCase();
   if (!raw) return null;
   return VALID_MODES.has(raw as LandingMode) ? (raw as LandingMode) : null;
+}
+
+/**
+ * Same resolution as `src/config.ts` (`NEOTOMA_ENV` or `development`), trimmed for display.
+ * Orthogonal to landing {@link LandingMode}: e.g. loopback `local` with `production` config.
+ */
+export function readNeotomaConfigEnvironment(env: NodeJS.ProcessEnv = process.env): string {
+  const raw = (env.NEOTOMA_ENV || "development").trim();
+  return raw.length ? raw : "development";
 }
 
 /**
@@ -161,16 +181,9 @@ function buildEndpointsMap(mode: LandingMode): Record<string, string> {
   return base;
 }
 
-function resolveInspectorUrl(
-  base: string,
-  env: NodeJS.ProcessEnv = process.env,
-): string | null {
-  const staticDir = (env.NEOTOMA_INSPECTOR_STATIC_DIR || "").trim();
-  if (!staticDir) return null;
-  const inspectorBase =
-    (env.NEOTOMA_INSPECTOR_BASE_PATH || "/app").trim() || "/app";
-  const normalized = inspectorBase.startsWith("/") ? inspectorBase : `/${inspectorBase}`;
-  return `${base}${normalized}`;
+
+export function parseCookieBearer(req: express.Request): string | null {
+  return (req.cookies?.[SESSION_COOKIE_NAME] as string | undefined) ?? null;
 }
 
 export function buildLandingContext(
@@ -178,13 +191,16 @@ export function buildLandingContext(
   env: NodeJS.ProcessEnv = process.env,
 ): RootLandingContext {
   const mode = resolveLandingMode(req, env);
+  const configEnvironment = readNeotomaConfigEnvironment(env);
   const base = resolveBaseUrl(req);
   const mcpUrl = `${base}/mcp`;
   const version = readPackageVersion();
   const gitSha = readGitSha(env);
   const publicDocsUrl = defaultPublicDocsUrl(env);
-  const inspectorUrl = resolveInspectorUrl(base, env);
+  const inspectorUrl = resolveInspectorLandingUrl(base, env);
   const stdioMcpScriptPath = resolveStdioMcpScriptPath();
+
+  const activeSessionBearer = mode === "sandbox" ? parseCookieBearer(req) : null;
 
   const snippetCtx: HarnessSnippetContext = {
     mcpUrl,
@@ -192,10 +208,12 @@ export function buildLandingContext(
     mode,
     publicDocsUrl,
     stdioMcpScriptPath,
+    sessionBearer: activeSessionBearer,
   };
 
   return {
     mode,
+    configEnvironment,
     base,
     mcpUrl,
     version,
@@ -206,6 +224,9 @@ export function buildLandingContext(
     harnesses: buildAllHarnessSnippets(snippetCtx),
     index: ROOT_LANDING_SITE_NAV,
     endpoints: buildEndpointsMap(mode),
+    sandboxPacks: [...PACK_REGISTRY],
+    sandboxDefaultPackId: DEFAULT_SANDBOX_PACK_ID,
+    activeSessionBearer,
   };
 }
 
@@ -223,6 +244,7 @@ export function buildRootLandingJson(ctx: RootLandingContext): Record<string, un
     version: ctx.version,
     git_sha: ctx.gitSha,
     mode: ctx.mode,
+    neotoma_env: ctx.configEnvironment,
     base_url: ctx.base,
     mcp_url: ctx.mcpUrl,
     inspector_url: ctx.inspectorUrl,
@@ -245,6 +267,10 @@ export function buildRootLandingJson(ctx: RootLandingContext): Record<string, un
         href: resolveNavHref(item.href, ctx.publicDocsUrl),
       })),
     })),
+    sandbox_packs: ctx.mode === "sandbox"
+      ? ctx.sandboxPacks.map((p) => ({ id: p.id, kind: p.kind, label: p.label }))
+      : undefined,
+    sandbox_default_pack_id: ctx.mode === "sandbox" ? ctx.sandboxDefaultPackId : undefined,
   };
 }
 

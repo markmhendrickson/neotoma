@@ -60,8 +60,9 @@ export function FoundationsPage() {
         </p>
         <p className="text-[15px] leading-7 mb-4">
           This model means agents can build rich, structured memory without requiring trust in a
-          third-party service. The privacy guarantee is architectural, not policy-based: there is no
-          remote endpoint to breach because the data never leaves your machine.
+          third-party service. The privacy guarantee is architectural, not policy-based: by default,
+          data stays on your machine. When hosted deployment is needed, the operator controls the
+          infrastructure and data location.
         </p>
         <p className="text-[15px] leading-7 mb-4">
           See{" "}
@@ -95,9 +96,10 @@ export function FoundationsPage() {
         </p>
         <p className="text-[15px] leading-7 mb-4">
           Schema-first extraction enforces structure at the boundary. Extraction rules derive from
-          schema types, not heuristics. Fields are extracted from what is present in the source;
-          nothing is inferred, predicted, or synthesized. Corrections add new observations rather
-          than editing existing ones.
+          schema types, not heuristics. For unstructured files, AI interpretation extracts fields
+          present in the source with full audit trail and idempotence guarantees; it does not
+          synthesize or infer data beyond what the source contains. Corrections add new observations
+          rather than editing existing ones.
         </p>
         <p className="text-[15px] leading-7 mb-4">
           This matters because agents that read stale or conflicting state make wrong decisions.

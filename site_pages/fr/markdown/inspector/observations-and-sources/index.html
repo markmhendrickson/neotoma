@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<!DOCTYPE html><html lang="fr" dir="ltr"><head>
+    <meta charset="UTF-8">
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="application-name" content="Neotoma">
+    <meta name="theme-color" content="#130918">
+    <meta name="description" content="Markdown export of the rendered /inspector/observations-and-sources page. Inspect immutable observations, the reducer that produces snapshots, the source registry, and the file-backed provenance chain behind every entity.">
+    <meta name="author" content="Neotoma">
+    <meta name="robots" content="noindex,nofollow">
+    <link rel="canonical" href="https://neotoma.io/fr/markdown/inspector/observations-and-sources">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Neotoma">
+    <meta property="og:locale" content="fr_FR">
+    <meta property="og:title" content="Inspector, Observations &amp; sources (Markdown) | Neotoma">
+    <meta property="og:description" content="Markdown export of the rendered /inspector/observations-and-sources page. Inspect immutable observations, the reducer that produces snapshots, the source registry, and the file-backed provenance chain behind every entity.">
+    <meta property="og:url" content="https://neotoma.io/fr/markdown/inspector/observations-and-sources">
+    <meta property="og:image" content="https://neotoma.io/neotoma-og-1200x630.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Inspector, Observations &amp; sources (Markdown) | Neotoma. Markdown export of the rendered /inspector/observations-and-sources page. Inspect immutable observations, the reducer that produces snaps...">
+    <meta name="keywords" content="Inspector, Observations &amp; sources (Markdown), Neotoma, MCP, Model Context Protocol, AI agents, agent memory, deterministic state">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:site" content="@markmhendrickson">
+    <meta name="twitter:title" content="Inspector, Observations &amp; sources (Markdown) | Neotoma">
+    <meta name="twitter:description" content="Markdown export of the rendered /inspector/observations-and-sources page. Inspect immutable observations, the reducer that produces snapshots, the source registry, and the file-backed provenance chain behind every entity.">
+    <meta name="twitter:image" content="https://neotoma.io/neotoma-og-1200x630.png">
+    <meta name="twitter:image:width" content="1200">
+    <meta name="twitter:image:height" content="630">
+    <meta name="twitter:image:alt" content="Inspector, Observations &amp; sources (Markdown) | Neotoma. Markdown export of the rendered /inspector/observations-and-sources page. Inspect immutable observations, the reducer that produces snaps...">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"Inspector, Observations & sources (Markdown) | Neotoma","description":"Markdown export of the rendered /inspector/observations-and-sources page. Inspect immutable observations, the reducer that produces snapshots, the source registry, and the file-backed provenance chain behind every entity.","url":"https://neotoma.io/fr/markdown/inspector/observations-and-sources","publisher":{"@type":"Organization","name":"Neotoma"},"image":{"@type":"ImageObject","url":"https://neotoma.io/neotoma-og-1200x630.png","width":1200,"height":630,"caption":"Inspector, Observations & sources (Markdown) | Neotoma. Markdown export of the rendered /inspector/observations-and-sources page. Inspect immutable observations, the reducer that produces snaps..."}}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://neotoma.io/"},{"@type":"ListItem","position":2,"name":"Docs","item":"https://neotoma.io/docs"},{"@type":"ListItem","position":3,"name":"Inspector","item":"https://neotoma.io/inspector"},{"@type":"ListItem","position":4,"name":"Observations & sources","item":"https://neotoma.io/inspector/observations-and-sources"}]}</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
+    <title>Inspector, Observations &amp; sources (Markdown) | Neotoma</title>
+    <script type="module" crossorigin="" src="/assets/main-CaoWcp2k.js"></script>
+    <link rel="stylesheet" crossorigin="" href="/assets/main-BBds_bdF.css">
+  
+    <!-- build: local-1777360387837 -->
+      <link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/inspector/observations-and-sources">
+    <link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/inspector/observations-and-sources">
+    <link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/inspector/observations-and-sources">
+    <link rel="alternate" hreflang="ca" href="https://neotoma.io/ca/markdown/inspector/observations-and-sources">
+    <link rel="alternate" hreflang="zh" href="https://neotoma.io/zh/markdown/inspector/observations-and-sources">
+    <link rel="alternate" hreflang="hi" href="https://neotoma.io/hi/markdown/inspector/observations-and-sources">
+    <link rel="alternate" hreflang="ar" href="https://neotoma.io/ar/markdown/inspector/observations-and-sources">
+    <link rel="alternate" hreflang="fr" href="https://neotoma.io/fr/markdown/inspector/observations-and-sources">
+    <link rel="alternate" hreflang="pt" href="https://neotoma.io/pt/markdown/inspector/observations-and-sources">
+    <link rel="alternate" hreflang="ru" href="https://neotoma.io/ru/markdown/inspector/observations-and-sources">
+    <link rel="alternate" hreflang="bn" href="https://neotoma.io/bn/markdown/inspector/observations-and-sources">
+    <link rel="alternate" hreflang="ur" href="https://neotoma.io/ur/markdown/inspector/observations-and-sources">
+    <link rel="alternate" hreflang="id" href="https://neotoma.io/id/markdown/inspector/observations-and-sources">
+    <link rel="alternate" hreflang="de" href="https://neotoma.io/de/markdown/inspector/observations-and-sources">
+  <link rel="icon" href="/favicon.ico" sizes="any" data-rh="true"><link rel="icon" type="image/svg+xml" href="/favicon.svg" data-rh="true"><link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png" data-rh="true"><link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" data-rh="true"><link rel="manifest" href="/site.webmanifest" data-rh="true"><link rel="canonical" href="https://neotoma.io/fr/markdown/inspector/observations-and-sources" data-rh="true"><link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/inspector/observations-and-sources" data-rh="true"><link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/inspector/observations-and-sources" data-rh="true"><link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/inspector/observations-and-sources" data-rh="true"><link rel="alternate" hreflang="ca" href="https://neotoma.io/ca/markdown/inspector/observations-and-sources" data-rh="true"><link rel="alternate" hreflang="zh" href="https://neotoma.io/zh/markdown/inspector/observations-and-sources" data-rh="true"><link rel="alternate" hreflang="hi" href="https://neotoma.io/hi/markdown/inspector/observations-and-sources" data-rh="true"><link rel="alternate" hreflang="ar" href="https://neotoma.io/ar/markdown/inspector/observations-and-sources" data-rh="true"><link rel="alternate" hreflang="fr" href="https://neotoma.io/fr/markdown/inspector/observations-and-sources" data-rh="true"><link rel="alternate" hreflang="pt" href="https://neotoma.io/pt/markdown/inspector/observations-and-sources" data-rh="true"><link rel="alternate" hreflang="ru" href="https://neotoma.io/ru/markdown/inspector/observations-and-sources" data-rh="true"><link rel="alternate" hreflang="bn" href="https://neotoma.io/bn/markdown/inspector/observations-and-sources" data-rh="true"><link rel="alternate" hreflang="ur" href="https://neotoma.io/ur/markdown/inspector/observations-and-sources" data-rh="true"><link rel="alternate" hreflang="id" href="https://neotoma.io/id/markdown/inspector/observations-and-sources" data-rh="true"><link rel="alternate" hreflang="de" href="https://neotoma.io/de/markdown/inspector/observations-and-sources" data-rh="true"><meta name="description" content="Markdown export of the rendered /inspector/observations-and-sources page. Inspect immutable observations, the reducer that produces snapshots, the source registry, and the file-backed provenance chain behind every entity." data-rh="true"><meta name="author" content="Neotoma" data-rh="true"><meta name="application-name" content="Neotoma" data-rh="true"><meta name="robots" content="noindex,nofollow" data-rh="true"><meta name="theme-color" content="#130918" data-rh="true"><meta property="og:type" content="website" data-rh="true"><meta property="og:site_name" content="Neotoma" data-rh="true"><meta property="og:locale" content="fr_FR" data-rh="true"><meta property="og:title" content="Inspector, Observations &amp; sources (Markdown) | Neotoma" data-rh="true"><meta property="og:description" content="Markdown export of the rendered /inspector/observations-and-sources page. Inspect immutable observations, the reducer that produces snapshots, the source registry, and the file-backed provenance chain behind every entity." data-rh="true"><meta property="og:url" content="https://neotoma.io/fr/markdown/inspector/observations-and-sources" data-rh="true"><meta property="og:image" content="https://neotoma.io/neotoma-og-1200x630.png" data-rh="true"><meta property="og:image:width" content="1200" data-rh="true"><meta property="og:image:height" content="630" data-rh="true"><meta property="og:image:alt" content="Inspector, Observations &amp; sources (Markdown) | Neotoma. Markdown export of the rendered /inspector/observations-and-sources page. Inspect immutable observations, the reducer that produces snaps..." data-rh="true"><meta name="keywords" content="Inspector, Observations &amp; sources (Markdown), Neotoma, MCP, Model Context Protocol, AI agents, agent memory, deterministic state" data-rh="true"><meta name="twitter:card" content="summary_large_image" data-rh="true"><meta name="twitter:site" content="@markmhendrickson" data-rh="true"><meta name="twitter:title" content="Inspector, Observations &amp; sources (Markdown) | Neotoma" data-rh="true"><meta name="twitter:description" content="Markdown export of the rendered /inspector/observations-and-sources page. Inspect immutable observations, the reducer that produces snapshots, the source registry, and the file-backed provenance chain behind every entity." data-rh="true"><meta name="twitter:image" content="https://neotoma.io/neotoma-og-1200x630.png" data-rh="true"><meta name="twitter:image:width" content="1200" data-rh="true"><meta name="twitter:image:height" content="630" data-rh="true"><meta name="twitter:image:alt" content="Inspector, Observations &amp; sources (Markdown) | Neotoma. Markdown export of the rendered /inspector/observations-and-sources page. Inspect immutable observations, the reducer that produces snaps..." data-rh="true"><script type="application/ld+json" data-rh="true">{"@context":"https://schema.org","@type":"WebPage","name":"Inspector, Observations & sources (Markdown) | Neotoma","description":"Markdown export of the rendered /inspector/observations-and-sources page. Inspect immutable observations, the reducer that produces snapshots, the source registry, and the file-backed provenance chain behind every entity.","url":"https://neotoma.io/fr/markdown/inspector/observations-and-sources","publisher":{"@type":"Organization","name":"Neotoma"},"image":{"@type":"ImageObject","url":"https://neotoma.io/neotoma-og-1200x630.png","width":1200,"height":630,"caption":"Inspector, Observations & sources (Markdown) | Neotoma. Markdown export of the rendered /inspector/observations-and-sources page. Inspect immutable observations, the reducer that produces snaps..."}}</script><script type="application/ld+json" data-rh="true">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://neotoma.io/"},{"@type":"ListItem","position":2,"name":"Docs","item":"https://neotoma.io/docs"},{"@type":"ListItem","position":3,"name":"Inspector","item":"https://neotoma.io/inspector"},{"@type":"ListItem","position":4,"name":"Observations & sources","item":"https://neotoma.io/inspector/observations-and-sources"}]}</script></head>
+  <body>
+    <div id="root"><iframe title="Markdown capture" aria-hidden="true" width="1280" height="900" class="pointer-events-none fixed left-[-9999px] top-0 z-[-1] border-0 opacity-0" sandbox="allow-same-origin allow-scripts allow-forms"></iframe><div class="min-h-screen bg-background text-foreground"><pre class="whitespace-pre-wrap break-words p-4 font-mono text-[13px] leading-relaxed text-foreground">&lt;!--
+  Full-page Markdown export (rendered HTML → GFM).
+  Source: https://neotoma.io/fr/inspector/observations-and-sources
+  Generated: 2026-04-28T07:15:56.227Z
+--&gt;
+# Inspector, Observations &amp; sources
+
+Snapshots are derived; observations and sources are the truth. Inspector exposes both as first-class browsable surfaces so operators can audit exactly which writes produced the current snapshot, and which raw artifact (file, API response, signed request) backed each write.
+
+## Observations list
+
+Observations are immutable. Every `store`, `correct`, or merge produces one or more rows here, and *none of them are ever mutated or deleted*. The list at `/observations` shows them in reverse chronological order with filters for entity, field, agent, trust tier, and `observation_source` (sensor, workflow\_state, llm\_summary, human, import).
+
+inspector.neotoma.io/observations?entity=ent\_4ad…
+
+Inspector
+
+Neotoma
+
+Dashboard
+
+Conversations
+
+Turns
+
+Compliance
+
+Activity
+
+Feedback
+
+Entities
+
+Observations
+
+Sources
+
+Relationships
+
+Graph Explorer
+
+Schemas
+
+Timeline
+
+Interpretations
+
+Agents
+
+Agent grants
+
+Settings
+
+Observations
+
+Subscription · Vercel · 8 rows
+
+obs\_source: anyGroup by field
+
+| When | Field | Value | Agent | Source | Reducer |
+| --- | --- | --- | --- | --- | --- |
+| 12:41 | amount | 20.00 | claude-code | llm\_summary | winner |
+| 12:38 | category | subscription | operator | human | winner |
+| 12:30 | merchant | Vercel | claude-code | llm\_summary | superseded |
+| 12:30 | merchant | Vercel Inc. | claude-code | llm\_summary | winner |
+| 11:08 | amount | $20 | ingest-pipeline | import | superseded |
+
+The full immutable history for one entity. The 'reducer' column shows which row currently wins for each field.
+
+◆
+
+## Reducer transparency
+
+Each observation displays which row currently "wins" for its field. The reducer order is documented and visible: higher `source_priority` wins, with `observation_source` as the tie-break (sensor &lt; workflow\_state &lt; llm\_summary &lt; human &lt; import). Inspector shows this in the row metadata so operators don't have to guess why a "human" correction did or did not override an automated row.
+
+◆
+
+## Source registry
+
+Every observation that came from an external artifact carries a `source_id`. The Sources page (`/sources`) lists those artifacts: PDFs, CSVs, JSON dumps, screenshots, signed API responses, even raw email bodies. Each row links to `GET /sources/:id/content` so you can open the original file inline (browser-viewable types) or download it.
+
+inspector.neotoma.io/sources?type=email
+
+Inspector
+
+Neotoma
+
+Dashboard
+
+Conversations
+
+Turns
+
+Compliance
+
+Activity
+
+Feedback
+
+Entities
+
+Observations
+
+Sources
+
+Relationships
+
+Graph Explorer
+
+Schemas
+
+Timeline
+
+Interpretations
+
+Agents
+
+Agent grants
+
+Settings
+
+Sources
+
+2,154 artifacts · 312 unique
+
+mime: application/pdfsize &lt; 1MB
+
+vercel-2026-04.pdf
+
+ingested by claude-code · 12 observations downstream
+
+application/pdfOpen
+
+wise-transfer-58812.json
+
+ingested by ingest-pipeline · 6 observations downstream
+
+application/jsonOpen
+
+screenshot-2026-04-22.png
+
+ingested by cursor-agent · 3 observations downstream
+
+image/pngOpen
+
+calendar-week-17.ics
+
+ingested by ingest-pipeline · 14 observations downstream
+
+text/calendarOpen
+
+Each source row preserves the original artifact, its mime type, the agent that ingested it, and downstream observations.
+
+◆
+
+## Source detail
+
+Source detail pages show the artifact's metadata (mime type, size, ingestion agent, idempotency key, when it was first observed) and the full list of observations that cite it. The combined-store contract guarantees each `file_path` / `file_content` persisted via `store_structured` becomes one row here, making "what raw artifact backs this fact?" a one-click question.
+
+◆
+
+## Provenance chains
+
+From any observation row, you can trace forward (what entity it contributed to, which fields it currently or once won) or backward (which source artifact, which agent, which trust tier). This is the same chain the per-field provenance hover on [Entities](/inspector/entities) surfaces, the difference is direction: that view starts from the snapshot, this one starts from the writes themselves.</pre></div><div role="region" aria-label="Notifications (F8)" tabindex="-1" style="pointer-events: none;"><ol tabindex="-1" class="fixed top-0 z-[100] flex w-full flex-col-reverse p-4 sm:bottom-4 sm:right-4 sm:top-auto sm:flex-col sm:max-h-[calc(100vh-1rem)] sm:overflow-y-auto md:max-w-[420px]"></ol></div></div>
+  
+
+
+</body></html>

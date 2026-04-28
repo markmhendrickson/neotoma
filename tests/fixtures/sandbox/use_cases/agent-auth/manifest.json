@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0",
+  "description": "Agent auth use case sandbox seed. Auth decisions, consent, delegation chains.",
+  "agent_identities": [
+    {
+      "agent_sub": "sandbox-agent-auth@neotoma.sandbox",
+      "client_name": "sandbox-seed-auth",
+      "client_version": "0.1.0",
+      "label": "Agent auth seed runner"
+    }
+  ],
+  "entity_batches": [],
+  "unstructured_sources": [],
+  "excluded_fixtures": []
+}

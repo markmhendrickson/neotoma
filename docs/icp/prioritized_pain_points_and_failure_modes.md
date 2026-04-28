@@ -20,7 +20,7 @@ The primary ICP is one archetype (personal agentic OS builder/operator) in three
 | **Building agent systems** | Drift across sessions; conflicting state across tool boundaries; no replay; no shared memory for agents | Duplicate entities; contradictory state; non-replayable decisions; entity resolution failures | `person`, `contact`, `company`, `relationship`, `event`, `task` |
 | **Infrastructure engineering** | Can't reproduce agent runs; state mutations invisible; debugging is log archaeology; no provenance | Non-replayable decisions; contradictory state; silent memory drift; weak correction loop | `flow`, `event`, `agent_message`, `conversation`, `task`, `relationship` |
 
-## Secondary Motion: B2B-by-Vertical
+## Secondary Motion: B2B-by-Use-Case
 
 These emerge downstream from personal adoption when the primary ICP brings Neotoma into team contexts.
 

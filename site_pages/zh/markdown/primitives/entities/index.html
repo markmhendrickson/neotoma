@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<!DOCTYPE html><html lang="zh" dir="ltr"><head>
+    <meta charset="UTF-8">
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="application-name" content="Neotoma">
+    <meta name="theme-color" content="#130918">
+    <meta name="description" content="Markdown export of the rendered /primitives/entities page. Entities are the canonical, durable rows that observations, relationships, and timeline events point at. Deterministic hash-based IDs, per-user identity isolation, and merge tracking via merged_to_entity_id.">
+    <meta name="author" content="Neotoma">
+    <meta name="robots" content="noindex,nofollow">
+    <link rel="canonical" href="https://neotoma.io/zh/markdown/primitives/entities">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Neotoma">
+    <meta property="og:locale" content="zh_CN">
+    <meta property="og:title" content="Entities | Primitive Record Type (Markdown) | Neotoma">
+    <meta property="og:description" content="Markdown export of the rendered /primitives/entities page. Entities are the canonical, durable rows that observations, relationships, and timeline events point at. Deterministic hash-based IDs, per-user identity isolation, and merge tracking via merged_to_entity_id.">
+    <meta property="og:url" content="https://neotoma.io/zh/markdown/primitives/entities">
+    <meta property="og:image" content="https://neotoma.io/neotoma-og-1200x630.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Entities | Primitive Record Type (Markdown) | Neotoma. Markdown export of the rendered /primitives/entities page. Entities are the canonical, durable rows that observations, relationships, and...">
+    <meta name="keywords" content="entities, canonical record, deterministic id, entity merge, primitive record type, Entities, Primitive Record Type (Markdown), Neotoma, MCP, Model Context Protocol, AI agents, agent memory, deterministic state">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:site" content="@markmhendrickson">
+    <meta name="twitter:title" content="Entities | Primitive Record Type (Markdown) | Neotoma">
+    <meta name="twitter:description" content="Markdown export of the rendered /primitives/entities page. Entities are the canonical, durable rows that observations, relationships, and timeline events point at. Deterministic hash-based IDs, per-user identity isolation, and merge tracking via merged_to_entity_id.">
+    <meta name="twitter:image" content="https://neotoma.io/neotoma-og-1200x630.png">
+    <meta name="twitter:image:width" content="1200">
+    <meta name="twitter:image:height" content="630">
+    <meta name="twitter:image:alt" content="Entities | Primitive Record Type (Markdown) | Neotoma. Markdown export of the rendered /primitives/entities page. Entities are the canonical, durable rows that observations, relationships, and...">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"Entities | Primitive Record Type (Markdown) | Neotoma","description":"Markdown export of the rendered /primitives/entities page. Entities are the canonical, durable rows that observations, relationships, and timeline events point at. Deterministic hash-based IDs, per-user identity isolation, and merge tracking via merged_to_entity_id.","url":"https://neotoma.io/zh/markdown/primitives/entities","publisher":{"@type":"Organization","name":"Neotoma"},"image":{"@type":"ImageObject","url":"https://neotoma.io/neotoma-og-1200x630.png","width":1200,"height":630,"caption":"Entities | Primitive Record Type (Markdown) | Neotoma. Markdown export of the rendered /primitives/entities page. Entities are the canonical, durable rows that observations, relationships, and..."}}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://neotoma.io/"},{"@type":"ListItem","position":2,"name":"Docs","item":"https://neotoma.io/docs"},{"@type":"ListItem","position":3,"name":"Primitive record types","item":"https://neotoma.io/primitives"},{"@type":"ListItem","position":4,"name":"Entities","item":"https://neotoma.io/primitives/entities"}]}</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
+    <title>Entities | Primitive Record Type (Markdown) | Neotoma</title>
+    <script type="module" crossorigin="" src="/assets/main-CaoWcp2k.js"></script>
+    <link rel="stylesheet" crossorigin="" href="/assets/main-BBds_bdF.css">
+  
+    <!-- build: local-1777360387837 -->
+      <link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/primitives/entities">
+    <link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/primitives/entities">
+    <link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/primitives/entities">
+    <link rel="alternate" hreflang="ca" href="https://neotoma.io/ca/markdown/primitives/entities">
+    <link rel="alternate" hreflang="zh" href="https://neotoma.io/zh/markdown/primitives/entities">
+    <link rel="alternate" hreflang="hi" href="https://neotoma.io/hi/markdown/primitives/entities">
+    <link rel="alternate" hreflang="ar" href="https://neotoma.io/ar/markdown/primitives/entities">
+    <link rel="alternate" hreflang="fr" href="https://neotoma.io/fr/markdown/primitives/entities">
+    <link rel="alternate" hreflang="pt" href="https://neotoma.io/pt/markdown/primitives/entities">
+    <link rel="alternate" hreflang="ru" href="https://neotoma.io/ru/markdown/primitives/entities">
+    <link rel="alternate" hreflang="bn" href="https://neotoma.io/bn/markdown/primitives/entities">
+    <link rel="alternate" hreflang="ur" href="https://neotoma.io/ur/markdown/primitives/entities">
+    <link rel="alternate" hreflang="id" href="https://neotoma.io/id/markdown/primitives/entities">
+    <link rel="alternate" hreflang="de" href="https://neotoma.io/de/markdown/primitives/entities">
+  <link rel="icon" href="/favicon.ico" sizes="any" data-rh="true"><link rel="icon" type="image/svg+xml" href="/favicon.svg" data-rh="true"><link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png" data-rh="true"><link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" data-rh="true"><link rel="manifest" href="/site.webmanifest" data-rh="true"><link rel="canonical" href="https://neotoma.io/zh/markdown/primitives/entities" data-rh="true"><link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/primitives/entities" data-rh="true"><link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/primitives/entities" data-rh="true"><link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/primitives/entities" data-rh="true"><link rel="alternate" hreflang="ca" href="https://neotoma.io/ca/markdown/primitives/entities" data-rh="true"><link rel="alternate" hreflang="zh" href="https://neotoma.io/zh/markdown/primitives/entities" data-rh="true"><link rel="alternate" hreflang="hi" href="https://neotoma.io/hi/markdown/primitives/entities" data-rh="true"><link rel="alternate" hreflang="ar" href="https://neotoma.io/ar/markdown/primitives/entities" data-rh="true"><link rel="alternate" hreflang="fr" href="https://neotoma.io/fr/markdown/primitives/entities" data-rh="true"><link rel="alternate" hreflang="pt" href="https://neotoma.io/pt/markdown/primitives/entities" data-rh="true"><link rel="alternate" hreflang="ru" href="https://neotoma.io/ru/markdown/primitives/entities" data-rh="true"><link rel="alternate" hreflang="bn" href="https://neotoma.io/bn/markdown/primitives/entities" data-rh="true"><link rel="alternate" hreflang="ur" href="https://neotoma.io/ur/markdown/primitives/entities" data-rh="true"><link rel="alternate" hreflang="id" href="https://neotoma.io/id/markdown/primitives/entities" data-rh="true"><link rel="alternate" hreflang="de" href="https://neotoma.io/de/markdown/primitives/entities" data-rh="true"><meta name="description" content="Markdown export of the rendered /primitives/entities page. Entities are the canonical, durable rows that observations, relationships, and timeline events point at. Deterministic hash-based IDs, per-user identity isolation, and merge tracking via merged_to_entity_id." data-rh="true"><meta name="author" content="Neotoma" data-rh="true"><meta name="application-name" content="Neotoma" data-rh="true"><meta name="robots" content="noindex,nofollow" data-rh="true"><meta name="theme-color" content="#130918" data-rh="true"><meta property="og:type" content="website" data-rh="true"><meta property="og:site_name" content="Neotoma" data-rh="true"><meta property="og:locale" content="zh_CN" data-rh="true"><meta property="og:title" content="Entities | Primitive Record Type (Markdown) | Neotoma" data-rh="true"><meta property="og:description" content="Markdown export of the rendered /primitives/entities page. Entities are the canonical, durable rows that observations, relationships, and timeline events point at. Deterministic hash-based IDs, per-user identity isolation, and merge tracking via merged_to_entity_id." data-rh="true"><meta property="og:url" content="https://neotoma.io/zh/markdown/primitives/entities" data-rh="true"><meta property="og:image" content="https://neotoma.io/neotoma-og-1200x630.png" data-rh="true"><meta property="og:image:width" content="1200" data-rh="true"><meta property="og:image:height" content="630" data-rh="true"><meta property="og:image:alt" content="Entities | Primitive Record Type (Markdown) | Neotoma. Markdown export of the rendered /primitives/entities page. Entities are the canonical, durable rows that observations, relationships, and..." data-rh="true"><meta name="keywords" content="entities, canonical record, deterministic id, entity merge, primitive record type, Entities, Primitive Record Type (Markdown), Neotoma, MCP, Model Context Protocol, AI agents, agent memory, deterministic state" data-rh="true"><meta name="twitter:card" content="summary_large_image" data-rh="true"><meta name="twitter:site" content="@markmhendrickson" data-rh="true"><meta name="twitter:title" content="Entities | Primitive Record Type (Markdown) | Neotoma" data-rh="true"><meta name="twitter:description" content="Markdown export of the rendered /primitives/entities page. Entities are the canonical, durable rows that observations, relationships, and timeline events point at. Deterministic hash-based IDs, per-user identity isolation, and merge tracking via merged_to_entity_id." data-rh="true"><meta name="twitter:image" content="https://neotoma.io/neotoma-og-1200x630.png" data-rh="true"><meta name="twitter:image:width" content="1200" data-rh="true"><meta name="twitter:image:height" content="630" data-rh="true"><meta name="twitter:image:alt" content="Entities | Primitive Record Type (Markdown) | Neotoma. Markdown export of the rendered /primitives/entities page. Entities are the canonical, durable rows that observations, relationships, and..." data-rh="true"><script type="application/ld+json" data-rh="true">{"@context":"https://schema.org","@type":"WebPage","name":"Entities | Primitive Record Type (Markdown) | Neotoma","description":"Markdown export of the rendered /primitives/entities page. Entities are the canonical, durable rows that observations, relationships, and timeline events point at. Deterministic hash-based IDs, per-user identity isolation, and merge tracking via merged_to_entity_id.","url":"https://neotoma.io/zh/markdown/primitives/entities","publisher":{"@type":"Organization","name":"Neotoma"},"image":{"@type":"ImageObject","url":"https://neotoma.io/neotoma-og-1200x630.png","width":1200,"height":630,"caption":"Entities | Primitive Record Type (Markdown) | Neotoma. Markdown export of the rendered /primitives/entities page. Entities are the canonical, durable rows that observations, relationships, and..."}}</script><script type="application/ld+json" data-rh="true">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://neotoma.io/"},{"@type":"ListItem","position":2,"name":"Docs","item":"https://neotoma.io/docs"},{"@type":"ListItem","position":3,"name":"Primitive record types","item":"https://neotoma.io/primitives"},{"@type":"ListItem","position":4,"name":"Entities","item":"https://neotoma.io/primitives/entities"}]}</script></head>
+  <body>
+    <div id="root"><iframe title="Markdown capture" aria-hidden="true" width="1280" height="900" class="pointer-events-none fixed left-[-9999px] top-0 z-[-1] border-0 opacity-0" sandbox="allow-same-origin allow-scripts allow-forms"></iframe><div class="min-h-screen bg-background text-foreground"><pre class="whitespace-pre-wrap break-words p-4 font-mono text-[13px] leading-relaxed text-foreground">&lt;!--
+  Full-page Markdown export (rendered HTML → GFM).
+  Source: https://neotoma.io/zh/primitives/entities
+  Generated: 2026-04-28T07:17:14.273Z
+--&gt;
+# Entities
+
+An entity is the canonical, durable row that every observation, relationship, and timeline event ultimately points at. The entities table itself is small and stable, aliases, identity decisions, and merge history live here. The rich, current view of an entity lives in entity snapshots, recomputed deterministically from observations.
+
+Sits next to the truth pipeline. Observations describe entities; the reducer composes those observations into entity snapshots. Without a stable entities row, observations would have no durable target to attach to.
+
+## Schema[#](#schema)
+
+entities table (Postgres / hosted)
+
+SQL / TS
+
+Schema or pattern reference for this primitive.
+
+CREATE TABLE entities ( id TEXT PRIMARY KEY, -- Deterministic hash-based ID entity\_type TEXT NOT NULL, -- 'person', 'company', 'location', 'invoice', … canonical\_name TEXT NOT NULL, -- Normalized name aliases JSONB DEFAULT '\[\]', -- Array of alternate names metadata JSONB DEFAULT '{}', first\_seen\_at TIMESTAMP WITH TIME ZONE, last\_seen\_at TIMESTAMP WITH TIME ZONE, created\_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(), user\_id UUID NOT NULL, merged\_to\_entity\_id TEXT REFERENCES entities(id), merged\_at TIMESTAMPTZ );
+
+| Field | Type | Purpose |
+| --- | --- | --- |
+| id | TEXT | Deterministic hash-based ID derived from entity\_type + canonical\_name + user\_id; same identity collapses to the same row |
+| entity\_type | TEXT | Canonical type label (person, company, location, invoice, …) |
+| canonical\_name | TEXT | Normalized name used as part of the identity hash |
+| aliases | JSONB | Alternate spellings, legal names, handles, additive, never destructive |
+| metadata | JSONB | Identity-level metadata (e.g. external IDs); not the rich snapshot view |
+| first\_seen\_at | TIMESTAMPTZ | Earliest observed\_at across observations for this entity |
+| last\_seen\_at | TIMESTAMPTZ | Most recent observed\_at across observations |
+| user\_id | UUID | Owner; combined with the identity hash this enforces per-user identity isolation and RLS |
+| merged\_to\_entity\_id | TEXT | Set on merge, points at the surviving entity; the merged-from row stays so historical observations resolve |
+| merged\_at | TIMESTAMPTZ | When the merge happened; reads filter merged entities from default queries |
+
+## Deterministic, hash-based identity[#](#deterministic-id)
+
+Entity ids are derived from (entity\_type, canonical\_name, user\_id), not generated at random. Re-resolving the same identity converges on the same row, which is what makes ingestion idempotent and lets out-of-order writes attach to the right entity without coordination.
+
+◆
+
+## Why the row stays small[#](#small-and-stable)
+
+Rich, multi-field truth lives in entity\_snapshots, which is recomputed by the reducer. The entities row carries only what has to be durable: identity, aliases, merge state, and ownership. If snapshots are lost they can be rebuilt; the entities row cannot.
+
+◆
+
+## Merge: a repair mechanism, not write-time resolution[#](#merge-mechanics)
+
+Neotoma does not attempt perfect entity resolution at write time. Duplicates are repaired with merge\_entities(from\_id, to\_id): observations pointing at the loser are rewritten to the winner, the loser's snapshot is deleted, the winner's is recomputed, and the loser row is marked merged with merged\_to\_entity\_id and merged\_at set. The loser row stays so historical observations and relationships still resolve.
+
+◆
+
+## User isolation[#](#rls)
+
+RLS on entities filters by user\_id. Identity is per-user, two users can independently have an entity for the same canonical name without colliding. All reads from MCP, HTTP, and CLI go through this filter, and merged entities are excluded from default queries.
+
+## Invariants[#](#invariants)
+
+Every entity satisfies the following constraints:
+
+MUST
+
+-   Carry a non-null entity\_type, canonical\_name, and user\_id
+-   Have a deterministic, hash-derived id so re-resolving the same identity returns the same row
+-   Be the foreign-key target for every observation, relationship, and timeline event for that identity
+-   Be repaired via merge (never destructive deletion), merged rows stay so history resolves
+-   Pass attribution policy enforcement before write
+
+MUST NOT
+
+-   Be edited destructively after creation, aliases and metadata are additive
+-   Carry the rich, merged truth view (that lives in entity\_snapshots)
+-   Be deduplicated across user boundaries, identity is per-user
+-   Be hard-deleted as a routine merge step, the merged-from row stays for provenance
+
+## Related[#](#related)
+
+-   [Entities subsystem doc](https://github.com/markmhendrickson/neotoma/blob/main/docs/subsystems/entities.md) , Identity, aliases, merge tracking, RLS
+-   [Entity snapshots](/primitives/entity-snapshots) , Reducer output that composes observations into the entity's current truth
+-   [Observations](/primitives/observations) , Granular facts that describe entities
+-   [Relationships](/primitives/relationships) , Typed graph edges between entities
+-   [Entity merge](https://github.com/markmhendrickson/neotoma/blob/main/docs/subsystems/entity_merge.md) , Detailed merge mechanics and the entity\_merges audit table
+-   [Schema](https://github.com/markmhendrickson/neotoma/blob/main/docs/subsystems/schema.md) , Authoritative DDL for entities
+
+## Where to go next[#](#more)
+
+-   [All primitive record types](/primitives) , index of sources, interpretations, observations, relationships, and timeline events
+-   [Architecture](/architecture) , how the primitives compose into Neotoma's deterministic state
+-   [Terminology](/terminology) , canonical glossary of terms used across Neotoma docs</pre></div><div role="region" aria-label="Notifications (F8)" tabindex="-1" style="pointer-events: none;"><ol tabindex="-1" class="fixed top-0 z-[100] flex w-full flex-col-reverse p-4 sm:bottom-4 sm:right-4 sm:top-auto sm:flex-col sm:max-h-[calc(100vh-1rem)] sm:overflow-y-auto md:max-w-[420px]"></ol></div></div>
+  
+
+
+</body></html>

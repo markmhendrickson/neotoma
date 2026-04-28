@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "id": "single_turn_with_extracted_entity",
+    "description": "User prompt mentions a named person; the harness records the user message and the agent's reply via stop. Validates the basic turn lifecycle store-first invariant (user message persisted before tool work; assistant message persisted at stop).",
+    "harnesses": ["cursor-hooks"],
+    "models": ["composer-2", "gpt-5.5-fast", "claude-haiku-4", "claude-sonnet-4.5", "gpt-5.5-medium"],
+    "tags": ["turn-lifecycle", "store-first"]
+  },
+  "events": [
+    {
+      "hook": "beforeSubmitPrompt",
+      "payload": { "prompt": "Sara Lee said the proposal looks great." }
+    },
+    {
+      "hook": "stop",
+      "payload": { "text": "Got it — I will note Sara Lee's feedback." }
+    }
+  ],
+  "assertions": {
+    "default": [
+      {
+        "type": "entity_stored",
+        "entity_type": "conversation_message",
+        "where": { "role": "user" }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "conversation_message",
+        "where": { "role": "assistant" }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "conversation_turn"
+      },
+      {
+        "type": "request_count",
+        "endpoint": "/store",
+        "op": "gte",
+        "value": 3
+      }
+    ]
+  }
+}

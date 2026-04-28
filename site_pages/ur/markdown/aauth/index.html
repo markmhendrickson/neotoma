@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<!DOCTYPE html><html lang="ur" dir="rtl"><head>
+    <meta charset="UTF-8">
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="application-name" content="Neotoma">
+    <meta name="theme-color" content="#130918">
+    <meta name="description" content="Markdown export of the rendered /aauth page. Cryptographically verifiable agent identity for Neotoma writes: RFC 9421 HTTP Message Signatures, the aa-agent+jwt token, trust tiers, hardware attestation, and operator policy.">
+    <meta name="author" content="Neotoma">
+    <meta name="robots" content="noindex,nofollow">
+    <link rel="canonical" href="https://neotoma.io/ur/markdown/aauth">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Neotoma">
+    <meta property="og:locale" content="ur_PK">
+    <meta property="og:title" content="AAuth (Agent Authentication) (Markdown) | Neotoma">
+    <meta property="og:description" content="Markdown export of the rendered /aauth page. Cryptographically verifiable agent identity for Neotoma writes: RFC 9421 HTTP Message Signatures, the aa-agent+jwt token, trust tiers, hardware attestation, and operator policy.">
+    <meta property="og:url" content="https://neotoma.io/ur/markdown/aauth">
+    <meta property="og:image" content="https://neotoma.io/neotoma-og-1200x630.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="AAuth (Agent Authentication) (Markdown) | Neotoma. Markdown export of the rendered /aauth page. Cryptographically verifiable agent identity for Neotoma writes: RFC 9421 HTTP Message Signat...">
+    <meta name="keywords" content="AAuth (Agent Authentication) (Markdown), Neotoma, MCP, Model Context Protocol, AI agents, agent memory, deterministic state">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:site" content="@markmhendrickson">
+    <meta name="twitter:title" content="AAuth (Agent Authentication) (Markdown) | Neotoma">
+    <meta name="twitter:description" content="Markdown export of the rendered /aauth page. Cryptographically verifiable agent identity for Neotoma writes: RFC 9421 HTTP Message Signatures, the aa-agent+jwt token, trust tiers, hardware attestation, and operator policy.">
+    <meta name="twitter:image" content="https://neotoma.io/neotoma-og-1200x630.png">
+    <meta name="twitter:image:width" content="1200">
+    <meta name="twitter:image:height" content="630">
+    <meta name="twitter:image:alt" content="AAuth (Agent Authentication) (Markdown) | Neotoma. Markdown export of the rendered /aauth page. Cryptographically verifiable agent identity for Neotoma writes: RFC 9421 HTTP Message Signat...">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"AAuth (Agent Authentication) (Markdown) | Neotoma","description":"Markdown export of the rendered /aauth page. Cryptographically verifiable agent identity for Neotoma writes: RFC 9421 HTTP Message Signatures, the aa-agent+jwt token, trust tiers, hardware attestation, and operator policy.","url":"https://neotoma.io/ur/markdown/aauth","publisher":{"@type":"Organization","name":"Neotoma"},"image":{"@type":"ImageObject","url":"https://neotoma.io/neotoma-og-1200x630.png","width":1200,"height":630,"caption":"AAuth (Agent Authentication) (Markdown) | Neotoma. Markdown export of the rendered /aauth page. Cryptographically verifiable agent identity for Neotoma writes: RFC 9421 HTTP Message Signat..."}}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://neotoma.io/"},{"@type":"ListItem","position":2,"name":"Docs","item":"https://neotoma.io/docs"},{"@type":"ListItem","position":3,"name":"AAuth","item":"https://neotoma.io/aauth"}]}</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
+    <title>AAuth (Agent Authentication) (Markdown) | Neotoma</title>
+    <script type="module" crossorigin="" src="/assets/main-CaoWcp2k.js"></script>
+    <link rel="stylesheet" crossorigin="" href="/assets/main-BBds_bdF.css">
+  
+    <!-- build: local-1777360387837 -->
+      <link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/aauth">
+    <link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/aauth">
+    <link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/aauth">
+    <link rel="alternate" hreflang="ca" href="https://neotoma.io/ca/markdown/aauth">
+    <link rel="alternate" hreflang="zh" href="https://neotoma.io/zh/markdown/aauth">
+    <link rel="alternate" hreflang="hi" href="https://neotoma.io/hi/markdown/aauth">
+    <link rel="alternate" hreflang="ar" href="https://neotoma.io/ar/markdown/aauth">
+    <link rel="alternate" hreflang="fr" href="https://neotoma.io/fr/markdown/aauth">
+    <link rel="alternate" hreflang="pt" href="https://neotoma.io/pt/markdown/aauth">
+    <link rel="alternate" hreflang="ru" href="https://neotoma.io/ru/markdown/aauth">
+    <link rel="alternate" hreflang="bn" href="https://neotoma.io/bn/markdown/aauth">
+    <link rel="alternate" hreflang="ur" href="https://neotoma.io/ur/markdown/aauth">
+    <link rel="alternate" hreflang="id" href="https://neotoma.io/id/markdown/aauth">
+    <link rel="alternate" hreflang="de" href="https://neotoma.io/de/markdown/aauth">
+  <link rel="icon" href="/favicon.ico" sizes="any" data-rh="true"><link rel="icon" type="image/svg+xml" href="/favicon.svg" data-rh="true"><link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png" data-rh="true"><link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" data-rh="true"><link rel="manifest" href="/site.webmanifest" data-rh="true"><link rel="canonical" href="https://neotoma.io/ur/markdown/aauth" data-rh="true"><link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/aauth" data-rh="true"><link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/aauth" data-rh="true"><link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/aauth" data-rh="true"><link rel="alternate" hreflang="ca" href="https://neotoma.io/ca/markdown/aauth" data-rh="true"><link rel="alternate" hreflang="zh" href="https://neotoma.io/zh/markdown/aauth" data-rh="true"><link rel="alternate" hreflang="hi" href="https://neotoma.io/hi/markdown/aauth" data-rh="true"><link rel="alternate" hreflang="ar" href="https://neotoma.io/ar/markdown/aauth" data-rh="true"><link rel="alternate" hreflang="fr" href="https://neotoma.io/fr/markdown/aauth" data-rh="true"><link rel="alternate" hreflang="pt" href="https://neotoma.io/pt/markdown/aauth" data-rh="true"><link rel="alternate" hreflang="ru" href="https://neotoma.io/ru/markdown/aauth" data-rh="true"><link rel="alternate" hreflang="bn" href="https://neotoma.io/bn/markdown/aauth" data-rh="true"><link rel="alternate" hreflang="ur" href="https://neotoma.io/ur/markdown/aauth" data-rh="true"><link rel="alternate" hreflang="id" href="https://neotoma.io/id/markdown/aauth" data-rh="true"><link rel="alternate" hreflang="de" href="https://neotoma.io/de/markdown/aauth" data-rh="true"><meta name="description" content="Markdown export of the rendered /aauth page. Cryptographically verifiable agent identity for Neotoma writes: RFC 9421 HTTP Message Signatures, the aa-agent+jwt token, trust tiers, hardware attestation, and operator policy." data-rh="true"><meta name="author" content="Neotoma" data-rh="true"><meta name="application-name" content="Neotoma" data-rh="true"><meta name="robots" content="noindex,nofollow" data-rh="true"><meta name="theme-color" content="#130918" data-rh="true"><meta property="og:type" content="website" data-rh="true"><meta property="og:site_name" content="Neotoma" data-rh="true"><meta property="og:locale" content="ur_PK" data-rh="true"><meta property="og:title" content="AAuth (Agent Authentication) (Markdown) | Neotoma" data-rh="true"><meta property="og:description" content="Markdown export of the rendered /aauth page. Cryptographically verifiable agent identity for Neotoma writes: RFC 9421 HTTP Message Signatures, the aa-agent+jwt token, trust tiers, hardware attestation, and operator policy." data-rh="true"><meta property="og:url" content="https://neotoma.io/ur/markdown/aauth" data-rh="true"><meta property="og:image" content="https://neotoma.io/neotoma-og-1200x630.png" data-rh="true"><meta property="og:image:width" content="1200" data-rh="true"><meta property="og:image:height" content="630" data-rh="true"><meta property="og:image:alt" content="AAuth (Agent Authentication) (Markdown) | Neotoma. Markdown export of the rendered /aauth page. Cryptographically verifiable agent identity for Neotoma writes: RFC 9421 HTTP Message Signat..." data-rh="true"><meta name="keywords" content="AAuth (Agent Authentication) (Markdown), Neotoma, MCP, Model Context Protocol, AI agents, agent memory, deterministic state" data-rh="true"><meta name="twitter:card" content="summary_large_image" data-rh="true"><meta name="twitter:site" content="@markmhendrickson" data-rh="true"><meta name="twitter:title" content="AAuth (Agent Authentication) (Markdown) | Neotoma" data-rh="true"><meta name="twitter:description" content="Markdown export of the rendered /aauth page. Cryptographically verifiable agent identity for Neotoma writes: RFC 9421 HTTP Message Signatures, the aa-agent+jwt token, trust tiers, hardware attestation, and operator policy." data-rh="true"><meta name="twitter:image" content="https://neotoma.io/neotoma-og-1200x630.png" data-rh="true"><meta name="twitter:image:width" content="1200" data-rh="true"><meta name="twitter:image:height" content="630" data-rh="true"><meta name="twitter:image:alt" content="AAuth (Agent Authentication) (Markdown) | Neotoma. Markdown export of the rendered /aauth page. Cryptographically verifiable agent identity for Neotoma writes: RFC 9421 HTTP Message Signat..." data-rh="true"><script type="application/ld+json" data-rh="true">{"@context":"https://schema.org","@type":"WebPage","name":"AAuth (Agent Authentication) (Markdown) | Neotoma","description":"Markdown export of the rendered /aauth page. Cryptographically verifiable agent identity for Neotoma writes: RFC 9421 HTTP Message Signatures, the aa-agent+jwt token, trust tiers, hardware attestation, and operator policy.","url":"https://neotoma.io/ur/markdown/aauth","publisher":{"@type":"Organization","name":"Neotoma"},"image":{"@type":"ImageObject","url":"https://neotoma.io/neotoma-og-1200x630.png","width":1200,"height":630,"caption":"AAuth (Agent Authentication) (Markdown) | Neotoma. Markdown export of the rendered /aauth page. Cryptographically verifiable agent identity for Neotoma writes: RFC 9421 HTTP Message Signat..."}}</script><script type="application/ld+json" data-rh="true">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://neotoma.io/"},{"@type":"ListItem","position":2,"name":"Docs","item":"https://neotoma.io/docs"},{"@type":"ListItem","position":3,"name":"AAuth","item":"https://neotoma.io/aauth"}]}</script></head>
+  <body>
+    <div id="root"><iframe title="Markdown capture" aria-hidden="true" width="1280" height="900" class="pointer-events-none fixed left-[-9999px] top-0 z-[-1] border-0 opacity-0" sandbox="allow-same-origin allow-scripts allow-forms"></iframe><div class="min-h-screen bg-background text-foreground"><pre class="whitespace-pre-wrap break-words p-4 font-mono text-[13px] leading-relaxed text-foreground">&lt;!--
+  Full-page Markdown export (rendered HTML → GFM).
+  Source: https://neotoma.io/ur/aauth
+  Generated: 2026-04-28T07:15:52.708Z
+--&gt;
+# AAuth (Agent Authentication)
+
+AAuth is Neotoma's mechanism for cryptographically verifiable *agent identity* on every write. It lives alongside (not in place of) human user authentication: where `user_id` answers "whose data is this?", AAuth answers "which agent wrote it?". The pair is stamped onto every observation, relationship, source, interpretation, and timeline event.
+
+AAuth is built on two open standards: **RFC 9421 HTTP Message Signatures** for the request signature, and an **`aa-agent+jwt`** agent token that carries the agent's confirmation key and stable identifiers. Optional hardware attestation (Apple Secure Enclave, WebAuthn-packed, TPM 2.0) promotes signed clients into the highest trust tier.
+
+Protocol-level specifications, Internet-Drafts, SDKs, and the live playground are on [aauth.dev](https://aauth.dev/). The rest of this page is how Neotoma implements that contract for writes and attribution.
+
+## Why AAuth
+
+-   Bearer tokens are operator-set shared secrets that gate connection access; they resolve a `user_id` but never mint an attribution tier above `anonymous` on their own. OAuth authenticates the *human* behind the connection. AAuth identifies the *agent* writing within that authenticated session, in parallel with whichever human-identity flow is in use.
+-   Neotoma's AAuth is an identity-based contract today, not a delegation-token system: the agent presents a stable cryptographic identity, and the server records it alongside the human `user_id` on every write. Per-agent scoping is handled separately via `agent_grant` entities (see [capabilities](/aauth/capabilities)).
+-   Every durable row carries the agent's stable identifiers (`agent_thumbprint`, `agent_sub`, `agent_iss`) and a resolved `trust_tier`.
+-   Operators can require a minimum tier per route via attribution policy. Self-reported clients fall back gracefully to the `unverified_client` tier.
+-   The contract is uniform across HTTP `/mcp`, direct REST routes, MCP stdio, and CLI-over-MCP / CLI-over-HTTP.
+
+◆
+
+## Trust tiers
+
+A single enum is stamped onto every durable row. Tier resolution happens once per request inside `src/middleware/aauth_verify.ts`; services and clients MUST read the resolved tier from the request context rather than re-deriving it.
+
+-   **`hardware`**, AAuth verified AND the JWT carries a `cnf.attestation` envelope the verifier accepts AND the bound key is not revoked.
+-   **`operator_attested`**, AAuth verified AND `iss` (or `iss:sub`) is in the operator allowlist (`NEOTOMA_OPERATOR_ATTESTED_ISSUERS` / `NEOTOMA_OPERATOR_ATTESTED_SUBS`).
+-   **`software`**, AAuth verified, but no attestation envelope (or attestation failed and operator allowlist did not match), regardless of signing algorithm.
+-   **`unverified_client`**, No AAuth signature was verified, but the caller self-reported a distinctive `clientInfo.name` (or `X-Client-Name`) that survived generic-name normalisation. The name is recorded on the row but is *not* cryptographically attested, anyone can claim it.
+-   **`anonymous`**, No AAuth, and no usable client name either: `clientInfo` and `X-Client-Name` were absent, empty, non-strings, or matched the generic-names blocklist (`mcp`, `client`, `mcp-client`, `unknown`, `anonymous`). The row carries no stable identifying name at all.
+
+The practical difference: `unverified_client` rows still let you filter and group by which integration produced the write (e.g. `cursor-agent` vs `claude-code`), whereas `anonymous` rows are an undifferentiated bucket that operators usually want to surface or block via attribution policy.
+
+Tier resolution surfaces directly in the [Inspector agents view](/inspector/agents): every distinct writer is one row, badged with the tier it resolved to (`hardware`, `software`, `unverified_client`, `anonymous`) plus the signing algorithm and last-seen activity.
+
+inspector.neotoma.io/agents
+
+Inspector
+
+Neotoma
+
+Dashboard
+
+Conversations
+
+Turns
+
+Compliance
+
+Activity
+
+Feedback
+
+Entities
+
+Observations
+
+Sources
+
+Relationships
+
+Graph Explorer
+
+Schemas
+
+Timeline
+
+Interpretations
+
+Agents
+
+Agent grants
+
+Settings
+
+Agents
+
+14 active identities · 8.2k writes · last 30d
+
+hardware (3)software (8)unverified (2)anonymous (1)
+
+| Agent | Tier | Alg | Writes | Last seen |
+| --- | --- | --- | --- | --- |
+| operator (mac · SE)es256:Dr…2Yj | hardware | ES256 | 412 | 10:55 |
+| cursor-agentes256:Bp…4Zq | hardware | ES256 | 2,810 | 12:30 |
+| claude-codeed25519:Aa…7Lk | software | EdDSA | 4,120 | 12:41 |
+| ingest-pipelineed25519:Cq…9Rt | software | EdDSA | 980 | 11:08 |
+| custom-script@myco- | unverified\_client | \- | 18 | Apr 24 |
+| anonymous- | anonymous | \- | 4 | Apr 22 |
+
+Inspector, Agents list. AAuth trust tiers render as inline badges; click through for the per-agent thumbprint, algorithm, attestation outcome, and grants.
+
+◆
+
+## Wire format
+
+AAuth sends three headers on every signed request. The signature components MUST cover `@authority`, `@method`, `@target-uri`, `content-digest` (when there's a body), and the `signature-key` header itself.
+
+Signature: sig1=:AGNlbGtkdHIxMjM4...:
+Signature-Input: sig1=("@authority" "@method" "@target-uri" \\
+                       "content-digest" "signature-key");\\
+                  alg="ed25519";created=1714003200;keyid="..."
+Signature-Key: &lt;base64url(JSON: { jwk, jwt: "&lt;aa-agent+jwt&gt;" })&gt;
+
+The `aa-agent+jwt` agent token uses `typ: "aa-agent+jwt"` and carries:
+
+-   `iss`, issuer / fleet identifier
+-   `sub`, agent identity within the issuer
+-   `iat`, issued-at; checked against the configured AAuth clock-skew window (default 300 s)
+-   `cnf.jwk`, confirmation key (RFC 7638 thumbprint MUST match the signing key)
+-   `cnf.attestation` (optional), hardware attestation envelope (Apple SE, WebAuthn-packed, or TPM 2.0)
+
+Neotoma verifies the signature against the canonical authority configured via `NEOTOMA_AUTH_AUTHORITY`. Using the request `Host` header for verification is explicitly unsafe and rejected.
+
+◆
+
+## Verification cascade
+
+Tier derivation walks the signed payload, then attestation, then the operator allowlist, then the self-reported channels:
+
+Signature header present?
+  no  → clientInfo / X-Client-Name non-generic? → unverified\_client
+                                                | else → anonymous
+  yes → signature verifies against authority + body digest?
+          no  → fall through to clientInfo channel
+          yes → cnf.attestation present?
+                  yes → verifier accepts? → revocation OK? → hardware
+                                          | else → software
+                  no / fails → iss (or iss:sub) in operator allowlist?
+                                yes → operator\_attested
+                                no  → software
+
+Verifier failures never reject the request when the underlying signature is valid, they only prevent tier promotion. The reason is recorded under `attribution.decision` on `GET /session` for debugging.
+
+◆
+
+## Per-request precedence
+
+For each request Neotoma walks these inputs in order; the first populated field at each layer wins. Bearer tokens resolve only `user_id` and never mint a tier above `anonymous` on their own.
+
+AAuth (verified signature + JWT)  → agent\_thumbprint, agent\_sub, agent\_iss,
+                                    agent\_algorithm, agent\_public\_key
+clientInfo (MCP initialize)       → client\_name, client\_version
+X-Client-Name / X-Client-Version  → client\_name, client\_version
+OAuth connection id               → connection\_id
+(nothing)                         → anonymous
+
+◆
+
+## Hardware attestation
+
+When the agent token carries `cnf.attestation`, Neotoma verifies the envelope before promoting the request to `hardware`. The envelope binds the signing key to a hardware root of trust by RFC 7638 thumbprint and a server-recomputed challenge. Supported formats:
+
+-   **`apple-secure-enclave`**, macOS hosts; backed by the Apple Attestation Root (bundled at `config/aauth/apple_attestation_root.pem`).
+-   **`webauthn-packed`**, YubiKey 5 series and any WebAuthn authenticator emitting a `packed` attestation statement.
+-   **`tpm2`**, Linux `/dev/tpmrm0` and Windows TBS / NCrypt; verified against the operator-configured TPM CA bundle.
+
+Verification ordering inside each format: parse statement, extract credential public key, RFC 7638 thumbprint check against `cnf.jwk`, recompute challenge from JWT claims, then chain validation. Each step has a deterministic failure code surfaced via `attestation_outcome`.
+
+◆
+
+## Operator policy
+
+Operators control attribution requirements through environment variables. The active policy is exposed under `policy` on `GET /session`:
+
+-   **`NEOTOMA_ATTRIBUTION_POLICY`** (`allow` | `warn` | `reject`; default `allow`), global behaviour for `anonymous` writes. `reject` returns `HTTP 403 ATTRIBUTION_REQUIRED`; `warn` stamps `X-Neotoma-Attribution-Warning`.
+-   **`NEOTOMA_MIN_ATTRIBUTION_TIER`** (`hardware` | `software` | `unverified_client`), minimum tier required for the policy to be considered satisfied.
+-   **`NEOTOMA_ATTRIBUTION_POLICY_JSON`** , per-path overrides, e.g. `{"observations":"reject","relationships":"warn"}`.
+
+Per-path `reject` always wins over a global `allow`. Per-agent fine-grained capability scoping (`(op, entity_type)` allow-lists) is layered on top via `agent_grant` entities.
+
+Operators can read and edit the active policy without touching env vars from the [Inspector settings page](/inspector/settings/attribution-policy); per-agent grants live alongside the agent in the [Agents view](/inspector/agents).
+
+inspector.neotoma.io/settings#attribution
+
+Inspector
+
+Neotoma
+
+Dashboard
+
+Conversations
+
+Turns
+
+Compliance
+
+Activity
+
+Feedback
+
+Entities
+
+Observations
+
+Sources
+
+Relationships
+
+Graph Explorer
+
+Schemas
+
+Timeline
+
+Interpretations
+
+Agents
+
+Agent grants
+
+Settings
+
+Attribution policy
+
+Global mode
+
+allowwarnreject
+
+Active: warn
+
+Min tier
+
+hardwaresoftwareunverified\_client
+
+Active: software
+
+Per-path overrides
+
+&lt;table class="w-full text-[12px]"&gt;&lt;tbody&gt;&lt;tr class="border-b border-border/40 last:border-0"&gt;&lt;td class="py-1.5 font-mono text-muted-foreground"&gt;/observations&lt;/td&gt;&lt;td class="py-1.5 text-right"&gt;reject&lt;/td&gt;&lt;/tr&gt;&lt;tr class="border-b border-border/40 last:border-0"&gt;&lt;td class="py-1.5 font-mono text-muted-foreground"&gt;/relationships&lt;/td&gt;&lt;td class="py-1.5 text-right"&gt;warn&lt;/td&gt;&lt;/tr&gt;&lt;tr class="border-b border-border/40 last:border-0"&gt;&lt;td class="py-1.5 font-mono text-muted-foreground"&gt;/timeline&lt;/td&gt;&lt;td class="py-1.5 text-right"&gt;warn&lt;/td&gt;&lt;/tr&gt;&lt;tr class="border-b border-border/40 last:border-0"&gt;&lt;td class="py-1.5 font-mono text-muted-foreground"&gt;/sources&lt;/td&gt;&lt;td class="py-1.5 text-right"&gt;allow&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+
+Decision (last 100 requests)
+
+Verified sigs
+
+94
+
+94%
+
+Promoted (HW)
+
+12
+
+attestation OK
+
+Rejected
+
+3
+
+anonymous → /observations
+
+Inspector, Settings · Attribution policy. The same env vars (NEOTOMA\_ATTRIBUTION\_POLICY, NEOTOMA\_MIN\_ATTRIBUTION\_TIER, per-path overrides) rendered as a live operator console with the resolved decision per route.
+
+◆
+
+## Generate keys with the CLI
+
+The Neotoma CLI ships hardware-aware keygen across darwin (Apple Secure Enclave), linux (TPM 2.0), win32 (Windows TBS / NCrypt), and YubiKey 5 series:
+
+\# Software-backed keypair (cross-platform)
+neotoma auth keygen
+
+# Hardware-backed keypair (auto-selects best backend)
+neotoma auth keygen --hardware
+
+# Force a specific hardware backend
+neotoma auth keygen --hardware --backend yubikey
+
+# Inspect resolved trust tier and attestation outcome
+neotoma auth session
+
+Keys are written to `~/.config/neotoma/aauth/signer.json` with a per-backend handle. The agent token is minted on demand and attached to every signed request. `neotoma auth session` renders the same diagnostics that `GET /session` exposes over HTTP.
+
+◆
+
+## Preflight (mandatory for new integrators)
+
+Before enabling writes, call `GET /session` (or the `get_session_identity` MCP tool, or `neotoma auth session`) and confirm:
+
+-   `attribution.decision.signature_verified === true` when AAuth is intended.
+-   `attribution.tier` is `hardware`, `operator_attested`, or `software` for signed clients, or at least `unverified_client` when intentionally relying on `clientInfo` only.
+-   `eligible_for_trusted_writes === true`.
+
+Generic `clientInfo.name` values (`mcp`, `client`, `mcp-client`, `unknown`, `anonymous`, …) are normalised to the `anonymous` tier and WILL fail preflight under any non-`allow` policy.
+
+◆
+
+## Diagnostic surface
+
+Every AAuth verification emits a structured `attribution_decision` log line and exposes the same fields on `GET /session` under `attribution.decision`:
+
+-   `signature_present`, `signature_verified`, `signature_error_code`
+-   `attestation_outcome` (`verified`, `format_unsupported`, `key_binding_failed`, `challenge_mismatch`, `chain_invalid`, …)
+-   `revocation_outcome` (`not_checked`, `live`, `revoked`, `error_skipped`)
+-   `resolved_tier`, final tier stamped onto the request context
+
+The same fields render visually on each agent in the [Inspector agent detail](/inspector/agents): thumbprint, algorithm, attestation envelope, revocation status, resolved tier, and the writes/relationships/sources the agent produced. Every durable row carries this stamp, so any [observation](/inspector/observations-and-sources) or [timeline event](/inspector/timeline) can be filtered or grouped by tier and signing identity after the fact.
+
+◆
+
+## Inspect attribution from the operator console
+
+Everything on this page has a counterpart in the [Inspector](/inspector), Neotoma's read-only operator UI. Use these entry points when debugging an integration or auditing writes:
+
+-   [Agents &amp; grants](/inspector/agents) , every signing identity that ever wrote, with tier badges, thumbprint, algorithm, attestation outcome, last-seen activity, and the per-agent `(op, entity_type)` grant table.
+-   [Settings · Attribution policy](/inspector/settings/attribution-policy) , global mode, minimum tier, and per-path overrides resolved from `NEOTOMA_ATTRIBUTION_POLICY` / `NEOTOMA_MIN_ATTRIBUTION_TIER` / `NEOTOMA_ATTRIBUTION_POLICY_JSON`, with a live decision summary.
+-   [Observations &amp; sources](/inspector/observations-and-sources) , every immutable write tagged with `resolved_tier` and agent identifiers; filter by tier or by `agent_thumbprint`.
+-   [Timeline &amp; interpretations](/inspector/timeline) , chronological view of every signed event across the instance, including verification failures and tier promotions.
+
+◆
+
+## Specs and deeper reading
+
+Each topic below has its own dedicated reference page with the full implementation contract:
+
+-   [AAuth wire format and verification](/aauth/spec) , signature components, trust-tier cascade, JWT contract.
+-   [Attestation](/aauth/attestation), envelope formats, per-format verifiers, revocation policy.
+-   [CLI keys and hardware backends](/aauth/cli-keys) , keygen flows for Apple Secure Enclave, TPM 2.0, Windows TBS, and YubiKey.
+-   [Integration guide](/aauth/integration), end-to-end walkthrough, preflight, diagnostics, transport parity.
+-   [Capabilities](/aauth/capabilities), per-agent `(op, entity_type)` allow-lists via `agent_grant` entities.
+
+See [REST API reference](/api) for HTTP endpoints, [MCP reference](/mcp) for agent-native transport, and [CLI reference](/cli) for keygen and session inspection commands.</pre></div><div role="region" aria-label="Notifications (F8)" tabindex="-1" style="pointer-events: none;"><ol tabindex="-1" class="fixed top-0 z-[100] flex w-full flex-col-reverse p-4 sm:bottom-4 sm:right-4 sm:top-auto sm:flex-col sm:max-h-[calc(100vh-1rem)] sm:overflow-y-auto md:max-w-[420px]"></ol></div></div>
+  
+
+
+</body></html>

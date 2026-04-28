@@ -25,6 +25,7 @@
  * Launchd example: see scripts/cron/com.neotoma.feedback-ingest.plist.template
  */
 
+import { mirrorLocalFeedbackToEntity } from "../../src/services/feedback/mirror_local_to_entity.js";
 import {
   LocalFeedbackStore,
   type LocalFeedbackRecord,
@@ -140,6 +141,10 @@ async function processLocalStore(dryRun: boolean): Promise<void> {
       next_check_suggested_at: deriveNextCheckAt(newStatus, 0, now),
     };
     await store.upsert(updated);
+    await mirrorLocalFeedbackToEntity(updated, {
+      dataSource: `neotoma ingest cron ${now.toISOString().slice(0, 10)}`,
+      userId: updated.submitter_id,
+    });
   }
 }
 

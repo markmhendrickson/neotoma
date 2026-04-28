@@ -38,10 +38,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
     <title>OpenClaw remote setup (HTTP) (Markdown) | Neotoma</title>
-    <script type="module" crossorigin="" src="../../../assets/main-Jf-itxVT.js"></script>
-    <link rel="stylesheet" crossorigin="" href="../../../assets/main-DWQ-Fl-1.css">
+    <script type="module" crossorigin="" src="/assets/main-CaoWcp2k.js"></script>
+    <link rel="stylesheet" crossorigin="" href="/assets/main-BBds_bdF.css">
   
-    <!-- build: local-1776078353914 -->
+    <!-- build: local-1777360387837 -->
       <link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/neotoma-with-openclaw-connect-remote-http">
     <link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/neotoma-with-openclaw-connect-remote-http">
     <link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/neotoma-with-openclaw-connect-remote-http">
@@ -61,7 +61,7 @@
     <div id="root"><iframe title="Markdown capture" aria-hidden="true" width="1280" height="900" class="pointer-events-none fixed left-[-9999px] top-0 z-[-1] border-0 opacity-0" sandbox="allow-same-origin allow-scripts allow-forms"></iframe><div class="min-h-screen bg-background text-foreground"><pre class="whitespace-pre-wrap break-words p-4 font-mono text-[13px] leading-relaxed text-foreground">&lt;!--
   Full-page Markdown export (rendered HTML → GFM).
   Source: https://neotoma.io/ca/neotoma-with-openclaw-connect-remote-http
-  Generated: 2026-04-13T11:07:44.481Z
+  Generated: 2026-04-28T07:16:30.624Z
 --&gt;
 # OpenClaw remote setup (HTTP)
 
@@ -77,17 +77,41 @@ If OpenClaw runs on a different machine or in the cloud, start with local instal
 
 1.  **Install a tunnel provider:** Neotoma's `--tunnel` flag needs either [ngrok](https://ngrok.com/download) or [Cloudflare Tunnel (cloudflared)](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/) installed on your machine. Install one:
     
-    `# ngrok (via Homebrew) brew install ngrok ngrok config add-authtoken &lt;YOUR_NGROK_TOKEN&gt;  # or Cloudflare Tunnel brew install cloudflared`
+    Code snippet
+    
+    Copy the exact snippet shown below.
+    
+    ```
+    # ngrok (via Homebrew)
+    brew install ngrok
+    ngrok config add-authtoken &lt;YOUR_NGROK_TOKEN&gt;
+    
+    # or Cloudflare Tunnel
+    brew install cloudflared
+    ```
     
     ngrok requires a free account and auth token from [dashboard.ngrok.com](https://dashboard.ngrok.com/get-started/your-authtoken). You can set the token as an environment variable instead of running `ngrok config`:
     
-    `# In your shell profile or .env export NGROK_AUTHTOKEN=&lt;YOUR_NGROK_TOKEN&gt;`
+    Code snippet
+    
+    Copy the exact snippet shown below.
+    
+    ```
+    # In your shell profile or .env
+    export NGROK_AUTHTOKEN=&lt;YOUR_NGROK_TOKEN&gt;
+    ```
     
     Cloudflare Tunnel works without an account for quick tunnels. If both providers are installed, Neotoma auto-detects which to use; pass `--tunnel-provider ngrok` or `--tunnel-provider cloudflare` to choose explicitly.
     
 2.  **Start the API server with a tunnel:** the `--tunnel` flag auto-provisions a public HTTPS URL via ngrok or Cloudflare (whichever is installed)
     
-    `neotoma api start --env prod --tunnel`
+    Code snippet
+    
+    Copy the exact snippet shown below.
+    
+    ```
+    neotoma api start --env prod --tunnel
+    ```
     
     The tunnel URL is printed to the console and written to `/tmp/ngrok-mcp-url.txt`. You can also use a reverse proxy or your own domain instead of `--tunnel`.
     
@@ -95,7 +119,14 @@ If OpenClaw runs on a different machine or in the cloud, start with local instal
 
 If MCP is not yet available in your OpenClaw environment, use the Neotoma CLI directly from the same machine as a fallback:
 
-`neotoma store --json='[{"entity_type":"task","title":"Follow up","status":"open"}]' neotoma entities list --type task`
+Code snippet
+
+Copy the exact snippet shown below.
+
+```
+neotoma store --json='[{"entity_type":"task","title":"Follow up","status":"open"}]'
+neotoma entities list --type task
+```
 
 [Back to Neotoma with OpenClaw](/neotoma-with-openclaw) · [Install guide](/install) · [MCP reference](/mcp)</pre></div><div role="region" aria-label="Notifications (F8)" tabindex="-1" style="pointer-events: none;"><ol tabindex="-1" class="fixed top-0 z-[100] flex w-full flex-col-reverse p-4 sm:bottom-4 sm:right-4 sm:top-auto sm:flex-col sm:max-h-[calc(100vh-1rem)] sm:overflow-y-auto md:max-w-[420px]"></ol></div></div>
   

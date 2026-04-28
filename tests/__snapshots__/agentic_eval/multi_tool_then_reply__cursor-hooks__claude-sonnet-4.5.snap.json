@@ -1,0 +1,268 @@
+{
+  "requests": [
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "content": "Find the auth flow in this repo.",
+            "cwd": "/Users/markmhendrickson/repos/neotoma",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_message",
+            "harness": "cursor",
+            "hook_event": "beforeSubmitPrompt",
+            "role": "user",
+            "sender_kind": "user",
+            "turn_key": "multi_tool_then_reply__cursor-hooks__claude-sonnet-4.5:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:1>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "conversation_id": "<id:2>",
+            "cwd": "/Users/markmhendrickson/repos/neotoma",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_turn",
+            "harness": "cursor",
+            "hook_event": "before_submit_prompt",
+            "hook_events": [
+              "before_submit_prompt"
+            ],
+            "model": "claude-sonnet-4.5",
+            "session_id": "<id:2>",
+            "started_at": "<ts>",
+            "turn_id": "<id:3>",
+            "turn_key": "multi_tool_then_reply__cursor-hooks__claude-sonnet-4.5:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:4>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "cwd": "/Users/markmhendrickson/repos/neotoma",
+            "data_source": "cursor-hook",
+            "entity_type": "tool_invocation",
+            "harness": "cursor",
+            "has_error": false,
+            "hook_event": "postToolUse",
+            "input_summary": "{\"path\":\"src/auth/index.ts\"}",
+            "invoked_at": "<ts>",
+            "output_summary": "{\"ok\":true,\"bytes_read\":1024}",
+            "status": null,
+            "tool_name": "Read",
+            "turn_key": "multi_tool_then_reply__cursor-hooks__claude-sonnet-4.5:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:5>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "cwd": "/Users/markmhendrickson/repos/neotoma",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_turn",
+            "harness": "cursor",
+            "hook_event": "post_tool_use",
+            "hook_events": [
+              "post_tool_use"
+            ],
+            "model": "claude-sonnet-4.5",
+            "neotoma_tool_failures": 0,
+            "retrieve_calls": 0,
+            "session_id": "<id:2>",
+            "store_structured_calls": 0,
+            "tool_invocation_count": 1,
+            "turn_id": "<id:3>",
+            "turn_key": "multi_tool_then_reply__cursor-hooks__claude-sonnet-4.5:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:4>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "cwd": "/Users/markmhendrickson/repos/neotoma",
+            "data_source": "cursor-hook",
+            "entity_type": "tool_invocation",
+            "harness": "cursor",
+            "has_error": false,
+            "hook_event": "postToolUse",
+            "input_summary": "{\"pattern\":\"createSession\"}",
+            "invoked_at": "<ts>",
+            "output_summary": "{\"ok\":true,\"matches\":3}",
+            "status": null,
+            "tool_name": "Grep",
+            "turn_key": "multi_tool_then_reply__cursor-hooks__claude-sonnet-4.5:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:6>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "cwd": "/Users/markmhendrickson/repos/neotoma",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_turn",
+            "harness": "cursor",
+            "hook_event": "post_tool_use",
+            "hook_events": [
+              "post_tool_use"
+            ],
+            "model": "claude-sonnet-4.5",
+            "neotoma_tool_failures": 0,
+            "retrieve_calls": 0,
+            "session_id": "<id:2>",
+            "store_structured_calls": 0,
+            "tool_invocation_count": 2,
+            "turn_id": "<id:3>",
+            "turn_key": "multi_tool_then_reply__cursor-hooks__claude-sonnet-4.5:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:4>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "content": "Found 3 references to createSession across src/auth/.",
+            "cwd": "/Users/markmhendrickson/repos/neotoma",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation_message",
+            "harness": "cursor",
+            "hook_event": "stop",
+            "observed_at": "<ts>",
+            "role": "assistant",
+            "sender_kind": "assistant",
+            "turn_key": "multi_tool_then_reply__cursor-hooks__claude-sonnet-4.5:turn-1:assistant"
+          }
+        ],
+        "idempotency_key": "<id:7>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "canonical_name": "Cursor session multi_tool_then_reply__cursor-hooks__claude-sonnet-4.5",
+            "cwd": "/Users/markmhendrickson/repos/neotoma",
+            "data_source": "cursor-hook",
+            "entity_type": "conversation",
+            "harness": "cursor",
+            "hook_event": "stop_backfill",
+            "turn_key": "multi_tool_then_reply__cursor-hooks__claude-sonnet-4.5"
+          }
+        ],
+        "idempotency_key": "<id:8>"
+      }
+    },
+    {
+      "method": "POST",
+      "endpoint": "/store",
+      "body": {
+        "entities": [
+          {
+            "conversation_id": "<id:2>",
+            "cwd": "/Users/markmhendrickson/repos/neotoma",
+            "data_source": "cursor-hook",
+            "diagnosis_confidence": "medium",
+            "ended_at": "<ts>",
+            "entity_type": "conversation_turn",
+            "harness": "cursor",
+            "harness_loop_count": 0,
+            "hook_event": "stop",
+            "hook_events": [
+              "stop"
+            ],
+            "instruction_diagnostics": {
+              "classification": "instruction_delivery_missing_or_stale",
+              "local_build": true,
+              "reason": "Tools ran this turn but no compact reminder was injected — instruction delivery to the agent is likely missing or stale.",
+              "signals": {
+                "had_final_text": true,
+                "model": "claude-sonnet-4.5",
+                "neotoma_connection_failure": false,
+                "neotoma_tool_failures": 0,
+                "reminder_hooks": [],
+                "reminder_injected": false,
+                "tool_invocation_count": 2,
+                "user_message_stored": false
+              }
+            },
+            "missed_steps": [
+              "user_message_store",
+              "user_phase_store_structured"
+            ],
+            "model": "claude-sonnet-4.5",
+            "neotoma_tool_failures": 0,
+            "recommended_repairs": [
+              "Confirm `docs/developer/mcp/instructions.md` is reachable from `src/server.ts#getMcpInteractionInstructions` and reconnect the MCP client to pick up edits.",
+              "Compare the runtime fallback in `src/server.ts` against `docs/developer/mcp/instructions.md`; the fallback should not contradict the canonical contract.",
+              "If running a packaged build, rebuild (`npm run build:server`) so `dist/` ships the latest instruction text."
+            ],
+            "reminder_injected": false,
+            "retrieve_calls": 0,
+            "safety_net_used": true,
+            "session_id": "<id:2>",
+            "status": "backfilled_by_hook",
+            "store_structured_calls": 0,
+            "tool_invocation_count": 2,
+            "turn_id": "<id:3>",
+            "turn_key": "multi_tool_then_reply__cursor-hooks__claude-sonnet-4.5:turn-1"
+          }
+        ],
+        "idempotency_key": "<id:4>"
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "hook": "beforeSubmitPrompt",
+      "exitCode": 0,
+      "output": {}
+    },
+    {
+      "hook": "postToolUse",
+      "exitCode": 0,
+      "output": {}
+    },
+    {
+      "hook": "postToolUse",
+      "exitCode": 0,
+      "output": {}
+    },
+    {
+      "hook": "stop",
+      "exitCode": 0,
+      "output": {}
+    }
+  ]
+}

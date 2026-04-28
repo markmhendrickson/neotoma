@@ -38,10 +38,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
     <title>Events Guide | Store &amp; Retrieve Meetings, Milestones, Outcomes (Markdown) | Neotoma</title>
-    <script type="module" crossorigin="" src="../../../../assets/main-Jf-itxVT.js"></script>
-    <link rel="stylesheet" crossorigin="" href="../../../../assets/main-DWQ-Fl-1.css">
+    <script type="module" crossorigin="" src="/assets/main-CaoWcp2k.js"></script>
+    <link rel="stylesheet" crossorigin="" href="/assets/main-BBds_bdF.css">
   
-    <!-- build: local-1776078353914 -->
+    <!-- build: local-1777360387837 -->
       <link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/types/events">
     <link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/types/events">
     <link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/types/events">
@@ -61,7 +61,7 @@
     <div id="root"><iframe title="Markdown capture" aria-hidden="true" width="1280" height="900" class="pointer-events-none fixed left-[-9999px] top-0 z-[-1] border-0 opacity-0" sandbox="allow-same-origin allow-scripts allow-forms"></iframe><div class="min-h-screen bg-background text-foreground"><pre class="whitespace-pre-wrap break-words p-4 font-mono text-[13px] leading-relaxed text-foreground">&lt;!--
   Full-page Markdown export (rendered HTML → GFM).
   Source: https://neotoma.io/zh/types/events
-  Generated: 2026-04-13T11:08:16.407Z
+  Generated: 2026-04-28T07:17:07.632Z
 --&gt;
 # Events
 
@@ -73,13 +73,19 @@ Store a event with any fields that describe it. Neotoma auto-discovers the schem
 
 MCP
 
+Equivalent MCP example for this entity type.
+
 store\_structured({ entities: \[ { entity\_type: "event", title: "Q4 Planning - Engineering", event\_type: "meeting", date: "2026-03-28T10:00:00Z", participants: \["Sarah Chen", "Alex Rivera"\], outcome: "Agreed on PostgreSQL migration timeline", follow\_ups: \["Draft migration RFC", "Set up staging env"\] } \], idempotency\_key: "event-q4-planning-eng-20260328" })
 
 CLI
 
+Equivalent CLI example for this entity type.
+
 neotoma store --json='\[{ "entity\_type": "event", "title": "Q4 Planning - Engineering", "event\_type": "meeting", "date": "2026-03-28T10:00:00Z", "participants": \["Sarah Chen", "Alex Rivera"\], "outcome": "Agreed on PostgreSQL migration timeline", "follow\_ups": \["Draft migration RFC", "Set up staging env"\] }\]'
 
 REST API
+
+Equivalent REST API example for this entity type.
 
 curl -X POST http://localhost:3080/api/store \\ -H "Content-Type: application/json" \\ -d '{ "entities": \[{ "entity\_type": "event", "title": "Q4 Planning - Engineering", "event\_type": "meeting", "date": "2026-03-28T10:00:00Z", "participants": \["Sarah Chen", "Alex Rivera"\], "outcome": "Agreed on PostgreSQL migration timeline", "follow\_ups": \["Draft migration RFC", "Set up staging env"\] }\] }'
 
@@ -101,9 +107,13 @@ Query events by type, search by keyword, inspect version history, and traverse r
 
 CLI
 
+Equivalent CLI example for this entity type.
+
 \# List recent events neotoma entities list --type event # Search by title neotoma entities search --query "Q4 Planning" --type event # See how meeting notes evolved neotoma observations list --entity-id &lt;entity\_id&gt; # Find linked participants and follow-up tasks neotoma relationships list --entity-id &lt;entity\_id&gt;
 
 MCP
+
+Equivalent MCP example for this entity type.
 
 // Find by title retrieve\_entity\_by\_identifier({ identifier: "Q4 Planning - Engineering", entity\_type: "event" }) // List events in a date range list\_timeline\_events({ entity\_type: "event", start\_date: "2026-03-01", end\_date: "2026-03-31" }) // Expand related entities retrieve\_related\_entities({ entity\_id: "&lt;entity\_id&gt;", relationship\_types: \["REFERS\_TO"\] })
 

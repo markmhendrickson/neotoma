@@ -265,3 +265,89 @@ export async function snapshotOnUpdate(
 
   return { applied: true, previousSnapshot: snapshot, correctionResult };
 }
+
+// ---------------------------------------------------------------------------
+// Per-turn telemetry: conversation_turn
+// ---------------------------------------------------------------------------
+
+export interface ConversationTurnInput {
+  sessionId: string;
+  turnId: string;
+  hookEvent?: string;
+  harness?: string;
+  harnessVersion?: string;
+  model?: string;
+  status?: string;
+  conversationEntityId?: string;
+  missedSteps?: string[];
+  toolInvocationCount?: number;
+  storeStructuredCalls?: number;
+  retrieveCalls?: number;
+  neotomaToolFailures?: number;
+  harnessLoopCount?: number;
+  injectedContextChars?: number;
+  retrievedEntityIds?: string[];
+  storedEntityIds?: string[];
+  failureHintShown?: boolean;
+  safetyNetUsed?: boolean;
+  startedAt?: string;
+  endedAt?: string;
+  cwd?: string;
+  extra?: Record<string, unknown>;
+  idempotencyKey?: string;
+}
+
+export interface ConversationTurnResult {
+  entityId?: string;
+}
+
+/**
+ * Append an observation to the per-turn `conversation_turn` entity.
+ *
+ * Each hook in the turn lifecycle calls this with the subset of fields it
+ * knows. The server reducer collapses every contribution onto a single
+ * entity via the composite identity rule `[session_id, turn_id]`.
+ *
+ * The idempotency key defaults to `conversation-{sessionId}-{turnId}-turn`.
+ */
+export async function recordConversationTurn(
+  transport: Pick<NeotomaTransport, "store">,
+  input: ConversationTurnInput,
+): Promise<ConversationTurnResult> {
+  if (!input.sessionId || !input.turnId) return {};
+  const turnKey = `${input.sessionId}:${input.turnId}`;
+  const entity: StoreEntityInput = {
+    entity_type: "conversation_turn",
+    session_id: input.sessionId,
+    turn_id: input.turnId,
+    turn_key: turnKey,
+  };
+  if (input.harness) entity.harness = input.harness;
+  if (input.hookEvent) entity.hook_events = [input.hookEvent];
+  if (input.conversationEntityId) entity.conversation_id = input.conversationEntityId;
+  if (input.harnessVersion) entity.harness_version = input.harnessVersion;
+  if (input.model) entity.model = input.model;
+  if (input.status) entity.status = input.status;
+  if (input.missedSteps) entity.missed_steps = [...input.missedSteps];
+  if (input.toolInvocationCount !== undefined) entity.tool_invocation_count = input.toolInvocationCount;
+  if (input.storeStructuredCalls !== undefined) entity.store_structured_calls = input.storeStructuredCalls;
+  if (input.retrieveCalls !== undefined) entity.retrieve_calls = input.retrieveCalls;
+  if (input.neotomaToolFailures !== undefined) entity.neotoma_tool_failures = input.neotomaToolFailures;
+  if (input.harnessLoopCount !== undefined) entity.harness_loop_count = input.harnessLoopCount;
+  if (input.injectedContextChars !== undefined) entity.injected_context_chars = input.injectedContextChars;
+  if (input.retrievedEntityIds?.length) entity.retrieved_entity_ids = [...input.retrievedEntityIds];
+  if (input.storedEntityIds?.length) entity.stored_entity_ids = [...input.storedEntityIds];
+  if (input.failureHintShown !== undefined) entity.failure_hint_shown = input.failureHintShown;
+  if (input.safetyNetUsed !== undefined) entity.safety_net_used = input.safetyNetUsed;
+  if (input.startedAt) entity.started_at = input.startedAt;
+  if (input.endedAt) entity.ended_at = input.endedAt;
+  if (input.cwd) entity.cwd = input.cwd;
+  if (input.extra) Object.assign(entity, input.extra);
+
+  const idempotencyKey = input.idempotencyKey ?? `conversation-${input.sessionId}-${input.turnId}-turn`;
+  const result = (await transport.store({
+    entities: [entity],
+    idempotency_key: idempotencyKey,
+  })) as StoreResult;
+  return { entityId: result.structured?.entities?.[0]?.entity_id };
+}

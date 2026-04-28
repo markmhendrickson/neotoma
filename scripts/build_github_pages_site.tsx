@@ -95,15 +95,18 @@ const LOCALE_TO_GOOGLE_CODE: Record<SupportedLocale, string> = {
   de: "de",
 };
 
-/** Read Vite build output and convert to relative asset paths for the root. */
+/**
+ * Read Vite build output. Keep bundled entrypoints as root-absolute `/assets/…`
+ * so every static HTML file (/, nested routes, 404) resolves the same chunk URLs.
+ * Relative `assets/` or `../assets/` breaks when prerendered HTML drifts from the
+ * deployed `public/assets` manifest (nested pages showed wrong hashes on neotoma.io).
+ */
 function readPublicHtml(): string {
   if (!fs.existsSync(publicIndex)) {
     throw new Error("Missing public/index.html (run 'npm run build:ui' first).");
   }
   const html = fs.readFileSync(publicIndex, "utf-8");
-  let out = html
-    .replaceAll('src="/assets/', 'src="assets/')
-    .replaceAll('href="/assets/', 'href="assets/');
+  let out = html;
   const buildComment = `\n    <!-- build: ${buildId} -->`;
   if (out.includes("</head>")) {
     out = out.replace("</head>", `${buildComment}\n  </head>`);
@@ -111,20 +114,29 @@ function readPublicHtml(): string {
   return out;
 }
 
-/**
- * Build HTML for a specific route. Subpages live in site_pages/{slug}/index.html
- * so asset paths must go up one directory level (../assets/).
- */
+/** Collapse `../../../assets/` to `/assets/` (Playwright serializes root `/assets/` as `../assets/` on nested URLs). */
+function normalizeBundledAssetPaths(html: string): string {
+  return html.replace(/(\.\.\/)+assets\//g, "/assets/");
+}
+
+/** Final pass: normalize every emitted HTML file (prerender + any stale copies). */
+function finalizeBundledAssetPathsInAllHtml(): void {
+  const walk = (dir: string) => {
+    for (const name of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, name.name);
+      if (name.isDirectory()) walk(p);
+      else if (name.isFile() && name.name.endsWith(".html")) {
+        const html = fs.readFileSync(p, "utf-8");
+        const next = normalizeBundledAssetPaths(html);
+        if (next !== html) fs.writeFileSync(p, next, "utf-8");
+      }
+    }
+  };
+  walk(outputDir);
+}
+
 function buildHtmlForRoute(rootHtml: string, routePath: string): string {
-  let html = injectRouteMetaIntoHtml(rootHtml, routePath);
-  if (routePath !== "/") {
-    const depth = routePath.replace(/^\//, "").split("/").filter(Boolean).length;
-    const relativePrefix = "../".repeat(depth);
-    html = html
-      .replaceAll('src="assets/', `src="${relativePrefix}assets/`)
-      .replaceAll('href="assets/', `href="${relativePrefix}assets/`);
-  }
-  return html;
+  return injectRouteMetaIntoHtml(rootHtml, routePath);
 }
 
 function getOutputPathForRoute(routePath: string): string {
@@ -204,13 +216,13 @@ async function prerenderHtmlRoutes(routePaths: readonly string[]): Promise<void>
       const targetUrl = `${server.origin}${routePath}`;
       await page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
       await translatePageForRoute(page, routePath);
-      const renderedHtml = await page.content();
+      const renderedHtml = normalizeBundledAssetPaths(await page.content());
       fs.writeFileSync(getOutputPathForRoute(routePath), `<!DOCTYPE html>\n${renderedHtml}\n`, "utf-8");
     }
 
     await page.goto(`${server.origin}/404`, { waitUntil: "domcontentloaded", timeout: 30000 });
     await page.waitForTimeout(250);
-    const notFoundHtml = await page.content();
+    const notFoundHtml = normalizeBundledAssetPaths(await page.content());
     fs.writeFileSync(notFoundFile, `<!DOCTYPE html>\n${notFoundHtml}\n`, "utf-8");
   } finally {
     await page.close();
@@ -380,6 +392,9 @@ async function main() {
     throw new Error("Missing public/assets (run 'npm run build:ui' first).");
   }
   const outputAssetsDir = path.join(outputDir, "assets");
+  if (fs.existsSync(outputAssetsDir)) {
+    fs.rmSync(outputAssetsDir, { recursive: true, force: true });
+  }
   fs.cpSync(publicAssetsDir, outputAssetsDir, { recursive: true });
 
   const rootHtml = readPublicHtml();
@@ -437,6 +452,7 @@ async function main() {
     console.log(`Copied llms.txt: ${path.relative(repoRoot, llmsTxtDest)}`);
   }
   await prerenderHtmlRoutes(allStaticRoutePaths);
+  finalizeBundledAssetPathsInAllHtml();
 
   console.log(`Built site page: ${path.relative(repoRoot, outputFile)}`);
   console.log(`Built ${routeCount} route pages (fully pre-rendered HTML)`);

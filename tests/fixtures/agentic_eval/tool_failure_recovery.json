@@ -1,0 +1,45 @@
+{
+  "meta": {
+    "id": "tool_failure_recovery",
+    "description": "A failing tool triggers postToolUseFailure. The hook stores a context_event observation describing the failure and increments neotoma_tool_failures on the turn, but it MUST NOT trigger compliance backfill on its own (compliance is solely the stop hook's job).",
+    "harnesses": ["cursor-hooks"],
+    "models": ["composer-2", "gpt-5.5-fast", "claude-haiku-4", "claude-sonnet-4.5", "gpt-5.5-medium"],
+    "tags": ["error-handling", "turn-lifecycle"]
+  },
+  "events": [
+    {
+      "hook": "beforeSubmitPrompt",
+      "payload": { "prompt": "Read /does/not/exist.txt" }
+    },
+    {
+      "hook": "postToolUseFailure",
+      "payload": {
+        "tool_name": "Read",
+        "tool_input": { "path": "/does/not/exist.txt" },
+        "tool_error": "ENOENT: no such file or directory"
+      }
+    },
+    {
+      "hook": "stop",
+      "payload": { "text": "That file does not exist; please check the path." }
+    }
+  ],
+  "assertions": {
+    "default": [
+      {
+        "type": "entity_stored",
+        "entity_type": "conversation_message",
+        "where": { "role": "user" }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "conversation_message",
+        "where": { "role": "assistant" }
+      },
+      {
+        "type": "entity_stored",
+        "entity_type": "conversation_turn"
+      }
+    ]
+  }
+}

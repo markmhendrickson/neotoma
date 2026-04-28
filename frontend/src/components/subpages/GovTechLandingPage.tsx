@@ -16,9 +16,9 @@ import {
   Upload,
   UserCheck,
 } from "lucide-react";
-import { VerticalLandingShell, type VerticalConfig } from "./vertical_landing/VerticalLandingShell";
+import { UseCaseLandingShell, type UseCaseConfig } from "./use_case_landing/UseCaseLandingShell";
 
-const CONFIG: VerticalConfig = {
+const CONFIG: UseCaseConfig = {
   accentColor: "slate",
   badgeIcon: Landmark,
   badgeText: "Neotoma for Public Sector",
@@ -247,5 +247,5 @@ const CONFIG: VerticalConfig = {
 };
 
 export function GovTechLandingPage() {
-  return <VerticalLandingShell config={CONFIG} />;
+  return <UseCaseLandingShell config={CONFIG} />;
 }

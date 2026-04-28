@@ -2495,6 +2495,9 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        /** @description Resolved NEOTOMA_ENV for this process (development or production). */
+                        neotoma_env?: string;
+                    } & {
                         [key: string]: unknown;
                     };
                 };

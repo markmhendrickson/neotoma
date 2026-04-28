@@ -38,10 +38,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
     <title>CLI Reference (Markdown) | Neotoma</title>
-    <script type="module" crossorigin="" src="../../../assets/main-Jf-itxVT.js"></script>
-    <link rel="stylesheet" crossorigin="" href="../../../assets/main-DWQ-Fl-1.css">
+    <script type="module" crossorigin="" src="/assets/main-CaoWcp2k.js"></script>
+    <link rel="stylesheet" crossorigin="" href="/assets/main-BBds_bdF.css">
   
-    <!-- build: local-1776078353914 -->
+    <!-- build: local-1777360387837 -->
       <link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/cli">
     <link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/cli">
     <link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/cli">
@@ -61,7 +61,7 @@
     <div id="root"><iframe title="Markdown capture" aria-hidden="true" width="1280" height="900" class="pointer-events-none fixed left-[-9999px] top-0 z-[-1] border-0 opacity-0" sandbox="allow-same-origin allow-scripts allow-forms"></iframe><div class="min-h-screen bg-background text-foreground"><pre class="whitespace-pre-wrap break-words p-4 font-mono text-[13px] leading-relaxed text-foreground">&lt;!--
   Full-page Markdown export (rendered HTML → GFM).
   Source: https://neotoma.io/de/cli
-  Generated: 2026-04-13T11:07:27.594Z
+  Generated: 2026-04-28T07:15:51.902Z
 --&gt;
 # Command-line interface (CLI)
 
@@ -217,6 +217,8 @@ Local CLI commands run without login in development. For production or MCP OAuth
 -   `neotoma auth mcp-token` - print key-derived MCP token (when encryption is enabled)
 -   `neotoma auth logout` - clear stored OAuth credentials
 
+For agent identity (cryptographically verifiable writes), use `neotoma auth keygen` (software or hardware-backed) and `neotoma auth session` to inspect the resolved trust tier. See [AAuth reference](/aauth) for the full agent authentication contract.
+
 ◆
 
 ## Storage and configuration
@@ -229,7 +231,7 @@ CLI config is stored at `~/.config/neotoma/config.json`. Run `neotoma storage in
 
 `neotoma backup create` creates a timestamped backup of the database, sources, and logs with a `manifest.json` containing checksums. `neotoma backup restore --from &lt;dir&gt;` restores a backup into the data directory. Encrypted data stays encrypted; preserve the key file or mnemonic.
 
-See [MCP reference](/mcp) for agent-native transport, [REST API reference](/api) for HTTP endpoints, and [troubleshooting](/troubleshooting) for common failure modes.</pre></div><div role="region" aria-label="Notifications (F8)" tabindex="-1" style="pointer-events: none;"><ol tabindex="-1" class="fixed top-0 z-[100] flex w-full flex-col-reverse p-4 sm:bottom-4 sm:right-4 sm:top-auto sm:flex-col sm:max-h-[calc(100vh-1rem)] sm:overflow-y-auto md:max-w-[420px]"></ol></div></div>
+See [MCP reference](/mcp) for agent-native transport, [REST API reference](/api) for HTTP endpoints, [AAuth reference](/aauth) for agent identity, and [troubleshooting](/troubleshooting) for common failure modes.</pre></div><div role="region" aria-label="Notifications (F8)" tabindex="-1" style="pointer-events: none;"><ol tabindex="-1" class="fixed top-0 z-[100] flex w-full flex-col-reverse p-4 sm:bottom-4 sm:right-4 sm:top-auto sm:flex-col sm:max-h-[calc(100vh-1rem)] sm:overflow-y-auto md:max-w-[420px]"></ol></div></div>
   
 
 

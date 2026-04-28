@@ -41,7 +41,7 @@ export function getLocalizedDocNavCategories(dict: LocaleDictionary) {
     Integrations: dict.categoryIntegrationGuides,
     External: dict.categoryExternal,
     Compare: dict.categoryCompare,
-    Verticals: dict.categoryVerticals,
+    "Use Cases": dict.categoryUseCases,
   };
 
   const itemLabelByHref: Record<string, string> = {

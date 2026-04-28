@@ -18,7 +18,7 @@ neotoma store --json='[{"entity_type":"contact","name":"Ana Rivera","office_city
 neotoma store --json='[{"entity_type":"contact","name":"Ana Rivera","office_city":"London"}]'
 
 # Query canonical resolved state
-neotoma entities search --query "Ana Rivera" --type contact`}</pre>
+neotoma entities search --query "Ana Rivera" --entity-type contact`}</pre>
       <p className="text-[15px] leading-7 mb-4">
         Deterministic merge logic resolves conflicts reproducibly.{" "}
         <Link to="/schema-constraints" className="text-foreground underline hover:text-foreground">

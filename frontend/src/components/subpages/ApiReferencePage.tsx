@@ -54,7 +54,7 @@ export function ApiReferencePage() {
 
       <h2 className="text-[18px] font-medium tracking-[-0.01em] mt-8 mb-3">Authentication</h2>
       <p className="text-[15px] leading-7 mb-4">
-        All endpoints except <code>/health</code> and <code>/openapi.yaml</code> require a Bearer token:
+        Most write endpoints require authentication. Discovery routes like <code>/health</code>, <code>/server-info</code>, and <code>/.well-known/*</code> are unauthenticated. When authentication is enabled, include a Bearer token:
       </p>
       <pre className="rounded-lg border code-block-palette p-4 overflow-x-auto font-mono text-[14px] whitespace-pre-wrap break-words mb-4">{`Authorization: Bearer <NEOTOMA_BEARER_TOKEN>`}</pre>
       <ul className="list-none pl-0 space-y-2 mb-6">
@@ -100,10 +100,11 @@ curl -X POST http://localhost:3080/get_entity_snapshot \\
   -H "Content-Type: application/json" \\
   -d '{"entity_id":"<entity_id>"}'
 
-# Upload a file
-curl -X POST http://localhost:3080/upload_file \\
+# Store a file with entities (unified store)
+curl -X POST http://localhost:3080/store \\
   -H "Authorization: Bearer $NEOTOMA_BEARER_TOKEN" \\
-  -F "file=@document.pdf"
+  -H "Content-Type: application/json" \\
+  -d '{"entities":[{"entity_type":"note","title":"Meeting notes"}],"file_path":"/path/to/document.pdf"}'
 
 # Health check (no auth required)
 curl http://localhost:3080/health`}</pre>
@@ -171,8 +172,8 @@ curl http://localhost:3080/health`}</pre>
 
       <h2 className="text-[18px] font-medium tracking-[-0.01em] mt-8 mb-3">File operations</h2>
       <p className="text-[15px] leading-7 mb-4">
-        Upload files via <code>POST /upload_file</code> (multipart/form-data) or
-        the unified <code>POST /store</code> with structured entities. File size limit: 50 MB.
+        Upload files via the unified <code>POST /store</code> (with <code>file_path</code> or <code>file_content</code> + <code>mime_type</code>)
+        or <code>POST /store/unstructured</code> for raw file ingestion. File size limit: 50 MB.
         Retrieve signed URLs via <code>GET /get_file_url?file_path=...</code> (default expiry: 1 hour).
       </p>
 

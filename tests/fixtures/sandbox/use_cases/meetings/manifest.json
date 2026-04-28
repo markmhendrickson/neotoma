@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0",
+  "description": "Meetings use case sandbox seed.",
+  "agent_identities": [
+    {
+      "agent_sub": "sandbox-agent-meetings@neotoma.sandbox",
+      "client_name": "sandbox-seed-meetings",
+      "client_version": "0.1.0",
+      "label": "Meetings seed runner"
+    }
+  ],
+  "entity_batches": [],
+  "unstructured_sources": [],
+  "excluded_fixtures": []
+}

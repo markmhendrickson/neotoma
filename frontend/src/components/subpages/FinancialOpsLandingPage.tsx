@@ -20,9 +20,9 @@ import {
   Upload,
   Waypoints,
 } from "lucide-react";
-import { VerticalLandingShell, type VerticalConfig } from "./vertical_landing/VerticalLandingShell";
+import { UseCaseLandingShell, type UseCaseConfig } from "./use_case_landing/UseCaseLandingShell";
 
-const CONFIG: VerticalConfig = {
+const CONFIG: UseCaseConfig = {
   accentColor: "teal",
   badgeIcon: Scale,
   badgeText: "Neotoma for Financial Ops",
@@ -264,5 +264,5 @@ const CONFIG: VerticalConfig = {
 };
 
 export function FinancialOpsLandingPage() {
-  return <VerticalLandingShell config={CONFIG} />;
+  return <UseCaseLandingShell config={CONFIG} />;
 }

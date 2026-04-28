@@ -40,11 +40,11 @@ Neotoma serves both human-in-the-loop workflows (people using AI tools) and agen
 
 **Substrate Positioning in LLM Stack:**
 
-Neotoma positions as the substrate layer beneath the emerging "LLM app layer" (applications like Cursor that orchestrate LLM calls for specific verticals). As [Andrej Karpathy observes in his 2025 LLM Year in Review](https://x.com/karpathy/status/2002118205729562949), LLM labs produce generally capable models, but LLM apps "organize, finetune and actually animate teams of them into deployed professionals in specific verticals by supplying private data, sensors and actuators and feedback loops." Neotoma provides that critical "private data" component—the structured memory substrate that LLM app layers depend on for effective context engineering.
+Neotoma positions as the substrate layer beneath the emerging "LLM app layer" (applications like Cursor that orchestrate LLM calls for specific use cases). As [Andrej Karpathy observes in his 2025 LLM Year in Review](https://x.com/karpathy/status/2002118205729562949), LLM labs produce generally capable models, but LLM apps "organize, finetune and actually animate teams of them into deployed professionals in specific verticals by supplying private data, sensors and actuators and feedback loops." Neotoma provides that critical "private data" component—the structured memory substrate that LLM app layers depend on for effective context engineering.
 
 **LLM Stack Architecture:**
 - **LLM Labs** (OpenAI, Anthropic, Google): Produce foundation models
-- **LLM App Layer** (Cursor, vertical-specific apps): Orchestrate LLM calls, provide context engineering, application-specific GUIs
+- **LLM App Layer** (Cursor, use-case-specific apps): Orchestrate LLM calls, provide context engineering, application-specific GUIs
 - **Neotoma (State Layer)**: Provides structured personal data substrate—the private data that enables LLM apps to be effective
 
 **vs. Provider Memory:** ChatGPT, Claude, and Gemini offer conversation-only memory (platform-locked, provider-controlled). Neotoma provides structured personal data memory with entity resolution, timelines, and cross-platform access via MCP.

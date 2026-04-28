@@ -105,12 +105,12 @@ Neotoma `0.4.1` tightens the release-prep workflow, adds a safer SQLite recovery
 - `7119cac` docs(site): ICP paths, marketing pages, workflows, and site export refresh
 - `5f1f004` Add site marketing pages, markdown hub, and SEO dev tooling
 - `6738fb5` chore(docs): bump docs/private submodule (Isaac CD trilogy + persona)
-- `1b29ead` feat(site): healthcare, gov, customer-ops, logistics verticals; private doc submodule
-- `ea333c2` refine(site): vertical landing shell UX and agent-auth page
+- `1b29ead` feat(site): healthcare, gov, customer-ops, logistics use cases; private doc submodule
+- `ea333c2` refine(site): use-case landing shell UX and agent-auth page
 - `a6ad85a` fix(site): ship AgentAuthLandingPage and full-page segment for /agent-auth
-- `8fee422` feat(site): vertical index + landings, marketing full-page shell
+- `8fee422` feat(site): use-case index + landings, marketing full-page shell
 - `1485d9f` ci(dev-pages): install Playwright Chromium before site prerender build
-- `9e1f86e` feat(site): CRM/compliance verticals, timeline/schema, docs, scripts
+- `9e1f86e` feat(site): CRM/compliance use cases, timeline/schema, docs, scripts
 - `49edfe4` Release v0.3.11: site, docs, MCP/ChatGPT integration
 - `2f395c6` Prepare v0.3.10 patch release metadata.
 - `c213566` fix seo title on basename-root detail pages
