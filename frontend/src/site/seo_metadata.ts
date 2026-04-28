@@ -1383,6 +1383,17 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Use Cases", path: "/use-cases" },
     ],
   },
+  "/verticals": {
+    title: "Use Cases (redirect) | Neotoma",
+    description:
+      "Legacy path /verticals redirects to /use-cases. Bookmarks and inbound links continue to resolve while the canonical use-case hub lives at /use-cases.",
+    robots: "noindex,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Use Cases", path: "/use-cases" },
+    ],
+  },
   "/crypto-engineering": {
     title:
       "Neotoma for Crypto & Security-Sensitive Engineering | Agent-Session Replay and Review-Cost Reduction",

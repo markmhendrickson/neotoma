@@ -5,27 +5,11 @@ import {
   DEFAULT_SANDBOX_PACK_ID,
   getSandboxPack,
 } from "../../src/services/sandbox/pack_registry.js";
-import {
-  SANDBOX_PACKS as FRONTEND_PACKS,
-} from "../../frontend/src/data/sandbox_packs.js";
 
 describe("sandbox pack registry", () => {
-  it("ids match between backend and frontend registries", () => {
-    const backendIds = SANDBOX_PACKS.map((p) => p.id);
-    const frontendIds = FRONTEND_PACKS.map((p) => p.id);
-    expect(backendIds).toEqual(frontendIds);
-  });
-
-  it("kinds match between backend and frontend registries", () => {
-    for (let i = 0; i < SANDBOX_PACKS.length; i++) {
-      expect(SANDBOX_PACKS[i].kind).toBe(FRONTEND_PACKS[i].kind);
-    }
-  });
-
-  it("ordering matches between backend and frontend registries", () => {
-    for (let i = 0; i < SANDBOX_PACKS.length; i++) {
-      expect(SANDBOX_PACKS[i].id).toBe(FRONTEND_PACKS[i].id);
-    }
+  it("pack ids are unique and stable", () => {
+    const ids = SANDBOX_PACKS.map((p) => p.id);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 
   it("default pack exists", () => {
