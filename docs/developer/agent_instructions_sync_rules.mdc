@@ -16,7 +16,7 @@ The two files governed by this rule:
 - `docs/developer/mcp/instructions.md` — loaded at runtime by `getMcpInteractionInstructions()` in `src/server.ts`; sent verbatim to MCP clients
 - `docs/developer/cli_agent_instructions.md` — source of truth for CLI agent rules; applied to `.cursor/rules/neotoma_cli.mdc`, `.claude/rules/`, and `.codex/` by `neotoma cli-instructions check`
 
-Both files are organized under the same ten bracket-labelled sections in the same turn-lifecycle order: `[TURN LIFECYCLE]`, `[STORE RECIPES]` (+ subsections `user-phase`, `attachment`, `screenshot/image`, `chat details and fallbacks`), `[RETRIEVAL]`, `[PROVENANCE]`, `[TASKS & COMMITMENTS]`, `[ENTITY TYPES & SCHEMA]`, `[COMMUNICATION & DISPLAY]`, `[CONVENTIONS]`, `[ERRORS & RECOVERY]`, `[ONBOARDING]`. The anchor table below uses section-qualified rule names so each atomic rule maps 1:1 between the two files.
+Both files are organized under the same bracket-labelled sections in the same turn-lifecycle order: `[TURN LIFECYCLE]`, `[STORE RECIPES]` (+ subsections `user-phase`, `attachment`, `screenshot/image`, `chat details and fallbacks`), `[RETRIEVAL]`, `[PROVENANCE]`, `[TASKS & COMMITMENTS]`, `[ENTITY TYPES & SCHEMA]`, `[COMMUNICATION & DISPLAY]`, `[ATTRIBUTION & AGENT IDENTITY]`, `[CONVENTIONS]`, `[FEEDBACK REPORTING]`, `[QA REFLECTION]`, `[ERRORS & RECOVERY]`, `[ONBOARDING]`. The anchor table below uses section-qualified rule names so each atomic rule maps 1:1 between the two files.
 
 For the broader architectural touchpoints that surround instruction changes (OpenAPI spec updates, contract mappings, error envelopes, release discipline), see `docs/architecture/change_guardrails_rules.mdc`.
 
@@ -52,7 +52,7 @@ Each atomic rule below exists in both files with transport-appropriate wording. 
 | 7a | Step 5b.1 — Reply-cited entity edges (REFERS_TO from assistant agent_message to cited/produced entities, with dedup) | `Step 5b.1 — Reply-cited entity edges` | **Step 5b.1 — Reply-cited entity edges** bullet |
 | 8 | Step 5c — Closing store skip / forbidden clauses | `Step 5c — Closing store skip/forbidden` | **Step 5c — Closing store skip/forbidden** bullet |
 | 9 | Rapid-fire / edit-heavy sessions (batch cadence, closing-store invariant) | `Rapid-fire and edit-heavy sessions` | **Rapid-fire and edit-heavy sessions** bullet |
-| 10 | Backfill after persistence gap / /learn | `Backfill` | **Backfill** bullet |
+| 10 | Backfill after persistence gap / /learn / compliance pass, exact visible turn content when available | `Backfill` | **Backfill** bullet |
 
 ### [STORE RECIPES]
 
@@ -72,7 +72,8 @@ Each atomic rule below exists in both files with transport-appropriate wording. 
 | 16 | Relationships (PART_OF + REFERS_TO for created and updated entities, with dedup) | `Relationships` | **Relationships** bullet |
 | 17 | Extraction (descriptive entity_type, no schema lookup) | `Extraction` | **Extraction** bullet |
 | 18 | `idempotency_key` format | `idempotency_key:` | **idempotency_key** bullet |
-| 18a | Human-readable chat naming (`agent_message.canonical_name`, `conversation.title`, and canonical-name scope) | `Naming` + `Canonical-name scope` | **Naming** + **Canonical-name scope** bullets |
+| 18a | Human-readable chat naming through schema fields (`conversation.title`, `conversation_message.content`, labels via `title`/`name`/`summary`; `canonical_name` is resolver output and should not be sent unless explicitly declared by the schema) | `Naming` + `Canonical-name scope` | **Naming** + **Canonical-name scope** bullets |
+| 18b | Chat context scope (bounded host-provided context; stable conversation fields; volatile conversation_turn fields; repository/project REFERS_TO; never identity-bearing; no raw git status/terminal/file/secrets by default) | `Chat context scope` | **Chat context scope** bullet |
 
 #### [STORE RECIPES] attachment
 
@@ -154,7 +155,7 @@ Each atomic rule below exists in both files with transport-appropriate wording. 
 | 53 | User identity (store as contact/person same turn) | `User identity` | **User identity** bullet |
 | 54 | Extract-all (people, tasks, events, …, places; container+asset EMBEDS) | `Extract-all` | **Extract-all** bullet |
 | 55 | No-data bootstrap / onboarding discovery entry | (covered by `[ONBOARDING]` Discovery flow) | **No-data bootstrap and onboarding discovery** bullet |
-| 56 | Display rule — section render (🧠 Neotoma heading + HR, bookkeeping carve-out) | `Display rule — section render` | **Display rule — section render** bullet |
+| 56 | Display rule — section render (🧠 Neotoma heading includes full conversation canonical_name + entity_id, HR, bookkeeping carve-out) | `Display rule — section render` | **Display rule — section render** bullet |
 | 57 | Display rule — groups (Created / Updated / Retrieved, non-empty only) | `Display rule — groups` | **Display rule — groups** bullet |
 | 58 | Display rule — store disambiguation (store→Created/Updated, never Retrieved) | `Display rule — store disambiguation` | **Display rule — store disambiguation** bullet |
 | 59 | Display rule — bullet format (emoji + label + (`entity_type`)) | `Display rule — bullet format` | **Display rule — bullet format** bullet |
@@ -182,6 +183,18 @@ Each atomic rule below exists in both files with transport-appropriate wording. 
 | 72d | Commit-mode store silent-failure guard: when `/store` returns `entities_created=0` with no resolved entities and `replayed != true`, CLI emits stderr warning (flatten `attributes`, check user scope, check schema). | n/a (CLI-only UX; MCP clients surface error envelopes directly) | **Silent-failure guard** bullet |
 | 72e | `api start --env prod --watch` opt-in on source checkouts (v0.5.2+): flag is observable and preserves current watcher routing; implicit path prints a stderr deprecation line announcing the v0.6.0 flip to `start:api:prod`; json mode suppresses the line; no effect on installed-package or tunnel paths. | n/a (CLI-only; MCP has no server-lifecycle surface) | **`api start --env prod --watch` (source checkouts only)** bullet |
 | 72f | Feedback reporting retention (`submit_feedback` result must be stored in Neotoma with `feedback_id` + `access_token` until terminal state / verification closeout) | `[FEEDBACK REPORTING]` → `Immediately after submit_feedback returns` | **Feedback reporting retention** bullet |
+
+### [QA REFLECTION]
+
+| # | Behavior | MCP anchor | CLI anchor |
+|---|---|---|---|
+| 72g | QA reflection scope (inside Neotoma repo: fix turn-based Neotoma issues directly when safe; outside/package context: report product/tooling/doc issues via feedback and avoid consumer-project edits) | `[QA REFLECTION]` → `Scope` | `### [QA REFLECTION]` → **Scope** bullet |
+| 72h | Session-start health check for source checkouts (type cache, duplicate/test-artifact/orphan checks, bounded-eventual awareness) | `Session-start health check (source checkout only)` | **Session-start health check (source checkout only)** bullet |
+| 72i | Per-turn self-audit tiers (interaction efficiency, data quality, interpretation fidelity, database health) | `Per-turn self-audit` | **Per-turn self-audit** bullet |
+| 72j | Severity classification and in-turn repair/surfacing requirements | `Severity classification` | **Severity classification** bullet |
+| 72k | Issues and repairs in the `🧠 Neotoma` turn report, with durable repair capture when appropriate | `Issues and repairs` | **Issues and repairs** bullet |
+| 72l | Durable enhancement ladder (inside repo: instructions first, re-test, schema-agnostic product fix, ask for schema/domain-specific changes; outside repo: submit_feedback + redacted reproduction + upgrade guidance) | `Durable enhancement ladder` | **Durable enhancement ladder** bullet |
+| 72m | Feedback-tool reporting display and obligation (every Neotoma product/tooling/doc/schema-instruction `Issues` item needs either local fix inside repo or same-turn submit_feedback outside repo; skipped/local-fix decisions appear in Feedback group; token privacy) | `Feedback-tool reporting` | **Feedback-tool reporting** bullet |
 
 ### [ERRORS & RECOVERY]
 
@@ -232,7 +245,7 @@ When `docs/developer/cli_agent_instructions.md` changes:
 ## Constraints
 
 - MUST update both files when behavioral instructions change in either one
-- MUST keep the section-label order identical between files (ten labels: `[TURN LIFECYCLE]`, `[STORE RECIPES]` (+ subsections), `[RETRIEVAL]`, `[PROVENANCE]`, `[TASKS & COMMITMENTS]`, `[ENTITY TYPES & SCHEMA]`, `[COMMUNICATION & DISPLAY]`, `[CONVENTIONS]`, `[ERRORS & RECOVERY]`, `[ONBOARDING]`)
+- MUST keep the section-label order identical between files (`[TURN LIFECYCLE]`, `[STORE RECIPES]` (+ subsections), `[RETRIEVAL]`, `[PROVENANCE]`, `[TASKS & COMMITMENTS]`, `[ENTITY TYPES & SCHEMA]`, `[COMMUNICATION & DISPLAY]`, `[ATTRIBUTION & AGENT IDENTITY]`, `[CONVENTIONS]`, `[FEEDBACK REPORTING]`, `[QA REFLECTION]`, `[ERRORS & RECOVERY]`, `[ONBOARDING]`)
 - MUST NOT change the behavioral intent when translating between transports — only the commands differ
 - MUST NOT add CLI-specific operational sections (e.g. `--servers=start` protocol, `--json=` syntax warning, active-env block, `## Store command quick reference`, `## Relationship creation`, `## Pre-check before storing`, `## Retrieval command quick reference`) to `mcp/instructions.md`
 - MUST NOT add MCP-specific internals (e.g. `source_index`/`target_index` for inline relationships, `file_content+mime_type` parameter names, `unstructured.asset_entity_id` paths) to the CLI file beyond what is needed for behavioral equivalence

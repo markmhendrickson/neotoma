@@ -19,6 +19,7 @@ export interface StoreRelationshipInput {
   target_index?: number;
   source_entity_id?: string;
   target_entity_id?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface StoreInput {
@@ -70,6 +71,13 @@ export interface CreateRelationshipInput {
   relationship_type: string;
   source_entity_id: string;
   target_entity_id: string;
+  source_id?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface CreateRelationshipsInput {
+  relationships: CreateRelationshipInput[];
+  source_id?: string;
 }
 
 export interface ListObservationsInput {
@@ -107,6 +115,7 @@ export interface NeotomaTransport {
   listTimelineEvents(input: ListTimelineEventsInput): Promise<unknown>;
   retrieveRelatedEntities(input: RetrieveRelatedEntitiesInput): Promise<unknown>;
   createRelationship(input: CreateRelationshipInput): Promise<unknown>;
+  createRelationships(input: CreateRelationshipsInput): Promise<unknown>;
   correct(input: { entity_id: string; corrections: Record<string, unknown> }): Promise<unknown>;
   listEntityTypes(input?: { search?: string }): Promise<unknown>;
   getEntityTypeCounts(input?: Record<string, unknown>): Promise<unknown>;

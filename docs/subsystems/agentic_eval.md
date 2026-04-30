@@ -220,11 +220,11 @@ expected:
 
 Supported predicates (see `packages/eval-harness/src/assertions.ts`):
 `store_structured.calls`, `entity.exists`, `entity.count`,
-`observation.with_field`, `relationship.exists`,
-`turn_compliance.backfilled`, `instruction_profile.served`,
-`host_tool.invocations`. Each predicate returns a structured
-`{ pass, expected, actual, message }` and the failure message is what the
-TTY/JUnit reporter surfaces.
+`observation.with_field`, `relationship.exists`, `relationship.count`,
+`reply_text.contains`, `turn_compliance.backfilled`,
+`instruction_profile.served`, `host_tool.invocations`. Each predicate
+returns a structured `{ pass, expected, actual, message }` and the
+failure message is what the TTY/JUnit reporter surfaces.
 
 ### Cassettes
 
@@ -256,15 +256,95 @@ touches the network. Record mode overwrites the cassette and stamps
 - Drivers refuse to run live without the relevant API key
   (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`).
 
-### Seeded scenarios (Phase 5)
+### WRIT benchmark alignment
 
-| Scenario id                                  | Focus                                                                             |
-| -------------------------------------------- | --------------------------------------------------------------------------------- |
-| `simple_user_message_with_extracted_contact` | Baseline: contact extraction + PART_OF / REFERS_TO edges                          |
-| `multi_tool_research_then_synthesis`         | Multi-tool: 3× Read → 1× synthesized `research` entity with cited sources         |
-| `agent_under_load_skips_store`               | Compliance: small model skips, stop-hook backfill                                 |
-| `compliance_followup_loop`                   | Compliance: small model that re-stores after a hook-emitted follow-up reminder    |
-| `attachment_extraction`                      | Attachment: `file_asset` + extracted `receipt` entity + `EMBEDS` edge             |
+The [`writ/`](../../writ/) submodule (77 scenarios, 16 categories) tests
+**state-layer** integrity — whether stored data survives updates,
+preserves history, and maintains provenance across multi-session
+timelines. Tier 2 tests **agent-layer** compliance — whether the agent
+follows the turn lifecycle contract on each individual turn. New Tier 2
+scenarios carry `writ:<category>` tags in `meta.tags[]` so the
+integrated runner (`packages/eval-combined/`) can cross-reference scores.
+
+### Hybrid scenario seeding
+
+Scenarios carry optional metadata describing how they were derived:
+
+| Field | Purpose |
+|-------|---------|
+| `seed_strategy` | `generated`, `real_derived`, or `hybrid_amplified` |
+| `source_transcript_ref` | Neotoma entity ID of the source transcript |
+| `source_pattern` | Human-readable description of the failure pattern |
+| `privacy_transform` | How PII was transformed for the committed scenario |
+| `seed_entities[]` | Entities pre-seeded into the isolated DB before the driver runs |
+
+Scenarios that need pre-existing DB state (retrieval, dedup) use
+`seed_entities[]` — the runner POSTs these to the isolated server's
+`/store` endpoint before running the driver.
+
+### Seeded scenarios
+
+| Scenario id | Focus | WRIT category |
+| --- | --- | --- |
+| `simple_user_message_with_extracted_contact` | Baseline: contact extraction + PART_OF / REFERS_TO edges | — |
+| `multi_tool_research_then_synthesis` | Multi-tool: 3× Read → 1× synthesized `research` entity | — |
+| `agent_under_load_skips_store` | Compliance: small model skips, stop-hook backfill | — |
+| `compliance_followup_loop` | Compliance: re-stores after hook-emitted follow-up reminder | — |
+| `attachment_extraction` | Attachment: `file_asset` + extracted `receipt` + `EMBEDS` | — |
+| `closing_assistant_store` | Turn lifecycle: closing store not skipped for factual answers | `extraction_drift` |
+| `greeting_must_still_store` | Turn lifecycle: store-first even for greetings | — |
+| `tool_use_after_store_ordering` | Turn lifecycle: store before host tools | — |
+| `multiple_entity_extraction` | Extract-all: multiple people + event from one message | `entity`, `extraction_drift` |
+| `task_extraction_with_deadline` | Tasks: create task with due_date + linked contact | `constraint`, `work_state` |
+| `user_identity_extraction` | User identity: store as contact/person | `entity` |
+| `outreach_commitment_creates_task` | Tasks: outreach commitment → follow-up task | `constraint`, `work_state` |
+| `scheduling_cue_creates_task` | Tasks: scheduling cue → task | `constraint`, `work_state` |
+| `file_source_provenance` | Provenance: file-derived entities carry `source_file` | `provenance` |
+| `external_tool_provenance` | Provenance: API-sourced entities carry `data_source` | `provenance`, `trust_hierarchy` |
+| `schema_agnostic_novel_entity` | Schema: novel entity type stored without pre-lookup | `entity` |
+| `compact_profile_still_stores` | Profile: compact profile still obeys store-first | — |
+| `display_rule_neotoma_section` | Display: reply renders Neotoma section | `extraction_drift` |
+| `relationship_graph_completeness` | Relationships: every entity has REFERS_TO edge | `entity`, `provenance` |
+| `bounded_retrieval_for_known_entity` | Retrieval: reuse existing entity, no duplicate | `abstention`, `entity` |
+| `retrieval_grounds_answer_no_hallucination` | Retrieval: ground answer in stored facts | `abstention` |
+| `entity_type_reuse_no_duplicate_type` | Schema: use established type, no proliferation | `entity` |
+| `store_failure_retry` | Errors: retry once on store failure | `failure_injection` |
+| `store_failure_surfaces_error` | Errors: surface error to user, do not silently skip | `failure_injection` |
+
+### Assertion types
+
+Supported predicates in `packages/eval-harness/src/assertions.ts`:
+
+| Predicate | Purpose |
+|-----------|---------|
+| `store_structured.calls` | Count of store calls (from /stats) |
+| `entity.exists` | At least one entity of given type exists |
+| `entity.count` | Entity count matches op/value |
+| `observation.with_field` | At least one observation carries the named field |
+| `relationship.exists` | At least one relationship of given type exists |
+| `relationship.count` | Relationship count matches op/value |
+| `reply_text.contains` | Assistant reply contains substring or matches regex |
+| `turn_compliance.backfilled` | Whether the stop hook backfilled compliance |
+| `instruction_profile.served` | Whether the requested profile was served |
+| `host_tool.invocations` | Host tool invocation count |
+
+### Combined runner (WRIT + Tier 2)
+
+`packages/eval-combined/` provides a single CLI that runs both WRIT and
+Tier 2 against a shared isolated Neotoma instance, then produces a
+**layered coverage matrix** showing per-category scores at both layers.
+
+```bash
+npx tsx packages/eval-combined/src/cli.ts run --output tty
+npx tsx packages/eval-combined/src/cli.ts run --output md > coverage.md
+npx tsx packages/eval-combined/src/cli.ts run --output json > coverage.json
+npx tsx packages/eval-combined/src/cli.ts run --tier2-only
+npx tsx packages/eval-combined/src/cli.ts run --writ-only --categories provenance,entity
+```
+
+The layered matrix surfaces diagnostics like: "For provenance, agents
+write the fields correctly (100% Tier 2) but the state layer loses some
+chains over time (80% WRIT)" — telling you exactly where to invest.
 
 ### CI
 
@@ -495,3 +575,6 @@ non-compliance; the real fleet is at least this bad.
 - Tier 2 plan: [`.cursor/plans/agentic_eval_tier2_real_llm_replay_8d2e7f15.plan.md`](../../.cursor/plans/agentic_eval_tier2_real_llm_replay_8d2e7f15.plan.md)
 - Tier 2 package: [`packages/eval-harness/`](../../packages/eval-harness/)
 - Tier 3 plan: [`.cursor/plans/agentic_eval_tier3_compliance_scorecard_2a6b4c0e.plan.md`](../../.cursor/plans/agentic_eval_tier3_compliance_scorecard_2a6b4c0e.plan.md)
+- Scenario expansion plan: [`.cursor/plans/eval_scenario_expansion_69e53394.plan.md`](../../.cursor/plans/eval_scenario_expansion_69e53394.plan.md)
+- Combined runner (WRIT + Tier 2): [`packages/eval-combined/`](../../packages/eval-combined/)
+- WRIT benchmark submodule: [`writ/`](../../writ/)

@@ -1,0 +1,52 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "bounded_retrieval_for_known_entity",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-04-29T09:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Tell me about Alice Chen\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. Before storing entities, always check if they already exist via bounded retrieval to avoid duplicates. Persist the conversation and user message via store_structured with PART_OF relationships. If an entity already exists, reference it via REFERS_TO without creating a duplicate.\n",
+  "tool_calls": [
+    {
+      "name": "retrieve_entity_by_identifier",
+      "input": { "identifier": "Alice Chen" },
+      "output": {
+        "type": "text",
+        "text": "{\"entities\":[{\"entity_id\":\"ent_seed_alice\",\"entity_type\":\"contact\",\"canonical_name\":\"contact:Alice Chen\",\"snapshot\":{\"name\":\"Alice Chen\",\"email\":\"alice.chen@example.com\",\"company\":\"Meridian Labs\",\"role\":\"Director of Engineering\"}}]}"
+      },
+      "sequence": 0
+    },
+    {
+      "name": "store_structured",
+      "input": {
+        "idempotency_key": "conv-retrieval-alice-001",
+        "entities": [
+          {
+            "entity_type": "conversation",
+            "conversation_id": "conv-retrieval-alice-001"
+          },
+          {
+            "entity_type": "conversation_message",
+            "turn_key": "conv-retrieval-alice-001:1",
+            "role": "user",
+            "sender_kind": "user",
+            "content": "Tell me about Alice Chen"
+          }
+        ],
+        "relationships": [
+          { "relationship_type": "PART_OF", "source_index": 1, "target_index": 0 }
+        ]
+      },
+      "output": {
+        "type": "text",
+        "text": "{\"source_id\":\"stub-src-retr-1\",\"entities\":[{\"observation_index\":0,\"entity_id\":\"ent_stub_r01\",\"entity_type\":\"conversation\",\"action\":\"created\"},{\"observation_index\":1,\"entity_id\":\"ent_stub_r02\",\"entity_type\":\"conversation_message\",\"action\":\"created\"}],\"unknown_fields_count\":0,\"related_entities\":[],\"related_relationships\":[]}"
+      },
+      "sequence": 1
+    }
+  ],
+  "assistant_text": "Alice Chen is a Director of Engineering at Meridian Labs. Her email is alice.chen@example.com."
+}

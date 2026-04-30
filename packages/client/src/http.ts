@@ -11,6 +11,7 @@
  */
 
 import {
+  CreateRelationshipsInput,
   CreateRelationshipInput,
   ListObservationsInput,
   ListTimelineEventsInput,
@@ -143,6 +144,10 @@ export class HttpTransport implements NeotomaTransport {
 
   async createRelationship(input: CreateRelationshipInput): Promise<unknown> {
     return this.post("/create_relationship", input);
+  }
+
+  async createRelationships(input: CreateRelationshipsInput): Promise<unknown> {
+    return this.post("/create_relationships", input);
   }
 
   async correct(input: {

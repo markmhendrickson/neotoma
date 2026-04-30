@@ -7,6 +7,7 @@
  * log to stderr.
  */
 
+import { execFileSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -17,16 +18,13 @@ import {
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 import { NeotomaClient, type StoreEntityInput } from "@neotoma/client";
 
-const NEOTOMA_BASE_URL =
-  process.env.NEOTOMA_BASE_URL ?? "http://127.0.0.1:3080";
+const NEOTOMA_BASE_URL = process.env.NEOTOMA_BASE_URL ?? "http://127.0.0.1:3080";
 const NEOTOMA_TOKEN = process.env.NEOTOMA_TOKEN ?? "dev-local";
-const NEOTOMA_LOG_LEVEL = (
-  process.env.NEOTOMA_LOG_LEVEL ?? "warn"
-).toLowerCase();
+const NEOTOMA_LOG_LEVEL = (process.env.NEOTOMA_LOG_LEVEL ?? "warn").toLowerCase();
 
 const LEVEL_ORDER: Record<string, number> = {
   debug: 0,
@@ -85,10 +83,7 @@ export function getClient(): NeotomaClient | null {
       token: NEOTOMA_TOKEN,
     });
   } catch (err) {
-    log(
-      "warn",
-      `Failed to construct NeotomaClient: ${(err as Error).message}`
-    );
+    log("warn", `Failed to construct NeotomaClient: ${(err as Error).message}`);
     return null;
   }
 }
@@ -116,31 +111,163 @@ export function isExpectedNetworkError(err: unknown): boolean {
   if (!cause || typeof cause !== "object") return false;
   const code = (cause as { code?: string }).code;
   return (
-    code === "ECONNREFUSED" ||
-    code === "ENOTFOUND" ||
-    code === "ECONNRESET" ||
-    code === "ETIMEDOUT"
+    code === "ECONNREFUSED" || code === "ENOTFOUND" || code === "ECONNRESET" || code === "ETIMEDOUT"
   );
 }
 
-export function makeIdempotencyKey(
-  sessionId: string,
-  turnId: string,
-  suffix: string
-): string {
+export function makeIdempotencyKey(sessionId: string, turnId: string, suffix: string): string {
   const safeSession = sessionId || `cursor-${Date.now()}`;
   const safeTurn = turnId || String(Date.now());
   return `conversation-${safeSession}-${safeTurn}-${suffix}`;
 }
 
-export function harnessProvenance(
-  extra?: Record<string, unknown>
-): Record<string, unknown> {
+export function harnessProvenance(extra?: Record<string, unknown>): Record<string, unknown> {
   return {
     data_source: "cursor-hook",
     harness: "cursor",
     cwd: process.cwd(),
     ...(extra ?? {}),
+  };
+}
+
+export interface HookWorkspaceContext {
+  clientName?: string;
+  harness?: string;
+  workspaceKind?: string;
+  repositoryName?: string;
+  repositoryRoot?: string;
+  repositoryRemote?: string;
+  scopeSummary?: string;
+  workingDirectory?: string;
+  gitBranch?: string;
+  activeFileRefs?: string[];
+  contextSource?: string;
+}
+
+function firstString(input: Record<string, unknown>, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = input[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return undefined;
+}
+
+function runGit(cwd: string, args: string[]): string | undefined {
+  try {
+    const output = execFileSync("git", args, {
+      cwd,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 1_500,
+    }).trim();
+    return output || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function redactRepositoryRemote(remote: string | undefined): string | undefined {
+  if (!remote) return undefined;
+  return remote
+    .replace(/:\/\/([^/@]+)@/g, "://<redacted>@")
+    .replace(/([?&](?:access_token|auth|key|password|token)=)[^&]+/gi, "$1<redacted>");
+}
+
+function extractActiveFileRefs(input: Record<string, unknown>): string[] {
+  const candidates = [
+    input.active_file_refs,
+    input.activeFileRefs,
+    input.active_file_paths,
+    input.activeFilePaths,
+    input.open_files,
+    input.openFiles,
+    input.visible_files,
+    input.visibleFiles,
+  ];
+  const refs: string[] = [];
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim()) {
+      refs.push(candidate.trim());
+    } else if (Array.isArray(candidate)) {
+      for (const item of candidate) {
+        if (typeof item === "string" && item.trim()) refs.push(item.trim());
+      }
+    }
+  }
+  return Array.from(new Set(refs)).slice(0, 10);
+}
+
+export function collectHookWorkspaceContext(
+  input: Record<string, unknown> = {}
+): HookWorkspaceContext {
+  const workingDirectory =
+    firstString(input, [
+      "working_directory",
+      "workingDirectory",
+      "workspace_path",
+      "workspacePath",
+      "project_path",
+      "projectPath",
+      "cwd",
+    ]) ?? process.cwd();
+  const repositoryRoot =
+    firstString(input, ["repository_root", "repositoryRoot"]) ??
+    runGit(workingDirectory, ["rev-parse", "--show-toplevel"]);
+  const gitBranch =
+    firstString(input, ["git_branch", "gitBranch"]) ??
+    runGit(workingDirectory, ["branch", "--show-current"]) ??
+    runGit(workingDirectory, ["rev-parse", "--abbrev-ref", "HEAD"]);
+  const repositoryRemote = redactRepositoryRemote(
+    firstString(input, ["repository_remote", "repositoryRemote"]) ??
+      runGit(workingDirectory, ["config", "--get", "remote.origin.url"])
+  );
+  const workspaceKind = repositoryRoot ? "git_repository" : "plain_directory";
+  const repositoryName =
+    firstString(input, ["repository_name", "repositoryName"]) ??
+    basename(repositoryRoot ?? workingDirectory);
+  const scopeSummary =
+    firstString(input, ["scope_summary", "scopeSummary"]) ??
+    `Cursor session in ${workspaceKind.replace(/_/g, " ")} ${repositoryName}.`;
+  const activeFileRefs = extractActiveFileRefs(input);
+
+  return {
+    clientName: "Cursor",
+    harness: "cursor-hook",
+    workspaceKind,
+    repositoryName,
+    repositoryRoot,
+    repositoryRemote,
+    scopeSummary,
+    workingDirectory,
+    gitBranch,
+    activeFileRefs: activeFileRefs.length > 0 ? activeFileRefs : undefined,
+    contextSource: "cursor-hook",
+  };
+}
+
+export function conversationContextFields(context: HookWorkspaceContext): Record<string, unknown> {
+  return {
+    client_name: context.clientName,
+    harness: context.harness,
+    workspace_kind: context.workspaceKind,
+    repository_name: context.repositoryName,
+    repository_root: context.repositoryRoot,
+    repository_remote: context.repositoryRemote,
+    scope_summary: context.scopeSummary,
+  };
+}
+
+export function turnContextFields(
+  context: HookWorkspaceContext
+): Pick<
+  ConversationTurnObservationInput,
+  "workingDirectory" | "gitBranch" | "activeFileRefs" | "contextSource"
+> {
+  return {
+    workingDirectory: context.workingDirectory,
+    gitBranch: context.gitBranch,
+    activeFileRefs: context.activeFileRefs,
+    contextSource: context.contextSource,
   };
 }
 
@@ -206,6 +333,10 @@ export interface ConversationTurnObservationInput {
   startedAt?: string;
   endedAt?: string;
   cwd?: string;
+  workingDirectory?: string;
+  gitBranch?: string;
+  activeFileRefs?: string[];
+  contextSource?: string;
   extra?: Record<string, unknown>;
   /** Idempotency key override; defaults to `<sessionId>-<turnId>-turn`. */
   idempotencyKey?: string;
@@ -233,12 +364,9 @@ export async function recordConversationTurn(
     turn_id: input.turnId,
     turn_key: turnKey,
     harness: input.harness ?? "cursor",
-    ...harnessProvenance(
-      input.hookEvent ? { hook_event: input.hookEvent } : undefined
-    ),
+    ...harnessProvenance(input.hookEvent ? { hook_event: input.hookEvent } : undefined),
   };
-  if (input.conversationEntityId)
-    entity.conversation_id = input.conversationEntityId;
+  if (input.conversationEntityId) entity.conversation_id = input.conversationEntityId;
   if (input.harnessVersion) entity.harness_version = input.harnessVersion;
   if (input.model) entity.model = input.model;
   if (input.status) entity.status = input.status;
@@ -248,37 +376,35 @@ export async function recordConversationTurn(
     entity.tool_invocation_count = input.toolInvocationCount;
   if (input.storeStructuredCalls !== undefined)
     entity.store_structured_calls = input.storeStructuredCalls;
-  if (input.retrieveCalls !== undefined)
-    entity.retrieve_calls = input.retrieveCalls;
+  if (input.retrieveCalls !== undefined) entity.retrieve_calls = input.retrieveCalls;
   if (input.neotomaToolFailures !== undefined)
     entity.neotoma_tool_failures = input.neotomaToolFailures;
-  if (input.harnessLoopCount !== undefined)
-    entity.harness_loop_count = input.harnessLoopCount;
+  if (input.harnessLoopCount !== undefined) entity.harness_loop_count = input.harnessLoopCount;
   if (input.injectedContextChars !== undefined)
     entity.injected_context_chars = input.injectedContextChars;
   if (input.retrievedEntityIds && input.retrievedEntityIds.length > 0)
     entity.retrieved_entity_ids = [...input.retrievedEntityIds];
   if (input.storedEntityIds && input.storedEntityIds.length > 0)
     entity.stored_entity_ids = [...input.storedEntityIds];
-  if (input.failureHintShown !== undefined)
-    entity.failure_hint_shown = input.failureHintShown;
-  if (input.safetyNetUsed !== undefined)
-    entity.safety_net_used = input.safetyNetUsed;
-  if (input.reminderInjected !== undefined)
-    entity.reminder_injected = input.reminderInjected;
+  if (input.failureHintShown !== undefined) entity.failure_hint_shown = input.failureHintShown;
+  if (input.safetyNetUsed !== undefined) entity.safety_net_used = input.safetyNetUsed;
+  if (input.reminderInjected !== undefined) entity.reminder_injected = input.reminderInjected;
   if (input.instructionDiagnostics)
     entity.instruction_diagnostics = { ...input.instructionDiagnostics };
   if (input.recommendedRepairs && input.recommendedRepairs.length > 0)
     entity.recommended_repairs = [...input.recommendedRepairs];
-  if (input.diagnosisConfidence)
-    entity.diagnosis_confidence = input.diagnosisConfidence;
+  if (input.diagnosisConfidence) entity.diagnosis_confidence = input.diagnosisConfidence;
   if (input.startedAt) entity.started_at = input.startedAt;
   if (input.endedAt) entity.ended_at = input.endedAt;
   if (input.cwd) entity.cwd = input.cwd;
+  if (input.workingDirectory) entity.working_directory = input.workingDirectory;
+  if (input.gitBranch) entity.git_branch = input.gitBranch;
+  if (input.activeFileRefs && input.activeFileRefs.length > 0)
+    entity.active_file_refs = [...input.activeFileRefs];
+  if (input.contextSource) entity.context_source = input.contextSource;
   if (input.extra) Object.assign(entity, input.extra);
   const idempotencyKey =
-    input.idempotencyKey ??
-    makeIdempotencyKey(input.sessionId, input.turnId, "turn");
+    input.idempotencyKey ?? makeIdempotencyKey(input.sessionId, input.turnId, "turn");
   try {
     const result = (await client.store({
       entities: [entity],
@@ -288,10 +414,7 @@ export async function recordConversationTurn(
     };
     return { entityId: result.structured?.entities?.[0]?.entity_id };
   } catch (err) {
-    log(
-      "debug",
-      `recordConversationTurn store failed: ${(err as Error).message}`
-    );
+    log("debug", `recordConversationTurn store failed: ${(err as Error).message}`);
     return null;
   }
 }
@@ -340,12 +463,7 @@ function getSmallModelPatterns(): RegExp[] {
     try {
       out.push(new RegExp(p, "i"));
     } catch (err) {
-      log(
-        "debug",
-        `invalid small-model pattern ${JSON.stringify(p)}: ${
-          (err as Error).message
-        }`
-      );
+      log("debug", `invalid small-model pattern ${JSON.stringify(p)}: ${(err as Error).message}`);
     }
   }
   return out;
@@ -354,8 +472,9 @@ function getSmallModelPatterns(): RegExp[] {
 /**
  * Returns true when the given model id looks like a small / fast / cheap
  * model that historically fails to follow long instruction blocks. Used to
- * gate prompt-local reminders, compact MCP instruction selection, and
- * stop-hook auto follow-up.
+ * add extra wording to prompt-local reminders and compact MCP instruction
+ * selection. Stop-hook follow-up is no longer model-gated: every material
+ * turn must interact with Neotoma at least once.
  */
 export function isSmallModel(model: string | null | undefined): boolean {
   if (!model || typeof model !== "string") return false;
@@ -381,6 +500,8 @@ export interface TurnComplianceState {
   retrieve_calls: number;
   neotoma_tool_failures: number;
   tool_invocation_count: number;
+  /** Non-Neotoma MCP tool calls that returned structured data this turn. */
+  external_data_tool_calls: number;
   user_message_stored: boolean;
   assistant_message_stored: boolean;
   user_message_entity_id?: string;
@@ -409,18 +530,12 @@ export interface TurnComplianceState {
 const TURN_TTL_MS = 6 * 60 * 60 * 1000;
 
 function turnStatePath(conversationId: string, generationId: string): string {
-  const safeConv =
-    (conversationId || "unknown").replace(/[^A-Za-z0-9_.-]/g, "_") ||
-    "unknown";
-  const safeGen =
-    (generationId || "unknown").replace(/[^A-Za-z0-9_.-]/g, "_") || "unknown";
+  const safeConv = (conversationId || "unknown").replace(/[^A-Za-z0-9_.-]/g, "_") || "unknown";
+  const safeGen = (generationId || "unknown").replace(/[^A-Za-z0-9_.-]/g, "_") || "unknown";
   return join(hookStateDir(), `turn-${safeConv}-${safeGen}.json`);
 }
 
-export function readTurnState(
-  conversationId: string,
-  generationId: string
-): TurnComplianceState {
+export function readTurnState(conversationId: string, generationId: string): TurnComplianceState {
   const path = turnStatePath(conversationId, generationId);
   if (!existsSync(path)) {
     return {
@@ -431,6 +546,7 @@ export function readTurnState(
       retrieve_calls: 0,
       neotoma_tool_failures: 0,
       tool_invocation_count: 0,
+      external_data_tool_calls: 0,
       user_message_stored: false,
       assistant_message_stored: false,
       reminder_injected: false,
@@ -449,15 +565,14 @@ export function readTurnState(
       retrieve_calls: raw.retrieve_calls ?? 0,
       neotoma_tool_failures: raw.neotoma_tool_failures ?? 0,
       tool_invocation_count: raw.tool_invocation_count ?? 0,
+      external_data_tool_calls: raw.external_data_tool_calls ?? 0,
       user_message_stored: raw.user_message_stored ?? false,
       assistant_message_stored: raw.assistant_message_stored ?? false,
       user_message_entity_id: raw.user_message_entity_id,
       assistant_message_entity_id: raw.assistant_message_entity_id,
       conversation_entity_id: raw.conversation_entity_id,
       reminder_injected: raw.reminder_injected ?? false,
-      reminder_hooks: Array.isArray(raw.reminder_hooks)
-        ? [...raw.reminder_hooks]
-        : [],
+      reminder_hooks: Array.isArray(raw.reminder_hooks) ? [...raw.reminder_hooks] : [],
       neotoma_connection_failure: raw.neotoma_connection_failure ?? false,
       updated_at: raw.updated_at ?? "",
     };
@@ -471,6 +586,7 @@ export function readTurnState(
       retrieve_calls: 0,
       neotoma_tool_failures: 0,
       tool_invocation_count: 0,
+      external_data_tool_calls: 0,
       user_message_stored: false,
       assistant_message_stored: false,
       reminder_injected: false,
@@ -543,9 +659,7 @@ export async function setProfileDebounced(
   model: string | null | undefined
 ): Promise<void> {
   const profile = isSmallModel(model) ? "compact" : "full";
-  const safeConv =
-    (conversationId || "unknown").replace(/[^A-Za-z0-9_.-]/g, "_") ||
-    "unknown";
+  const safeConv = (conversationId || "unknown").replace(/[^A-Za-z0-9_.-]/g, "_") || "unknown";
   const markerPath = join(hookStateDir(), `profile-${safeConv}.json`);
   try {
     if (existsSync(markerPath)) {
@@ -559,9 +673,7 @@ export async function setProfileDebounced(
     // ignore parse errors; we'll re-send.
   }
   const connectionId =
-    process.env.NEOTOMA_HOOK_CONNECTION_ID ??
-    process.env.X_CONNECTION_ID ??
-    null;
+    process.env.NEOTOMA_HOOK_CONNECTION_ID ?? process.env.X_CONNECTION_ID ?? null;
   try {
     const url = `${NEOTOMA_BASE_URL.replace(/\/$/, "")}/session/profile`;
     await fetch(url, {
@@ -605,11 +717,10 @@ export async function setProfileDebounced(
  * authoritative; this is the prompt-local reinforcement next to the model's
  * working context.
  */
-export function buildCompactReminder(
-  model?: string | null | undefined
-): string {
+export function buildCompactReminder(model?: string | null | undefined): string {
   const lines = [
     "Neotoma turn must-do (compact; full rules at MCP `instructions`):",
+    "0. Every turn must interact with Neotoma at least once, usually by storing the conversation turn.",
     "1. Bounded retrieval first when the user message implies known entities (retrieve_entity_by_identifier for ids, retrieve_entities for category lists).",
     "2. User-phase store (one store_structured call): conversation + user conversation_message (sender_kind=user) + any extracted entities; PART_OF message->conversation; REFERS_TO message->each extracted entity.",
     "3. Tool calls and host edits run AFTER step 2.",
@@ -627,11 +738,61 @@ export function buildCompactReminder(
   return lines.join("\n");
 }
 
+function tokenizeCommand(command: string): string[] {
+  const matches = command.match(/"[^"]*"|'[^']*'|`[^`]*`|[^\s]+/g) ?? [];
+  return matches.map((token) => token.replace(/^["'`]|["'`]$/g, ""));
+}
+
+function isNeotomaCliToken(token: string): boolean {
+  return (
+    token === "neotoma" ||
+    token.startsWith("neotoma@") ||
+    token.endsWith("/neotoma")
+  );
+}
+
+function looksLikeNeotomaCliWrite(command: string): boolean {
+  const tokens = tokenizeCommand(command).map((token) => token.toLowerCase());
+  for (let i = 0; i < tokens.length; i += 1) {
+    const token = tokens[i];
+    const neotomaIndex =
+      token === "npx" && isNeotomaCliToken(tokens[i + 1] ?? "")
+        ? i + 1
+        : isNeotomaCliToken(token)
+          ? i
+          : -1;
+    if (neotomaIndex < 0) continue;
+
+    for (let j = neotomaIndex + 1; j < tokens.length; j += 1) {
+      const candidate = tokens[j];
+      if (
+        candidate === ";" ||
+        candidate === "&&" ||
+        candidate === "||" ||
+        candidate === "|"
+      ) {
+        break;
+      }
+      if (candidate.startsWith("-")) continue;
+      if (candidate === "dev" || candidate === "prod") continue;
+      return (
+        candidate === "store" ||
+        candidate === "store-structured" ||
+        candidate === "ingest"
+      );
+    }
+  }
+  return false;
+}
+
 /**
  * Conservative heuristic: returns true when a tool name + input look like a
- * Neotoma `store_structured` call. Used by `postToolUse` to bump the
- * compliance counter so `stop.ts` knows whether the agent actually wrote
- * structured memory this turn.
+ * Neotoma turn write. Handles direct MCP `store_structured`, generic host
+ * wrappers such as `CallMcpTool({ server: "user-neotoma", toolName:
+ * "store_structured", arguments: ... })`, and Neotoma CLI backup commands
+ * such as `neotoma --servers=start store ...`. Used by `postToolUse` to bump
+ * the compliance counter so `stop.ts` knows whether the agent actually wrote
+ * structured memory this turn, regardless of supported transport.
  */
 export function looksLikeStoreStructured(
   toolName: unknown,
@@ -649,8 +810,35 @@ export function looksLikeStoreStructured(
   }
   if (toolInput && typeof toolInput === "object") {
     const record = toolInput as Record<string, unknown>;
+    const commandLike = record.command ?? record.cmd;
+    if (typeof commandLike === "string" && looksLikeNeotomaCliWrite(commandLike)) {
+      return true;
+    }
+    const server = record.server;
+    const wrappedToolName = record.toolName ?? record.tool_name ?? record.name;
+    if (
+      typeof server === "string" &&
+      server.toLowerCase().includes("neotoma") &&
+      typeof wrappedToolName === "string" &&
+      wrappedToolName.toLowerCase() === "store_structured"
+    ) {
+      return true;
+    }
+    const args =
+      record.arguments && typeof record.arguments === "object"
+        ? (record.arguments as Record<string, unknown>)
+        : record;
     if (Array.isArray(record.entities) && record.entities.length > 0) {
       const has = (record.entities as unknown[]).every(
+        (e) =>
+          e !== null &&
+          typeof e === "object" &&
+          typeof (e as { entity_type?: unknown }).entity_type === "string"
+      );
+      if (has) return true;
+    }
+    if (Array.isArray(args.entities) && args.entities.length > 0) {
+      const has = (args.entities as unknown[]).every(
         (e) =>
           e !== null &&
           typeof e === "object" &&
@@ -680,16 +868,29 @@ export function looksLikeRetrieve(toolName: unknown): boolean {
   );
 }
 
+export function looksLikeRetrieveInvocation(toolName: unknown, toolInput: unknown): boolean {
+  if (looksLikeRetrieve(toolName)) return true;
+  if (!toolInput || typeof toolInput !== "object") return false;
+  const record = toolInput as Record<string, unknown>;
+  const server = record.server;
+  const wrappedToolName = record.toolName ?? record.tool_name ?? record.name;
+  if (
+    typeof server === "string" &&
+    server.toLowerCase().includes("neotoma") &&
+    looksLikeRetrieve(wrappedToolName)
+  ) {
+    return true;
+  }
+  return false;
+}
+
 /**
  * Returns true when the given tool name looks Neotoma-relevant (MCP tool
  * against the Neotoma server, the `neotoma` CLI, or a direct HTTP call
  * into a Neotoma endpoint). We use this to scope post-tool failure
  * capture so the hook only signals friction the user or agent can act on.
  */
-export function isNeotomaRelevantTool(
-  toolName: unknown,
-  toolInput: unknown
-): boolean {
+export function isNeotomaRelevantTool(toolName: unknown, toolInput: unknown): boolean {
   if (typeof toolName === "string") {
     const lower = toolName.toLowerCase();
     if (
@@ -710,6 +911,10 @@ export function isNeotomaRelevantTool(
   }
   if (toolInput && typeof toolInput === "object") {
     const record = toolInput as Record<string, unknown>;
+    const server = record.server;
+    if (typeof server === "string" && server.toLowerCase().includes("neotoma")) {
+      return true;
+    }
     const commandLike = record.command ?? record.cmd ?? record.url;
     if (typeof commandLike === "string") {
       const lower = commandLike.toLowerCase();
@@ -723,6 +928,52 @@ export function isNeotomaRelevantTool(
       }
     }
   }
+  return false;
+}
+
+/**
+ * Returns true when the tool call looks like a non-Neotoma MCP tool that
+ * returned structured data the agent should persist. Covers CallMcpTool
+ * dispatches to third-party servers (gmail, calendar, slack, etc.) and
+ * direct MCP tool names that are clearly external data sources.
+ */
+export function looksLikeExternalDataTool(
+  toolName: unknown,
+  toolInput: unknown,
+  toolOutput: unknown,
+): boolean {
+  if (isNeotomaRelevantTool(toolName, toolInput)) return false;
+
+  const name = typeof toolName === "string" ? toolName.toLowerCase() : "";
+
+  if (name === "callmcptool" && toolInput && typeof toolInput === "object") {
+    const record = toolInput as Record<string, unknown>;
+    const server = typeof record.server === "string" ? record.server.toLowerCase() : "";
+    if (server.includes("neotoma")) return false;
+    if (server) return hasStructuredOutput(toolOutput);
+  }
+
+  const externalPatterns = [
+    "search_emails", "read_email", "send_email",
+    "list_events", "get_event", "create_event",
+    "list_contacts", "get_contact",
+    "search_messages", "read_message",
+    "list_transactions", "get_transaction",
+    "list_transfers", "get_transfer",
+  ];
+  if (externalPatterns.includes(name)) return hasStructuredOutput(toolOutput);
+
+  return false;
+}
+
+function hasStructuredOutput(toolOutput: unknown): boolean {
+  if (toolOutput == null) return false;
+  if (typeof toolOutput === "string") {
+    const trimmed = toolOutput.trim();
+    if (trimmed.startsWith("{") || trimmed.startsWith("[")) return trimmed.length > 10;
+    return trimmed.length > 50;
+  }
+  if (typeof toolOutput === "object") return true;
   return false;
 }
 
@@ -746,14 +997,8 @@ export function scrubErrorMessage(raw: unknown): string {
   if (raw == null) return "";
   const text = typeof raw === "string" ? raw : String(raw);
   let out = text;
-  out = out.replace(
-    /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g,
-    "<EMAIL>"
-  );
-  out = out.replace(
-    /\b(?:sk|pk|ghp|ghs|ntk|aa)_[A-Za-z0-9_-]{16,}\b/g,
-    "<TOKEN>"
-  );
+  out = out.replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, "<EMAIL>");
+  out = out.replace(/\b(?:sk|pk|ghp|ghs|ntk|aa)_[A-Za-z0-9_-]{16,}\b/g, "<TOKEN>");
   out = out.replace(
     /\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b/g,
     "<UUID>"
@@ -793,10 +1038,7 @@ export function classifyErrorMessage(raw: unknown): string {
 const FAILURE_TTL_MS = 24 * 60 * 60 * 1000;
 
 function hookStateDir(): string {
-  return (
-    process.env.NEOTOMA_HOOK_STATE_DIR ??
-    join(homedir(), ".neotoma", "hook-state")
-  );
+  return process.env.NEOTOMA_HOOK_STATE_DIR ?? join(homedir(), ".neotoma", "hook-state");
 }
 
 function failureStatePath(sessionId: string): string {
@@ -898,17 +1140,12 @@ export interface FailureHint {
  * `NEOTOMA_HOOK_FEEDBACK_HINT_THRESHOLD`.
  */
 export function readFailureHint(sessionId: string): FailureHint | null {
-  if (
-    (process.env.NEOTOMA_HOOK_FEEDBACK_HINT ?? "on").toLowerCase() === "off"
-  ) {
+  if ((process.env.NEOTOMA_HOOK_FEEDBACK_HINT ?? "on").toLowerCase() === "off") {
     return null;
   }
   const threshold = Math.max(
     1,
-    Number.parseInt(
-      process.env.NEOTOMA_HOOK_FEEDBACK_HINT_THRESHOLD ?? "2",
-      10
-    ) || 2
+    Number.parseInt(process.env.NEOTOMA_HOOK_FEEDBACK_HINT_THRESHOLD ?? "2", 10) || 2
   );
   const state = pruneExpired(readFailureStateFile(sessionId));
   let best: { key: string; entry: FailureCounterEntry } | null = null;
@@ -954,7 +1191,8 @@ export function formatFailureHint(hint: FailureHint): string {
  * Heuristic priority:
  *   1. Explicit `NEOTOMA_LOCAL_BUILD=1` / `=0` env override.
  *   2. Otherwise, both: base URL points at localhost / 127.0.0.1 AND
- *      cwd contains a `package.json` whose `name` is `"neotoma"`.
+ *      cwd or an ancestor contains a `package.json` whose `name` is
+ *      `"neotoma"`.
  *
  * Cached for the lifetime of the hook process to avoid re-reading
  * `package.json` on every stop hook.
@@ -979,10 +1217,19 @@ export function isLocalRepoBuild(): boolean {
     baseUrl.startsWith("http://0.0.0.0");
   let cwdLooksLikeNeotoma = false;
   try {
-    const pkgPath = join(process.cwd(), "package.json");
-    if (existsSync(pkgPath)) {
-      const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
-      if (pkg.name === "neotoma") cwdLooksLikeNeotoma = true;
+    let dir = process.cwd();
+    while (true) {
+      const pkgPath = join(dir, "package.json");
+      if (existsSync(pkgPath)) {
+        const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
+        if (pkg.name === "neotoma") {
+          cwdLooksLikeNeotoma = true;
+          break;
+        }
+      }
+      const parent = dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
     }
   } catch {
     // ignore — fall through to heuristic-only
@@ -1005,10 +1252,10 @@ export function resetLocalRepoBuildCache(): void {
  * confidence level, and a list of `recommended_repairs` that operators
  * (and the local repo build) can act on.
  *
- * No action is taken on the recommendations here; they are recorded on
- * the `conversation_turn` entity and optionally summarised in the
- * follow-up message. Hooks NEVER mutate Cursor / user / repo config
- * automatically.
+ * Repo-owned diagnoses mark proactive remediation as required. The hook
+ * records the recommendations and the stop follow-up instructs the agent
+ * to resolve the underlying cause in the source checkout when safe.
+ * Hooks NEVER mutate Cursor / user / repo config automatically.
  */
 export type SkippedStoreClassification =
   | "tooling_unavailable_or_failed"
@@ -1025,6 +1272,7 @@ export interface SkippedStoreDiagnosis {
   signals: Record<string, unknown>;
   local_build: boolean;
   recommended_repairs: string[];
+  proactive_remediation_required: boolean;
 }
 
 export interface DiagnoseSkippedStoreInput {
@@ -1037,9 +1285,7 @@ export interface DiagnoseSkippedStoreInput {
   localBuild?: boolean;
 }
 
-export function diagnoseSkippedStore(
-  input: DiagnoseSkippedStoreInput
-): SkippedStoreDiagnosis {
+export function diagnoseSkippedStore(input: DiagnoseSkippedStoreInput): SkippedStoreDiagnosis {
   const { state, hadFinalText } = input;
   const localBuild = input.localBuild ?? isLocalRepoBuild();
   const reminderInjected = state.reminder_injected === true;
@@ -1068,6 +1314,7 @@ export function diagnoseSkippedStore(
         : `Neotoma-relevant tool failed ${toolFailures} time(s) this turn.`,
       signals,
       local_build: localBuild,
+      proactive_remediation_required: localBuild,
       recommended_repairs: localBuild
         ? [
             "Verify the local Neotoma server is running (e.g. `npm run watch:prod`) and reachable at NEOTOMA_BASE_URL.",
@@ -1089,6 +1336,7 @@ export function diagnoseSkippedStore(
         "No reminders were injected and no tool calls were observed this turn — sessionStart/postToolUse may not be wired up.",
       signals,
       local_build: localBuild,
+      proactive_remediation_required: localBuild,
       recommended_repairs: localBuild
         ? [
             "Re-run the cursor-hooks installer (`packages/cursor-hooks/scripts/install.mjs`) and confirm `.cursor/hooks.json` references the compiled hooks.",
@@ -1110,6 +1358,7 @@ export function diagnoseSkippedStore(
         "Tools ran this turn but no compact reminder was injected — instruction delivery to the agent is likely missing or stale.",
       signals,
       local_build: localBuild,
+      proactive_remediation_required: localBuild,
       recommended_repairs: localBuild
         ? [
             "Confirm `docs/developer/mcp/instructions.md` is reachable from `src/server.ts#getMcpInteractionInstructions` and reconnect the MCP client to pick up edits.",
@@ -1118,7 +1367,7 @@ export function diagnoseSkippedStore(
           ]
         : [
             "Reconnect the MCP client so a fresh `initialize` re-delivers Neotoma instructions.",
-            "If using a small/fast model, ensure NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP is left at `auto` so the stop-hook follow-up still fires.",
+            "Ensure NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP is left at `auto` or `on` so the stop-hook follow-up still fires.",
           ],
     };
   }
@@ -1131,14 +1380,15 @@ export function diagnoseSkippedStore(
         "Compact reminder was injected and Neotoma tooling was reachable, but the agent did not call store_structured.",
       signals,
       local_build: localBuild,
+      proactive_remediation_required: localBuild,
       recommended_repairs: localBuild
         ? [
             "Add or extend a Tier 1 fixture in `tests/fixtures/agentic_eval/` that asserts the `agent_ignored_available_instructions` classification for this model.",
-            "Tighten the small-model gate (`NEOTOMA_HOOK_SMALL_MODEL_PATTERNS`) so this model receives the compliance follow-up automatically.",
+            "Check the postToolUse reminder gate so wrapped host tool calls still receive the compact Neotoma reminder.",
             "Investigate whether the MCP `[COMPACT MODE]` block omits a contract this model needs; expand `docs/developer/mcp/instructions.md` accordingly.",
           ]
         : [
-            "Use NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP=on to force the follow-up nudge for this model.",
+            "Leave NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP at `auto` or set it to `on`; only `off` suppresses skipped-store follow-up.",
           ],
     };
   }
@@ -1150,6 +1400,7 @@ export function diagnoseSkippedStore(
       "Turn ended without assistant text; backfill captured the graph but no agent reply was written.",
     signals,
     local_build: localBuild,
+    proactive_remediation_required: false,
     recommended_repairs: localBuild
       ? [
           "Confirm the agent harness sent a final assistant message; otherwise the stop hook is firing on aborted turns.",

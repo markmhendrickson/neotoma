@@ -1,10 +1,10 @@
 /**
  * `neotoma hooks` — install / uninstall / status for lifecycle hooks.
  *
- * This command intentionally does *not* ship as part of `neotoma setup`.
- * Hooks are offered separately during activation (see install.md step 6.5)
- * so the user sees Neotoma's MCP-driven value before we add a second write
- * path into their tool configuration.
+ * Hooks can be installed directly with `neotoma hooks install`, or
+ * automatically by setup flows after Neotoma MCP has been configured for a
+ * hook-capable harness. Runtime MCP servers never mutate harness config; only
+ * local setup commands call these installers.
  *
  * The command itself is a thin wrapper that delegates to each package's own
  * installer script:

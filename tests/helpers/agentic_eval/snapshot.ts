@@ -46,6 +46,8 @@ const ID_KEYS = new Set([
   "idempotency_key",
 ]);
 
+const ENVIRONMENT_KEYS = new Set(["git_branch"]);
+
 function scrubValue(value: unknown, ctx: { idMap: Map<string, string>; nextId: { n: number } }): unknown {
   if (value == null) return value;
   if (typeof value === "string") {
@@ -72,6 +74,10 @@ function scrubValue(value: unknown, ctx: { idMap: Map<string, string>; nextId: {
         ctx.idMap.set(v, mapped);
       }
       out[key] = mapped;
+      continue;
+    }
+    if (ENVIRONMENT_KEYS.has(key) && typeof v === "string") {
+      out[key] = "<env>";
       continue;
     }
     out[key] = scrubValue(v, ctx);

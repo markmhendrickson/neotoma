@@ -9,6 +9,7 @@
 import { HttpTransport, HttpTransportOptions } from "./http.js";
 import { LocalTransport, LocalTransportOptions } from "./local.js";
 import {
+  CreateRelationshipsInput,
   CreateRelationshipInput,
   ListObservationsInput,
   ListTimelineEventsInput,
@@ -63,6 +64,9 @@ export class NeotomaClient implements NeotomaTransport {
   }
   createRelationship(input: CreateRelationshipInput): Promise<unknown> {
     return this.transport.createRelationship(input);
+  }
+  createRelationships(input: CreateRelationshipsInput): Promise<unknown> {
+    return this.transport.createRelationships(input);
   }
   correct(input: {
     entity_id: string;

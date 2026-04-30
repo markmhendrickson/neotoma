@@ -1,0 +1,56 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "store_failure_retry",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-04-29T09:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Remember that I prefer dark mode in all apps.\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. Always persist the conversation via store_structured. If a store call fails, retry once before giving up. Then reply briefly.\n",
+  "tool_calls": [
+    {
+      "name": "store_structured",
+      "input": {
+        "idempotency_key": "conv-retry-001-attempt-1",
+        "entities": [
+          { "entity_type": "conversation", "conversation_id": "conv-retry-001" },
+          { "entity_type": "conversation_message", "turn_key": "conv-retry-001:1", "role": "user", "sender_kind": "user", "content": "Remember that I prefer dark mode in all apps." },
+          { "entity_type": "preference", "name": "Dark mode preference", "category": "ui", "value": "dark mode in all apps" }
+        ],
+        "relationships": [
+          { "relationship_type": "PART_OF", "source_index": 1, "target_index": 0 },
+          { "relationship_type": "REFERS_TO", "source_index": 1, "target_index": 2 }
+        ]
+      },
+      "output": {
+        "type": "text",
+        "text": "An error occurred while running the tool. Error: Internal Server Error (500): Injected fault 1/1"
+      },
+      "sequence": 0
+    },
+    {
+      "name": "store_structured",
+      "input": {
+        "idempotency_key": "conv-retry-001-attempt-2",
+        "entities": [
+          { "entity_type": "conversation", "conversation_id": "conv-retry-001" },
+          { "entity_type": "conversation_message", "turn_key": "conv-retry-001:1", "role": "user", "sender_kind": "user", "content": "Remember that I prefer dark mode in all apps." },
+          { "entity_type": "preference", "name": "Dark mode preference", "category": "ui", "value": "dark mode in all apps" }
+        ],
+        "relationships": [
+          { "relationship_type": "PART_OF", "source_index": 1, "target_index": 0 },
+          { "relationship_type": "REFERS_TO", "source_index": 1, "target_index": 2 }
+        ]
+      },
+      "output": {
+        "type": "text",
+        "text": "{\"source_id\":\"stub-src-retry-1\",\"entities\":[{\"observation_index\":0,\"entity_id\":\"ent_stub_fr01\",\"entity_type\":\"conversation\",\"action\":\"created\"},{\"observation_index\":1,\"entity_id\":\"ent_stub_fr02\",\"entity_type\":\"conversation_message\",\"action\":\"created\"},{\"observation_index\":2,\"entity_id\":\"ent_stub_fr03\",\"entity_type\":\"preference\",\"action\":\"created\"}],\"unknown_fields_count\":0,\"related_entities\":[],\"related_relationships\":[]}"
+      },
+      "sequence": 1
+    }
+  ],
+  "assistant_text": "Noted — I've stored your preference for dark mode in all apps."
+}

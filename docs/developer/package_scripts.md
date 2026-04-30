@@ -24,6 +24,7 @@ Prefix mismatch breaks that contract. An alias like `dev:prod = npm run watch:pr
 - **Adding a watcher?** Prefix with `watch:` and list the ports, watched paths, and any `concurrently` wrappers inline.
 - **Adding a compiled-dist runner (API, MCP server, WebSocket bridge, static site)?** Prefix with `serve:` or `start:` (matching the neighboring scripts in that family) and make sure it runs `node dist/…` with no watch flags.
 - **Adding a dev tool that is not a long-lived server (migration, generator, one-shot REPL)?** Prefix with `dev:` and document what it produces.
+- **Adding a stable dev shim?** Use `start:*` for the compiled shim and `watch:*` for the source-mode shim only when the shim itself remains the stable parent process. Do not point installed MCP clients at watch-mode stdio workers.
 - **Need a convenience alias?** Keep the alias in the same category. `watch:foo → dev:foo` aliases that cross the category boundary are forbidden; they reintroduce the exact ambiguity `dev:prod` caused.
 - **Renaming an existing script?** Keep the old name as an alias for one minor release, then drop it. Announce both the rename and the alias drop in the release supplement. See `docs/architecture/change_guardrails_rules.mdc` § file/script rename rules.
 

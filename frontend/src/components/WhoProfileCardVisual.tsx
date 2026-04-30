@@ -38,12 +38,22 @@ export const WHO_CARD_VISUALS: Record<string, WhoCardVisualConfig> = {
     chipClass:
       "border-border/80 bg-background/90 text-foreground/85 dark:bg-background/40 dark:text-foreground/90",
   },
+  "rate-limit-handoff": {
+    panelClass:
+      "border-border/70 bg-gradient-to-b from-muted/50 to-muted/25 dark:from-muted/30 dark:to-muted/10",
+    glowClass: "bg-rose-400/20 dark:bg-rose-500/15",
+    accentClass:
+      "border-rose-500/25 bg-rose-500/[0.08] text-rose-800 dark:border-rose-400/25 dark:bg-rose-400/10 dark:text-rose-200",
+    chipClass:
+      "border-border/80 bg-background/90 text-foreground/85 dark:bg-background/40 dark:text-foreground/90",
+  },
 };
 
 const WHO_ICP_SQUARE_ILLUS: Record<string, string> = {
   operating: whoIcpOperatingSquare,
   "building-pipelines": whoIcpBuildingPipelinesSquare,
   "debugging-infrastructure": whoIcpDebuggingInfrastructureSquare,
+  "rate-limit-handoff": whoIcpBuildingPipelinesSquare,
 };
 
 /** Match homepage guarantee card image treatment */

@@ -188,6 +188,7 @@ Neotoma stores user data and requires secure configuration.
 
 ```bash
 npm run dev          # MCP server (stdio)
+npm run dev:mcp:dev-shim  # stable stdio shim for MCP source iteration
 npm run dev:ui       # Frontend
 npm run dev:server   # API only (MCP at /mcp)
 npm run dev:full     # API + UI + build watch
@@ -218,7 +219,9 @@ Neotoma exposes state via MCP. Local storage only in preview. Local built-in aut
 
 **Setup guides:** [Cursor](https://neotoma.io/neotoma-with-cursor) · [Claude Code](https://neotoma.io/neotoma-with-claude-code) · [Claude](https://neotoma.io/neotoma-with-claude) · [ChatGPT](https://neotoma.io/neotoma-with-chatgpt) · [Codex](https://neotoma.io/neotoma-with-codex) · [OpenClaw](https://neotoma.io/neotoma-with-openclaw)
 
-**Agent behavior contract:** Store first, retrieve before storing, extract entities from user input, create tasks for commitments. Full instructions: [MCP instructions](docs/developer/mcp/instructions.md) and [CLI agent instructions](docs/developer/cli_agent_instructions.md).
+For local source iteration, use the stable dev shim (`scripts/run_neotoma_mcp_stdio_dev_shim.sh` or `npm run dev:mcp:dev-shim`) instead of pointing installed MCP clients at a `tsx watch` stdio process. The shim keeps the client-facing JSON-RPC stream stable and asks clients to refresh or reconnect when the tool interface changes.
+
+**Agent behavior contract:** Store first, retrieve before storing, extract entities from user input, create tasks for commitments, and attach bounded host context such as repository name/root scope when available. Full instructions: [MCP instructions](docs/developer/mcp/instructions.md) and [CLI agent instructions](docs/developer/cli_agent_instructions.md).
 
 **Representative actions:** `store`, `retrieve_entities`, `retrieve_entity_snapshot`, `merge_entities`, `list_observations`, `create_relationship`, `list_relationships`, `list_timeline_events`, `retrieve_graph_neighborhood`. Full list: [MCP spec](docs/specs/MCP_SPEC.md).
 

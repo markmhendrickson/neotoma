@@ -24,6 +24,7 @@ import { buildToolDefinitions } from "./tool_definitions.js";
 import {
   AnalyzeSchemaCandidatesRequestSchema,
   CorrectEntityRequestSchema,
+  CreateRelationshipsRequestSchema,
   CreateRelationshipRequestSchema,
   EntitySnapshotRequestSchema,
   FieldProvenanceRequestSchema,
@@ -102,7 +103,7 @@ export const MCP_INTERACTION_INSTRUCTIONS_FALLBACK = [
   "[COMPACT MODE — runtime fallback]",
   "Every turn, do the following in order — do not skip steps:",
   "1. Bounded retrieval: for entities implied by the user message, use retrieve_entity_by_identifier for concrete identifiers and retrieve_entities for category/list queries.",
-  "2. User-phase store: store the conversation, the current user message, and any entities implied by the message in ONE store_structured call. entities = [ { entity_type: \"conversation\", title? }, { entity_type: \"conversation_message\", role: \"user\", sender_kind: \"user\", content: \"<exact message>\", turn_key: \"{conversation_id}:{turn_id}\" }, …extracted entities… ]. Relationships: PART_OF from message to conversation; REFERS_TO from message to each extracted entity. MUST NOT skip for greetings or minimal messages.",
+  "2. User-phase store: store the conversation, the current user message, and any entities implied by the message in ONE store_structured call. entities = [ { entity_type: \"conversation\", conversation_id, title?, thread_kind?, client_name?/harness?, repository_name?/repository_root?/repository_remote?, scope_summary? }, { entity_type: \"conversation_message\", role: \"user\", sender_kind: \"user\", content: \"<exact message>\", turn_key: \"{conversation_id}:{turn_id}\" }, …extracted entities… ]. Relationships: PART_OF from message to conversation; REFERS_TO from message to each extracted entity. Context fields are optional and never identity-bearing; do not store raw git status, terminal output, file contents, secrets, or large open-file lists by default. MUST NOT skip for greetings or minimal messages.",
   "3. Other actions: host IDE tools and other MCP tools may run only after steps 1 and 2.",
   "4. Compose reply: synthesize the answer using retrieval results and tool output.",
   "5a. Closing store: call store_structured with entities = [ { entity_type: \"conversation_message\", role: \"assistant\", sender_kind: \"assistant\", content: \"<exact reply text>\", turn_key: \"{conversation_id}:{turn_id}:assistant\" } ] and idempotency_key \"conversation-{conversation_id}-{turn_id}-assistant-{suffix}\".",
@@ -114,7 +115,11 @@ export const MCP_INTERACTION_INSTRUCTIONS_FALLBACK = [
   "",
   "FORBIDDEN: skipping Neotoma for an entire rapid-fire session; persisting only the user message; ending the turn without the closing assistant store.",
   "",
-  "Display rule: when a turn creates, updates, or retrieves Neotoma entities other than chat bookkeeping (conversation, conversation_message), the reply MUST render a section headed `🧠 Neotoma` with bullet points. Each bullet: emoji + label + (`entity_type`). Groups: Created (N), Updated (N), Retrieved (N).",
+  "Display rule: when a turn creates, updates, or retrieves Neotoma entities other than chat bookkeeping (conversation, conversation_message), the reply MUST render a section headed `🧠 Neotoma — <full conversation canonical_name> (<conversation entity_id>)` with bullet points. Use the full, untruncated conversation canonical_name returned by the user-phase store (or conversation title if unavailable) and the conversation entity_id. Each bullet: emoji + label + (`entity_type`). Groups: Created (N), Updated (N), Retrieved (N).",
+  "",
+  "Per-turn QA: before finalizing, self-audit for missing user/assistant stores, missing PART_OF/REFERS_TO/EMBEDS relationships, orphaned entities, missing provenance, ignored ErrorEnvelope, and source extraction mistakes. Repair safe gaps in-turn; otherwise list Issues with immediate meaning, risk if unresolved, and recommended resolution.",
+  "",
+  "Feedback QA: every Issues item about Neotoma product/tooling/doc/schema-instruction behavior needs either a local fix when operating inside the Neotoma repo, or submit_feedback when outside it. If feedback is skipped because of local fix, consent, waiver, or next_check_suggested_at, show that decision in a Feedback group. Never reveal access_token.",
   "",
   "Store retry policy: if store_structured fails, (1) retry once with the same payload; (2) if it fails again, surface the error to the user before responding; (3) do not silently skip storage.",
   "",
@@ -153,7 +158,7 @@ export class NeotomaServer {
       },
       {
         capabilities: {
-          tools: {},
+          tools: { listChanged: true },
           resources: {},
         },
       }
@@ -1199,6 +1204,8 @@ export class NeotomaServer {
         return await this.retrieveFieldProvenance(args);
       case "create_relationship":
         return await this.createRelationship(args);
+      case "create_relationships":
+        return await this.createRelationships(args);
       case "list_relationships":
         return await this.listRelationships(args);
       case "get_relationship_snapshot":
@@ -2204,6 +2211,50 @@ export class NeotomaServer {
     }
   }
 
+  private async createRelationships(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const parsed = CreateRelationshipsRequestSchema.parse(args ?? {});
+    const userId = this.getAuthenticatedUserId(parsed.user_id);
+    const { relationshipsService } = await import("./services/relationships.js");
+
+    const created: Array<Record<string, unknown>> = [];
+    const errors: Array<Record<string, unknown>> = [];
+    for (const [index, relationship] of parsed.relationships.entries()) {
+      try {
+        const snapshot = await relationshipsService.createRelationship({
+          relationship_type: relationship.relationship_type,
+          source_entity_id: relationship.source_entity_id,
+          target_entity_id: relationship.target_entity_id,
+          source_id: relationship.source_id || parsed.source_id || null,
+          metadata: relationship.metadata || {},
+          user_id: userId,
+        });
+        created.push({
+          index,
+          ...snapshot,
+          id: snapshot.relationship_key,
+          created_at: snapshot.last_observation_at,
+        });
+      } catch (error) {
+        errors.push({
+          index,
+          relationship,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    return this.buildTextResponse({
+      success: errors.length === 0,
+      requested: parsed.relationships.length,
+      created_count: created.length,
+      error_count: errors.length,
+      relationships: created,
+      errors,
+    });
+  }
+
   private async listRelationships(
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
@@ -3038,11 +3089,20 @@ export class NeotomaServer {
         entities: z.array(z.record(z.unknown())).optional(),
         relationships: z
           .array(
-            z.object({
-              relationship_type: z.string(),
-              source_index: z.number().int().min(0),
-              target_index: z.number().int().min(0),
-            })
+            z.union([
+              z.object({
+                relationship_type: z.string(),
+                source_index: z.number().int().min(0),
+                target_index: z.number().int().min(0),
+                metadata: z.record(z.unknown()).optional(),
+              }),
+              z.object({
+                relationship_type: z.string(),
+                source_entity_id: z.string().min(1),
+                target_entity_id: z.string().min(1),
+                metadata: z.record(z.unknown()).optional(),
+              }),
+            ])
           )
           .optional(),
         source_priority: z.number().default(100),
@@ -3405,11 +3465,20 @@ export class NeotomaServer {
     sourcePriority: number = 100,
     idempotencyKey?: string,
     originalFilename?: string,
-    relationships?: Array<{
-      relationship_type: string;
-      source_index: number;
-      target_index: number;
-    }>,
+    relationships?: Array<
+      | {
+          relationship_type: string;
+          source_index: number;
+          target_index: number;
+          metadata?: Record<string, unknown>;
+        }
+      | {
+          relationship_type: string;
+          source_entity_id: string;
+          target_entity_id: string;
+          metadata?: Record<string, unknown>;
+        }
+    >,
     options: {
       commit?: boolean;
       strict?: boolean;
@@ -4000,21 +4069,30 @@ export class NeotomaServer {
       const { relationshipsService } = await import("./services/relationships.js");
       const entityIds = createdEntities.map((e) => e.entityId);
       for (const rel of relationships) {
-        if (rel.source_index >= entityIds.length || rel.target_index >= entityIds.length) {
+        const sourceEntityId =
+          "source_entity_id" in rel
+            ? rel.source_entity_id
+            : entityIds[rel.source_index];
+        const targetEntityId =
+          "target_entity_id" in rel
+            ? rel.target_entity_id
+            : entityIds[rel.target_index];
+        if (!sourceEntityId || !targetEntityId) {
           logger.warn(
-            `store_structured: relationship index out of range (source_index=${rel.source_index}, target_index=${rel.target_index}, entities.length=${entityIds.length}); skipping`
+            `store_structured: relationship reference out of range or missing ` +
+              `(source=${"source_index" in rel ? rel.source_index : rel.source_entity_id}, ` +
+              `target=${"target_index" in rel ? rel.target_index : rel.target_entity_id}, ` +
+              `entities.length=${entityIds.length}); skipping`
           );
           continue;
         }
-        const sourceEntityId = entityIds[rel.source_index];
-        const targetEntityId = entityIds[rel.target_index];
         try {
           await relationshipsService.createRelationship({
             relationship_type: rel.relationship_type as RelationshipType,
             source_entity_id: sourceEntityId,
             target_entity_id: targetEntityId,
             source_id: storageResult.sourceId,
-            metadata: {},
+            metadata: rel.metadata ?? {},
             user_id: userId,
           });
         } catch (relError) {

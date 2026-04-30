@@ -82,6 +82,14 @@ export function buildToolDefinitions(
       inputSchema: getOpenApiInputSchemaOrThrow("create_relationship"),
     },
     {
+      name: "create_relationships",
+      description: desc(
+        "create_relationships",
+        "Create multiple typed relationships between existing entities in one batch",
+      ),
+      inputSchema: getOpenApiInputSchemaOrThrow("create_relationships"),
+    },
+    {
       name: "list_relationships",
       description: desc(
         "list_relationships",
@@ -1054,6 +1062,7 @@ export const NEOTOMA_TOOL_NAMES = [
   "list_observations",
   "retrieve_field_provenance",
   "create_relationship",
+  "create_relationships",
   "list_relationships",
   "get_relationship_snapshot",
   "retrieve_entities",

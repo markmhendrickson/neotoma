@@ -48,6 +48,7 @@ If a client supports standard MCP server configuration, point it at the same Neo
 
 - Local same-machine usage: prefer stdio (`run_neotoma_mcp_stdio*.sh`)
 - Remote/tunnel/deployed usage: prefer HTTP MCP endpoints
+- Local source iteration with an installed MCP client: use `run_neotoma_mcp_stdio_dev_shim.sh` so the client-facing stdio process remains stable while the shim restarts its worker.
 
 For an OpenClaw-specific setup path, see [MCP OpenClaw setup](mcp_openclaw_setup.md).
 
@@ -69,6 +70,8 @@ For local usage (Cursor, Claude Code, Codex on the same machine as the Neotoma r
 ```
 
 Replace `/absolute/path/to/neotoma` with your repo path. Run `npm run build:server` before first use. Stdio lets the client spawn the server, so after sleep you only need to toggle the MCP server off/on; no separate HTTP process to restart.
+
+For local source iteration, point `neotoma-dev` at `scripts/run_neotoma_mcp_stdio_dev_shim.sh` instead. The dev shim is still a stdio MCP server from the client perspective, but it owns a restartable worker behind that stream. It detects `tools/list` surface changes by hashing the tool list and emits `notifications/tools/list_changed`; clients that do not refresh after that notification must reconnect or reinitialize to see new or updated tools.
 
 To use both dev and prod, add two MCP servers (e.g. `neotoma-dev` and `neotoma`); each process has a fixed environment and cannot switch at runtime.
 

@@ -18,6 +18,7 @@ import { type StoreEntityInput } from "@neotoma/client";
 
 import {
   classifyErrorMessage,
+  collectHookWorkspaceContext,
   getClient,
   harnessProvenance,
   incrementFailureCounter,
@@ -26,6 +27,7 @@ import {
   makeIdempotencyKey,
   recordConversationTurn,
   runHook,
+  turnContextFields,
   scrubErrorMessage,
   updateTurnState,
 } from "./_common.js";
@@ -106,6 +108,7 @@ async function handle(
     errorClass === "ETIMEDOUT" ||
     errorClass === "timeout";
   const model = (input.model as string) ?? "";
+  const context = collectHookWorkspaceContext(input);
   const nextState = updateTurnState(sessionId, turnId, (s) => ({
     ...s,
     conversation_id: sessionId,
@@ -155,6 +158,7 @@ async function handle(
     model: model || undefined,
     neotomaToolFailures: nextState.neotoma_tool_failures,
     storedEntityIds: failureEntityId ? [failureEntityId] : undefined,
+    ...turnContextFields(context),
   });
   if (failureEntityId && turnRecord?.entityId) {
     try {

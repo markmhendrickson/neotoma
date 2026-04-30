@@ -149,6 +149,12 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     robots: "noindex,nofollow",
     ogType: "website",
   },
+  "/home-2": {
+    title: "Neotoma \u2014 structured state for AI agents",
+    description: "Homepage preview variant (not indexed).",
+    robots: "noindex,nofollow",
+    ogType: "website",
+  },
   "/install": {
     title: "Install | Neotoma",
     description:

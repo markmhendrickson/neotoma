@@ -1,0 +1,75 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "outreach_commitment_creates_task",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-04-29T09:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Draft an email to Tom asking if he can meet next Tuesday for the\npartnership review.\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. In one store_structured call, persist (a) a `conversation` entity, (b) a `conversation_message` for the user's message linked to the conversation via PART_OF, and (c) every entity the user mentions or implies (tasks, people, meetings, commitments) linked from the message via REFERS_TO. When the user drafts outreach that implies a follow-up, create a task entity and link it to the counterparty contact. Then reply briefly.\n",
+  "tool_calls": [
+    {
+      "name": "store_structured",
+      "input": {
+        "idempotency_key": "conversation-outreach-1-user",
+        "entities": [
+          {
+            "entity_type": "conversation",
+            "title": "Draft email to Tom — partnership review meeting"
+          },
+          {
+            "entity_type": "conversation_message",
+            "role": "user",
+            "sender_kind": "user",
+            "content": "Draft an email to Tom asking if he can meet next Tuesday for the partnership review.",
+            "turn_key": "outreach-1:1"
+          },
+          {
+            "entity_type": "contact",
+            "name": "Tom"
+          },
+          {
+            "entity_type": "task",
+            "title": "Follow up with Tom on partnership review meeting",
+            "due_date": "2026-05-05",
+            "status": "pending",
+            "description": "Schedule meeting with Tom next Tuesday for partnership review."
+          }
+        ],
+        "relationships": [
+          {
+            "relationship_type": "PART_OF",
+            "source_index": 1,
+            "target_index": 0
+          },
+          {
+            "relationship_type": "REFERS_TO",
+            "source_index": 1,
+            "target_index": 2
+          },
+          {
+            "relationship_type": "REFERS_TO",
+            "source_index": 1,
+            "target_index": 3
+          },
+          {
+            "relationship_type": "REFERS_TO",
+            "source_index": 3,
+            "target_index": 2
+          }
+        ]
+      },
+      "output": [
+        {
+          "type": "input_text",
+          "text": "{\"source_id\":\"stub-src-outreach-1\",\"entities\":[{\"observation_index\":0,\"entity_id\":\"ent_stub_out_001\",\"entity_type\":\"conversation\",\"action\":\"created\",\"canonical_name\":\"conversation:Draft email to Tom\",\"resolver_path\":[\"schema:canonical_name_fields:title\",\"existing_row:none\"],\"identity_basis\":\"schema_rule\",\"identity_rule\":\"composite:title\"},{\"observation_index\":1,\"entity_id\":\"ent_stub_out_002\",\"entity_type\":\"conversation_message\",\"action\":\"created\",\"canonical_name\":\"conversation_message:outreach-1:1\",\"resolver_path\":[\"schema:canonical_name_fields:turn_key\",\"existing_row:none\"],\"identity_basis\":\"schema_rule\",\"identity_rule\":\"composite:turn_key\"},{\"observation_index\":2,\"entity_id\":\"ent_stub_out_003\",\"entity_type\":\"contact\",\"action\":\"created\",\"canonical_name\":\"Tom\",\"resolver_path\":[\"name_key:name\",\"existing_row:none\"],\"identity_basis\":\"heuristic_name\",\"identity_rule\":\"name_key:name\"},{\"observation_index\":3,\"entity_id\":\"ent_stub_out_004\",\"entity_type\":\"task\",\"action\":\"created\",\"canonical_name\":\"Follow up with Tom on partnership review meeting\",\"resolver_path\":[\"name_key:title\",\"existing_row:none\"],\"identity_basis\":\"heuristic_name\",\"identity_rule\":\"name_key:title\"}],\"unknown_fields_count\":0,\"related_entities\":[],\"related_relationships\":[{\"relationship_key\":\"PART_OF:ent_stub_out_002:ent_stub_out_001\",\"relationship_type\":\"PART_OF\",\"source_entity_id\":\"ent_stub_out_002\",\"target_entity_id\":\"ent_stub_out_001\",\"schema_version\":\"1.0\",\"snapshot\":{},\"computed_at\":\"2026-04-29T09:00:00.000Z\",\"observation_count\":1,\"last_observation_at\":\"2026-04-29T09:00:00.000Z\",\"provenance\":{},\"user_id\":\"00000000-0000-0000-0000-000000000000\"},{\"relationship_key\":\"REFERS_TO:ent_stub_out_002:ent_stub_out_003\",\"relationship_type\":\"REFERS_TO\",\"source_entity_id\":\"ent_stub_out_002\",\"target_entity_id\":\"ent_stub_out_003\",\"schema_version\":\"1.0\",\"snapshot\":{},\"computed_at\":\"2026-04-29T09:00:00.000Z\",\"observation_count\":1,\"last_observation_at\":\"2026-04-29T09:00:00.000Z\",\"provenance\":{},\"user_id\":\"00000000-0000-0000-0000-000000000000\"},{\"relationship_key\":\"REFERS_TO:ent_stub_out_002:ent_stub_out_004\",\"relationship_type\":\"REFERS_TO\",\"source_entity_id\":\"ent_stub_out_002\",\"target_entity_id\":\"ent_stub_out_004\",\"schema_version\":\"1.0\",\"snapshot\":{},\"computed_at\":\"2026-04-29T09:00:00.000Z\",\"observation_count\":1,\"last_observation_at\":\"2026-04-29T09:00:00.000Z\",\"provenance\":{},\"user_id\":\"00000000-0000-0000-0000-000000000000\"},{\"relationship_key\":\"REFERS_TO:ent_stub_out_004:ent_stub_out_003\",\"relationship_type\":\"REFERS_TO\",\"source_entity_id\":\"ent_stub_out_004\",\"target_entity_id\":\"ent_stub_out_003\",\"schema_version\":\"1.0\",\"snapshot\":{},\"computed_at\":\"2026-04-29T09:00:00.000Z\",\"observation_count\":1,\"last_observation_at\":\"2026-04-29T09:00:00.000Z\",\"provenance\":{},\"user_id\":\"00000000-0000-0000-0000-000000000000\"}]}"
+        }
+      ],
+      "sequence": 0
+    }
+  ],
+  "assistant_text": "Here's a draft:\n\nSubject: Partnership Review — Next Tuesday?\n\nHi Tom,\n\nWould you be available next Tuesday for the partnership review? Let me know a time that works.\n\nBest regards\n\nI've also created a follow-up task to confirm the meeting."
+}

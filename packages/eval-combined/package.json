@@ -1,0 +1,16 @@
+{
+  "name": "@neotoma/eval-combined",
+  "version": "0.1.0",
+  "description": "Integrated runner for WRIT + Tier 2 eval harness against a shared isolated Neotoma server",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "run": "npx tsx src/cli.ts"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  }
+}

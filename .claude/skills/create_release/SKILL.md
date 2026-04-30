@@ -1,261 +1,428 @@
 ---
 name: create_release
-description: Release
+description: Create New Release
 ---
 
-<!-- Source: .cursor/skills/create-release/SKILL.md -->
+<!-- Source: foundation/agent_instructions/cursor_commands/create_release.md -->
 
+# Create New Release
 
-# Release
-
-Prepare and ship a GitHub + npm release with a mandatory preview step. A confirmed **execute** run is **not complete** until **`npm publish`** succeeds from the published package root, unless the user explicitly scoped the request to GitHub-only / no registry.
+Orchestrates multiple Feature Units into a cohesive release. Implements the Release workflow from `foundation/development/release_workflow.md`.
 
 ## When to Use
 
-When you want to ship what is on `dev` (or the current integration branch) to `main`, tag it, publish to npm, and create a GitHub Release with curated notes.
+**Explicit Command:** Use when you know exactly what you want: start a new release, plan multi-FU work with dependency resolution, generate execution schedules with parallelization, orchestrate FU creation/execution in dependency order, run cross-FU integration tests.
 
-Trigger with `/release`, or naturally ("prepare a release", "let's ship v0.5.0").
+**Automatic Detection:** This workflow can also be triggered automatically via `.claude/rules/release_detection.md` when you mention release-related patterns in natural language (e.g., "new release", "release v1.1.0"). Both paths execute the same workflow.
 
-## Reference Documents
+This is a foundation command. If installed, it will be available in `.claude/skills/` via symlink.
 
-| Document | Role |
-|----------|------|
-| `docs/developer/github_release_process.md` | GitHub Release template layout, `release-notes:render` usage, `gh release create` |
-| `docs/developer/github_release_supplement.example.md` | Section pattern for the human-readable supplement |
-| `.github/release_notes_wrap.md` | Fixed wrap template (install commands, npm/compare table, commit list) |
+## Prerequisites
 
-## Workflow
+- Release ID chosen (format: `vX.Y.Z`, e.g., `v1.0.0`)
+- Release scope roughly defined (what's in, what's out)
+- FU IDs for included work identified (or to be created)
 
-### Step 1: Preflight
+## Command Execution
 
-Run before anything else:
+### Step 1: Load Documentation
 
-1. **Fetch**: `git fetch origin` (and other configured remotes).
-2. **Determine branches**: Default integration = `dev`, target = `main`. Override if the user specifies.
-3. **Commits not on main**: `git log origin/main..origin/dev --oneline` (or `origin/main..HEAD` on integration branch). This is the default scope of "what ships."
-4. **Uncommitted changes**: `git status --short`. If dirty, describe the actual pending work grouped by area/impact using `git diff --stat` and targeted file inspection. Do not use a generic placeholder.
-5. **Submodules**: `git submodule status` — surface any that are ahead/behind recorded SHAs.
-6. **Previous tag**: `git tag --sort=-v:refname | head -1` — this is the compare base unless the user specifies `--compare-base`.
-7. **Current package.json version**: Read and display.
-8. **OpenAPI breaking-change diff**: Run `npm run -s openapi:bc-diff -- --base <previous-tag>` (the script defaults to the latest tag if `--base` is omitted). Capture stdout — it lists every breaking entry classified against `openapi.yaml`. The script exits non-zero when breaking entries exist; that exit code is informational, not fatal, at this stage. Save the prose output for the supplement reconciliation in Step 3.
-9. **Breaking-changes section present**: When the draft supplement at `docs/releases/in_progress/<TAG>/github_release_supplement.md` exists, confirm it contains a `## Breaking changes` (or `### Breaking changes`) heading. If missing, abort preflight with a clear message pointing at `docs/developer/github_release_process.md` § Validation tightening is breaking. When the release has no breaking changes, the section still exists and contains the single line `No breaking changes.` — an omitted heading is treated as a preflight failure, not an empty section.
-10. **Preflight reconciliation (gate)**: For every entry in the Step 8 breaking list, confirm the draft supplement's Breaking changes section names that entry with a migration note. Abort preflight when any breaking entry is uncovered. Typical output:
+Load required documents:
+- `foundation/development/release_workflow.md` (primary workflow)
+- `docs/feature_units/standards/creating_feature_units.md` (FU creation)
+- `docs/feature_units/standards/execution_instructions.md` (FU execution)
+- `docs/specs/MVP_FEATURE_UNITS.md` (if working on MVP)
 
-    ```
-    OpenAPI diff reports 2 breaking entries; supplement covers 1.
-    Missing: tightened-additional-properties components.schemas.StoreRequest
-    Add an entry under "## Breaking changes" in docs/releases/in_progress/<TAG>/github_release_supplement.md
-    or restore compatibility before proceeding.
-    ```
+### Step 2: Checkpoint 0 — Release Planning
 
-    The release-skill executor does not tag or push a release whose supplement omits a breaking entry reported by the diff.
+Check if Release plan exists:
 
-### Step 2: Resolve Version
+- Look for `docs/releases/in_progress/{release_id}/release_plan.md`
+- Look for `docs/releases/in_progress/{release_id}/manifest.yaml`
 
-1. If the user provided a version (e.g. "v0.5.0"), use it.
-2. Otherwise, propose next patch from the latest tag: if latest is `v0.4.2`, propose `v0.4.3`. If the user wants a minor or major bump, ask once.
-3. Confirm: "Release as **vX.Y.Z**?"
+**If Release plan exists:** Load and validate. If complete → proceed to Step 3. If incomplete → prompt user to complete.
 
-### Step 3: Preview
+**If Release plan does NOT exist:** Prompt user interactively for Release details:
 
-Draft the supplement following the section pattern from `docs/developer/github_release_supplement.example.md`:
+1. **Release name and version** (e.g., "MVP", "v1.0.0")
+2. **Release goal** (1-2 sentence summary of what this ships)
+3. **Target ship date** (date or "when ready")
+4. **Priority** (P0 critical / P1 high / P2 normal)
+5. **Included Feature Units** (list of FU IDs, e.g., "FU-100, FU-101, FU-102" or "all P0 FUs from MVP_FEATURE_UNITS.md")
+6. **Excluded scope** (what's explicitly NOT in this release)
+7. **Release-level acceptance criteria:**
+   - Product acceptance (core workflows, empty/error states)
+   - Technical acceptance (test coverage, performance, integrity)
+   - Business acceptance (metrics, KPIs)
+8. **Cross-FU integration test requirements** (flows that span multiple FUs)
+9. **Deployment strategy** (staging_first / canary / full_rollout)
+10. **Rollback plan** (how to revert if issues found)
+11. **Post-release monitoring plan** (key metrics, alerts)
 
-- **Summary**: One plain-English sentence of what this release ships.
-- **Highlights**: A short section immediately after the summary with the 3-5 most compelling user-facing changes (never omit; draft via the Highlights rule below).
-- **What changed for npm package users**: CLI, runtime/data layer, shipped artifacts.
-- **API surface & contracts**: OpenAPI / MCP tool changes.
-- **Behavior changes**: What users notice after upgrading.
-- **Agent-facing instruction changes**: Include whenever `docs/developer/mcp/instructions.md`, `docs/developer/cli_agent_instructions.md`, or `AGENTS.md` changed materially — the MCP server ships those instructions to every connected client, so each net-new rule or block is user-facing behavior.
-- **Plugin / hooks / SDK changes**: Include when any of `packages/cursor-hooks`, `codex-hooks`, `claude-code-plugin`, `opencode-plugin`, `claude-agent-sdk-adapter`, or the TS/Python clients changed.
-- **Security hardening**: Include when CSP, rate limits, auth, loopback/local classification, or capability registries changed.
-- **Docs site & CI / tooling**: If applicable.
-- **Internal changes**: Refactors, architecture, dependency, test-only work.
-- **Fixes**: Bug fixes with user/operator impact.
-- **Tests and validation**: What validates confidence.
-- **Breaking changes**: **REQUIRED AND EXPLICIT.** Never omit this section. When nothing is breaking, write a single line `No breaking changes.` under the heading. When the release contains validation tightenings (see `docs/developer/github_release_process.md` § Validation tightening is breaking), each entry names the before/after request shape, the error code returned, the structured `hint` text, and the migration step callers must take. The preflight in Step 1 refuses to proceed when this section is absent.
+**After user input:** Generate complete Release plan (`release_plan.md`), create manifest YAML (`manifest.yaml`), create integration test spec (`integration_tests.md`), create status tracker (`status.md`), save all to `docs/releases/in_progress/{release_id}/`.
 
-**Highlights drafting rule (mandatory):**
+### Step 3: Dependency Analysis and Schedule Generation
 
-Before writing Highlights bullets, walk the **actual release scope** (code, docs, tests, OpenAPI diff, plans folder) and identify the user-visible benefit of each major subsystem that changed. Do not draft from commit messages or diff-stats alone — shipped commits plus folded-in working-tree scope both count.
+Analyze dependencies:
 
-For each candidate bullet, rank it by upgrade motivation:
+1. **Load all FU manifests** for FUs in Release
+2. **Extract dependencies** from each FU's `dependencies.requires` field
+3. **Build dependency graph**: FU → [list of required FUs]
+4. **Detect cycles:** If cycle found → REJECT with error message. List cycle: "FU-A → FU-B → FU-C → FU-A"
+5. **Validate dependencies:** If any required FU is ⏳ Not Started and not in this Release → REJECT. If any required FU is 🔨 Partial → WARN but allow with user confirmation. If any required FU is ✅ Complete → proceed.
 
-1. **New capability** — something the reader can now do that was impossible or painful before (e.g. repair an over-merged entity, verify a signed writer, diff against an external store).
-2. **Visibility / trust / safety** — information or guarantees the reader newly gets (e.g. attribution tier exposed, structured migration guidance on validation errors).
-3. **Ops / quality-of-life** — defaults changed to the sane thing (e.g. `api start --env prod` flip).
-4. **Breaking-change cleanup** — only headline-worthy if the cleanup unlocks a new capability. Otherwise keep it in **Breaking changes**, not in Highlights.
+Generate execution schedule:
 
-Keep **3-5 Highlights bullets** (absolute max 7; prefer fewer). Apply this shape to each bullet:
+1. **Perform topological sort** of FU dependency graph
+2. **Group into batches**:
+   - Batch 0: FUs with no dependencies
+   - Batch 1: FUs that depend only on Batch 0
+   - Batch 2: FUs that depend only on Batch 0 or 1
+   - ... continue until all FUs assigned to batches
+3. **Identify parallelization opportunities**:
+   - Within each batch, FUs can execute in parallel
+4. **Estimate timeline**:
+   - Sum FU effort estimates per batch
+   - Account for parallelization (divide by number of parallel agents if applicable)
+5. **Save execution schedule** to `execution_schedule.md`
 
-- `- **<Bolded benefit claim in plain English>.** <One concrete mechanic sentence naming the tool, endpoint, field, flag, or file that delivers the benefit.>`
+Pre-Mortem Analysis:
 
-Benefit-claim phrasing rules: lead with what the reader can do or know; avoid implementation verbs like "refactored", "introduced middleware", "added service". Name endpoints/tools/flags once inside the mechanic sentence so readers can map the bullet to the detailed sections.
+1. Identify top 3-5 most likely failure modes for this Release
+2. For each failure mode, specify:
+   - Early warning signals (metrics, test failures, timeline slips)
+   - Mitigating FUs or actions
+   - Rollback plan
+3. Present pre-mortem to user and ask:
+   - "Do these failure modes match your concerns? (yes/no)"
+   - "What other failure modes should we plan for?"
+4. Incorporate feedback and add "Pre-Mortem" section to Release plan
 
-When in doubt, cut. Supporting-cast items (single bug fixes, tightenings, internal refactors, doc moves) belong in later sections, not in Highlights.
+WIP and Parallelization Limits:
 
-**Comprehensive body coverage rule (mandatory):**
+1. Encode limits in `manifest.yaml`:
+   - `max_parallel_fus: <number>` (default: 3)
+   - `max_high_risk_in_parallel: <number>` (default: 1)
+2. Present limits to user: "Proposed limits: max_parallel_fus=3, max_high_risk_in_parallel=1. Approve? (yes/modify)"
 
-Highlights are tight; the body is **comprehensive**. Take the time needed to explain every significant user-impacting change in the detailed sections below Highlights — omission and under-explanation are equally bad. A change is user-impacting if it affects anyone in the audience set: npm/CLI users, HTTP/OpenAPI callers, MCP tool callers, agent authors (including via the MCP instructions the server ships to clients), server operators, plugin/hook/SDK integrators, the Inspector/frontend, or the feedback/triage pipeline.
+Machine-Checkable Exit Criteria:
 
-Before writing body sections, enumerate the full release scope across these source lanes and confirm each is covered somewhere in the supplement:
+1. For each Release acceptance criterion, define:
+   - Concrete test suite or script that validates it
+   - Single metric or query that proves it
+2. Add these to `integration_tests.md` with explicit pass/fail conditions
+3. Present to user: "Each acceptance criterion now has a machine-checkable test. Review? (yes/modify)"
 
-- Committed commits since the base tag (`git log <base>..HEAD`).
-- Dirty working-tree edits and untracked files (folded into the same sections as committed work).
-- `openapi.yaml` diff — new routes, expanded existing routes, new component schemas, validation tightenings.
-- MCP tool diff (`src/tool_definitions.ts`) — new/renamed tools, schema changes.
-- Agent-facing instruction diffs (`docs/developer/mcp/instructions.md`, `docs/developer/cli_agent_instructions.md`, `AGENTS.md`) — these ship to every connected client and count as user-facing behavior.
-- CLI diff (`src/cli/index.ts`, `package.json` scripts) — new commands, flags, defaults, removals.
-- Runtime middleware / reducers / adapters / schema registry.
-- Plugin and hook packages (`packages/cursor-hooks`, `codex-hooks`, `claude-code-plugin`, `opencode-plugin`, `claude-agent-sdk-adapter`, `client`, `client-python`).
-- Frontend (`frontend/`) and Inspector (`inspector/`).
-- New services (`services/…`), new scripts (`scripts/…`), new cron/launchd templates.
-- New subsystem docs (`docs/subsystems/…`), operator docs (`docs/developer/…`, `docs/infrastructure/…`), architecture docs.
-- New or changed tests (counts meaningfully — it tells readers what's validated).
-- New env vars (grep `.env.example` and `NEOTOMA_*` references).
-- Security-relevant changes (CSP, rate limits, auth, loopback detection, capability registries).
+Present schedule to user: Display batch breakdown, show which FUs run in parallel, show estimated timeline, show WIP limits and pre-mortem failure modes. STOP and prompt: "Approve execution schedule? (yes/no/modify)"
 
-Every significant user-impacting item from the above lanes MUST appear in at least one body section with enough detail that the reader can act on it (endpoint path, tool name, CLI flag, env var, schema field, file path). Supporting cast items (single internal refactors, test-only tweaks, doc typo fixes, generated-code churn) can be summarized in aggregate; substantive behavior changes cannot. If a body section grows long, add subheadings rather than cutting — verbosity in body sections is fine when the content is substantive.
+**If user approves:**
 
-For releases that change agent-facing behavior via the shipped MCP instructions, include a dedicated **Agent-facing instruction changes** section calling out each net-new rule or block; that surface ships to every connected agent on server upgrade and is user-facing.
+- Initialize `status.md` with "Decision Log" section (empty initially)
+- Update Release status to `in_progress`
+- Proceed to Step 4
 
-**Integrated supplement (mandatory for `/release`):** The narrative is always a **single release story** across committed history and the working tree. Walk the default compare range (commits not yet on `main`, plus any user override) **and** fold **all** material uncommitted and untracked work into **the same sections above**, written **as if that work were already committed** — same grouping and reader-facing tone as shipped commits. Do not isolate dirty work in a separate appendix (for example, do not use a standalone **Uncommitted changes pending inclusion** block as the primary description). If paths cannot ship under repo security or submodule policy, state that in **Breaking changes** or a one-line **Ship constraints** item inside the same structure.
+**If user requests modifications:**
 
-**Exact GitHub Release preview (mandatory):** After drafting the supplement, render the **exact Markdown body** that `gh release create --notes-file` will use. Preview the rendered wrap + supplement, not just the supplement summary.
+- Adjust schedule based on user input
+- Re-present for approval
 
-- If the tag already exists, render it normally:
+---
+
+### Step 4: Execute FU Batches (Autonomous)
+
+Before starting execution, prompt user for execution strategy:
+- Run `node scripts/release_orchestrator.js <release_id>`
+- Orchestrator will prompt: "How would you like to execute this release build? 1. Single-agent (sequential execution) 2. Multi-agent (parallel execution)"
+- If single-agent selected, orchestrator recommends model based on release complexity
+- Selected strategy saved to `manifest.yaml`
+
+For each batch in execution schedule (in order):
+
+**Batch Execution Loop:**
+
+1. **Start all FUs in batch:**
+
+   - For each FU in batch:
+     - Check if FU spec exists
+     - If not, run `Create New Feature Unit` command (Checkpoint 0)
+     - If UI FU and no prototype, run `Create Prototype` command
+     - If UI FU and prototype not approved, run Checkpoint 1 (Prototype Review)
+     - Run `Run Feature Workflow` command to implement FU
+     - Run `Final Review` command (Checkpoint 2) for FU approval
+   - If multiple FUs in batch, suggest running in parallel (separate agent sessions or worktrees)
+
+2. **Wait for all FUs in batch to complete**
+
+3. **Run cross-FU integration tests:**
+
+   - Execute integration test suite from `integration_tests.md`
+   - Test flows that span multiple FUs in this batch
+   - If tests fail: STOP and report failures to user. User decides: fix and retry, skip FU, or abort Release
+   - If tests pass, proceed
+
+4. **Update Release status:**
+   - Mark batch as `completed` in `status.md`
+   - Update progress percentage: `(completed_batches / total_batches) * 100`
+   - If any decisions were made during batch execution (scope changes, FU deferrals, etc.), append to Decision Log in `status.md` with timestamp
+
+**After all batches complete:**
+
+- Mark all FUs as `completed` in status tracker
+- Proceed to Step 5
+
+---
+
+### Step 5: Checkpoint 1 — Mid-Release Review (Optional)
+
+Check if mid-release checkpoint is configured: Look for `checkpoint_1_after_batch` in `manifest.yaml`. If not configured, skip to Step 6.
+
+If configured and batch threshold reached, present mid-release status:
+
+- "Mid-release checkpoint reached"
+- "FUs completed: X/Y"
+- "Integration tests: [pass/fail summary]"
+- "Current batch: N"
+- "Remaining batches: [list]"
+
+**STOP and prompt user:**
+
+- "Continue to remaining FUs? (yes/no/pause)"
+
+**If user responds:**
+
+- **yes** → continue to remaining batches
+- **no** → halt execution, mark Release as `paused`
+- **pause** → halt execution, user can resume later
+
+---
+
+### Step 6: Cross-Release Integration Testing
+
+Run full integration test suite:
+
+1. **Execute all tests** from `integration_tests.md`
+2. **Run end-to-end user flows** that span multiple FUs
+3. **Verify no regressions** in existing functionality
+4. **Run performance benchmarks** (if specified in acceptance criteria)
+5. **Verify graph integrity** (0 orphans, 0 cycles if applicable)
+
+Check Release-level acceptance criteria:
+
+- Product acceptance: Core workflows functional?
+- Technical acceptance: Test coverage met? Performance targets hit?
+- Business acceptance: Metrics instrumented? Analytics ready?
+
+Generate integration test report:
+
+- Save to `integration_test_report.md`
+- Include:
+  - Pass/fail summary
+  - Performance metrics
+  - Regression test results
+  - Issues found (if any)
+
+**If tests fail:** STOP and report failures to user. User decides: fix issues and re-test, or abort Release.
+
+**If all tests pass:** Proceed to Step 7.
+
+### Step 7: Checkpoint 2 — Pre-Release Sign-Off
+
+Present Release summary:
+
+- FUs completed: X/Y (with list)
+- Integration tests: [pass/fail summary with link to report]
+- Acceptance criteria: [checklist with ✅ / ❌ status]
+- Release plan: [link]
+- Integration test report: [link]
+
+**STOP and prompt user:**
+
+- "Release {release_id} ready for deployment."
+- "All FUs complete: [list with status]"
+- "Integration tests passed: [summary]"
+- "Acceptance criteria met: [checklist]"
+- "Approve for deployment? (yes/no)"
+- "Any final changes needed? (list or 'none')"
+
+**If user requests changes:**
+
+- Apply changes
+- Re-run affected tests
+- Update status
+- Repeat Checkpoint 2 until approved
+
+**If user approves:**
+
+- Update Release status to `ready_for_deployment`
+- Proceed to Step 8
+
+---
+
+### Step 8: Deployment
+
+Execute deployment plan:
+
+1. **Follow deployment strategy** from Release plan:
+   - **staging_first**: Deploy to staging, run smoke tests, then production
+   - **canary**: Deploy to small % of users, monitor, then full rollout
+   - **full_rollout**: Deploy to all users at once
+2. **Run deployment steps:**
+   - Build production bundle
+   - Run database migrations (if any)
+   - Deploy backend services
+   - Deploy frontend assets
+   - Run health checks
+   - Run smoke tests
+3. **Verify deployment success:**
+   - Health checks pass?
+   - Smoke tests pass?
+   - Key metrics normal?
+
+**If deployment fails:** STOP and report failure, execute rollback plan, user investigates and fixes.
+
+**If deployment succeeds:** Update Release status to `deployed`, record deployment timestamp, proceed to Step 9.
+
+### Step 9: Post-Release Monitoring Setup
+
+Setup monitoring:
+
+1. **Verify metrics instrumentation:**
+   - Check that key metrics from acceptance criteria are being collected
+   - Verify dashboards are accessible
+2. **Setup alerts:**
+   - Configure alerts for critical metrics (error rates, latency, etc.)
+3. **Document monitoring links:**
+   - Add links to dashboards, alerts to Release status doc
+
+Mark Release as completed:
+
+- Update status to `completed`
+- Move Release files from `in_progress/` to `completed/`:
   ```bash
-  npm run -s release-notes:render -- --tag vX.Y.Z > /tmp/gh-release-vX.Y.Z.md
+  mv docs/releases/in_progress/{release_id} docs/releases/completed/{release_id}
   ```
-- If the tag does **not** exist yet, render a **pre-tag exact preview** against the intended release ref:
-  ```bash
-  npm run -s release-notes:render -- --tag vX.Y.Z --head-ref <release-ref> --supplement docs/releases/in_progress/vX.Y.Z/github_release_supplement.md > /tmp/gh-release-vX.Y.Z.md
-  ```
-  Use `<release-ref>` as the ref that will receive the tag (for example `HEAD`, `origin/dev`, or the chosen integration branch after any confirmed pre-release commit).
 
-**Preflight honesty:** If the tree is dirty, append a short **Execute note:** the tag matches this preview only after the described local work is committed on the branch you will release (never stage paths forbidden by security / pre-commit rules). In that case the rendered Markdown is exact for the manual body and wrap, while the commit list becomes exact only after the pending commit set exists and you re-render in Step 4.
+Present completion summary:
 
-Write for a human reader deciding whether to upgrade. Do not dump raw commit lists into the supplement. Walk the commit range and group by theme together with local changes.
+- "Release {release_id} deployed and complete!"
+- "Deployed at: {timestamp}"
+- "Monitoring: {dashboard_links}"
+- "FUs shipped: [list]"
 
-**Present the rendered `/tmp/gh-release-vX.Y.Z.md` body to the user verbatim. STOP and ask:**
+## Example Interaction
 
-> "Confirm release **vX.Y.Z** with these notes? (yes / modify / cancel)"
+```
+User: Create release v1.0.0 for MVP
 
-If the working tree was dirty when drafting, state that **execute** matches the preview only after that local work is committed (excluding forbidden paths); confirm whether the user intends that full scope or needs to narrow it before Step 4.
+Agent: Loading Release workflow documentation...
 
-### Step 4: Execute
+Agent: No existing Release plan found for v1.0.0. Starting interactive Release planning (Checkpoint 0).
 
-After user confirms, run **every** step below in order through **`npm publish`**. Stopping after `gh release create` is a failed full `/release` unless the user confirmed a GitHub-only (no npm) scope.
+Agent: What is the Release name and version?
+User: MVP, v1.0.0
 
-1. **Commit uncommitted changes** (when the preview assumed them and the user confirms execute):
-   - Stage only paths that should ship; **never** stage paths forbidden by repository security / pre-commit rules (for example configured `protected_paths`, `.env*`, `data/` when disallowed).
-   - Prefer explicit `git add <paths>`; avoid blind `git add -A` when forbidden or local-only paths are present.
-   ```bash
-   git commit -m "Pre-release: include pending changes for vX.Y.Z"
-   ```
-   Skip this step if the working tree was clean at confirm time.
+Agent: What is the Release goal? (1-2 sentence summary)
+User: Ship deterministic Truth Layer with ingestion, extraction, entity resolution, timeline, and MCP access for AI tools. Support multi-user teams.
 
-2. **Bump version** in `package.json` (and workspaces if monorepo):
-   ```bash
-   npm version X.Y.Z --no-git-tag-version
-   git add package.json package-lock.json
-   git commit -m "Bump version to vX.Y.Z"
-   ```
+Agent: What is the target ship date?
+User: 2025-03-01
 
-3. **Merge dev into main**:
-   ```bash
-   git checkout main
-   git pull origin main
-   git merge --no-ff dev -m "Merge dev into main for vX.Y.Z"
-   ```
-   If merge conflicts: STOP and report. User resolves manually.
+Agent: What is the priority?
+User: P0 critical
 
-4. **Tag**:
-   ```bash
-   git tag -a "vX.Y.Z" -m "Release vX.Y.Z"
-   ```
+Agent: Which Feature Units should be included? (list FU IDs or "all P0 from MVP_FEATURE_UNITS")
+User: all P0 from MVP_FEATURE_UNITS.md
 
-5. **Push**:
-   ```bash
-   git push origin main
-   git push origin "vX.Y.Z"
-   ```
+Agent: [loads MVP_FEATURE_UNITS.md, extracts P0 FUs: FU-100, FU-101, FU-102, FU-103, FU-105, FU-300, FU-700, FU-701]
 
-6. **Write supplement file**: Save the confirmed changelog to `docs/releases/in_progress/vX.Y.Z/github_release_supplement.md`.
+Agent: What scope is explicitly excluded from this release?
+User: Semantic search, Plaid integration, X/Instagram integrations (all post-MVP)
 
-7. **Render release notes**:
-   ```bash
-   npm run -s release-notes:render -- --tag vX.Y.Z > /tmp/gh-release-vX.Y.Z.md
-   ```
-   If the last npm publish does not match the previous git tag, use `--compare-base <last_published_tag>`. This must reproduce the same body style shown in Step 3, now with the final tag/commit set.
+Agent: What are the Release-level acceptance criteria? (product, technical, business)
+User: [provides criteria from MVP_EXECUTION_PLAN.md]
 
-8. **Create GitHub Release**:
-   ```bash
-   gh release create "vX.Y.Z" --title "vX.Y.Z" --notes-file /tmp/gh-release-vX.Y.Z.md
-   ```
+Agent: What cross-FU integration tests are required?
+User: Full user flow: upload → extraction → entity resolution → event generation → timeline display → AI query via MCP
 
-9. **Publish to npm (mandatory for a full release)**:
-   From the directory that owns the published `package.json` (repo or workspace root per your monorepo layout), run:
-   ```bash
-   npm publish
-   ```
-   Do not treat the release as finished until this succeeds (capture or report the registry URL / version). **Skip only** if the user explicitly confirmed a scope that excludes npm (for example tag-only or internal).
+Agent: What is the deployment strategy?
+User: staging_first
 
-   After `npm publish` returns, confirm the registry actually reflects the new version before moving on:
-   ```bash
-   npm view neotoma version
-   ```
-   The output must equal `X.Y.Z`. If it still reports the previous version, the registry has not propagated yet — wait 30s and retry rather than advancing. This protects against the contract-discrepancy class of issue Simon's agent reported against v0.5.0, where the GitHub Release existed but `npm install neotoma@latest` still resolved to the prior version for several minutes.
+Agent: What is the rollback plan?
+User: Revert to previous release tag, restore DB snapshot if needed
 
-10. **Merge main back to dev** (keep branches in sync):
-    ```bash
-    git checkout dev
-    git merge main
-    git push origin dev
-    ```
+Agent: What monitoring plan should be setup post-release?
+User: Monitor upload success rate, P95 latency, DAU, orphan node count
 
-### Step 5: Post-Release
+Agent: Generating Release plan, manifest, and integration test spec...
+Agent: Analyzing FU dependencies...
+Agent: Dependency graph:
+  FU-100 → []
+  FU-101 → [FU-100]
+  FU-102 → [FU-100]
+  FU-103 → [FU-101, FU-102]
+  FU-105 → [FU-103]
+  FU-300 → []
+  FU-700 → []
+  FU-701 → [FU-700]
 
-1. Move supplement: `mv docs/releases/in_progress/vX.Y.Z docs/releases/completed/vX.Y.Z` (if directory was created).
-2. Report summary: version, GitHub Release URL, npm package URL (must reflect a successful **`npm publish`** when the release included npm).
+Agent: Generating execution schedule...
+Agent: Execution schedule:
+  Batch 0: FU-100, FU-300, FU-700 (can run in parallel)
+  Batch 1: FU-101, FU-102 (can run in parallel, depend on FU-100)
+  Batch 2: FU-103 (depends on FU-101, FU-102)
+  Batch 3: FU-105, FU-701 (can run in parallel, FU-105 depends on FU-103, FU-701 depends on FU-700)
 
-## Submodule Mode
+Agent: Estimated timeline: 11-14 days (with parallelization across 3 agents)
 
-If the user says `/release foundation` (or another submodule name):
+Agent: Approve execution schedule? (yes/no/modify)
+User: yes
 
-1. `cd <submodule>` and run the same workflow scoped to that submodule.
-2. If that submodule is the npm package root, run **`npm publish`** there after tag push, same as the main repo execute path.
-3. After tagging and pushing (and npm publish when applicable) inside the submodule, return to the main repo.
-4. Do NOT proceed with main repository release.
+Agent: Starting batch execution...
+Agent: Batch 0: Starting FU-100, FU-300, FU-700 in parallel...
+[FU execution proceeds autonomously]
+Agent: Batch 0 complete. Running cross-FU integration tests...
+Agent: Integration tests passed.
+Agent: Batch 1: Starting FU-101, FU-102 in parallel...
+[continues through all batches]
 
-## Constraints
+Agent: All batches complete. Running full integration test suite...
+Agent: All integration tests passed.
+Agent: Release v1.0.0 ready for deployment.
+Agent: All FUs complete: FU-100 ✅, FU-101 ✅, FU-102 ✅, FU-103 ✅, FU-105 ✅, FU-300 ✅, FU-700 ✅, FU-701 ✅
+Agent: Integration tests passed: 12/12
+Agent: Acceptance criteria met: ✅ Product, ✅ Technical, ✅ Business
+Agent: Approve for deployment? (yes/no)
+User: yes
 
-- Always run preflight before version bumps or note drafting.
-- Always preview the full changelog and get explicit user confirmation before executing.
-- Always show the rendered GitHub Release Markdown body during preview, not just a prose summary of the supplement.
-- Always describe uncommitted changes concretely — never use a generic placeholder.
-- Do not ship a GitHub Release body that is only an auto-generated commit list.
-- Do not merge or tag without user approval of the preview.
-- For a standard `/release`, **always** run **`npm publish`** after `gh release create` unless the user explicitly confirmed GitHub-only / no registry.
-- If `docs/developer/github_release_process.md` exists, follow its template and render pipeline.
+Agent: Deploying to staging...
+Agent: Staging smoke tests passed.
+Agent: Deploying to production...
+Agent: Production health checks passed.
+Agent: Release v1.0.0 deployed and complete!
+Agent: Monitoring: [dashboard links]
+```
 
 ## Agent Instructions
 
 ### Load Order
 
-1. This skill
-2. `docs/developer/github_release_process.md` (template layout, render commands)
-3. `docs/developer/github_release_supplement.example.md` (section pattern)
+1. `foundation/development/release_workflow.md` (primary)
+2. `docs/feature_units/standards/creating_feature_units.md` (for FU creation)
+3. `docs/feature_units/standards/execution_instructions.md` (for FU execution)
+4. `docs/specs/MVP_FEATURE_UNITS.md` (if release_id is v1.0.0 / MVP)
+
+### Constraints
+
+- Do NOT proceed past Checkpoint 0 without complete Release plan
+- Always validate FU dependencies before generating schedule
+- REJECT if circular dependencies detected
+- Always run cross-FU integration tests after each batch
+- Always get user approval at Checkpoints 0, 1 (if configured), 2
+- Do NOT deploy without passing integration tests and acceptance criteria
 
 ### Forbidden Patterns
 
-- Skipping the preview step
-- Showing only a release summary when the final GitHub Release body can be rendered
-- Tagging or pushing without user confirmation
-- Omitting material working-tree changes from the integrated preview (they must appear in-section, not dropped)
-- Treating confirmed uncommitted changes as shipped without committing them first
-- Using only `git log --oneline` as the GitHub Release body
-- Ending execute after the GitHub Release without **`npm publish`** when the user confirmed a normal (npm-included) release
-- Omitting the **Breaking changes** section from the supplement, even when the release contains no breaking changes (write `No breaking changes.` explicitly)
-- Omitting the **Highlights** section, or drafting Highlights from commit messages / diff-stats alone instead of reviewing the actual scope for user benefit
-- Highlights bullets that lead with implementation detail ("refactored X", "added middleware", "new service") instead of a bolded user-benefit claim plus a concrete mechanic
-- Stuffing more than 5 Highlights bullets or mixing supporting-cast items (single fixes, tightenings, internal refactors) into the Highlights section
+- Starting FUs out of dependency order
+- Skipping integration tests
+- Proceeding without user approval at checkpoints
+- Deploying with failing tests or unmet acceptance criteria

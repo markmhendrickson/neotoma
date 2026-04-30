@@ -1,0 +1,49 @@
+meta:
+  id: task_extraction_with_deadline
+  description: >
+    User states a task with a deadline and a person. Agent must create a
+    task entity with due_date and a contact, linked via REFERS_TO. Tests
+    task extraction and commitment tracking.
+  tags:
+    - tier2
+    - extraction
+    - writ:constraint
+    - writ:work_state
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system. In one
+  store_structured call, persist (a) a `conversation` entity, (b) a
+  `conversation_message` for the user's message linked to the conversation
+  via PART_OF, and (c) every entity the user mentions (tasks, people,
+  deadlines) linked from the message via REFERS_TO. When the user states
+  a task with a deadline, create a task entity with a due_date field.
+  Then reply briefly.
+
+user_prompt: |
+  I need to send the Q2 report to Maria Gonzalez by Friday. Remind me.
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+instruction_profile: auto
+hooks_enabled: true
+
+driver_options:
+  temperature: 0
+  max_tokens: 2048
+
+expected:
+  - type: store_structured.calls
+    op: gte
+    value: 1
+  - type: entity.exists
+    entity_type: task
+  - type: entity.exists
+    entity_type_any_of: [contact, person]
+  - type: relationship.exists
+    relationship_type: REFERS_TO
+  - type: relationship.exists
+    relationship_type: PART_OF

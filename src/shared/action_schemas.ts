@@ -68,6 +68,37 @@ export const CreateRelationshipRequestSchema = z.object({
   user_id: z.string().optional(),
 });
 
+const CreateRelationshipBatchItemSchema = CreateRelationshipRequestSchema.omit({
+  user_id: true,
+}).extend({
+  source_id: z.string().optional(),
+});
+
+export const CreateRelationshipsRequestSchema = z.object({
+  relationships: z.array(CreateRelationshipBatchItemSchema).min(1),
+  source_id: z.string().optional(),
+  user_id: z.string().optional(),
+});
+
+const StoreRelationshipByIndexSchema = z.object({
+  relationship_type: z.string(),
+  source_index: z.number().int().min(0),
+  target_index: z.number().int().min(0),
+  metadata: z.record(z.unknown()).optional(),
+});
+
+const StoreRelationshipByEntityIdSchema = z.object({
+  relationship_type: z.string(),
+  source_entity_id: z.string().min(1),
+  target_entity_id: z.string().min(1),
+  metadata: z.record(z.unknown()).optional(),
+});
+
+export const StoreRelationshipInputSchema = z.union([
+  StoreRelationshipByIndexSchema,
+  StoreRelationshipByEntityIdSchema,
+]);
+
 export const ListRelationshipsRequestSchema = z.object({
   entity_id: z.string(),
   direction: z
@@ -268,13 +299,7 @@ export type ObservationSource = z.infer<typeof ObservationSourceSchema>;
 export const StoreStructuredRequestSchema = z.object({
   entities: z.array(z.record(z.unknown())),
   relationships: z
-    .array(
-      z.object({
-        relationship_type: z.string(),
-        source_index: z.number().int().min(0),
-        target_index: z.number().int().min(0),
-      })
-    )
+    .array(StoreRelationshipInputSchema)
     .optional(),
   source_priority: z.number().optional().default(100),
   observation_source: ObservationSourceSchema.optional(),
@@ -297,13 +322,7 @@ export const StoreRequestSchema = z
     user_id: z.string().optional(),
     entities: z.array(z.record(z.unknown())).optional(),
     relationships: z
-      .array(
-        z.object({
-          relationship_type: z.string(),
-          source_index: z.number().int().min(0),
-          target_index: z.number().int().min(0),
-        })
-      )
+      .array(StoreRelationshipInputSchema)
       .optional(),
     source_priority: z.number().optional().default(100),
     observation_source: ObservationSourceSchema.optional(),

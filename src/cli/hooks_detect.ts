@@ -60,22 +60,27 @@ export interface HooksReport {
 
 /** Neotoma's Cursor hook scripts, emitted by packages/cursor-hooks. */
 const CURSOR_HOOK_SCRIPTS = [
+  "session_start.js",
   "before_submit_prompt.js",
   "after_tool_use.js",
+  "post_tool_use_failure.js",
   "stop.js",
 ];
 
 function isNeotomaCursorEntry(entry: unknown): boolean {
   if (!entry || typeof entry !== "object") return false;
-  const args = (entry as { args?: unknown }).args;
-  if (!Array.isArray(args)) return false;
-  return args.some((a) => {
-    if (typeof a !== "string") return false;
-    if (a.includes("@neotoma/cursor-hooks")) return true;
-    if (!a.includes("cursor-hooks")) return false;
-    return CURSOR_HOOK_SCRIPTS.some(
-      (name) => a.endsWith(name) || a.includes(`dist/${name}`)
-    );
+  const obj = entry as { command?: unknown; args?: unknown };
+  const parts: string[] = [];
+  if (typeof obj.command === "string") parts.push(obj.command);
+  if (Array.isArray(obj.args)) {
+    for (const arg of obj.args) {
+      if (typeof arg === "string") parts.push(arg);
+    }
+  }
+  return parts.some((part) => {
+    if (part.includes("@neotoma/cursor-hooks")) return true;
+    if (!part.includes("cursor-hooks")) return false;
+    return CURSOR_HOOK_SCRIPTS.some((name) => part.endsWith(name) || part.includes(`dist/${name}`));
   });
 }
 

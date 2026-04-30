@@ -1,0 +1,81 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "relationship_graph_completeness",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-04-29T09:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Sarah from Acme Corp sent me an invoice for $5,000 due next month for\nthe consulting project.\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. In one store_structured call, persist (a) a `conversation` entity, (b) a `conversation_message` for the user's message linked to the conversation via PART_OF, and (c) every entity the user mentions (people, companies, invoices, projects) linked from the message via REFERS_TO. Then reply briefly.\n",
+  "tool_calls": [
+    {
+      "name": "store_structured",
+      "input": {
+        "idempotency_key": "conversation-graph-compl-1-20260429",
+        "entities": [
+          {
+            "entity_type": "conversation",
+            "title": "Invoice from Sarah at Acme Corp"
+          },
+          {
+            "entity_type": "conversation_message",
+            "role": "user",
+            "sender_kind": "user",
+            "content": "Sarah from Acme Corp sent me an invoice for $5,000 due next month for the consulting project.",
+            "turn_key": "graph-compl-1:1"
+          },
+          {
+            "entity_type": "person",
+            "name": "Sarah",
+            "company": "Acme Corp"
+          },
+          {
+            "entity_type": "company",
+            "name": "Acme Corp"
+          },
+          {
+            "entity_type": "invoice",
+            "description": "Consulting project invoice from Acme Corp",
+            "amount": 5000.00,
+            "currency": "USD",
+            "due_date": "2026-05-31",
+            "sender": "Sarah",
+            "sender_company": "Acme Corp",
+            "project": "consulting"
+          }
+        ],
+        "relationships": [
+          {
+            "relationship_type": "PART_OF",
+            "source_index": 1,
+            "target_index": 0
+          },
+          {
+            "relationship_type": "REFERS_TO",
+            "source_index": 1,
+            "target_index": 2
+          },
+          {
+            "relationship_type": "REFERS_TO",
+            "source_index": 1,
+            "target_index": 3
+          },
+          {
+            "relationship_type": "REFERS_TO",
+            "source_index": 1,
+            "target_index": 4
+          }
+        ]
+      },
+      "output": {
+        "type": "text",
+        "text": "{\"source_id\":\"stub-src-graph-1\",\"entities\":[{\"observation_index\":0,\"entity_id\":\"ent_graph_conv_001\",\"entity_type\":\"conversation\",\"observation_id\":\"obs-graph-conv-001\",\"action\":\"created\",\"canonical_name\":\"Invoice from Sarah at Acme Corp\"},{\"observation_index\":1,\"entity_id\":\"ent_graph_msg_001\",\"entity_type\":\"conversation_message\",\"observation_id\":\"obs-graph-msg-001\",\"action\":\"created\",\"canonical_name\":\"conversation_message:graph-compl-1:1\"},{\"observation_index\":2,\"entity_id\":\"ent_graph_person_001\",\"entity_type\":\"person\",\"observation_id\":\"obs-graph-person-001\",\"action\":\"created\",\"canonical_name\":\"Sarah\"},{\"observation_index\":3,\"entity_id\":\"ent_graph_company_001\",\"entity_type\":\"company\",\"observation_id\":\"obs-graph-company-001\",\"action\":\"created\",\"canonical_name\":\"Acme Corp\"},{\"observation_index\":4,\"entity_id\":\"ent_graph_invoice_001\",\"entity_type\":\"invoice\",\"observation_id\":\"obs-graph-invoice-001\",\"action\":\"created\",\"canonical_name\":\"Consulting project invoice from Acme Corp\"}],\"unknown_fields_count\":0,\"related_entities\":[],\"related_relationships\":[{\"relationship_key\":\"PART_OF:ent_graph_msg_001:ent_graph_conv_001\",\"relationship_type\":\"PART_OF\",\"source_entity_id\":\"ent_graph_msg_001\",\"target_entity_id\":\"ent_graph_conv_001\"},{\"relationship_key\":\"REFERS_TO:ent_graph_msg_001:ent_graph_person_001\",\"relationship_type\":\"REFERS_TO\",\"source_entity_id\":\"ent_graph_msg_001\",\"target_entity_id\":\"ent_graph_person_001\"},{\"relationship_key\":\"REFERS_TO:ent_graph_msg_001:ent_graph_company_001\",\"relationship_type\":\"REFERS_TO\",\"source_entity_id\":\"ent_graph_msg_001\",\"target_entity_id\":\"ent_graph_company_001\"},{\"relationship_key\":\"REFERS_TO:ent_graph_msg_001:ent_graph_invoice_001\",\"relationship_type\":\"REFERS_TO\",\"source_entity_id\":\"ent_graph_msg_001\",\"target_entity_id\":\"ent_graph_invoice_001\"}]}"
+      },
+      "sequence": 0
+    }
+  ],
+  "assistant_text": "Stored: Sarah (person) at Acme Corp (company) sent a $5,000 invoice due next month for the consulting project. All entities linked."
+}

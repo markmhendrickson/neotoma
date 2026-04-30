@@ -14,11 +14,18 @@
 
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createServer as createHttpServer, type Server as HttpServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), "..", "..", "..", "..");
+
+export interface ServerFaultConfig {
+  target: string;
+  fail_first_n: number;
+  status_code?: number;
+}
 
 export interface IsolatedServerOptions {
   /** Optional explicit port; default = OS-chosen via the server's port probe. */
@@ -35,6 +42,8 @@ export interface IsolatedServerOptions {
   captureStderr?: boolean;
   /** Use ts via tsx if running from source (default), else `node dist/index.js`. */
   useTsx?: boolean;
+  /** Fault injection config for error-recovery scenarios. */
+  faults?: ServerFaultConfig;
 }
 
 export interface IsolatedServer {
@@ -74,6 +83,79 @@ async function waitForHealth(
     await new Promise((r) => setTimeout(r, 150));
   }
   throw new Error(`isolated Neotoma server did not become healthy within ${timeoutMs}ms (last error: ${lastError})`);
+}
+
+async function startFaultProxy(
+  upstreamUrl: string,
+  faults: ServerFaultConfig
+): Promise<{ proxyUrl: string; server: HttpServer }> {
+  let failCount = 0;
+  const statusCode = faults.status_code ?? 500;
+
+  return new Promise((resolveProxy, reject) => {
+    const server = createHttpServer(async (req, res) => {
+      const urlPath = req.url ?? "/";
+      const shouldFault =
+        failCount < faults.fail_first_n &&
+        (urlPath.includes(faults.target) || urlPath.includes("/store") || urlPath.includes("/mcp"));
+
+      if (shouldFault && faults.target === "store_structured") {
+        const body = await readRequestBody(req);
+        const isStore =
+          urlPath.includes("/store") ||
+          (urlPath.includes("/mcp") && body.includes("store_structured"));
+        if (isStore) {
+          failCount++;
+          res.writeHead(statusCode, { "content-type": "application/json" });
+          res.end(JSON.stringify({ error: `Injected fault ${failCount}/${faults.fail_first_n}` }));
+          return;
+        }
+      }
+
+      const headers: Record<string, string> = {};
+      for (const [k, v] of Object.entries(req.headers)) {
+        if (typeof v === "string") headers[k] = v;
+        else if (Array.isArray(v)) headers[k] = v.join(", ");
+      }
+      delete headers.host;
+
+      try {
+        const body = await readRequestBody(req);
+        const upstream = await fetch(`${upstreamUrl}${urlPath}`, {
+          method: req.method ?? "GET",
+          headers,
+          body: ["GET", "HEAD"].includes(req.method ?? "GET") ? undefined : body,
+        });
+        res.writeHead(upstream.status, Object.fromEntries(upstream.headers.entries()));
+        const buf = Buffer.from(await upstream.arrayBuffer());
+        res.end(buf);
+      } catch (err) {
+        res.writeHead(502, { "content-type": "text/plain" });
+        res.end(`proxy error: ${(err as Error).message}`);
+      }
+    });
+
+    server.listen(0, "127.0.0.1", () => {
+      const addr = server.address();
+      if (!addr || typeof addr === "string") {
+        reject(new Error("fault proxy failed to bind"));
+        return;
+      }
+      resolveProxy({
+        proxyUrl: `http://127.0.0.1:${addr.port}`,
+        server,
+      });
+    });
+  });
+}
+
+function readRequestBody(req: import("node:http").IncomingMessage): Promise<string> {
+  return new Promise((resolve) => {
+    const chunks: Buffer[] = [];
+    req.on("data", (c: Buffer) => chunks.push(c));
+    req.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
+    req.on("error", () => resolve(""));
+  });
 }
 
 export async function startIsolatedNeotomaServer(
@@ -179,10 +261,18 @@ export async function startIsolatedNeotomaServer(
     // non-fatal
   }
 
+  let effectiveBaseUrl = baseUrl;
+  let faultProxy: HttpServer | null = null;
+  if (options.faults) {
+    const faultResult = await startFaultProxy(baseUrl, options.faults);
+    effectiveBaseUrl = faultResult.proxyUrl;
+    faultProxy = faultResult.server;
+  }
+
   const handle: IsolatedServer = {
-    baseUrl,
-    mcpUrl: `${baseUrl}/mcp`,
-    port,
+    baseUrl: effectiveBaseUrl,
+    mcpUrl: `${effectiveBaseUrl}/mcp`,
+    port: faultProxy ? parseInt(new URL(effectiveBaseUrl).port, 10) : port,
     token,
     dataDir,
     stderrTail: () => stderrLines.slice(-50).join("\n"),
@@ -199,6 +289,9 @@ export async function startIsolatedNeotomaServer(
       }
     },
     async stop(): Promise<void> {
+      if (faultProxy) {
+        await new Promise<void>((r) => faultProxy!.close(() => r()));
+      }
       if (!child.killed && child.exitCode == null) {
         child.kill("SIGTERM");
         const timer = setTimeout(() => {

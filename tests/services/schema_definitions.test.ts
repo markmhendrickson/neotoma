@@ -92,6 +92,26 @@ describe("reject-policy schemas have reachable canonical rules (R1/R2 regression
     expect(msgFields.some((f) => f === "turn_key")).toBe(true);
   });
 
+  it("conversation context fields are optional and not identity-bearing", () => {
+    const schema = getSchemaDefinition("conversation");
+    expect(schema).not.toBeNull();
+    const fields = schema!.schema_definition.fields;
+    for (const field of [
+      "client_name",
+      "harness",
+      "workspace_kind",
+      "repository_name",
+      "repository_root",
+      "repository_remote",
+      "scope_summary",
+    ]) {
+      expect(fields[field], `${field} should be declared`).toBeDefined();
+      expect(fields[field]!.required).toBe(false);
+    }
+
+    expect(schema!.schema_definition.canonical_name_fields).toEqual(["conversation_id"]);
+  });
+
   it("conversation_turn is reject-policy with composite [session_id, turn_id] canonical", () => {
     const schema = getSchemaDefinition("conversation_turn");
     expect(schema).not.toBeNull();
@@ -99,6 +119,25 @@ describe("reject-policy schemas have reachable canonical rules (R1/R2 regression
     expect(def?.name_collision_policy).toBe("reject");
     const fields = (def?.canonical_name_fields ?? []) as unknown[];
     expect(fields).toEqual([{ composite: ["session_id", "turn_id"] }]);
+  });
+
+  it("conversation_turn accepts volatile turn context without changing identity", () => {
+    const schema = getSchemaDefinition("conversation_turn");
+    expect(schema).not.toBeNull();
+    const fields = schema!.schema_definition.fields;
+    for (const field of [
+      "working_directory",
+      "git_branch",
+      "active_file_refs",
+      "context_source",
+    ]) {
+      expect(fields[field], `${field} should be declared`).toBeDefined();
+      expect(fields[field]!.required).toBe(false);
+    }
+
+    expect(schema!.schema_definition.canonical_name_fields).toEqual([
+      { composite: ["session_id", "turn_id"] },
+    ]);
   });
 
   it("turn_compliance and turn_activity resolve to conversation_turn", () => {

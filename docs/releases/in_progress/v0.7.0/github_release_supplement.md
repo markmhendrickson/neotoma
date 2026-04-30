@@ -57,7 +57,7 @@ v0.7.0 turns the hosted Neotoma story into a coherent product surface: a public 
 
 ## Plugin / hooks / SDK changes
 
-- `@neotoma/cursor-hooks` now includes an `afterToolUse` hook that records passive `tool_invocation` observations so timeline coverage does not depend on the agent voluntarily writing structured memory later in the turn.
+- `@neotoma/cursor-hooks` wires Cursor’s `postToolUse` hook to `after_tool_use.js`, which records passive `tool_invocation` observations so timeline coverage does not depend on the agent voluntarily writing structured memory later in the turn.
 - The Cursor hooks installer now supports explicit install/uninstall flows, merges into an existing `.cursor/hooks.json` instead of clobbering it, and strips only Neotoma-owned hook entries when uninstalling.
 - `packages/cursor-hooks/hooks.template.json` and the package README are updated to match the new hook set and install behavior.
 

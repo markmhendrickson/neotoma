@@ -292,7 +292,9 @@ export function detectNeotomaServers(
     const idHintsProd = id === "neotoma" || id === "mcpsrv_neotoma" || id.includes("prod");
 
     const isDevCommand =
-      command.includes("run_neotoma_mcp_stdio.sh") || command.includes("run_neotoma_mcp_stdio_dev_watch.sh");
+      command.includes("run_neotoma_mcp_stdio.sh") ||
+      command.includes("run_neotoma_mcp_stdio_dev_watch.sh") ||
+      command.includes("run_neotoma_mcp_stdio_dev_shim.sh");
     const isProdCommand =
       command.includes("run_neotoma_mcp_stdio_prod.sh") || command.includes("run_neotoma_mcp_stdio_prod_watch.sh");
 
@@ -625,6 +627,34 @@ export type ConfigStatus = {
   /** Issues that suggest fixing (e.g. HTTP locally when stdio recommended, port mismatch). */
   issues?: McpConfigIssue[];
 };
+
+export type McpHookHarness = "cursor" | "claude-code" | "codex";
+
+/** Infer hook-capable harnesses from MCP config paths that already contain a Neotoma server. */
+export function inferHookHarnessesFromMcpConfigs(configs: ConfigStatus[]): McpHookHarness[] {
+  const harnesses = new Set<McpHookHarness>();
+  for (const config of configs) {
+    if (!config.hasDev && !config.hasProd) continue;
+    const normalized = path.normalize(config.path);
+    const lower = normalized.toLowerCase();
+    if (
+      normalized.endsWith(path.normalize(".cursor/mcp.json")) ||
+      normalized.includes(`${path.sep}.cursor${path.sep}mcp.json`) ||
+      lower.endsWith(path.normalize(`${path.sep}.cursor${path.sep}mcp.json`).toLowerCase())
+    ) {
+      harnesses.add("cursor");
+      continue;
+    }
+    if (isCodexConfigPath(normalized)) {
+      harnesses.add("codex");
+      continue;
+    }
+    if (path.basename(normalized) === "claude_desktop_config.json" || lower.includes(`${path.sep}claude${path.sep}`)) {
+      harnesses.add("claude-code");
+    }
+  }
+  return [...harnesses];
+}
 
 /**
  * Scan for MCP configs from cwd and return status for each found config.
@@ -1068,7 +1098,7 @@ async function attemptCursorMcpReload(configPath: string): Promise<void> {
 export async function offerFix(
   configs: ConfigStatus[],
   repoRoot: string | null,
-  options?: { silent?: boolean; devPort?: number; prodPort?: number }
+  options?: { silent?: boolean; devPort?: number; prodPort?: number; assumeYes?: boolean }
 ): Promise<{ fixed: boolean; message: string; updatedPaths: string[] }> {
   const silent = options?.silent ?? false;
   const sessionPorts: SessionPorts | undefined =
@@ -1114,7 +1144,11 @@ export async function offerFix(
   }
   process.stdout.write("\n");
 
-  const shouldFix = await promptYesNo("Fix these issues? (Align local MCP URLs and Claude Desktop server IDs)");
+  const shouldFix =
+    options?.assumeYes ??
+    (process.stdin.isTTY
+      ? await promptYesNo("Fix these issues? (Align local MCP URLs and Claude Desktop server IDs)")
+      : false);
   if (!shouldFix) {
     return { fixed: false, message: "Fix cancelled.", updatedPaths: [] };
   }
@@ -1208,6 +1242,8 @@ export async function offerInstall(
     autoInstallEnv?: "dev" | "prod" | "both";
     /** Optional init default: skip target prompt and use this scope. */
     autoInstallScope?: "project" | "user" | "both";
+    /** Non-interactive default: accept repair prompts instead of waiting on stdin. */
+    assumeYes?: boolean;
     /** When true, do not run sync:mcp (avoids writing project-level MCP configs). */
     skipProjectSync?: boolean;
   }
@@ -1276,6 +1312,7 @@ export async function offerInstall(
       silent: false,
       devPort: options?.devPort,
       prodPort: options?.prodPort,
+      assumeYes: options?.assumeYes,
     });
     if (fixResult.fixed) {
       process.stdout.write("Fixed: " + fixResult.message + "\n");

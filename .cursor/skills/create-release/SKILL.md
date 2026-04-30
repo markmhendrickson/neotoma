@@ -1,6 +1,6 @@
 ---
 name: release
-description: Prepare a GitHub + npm release with preview. Covers preflight, changelog preview, version bump, tag, merge, GitHub Release creation, and npm publish.
+description: Prepare a GitHub + npm + sandbox release with preview. Covers preflight, changelog preview, version bump, tag, merge, GitHub Release creation, npm publish, and sandbox.neotoma.io deployment.
 triggers:
   - new release
   - release
@@ -15,11 +15,11 @@ triggers:
 
 # Release
 
-Prepare and ship a GitHub + npm release with a mandatory preview step. A confirmed **execute** run is **not complete** until **`npm publish`** succeeds from the published package root, unless the user explicitly scoped the request to GitHub-only / no registry.
+Prepare and ship a GitHub + npm + sandbox release with a mandatory preview step. A confirmed **execute** run is **not complete** until **`npm publish`** succeeds from the published package root and `sandbox.neotoma.io` is deployed and verified, unless the user explicitly scoped the request to GitHub-only / no registry / no sandbox.
 
 ## When to Use
 
-When you want to ship what is on `dev` (or the current integration branch) to `main`, tag it, publish to npm, and create a GitHub Release with curated notes.
+When you want to ship what is on `dev` (or the current integration branch) to `main`, tag it, publish to npm, create a GitHub Release with curated notes, and update the public sandbox deployment.
 
 Trigger with `/release`, or naturally ("prepare a release", "let's ship v0.5.0").
 
@@ -29,6 +29,8 @@ Trigger with `/release`, or naturally ("prepare a release", "let's ship v0.5.0")
 |----------|------|
 | `docs/developer/github_release_process.md` | GitHub Release template layout, `release-notes:render` usage, `gh release create` |
 | `docs/developer/github_release_supplement.example.md` | Section pattern for the human-readable supplement |
+| `docs/infrastructure/deployment.md` | Sandbox Fly deployment command and verification |
+| `docs/subsystems/sandbox_deployment.md` | Sandbox runtime behavior and operator runbook |
 | `.github/release_notes_wrap.md` | Fixed wrap template (install commands, npm/compare table, commit list) |
 
 ## Workflow
@@ -56,6 +58,7 @@ Run before anything else:
     ```
 
     The release-skill executor does not tag or push a release whose supplement omits a breaking entry reported by the diff.
+11. **Sandbox deploy readiness**: Confirm `fly.sandbox.toml` exists, `flyctl` is available, and the active Fly account can deploy `neotoma-sandbox`. If Fly auth is missing, report that execute will block at sandbox deployment unless the user explicitly scopes the release to no sandbox.
 
 ### Step 2: Resolve Version
 
@@ -151,7 +154,7 @@ If the working tree was dirty when drafting, state that **execute** matches the 
 
 ### Step 4: Execute
 
-After user confirms, run **every** step below in order through **`npm publish`**. Stopping after `gh release create` is a failed full `/release` unless the user confirmed a GitHub-only (no npm) scope.
+After user confirms, run **every** step below in order through **npm publish and sandbox deployment**. Stopping after `gh release create` or `npm publish` is a failed full `/release` unless the user confirmed a GitHub-only / no-registry / no-sandbox scope.
 
 1. **Commit uncommitted changes** (when the preview assumed them and the user confirms execute):
    - Stage only paths that should ship; **never** stage paths forbidden by repository security / pre-commit rules (for example configured `protected_paths`, `.env*`, `data/` when disallowed).
@@ -213,7 +216,19 @@ After user confirms, run **every** step below in order through **`npm publish`**
    ```
    The output must equal `X.Y.Z`. If it still reports the previous version, the registry has not propagated yet — wait 30s and retry rather than advancing. This protects against the contract-discrepancy class of issue Simon's agent reported against v0.5.0, where the GitHub Release existed but `npm install neotoma@latest` still resolved to the prior version for several minutes.
 
-10. **Merge main back to dev** (keep branches in sync):
+10. **Deploy sandbox.neotoma.io (mandatory for a full release)**:
+    Deploy the Fly app from the final release commit:
+    ```bash
+    flyctl deploy -c fly.sandbox.toml --remote-only
+    ```
+    Then verify the live sandbox before advancing:
+    ```bash
+    curl -fsS -H "Accept: application/json" https://sandbox.neotoma.io/ | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s); if (j.version !== "X.Y.Z" || j.mode !== "sandbox") { console.error(j); process.exit(1); } console.log(j.version); })'
+    curl -fsSI https://sandbox.neotoma.io/health | grep -i '^x-neotoma-sandbox: 1'
+    ```
+    Do not treat the release as complete until the root JSON reports `version: X.Y.Z`, `mode: sandbox`, and `/health` returns `X-Neotoma-Sandbox: 1`. If sandbox deployment fails after npm publish, report the partial-release state and keep working the sandbox failure unless the user explicitly pauses.
+
+11. **Merge main back to dev** (keep branches in sync):
     ```bash
     git checkout dev
     git merge main
@@ -223,7 +238,7 @@ After user confirms, run **every** step below in order through **`npm publish`**
 ### Step 5: Post-Release
 
 1. Move supplement: `mv docs/releases/in_progress/vX.Y.Z docs/releases/completed/vX.Y.Z` (if directory was created).
-2. Report summary: version, GitHub Release URL, npm package URL (must reflect a successful **`npm publish`** when the release included npm).
+2. Report summary: version, GitHub Release URL, npm package URL (must reflect a successful **`npm publish`** when the release included npm), and sandbox URL/version verification.
 
 ## Submodule Mode
 
@@ -243,6 +258,7 @@ If the user says `/release foundation` (or another submodule name):
 - Do not ship a GitHub Release body that is only an auto-generated commit list.
 - Do not merge or tag without user approval of the preview.
 - For a standard `/release`, **always** run **`npm publish`** after `gh release create` unless the user explicitly confirmed GitHub-only / no registry.
+- For a standard `/release`, **always** deploy `sandbox.neotoma.io` with `flyctl deploy -c fly.sandbox.toml --remote-only` and verify the live sandbox version unless the user explicitly confirmed no sandbox.
 - If `docs/developer/github_release_process.md` exists, follow its template and render pipeline.
 
 ## Agent Instructions
@@ -262,6 +278,7 @@ If the user says `/release foundation` (or another submodule name):
 - Treating confirmed uncommitted changes as shipped without committing them first
 - Using only `git log --oneline` as the GitHub Release body
 - Ending execute after the GitHub Release without **`npm publish`** when the user confirmed a normal (npm-included) release
+- Ending execute after **`npm publish`** without deploying and verifying `sandbox.neotoma.io` when the user confirmed a normal sandbox-included release
 - Omitting the **Breaking changes** section from the supplement, even when the release contains no breaking changes (write `No breaking changes.` explicitly)
 - Omitting the **Highlights** section, or drafting Highlights from commit messages / diff-stats alone instead of reviewing the actual scope for user benefit
 - Highlights bullets that lead with implementation detail ("refactored X", "added middleware", "new service") instead of a bolded user-benefit claim plus a concrete mechanic

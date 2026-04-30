@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import {
   detectNeotomaServers,
   findMcpConfigPaths,
+  inferHookHarnessesFromMcpConfigs,
   neotomaServerEntries,
   offerInstall,
   parseInstallEnvironmentChoice,
@@ -145,6 +146,35 @@ describe("CLI MCP and instruction commands", () => {
     });
   });
 
+  describe("mcp hook harness inference", () => {
+    it("infers hook-capable harnesses only from configured Neotoma MCP paths", () => {
+      const result = inferHookHarnessesFromMcpConfigs([
+        {
+          path: "/tmp/project/.cursor/mcp.json",
+          hasDev: true,
+          hasProd: false,
+        },
+        {
+          path: `${process.env.HOME ?? "/tmp"}/.codex/config.toml`,
+          hasDev: false,
+          hasProd: true,
+        },
+        {
+          path: `${process.env.HOME ?? "/tmp"}/Library/Application Support/Claude/claude_desktop_config.json`,
+          hasDev: false,
+          hasProd: false,
+        },
+        {
+          path: "/tmp/project/.mcp.json",
+          hasDev: true,
+          hasProd: true,
+        },
+      ]);
+
+      expect(result).toEqual(["cursor", "codex"]);
+    });
+  });
+
   describe("mcp server script path resolution", () => {
     it("prefers installed CLI script root over stale repo root path", () => {
       const staleRoot = path.join(os.tmpdir(), "neotoma-stale-root");
@@ -162,6 +192,17 @@ describe("CLI MCP and instruction commands", () => {
   });
 
   describe("mcp server detection for dist entrypoint configs", () => {
+    it("recognizes the stable dev shim wrapper as a dev server", () => {
+      const config = {
+        "neotoma-dev": {
+          command: "/opt/neotoma/scripts/run_neotoma_mcp_stdio_dev_shim.sh",
+        },
+      };
+      const result = detectNeotomaServers(config);
+      expect(result.hasDev).toBe(true);
+      expect(result.hasProd).toBe(false);
+    });
+
     it("recognizes prod server when NEOTOMA_ENV is production", () => {
       const config = {
         neotoma: {

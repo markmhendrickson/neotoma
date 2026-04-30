@@ -1,7 +1,7 @@
 {
   "meta": {
     "id": "agent_skips_store_after_reminder",
-    "description": "Agent finishes a turn without ever calling store_structured even though sessionStart and postToolUse both injected the compact reminder. The stop hook MUST classify the skip as `agent_ignored_available_instructions` (high confidence) and recommend repairs that mention extending Tier 1 fixtures or tightening the small-model gate.",
+    "description": "Agent finishes a turn without ever calling store_structured even though sessionStart and postToolUse both injected the compact reminder. The stop hook MUST classify the skip as `agent_ignored_available_instructions` (high confidence), recommend repairs that mention extending Tier 1 fixtures, and return a follow-up for every model unless disabled.",
     "harnesses": ["cursor-hooks"],
     "models": ["composer-2", "gpt-5.5-fast", "claude-haiku-4", "claude-sonnet-4.5", "gpt-5.5-medium"],
     "tags": ["compliance", "stop-hook", "diagnosis", "after-reminder"]
@@ -73,12 +73,14 @@
       },
       "claude-sonnet-4.5": {
         "stop": [
-          { "field": "followup_message", "presence": "absent" }
+          { "field": "followup_message", "presence": "present", "matches": "Neotoma compliance pass" },
+          { "field": "followup_message", "matches": "Likely cause: agent ignored available instructions" }
         ]
       },
       "gpt-5.5-medium": {
         "stop": [
-          { "field": "followup_message", "presence": "absent" }
+          { "field": "followup_message", "presence": "present", "matches": "Neotoma compliance pass" },
+          { "field": "followup_message", "matches": "Likely cause: agent ignored available instructions" }
         ]
       }
     }

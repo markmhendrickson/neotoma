@@ -1,0 +1,56 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "store_failure_surfaces_error",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-04-29T09:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Note that our next board meeting is June 15th at 2pm.\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. Always persist the conversation via store_structured. If storage fails after retrying, tell the user that storage failed. Do not silently skip.\n",
+  "tool_calls": [
+    {
+      "name": "store_structured",
+      "input": {
+        "idempotency_key": "conv-fail-all-001-attempt-1",
+        "entities": [
+          { "entity_type": "conversation", "conversation_id": "conv-fail-all-001" },
+          { "entity_type": "conversation_message", "turn_key": "conv-fail-all-001:1", "role": "user", "sender_kind": "user", "content": "Note that our next board meeting is June 15th at 2pm." },
+          { "entity_type": "event", "title": "Board meeting", "date": "2026-06-15", "time": "14:00" }
+        ],
+        "relationships": [
+          { "relationship_type": "PART_OF", "source_index": 1, "target_index": 0 },
+          { "relationship_type": "REFERS_TO", "source_index": 1, "target_index": 2 }
+        ]
+      },
+      "output": {
+        "type": "text",
+        "text": "An error occurred while running the tool. Error: Internal Server Error (500): Injected fault 1/10"
+      },
+      "sequence": 0
+    },
+    {
+      "name": "store_structured",
+      "input": {
+        "idempotency_key": "conv-fail-all-001-attempt-2",
+        "entities": [
+          { "entity_type": "conversation", "conversation_id": "conv-fail-all-001" },
+          { "entity_type": "conversation_message", "turn_key": "conv-fail-all-001:1", "role": "user", "sender_kind": "user", "content": "Note that our next board meeting is June 15th at 2pm." },
+          { "entity_type": "event", "title": "Board meeting", "date": "2026-06-15", "time": "14:00" }
+        ],
+        "relationships": [
+          { "relationship_type": "PART_OF", "source_index": 1, "target_index": 0 },
+          { "relationship_type": "REFERS_TO", "source_index": 1, "target_index": 2 }
+        ]
+      },
+      "output": {
+        "type": "text",
+        "text": "An error occurred while running the tool. Error: Internal Server Error (500): Injected fault 2/10"
+      },
+      "sequence": 1
+    }
+  ],
+  "assistant_text": "I was unable to store the board meeting event — the memory system returned an error after retrying. The board meeting details: June 15th at 2pm. Please try again later or check the system status."
+}

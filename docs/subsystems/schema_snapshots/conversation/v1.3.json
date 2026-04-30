@@ -1,0 +1,98 @@
+{
+  "entity_type": "conversation",
+  "schema_version": "1.3",
+  "active": true,
+  "created_at": "2026-04-28T00:00:00.000Z",
+  "schema_definition": {
+    "fields": {
+      "schema_version": {
+        "type": "string",
+        "required": true
+      },
+      "conversation_id": {
+        "type": "string",
+        "required": false,
+        "description": "Caller-supplied stable identifier linking all turns in this conversation. Declared as the primary canonical_name_fields rule so distinct sessions never heuristically merge via `title`."
+      },
+      "title": {
+        "type": "string",
+        "required": false,
+        "description": "Descriptive conversation title. NOT an identity field; use `conversation_id` for resolution."
+      },
+      "thread_kind": {
+        "type": "string",
+        "required": false,
+        "description": "Participant topology: 'human_agent' (default, user + assistant), 'agent_agent' (A2A), or 'multi_party'."
+      },
+      "client_name": {
+        "type": "string",
+        "required": false,
+        "description": "Client or harness name that supplied this conversation context."
+      },
+      "harness": {
+        "type": "string",
+        "required": false,
+        "description": "Agent harness name, when distinct from the client label."
+      },
+      "workspace_kind": {
+        "type": "string",
+        "required": false,
+        "description": "Coarse workspace kind such as git_repository or plain_directory."
+      },
+      "repository_name": {
+        "type": "string",
+        "required": false,
+        "description": "Bounded repository/project name supplied by the host."
+      },
+      "repository_root": {
+        "type": "string",
+        "required": false,
+        "description": "Repository root path supplied by the host. Optional context only; not an identity field."
+      },
+      "repository_remote": {
+        "type": "string",
+        "required": false,
+        "description": "Repository remote URL or label supplied by the host. Optional context only; not an identity field."
+      },
+      "scope_summary": {
+        "type": "string",
+        "required": false,
+        "description": "Short human summary of the bounded session scope."
+      }
+    },
+    "canonical_name_fields": ["conversation_id"],
+    "name_collision_policy": "reject"
+  },
+  "reducer_config": {
+    "merge_policies": {
+      "title": {
+        "strategy": "highest_priority",
+        "tie_breaker": "source_priority"
+      },
+      "thread_kind": {
+        "strategy": "last_write"
+      },
+      "client_name": {
+        "strategy": "last_write"
+      },
+      "harness": {
+        "strategy": "last_write"
+      },
+      "workspace_kind": {
+        "strategy": "last_write"
+      },
+      "repository_name": {
+        "strategy": "last_write"
+      },
+      "repository_root": {
+        "strategy": "last_write"
+      },
+      "repository_remote": {
+        "strategy": "last_write"
+      },
+      "scope_summary": {
+        "strategy": "last_write"
+      }
+    }
+  }
+}

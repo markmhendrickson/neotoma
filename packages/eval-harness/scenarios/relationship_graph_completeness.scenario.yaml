@@ -1,0 +1,52 @@
+meta:
+  id: relationship_graph_completeness
+  description: >
+    User mentions multiple entities (person, company, transaction). Agent
+    must create all entities and link each via REFERS_TO from the message,
+    plus PART_OF to conversation.
+  tags:
+    - tier2
+    - extraction
+    - relationships
+    - writ:entity
+    - writ:provenance
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system. In one
+  store_structured call, persist (a) a `conversation` entity, (b) a
+  `conversation_message` for the user's message linked to the conversation
+  via PART_OF, and (c) every entity the user mentions (people, companies,
+  invoices, projects) linked from the message via REFERS_TO. Then reply
+  briefly.
+
+user_prompt: |
+  Sarah from Acme Corp sent me an invoice for $5,000 due next month for
+  the consulting project.
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+instruction_profile: auto
+hooks_enabled: true
+
+driver_options:
+  temperature: 0
+  max_tokens: 2048
+
+expected:
+  - type: store_structured.calls
+    op: gte
+    value: 1
+  - type: entity.exists
+    entity_type_any_of: [contact, person]
+  - type: entity.exists
+    entity_type_any_of: [company, organization]
+  - type: entity.exists
+    entity_type_any_of: [invoice, transaction]
+  - type: relationship.exists
+    relationship_type: REFERS_TO
+  - type: relationship.exists
+    relationship_type: PART_OF

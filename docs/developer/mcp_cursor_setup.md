@@ -17,6 +17,8 @@ For other integrations, see:
 
 **Recommendation:** Use stdio for local Cursor. Use HTTP only when Cursor is on a different machine or you need tunnel access. See [agent_cli_configuration.md](agent_cli_configuration.md) for the unified config approach.
 
+For source iteration with an installed local MCP server, use the stable dev shim instead of `tsx watch` as the client-facing stdio command. The shim keeps Cursor connected, restarts a worker behind the stdio stream, and keeps diagnostics on stderr.
+
 ---
 
 ## Option A: Stdio (Local — Recommended)
@@ -47,6 +49,22 @@ Create or edit `.cursor/mcp.json` in the Neotoma project directory:
 ```
 
 Replace `/absolute/path/to/neotoma` with your actual repo path. No `cwd` or `args` needed; the scripts handle everything.
+
+**Dev shim for source iteration:**
+
+```json
+{
+  "mcpServers": {
+    "neotoma-dev": {
+      "command": "/absolute/path/to/neotoma/scripts/run_neotoma_mcp_stdio_dev_shim.sh"
+    }
+  }
+}
+```
+
+Use this only when you want the MCP client connection to survive local source reloads. Keep `run_neotoma_mcp_stdio.sh` as the stable default for ordinary local MCP usage. Do not use `run_neotoma_mcp_stdio_dev_watch.sh` as an installed MCP command; watch-mode stdout and process restarts share the JSON-RPC channel and can break stdio MCP.
+
+Runtime code changes can reload behind the shim. Tool interface changes are different: new tools, removed tools, changed descriptions, schemas, annotations, or `_meta` require client rediscovery. The shim emits `notifications/tools/list_changed` when it detects a changed `tools/list` hash; if Cursor does not refresh its cached tool list, reconnect or reinitialize the MCP server.
 
 **Alternative (command + args):**
 

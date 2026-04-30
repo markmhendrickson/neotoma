@@ -6,6 +6,8 @@
 import { describe, expect, it } from "vitest";
 import {
   diagnoseSkippedStore,
+  looksLikeRetrieveInvocation,
+  looksLikeStoreStructured,
   type TurnComplianceState,
 } from "../../packages/cursor-hooks/hooks/_common.js";
 
@@ -18,6 +20,7 @@ function baseTurnState(overrides?: Partial<TurnComplianceState>): TurnCompliance
     store_structured_calls: 0,
     retrieve_calls: 0,
     neotoma_tool_failures: 0,
+    external_data_tool_calls: 0,
     user_message_stored: false,
     assistant_message_stored: false,
     reminder_injected: false,
@@ -118,6 +121,7 @@ describe("diagnoseSkippedStore", () => {
       localBuild: true,
     });
     expect(result.local_build).toBe(true);
+    expect(result.proactive_remediation_required).toBe(true);
     expect(result.recommended_repairs.some((r) => r.includes("Tier 1"))).toBe(true);
   });
 
@@ -132,6 +136,7 @@ describe("diagnoseSkippedStore", () => {
       localBuild: false,
     });
     expect(result.local_build).toBe(false);
+    expect(result.proactive_remediation_required).toBe(false);
     expect(result.recommended_repairs.some((r) => r.includes("NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP"))).toBe(true);
   });
 
@@ -161,5 +166,46 @@ describe("diagnoseSkippedStore", () => {
     expect(typeof result.signals.reminder_injected).toBe("boolean");
     expect(typeof result.signals.neotoma_connection_failure).toBe("boolean");
     expect(typeof result.signals.had_final_text).toBe("boolean");
+  });
+});
+
+describe("generic MCP wrapper detection", () => {
+  it("recognizes wrapped Neotoma store_structured calls", () => {
+    expect(
+      looksLikeStoreStructured("CallMcpTool", {
+        server: "user-neotoma",
+        toolName: "store_structured",
+        arguments: {
+          entities: [{ entity_type: "conversation_message", role: "user" }],
+        },
+      })
+    ).toBe(true);
+  });
+
+  it("recognizes Neotoma CLI store calls as turn writes", () => {
+    expect(
+      looksLikeStoreStructured("Shell", {
+        command:
+          "neotoma --servers=start store --idempotency-key turn-1 --json='[{\"entity_type\":\"conversation_message\"}]'",
+      })
+    ).toBe(true);
+  });
+
+  it("does not classify Neotoma CLI reads as turn writes", () => {
+    expect(
+      looksLikeStoreStructured("Shell", {
+        command: 'neotoma --servers=start entities search "Neotoma compliance checks"',
+      })
+    ).toBe(false);
+  });
+
+  it("recognizes wrapped Neotoma retrieval calls", () => {
+    expect(
+      looksLikeRetrieveInvocation("CallMcpTool", {
+        server: "user-neotoma",
+        toolName: "retrieve_entity_by_identifier",
+        arguments: { identifier: "Neotoma" },
+      })
+    ).toBe(true);
   });
 });

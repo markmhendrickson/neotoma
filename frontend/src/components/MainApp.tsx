@@ -11,6 +11,7 @@ import { Layout } from "@/components/Layout";
 import { NotFound } from "@/components/NotFound";
 import { SitePage } from "@/components/SitePage";
 import { SitePageAlt } from "@/components/SitePageAlt";
+import { SitePageHome2 } from "@/components/SitePageHome2";
 import { TerminologyPage } from "@/components/subpages/TerminologyPage";
 import { AgentInstructionsPage } from "@/components/subpages/AgentInstructionsPage";
 import { AgentInstructionsStoreRecipesPage } from "@/components/subpages/AgentInstructionsStoreRecipesPage";
@@ -156,6 +157,7 @@ type AppRoute = {
 
 const APP_ROUTES: readonly AppRoute[] = [
   { path: "/", element: <SitePage /> },
+  { path: "/home-2", element: <SitePageHome2 /> },
   { path: "/home/x7k9m2vp", element: <SitePageAlt /> },
   { path: "/terminology", element: <TerminologyPage /> },
   { path: "/agent-instructions", element: <AgentInstructionsPage /> },

@@ -23,6 +23,8 @@ export interface AssertionContext {
   hostToolRegistry: HostToolRegistry;
   /** Effective profile for the cell (used by the instruction_profile predicate). */
   effectiveProfile: InstructionProfile;
+  /** Final assistant reply text (used by reply_text.contains). */
+  assistantText?: string;
 }
 
 interface EntitiesQueryResponse {
@@ -322,6 +324,54 @@ export async function evaluatePredicate(
         message: `Expected host_tool[${predicate.tool_name ?? "*"}] invocations ${op} ${expected}, got ${actual}.`,
         expected: { op, value: expected, tool_name: predicate.tool_name },
         actual,
+      };
+    }
+    case "reply_text.contains": {
+      const text = ctx.assistantText ?? "";
+      if (predicate.pattern) {
+        const re = new RegExp(predicate.pattern, "i");
+        if (re.test(text)) return null;
+        return {
+          predicate,
+          message: `Expected assistant reply to match pattern /${predicate.pattern}/i, but it did not.`,
+          expected: predicate.pattern,
+          actual: text.slice(0, 200),
+        };
+      }
+      const needle = predicate.substring ?? (typeof predicate.value === "string" ? predicate.value : "");
+      if (!needle) {
+        return {
+          predicate,
+          message: `reply_text.contains requires either "substring", "pattern", or a string "value".`,
+          expected: predicate,
+          actual: null,
+        };
+      }
+      if (text.toLowerCase().includes(needle.toLowerCase())) return null;
+      return {
+        predicate,
+        message: `Expected assistant reply to contain "${needle}" (case-insensitive), but it did not.`,
+        expected: needle,
+        actual: text.slice(0, 200),
+      };
+    }
+    case "relationship.count": {
+      const types = predicate.relationship_type_any_of && predicate.relationship_type_any_of.length > 0
+        ? predicate.relationship_type_any_of
+        : predicate.relationship_type
+          ? [predicate.relationship_type]
+          : [];
+      const lists = await Promise.all(types.map((t) => fetchRelationships(ctx, t)));
+      const rels = lists.flat();
+      const expected = typeof predicate.value === "number" ? predicate.value : 0;
+      const op = predicate.op ?? "eq";
+      if (compareNumber(rels.length, op, expected)) return null;
+      const label = types.length > 1 ? `any of ${JSON.stringify(types)}` : types[0] ?? "(unspecified)";
+      return {
+        predicate,
+        message: `Expected relationship.count of "${label}" ${op} ${expected}, got ${rels.length}.`,
+        expected: { op, value: expected },
+        actual: rels.length,
       };
     }
   }

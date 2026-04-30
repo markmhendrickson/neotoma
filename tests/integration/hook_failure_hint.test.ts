@@ -111,7 +111,7 @@ describe("cursor postToolUseFailure hook", () => {
   });
 });
 
-describe("cursor postToolUse / afterToolUse failure-hint surfacing", () => {
+describe("cursor postToolUse (after_tool_use) failure-hint surfacing", () => {
   it("surfaces a one-shot hint via additional_context once the threshold trips", () => {
     const payload = {
       session_id: "session-C",

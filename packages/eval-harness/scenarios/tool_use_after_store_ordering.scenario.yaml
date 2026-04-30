@@ -1,0 +1,55 @@
+meta:
+  id: tool_use_after_store_ordering
+  description: >
+    User asks to read and summarize a file. Agent must store the
+    conversation before invoking the host Read tool. Tests Turn Lifecycle
+    Step 3 — host tools run only after user-phase store.
+  tags:
+    - tier2
+    - turn_lifecycle
+    - ordering
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system. Always
+  persist the conversation and user message via store_structured BEFORE
+  using any host tools. Then use the Read tool to fulfill the user's
+  request, and reply with a summary.
+
+user_prompt: |
+  Read the file at docs/architecture.md and summarize it
+
+host_tools:
+  - name: Read
+    description: Read a UTF-8 file from the workspace and return its contents.
+    default:
+      output: |
+        # Architecture
+        Neotoma uses a three-layer architecture: State Layer (persistence),
+        Strategy Layer (business logic), and Execution Layer (agent runtime).
+        The State Layer owns all durable data and enforces immutability.
+
+models:
+  - provider: stub
+    model: replay-only
+
+instruction_profile: auto
+hooks_enabled: true
+
+driver_options:
+  temperature: 0
+  max_tokens: 2048
+
+expected:
+  - type: store_structured.calls
+    op: gte
+    value: 1
+  - type: host_tool.invocations
+    tool_name: Read
+    op: gte
+    value: 1
+  - type: entity.exists
+    entity_type: conversation_message
+  - type: relationship.exists
+    relationship_type: PART_OF
+  - type: reply_text.contains
+    pattern: "architecture|layer|state"

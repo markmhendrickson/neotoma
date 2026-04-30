@@ -1,0 +1,38 @@
+meta:
+  id: compact_profile_still_stores
+  description: >
+    Even under the compact instruction profile, the agent must still
+    perform store-first. Tests that profile reduction does not skip
+    persistence.
+  tags:
+    - tier2
+    - turn_lifecycle
+    - compliance
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system. Always
+  store the conversation and user message before responding, even when
+  using a compact instruction profile. Then reply briefly.
+
+user_prompt: |
+  What time is it in Tokyo?
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+instruction_profile: compact
+hooks_enabled: true
+
+driver_options:
+  temperature: 0
+  max_tokens: 2048
+
+expected:
+  - type: store_structured.calls
+    op: gte
+    value: 1
+  - type: instruction_profile.served
+    profile: compact
