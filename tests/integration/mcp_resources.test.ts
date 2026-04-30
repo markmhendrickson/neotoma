@@ -123,9 +123,20 @@ describe("MCP Resources - Integration", () => {
     });
 
     it("should parse timeline widget UI URI", () => {
+      const uri = "ui://neotoma/timeline_widget";
+      const parsed = (server as any).parseResourceUri(uri);
+      expect(parsed.type).toBe("ui_timeline_widget");
+    });
+
+    it("should parse legacy timeline widget UI URI", () => {
       const uri = "neotoma://ui/timeline_widget";
       const parsed = (server as any).parseResourceUri(uri);
       expect(parsed.type).toBe("ui_timeline_widget");
+    });
+
+    it("should reject malformed UI resource URIs", () => {
+      const uri = "ui://other/timeline_widget";
+      expect(() => (server as any).parseResourceUri(uri)).toThrow();
     });
 
     it("should reject invalid URI scheme", () => {

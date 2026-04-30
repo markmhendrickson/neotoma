@@ -15,7 +15,7 @@ This audit maps Neotoma's current MCP/Actions implementation to ChatGPT App requ
 | OAuth discovery | `.well-known` OAuth metadata + protected resource metadata | Implemented | `src/actions.ts` exposes `/.well-known/oauth-authorization-server` and `/.well-known/oauth-protected-resource` | None |
 | OAuth endpoints | Authorization, token, dynamic registration endpoints for MCP clients | Implemented | `src/actions.ts` exposes `/mcp/oauth/authorize`, `/mcp/oauth/token`, `/mcp/oauth/register` | None |
 | Tool inventory | Stable tools with clear schemas and descriptions | Implemented, improved | `src/server.ts` `listTools` + `docs/developer/mcp/tool_descriptions.yaml` | Minor metadata tuning only |
-| ChatGPT app UI | Optional embedded UI resource linked from tool metadata | Implemented (timeline MVP) | `src/server.ts` resource `neotoma://ui/timeline_widget` + tool `_meta` for `list_timeline_events` | Expand to more tools later |
+| ChatGPT app UI | Optional embedded UI resource linked from tool metadata | Implemented (timeline MVP) | `src/server.ts` resource `ui://neotoma/timeline_widget` + tool `_meta` for `list_timeline_events` | Expand to more tools later |
 | Auth failure behavior | `401` and `WWW-Authenticate` for re-auth/connect | Implemented | `src/actions.ts` `/mcp` and protected-resource handling | None |
 | Legacy compatibility | Keep Custom GPT Actions path available | Implemented | Existing `openapi_actions.yaml` flow remains | None |
 

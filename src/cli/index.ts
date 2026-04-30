@@ -3113,7 +3113,8 @@ async function removeNeotomaServersFromJsonMcpConfig(configPath: string): Promis
   const neotomaServerIds = Object.entries(nextServers)
     .filter(
       ([serverId, config]) =>
-        /^neotoma(?:[-_].*)?$/i.test(serverId.trim()) || isLikelyNeotomaServerConfig(config)
+        /^(?:neotoma(?:[-_].*)?|mcpsrv_neotoma(?:_dev|_prod)?)$/i.test(serverId.trim()) ||
+        isLikelyNeotomaServerConfig(config)
     )
     .map(([serverId]) => serverId);
   if (neotomaServerIds.length === 0) return false;

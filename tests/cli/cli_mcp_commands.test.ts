@@ -12,6 +12,7 @@ import {
   neotomaServerEntries,
   offerInstall,
   parseInstallEnvironmentChoice,
+  scanForMcpConfigs,
 } from "../../src/cli/mcp_config_scan.ts";
 
 const execAsync = promisify(exec);
@@ -79,6 +80,68 @@ describe("CLI MCP and instruction commands", () => {
       });
       expect(result.installed).toBe(false);
       expect(result.message.toLowerCase()).toContain("already configured in user-level mcp configs");
+    });
+
+    it("uses Claude Desktop compliant server ids when adding missing servers", async () => {
+      const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-mcp-claude-install-"));
+      const claudeConfigPath = path.join(tmpRoot, "Claude", "claude_desktop_config.json");
+      try {
+        await fs.mkdir(path.dirname(claudeConfigPath), { recursive: true });
+        await fs.writeFile(claudeConfigPath, JSON.stringify({ mcpServers: {} }, null, 2));
+
+        const result = await offerInstall(
+          [{ path: claudeConfigPath, hasDev: false, hasProd: false }],
+          process.cwd(),
+          {
+            silent: false,
+            autoInstallScope: "both",
+            autoInstallEnv: "both",
+            skipProjectSync: true,
+          }
+        );
+
+        expect(result.installed).toBe(true);
+        const parsed = JSON.parse(await fs.readFile(claudeConfigPath, "utf-8")) as {
+          mcpServers?: Record<string, unknown>;
+        };
+        expect(parsed.mcpServers?.mcpsrv_neotoma_dev).toBeDefined();
+        expect(parsed.mcpServers?.mcpsrv_neotoma).toBeDefined();
+        expect(parsed.mcpServers?.["neotoma-dev"]).toBeUndefined();
+        expect(parsed.mcpServers?.neotoma).toBeUndefined();
+      } finally {
+        await fs.rm(tmpRoot, { recursive: true, force: true });
+      }
+    });
+
+    it("reports legacy Claude Desktop Neotoma ids as repairable issues", async () => {
+      const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-mcp-claude-scan-"));
+      const claudeConfigPath = path.join(tmpRoot, "claude_desktop_config.json");
+      try {
+        await fs.writeFile(
+          claudeConfigPath,
+          JSON.stringify(
+            {
+              mcpServers: {
+                "neotoma-dev": { url: "http://localhost:3080/mcp" },
+                neotoma: { url: "http://localhost:3180/mcp" },
+              },
+            },
+            null,
+            2
+          )
+        );
+
+        const { configs } = await scanForMcpConfigs(tmpRoot, {
+          neotomaRepoRoot: tmpRoot,
+        });
+        const realClaudeConfigPath = await fs.realpath(claudeConfigPath);
+        const claudeConfig = configs.find((config) => config.path === realClaudeConfigPath);
+        expect(claudeConfig?.hasDev).toBe(true);
+        expect(claudeConfig?.hasProd).toBe(true);
+        expect(claudeConfig?.issues?.map((issue) => issue.type)).toContain("invalid_claude_server_id");
+      } finally {
+        await fs.rm(tmpRoot, { recursive: true, force: true });
+      }
     });
   });
 

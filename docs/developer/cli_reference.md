@@ -330,7 +330,7 @@ Commands for managing MCP server configuration files (Cursor, Claude Code, Winds
     - **Windsurf:** `mcp_config.json` (project or user-level with `--user-level`):
       - macOS/Linux: `~/.codeium/windsurf/mcp_config.json`
       - Windows: `%APPDATA%\Codeium\Windsurf\mcp_config.json`
-  - For each found config, checks for `neotoma-dev` and `neotoma` server entries (based on `command` script names or `url` patterns).
+  - For each found config, checks for `neotoma-dev` and `neotoma` server entries (based on `command` script names or `url` patterns). In Claude Desktop's `claude_desktop_config.json`, new entries use `mcpsrv_neotoma_dev` and `mcpsrv_neotoma`, and legacy `neotoma-dev` / `neotoma` keys are reported for repair because Claude Desktop validates server IDs as UUIDs or `mcpsrv_*` tags.
   - If any config is missing dev or prod servers, prompts to add them with absolute script paths.
   - If no config files found, offers to create `.cursor/mcp.json` in current directory.
   - Uses Neotoma source root (from `findRepoRoot`, config, or `NEOTOMA_REPO_ROOT`) to resolve absolute script paths for `run_neotoma_mcp_stdio.sh` and `run_neotoma_mcp_stdio_prod.sh`.

@@ -19,11 +19,47 @@ const CONFIG_FILENAMES = ["mcp.json", "mcp_config.json", "claude_desktop_config.
 
 /** Project-relative config paths to check (repo-level Cursor/Claude/Codex). */
 const PROJECT_CONFIG_PATHS = [".cursor/mcp.json", ".mcp.json", ".codex/config.toml"] as const;
+const LEGACY_NEOTOMA_DEV_SERVER_ID = "neotoma-dev";
+const LEGACY_NEOTOMA_PROD_SERVER_ID = "neotoma";
+const CLAUDE_DESKTOP_NEOTOMA_DEV_SERVER_ID = "mcpsrv_neotoma_dev";
+const CLAUDE_DESKTOP_NEOTOMA_PROD_SERVER_ID = "mcpsrv_neotoma";
 
 /** Codex uses TOML; path ends with config.toml and contains .codex. */
 function isCodexConfigPath(filePath: string): boolean {
   const normalized = path.normalize(filePath);
   return normalized.includes(".codex") && normalized.endsWith("config.toml");
+}
+
+function isClaudeDesktopConfigPath(filePath: string): boolean {
+  return path.basename(path.normalize(filePath)) === "claude_desktop_config.json";
+}
+
+function neotomaServerIdForConfig(configPath: string, env: "dev" | "prod"): string {
+  if (isClaudeDesktopConfigPath(configPath)) {
+    return env === "dev" ? CLAUDE_DESKTOP_NEOTOMA_DEV_SERVER_ID : CLAUDE_DESKTOP_NEOTOMA_PROD_SERVER_ID;
+  }
+  return env === "dev" ? LEGACY_NEOTOMA_DEV_SERVER_ID : LEGACY_NEOTOMA_PROD_SERVER_ID;
+}
+
+function applyClaudeDesktopServerIdMigration(
+  mcpServers: Record<string, { command?: string; url?: string; [key: string]: unknown }>
+): boolean {
+  let changed = false;
+  const migrations = [
+    [LEGACY_NEOTOMA_DEV_SERVER_ID, CLAUDE_DESKTOP_NEOTOMA_DEV_SERVER_ID],
+    [LEGACY_NEOTOMA_PROD_SERVER_ID, CLAUDE_DESKTOP_NEOTOMA_PROD_SERVER_ID],
+  ] as const;
+
+  for (const [legacyId, compliantId] of migrations) {
+    if (!(legacyId in mcpServers)) continue;
+    if (!(compliantId in mcpServers)) {
+      mcpServers[compliantId] = mcpServers[legacyId];
+    }
+    delete mcpServers[legacyId];
+    changed = true;
+  }
+
+  return changed;
 }
 
 /**
@@ -253,7 +289,7 @@ export function detectNeotomaServers(
     const hasDistArg = args.some((arg) => isDistMcpEntrypointArg(arg));
     const id = serverId.toLowerCase();
     const idHintsDev = id.includes("dev");
-    const idHintsProd = id === "neotoma" || id.includes("prod");
+    const idHintsProd = id === "neotoma" || id === "mcpsrv_neotoma" || id.includes("prod");
 
     const isDevCommand =
       command.includes("run_neotoma_mcp_stdio.sh") || command.includes("run_neotoma_mcp_stdio_dev_watch.sh");
@@ -579,7 +615,8 @@ async function scanDirectory(dir: string, depth: number, maxDepth: number, found
 /** Issue detected in MCP config (misconfiguration or suboptimal setup). */
 export type McpConfigIssue =
   | { type: "http_locally"; serverId: string; description: string }
-  | { type: "port_mismatch"; serverId: string; expectedPort: number; actualPort: number; description: string };
+  | { type: "port_mismatch"; serverId: string; expectedPort: number; actualPort: number; description: string }
+  | { type: "invalid_claude_server_id"; serverId: string; description: string };
 
 export type ConfigStatus = {
   path: string;
@@ -662,6 +699,17 @@ export async function scanForMcpConfigs(
         sessionPorts,
         isLocalRepo,
       });
+      if (isClaudeDesktopConfigPath(configPath)) {
+        for (const serverId of [LEGACY_NEOTOMA_DEV_SERVER_ID, LEGACY_NEOTOMA_PROD_SERVER_ID]) {
+          if (parsed.mcpServers && serverId in parsed.mcpServers) {
+            issues.push({
+              type: "invalid_claude_server_id",
+              serverId,
+              description: `${serverId} is not accepted by Claude Desktop; use a mcpsrv_* server id instead.`,
+            });
+          }
+        }
+      }
       configs.push({ path: configPath, hasDev, hasProd, issues: issues.length ? issues : undefined });
     }
   }
@@ -1066,7 +1114,7 @@ export async function offerFix(
   }
   process.stdout.write("\n");
 
-  const shouldFix = await promptYesNo("Fix these issues? (Align local MCP URLs with CLI session ports)");
+  const shouldFix = await promptYesNo("Fix these issues? (Align local MCP URLs and Claude Desktop server IDs)");
   if (!shouldFix) {
     return { fixed: false, message: "Fix cancelled.", updatedPaths: [] };
   }
@@ -1084,6 +1132,9 @@ export async function offerFix(
       const before = JSON.stringify(parsed.mcpServers);
       applySessionPortsToUrls(parsed.mcpServers, sessionPorts);
       if (JSON.stringify(parsed.mcpServers) !== before) changed = true;
+    }
+    if (isClaudeDesktopConfigPath(config.path)) {
+      changed = applyClaudeDesktopServerIdMigration(parsed.mcpServers) || changed;
     }
 
     if (changed) {
@@ -1378,16 +1429,19 @@ export async function offerInstall(
 
     // Apply session ports to any existing URL-based entries so config uses CLI ports
     applySessionPortsToUrls(parsed.mcpServers, sessionPorts);
+    if (isClaudeDesktopConfigPath(config.path)) {
+      applyClaudeDesktopServerIdMigration(parsed.mcpServers);
+    }
 
     // Add missing servers (only selected env when selectedEnv is set)
     if (!selectedEnv || selectedEnv === "dev") {
       if (!config.hasDev) {
-        parsed.mcpServers["neotoma-dev"] = entries["neotoma-dev"];
+        parsed.mcpServers[neotomaServerIdForConfig(config.path, "dev")] = entries["neotoma-dev"];
       }
     }
     if (!selectedEnv || selectedEnv === "prod") {
       if (!config.hasProd) {
-        parsed.mcpServers["neotoma"] = entries.neotoma;
+        parsed.mcpServers[neotomaServerIdForConfig(config.path, "prod")] = entries.neotoma;
       }
     }
 
@@ -1404,6 +1458,9 @@ export async function offerInstall(
       if (!parsed?.mcpServers) continue;
       const before = JSON.stringify(parsed.mcpServers);
       applySessionPortsToUrls(parsed.mcpServers, sessionPorts);
+      if (isClaudeDesktopConfigPath(config.path)) {
+        applyClaudeDesktopServerIdMigration(parsed.mcpServers);
+      }
       if (JSON.stringify(parsed.mcpServers) !== before) {
         await fs.writeFile(config.path, JSON.stringify(parsed, null, 2) + "\n");
         updatedPaths.push(config.path);

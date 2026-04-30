@@ -5,7 +5,7 @@ import { config } from "./config.js";
 import { buildToolDefinitions } from "./tool_definitions.js";
 
 const MCP_DOCS_SUBDIR = ["docs", "developer", "mcp"] as const;
-const TIMELINE_WIDGET_RESOURCE_URI = "neotoma://ui/timeline_widget";
+const TIMELINE_WIDGET_RESOURCE_URI = "ui://neotoma/timeline_widget";
 
 function loadToolDescriptionsMap(): Map<string, string> {
   const yamlPath = join(config.projectRoot, ...MCP_DOCS_SUBDIR, "tool_descriptions.yaml");

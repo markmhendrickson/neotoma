@@ -111,24 +111,24 @@ Claude Code config location:
 ```json
 {
   "mcpServers": {
-    "neotoma-dev": {
+    "mcpsrv_neotoma_dev": {
       "command": "/absolute/path/to/neotoma/scripts/run_neotoma_mcp_stdio.sh"
     },
-    "neotoma": {
+    "mcpsrv_neotoma": {
       "command": "/absolute/path/to/neotoma/scripts/run_neotoma_mcp_stdio_prod.sh"
     }
   }
 }
 ```
 
-Replace `/absolute/path/to/neotoma` with your repo path. No `cwd` or `args` needed. When encryption is off (default), no connection ID required. When encryption is on, set `NEOTOMA_CONNECTION_ID` in `.env`.
+Replace `/absolute/path/to/neotoma` with your repo path. No `cwd` or `args` needed. Claude Desktop requires local MCP server IDs to use the `mcpsrv_*` format; `neotoma mcp check` migrates legacy `neotoma-dev` / `neotoma` keys in `claude_desktop_config.json`. When encryption is off (default), no connection ID required. When encryption is on, set `NEOTOMA_CONNECTION_ID` in `.env`.
 
 **Alternative (command + args + cwd):**
 
 ```json
 {
   "mcpServers": {
-    "neotoma": {
+    "mcpsrv_neotoma_dev": {
       "command": "/absolute/path/to/node",
       "args": ["/absolute/path/to/neotoma/dist/index.js"],
       "cwd": "/absolute/path/to/neotoma",

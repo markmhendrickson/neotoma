@@ -13,4 +13,22 @@ describe("buildSmitheryServerCard", () => {
     expect(Array.isArray(card.resources)).toBe(true);
     expect(Array.isArray(card.prompts)).toBe(true);
   });
+
+  it("advertises the timeline widget with an MCP Apps UI URI", () => {
+    const card = buildSmitheryServerCard();
+    const resources = card.resources as Array<{ uri?: string; name?: string }>;
+    const timelineResource = resources.find((resource) => resource.name === "Timeline Widget");
+    expect(timelineResource?.uri).toBe("ui://neotoma/timeline_widget");
+
+    const tools = card.tools as Array<{
+      name?: string;
+      _meta?: {
+        ui?: { resourceUri?: string };
+        "openai/outputTemplate"?: string;
+      };
+    }>;
+    const timelineTool = tools.find((tool) => tool.name === "list_timeline_events");
+    expect(timelineTool?._meta?.ui?.resourceUri).toBe("ui://neotoma/timeline_widget");
+    expect(timelineTool?._meta?.["openai/outputTemplate"]).toBe("ui://neotoma/timeline_widget");
+  });
 });

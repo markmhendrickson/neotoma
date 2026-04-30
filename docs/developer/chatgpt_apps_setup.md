@@ -85,6 +85,6 @@ After updating tool names/descriptions/schemas:
 
 ## Neotoma App-Specific Notes
 
-- The timeline tool includes optional embedded UI metadata via `neotoma://ui/timeline_widget`.
+- The timeline tool includes optional embedded UI metadata via `ui://neotoma/timeline_widget`.
 - Tool descriptions are loaded from `docs/developer/mcp/tool_descriptions.yaml`.
 - OAuth and dynamic registration are served from `src/actions.ts`.

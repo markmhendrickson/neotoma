@@ -87,7 +87,7 @@ import {
 } from "./crypto/agent_identity.js";
 
 const MCP_DOCS_SUBDIR = ["docs", "developer", "mcp"] as const;
-const TIMELINE_WIDGET_RESOURCE_URI = "neotoma://ui/timeline_widget";
+const TIMELINE_WIDGET_RESOURCE_URI = "ui://neotoma/timeline_widget";
 
 /**
  * Compact fallback delivered when `docs/developer/mcp/instructions.md` is
@@ -4391,11 +4391,21 @@ export class NeotomaServer {
       user_id?: string;
     };
   } {
+    if (uri.startsWith("ui://")) {
+      const uriWithoutScheme = uri.substring("ui://".length);
+      const [pathPart] = uriWithoutScheme.split("?");
+      const [serverName, resourceName, extraSegment] = pathPart.split("/").filter(Boolean);
+      if (serverName === "neotoma" && resourceName === "timeline_widget" && !extraSegment) {
+        return { type: "ui_timeline_widget" };
+      }
+      throw new McpError(ErrorCode.InvalidRequest, `Unrecognized UI resource URI format: ${uri}`);
+    }
+
     // Validate scheme
     if (!uri.startsWith("neotoma://")) {
       throw new McpError(
         ErrorCode.InvalidRequest,
-        `Invalid resource URI scheme. Expected 'neotoma://', got: ${uri}`
+        `Invalid resource URI scheme. Expected 'neotoma://' or 'ui://', got: ${uri}`
       );
     }
 

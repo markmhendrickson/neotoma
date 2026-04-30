@@ -30,7 +30,7 @@ Use this checklist for release gating before app submission.
 
 ## D) UI Surface Validation (Timeline Widget MVP)
 
-- [ ] `neotoma://ui/timeline_widget` appears in resources.
+- [ ] `ui://neotoma/timeline_widget` appears in resources.
 - [ ] `list_timeline_events` carries UI metadata.
 - [ ] Widget renders without console/runtime errors.
 - [ ] Widget gracefully handles empty event sets.
