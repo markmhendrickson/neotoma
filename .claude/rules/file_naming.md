@@ -1,9 +1,9 @@
 ---
-description: "All filenames and folder names must use underscores (snake_case), not kebab-case (dashes)."
-alwaysApply: true
+description: "Filenames and folder names must use underscores (snake_case), not kebab-case. Load when creating or renaming files or folders."
+alwaysApply: false
 ---
 
-<!-- Source: foundation/agent_instructions/cursor_rules/file_naming.mdc -->
+<!-- Source: foundation/.cursor/rules/file_naming.mdc -->
 
 # File and Folder Naming Convention
 
@@ -12,8 +12,8 @@ All filenames and folder names must use underscores (snake_case), not kebab-case
 ## Format
 
 **Files:**
-- Correct: `create_feature_unit.md`, `setup_symlinks.md`, `run_feature_workflow.md`
-- Incorrect: `create-feature-unit.md`, `setup-symlinks.md`, `run-feature-workflow.md`
+- Correct: `create_feature_unit.md`, `setup_cursor_copies.md`, `run_feature_workflow.md`
+- Incorrect: `create-feature-unit.md`, `setup-cursor-copies.md`, `run-feature-workflow.md`
 
 **Folders:**
 - Correct: `cursor_rules/`, `feature_units/`, `agent_instructions/`, `repo_adapters/`

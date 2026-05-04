@@ -108,13 +108,13 @@
 3. **`docs/foundation/problem_statement.md`**
    - Problems solved
    - User pain points
-4. **`docs/specs/MVP_OVERVIEW.md`**
-   - MVP capabilities
-   - Feature lists
-   - Architecture overview
-5. **`docs/architecture/architecture.md`**
+4. **`docs/architecture/architecture.md`**
    - System architecture
    - Layer descriptions
+5. **`docs/subsystems/`**
+   - Current implementation architecture
+   - Capability-specific behavior
+   - Source-of-truth subsystem details
 6. **`docs/icp/profiles.md`**
    - Target user profiles
    - Use cases
@@ -141,7 +141,7 @@
    - Architectural foundations
    - Problems solved
    - Target users
-   - MVP features
+   - Current capabilities
    - Architecture overview
    - Development setup
    - Documentation structure
@@ -158,7 +158,7 @@
 5. Check consistency with docs
 ### Step 4: Validate
 1. **Accuracy check:**
-   - Features match MVP_OVERVIEW.md
+   - Features match README source docs and subsystem docs
    - Architecture matches architecture.md
    - Principles match philosophy.md
    - Status matches releases/
@@ -180,7 +180,7 @@
 README must be regenerated when:
 1. **Core identity changes** — `docs/foundation/core_identity.md` modified
 2. **Product positioning changes** — `docs/foundation/product_positioning.md` modified
-3. **MVP scope changes** — `docs/specs/MVP_OVERVIEW.md` modified
+3. **Product scope changes** — `docs/foundation/core_identity.md`, `docs/foundation/product_positioning.md`, or subsystem docs modified
 4. **Architecture changes** — `docs/architecture/architecture.md` modified
 5. **New features added** — Feature specs updated
 6. **Release status changes** — New releases or status updates
@@ -195,7 +195,7 @@ README must be regenerated when:
 A documentation change is "materially affecting" if it:
 - Changes what Neotoma is or does (core identity)
 - Changes how Neotoma is positioned or differentiated
-- Adds or removes MVP features
+- Adds or removes product capabilities
 - Changes architectural description or layer structure
 - Modifies target users or use cases
 - Updates core principles or philosophy

@@ -42,7 +42,7 @@ The sync script updates:
 
 Run `npm run sync:mcp` after changing `.cursor/mcp.json` (or add it to your workflow). Cursor Agent CLI uses Cursor’s MCP config when running in a project that has `.cursor/mcp.json`.
 
-### Other MCP clients (including OpenClaw)
+### Other MCP clients (including OpenClaw and IronClaw)
 
 If a client supports standard MCP server configuration, point it at the same Neotoma server definitions used in `.cursor/mcp.json`:
 
@@ -50,7 +50,7 @@ If a client supports standard MCP server configuration, point it at the same Neo
 - Remote/tunnel/deployed usage: prefer HTTP MCP endpoints
 - Local source iteration with an installed MCP client: use `run_neotoma_mcp_stdio_dev_shim.sh` so the client-facing stdio process remains stable while the shim restarts its worker.
 
-For an OpenClaw-specific setup path, see [MCP OpenClaw setup](mcp_openclaw_setup.md).
+For tool-specific setup paths, see [MCP OpenClaw setup](mcp_openclaw_setup.md) and [MCP IronClaw setup](mcp_ironclaw_setup.md).
 
 ### Transport: stdio for local, HTTP for remote
 
@@ -153,3 +153,4 @@ Use the user config paths above so the same behavior applies in every project. F
 - [MCP Cursor setup](mcp_cursor_setup.md) — Cursor IDE MCP integration
 - [MCP Claude Code setup](mcp_claude_code_setup.md) — Claude Code MCP integration
 - [MCP OpenClaw setup](mcp_openclaw_setup.md) — OpenClaw MCP integration
+- [MCP IronClaw setup](mcp_ironclaw_setup.md) — IronClaw MCP integration

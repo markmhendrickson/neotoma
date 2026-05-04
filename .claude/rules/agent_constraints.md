@@ -1,9 +1,9 @@
 ---
-description: "Ensures agents enforce all absolute constraints, forbidden patterns, and validation requirements when working on the repository"
-alwaysApply: true
+description: "Enforce absolute constraints, forbidden patterns, and validation requirements. Load when validating work or when task touches architecture, data, or security."
+alwaysApply: false
 ---
 
-<!-- Source: foundation/agent_instructions/cursor_rules/agent_constraints.mdc -->
+<!-- Source: foundation/.cursor/rules/agent_constraints.mdc -->
 
 # Agent Constraints Rule
 

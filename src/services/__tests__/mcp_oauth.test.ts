@@ -47,6 +47,24 @@ async function loadLocalAuthModule(tempDir: string) {
   return await import(cacheBustUrl);
 }
 
+async function loadLocalMcpAuthModule(tempDir: string) {
+  process.env.NEOTOMA_DATA_DIR = tempDir;
+  process.env.NEOTOMA_RAW_STORAGE_DIR = path.join(tempDir, "sources");
+
+  const moduleUrl = new URL("../mcp_auth.js", import.meta.url).href;
+  const cacheBustUrl = `${moduleUrl}?cacheBust=${Date.now()}`;
+  return await import(cacheBustUrl);
+}
+
+async function loadSqliteClient(tempDir: string) {
+  process.env.NEOTOMA_DATA_DIR = tempDir;
+  process.env.NEOTOMA_RAW_STORAGE_DIR = path.join(tempDir, "sources");
+
+  const moduleUrl = new URL("../../repositories/sqlite/sqlite_client.js", import.meta.url).href;
+  const cacheBustUrl = `${moduleUrl}?cacheBust=${Date.now()}`;
+  return await import(cacheBustUrl);
+}
+
 describe("MCP OAuth Service", () => {
   describe("generatePKCE", () => {
     it("generates code verifier and challenge", () => {
@@ -238,6 +256,225 @@ describe("MCP OAuth Service", () => {
 
       const tokenResponse = await oauth.getTokenResponseForConnection(connectionId);
       expect(tokenResponse.access_token).toMatch(/^local_access_/);
+
+      rmSync(tempDir, { recursive: true, force: true });
+    });
+
+    it("renews an expired access token when resolving a connection id", async () => {
+      const tempDir = path.join(process.cwd(), "tmp", `neotoma-oauth-renew-${Date.now()}`);
+      const oauth = await loadLocalOAuthModule(tempDir);
+      const localAuth = await loadLocalAuthModule(tempDir);
+      const { getSqliteDb } = await loadSqliteClient(tempDir);
+      localAuth.createLocalAuthUser("renew@example.com", "password123");
+      const user = localAuth.getLocalAuthUserByEmail("renew@example.com");
+      if (!user) {
+        throw new Error("Local auth user not found in test");
+      }
+
+      const connectionId = "cursor-local-renew";
+      const request = await oauth.createLocalAuthorizationRequest({
+        connectionId,
+        redirectUri: "cursor://oauth",
+        clientState: "client-state",
+        codeChallenge: "test-challenge",
+      });
+      await oauth.completeLocalAuthorization(request.state, user.id);
+      const firstToken = await oauth.getTokenResponseForConnection(connectionId);
+
+      getSqliteDb()
+        .prepare(
+          "UPDATE mcp_oauth_connections SET access_token_expires_at = ? WHERE connection_id = ?"
+        )
+        .run(new Date(Date.now() - 60_000).toISOString(), connectionId);
+
+      const renewed = await oauth.getAccessTokenForConnection(connectionId);
+      const secondToken = await oauth.getTokenResponseForConnection(connectionId);
+
+      expect(renewed.userId).toBe(user.id);
+      expect(renewed.accessToken).toMatch(/^local_access_/);
+      expect(renewed.accessToken).not.toBe(firstToken.access_token);
+      expect(secondToken.access_token).toBe(renewed.accessToken);
+      expect(secondToken.expires_in).toBeGreaterThan(3_000);
+
+      rmSync(tempDir, { recursive: true, force: true });
+    });
+
+    it("rejects an expired bearer access token instead of accepting stale auth", async () => {
+      const tempDir = path.join(process.cwd(), "tmp", `neotoma-oauth-expired-bearer-${Date.now()}`);
+      const oauth = await loadLocalOAuthModule(tempDir);
+      const localAuth = await loadLocalAuthModule(tempDir);
+      const mcpAuth = await loadLocalMcpAuthModule(tempDir);
+      const { getSqliteDb } = await loadSqliteClient(tempDir);
+      localAuth.createLocalAuthUser("expired@example.com", "password123");
+      const user = localAuth.getLocalAuthUserByEmail("expired@example.com");
+      if (!user) {
+        throw new Error("Local auth user not found in test");
+      }
+
+      const connectionId = "cursor-local-expired-bearer";
+      const request = await oauth.createLocalAuthorizationRequest({
+        connectionId,
+        redirectUri: "cursor://oauth",
+        clientState: "client-state",
+        codeChallenge: "test-challenge",
+      });
+      await oauth.completeLocalAuthorization(request.state, user.id);
+      const tokenResponse = await oauth.getTokenResponseForConnection(connectionId);
+      getSqliteDb()
+        .prepare(
+          "UPDATE mcp_oauth_connections SET access_token_expires_at = ? WHERE connection_id = ?"
+        )
+        .run(new Date(Date.now() - 60_000).toISOString(), connectionId);
+
+      await expect(mcpAuth.validateSessionToken(tokenResponse.access_token)).rejects.toThrow(
+        "Local session token expired"
+      );
+      await expect(oauth.validateTokenAndGetConnectionId(tokenResponse.access_token)).rejects.toThrow(
+        "Access token expired"
+      );
+
+      rmSync(tempDir, { recursive: true, force: true });
+    });
+
+    it("exchanges a refresh token for a new local access token", async () => {
+      const tempDir = path.join(process.cwd(), "tmp", `neotoma-oauth-refresh-${Date.now()}`);
+      const oauth = await loadLocalOAuthModule(tempDir);
+      const localAuth = await loadLocalAuthModule(tempDir);
+      localAuth.createLocalAuthUser("refresh@example.com", "password123");
+      const user = localAuth.getLocalAuthUserByEmail("refresh@example.com");
+      if (!user) {
+        throw new Error("Local auth user not found in test");
+      }
+
+      const connectionId = "cursor-local-refresh";
+      const request = await oauth.createLocalAuthorizationRequest({
+        connectionId,
+        redirectUri: "cursor://oauth",
+        clientState: "client-state",
+        codeChallenge: "test-challenge",
+      });
+      await oauth.completeLocalAuthorization(request.state, user.id);
+      const firstToken = await oauth.getTokenResponseForConnection(connectionId);
+      if (!firstToken.refresh_token) {
+        throw new Error("Expected local OAuth flow to return a refresh token");
+      }
+
+      const refreshed = await oauth.refreshAccessToken(firstToken.refresh_token);
+
+      expect(refreshed.access_token).toMatch(/^local_access_/);
+      expect(refreshed.access_token).not.toBe(firstToken.access_token);
+      expect(refreshed.refresh_token).toBe(firstToken.refresh_token);
+      expect(refreshed.expires_in).toBeGreaterThan(3_000);
+
+      rmSync(tempDir, { recursive: true, force: true });
+    });
+
+    it("concurrent refresh calls both succeed without corrupting connection state", async () => {
+      const tempDir = path.join(process.cwd(), "tmp", `neotoma-oauth-concurrent-${Date.now()}`);
+      const oauth = await loadLocalOAuthModule(tempDir);
+      const localAuth = await loadLocalAuthModule(tempDir);
+      localAuth.createLocalAuthUser("concurrent@example.com", "password123");
+      const user = localAuth.getLocalAuthUserByEmail("concurrent@example.com");
+      if (!user) throw new Error("Local auth user not found in test");
+
+      const connectionId = "cursor-local-concurrent";
+      const request = await oauth.createLocalAuthorizationRequest({
+        connectionId,
+        redirectUri: "cursor://oauth",
+        clientState: "client-state",
+        codeChallenge: "test-challenge",
+      });
+      await oauth.completeLocalAuthorization(request.state, user.id);
+      const firstToken = await oauth.getTokenResponseForConnection(connectionId);
+      if (!firstToken.refresh_token) throw new Error("Expected refresh token");
+
+      const [r1, r2] = await Promise.all([
+        oauth.refreshAccessToken(firstToken.refresh_token),
+        oauth.refreshAccessToken(firstToken.refresh_token),
+      ]);
+
+      expect(r1.access_token).toMatch(/^local_access_/);
+      expect(r2.access_token).toMatch(/^local_access_/);
+
+      const finalToken = await oauth.getTokenResponseForConnection(connectionId);
+      expect(finalToken.access_token).toMatch(/^local_access_/);
+      expect(finalToken.expires_in).toBeGreaterThan(3_000);
+
+      const status = await oauth.getConnectionStatus(connectionId);
+      expect(status).toBe("active");
+
+      rmSync(tempDir, { recursive: true, force: true });
+    });
+
+    it("rejects refresh for a revoked connection", async () => {
+      const tempDir = path.join(process.cwd(), "tmp", `neotoma-oauth-revoked-${Date.now()}`);
+      const oauth = await loadLocalOAuthModule(tempDir);
+      const localAuth = await loadLocalAuthModule(tempDir);
+      const { getSqliteDb } = await loadSqliteClient(tempDir);
+      localAuth.createLocalAuthUser("revoked@example.com", "password123");
+      const user = localAuth.getLocalAuthUserByEmail("revoked@example.com");
+      if (!user) throw new Error("Local auth user not found in test");
+
+      const connectionId = "cursor-local-revoked";
+      const request = await oauth.createLocalAuthorizationRequest({
+        connectionId,
+        redirectUri: "cursor://oauth",
+        clientState: "client-state",
+        codeChallenge: "test-challenge",
+      });
+      await oauth.completeLocalAuthorization(request.state, user.id);
+      const firstToken = await oauth.getTokenResponseForConnection(connectionId);
+      if (!firstToken.refresh_token) throw new Error("Expected refresh token");
+
+      getSqliteDb()
+        .prepare("UPDATE mcp_oauth_connections SET revoked_at = ? WHERE connection_id = ?")
+        .run(new Date().toISOString(), connectionId);
+
+      await expect(oauth.refreshAccessToken(firstToken.refresh_token)).rejects.toThrow(
+        /not found/i
+      );
+
+      rmSync(tempDir, { recursive: true, force: true });
+    });
+
+    it("refreshes token after simulated tunnel restart (expired access, valid refresh)", async () => {
+      const tempDir = path.join(process.cwd(), "tmp", `neotoma-oauth-tunnel-${Date.now()}`);
+      const oauth = await loadLocalOAuthModule(tempDir);
+      const localAuth = await loadLocalAuthModule(tempDir);
+      const { getSqliteDb } = await loadSqliteClient(tempDir);
+      localAuth.createLocalAuthUser("tunnel@example.com", "password123");
+      const user = localAuth.getLocalAuthUserByEmail("tunnel@example.com");
+      if (!user) throw new Error("Local auth user not found in test");
+
+      const connectionId = "cursor-local-tunnel-restart";
+      const request = await oauth.createLocalAuthorizationRequest({
+        connectionId,
+        redirectUri: "cursor://oauth",
+        clientState: "client-state",
+        codeChallenge: "test-challenge",
+      });
+      await oauth.completeLocalAuthorization(request.state, user.id);
+      const firstToken = await oauth.getTokenResponseForConnection(connectionId);
+
+      getSqliteDb()
+        .prepare(
+          "UPDATE mcp_oauth_connections SET access_token_expires_at = ? WHERE connection_id = ?"
+        )
+        .run(new Date(Date.now() - 3600_000).toISOString(), connectionId);
+
+      await expect(oauth.validateTokenAndGetConnectionId(firstToken.access_token)).rejects.toThrow(
+        "Access token expired"
+      );
+
+      const renewed = await oauth.getAccessTokenForConnection(connectionId);
+      expect(renewed.accessToken).toMatch(/^local_access_/);
+      expect(renewed.accessToken).not.toBe(firstToken.access_token);
+
+      const finalStatus = await oauth.getConnectionStatus(connectionId);
+      expect(finalStatus).toBe("active");
+
+      const finalToken = await oauth.getTokenResponseForConnection(connectionId);
+      expect(finalToken.expires_in).toBeGreaterThan(3_000);
 
       rmSync(tempDir, { recursive: true, force: true });
     });

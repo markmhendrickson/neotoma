@@ -1,9 +1,9 @@
 ---
-description: "Rules for creating and maintaining documentation files to minimize context window usage while maintaining clarity"
-alwaysApply: true
+description: "Create and maintain documentation to minimize context usage while keeping clarity. Load when creating or editing documentation files."
+alwaysApply: false
 ---
 
-<!-- Source: foundation/agent_instructions/cursor_rules/documentation_rules.mdc -->
+<!-- Source: foundation/.cursor/rules/documentation_rules.mdc -->
 
 # Documentation Rules
 

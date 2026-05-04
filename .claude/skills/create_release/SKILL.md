@@ -3,7 +3,8 @@ name: create_release
 description: Create New Release
 ---
 
-<!-- Source: foundation/agent_instructions/cursor_commands/create_release.md -->
+<!-- Source: .cursor/skills/create-release/SKILL.md -->
+
 
 # Create New Release
 
@@ -31,7 +32,7 @@ Load required documents:
 - `foundation/development/release_workflow.md` (primary workflow)
 - `docs/feature_units/standards/creating_feature_units.md` (FU creation)
 - `docs/feature_units/standards/execution_instructions.md` (FU execution)
-- `docs/specs/MVP_FEATURE_UNITS.md` (if working on MVP)
+- `docs/feature_units/completed/` and `docs/feature_units/in_progress/` (for Feature Unit specs)
 
 ### Step 2: Checkpoint 0 — Release Planning
 
@@ -48,7 +49,7 @@ Check if Release plan exists:
 2. **Release goal** (1-2 sentence summary of what this ships)
 3. **Target ship date** (date or "when ready")
 4. **Priority** (P0 critical / P1 high / P2 normal)
-5. **Included Feature Units** (list of FU IDs, e.g., "FU-100, FU-101, FU-102" or "all P0 FUs from MVP_FEATURE_UNITS.md")
+5. **Included Feature Units** (list of FU IDs, e.g., "FU-100, FU-101, FU-102")
 6. **Excluded scope** (what's explicitly NOT in this release)
 7. **Release-level acceptance criteria:**
    - Product acceptance (core workflows, empty/error states)
@@ -330,16 +331,16 @@ User: 2025-03-01
 Agent: What is the priority?
 User: P0 critical
 
-Agent: Which Feature Units should be included? (list FU IDs or "all P0 from MVP_FEATURE_UNITS")
-User: all P0 from MVP_FEATURE_UNITS.md
+Agent: Which Feature Units should be included? (list FU IDs)
+User: FU-100, FU-101, FU-102, FU-103, FU-105, FU-300, FU-700, FU-701
 
-Agent: [loads MVP_FEATURE_UNITS.md, extracts P0 FUs: FU-100, FU-101, FU-102, FU-103, FU-105, FU-300, FU-700, FU-701]
+Agent: [loads the matching Feature Unit specs from `docs/feature_units/`]
 
 Agent: What scope is explicitly excluded from this release?
 User: Semantic search, Plaid integration, X/Instagram integrations (all post-MVP)
 
 Agent: What are the Release-level acceptance criteria? (product, technical, business)
-User: [provides criteria from MVP_EXECUTION_PLAN.md]
+User: [provides release-specific criteria]
 
 Agent: What cross-FU integration tests are required?
 User: Full user flow: upload → extraction → entity resolution → event generation → timeline display → AI query via MCP
@@ -409,7 +410,7 @@ Agent: Monitoring: [dashboard links]
 1. `foundation/development/release_workflow.md` (primary)
 2. `docs/feature_units/standards/creating_feature_units.md` (for FU creation)
 3. `docs/feature_units/standards/execution_instructions.md` (for FU execution)
-4. `docs/specs/MVP_FEATURE_UNITS.md` (if release_id is v1.0.0 / MVP)
+4. `docs/feature_units/completed/` and `docs/feature_units/in_progress/` (for Feature Unit specs)
 
 ### Constraints
 

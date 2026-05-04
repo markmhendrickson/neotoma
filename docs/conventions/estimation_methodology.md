@@ -46,7 +46,7 @@ This baseline demonstrates that with:
 - Reduce estimates by 50-70%
 - Example: Design system with existing components = polish (0.5 days), not greenfield (1.5 weeks)
 **If greenfield work:**
-- Use full estimates from `MVP_FEATURE_UNITS.md`
+- Use current feature-unit specs when available; use archived MVP estimates in `docs/releases/archived/mvp_planning/MVP_FEATURE_UNITS.md` only as historical calibration.
 - Add 30% buffer for unknowns
 ## Common Estimation Mistakes
 ### ❌ Mistake 1: Using Theoretical Hour Estimates

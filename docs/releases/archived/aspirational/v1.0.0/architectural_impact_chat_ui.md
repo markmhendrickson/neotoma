@@ -20,7 +20,7 @@ This document does NOT cover:
 - MCP provides standardized interface for external agents
 ## 2. Impact on Release v1.0.0
 ### 2.1 Feature Unit FU-307 Status
-**Current Status:** FU-307 (Chat/AI Panel) is marked as "✅ Complete" in `docs/specs/MVP_FEATURE_UNITS.md`.
+**Current Status:** FU-307 (Chat/AI Panel) was marked as "✅ Complete" in `docs/releases/archived/mvp_planning/MVP_FEATURE_UNITS.md`.
 **Required Change:** FU-307 MUST be explicitly excluded from v1.0.0 release scope.
 **Rationale:**
 - ChatPanel component exists but violates architectural decision
@@ -134,7 +134,7 @@ This document does NOT cover:
 - Add MCP integration acceptance criteria
 - Update product acceptance criteria to reflect MCP-first architecture
 ### 6.3 Feature Unit Spec Updates
-**File:** `docs/specs/MVP_FEATURE_UNITS.md`
+**File:** `docs/releases/archived/mvp_planning/MVP_FEATURE_UNITS.md`
 **Changes:**
 - Update FU-307 status to "❌ Excluded (Architectural Decision)"
 - Add note referencing architectural decision
@@ -167,7 +167,7 @@ This document does NOT cover:
 - `docs/architecture/conversational_ux_architecture.md` — Architectural decision and rationale
 - `docs/releases/v1.0.0/release_plan.md` — Release plan (to be updated)
 - `docs/releases/v1.0.0/acceptance_criteria.md` — Acceptance criteria (to be updated)
-- `docs/specs/MVP_FEATURE_UNITS.md` — Feature Unit specifications (to be updated)
+- `docs/releases/archived/mvp_planning/MVP_FEATURE_UNITS.md` — Historical Feature Unit specifications
 - `docs/specs/MCP_SPEC.md` — MCP specification
 ## Agent Instructions
 ### When to Load This Document

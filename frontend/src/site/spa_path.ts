@@ -9,7 +9,9 @@ export const PRODUCT_MARKETING_BASENAMES = new Set([
   "/neotoma-with-claude-code",
   "/neotoma-with-chatgpt",
   "/neotoma-with-codex",
+  "/neotoma-with-opencode",
   "/neotoma-with-openclaw",
+  "/neotoma-with-ironclaw",
 ]);
 
 const PRODUCT_MARKETING_FIRST_SEGMENTS = new Set(

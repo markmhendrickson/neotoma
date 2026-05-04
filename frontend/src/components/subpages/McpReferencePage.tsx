@@ -23,7 +23,9 @@ export function McpReferencePage() {
           The MCP client launches the Neotoma process directly.
         </li>
         <li className="text-[15px] leading-7 text-muted-foreground">
-          <strong className="text-foreground">HTTP (SSE)</strong> - remote or tunnel access via{" "}
+          <strong className="text-foreground">HTTP (SSE)</strong> - remote or{" "}
+          <Link to="/tunnel" className="text-foreground underline underline-offset-2 hover:no-underline">tunnel</Link>{" "}
+          access via{" "}
           <code>http://localhost:3080/mcp</code> (dev) or <code>http://localhost:3180/mcp</code> (prod).
           Use with <code>--tunnel</code> for HTTPS via ngrok or Cloudflare.
         </li>
@@ -45,7 +47,7 @@ export function McpReferencePage() {
         Add <code>--user-level</code> to include user-level paths.
       </p>
       <p className="text-[15px] leading-7 mb-3">
-        <strong>HTTP / tunnel</strong> (remote access):
+        <strong>HTTP / <Link to="/tunnel" className="text-foreground underline underline-offset-2 hover:no-underline">tunnel</Link></strong> (remote access):
       </p>
       <pre className="rounded-lg border code-block-palette p-4 overflow-x-auto font-mono text-[14px] whitespace-pre-wrap break-words mb-6">{`{
   "mcpServers": {
@@ -203,7 +205,7 @@ parse_file(file_path="/path/to/document.pdf")`}</pre>
         </li>
       </ul>
       <p className="text-[14px] leading-6 text-muted-foreground mb-4">
-        See <Link to="/connect" className="text-foreground underline underline-offset-2 hover:no-underline">Connect a remote Neotoma</Link>{" "}
+        See <Link to="/connect" className="text-foreground underline underline-offset-2 hover:no-underline">Connect remotely</Link>{" "}
         for per-harness snippets, and <Link to="/hosted" className="text-foreground underline underline-offset-2 hover:no-underline">Hosted Neotoma</Link>{" "}
         for the mode comparison.
       </p>

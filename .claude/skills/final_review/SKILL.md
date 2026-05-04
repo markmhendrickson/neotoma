@@ -3,7 +3,8 @@ name: final_review
 description: Final Review
 ---
 
-<!-- Source: foundation/agent_instructions/cursor_commands/final_review.md -->
+<!-- Source: .cursor/skills/final-review/SKILL.md -->
+
 
 # Final Review
 

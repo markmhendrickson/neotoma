@@ -1,9 +1,9 @@
 ---
-description: "Ensures that README.md remains synchronized with documentation changes, providing accurate and comprehensive representation of the repository"
-alwaysApply: true
+description: "README.md must stay synchronized with documentation changes. Load when editing docs that affect project overview or when updating README."
+alwaysApply: false
 ---
 
-<!-- Source: foundation/agent_instructions/cursor_rules/readme_maintenance.mdc -->
+<!-- Source: foundation/.cursor/rules/readme_maintenance.mdc -->
 
 # README Maintenance Rule
 

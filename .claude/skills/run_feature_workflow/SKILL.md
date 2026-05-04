@@ -3,7 +3,8 @@ name: run_feature_workflow
 description: Run Feature Workflow
 ---
 
-<!-- Source: foundation/agent_instructions/cursor_commands/run_feature_workflow.md -->
+<!-- Source: .cursor/skills/run-feature-workflow/SKILL.md -->
+
 
 # Run Feature Workflow
 

@@ -38,10 +38,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
     <title>AAuth (Agent Authentication) (Markdown) | Neotoma</title>
-    <script type="module" crossorigin="" src="/assets/main-CaoWcp2k.js"></script>
-    <link rel="stylesheet" crossorigin="" href="/assets/main-BBds_bdF.css">
+    <script type="module" crossorigin="" src="/assets/main-aNEaYUJL.js"></script>
+    <link rel="stylesheet" crossorigin="" href="/assets/main-a7BqVBLd.css">
   
-    <!-- build: local-1777360387837 -->
+    <!-- build: local-1777885129871 -->
       <link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/aauth">
     <link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/aauth">
     <link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/aauth">
@@ -61,7 +61,7 @@
     <div id="root"><iframe title="Markdown capture" aria-hidden="true" width="1280" height="900" class="pointer-events-none fixed left-[-9999px] top-0 z-[-1] border-0 opacity-0" sandbox="allow-same-origin allow-scripts allow-forms"></iframe><div class="min-h-screen bg-background text-foreground"><pre class="whitespace-pre-wrap break-words p-4 font-mono text-[13px] leading-relaxed text-foreground">&lt;!--
   Full-page Markdown export (rendered HTML → GFM).
   Source: https://neotoma.io/fr/aauth
-  Generated: 2026-04-28T07:15:52.418Z
+  Generated: 2026-05-04T09:01:42.867Z
 --&gt;
 # AAuth (Agent Authentication)
 
@@ -93,270 +93,19 @@ A single enum is stamped onto every durable row. Tier resolution happens once pe
 
 The practical difference: `unverified_client` rows still let you filter and group by which integration produced the write (e.g. `cursor-agent` vs `claude-code`), whereas `anonymous` rows are an undifferentiated bucket that operators usually want to surface or block via attribution policy.
 
-Tier resolution surfaces directly in the [Inspector agents view](/inspector/agents): every distinct writer is one row, badged with the tier it resolved to (`hardware`, `software`, `unverified_client`, `anonymous`) plus the signing algorithm and last-seen activity.
+Tier resolution surfaces directly in the [Inspector agents view](/inspector/agents): every distinct writer is one row, badged with the tier it resolved to (`hardware`, `operator_attested`, `software`, `unverified_client`, `anonymous`) plus the signing algorithm and last-seen activity.
 
-inspector.neotoma.io/agents
+See the [Inspector agents view](/inspector/agents) for a live table of all signing identities, trust tiers, and write counts.
 
-Inspector
+See [AAuth wire format and verification](/aauth/spec) for signature components, headers, the `aa-agent+jwt` token contract, and the trust-tier verification cascade.
 
-Neotoma
+See [Integration guide](/aauth/integration) for per-request precedence rules, preflight checks, and the diagnostic surface (`GET /session`, `attribution.decision`).
 
-Dashboard
+See [Attestation](/aauth/attestation) for hardware attestation envelope formats (Apple Secure Enclave, WebAuthn-packed, TPM 2.0), per-format verifiers, and revocation policy.
 
-Conversations
+Operators control attribution requirements through environment variables and the [Inspector attribution policy panel](/inspector/settings/attribution-policy): global mode (`allow` / `warn` / `reject`), minimum tier, and per-path overrides. See [Integration](/aauth/integration) for the full contract.
 
-Turns
-
-Compliance
-
-Activity
-
-Feedback
-
-Entities
-
-Observations
-
-Sources
-
-Relationships
-
-Graph Explorer
-
-Schemas
-
-Timeline
-
-Interpretations
-
-Agents
-
-Agent grants
-
-Settings
-
-Agents
-
-14 active identities · 8.2k writes · last 30d
-
-hardware (3)software (8)unverified (2)anonymous (1)
-
-| Agent | Tier | Alg | Writes | Last seen |
-| --- | --- | --- | --- | --- |
-| operator (mac · SE)es256:Dr…2Yj | hardware | ES256 | 412 | 10:55 |
-| cursor-agentes256:Bp…4Zq | hardware | ES256 | 2,810 | 12:30 |
-| claude-codeed25519:Aa…7Lk | software | EdDSA | 4,120 | 12:41 |
-| ingest-pipelineed25519:Cq…9Rt | software | EdDSA | 980 | 11:08 |
-| custom-script@myco- | unverified\_client | \- | 18 | Apr 24 |
-| anonymous- | anonymous | \- | 4 | Apr 22 |
-
-Inspector, Agents list. AAuth trust tiers render as inline badges; click through for the per-agent thumbprint, algorithm, attestation outcome, and grants.
-
-◆
-
-## Wire format
-
-AAuth sends three headers on every signed request. The signature components MUST cover `@authority`, `@method`, `@target-uri`, `content-digest` (when there's a body), and the `signature-key` header itself.
-
-Signature: sig1=:AGNlbGtkdHIxMjM4...:
-Signature-Input: sig1=("@authority" "@method" "@target-uri" \\
-                       "content-digest" "signature-key");\\
-                  alg="ed25519";created=1714003200;keyid="..."
-Signature-Key: &lt;base64url(JSON: { jwk, jwt: "&lt;aa-agent+jwt&gt;" })&gt;
-
-The `aa-agent+jwt` agent token uses `typ: "aa-agent+jwt"` and carries:
-
--   `iss`, issuer / fleet identifier
--   `sub`, agent identity within the issuer
--   `iat`, issued-at; checked against the configured AAuth clock-skew window (default 300 s)
--   `cnf.jwk`, confirmation key (RFC 7638 thumbprint MUST match the signing key)
--   `cnf.attestation` (optional), hardware attestation envelope (Apple SE, WebAuthn-packed, or TPM 2.0)
-
-Neotoma verifies the signature against the canonical authority configured via `NEOTOMA_AUTH_AUTHORITY`. Using the request `Host` header for verification is explicitly unsafe and rejected.
-
-◆
-
-## Verification cascade
-
-Tier derivation walks the signed payload, then attestation, then the operator allowlist, then the self-reported channels:
-
-Signature header present?
-  no  → clientInfo / X-Client-Name non-generic? → unverified\_client
-                                                | else → anonymous
-  yes → signature verifies against authority + body digest?
-          no  → fall through to clientInfo channel
-          yes → cnf.attestation present?
-                  yes → verifier accepts? → revocation OK? → hardware
-                                          | else → software
-                  no / fails → iss (or iss:sub) in operator allowlist?
-                                yes → operator\_attested
-                                no  → software
-
-Verifier failures never reject the request when the underlying signature is valid, they only prevent tier promotion. The reason is recorded under `attribution.decision` on `GET /session` for debugging.
-
-◆
-
-## Per-request precedence
-
-For each request Neotoma walks these inputs in order; the first populated field at each layer wins. Bearer tokens resolve only `user_id` and never mint a tier above `anonymous` on their own.
-
-AAuth (verified signature + JWT)  → agent\_thumbprint, agent\_sub, agent\_iss,
-                                    agent\_algorithm, agent\_public\_key
-clientInfo (MCP initialize)       → client\_name, client\_version
-X-Client-Name / X-Client-Version  → client\_name, client\_version
-OAuth connection id               → connection\_id
-(nothing)                         → anonymous
-
-◆
-
-## Hardware attestation
-
-When the agent token carries `cnf.attestation`, Neotoma verifies the envelope before promoting the request to `hardware`. The envelope binds the signing key to a hardware root of trust by RFC 7638 thumbprint and a server-recomputed challenge. Supported formats:
-
--   **`apple-secure-enclave`**, macOS hosts; backed by the Apple Attestation Root (bundled at `config/aauth/apple_attestation_root.pem`).
--   **`webauthn-packed`**, YubiKey 5 series and any WebAuthn authenticator emitting a `packed` attestation statement.
--   **`tpm2`**, Linux `/dev/tpmrm0` and Windows TBS / NCrypt; verified against the operator-configured TPM CA bundle.
-
-Verification ordering inside each format: parse statement, extract credential public key, RFC 7638 thumbprint check against `cnf.jwk`, recompute challenge from JWT claims, then chain validation. Each step has a deterministic failure code surfaced via `attestation_outcome`.
-
-◆
-
-## Operator policy
-
-Operators control attribution requirements through environment variables. The active policy is exposed under `policy` on `GET /session`:
-
--   **`NEOTOMA_ATTRIBUTION_POLICY`** (`allow` | `warn` | `reject`; default `allow`), global behaviour for `anonymous` writes. `reject` returns `HTTP 403 ATTRIBUTION_REQUIRED`; `warn` stamps `X-Neotoma-Attribution-Warning`.
--   **`NEOTOMA_MIN_ATTRIBUTION_TIER`** (`hardware` | `software` | `unverified_client`), minimum tier required for the policy to be considered satisfied.
--   **`NEOTOMA_ATTRIBUTION_POLICY_JSON`** , per-path overrides, e.g. `{"observations":"reject","relationships":"warn"}`.
-
-Per-path `reject` always wins over a global `allow`. Per-agent fine-grained capability scoping (`(op, entity_type)` allow-lists) is layered on top via `agent_grant` entities.
-
-Operators can read and edit the active policy without touching env vars from the [Inspector settings page](/inspector/settings/attribution-policy); per-agent grants live alongside the agent in the [Agents view](/inspector/agents).
-
-inspector.neotoma.io/settings#attribution
-
-Inspector
-
-Neotoma
-
-Dashboard
-
-Conversations
-
-Turns
-
-Compliance
-
-Activity
-
-Feedback
-
-Entities
-
-Observations
-
-Sources
-
-Relationships
-
-Graph Explorer
-
-Schemas
-
-Timeline
-
-Interpretations
-
-Agents
-
-Agent grants
-
-Settings
-
-Attribution policy
-
-Global mode
-
-allowwarnreject
-
-Active: warn
-
-Min tier
-
-hardwaresoftwareunverified\_client
-
-Active: software
-
-Per-path overrides
-
-&lt;table class="w-full text-[12px]"&gt;&lt;tbody&gt;&lt;tr class="border-b border-border/40 last:border-0"&gt;&lt;td class="py-1.5 font-mono text-muted-foreground"&gt;/observations&lt;/td&gt;&lt;td class="py-1.5 text-right"&gt;reject&lt;/td&gt;&lt;/tr&gt;&lt;tr class="border-b border-border/40 last:border-0"&gt;&lt;td class="py-1.5 font-mono text-muted-foreground"&gt;/relationships&lt;/td&gt;&lt;td class="py-1.5 text-right"&gt;warn&lt;/td&gt;&lt;/tr&gt;&lt;tr class="border-b border-border/40 last:border-0"&gt;&lt;td class="py-1.5 font-mono text-muted-foreground"&gt;/timeline&lt;/td&gt;&lt;td class="py-1.5 text-right"&gt;warn&lt;/td&gt;&lt;/tr&gt;&lt;tr class="border-b border-border/40 last:border-0"&gt;&lt;td class="py-1.5 font-mono text-muted-foreground"&gt;/sources&lt;/td&gt;&lt;td class="py-1.5 text-right"&gt;allow&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
-
-Decision (last 100 requests)
-
-Verified sigs
-
-94
-
-94%
-
-Promoted (HW)
-
-12
-
-attestation OK
-
-Rejected
-
-3
-
-anonymous → /observations
-
-Inspector, Settings · Attribution policy. The same env vars (NEOTOMA\_ATTRIBUTION\_POLICY, NEOTOMA\_MIN\_ATTRIBUTION\_TIER, per-path overrides) rendered as a live operator console with the resolved decision per route.
-
-◆
-
-## Generate keys with the CLI
-
-The Neotoma CLI ships hardware-aware keygen across darwin (Apple Secure Enclave), linux (TPM 2.0), win32 (Windows TBS / NCrypt), and YubiKey 5 series:
-
-\# Software-backed keypair (cross-platform)
-neotoma auth keygen
-
-# Hardware-backed keypair (auto-selects best backend)
-neotoma auth keygen --hardware
-
-# Force a specific hardware backend
-neotoma auth keygen --hardware --backend yubikey
-
-# Inspect resolved trust tier and attestation outcome
-neotoma auth session
-
-Keys are written to `~/.config/neotoma/aauth/signer.json` with a per-backend handle. The agent token is minted on demand and attached to every signed request. `neotoma auth session` renders the same diagnostics that `GET /session` exposes over HTTP.
-
-◆
-
-## Preflight (mandatory for new integrators)
-
-Before enabling writes, call `GET /session` (or the `get_session_identity` MCP tool, or `neotoma auth session`) and confirm:
-
--   `attribution.decision.signature_verified === true` when AAuth is intended.
--   `attribution.tier` is `hardware`, `operator_attested`, or `software` for signed clients, or at least `unverified_client` when intentionally relying on `clientInfo` only.
--   `eligible_for_trusted_writes === true`.
-
-Generic `clientInfo.name` values (`mcp`, `client`, `mcp-client`, `unknown`, `anonymous`, …) are normalised to the `anonymous` tier and WILL fail preflight under any non-`allow` policy.
-
-◆
-
-## Diagnostic surface
-
-Every AAuth verification emits a structured `attribution_decision` log line and exposes the same fields on `GET /session` under `attribution.decision`:
-
--   `signature_present`, `signature_verified`, `signature_error_code`
--   `attestation_outcome` (`verified`, `format_unsupported`, `key_binding_failed`, `challenge_mismatch`, `chain_invalid`, …)
--   `revocation_outcome` (`not_checked`, `live`, `revoked`, `error_skipped`)
--   `resolved_tier`, final tier stamped onto the request context
-
-The same fields render visually on each agent in the [Inspector agent detail](/inspector/agents): thumbprint, algorithm, attestation envelope, revocation status, resolved tier, and the writes/relationships/sources the agent produced. Every durable row carries this stamp, so any [observation](/inspector/observations-and-sources) or [timeline event](/inspector/timeline) can be filtered or grouped by tier and signing identity after the fact.
+See [CLI keys and hardware backends](/aauth/cli-keys) for keygen commands, on-disk key layout, and per-platform hardware support.
 
 ◆
 

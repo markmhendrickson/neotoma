@@ -4,6 +4,9 @@
   <url><loc>https://neotoma.io/install</loc></url>
   <url><loc>https://neotoma.io/install/manual</loc></url>
   <url><loc>https://neotoma.io/install/docker</loc></url>
+  <url><loc>https://neotoma.io/what-to-store</loc></url>
+  <url><loc>https://neotoma.io/backup</loc></url>
+  <url><loc>https://neotoma.io/tunnel</loc></url>
   <url><loc>https://neotoma.io/sandbox</loc></url>
   <url><loc>https://neotoma.io/sandbox/terms-of-use</loc></url>
   <url><loc>https://neotoma.io/hosted</loc></url>
@@ -54,7 +57,9 @@
   <url><loc>https://neotoma.io/neotoma-with-codex</loc></url>
   <url><loc>https://neotoma.io/neotoma-with-codex-connect-local-stdio</loc></url>
   <url><loc>https://neotoma.io/neotoma-with-codex-connect-remote-http-oauth</loc></url>
+  <url><loc>https://neotoma.io/neotoma-with-opencode</loc></url>
   <url><loc>https://neotoma.io/neotoma-with-openclaw</loc></url>
+  <url><loc>https://neotoma.io/neotoma-with-ironclaw</loc></url>
   <url><loc>https://neotoma.io/neotoma-with-openclaw-connect-local-stdio</loc></url>
   <url><loc>https://neotoma.io/neotoma-with-openclaw-connect-remote-http</loc></url>
   <url><loc>https://neotoma.io/deterministic-state-evolution</loc></url>
@@ -122,6 +127,9 @@
   <url><loc>https://neotoma.io/es/install</loc></url>
   <url><loc>https://neotoma.io/es/install/manual</loc></url>
   <url><loc>https://neotoma.io/es/install/docker</loc></url>
+  <url><loc>https://neotoma.io/es/what-to-store</loc></url>
+  <url><loc>https://neotoma.io/es/backup</loc></url>
+  <url><loc>https://neotoma.io/es/tunnel</loc></url>
   <url><loc>https://neotoma.io/es/sandbox</loc></url>
   <url><loc>https://neotoma.io/es/sandbox/terms-of-use</loc></url>
   <url><loc>https://neotoma.io/es/hosted</loc></url>
@@ -172,7 +180,9 @@
   <url><loc>https://neotoma.io/es/neotoma-with-codex</loc></url>
   <url><loc>https://neotoma.io/es/neotoma-with-codex-connect-local-stdio</loc></url>
   <url><loc>https://neotoma.io/es/neotoma-with-codex-connect-remote-http-oauth</loc></url>
+  <url><loc>https://neotoma.io/es/neotoma-with-opencode</loc></url>
   <url><loc>https://neotoma.io/es/neotoma-with-openclaw</loc></url>
+  <url><loc>https://neotoma.io/es/neotoma-with-ironclaw</loc></url>
   <url><loc>https://neotoma.io/es/neotoma-with-openclaw-connect-local-stdio</loc></url>
   <url><loc>https://neotoma.io/es/neotoma-with-openclaw-connect-remote-http</loc></url>
   <url><loc>https://neotoma.io/es/deterministic-state-evolution</loc></url>
@@ -240,6 +250,9 @@
   <url><loc>https://neotoma.io/ca/install</loc></url>
   <url><loc>https://neotoma.io/ca/install/manual</loc></url>
   <url><loc>https://neotoma.io/ca/install/docker</loc></url>
+  <url><loc>https://neotoma.io/ca/what-to-store</loc></url>
+  <url><loc>https://neotoma.io/ca/backup</loc></url>
+  <url><loc>https://neotoma.io/ca/tunnel</loc></url>
   <url><loc>https://neotoma.io/ca/sandbox</loc></url>
   <url><loc>https://neotoma.io/ca/sandbox/terms-of-use</loc></url>
   <url><loc>https://neotoma.io/ca/hosted</loc></url>
@@ -290,7 +303,9 @@
   <url><loc>https://neotoma.io/ca/neotoma-with-codex</loc></url>
   <url><loc>https://neotoma.io/ca/neotoma-with-codex-connect-local-stdio</loc></url>
   <url><loc>https://neotoma.io/ca/neotoma-with-codex-connect-remote-http-oauth</loc></url>
+  <url><loc>https://neotoma.io/ca/neotoma-with-opencode</loc></url>
   <url><loc>https://neotoma.io/ca/neotoma-with-openclaw</loc></url>
+  <url><loc>https://neotoma.io/ca/neotoma-with-ironclaw</loc></url>
   <url><loc>https://neotoma.io/ca/neotoma-with-openclaw-connect-local-stdio</loc></url>
   <url><loc>https://neotoma.io/ca/neotoma-with-openclaw-connect-remote-http</loc></url>
   <url><loc>https://neotoma.io/ca/deterministic-state-evolution</loc></url>
@@ -358,6 +373,9 @@
   <url><loc>https://neotoma.io/zh/install</loc></url>
   <url><loc>https://neotoma.io/zh/install/manual</loc></url>
   <url><loc>https://neotoma.io/zh/install/docker</loc></url>
+  <url><loc>https://neotoma.io/zh/what-to-store</loc></url>
+  <url><loc>https://neotoma.io/zh/backup</loc></url>
+  <url><loc>https://neotoma.io/zh/tunnel</loc></url>
   <url><loc>https://neotoma.io/zh/sandbox</loc></url>
   <url><loc>https://neotoma.io/zh/sandbox/terms-of-use</loc></url>
   <url><loc>https://neotoma.io/zh/hosted</loc></url>
@@ -408,7 +426,9 @@
   <url><loc>https://neotoma.io/zh/neotoma-with-codex</loc></url>
   <url><loc>https://neotoma.io/zh/neotoma-with-codex-connect-local-stdio</loc></url>
   <url><loc>https://neotoma.io/zh/neotoma-with-codex-connect-remote-http-oauth</loc></url>
+  <url><loc>https://neotoma.io/zh/neotoma-with-opencode</loc></url>
   <url><loc>https://neotoma.io/zh/neotoma-with-openclaw</loc></url>
+  <url><loc>https://neotoma.io/zh/neotoma-with-ironclaw</loc></url>
   <url><loc>https://neotoma.io/zh/neotoma-with-openclaw-connect-local-stdio</loc></url>
   <url><loc>https://neotoma.io/zh/neotoma-with-openclaw-connect-remote-http</loc></url>
   <url><loc>https://neotoma.io/zh/deterministic-state-evolution</loc></url>
@@ -476,6 +496,9 @@
   <url><loc>https://neotoma.io/hi/install</loc></url>
   <url><loc>https://neotoma.io/hi/install/manual</loc></url>
   <url><loc>https://neotoma.io/hi/install/docker</loc></url>
+  <url><loc>https://neotoma.io/hi/what-to-store</loc></url>
+  <url><loc>https://neotoma.io/hi/backup</loc></url>
+  <url><loc>https://neotoma.io/hi/tunnel</loc></url>
   <url><loc>https://neotoma.io/hi/sandbox</loc></url>
   <url><loc>https://neotoma.io/hi/sandbox/terms-of-use</loc></url>
   <url><loc>https://neotoma.io/hi/hosted</loc></url>
@@ -526,7 +549,9 @@
   <url><loc>https://neotoma.io/hi/neotoma-with-codex</loc></url>
   <url><loc>https://neotoma.io/hi/neotoma-with-codex-connect-local-stdio</loc></url>
   <url><loc>https://neotoma.io/hi/neotoma-with-codex-connect-remote-http-oauth</loc></url>
+  <url><loc>https://neotoma.io/hi/neotoma-with-opencode</loc></url>
   <url><loc>https://neotoma.io/hi/neotoma-with-openclaw</loc></url>
+  <url><loc>https://neotoma.io/hi/neotoma-with-ironclaw</loc></url>
   <url><loc>https://neotoma.io/hi/neotoma-with-openclaw-connect-local-stdio</loc></url>
   <url><loc>https://neotoma.io/hi/neotoma-with-openclaw-connect-remote-http</loc></url>
   <url><loc>https://neotoma.io/hi/deterministic-state-evolution</loc></url>
@@ -594,6 +619,9 @@
   <url><loc>https://neotoma.io/ar/install</loc></url>
   <url><loc>https://neotoma.io/ar/install/manual</loc></url>
   <url><loc>https://neotoma.io/ar/install/docker</loc></url>
+  <url><loc>https://neotoma.io/ar/what-to-store</loc></url>
+  <url><loc>https://neotoma.io/ar/backup</loc></url>
+  <url><loc>https://neotoma.io/ar/tunnel</loc></url>
   <url><loc>https://neotoma.io/ar/sandbox</loc></url>
   <url><loc>https://neotoma.io/ar/sandbox/terms-of-use</loc></url>
   <url><loc>https://neotoma.io/ar/hosted</loc></url>
@@ -644,7 +672,9 @@
   <url><loc>https://neotoma.io/ar/neotoma-with-codex</loc></url>
   <url><loc>https://neotoma.io/ar/neotoma-with-codex-connect-local-stdio</loc></url>
   <url><loc>https://neotoma.io/ar/neotoma-with-codex-connect-remote-http-oauth</loc></url>
+  <url><loc>https://neotoma.io/ar/neotoma-with-opencode</loc></url>
   <url><loc>https://neotoma.io/ar/neotoma-with-openclaw</loc></url>
+  <url><loc>https://neotoma.io/ar/neotoma-with-ironclaw</loc></url>
   <url><loc>https://neotoma.io/ar/neotoma-with-openclaw-connect-local-stdio</loc></url>
   <url><loc>https://neotoma.io/ar/neotoma-with-openclaw-connect-remote-http</loc></url>
   <url><loc>https://neotoma.io/ar/deterministic-state-evolution</loc></url>
@@ -712,6 +742,9 @@
   <url><loc>https://neotoma.io/fr/install</loc></url>
   <url><loc>https://neotoma.io/fr/install/manual</loc></url>
   <url><loc>https://neotoma.io/fr/install/docker</loc></url>
+  <url><loc>https://neotoma.io/fr/what-to-store</loc></url>
+  <url><loc>https://neotoma.io/fr/backup</loc></url>
+  <url><loc>https://neotoma.io/fr/tunnel</loc></url>
   <url><loc>https://neotoma.io/fr/sandbox</loc></url>
   <url><loc>https://neotoma.io/fr/sandbox/terms-of-use</loc></url>
   <url><loc>https://neotoma.io/fr/hosted</loc></url>
@@ -762,7 +795,9 @@
   <url><loc>https://neotoma.io/fr/neotoma-with-codex</loc></url>
   <url><loc>https://neotoma.io/fr/neotoma-with-codex-connect-local-stdio</loc></url>
   <url><loc>https://neotoma.io/fr/neotoma-with-codex-connect-remote-http-oauth</loc></url>
+  <url><loc>https://neotoma.io/fr/neotoma-with-opencode</loc></url>
   <url><loc>https://neotoma.io/fr/neotoma-with-openclaw</loc></url>
+  <url><loc>https://neotoma.io/fr/neotoma-with-ironclaw</loc></url>
   <url><loc>https://neotoma.io/fr/neotoma-with-openclaw-connect-local-stdio</loc></url>
   <url><loc>https://neotoma.io/fr/neotoma-with-openclaw-connect-remote-http</loc></url>
   <url><loc>https://neotoma.io/fr/deterministic-state-evolution</loc></url>
@@ -830,6 +865,9 @@
   <url><loc>https://neotoma.io/pt/install</loc></url>
   <url><loc>https://neotoma.io/pt/install/manual</loc></url>
   <url><loc>https://neotoma.io/pt/install/docker</loc></url>
+  <url><loc>https://neotoma.io/pt/what-to-store</loc></url>
+  <url><loc>https://neotoma.io/pt/backup</loc></url>
+  <url><loc>https://neotoma.io/pt/tunnel</loc></url>
   <url><loc>https://neotoma.io/pt/sandbox</loc></url>
   <url><loc>https://neotoma.io/pt/sandbox/terms-of-use</loc></url>
   <url><loc>https://neotoma.io/pt/hosted</loc></url>
@@ -880,7 +918,9 @@
   <url><loc>https://neotoma.io/pt/neotoma-with-codex</loc></url>
   <url><loc>https://neotoma.io/pt/neotoma-with-codex-connect-local-stdio</loc></url>
   <url><loc>https://neotoma.io/pt/neotoma-with-codex-connect-remote-http-oauth</loc></url>
+  <url><loc>https://neotoma.io/pt/neotoma-with-opencode</loc></url>
   <url><loc>https://neotoma.io/pt/neotoma-with-openclaw</loc></url>
+  <url><loc>https://neotoma.io/pt/neotoma-with-ironclaw</loc></url>
   <url><loc>https://neotoma.io/pt/neotoma-with-openclaw-connect-local-stdio</loc></url>
   <url><loc>https://neotoma.io/pt/neotoma-with-openclaw-connect-remote-http</loc></url>
   <url><loc>https://neotoma.io/pt/deterministic-state-evolution</loc></url>
@@ -948,6 +988,9 @@
   <url><loc>https://neotoma.io/ru/install</loc></url>
   <url><loc>https://neotoma.io/ru/install/manual</loc></url>
   <url><loc>https://neotoma.io/ru/install/docker</loc></url>
+  <url><loc>https://neotoma.io/ru/what-to-store</loc></url>
+  <url><loc>https://neotoma.io/ru/backup</loc></url>
+  <url><loc>https://neotoma.io/ru/tunnel</loc></url>
   <url><loc>https://neotoma.io/ru/sandbox</loc></url>
   <url><loc>https://neotoma.io/ru/sandbox/terms-of-use</loc></url>
   <url><loc>https://neotoma.io/ru/hosted</loc></url>
@@ -998,7 +1041,9 @@
   <url><loc>https://neotoma.io/ru/neotoma-with-codex</loc></url>
   <url><loc>https://neotoma.io/ru/neotoma-with-codex-connect-local-stdio</loc></url>
   <url><loc>https://neotoma.io/ru/neotoma-with-codex-connect-remote-http-oauth</loc></url>
+  <url><loc>https://neotoma.io/ru/neotoma-with-opencode</loc></url>
   <url><loc>https://neotoma.io/ru/neotoma-with-openclaw</loc></url>
+  <url><loc>https://neotoma.io/ru/neotoma-with-ironclaw</loc></url>
   <url><loc>https://neotoma.io/ru/neotoma-with-openclaw-connect-local-stdio</loc></url>
   <url><loc>https://neotoma.io/ru/neotoma-with-openclaw-connect-remote-http</loc></url>
   <url><loc>https://neotoma.io/ru/deterministic-state-evolution</loc></url>
@@ -1066,6 +1111,9 @@
   <url><loc>https://neotoma.io/bn/install</loc></url>
   <url><loc>https://neotoma.io/bn/install/manual</loc></url>
   <url><loc>https://neotoma.io/bn/install/docker</loc></url>
+  <url><loc>https://neotoma.io/bn/what-to-store</loc></url>
+  <url><loc>https://neotoma.io/bn/backup</loc></url>
+  <url><loc>https://neotoma.io/bn/tunnel</loc></url>
   <url><loc>https://neotoma.io/bn/sandbox</loc></url>
   <url><loc>https://neotoma.io/bn/sandbox/terms-of-use</loc></url>
   <url><loc>https://neotoma.io/bn/hosted</loc></url>
@@ -1116,7 +1164,9 @@
   <url><loc>https://neotoma.io/bn/neotoma-with-codex</loc></url>
   <url><loc>https://neotoma.io/bn/neotoma-with-codex-connect-local-stdio</loc></url>
   <url><loc>https://neotoma.io/bn/neotoma-with-codex-connect-remote-http-oauth</loc></url>
+  <url><loc>https://neotoma.io/bn/neotoma-with-opencode</loc></url>
   <url><loc>https://neotoma.io/bn/neotoma-with-openclaw</loc></url>
+  <url><loc>https://neotoma.io/bn/neotoma-with-ironclaw</loc></url>
   <url><loc>https://neotoma.io/bn/neotoma-with-openclaw-connect-local-stdio</loc></url>
   <url><loc>https://neotoma.io/bn/neotoma-with-openclaw-connect-remote-http</loc></url>
   <url><loc>https://neotoma.io/bn/deterministic-state-evolution</loc></url>
@@ -1184,6 +1234,9 @@
   <url><loc>https://neotoma.io/ur/install</loc></url>
   <url><loc>https://neotoma.io/ur/install/manual</loc></url>
   <url><loc>https://neotoma.io/ur/install/docker</loc></url>
+  <url><loc>https://neotoma.io/ur/what-to-store</loc></url>
+  <url><loc>https://neotoma.io/ur/backup</loc></url>
+  <url><loc>https://neotoma.io/ur/tunnel</loc></url>
   <url><loc>https://neotoma.io/ur/sandbox</loc></url>
   <url><loc>https://neotoma.io/ur/sandbox/terms-of-use</loc></url>
   <url><loc>https://neotoma.io/ur/hosted</loc></url>
@@ -1234,7 +1287,9 @@
   <url><loc>https://neotoma.io/ur/neotoma-with-codex</loc></url>
   <url><loc>https://neotoma.io/ur/neotoma-with-codex-connect-local-stdio</loc></url>
   <url><loc>https://neotoma.io/ur/neotoma-with-codex-connect-remote-http-oauth</loc></url>
+  <url><loc>https://neotoma.io/ur/neotoma-with-opencode</loc></url>
   <url><loc>https://neotoma.io/ur/neotoma-with-openclaw</loc></url>
+  <url><loc>https://neotoma.io/ur/neotoma-with-ironclaw</loc></url>
   <url><loc>https://neotoma.io/ur/neotoma-with-openclaw-connect-local-stdio</loc></url>
   <url><loc>https://neotoma.io/ur/neotoma-with-openclaw-connect-remote-http</loc></url>
   <url><loc>https://neotoma.io/ur/deterministic-state-evolution</loc></url>
@@ -1302,6 +1357,9 @@
   <url><loc>https://neotoma.io/id/install</loc></url>
   <url><loc>https://neotoma.io/id/install/manual</loc></url>
   <url><loc>https://neotoma.io/id/install/docker</loc></url>
+  <url><loc>https://neotoma.io/id/what-to-store</loc></url>
+  <url><loc>https://neotoma.io/id/backup</loc></url>
+  <url><loc>https://neotoma.io/id/tunnel</loc></url>
   <url><loc>https://neotoma.io/id/sandbox</loc></url>
   <url><loc>https://neotoma.io/id/sandbox/terms-of-use</loc></url>
   <url><loc>https://neotoma.io/id/hosted</loc></url>
@@ -1352,7 +1410,9 @@
   <url><loc>https://neotoma.io/id/neotoma-with-codex</loc></url>
   <url><loc>https://neotoma.io/id/neotoma-with-codex-connect-local-stdio</loc></url>
   <url><loc>https://neotoma.io/id/neotoma-with-codex-connect-remote-http-oauth</loc></url>
+  <url><loc>https://neotoma.io/id/neotoma-with-opencode</loc></url>
   <url><loc>https://neotoma.io/id/neotoma-with-openclaw</loc></url>
+  <url><loc>https://neotoma.io/id/neotoma-with-ironclaw</loc></url>
   <url><loc>https://neotoma.io/id/neotoma-with-openclaw-connect-local-stdio</loc></url>
   <url><loc>https://neotoma.io/id/neotoma-with-openclaw-connect-remote-http</loc></url>
   <url><loc>https://neotoma.io/id/deterministic-state-evolution</loc></url>
@@ -1420,6 +1480,9 @@
   <url><loc>https://neotoma.io/de/install</loc></url>
   <url><loc>https://neotoma.io/de/install/manual</loc></url>
   <url><loc>https://neotoma.io/de/install/docker</loc></url>
+  <url><loc>https://neotoma.io/de/what-to-store</loc></url>
+  <url><loc>https://neotoma.io/de/backup</loc></url>
+  <url><loc>https://neotoma.io/de/tunnel</loc></url>
   <url><loc>https://neotoma.io/de/sandbox</loc></url>
   <url><loc>https://neotoma.io/de/sandbox/terms-of-use</loc></url>
   <url><loc>https://neotoma.io/de/hosted</loc></url>
@@ -1470,7 +1533,9 @@
   <url><loc>https://neotoma.io/de/neotoma-with-codex</loc></url>
   <url><loc>https://neotoma.io/de/neotoma-with-codex-connect-local-stdio</loc></url>
   <url><loc>https://neotoma.io/de/neotoma-with-codex-connect-remote-http-oauth</loc></url>
+  <url><loc>https://neotoma.io/de/neotoma-with-opencode</loc></url>
   <url><loc>https://neotoma.io/de/neotoma-with-openclaw</loc></url>
+  <url><loc>https://neotoma.io/de/neotoma-with-ironclaw</loc></url>
   <url><loc>https://neotoma.io/de/neotoma-with-openclaw-connect-local-stdio</loc></url>
   <url><loc>https://neotoma.io/de/neotoma-with-openclaw-connect-remote-http</loc></url>
   <url><loc>https://neotoma.io/de/deterministic-state-evolution</loc></url>

@@ -108,7 +108,7 @@
 - All estimates assume Cursor agent execution (not human developers)
 - Cloud agents execute in parallel via Cursor Background Agents API (see `docs/feature_units/standards/multi_agent_orchestration.md`)
 - Execution limits: `max_parallel_fus: 3`, `max_high_risk_in_parallel: 1`
-- Estimates follow methodology from `docs/specs/MVP_FEATURE_UNITS.md`: spec (1-3h) + implementation (2-8h) + testing (1-4h) + docs (0.5-1h) + 20% review overhead
+- Estimates follow methodology from `docs/releases/archived/mvp_planning/MVP_FEATURE_UNITS.md`: spec (1-3h) + implementation (2-8h) + testing (1-4h) + docs (0.5-1h) + 20% review overhead
 - FU-000: 0.5 days (already complete)
 - FU-002: 0.25 days (already complete)
 - FU-050: 2 days (event-sourcing foundation, high complexity)

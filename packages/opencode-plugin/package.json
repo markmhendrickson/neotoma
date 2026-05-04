@@ -19,7 +19,26 @@
     "dist",
     "README.md"
   ],
+  "keywords": [
+    "neotoma",
+    "opencode",
+    "plugin",
+    "memory",
+    "mcp",
+    "agent",
+    "hooks"
+  ],
+  "author": "Mark Hendrickson",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/markmhendrickson/neotoma.git",
+    "directory": "packages/opencode-plugin"
+  },
+  "homepage": "https://neotoma.io",
+  "bugs": {
+    "url": "https://github.com/markmhendrickson/neotoma/issues"
+  },
   "dependencies": {
     "@neotoma/client": "^0.1.0"
   },

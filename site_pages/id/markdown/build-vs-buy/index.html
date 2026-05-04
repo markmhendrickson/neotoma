@@ -39,10 +39,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
     <title>Build vs Buy | When to Add a State Integrity Layer (Markdown) | Neotoma</title>
-    <script type="module" crossorigin="" src="/assets/main-CaoWcp2k.js"></script>
-    <link rel="stylesheet" crossorigin="" href="/assets/main-BBds_bdF.css">
+    <script type="module" crossorigin="" src="/assets/main-aNEaYUJL.js"></script>
+    <link rel="stylesheet" crossorigin="" href="/assets/main-a7BqVBLd.css">
   
-    <!-- build: local-1777360387837 -->
+    <!-- build: local-1777885129871 -->
       <link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/build-vs-buy">
     <link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/build-vs-buy">
     <link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/build-vs-buy">
@@ -62,13 +62,24 @@
     <div id="root"><iframe title="Markdown capture" aria-hidden="true" width="1280" height="900" class="pointer-events-none fixed left-[-9999px] top-0 z-[-1] border-0 opacity-0" sandbox="allow-same-origin allow-scripts allow-forms"></iframe><div class="min-h-screen bg-background text-foreground"><pre class="whitespace-pre-wrap break-words p-4 font-mono text-[13px] leading-relaxed text-foreground">&lt;!--
   Full-page Markdown export (rendered HTML → GFM).
   Source: https://neotoma.io/id/build-vs-buy
-  Generated: 2026-04-28T07:16:49.260Z
+  Generated: 2026-05-04T09:02:40.207Z
 --&gt;
 Build vs Buy
 
 # When to add a state integrity layer (and when observability is enough)
 
 If you run agents across sessions and tools-IDE, chat, cron, CLI-you already pay the tax of re-prompting, manual sync, and homegrown markdown or JSON workarounds. Logging what ran is a solved problem. Knowing the composed, replayable state of each entity (contacts, tasks, money facts, decisions) across those writers is a different problem. This page separates the two.
+
+On this page
+
+-   [How agent memory infrastructure evolves](#how-agent-memory-infrastructure-evolves)
+-   [What existing tools cover well](#what-existing-tools-cover-well)
+-   [Where observability ends and state integrity begins](#where-observability-ends-and-state-integrity-begins)
+-   [How many of these describe your system?](#how-many-of-these-describe-your-system)
+-   [Where the line shows up in typed state](#where-the-line-shows-up-in-typed-state)
+-   [Observability tells you what happened](#observability-tells-you-what-happened)
+-   [Between your agents and your database](#between-your-agents-and-your-database)
+-   [Every day without write integrity](#every-day-without-write-integrity)
 
 Where are you?
 
@@ -120,165 +131,13 @@ The gap
 
 ## Where observability ends and state integrity begins
 
-Observability shows you what happened. State integrity tells you what was true: the composed entity state at any moment, with deterministic reconstruction guarantees-what you need when agents must not contradict themselves across sessions and tools without you re-typing context every time. The second problem does not reduce to the first.
-
-An analogy: Saving files is trivial. Git exists because knowing the composed state of a codebase at any commit, with blame, merge history, and conflict resolution, is a qualitatively different problem from saving files. The same gap exists between logging what your agents did and knowing the composed state of your entities at any point in time.
-
-Knowing historical state
-
-Observability covers
-
-Query event logs by entity and timestamp. See what happened: which agents wrote, what payloads they sent, when. Reconstruct a timeline from individual events.
-
-State integrity adds
-
-Reconstruct the composed entity state at any point in time: all fields, all writers merged, conflicts resolved deterministically. Not what happened, but what was true.
-
-Multi-writer consistency
-
-Observability covers
-
-Log writes from each agent independently. See that two agents updated the same entity in the same window. Alert on conflicts after they happen.
-
-State integrity adds
-
-Deterministic reducer merges observations by priority, recency, or custom policy. The composed snapshot is the same regardless of query order. Conflicts are resolved, not just detected.
-
-Provenance across hops
-
-Observability covers
-
-Trace requests across services with correlation IDs. See the path a decision took through your system. Build dashboards showing delegation and approval patterns.
-
-State integrity adds
-
-Traverse from any outcome back to its origin through a chain of delegations, approvals, or handoffs. Bind each hop to the entity state and policy version at that moment. Prove the chain is complete.
-
-Version-bound decisions
-
-Observability covers
-
-Log which policy or rule version was active when a decision ran. Query by policy ID to find affected decisions. Build reports on policy coverage.
-
-State integrity adds
-
-Each observation records the policy version, role bindings, and constraints that produced it. Historical queries return the decision bound to the exact context that governed it. Counterfactual queries are supported.
-
-Cross-system entity identity
-
-Observability covers
-
-Track entity IDs per system. Build sync pipelines to correlate records across sources. Deduplicate on ingest. Monitor for drift between systems.
-
-State integrity adds
-
-Hash-based entity IDs resolve the same entity across systems. Multiple sources produce observations on one entity. Reducer composes one canonical snapshot with provenance from every source.
-
 Self-assessment
 
 ## How many of these describe your system?
 
-A useful diagnostic: what are you doing today to compensate for unreliable or missing agent state? Each item below is a structural signal-not a vendor checklist.
-
-1
-
-Multiple sources write to the same entities
-
-Chat agents, cron jobs, CLI scripts, or services all touch the same contact, task, or ledger row. Logging each write is not the same as a single deterministic snapshot everyone reads-especially when tools disagree.
-
-2
-
-You need the composed state at a specific point in time
-
-Not only which events fired, but what was true: the full derived state from every observation up to that moment. That is how you answer “what did the stack believe last Tuesday?”-for yourself, an auditor, or a postmortem-not just “what got logged.”
-
-3
-
-Rules or context change while entities have active state
-
-Prompt packs, merge policies, scoring rules, authorization gates, or contract terms change while records stay live. You need which version governed which outcome, and what the answer would have been under the prior version.
-
-4
-
-Actions flow through multiple systems, tools, or delegation hops
-
-An orchestrator, IDE agent, and background worker each contribute. Reconstructing the full chain-and proving it is complete-means traversing provenance on entities, not only correlating traces.
-
-5
-
-Explanation requires the full input context, not a summary
-
-Debugging drift, contradictions, or non-reproducible runs requires the exact entity fields, schema or policy version, writer context, and conflict resolution at that moment-not a terse log line or today’s live row.
-
-0-1 conditions
-
-Observability is enough. Invest in good event logging and dashboards. Revisit if agents gain autonomy, you add tools, or you need stronger audit and replay.
-
-2-3 conditions
-
-You're at the boundary. You can approximate state integrity on top of observability tools, but the gap widens as writers, policies, and entity types multiply.
-
-4-5 conditions
-
-You need a state integrity layer. The gap between what observability shows you and what you need to know is structural, not incremental.
-
 By entity type
 
 ## Where the line shows up in typed state
-
-Neotoma is schema-first: each entity type carries observations that reduce to a deterministic snapshot. The same observability-vs-integrity split appears whether the record is a contact, a task, or a transaction-see the guides for store and retrieval patterns.
-
-[
-
-Contacts
-
-Observability covers: Log each upsert from chat, CRM import, or script with timestamps and source labels
-
-State integrity gap: One canonical person or company record across tools, with deterministic merge when two agents update the same identity on the same day
-
-](/types/contacts)[
-
-Tasks
-
-Observability covers: Append status changes to an activity feed: opened, reassigned, completed, with agent IDs
-
-State integrity gap: Composed task state (owner, status, due date) after concurrent edits from scheduled jobs and interactive agents-same answer on every read
-
-](/types/tasks)[
-
-Transactions
-
-Observability covers: Record ingest events, file uploads, and reconciliation checks with correlation IDs
-
-State integrity gap: What your agents treated as settled financial truth on a given date, with every observation that fed the snapshot traceable
-
-](/types/transactions)[
-
-Contracts
-
-Observability covers: Log clause edits, reviews, and signatures with versions and timestamps
-
-State integrity gap: Reconstruct obligations and terms as they existed on signing day, including which change came from which writer and how conflicts were reduced
-
-](/types/contracts)[
-
-Decisions
-
-Observability covers: Store decision logs and rationale snippets as unstructured events or documents
-
-State integrity gap: Bind rationale to versioned entity state so “why we chose X” replays with the same facts the agent had then-not the notebook file as it reads today
-
-](/types/decisions)[
-
-Events
-
-Observability covers: Track calendar syncs, invites, and reschedule notifications in order
-
-State integrity gap: Composed meeting or milestone state when agents and calendars both mutate attendees, time, or status-without last-write-wins ambiguity
-
-](/types/events)
-
-Guides[Contacts](/types/contacts)·[Tasks](/types/tasks)·[Transactions](/types/transactions)·[Contracts](/types/contracts)·[Decisions](/types/decisions)·[Events](/types/events)
 
 The real question
 

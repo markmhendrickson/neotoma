@@ -65,7 +65,7 @@ todos:
     dependencies:
       - create-observation-arch-doc
   - id: update-feature-units
-    content: Update MVP_FEATURE_UNITS.md with FU-055 through FU-061
+    content: Update historical MVP feature-unit planning with FU-055 through FU-061
     status: completed
     dependencies:
       - create-observation-arch-doc
@@ -239,8 +239,8 @@ This plan integrates the 11 architectural decisions document into Neotoma's docu
 - Update existing action documentation to reference snapshots
 - Add provenance query examples
 **Deliverable:** Updated MCP specification
-### Task 5.3: Update MVP_FEATURE_UNITS.md
-**File:** [`docs/specs/MVP_FEATURE_UNITS.md`](docs/specs/MVP_FEATURE_UNITS.md)
+### Task 5.3: Update Historical MVP Feature-Unit Planning
+**File:** [`docs/releases/archived/mvp_planning/MVP_FEATURE_UNITS.md`](../releases/archived/mvp_planning/MVP_FEATURE_UNITS.md)
 **Updates:**
 - Add new Feature Units that SHOULD be created:
 - FU-055: Observation Storage Layer
@@ -335,7 +335,7 @@ This plan integrates the 11 architectural decisions document into Neotoma's docu
 7. `docs/architecture/consistency.md` — Observation/snapshot consistency
 8. `docs/specs/DATA_MODELS.md` — 4-layer model rewrite
 9. `docs/specs/MCP_SPEC.md` — New MCP actions
-10. `docs/specs/MVP_FEATURE_UNITS.md` — New Feature Units (FU-055 through FU-061)
+10. `docs/releases/archived/mvp_planning/MVP_FEATURE_UNITS.md` — Historical feature-unit planning (FU-055 through FU-061)
 11. Foundation rules in `.cursor/rules/` — Agent instructions and documentation loading order
 12. `docs/releases/in_progress/v0.1.0/manifest.yaml` — New Feature Units
 13. `docs/releases/in_progress/v0.1.0/release_plan.md` — Observation architecture scope

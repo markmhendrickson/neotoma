@@ -79,7 +79,7 @@ export function GuaranteeCell({ level }: { level: GuaranteeLevel }) {
 export function MemoryGuaranteesTable() {
   const { pack } = useLocale();
   const memory = pack.memory;
-  const memoryModelKeys = ["platform", "retrieval", "file", "database", "neotoma"] as const;
+  const memoryModelKeys = ["neotoma", "platform", "retrieval", "file", "database"] as const;
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -100,6 +100,31 @@ export function MemoryGuaranteesTable() {
               className="text-left px-3 py-2.5 font-medium text-foreground bg-muted/50 min-w-0 align-top"
             >
               <span className="block break-words whitespace-normal">Property</span>
+            </th>
+            <th
+              scope="col"
+              className="text-center px-3 py-2.5 font-medium text-foreground bg-muted/50 min-w-0 overflow-hidden"
+            >
+              <span className="inline-flex items-center justify-center gap-1 min-w-0 max-w-full">
+                <span className="truncate">{memory.deterministic}</span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Link
+                      to="/deterministic-memory"
+                      className="inline-flex shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                      aria-label="More info about Deterministic memory"
+                    >
+                      <Info className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                    </Link>
+                  </TooltipTrigger>
+                  <TooltipContent className="w-max min-w-[18rem] max-w-[min(36rem,calc(100vw-1.5rem))] text-[13px] leading-5 whitespace-normal">
+                    <p>
+                      Memory with deterministic state evolution, immutable history, and formal
+                      guarantees. Neotoma is the reference implementation.
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </span>
             </th>
             <th
               scope="col"
@@ -189,31 +214,6 @@ export function MemoryGuaranteesTable() {
                 </Tooltip>
               </span>
             </th>
-            <th
-              scope="col"
-              className="text-center px-3 py-2.5 font-medium text-foreground bg-muted/50 min-w-0 overflow-hidden"
-            >
-              <span className="inline-flex items-center justify-center gap-1 min-w-0 max-w-full">
-                <span className="truncate">{memory.deterministic}</span>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Link
-                      to="/deterministic-memory"
-                      className="inline-flex shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-                      aria-label="More info about Deterministic memory"
-                    >
-                      <Info className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                    </Link>
-                  </TooltipTrigger>
-                  <TooltipContent className="w-max min-w-[18rem] max-w-[min(36rem,calc(100vw-1.5rem))] text-[13px] leading-5 whitespace-normal">
-                    <p>
-                      Memory with deterministic state evolution, immutable history, and formal
-                      guarantees. Neotoma is the reference implementation.
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </span>
-            </th>
           </tr>
         </thead>
         <tbody>
@@ -291,6 +291,9 @@ export function MemoryGuaranteesTable() {
                 </span>
               </th>
               <td className="px-0 py-0 align-middle text-center min-w-0 overflow-hidden">
+                <GuaranteeCell level={row.neotoma} />
+              </td>
+              <td className="px-0 py-0 align-middle text-center min-w-0 overflow-hidden">
                 <GuaranteeCell level={row.platform} />
               </td>
               <td className="px-0 py-0 align-middle text-center min-w-0 overflow-hidden">
@@ -301,9 +304,6 @@ export function MemoryGuaranteesTable() {
               </td>
               <td className="px-0 py-0 align-middle text-center min-w-0 overflow-hidden">
                 <GuaranteeCell level={row.database} />
-              </td>
-              <td className="px-0 py-0 align-middle text-center min-w-0 overflow-hidden">
-                <GuaranteeCell level={row.neotoma} />
               </td>
             </tr>
           ))}

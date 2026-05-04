@@ -51,6 +51,4 @@ This is a **demonstration prototype**:
 ## Full Documentation
 See [PROTOTYPE_README.md](./PROTOTYPE_README.md) for complete details.
 ## Next Steps
-To build the production MVP from this prototype, see:
-- [MVP Execution Plan](./docs/specs/MVP_EXECUTION_PLAN.md)
-- [MVP Feature Units](./docs/specs/MVP_FEATURE_UNITS.md)
+This prototype is a historical MVP demonstration. Current implementation guidance lives in `README.md`, `docs/architecture/`, and `docs/subsystems/`. Historical MVP planning artifacts are archived in `docs/releases/archived/mvp_planning/`.

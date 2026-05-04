@@ -72,9 +72,6 @@ docs/foundation/core_identity.md:
     - path: docs/architecture/architecture.md
       type: explicit
       reason: References core identity in Purpose section
-    - path: docs/specs/MVP_OVERVIEW.md
-      type: restates
-      reason: Restates core identity concepts
     - path: docs/feature_units/standards/feature_unit_spec.md
       type: implicit
       reason: Feature units must align with core identity
@@ -102,9 +99,6 @@ docs/foundation/philosophy.md:
     - path: docs/architecture/architecture.md
       type: implicit
       reason: Architecture must align with philosophy
-    - path: docs/specs/MVP_OVERVIEW.md
-      type: implicit
-      reason: MVP must align with philosophy
     - path: docs/feature_units/standards/feature_unit_spec.md
       type: implicit
       reason: Feature units must follow philosophy
@@ -213,18 +207,6 @@ docs/architecture/determinism.md:
       reason: Report references determinism requirements for MCP and CLI
 
 # Specifications Layer
-docs/specs/MVP_OVERVIEW.md:
-  downstream:
-    - path: docs/feature_units/completed/*/FU-*_spec.md
-      type: explicit
-      reason: Feature units implement MVP features
-    - path: docs/releases/*/release_plan.md
-      type: explicit
-      reason: Release plans reference MVP scope
-    - path: README.md
-      type: restates
-      reason: Restates MVP capabilities
-
 docs/specs/MCP_SPEC.md:
   downstream:
     - path: docs/architecture/architecture.md

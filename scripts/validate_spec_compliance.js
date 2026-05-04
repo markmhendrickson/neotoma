@@ -571,7 +571,6 @@ export async function validateFUSpecCompliance(fuId, releaseId) {
   const specPaths = [
     `docs/feature_units/completed/${fuId}/${fuId}_spec.md`,
     `docs/feature_units/in_progress/${fuId}/${fuId}_spec.md`,
-    `docs/specs/MVP_FEATURE_UNITS.md`,
   ];
 
   let specPath = null;

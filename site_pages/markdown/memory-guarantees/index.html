@@ -38,10 +38,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
     <title>Memory Guarantees (Markdown) | Neotoma</title>
-    <script type="module" crossorigin="" src="/assets/main-CaoWcp2k.js"></script>
-    <link rel="stylesheet" crossorigin="" href="/assets/main-BBds_bdF.css">
+    <script type="module" crossorigin="" src="/assets/main-aNEaYUJL.js"></script>
+    <link rel="stylesheet" crossorigin="" href="/assets/main-a7BqVBLd.css">
   
-    <!-- build: local-1777360387837 -->
+    <!-- build: local-1777885129871 -->
       <link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/memory-guarantees">
     <link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/memory-guarantees">
     <link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/memory-guarantees">
@@ -61,13 +61,11 @@
     <div id="root"><iframe title="Markdown capture" aria-hidden="true" width="1280" height="900" class="pointer-events-none fixed left-[-9999px] top-0 z-[-1] border-0 opacity-0" sandbox="allow-same-origin allow-scripts allow-forms"></iframe><div class="min-h-screen bg-background text-foreground"><pre class="whitespace-pre-wrap break-words p-4 font-mono text-[13px] leading-relaxed text-foreground">&lt;!--
   Full-page Markdown export (rendered HTML → GFM).
   Source: https://neotoma.io/memory-guarantees
-  Generated: 2026-04-28T07:17:24.500Z
+  Generated: 2026-05-04T09:03:17.972Z
 --&gt;
 # Memory Guarantees
 
-Neotoma provides nine memory guarantees: deterministic state evolution, versioned history, replayable timeline, auditable change log, schema constraints, silent mutation prevention, conflicting facts detection, reproducible state reconstruction, and human inspectability.
-
-These are the properties that determine whether an agent memory system is reliable under production load. Each guarantee addresses a specific failure mode; together they form the invariant stack that Neotoma enforces.
+Neotoma provides a set of memory guarantees: properties that determine whether an agent memory system is reliable under production load. Each addresses a specific failure mode; together they form the invariant stack that Neotoma enforces.
 
 Vendors
 
@@ -191,301 +189,122 @@ Det.
 
 Show all 15 guarantees
 
-| Property | Platform | Retrieval / RAG | Files | Database | Deterministic |
+| Property | Deterministic | Platform | Retrieval / RAG | Files | Database |
 | --- | --- | --- | --- | --- | --- |
-| Vendors | Claude, ChatGPT, Gemini, Copilot | Mem0, Zep, LangChain Memory | Markdown files, JSON stores, CRDT docs | SQLite, Postgres, MySQL | Neotoma |
-| Deterministic state evolution | ✗ | ✗ | ✗ | ✗ | ✓ |
-| Versioned history | ✗ | ✗ | ⚠ | ✗ | ✓ |
-| Replayable timeline | ✗ | ✗ | ✗ | ✗ | ✓ |
-| Auditable change log | ✗ | ✗ | ⚠ | ✗ | ✓ |
-| Schema constraints | ✗ | ✗ | ✗ | ⚠ | ✓ |
-| Silent mutation risk | ⚠ | ⚠ | ⚠ | ⚠ | ✓ |
-| Conflicting facts risk | ⚠ | ⚠ | ⚠ | ⚠ | ✓ |
-| False closure risk | ⚠ | ⚠ | ⚠ | ⚠ | ✓ |
-| Reproducible state reconstruction | ✗ | ✗ | ✗ | ✗ | ✓ |
-| Human inspectability (diffs/lineage) | ⚠ | ⚠ | ⚠ | ⚠ | ✓ |
-| Zero-setup onboarding | ✓ | ✗ | ✗ | ✗ | ✗ |
-| Semantic similarity search | ✗ | ✓ | ✗ | ✗ | ✓ |
-| Direct human editability | ✗ | ✗ | ✓ | ✗ | ✗ |
-| Privacy-first local storage | ✗ | ✗ | ✓ | ✓ | ✓ |
-| Full data export and portability | ✗ | ⚠ | ✓ | ✓ | ✓ |
+| Vendors | Neotoma | Claude, ChatGPT, Gemini, Copilot | Mem0, Zep, LangChain Memory | Markdown files, JSON stores, CRDT docs | SQLite, Postgres, MySQL |
+| Deterministic state evolution | ✓ | ✗ | ✗ | ✗ | ✗ |
+| Versioned history | ✓ | ✗ | ✗ | ⚠ | ✗ |
+| Replayable timeline | ✓ | ✗ | ✗ | ✗ | ✗ |
+| Auditable change log | ✓ | ✗ | ✗ | ⚠ | ✗ |
+| Schema constraints | ✓ | ✗ | ✗ | ✗ | ⚠ |
+| Silent mutation risk | ✓ | ⚠ | ⚠ | ⚠ | ⚠ |
+| Conflicting facts risk | ✓ | ⚠ | ⚠ | ⚠ | ⚠ |
+| False closure risk | ✓ | ⚠ | ⚠ | ⚠ | ⚠ |
+| Reproducible state reconstruction | ✓ | ✗ | ✗ | ✗ | ✗ |
+| Human inspectability (diffs/lineage) | ✓ | ⚠ | ⚠ | ⚠ | ⚠ |
+| Zero-setup onboarding | ✗ | ✓ | ✗ | ✗ | ✗ |
+| Semantic similarity search | ✓ | ✗ | ✓ | ✗ | ✗ |
+| Direct human editability | ✗ | ✗ | ✗ | ✓ | ✗ |
+| Privacy-first local storage | ✓ | ✗ | ✗ | ✓ | ✓ |
+| Full data export and portability | ✓ | ✗ | ⚠ | ✓ | ✓ |
 
 Scroll right
 
 On this page
 
--   [Deterministic state evolution](#deterministic-state-evolution)
--   [Versioned history](#versioned-history)
--   [Replayable timeline](#replayable-timeline)
--   [Auditable change log](#auditable-change-log)
--   [Schema constraints](#schema-constraints)
--   [Silent mutation risk](#silent-mutation-risk)
--   [Conflicting facts risk](#conflicting-facts-risk)
--   [False closure risk](#false-closure-risk)
--   [Reproducible state reconstruction](#reproducible-state-reconstruction)
--   [Human inspectability](#human-inspectability)
--   [Zero-setup onboarding](#zero-setup-onboarding)
--   [Semantic similarity search](#semantic-similarity-search)
--   [Direct human editability](#direct-human-editability)
+-   [Deterministic state evolution](/deterministic-state-evolution)
+-   [Versioned history](/versioned-history)
+-   [Replayable timeline](/replayable-timeline)
+-   [Auditable change log](/auditable-change-log)
+-   [Schema constraints](/schema-constraints)
+-   [Silent mutation risk](/silent-mutation-risk)
+-   [Conflicting facts risk](/conflicting-facts-risk)
+-   [False closure risk](/false-closure-risk)
+-   [Reproducible state reconstruction](/reproducible-state-reconstruction)
+-   [Human inspectability](/human-inspectability)
+-   [Zero-setup onboarding](/zero-setup-onboarding)
+-   [Semantic similarity search](/semantic-similarity-search)
+-   [Direct human editability](/direct-human-editability)
 
-## Deterministic state evolution
+[
 
-Given the same set of observations, the system always produces the same entity state regardless of when or in what order they are processed. This removes ordering bugs and makes agent state testable.
+Deterministic state evolution
 
-### Before vs after
+Same observations always produce the same entity state.
 
-Before: two agents report conflicting values and whichever write arrives last wins. After: both observations are preserved and a deterministic merge rule resolves the canonical value reproducibly.
+](/deterministic-state-evolution)[
 
-\# Agent A writes one value
-neotoma store --json='\[{"entity\_type":"contact","name":"Ana Rivera","city":"Barcelona"}\]'
+Versioned history
 
-# Agent B writes a conflicting value
-neotoma store --json='\[{"entity\_type":"contact","name":"Ana Rivera","city":"San Francisco"}\]'
+Every change creates a new version; earlier snapshots remain queryable.
 
-# Deterministic reducer computes one canonical snapshot
-neotoma entities search --query "Ana Rivera" --type contact
+](/versioned-history)[
 
-Late-arriving observations are folded in deterministically. If the merge rule prefers stronger provenance or recency, it behaves identically on replay, which is required for [reproducible state reconstruction](#reproducible-state-reconstruction).
+Replayable timeline
 
-◆
+Full observation sequence can be replayed to reconstruct state at any timestamp.
 
-## Versioned history
+](/replayable-timeline)[
 
-Every change creates a new version instead of overwriting prior state. Earlier snapshots remain queryable, so you can answer what the system believed at any point.
+Auditable change log
 
-### Before vs after
+Every modification records who, when, and from which source.
 
-Before: a row update erases the old value unless you added custom history tables. After: each correction is appended as a new observation, so historical state is preserved by default.
+](/auditable-change-log)[
 
-\# Current snapshot
-neotoma entities search --query "Ana Rivera" --type contact
+Schema constraints
 
-# Historical lineage
-neotoma observations list --entity-id &lt;entity\_id&gt;
+Entities conform to defined types; invalid writes fail at store time.
 
-This aligns with event-sourcing principles: the observation log is authoritative, snapshots are derived views.
+](/schema-constraints)[
 
-◆
+Silent mutation risk
 
-## Replayable timeline
+State cannot change without an explicit, inspectable trail.
 
-The full sequence of observations can be replayed to reconstruct state at any timestamp. This enables deterministic debugging and incident analysis.
+](/silent-mutation-risk)[
 
-### Before vs after
+Conflicting facts risk
 
-Before: after an incident, you only have current snapshots and partial logs. After: replay from observations reproduces the exact state transition path that led to failure.
+Contradictory statements are resolved deterministically, not silently.
 
-\# List timeline events
-neotoma timeline list
+](/conflicting-facts-risk)[
 
-# Get one event and inspect linked entities
-neotoma timeline get &lt;event\_id&gt;
-neotoma relationships list --entity-id &lt;entity\_id&gt;
+False closure risk
 
-Replay depends on [deterministic state evolution](#deterministic-state-evolution) and supports [reproducible state reconstruction](#reproducible-state-reconstruction).
+Stale context is distinguished from current resolved state.
 
-◆
+](/false-closure-risk)[
 
-## Auditable change log
+Reproducible state reconstruction
 
-Every modification records who changed what, when, and from which source. This creates field-level lineage for every fact in state.
+Complete state can be rebuilt from raw observations alone.
 
-### Before vs after
+](/reproducible-state-reconstruction)[
 
-Before: state changes are visible but origin is unclear. After: every change maps back to a concrete tool call or source artifact with timestamped provenance.
+Human inspectability
 
-\# Inspect provenance trail
-neotoma observations list --entity-id &lt;entity\_id&gt;
+Diff versions, inspect lineage, trace each fact to its source.
 
-# Inspect relationships to source/message entities
-neotoma relationships list --entity-id &lt;entity\_id&gt;
+](/human-inspectability)[
 
-This is required for trustworthy multi-agent systems.
+Zero-setup onboarding
 
-◆
+Memory works from the first message with no configuration.
 
-## Schema constraints
+](/zero-setup-onboarding)[
 
-Entities conform to defined types and validation rules. Invalid writes fail at store time so malformed data does not silently enter the memory graph.
+Semantic similarity search
 
-### Before vs after
+Find relevant context by meaning over structured entity snapshots.
 
-Before: one tool stores `age: "thirty"` while another expects a number. After: schema validation rejects the invalid write and returns a deterministic error.
+](/semantic-similarity-search)[
 
-\# Invalid payload example
-neotoma store --json='\[{"entity\_type":"person","name":"Ana Rivera","age":"thirty"}\]'
+Direct human editability
 
-# Valid payload
-neotoma store --json='\[{"entity\_type":"person","name":"Ana Rivera","age":30}\]'
+Modify memory in standard editors; plain-text accessibility trade-offs.
 
-This protects [deterministic state evolution](#deterministic-state-evolution) and reduces [silent mutation risk](#silent-mutation-risk).
-
-### Schema extensibility
-
-Schemas are not fixed at deploy time. Store any entity with a descriptive `entity_type` and Neotoma infers the schema from the first observation. New fields are added automatically (minor version bump); unused fields can be pruned via `update_schema_incremental` (major version bump). Removed fields are excluded from snapshots but all observation data is preserved; re-adding a field restores it.
-
-\# Store a new entity type: schema is created automatically
-neotoma store --json='\[{"entity\_type":"project","name":"Acme Redesign","status":"active","lead":"Ana"}\]'
-
-# Later, add a new field: schema evolves
-neotoma store --json='\[{"entity\_type":"project","name":"Acme Redesign","priority":"P0"}\]'
-
-# View the current schema
-neotoma schemas get project
-
-This means you never need to define schemas upfront or run migrations. Your agent workflows define entity types organically, and the schema hardens over time as observations accumulate.
-
-◆
-
-## Silent mutation risk
-
-Silent mutation risk is the chance that state changes without an explicit, inspectable trail. High-risk systems can overwrite or drop facts without leaving evidence.
-
-### Before vs after
-
-Before: a contact field changes after an agent run and nobody can tell when or why. After: every field change is an observation, and lineage can be queried by entity and timestamp.
-
-\# Inspect mutation trail for one entity
-neotoma observations list --entity-id &lt;entity\_id&gt;
-
-# Verify relationship links for source context
-neotoma relationships list --entity-id &lt;entity\_id&gt;
-
-Deterministic systems prevent silent mutation by design through [auditable change logs](#auditable-change-log) and [versioned history](#versioned-history).
-
-◆
-
-## Conflicting facts risk
-
-Conflicting facts risk is the likelihood that contradictory statements coexist without deterministic resolution. In production this causes unpredictable agent behavior.
-
-### Before vs after
-
-Before: both "office is in New York" and "office is in London" remain active with no canonical winner. After: merge rules choose one canonical value and preserve conflicting history for audit.
-
-\# Store two conflicting facts
-neotoma store --json='\[{"entity\_type":"contact","name":"Ana Rivera","office\_city":"New York"}\]'
-neotoma store --json='\[{"entity\_type":"contact","name":"Ana Rivera","office\_city":"London"}\]'
-
-# Query canonical resolved state
-neotoma entities search --query "Ana Rivera" --type contact
-
-Deterministic merge logic resolves conflicts reproducibly. [Schema constraints](#schema-constraints) support typed conflict handling, and [deterministic state evolution](#deterministic-state-evolution) guarantees the same result on replay.
-
-◆
-
-## False closure risk
-
-False closure risk is the likelihood that an agent confidently answers from stale or superseded context because the system cannot distinguish resolved decisions from open questions. The retrieval is technically correct, the fact exists, but the decision it describes was revised months ago.
-
-### Before vs after
-
-Before: an ops team asks “What is our contractor access policy?” The agent retrieves the Q3 draft discussion instead of the November board-approved version and answers confidently. The team acts on an outdated policy with no indication it was superseded. After: Neotoma’s versioned observations preserve both the draft and the final decision with timestamps and provenance. The reducer surfaces the latest resolved state; the observation trail shows when and why the policy changed.
-
-\# View the full observation history for a policy entity
-neotoma observations list --entity-id &lt;policy\_entity\_id&gt;
-
-# The snapshot reflects the latest resolved state
-neotoma entities search --query "contractor access policy" --type policy
-
-False closure is prevented by the combination of [versioned history](#versioned-history), [auditable change logs](#auditable-change-log), and [deterministic state evolution](#deterministic-state-evolution). Where [silent mutation](#silent-mutation-risk) describes data changing without a trail, false closure describes stale data being served as if it were current.
-
-◆
-
-## Reproducible state reconstruction
-
-Reproducible state reconstruction means rebuilding complete state from raw observations alone. If the database is lost, replay reconstructs the same state deterministically.
-
-### Before vs after
-
-Before: restoring requires uncertain backups and manual reconciliation. After: replay up to timestamp T recreates state at T exactly, then replay to present restores current state.
-
-\# Verify timeline events are available
-neotoma timeline list
-
-# Recompute and verify snapshots
-neotoma entities list --type task --limit 20
-
-This depends on [replayable timeline](#replayable-timeline) and [deterministic state evolution](#deterministic-state-evolution).
-
-◆
-
-## Human inspectability
-
-Human inspectability means a person can diff two versions, inspect lineage, and trace each fact to its source. Trust comes from verification, not hidden model behavior.
-
-### Before vs after
-
-Before: a value changes and operators only see "current state." After: operators can inspect field-level diffs and provenance to validate or correct the update.
-
-\# Inspect snapshot lineage
-neotoma entities get &lt;entity\_id&gt;
-neotoma observations list --entity-id &lt;entity\_id&gt;
-
-Inspectability depends on [versioned history](#versioned-history) and [auditable change log](#auditable-change-log).
-
-◆
-
-## Zero-setup onboarding
-
-Zero-setup onboarding means memory works from the first message with no installation, configuration, or infrastructure required. Platform memory products like ChatGPT and Claude provide this by embedding memory into the chat product itself.
-
-### Trade-offs
-
-The convenience of zero-setup comes at a cost: the vendor controls where data lives, how it is structured, and what guarantees it provides. Users cannot export, version, or audit memory independently. Retrieval systems and file-based approaches require setup but offer more control. Neotoma requires installation but provides [deterministic state evolution](#deterministic-state-evolution), [versioned history](#versioned-history), and [human inspectability](#human-inspectability) in exchange.
-
-### Getting started with Neotoma
-
-While Neotoma is not zero-setup, the install process is minimal. See the [install guide](/install) for step-by-step instructions.
-
-npm install -g neotoma
-neotoma api start --env prod
-
-Compare memory approaches on the [memory models](/memory-models) page.
-
-◆
-
-## Semantic similarity search
-
-Semantic similarity search finds relevant prior context by meaning rather than exact text match. Retrieval / RAG systems pioneered this by searching over unstructured documents using vector embeddings. Neotoma applies the same technique to structured entity snapshots, scoped by entity type and structural filters.
-
-### How it works
-
-When an agent or user queries Neotoma, the system embeds the query and compares it against entity snapshots. Because entities are structured and typed, search can be narrowed by entity type, time range, or relationship before similarity ranking is applied.
-
-\# Search by meaning across all entities
-neotoma entities search --query "upcoming meetings with the design team"
-
-# Narrow by entity type
-neotoma entities search --query "design review" --type event
-
-### Structured vs unstructured
-
-Pure retrieval systems search over raw documents and rely on the model to extract relevant facts from returned chunks. Neotoma searches over snapshots that already conform to [schema constraints](#schema-constraints), so results are typed and immediately usable. This combines the flexibility of semantic search with the reliability of [deterministic state evolution](#deterministic-state-evolution).
-
-See [memory models](/memory-models) for a full comparison, and the [MCP reference](/mcp) for retrieval actions.
-
-◆
-
-## Direct human editability
-
-Direct human editability means a person can open the memory store in a standard editor (VS Code, Notepad, vim) and modify it directly. File-based memory systems use plain text formats like Markdown or JSON that any tool can read and write without a runtime or API layer.
-
-### Trade-offs
-
-Editable files are maximally accessible but lack structural guarantees. A typo, a malformed JSON key, or an accidental deletion can silently corrupt state. There is no built-in [versioned history](#versioned-history) unless the user maintains it (e.g. via git), and no [schema constraints](#schema-constraints) to reject invalid edits.
-
-### How Neotoma compares
-
-Neotoma stores data in a structured, schema-validated format. While the underlying storage is not a plain text file you open directly, entities are fully accessible and modifiable through the CLI and MCP actions. Every modification goes through the observation pipeline, preserving [auditable change logs](#auditable-change-log) and [deterministic state evolution](#deterministic-state-evolution).
-
-\# Read current state
-neotoma entities get &lt;entity\_id&gt;
-
-# Update via a new observation (preserves history)
-neotoma store --json='\[{"entity\_type":"contact","name":"Ana Rivera","city":"Barcelona"}\]'
-
-Platform memory (ChatGPT, Claude) may offer in-app UIs to view or edit memories, but the underlying store is not exposed as an editable file. See [memory models](/memory-models) for the full comparison.</pre></div><div role="region" aria-label="Notifications (F8)" tabindex="-1" style="pointer-events: none;"><ol tabindex="-1" class="fixed top-0 z-[100] flex w-full flex-col-reverse p-4 sm:bottom-4 sm:right-4 sm:top-auto sm:flex-col sm:max-h-[calc(100vh-1rem)] sm:overflow-y-auto md:max-w-[420px]"></ol></div></div>
+](/direct-human-editability)</pre></div><div role="region" aria-label="Notifications (F8)" tabindex="-1" style="pointer-events: none;"><ol tabindex="-1" class="fixed top-0 z-[100] flex w-full flex-col-reverse p-4 sm:bottom-4 sm:right-4 sm:top-auto sm:flex-col sm:max-h-[calc(100vh-1rem)] sm:overflow-y-auto md:max-w-[420px]"></ol></div></div>
   
 
 

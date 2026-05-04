@@ -1,9 +1,9 @@
 ---
-description: "Ensures the README.md file always reflects the current status of all releases, maintaining accurate project status visibility"
-alwaysApply: true
+description: "README.md must reflect current status of all releases. Load when updating releases or release status."
+alwaysApply: false
 ---
 
-<!-- Source: foundation/agent_instructions/cursor_rules/release_status_readme_update.mdc -->
+<!-- Source: foundation/.cursor/rules/release_status_readme_update.mdc -->
 
 # Release Status README Update Rule
 
@@ -65,4 +65,3 @@ Valid status values (from release workflow):
 ```markdown
 - **v0.2.0**: Minimal Ingestion + Correction Loop (`ready_for_deployment`). Sources-first ingestion...
 ```
-

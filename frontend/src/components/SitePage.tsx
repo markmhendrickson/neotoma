@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { SiClaude, SiOpenai } from "react-icons/si";
+import { OpenCodeIcon } from "@/components/icons/OpenCodeIcon";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
@@ -52,6 +53,7 @@ import { SeoHead } from "./SeoHead";
 import { SectionDotNav } from "./SectionDotNav";
 import { SiteTailpiece } from "./SiteTailpiece";
 import { CursorIcon } from "./icons/CursorIcon";
+import { IronClawIcon } from "./icons/IronClawIcon";
 import { OpenClawIcon } from "./icons/OpenClawIcon";
 import { StateFlowDiagram } from "./illustrations/StateFlowDiagram";
 import { ScrollRevealOnce } from "./ScrollRevealOnce";
@@ -1196,9 +1198,17 @@ function HomeAgentToolChips({
         <CursorIcon className={iconClass} aria-hidden />
         Cursor
       </Link>
+      <Link to="/neotoma-with-opencode" className={chipClass}>
+        <OpenCodeIcon className={iconClass} aria-hidden />
+        OpenCode
+      </Link>
       <Link to="/neotoma-with-openclaw" className={chipClass}>
         <OpenClawIcon className={iconClass} aria-hidden />
         OpenClaw
+      </Link>
+      <Link to="/neotoma-with-ironclaw" className={chipClass}>
+        <IronClawIcon className={iconClass} aria-hidden />
+        IronClaw
       </Link>
       </div>
     </div>
@@ -2016,6 +2026,16 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                         </Link>
                       );
                     })}
+                  </div>
+
+                  <div className="flex justify-center pt-2">
+                    <Link
+                      to="/what-to-store"
+                      className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-4 py-2 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
+                    >
+                      <Eye className="h-4 w-4 shrink-0" aria-hidden />
+                      View full guide
+                    </Link>
                   </div>
                 </div>
               </div>

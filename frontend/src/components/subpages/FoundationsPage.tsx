@@ -132,9 +132,9 @@ export function FoundationsPage() {
         </h2>
         <p className="text-[15px] leading-7 mb-4">
           Neotoma provides one memory system across AI tools. Claude, ChatGPT, Cursor, Codex,
-          Claude Code, and OpenClaw all access the same state graph through Model Context Protocol
-          (MCP). Facts stored by one agent are immediately available to every other connected agent:
-          no sync step, no export/import, no duplicate data.
+          OpenCode, Claude Code, OpenClaw, and IronClaw all access the same state graph through Model
+          Context Protocol (MCP). Facts stored by one agent are immediately available to every
+          other connected agent: no sync step, no export/import, no duplicate data.
         </p>
         <p className="text-[15px] leading-7 mb-4">
           MCP is the integration layer. Each AI tool connects to Neotoma's MCP server and uses the
@@ -179,9 +179,12 @@ export function FoundationsPage() {
           </Link>,{" "}
           <Link to="/neotoma-with-chatgpt" className="text-foreground underline hover:text-foreground">
             ChatGPT
-          </Link>, and{" "}
+          </Link>,{" "}
           <Link to="/neotoma-with-codex" className="text-foreground underline hover:text-foreground">
             Codex
+          </Link>, and{" "}
+          <Link to="/neotoma-with-opencode" className="text-foreground underline hover:text-foreground">
+            OpenCode
           </Link>.
         </p>
       </section>

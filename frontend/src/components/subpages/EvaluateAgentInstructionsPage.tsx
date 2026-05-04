@@ -383,6 +383,7 @@ export function EvaluateAgentInstructionsPage() {
             <a href="/neotoma-with-cursor" className="underline">Cursor</a>,{" "}
             <a href="/neotoma-with-claude-code" className="underline">Claude Code</a>,{" "}
             <a href="/neotoma-with-codex" className="underline">Codex</a>,{" "}
+            <a href="/neotoma-with-opencode" className="underline">OpenCode</a>,{" "}
             <a href="/neotoma-with-openclaw" className="underline">OpenClaw</a>
           </li>
           <li>

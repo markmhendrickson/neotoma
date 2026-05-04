@@ -3,7 +3,8 @@ name: create_rule
 description: Create Rule
 ---
 
-<!-- Source: foundation/agent_instructions/cursor_commands/create_rule.md -->
+<!-- Source: .cursor/skills/create-rule/SKILL.md -->
+
 
 # Create Rule
 

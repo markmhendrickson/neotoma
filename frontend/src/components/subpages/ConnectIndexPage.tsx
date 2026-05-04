@@ -1,13 +1,21 @@
 import { Link } from "react-router-dom";
+import type { ElementType } from "react";
 import { ArrowUpRight } from "lucide-react";
 import { SiClaude, SiOpenai } from "react-icons/si";
 import { CodexIcon } from "../icons/CodexIcon";
 import { CursorIcon } from "../icons/CursorIcon";
+import { IronClawIcon } from "../icons/IronClawIcon";
+import { OpenCodeIcon } from "../icons/OpenCodeIcon";
 import { OpenClawIcon } from "../icons/OpenClawIcon";
 import { DetailPage } from "../DetailPage";
 import { IntegrationSection } from "../IntegrationSection";
 
 const extLink = "text-foreground underline underline-offset-2 hover:no-underline";
+
+const harnessCardTitleLink =
+  "text-[15px] font-medium text-foreground no-underline transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm";
+const harnessCardMetaLink =
+  "text-muted-foreground no-underline hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm";
 
 type ConnectEntry = {
   label: string;
@@ -16,7 +24,7 @@ type ConnectEntry = {
   remote: string;
   /** Stdio / local connect doc (for users self-hosting). */
   local?: string;
-  Icon: typeof SiClaude;
+  Icon: ElementType;
 };
 
 const CONNECT_ENTRIES: ConnectEntry[] = [
@@ -54,6 +62,12 @@ const CONNECT_ENTRIES: ConnectEntry[] = [
     Icon: CodexIcon,
   },
   {
+    label: "OpenCode",
+    desc: "OpenCode - add @neotoma/opencode-plugin to opencode.json and keep MCP configured.",
+    remote: "/neotoma-with-opencode",
+    Icon: OpenCodeIcon,
+  },
+  {
     label: "Cursor",
     desc: "Cursor IDE - add a `mcpServers` entry to .cursor/mcp.json.",
     remote: "/neotoma-with-cursor",
@@ -66,32 +80,49 @@ const CONNECT_ENTRIES: ConnectEntry[] = [
     local: "/neotoma-with-openclaw-connect-local-stdio",
     Icon: OpenClawIcon,
   },
+  {
+    label: "IronClaw",
+    desc: "IronClaw agents - add Neotoma as an HTTP MCP server with `ironclaw mcp add`.",
+    remote: "/neotoma-with-ironclaw",
+    Icon: IronClawIcon,
+  },
 ];
 
 export function ConnectIndexPage() {
   return (
-    <DetailPage title="Connect a remote Neotoma">
+    <DetailPage title="Connect remotely">
       <p className="text-[15px] leading-7 text-foreground mb-3">
         Every hosted Neotoma instance - the{" "}
-        <Link to="/sandbox" className={extLink}>public sandbox</Link>, a personal tunnel, or a
-        self-hosted deployment - exposes an MCP endpoint at <code>/mcp</code>. This page points you
-        at the per-harness doc for connecting to it over HTTP without installing Neotoma locally.
+        <Link to="/sandbox" className={extLink}>
+          public sandbox
+        </Link>
+        , a personal tunnel, or a self-hosted deployment - exposes an MCP endpoint at{" "}
+        <code>/mcp</code>. This page points you at the per-harness doc for connecting to it over
+        HTTP without installing Neotoma locally.
       </p>
       <p className="text-[14px] leading-6 text-muted-foreground mb-6">
         Installing Neotoma on the same machine as your agent? Use the{" "}
-        <Link to="/install" className={extLink}>install guide</Link> instead - stdio is faster and
-        needs no tunnel. See <Link to="/hosted" className={extLink}>Hosted Neotoma</Link> for the
-        flavor comparison.
+        <Link to="/install" className={extLink}>
+          install guide
+        </Link>{" "}
+        instead - stdio is faster and needs no tunnel. See{" "}
+        <Link to="/hosted" className={extLink}>
+          Hosted Neotoma
+        </Link>{" "}
+        for the flavor comparison.
       </p>
 
       <IntegrationSection title="Pick your harness" sectionKey="harnesses" dividerBefore={false}>
         <ul className="list-none pl-0 m-0 space-y-2">
           {CONNECT_ENTRIES.map((entry) => (
-            <li key={entry.label} className="rounded-lg border border-border bg-muted/20 p-3 flex items-start gap-3">
+            <li
+              key={entry.label}
+              className="rounded-lg border border-border bg-muted/20 p-3 flex items-start gap-3"
+            >
               <entry.Icon className="mt-1 size-5 shrink-0 text-muted-foreground" aria-hidden />
               <div className="flex-1 min-w-0">
                 <div className="flex items-baseline gap-2 flex-wrap">
-                  <Link to={entry.remote} className="text-[15px] font-medium text-foreground underline underline-offset-2 hover:no-underline">
+                  <Link to={entry.remote} className={harnessCardTitleLink}>
                     {entry.label}
                   </Link>
                   <ArrowUpRight className="size-3.5 text-muted-foreground" aria-hidden />
@@ -100,13 +131,13 @@ export function ConnectIndexPage() {
                   {entry.desc}
                 </p>
                 <p className="text-[13px] leading-6 text-muted-foreground">
-                  <Link to={entry.remote} className={extLink}>
+                  <Link to={entry.remote} className={harnessCardMetaLink}>
                     Remote MCP setup
                   </Link>
                   {entry.local ? (
                     <>
                       {" · "}
-                      <Link to={entry.local} className={extLink}>
+                      <Link to={entry.local} className={harnessCardMetaLink}>
                         Local / stdio setup
                       </Link>
                     </>
@@ -153,13 +184,29 @@ export function ConnectIndexPage() {
 
       <IntegrationSection title="Related" sectionKey="related">
         <p className="text-[14px] leading-6 text-muted-foreground">
-          <Link to="/install" className={extLink}>Install Neotoma locally</Link>
+          <Link to="/install" className={extLink}>
+            Install Neotoma locally
+          </Link>
           {" · "}
-          <Link to="/hosted" className={extLink}>Hosted flavors overview</Link>
+          <Link to="/hosted" className={extLink}>
+            Hosted flavors overview
+          </Link>
           {" · "}
-          <Link to="/sandbox" className={extLink}>Public sandbox</Link>
+          <Link to="/sandbox" className={extLink}>
+            Public sandbox
+          </Link>
           {" · "}
-          <Link to="/mcp" className={extLink}>MCP reference</Link>
+          <Link to="/tunnel" className={extLink}>
+            Expose tunnel
+          </Link>
+          {" · "}
+          <Link to="/api" className={extLink}>
+            REST API reference
+          </Link>
+          {" · "}
+          <Link to="/mcp" className={extLink}>
+            MCP reference
+          </Link>
         </p>
       </IntegrationSection>
     </DetailPage>

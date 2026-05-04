@@ -38,10 +38,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
     <title>MCP Server Reference (Markdown) | Neotoma</title>
-    <script type="module" crossorigin="" src="/assets/main-CaoWcp2k.js"></script>
-    <link rel="stylesheet" crossorigin="" href="/assets/main-BBds_bdF.css">
+    <script type="module" crossorigin="" src="/assets/main-aNEaYUJL.js"></script>
+    <link rel="stylesheet" crossorigin="" href="/assets/main-a7BqVBLd.css">
   
-    <!-- build: local-1777360387837 -->
+    <!-- build: local-1777885129871 -->
       <link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/mcp">
     <link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/mcp">
     <link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/mcp">
@@ -61,7 +61,7 @@
     <div id="root"><iframe title="Markdown capture" aria-hidden="true" width="1280" height="900" class="pointer-events-none fixed left-[-9999px] top-0 z-[-1] border-0 opacity-0" sandbox="allow-same-origin allow-scripts allow-forms"></iframe><div class="min-h-screen bg-background text-foreground"><pre class="whitespace-pre-wrap break-words p-4 font-mono text-[13px] leading-relaxed text-foreground">&lt;!--
   Full-page Markdown export (rendered HTML → GFM).
   Source: https://neotoma.io/ru/mcp
-  Generated: 2026-04-28T07:15:50.669Z
+  Generated: 2026-05-04T09:01:41.110Z
 --&gt;
 # Model Context Protocol (MCP) server
 
@@ -70,7 +70,7 @@ Neotoma exposes 30 MCP actions covering storage, retrieval, relationships, schem
 ## Transport modes
 
 -   **stdio** - local process, recommended for Cursor / Claude Code / Codex. The MCP client launches the Neotoma process directly.
--   **HTTP (SSE)** - remote or tunnel access via `http://localhost:3080/mcp` (dev) or `http://localhost:3180/mcp` (prod). Use with `--tunnel` for HTTPS via ngrok or Cloudflare.
+-   **HTTP (SSE)** - remote or [tunnel](/tunnel) access via `http://localhost:3080/mcp` (dev) or `http://localhost:3180/mcp` (prod). Use with `--tunnel` for HTTPS via ngrok or Cloudflare.
 -   **WebSocket** - bridge mode for clients that require WebSocket transport.
 
 ◆
@@ -92,7 +92,7 @@ Neotoma exposes 30 MCP actions covering storage, retrieval, relationships, schem
 
 **Claude Code** (`claude_desktop_config.json`) and **Windsurf** (`mcp_config.json`) use the same structure. Run `neotoma mcp check` to scan for config files and auto-install missing entries. Add `--user-level` to include user-level paths.
 
-**HTTP / tunnel** (remote access):
+**HTTP / [tunnel](/tunnel)** (remote access):
 
 {
   "mcpServers": {
@@ -210,7 +210,7 @@ A running Neotoma binds a handful of unauthenticated discovery and health endpoi
 -   `GET /favicon.ico` - site icon for browser tabs.
 -   In sandbox mode: `GET /sandbox/terms` (acceptable-use JSON), `POST /sandbox/report`, and `GET /sandbox/report/status`.
 
-See [Connect a remote Neotoma](/connect) for per-harness snippets, and [Hosted Neotoma](/hosted) for the mode comparison.
+See [Connect remotely](/connect) for per-harness snippets, and [Hosted Neotoma](/hosted) for the mode comparison.
 
 ◆
 

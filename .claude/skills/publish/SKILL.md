@@ -3,7 +3,15 @@ name: publish
 description: publish
 ---
 
-<!-- Source: foundation/agent_instructions/cursor_commands/publish.md -->
+<!-- Source: foundation/.cursor/skills/publish/SKILL.md -->
+
+---
+name: publish
+description: Publish workflow per foundation publish command.
+triggers:
+  - publish
+  - /publish
+---
 
 # publish
 

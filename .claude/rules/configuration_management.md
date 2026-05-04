@@ -1,9 +1,9 @@
 ---
-description: "Ensures configuration files are placed in the correct location based on their scope and purpose"
-alwaysApply: true
+description: "Place configuration in correct location by scope (repo foundation-config.yaml vs foundation repo-adapters). Load when adding or moving config."
+alwaysApply: false
 ---
 
-<!-- Source: foundation/agent_instructions/cursor_rules/configuration_management.mdc -->
+<!-- Source: foundation/.cursor/rules/configuration_management.mdc -->
 
 # Configuration Management Rule
 

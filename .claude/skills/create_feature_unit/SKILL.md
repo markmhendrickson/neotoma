@@ -3,7 +3,8 @@ name: create_feature_unit
 description: Create New Feature Unit
 ---
 
-<!-- Source: foundation/agent_instructions/cursor_commands/create_feature_unit.md -->
+<!-- Source: .cursor/skills/create-feature-unit/SKILL.md -->
+
 
 # Create New Feature Unit
 

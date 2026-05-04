@@ -3,8 +3,15 @@ name: push
 description: push
 ---
 
-<!-- Source: .cursor/skills/push/SKILL.md -->
+<!-- Source: foundation/.cursor/skills/push/SKILL.md -->
 
+---
+name: push
+description: Push current branch to origin; supports /push <submodule>.
+triggers:
+  - push
+  - /push
+---
 
 # push
 

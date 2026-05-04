@@ -2024,21 +2024,40 @@ app.post(
     try {
       const grant_type = req.body?.grant_type;
       const code = req.body?.code;
+      const refresh_token = req.body?.refresh_token;
       logger.info("[MCP OAuth] Token request received", {
         grant_type: grant_type ?? null,
         has_code: typeof code === "string" && code.length > 0,
         code_hint: typeof code === "string" ? code.slice(0, 8) : null,
+        has_refresh_token: typeof refresh_token === "string" && refresh_token.length > 0,
         host: req.header("host") ?? null,
       });
 
-      if (grant_type !== "authorization_code") {
+      if (grant_type !== "authorization_code" && grant_type !== "refresh_token") {
         logger.warn("[MCP OAuth] Token rejected: unsupported grant_type", {
           grant_type: grant_type ?? null,
         });
         return res.status(400).json({
           error: "unsupported_grant_type",
-          error_description: "Only authorization_code is supported",
+          error_description: "Only authorization_code and refresh_token are supported",
         });
+      }
+      if (grant_type === "refresh_token") {
+        if (!refresh_token || typeof refresh_token !== "string") {
+          logger.warn("[MCP OAuth] Token refresh rejected: missing refresh_token");
+          return res
+            .status(400)
+            .json({ error: "invalid_request", error_description: "refresh_token is required" });
+        }
+
+        const { refreshAccessToken } = await import("./services/mcp_oauth.js");
+        const token = await refreshAccessToken(refresh_token);
+        logger.info("[MCP OAuth] Token refreshed", {
+          has_refresh_token: Boolean((token as { refresh_token?: string }).refresh_token),
+        });
+
+        res.setHeader("Content-Type", "application/json");
+        return res.json(token);
       }
       if (!code || typeof code !== "string") {
         logger.warn("[MCP OAuth] Token rejected: missing code");

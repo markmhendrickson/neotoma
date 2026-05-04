@@ -71,48 +71,30 @@ if [ "$TUNNEL_PROVIDER" = "cloudflare" ]; then
     exit 1
   fi
 
-  # Named tunnel: from env or .env (so .env-only config works when CLI spawns script)
-  CLOUDFLARED_NAMED="${CLOUDFLARE_TUNNEL_NAME:-}"
-  if [ -z "$CLOUDFLARED_NAMED" ]; then
-    if [ -z "${EARLY_REPO_ROOT:-}" ]; then
-      EARLY_REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-      EARLY_ENV_FILE="${EARLY_REPO_ROOT}/.env"
-      [ ! -f "${EARLY_ENV_FILE}" ] && [ -f ".env" ] && EARLY_ENV_FILE=".env"
-    fi
-    if [ -f "${EARLY_ENV_FILE:-}" ]; then
-      _tname=$(grep -E '^CLOUDFLARE_TUNNEL_NAME=' "${EARLY_ENV_FILE}" 2>/dev/null | head -1 | sed 's/^[^=]*=//' | tr -d '"' | tr -d "'" | xargs)
-      [ -n "$_tname" ] && CLOUDFLARED_NAMED="$_tname"
+  # Named tunnel: HOST_URL is the single Neotoma public origin.
+  NAMED_URL=""
+  if [ -z "${EARLY_REPO_ROOT:-}" ]; then
+    EARLY_REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+    EARLY_ENV_FILE="${EARLY_REPO_ROOT}/.env"
+    [ ! -f "${EARLY_ENV_FILE}" ] && [ -f ".env" ] && EARLY_ENV_FILE=".env"
+  fi
+  if [ -f "${EARLY_ENV_FILE:-}" ]; then
+    _line=""
+    grep -q "HOST_URL=" "${EARLY_ENV_FILE}" 2>/dev/null && _line=$(grep "HOST_URL=" "${EARLY_ENV_FILE}" 2>/dev/null | head -1)
+    [ -z "$_line" ] && grep -q "API_BASE_URL=" "${EARLY_ENV_FILE}" 2>/dev/null && _line=$(grep "API_BASE_URL=" "${EARLY_ENV_FILE}" 2>/dev/null | head -1)
+    if [ -n "$_line" ]; then
+      _val=$(echo "$_line" | sed 's/^[^=]*=//' | tr -d '"' | tr -d "'" | xargs)
+      [ -n "$_val" ] && NAMED_URL="${_val}"
     fi
   fi
-  if [ -n "$CLOUDFLARED_NAMED" ]; then
-    # Named tunnel (e.g. neotoma). Requires ~/.cloudflared configured and tunnel URL in env or .env.
-    NAMED_URL="${CLOUDFLARE_TUNNEL_URL:-}"
-    if [ -z "$NAMED_URL" ] && [ -z "${EARLY_REPO_ROOT:-}" ]; then
-      EARLY_REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-      EARLY_ENV_FILE="${EARLY_REPO_ROOT}/.env"
-      [ ! -f "${EARLY_ENV_FILE}" ] && [ -f ".env" ] && EARLY_ENV_FILE=".env"
-    fi
-    if [ -z "$NAMED_URL" ] && [ -f "${EARLY_ENV_FILE:-}" ]; then
-      _line=""
-      grep -q "HOST_URL=" "${EARLY_ENV_FILE}" 2>/dev/null && _line=$(grep "HOST_URL=" "${EARLY_ENV_FILE}" 2>/dev/null | head -1)
-      [ -z "$_line" ] && grep -q "API_BASE_URL=" "${EARLY_ENV_FILE}" 2>/dev/null && _line=$(grep "API_BASE_URL=" "${EARLY_ENV_FILE}" 2>/dev/null | head -1)
-      if [ -n "$_line" ]; then
-        _val=$(echo "$_line" | sed 's/^[^=]*=//' | tr -d '"' | tr -d "'" | xargs)
-        [ -n "$_val" ] && NAMED_URL="${_val}"
-      fi
-    fi
-    if [ -z "$NAMED_URL" ]; then
-      echo "❌ Named tunnel $CLOUDFLARED_NAMED requires CLOUDFLARE_TUNNEL_URL or HOST_URL in .env (e.g. https://mcp.neotoma.io)" >&2
-      [ "${TUNNEL_NONINTERACTIVE:-}" = "1" ] && echo "   To use ngrok instead: neotoma api start --env dev --tunnel --tunnel-provider ngrok" >&2
-      exit 1
-    fi
-    # Normalize: no trailing slash
+  if [ -n "$NAMED_URL" ]; then
+    # Named tunnel. Requires ~/.cloudflared/config.yml to declare the tunnel and ingress.
     NAMED_URL="${NAMED_URL%/}"
-    echo "✅ Starting Cloudflare named tunnel \"$CLOUDFLARED_NAMED\" (port ${HTTP_PORT})..."
-    echo "   Ensure ~/.cloudflared/config.yml ingress points to http://localhost:${HTTP_PORT}"
+    echo "✅ Starting Cloudflare named tunnel for ${NAMED_URL} (port ${HTTP_PORT})..."
+    echo "   Ensure ~/.cloudflared/config.yml declares the tunnel and routes ingress to http://localhost:${HTTP_PORT}"
     CLOUDFLARED_LOG="${NGROK_URL_FILE%.txt}.log"
     rm -f "$CLOUDFLARED_LOG"
-    cloudflared tunnel run "$CLOUDFLARED_NAMED" > "$CLOUDFLARED_LOG" 2>&1 &
+    cloudflared tunnel run > "$CLOUDFLARED_LOG" 2>&1 &
     NGROK_PID=$!
     sleep 3
     if ! kill -0 $NGROK_PID 2>/dev/null; then
@@ -135,7 +117,7 @@ if [ "$TUNNEL_PROVIDER" = "cloudflare" ]; then
     done
     if [ -z "$NGROK_URL" ]; then
       echo "❌ Failed to get Cloudflare tunnel URL. Check: tail -f $CLOUDFLARED_LOG" >&2
-      echo "   Tip: use named tunnel to avoid 429: CLOUDFLARE_TUNNEL_NAME=neotoma CLOUDFLARE_TUNNEL_URL=https://your-hostname" >&2
+      echo "   Tip: use a named tunnel to avoid 429: set HOST_URL=https://your-hostname and configure ~/.cloudflared/config.yml" >&2
       [ "${TUNNEL_NONINTERACTIVE:-}" = "1" ] && echo "   To use ngrok instead: neotoma api start --env dev --tunnel --tunnel-provider ngrok" >&2
       kill $NGROK_PID 2>/dev/null || true
       exit 1

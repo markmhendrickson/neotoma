@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { SiClaude, SiOpenai } from "react-icons/si";
+import { OpenCodeIcon } from "@/components/icons/OpenCodeIcon";
 import {
   useCallback,
   useEffect,
@@ -45,6 +46,7 @@ import { SeoHead } from "./SeoHead";
 import { SectionDotNav } from "./SectionDotNav";
 import { SiteTailpiece } from "./SiteTailpiece";
 import { CursorIcon } from "./icons/CursorIcon";
+import { IronClawIcon } from "./icons/IronClawIcon";
 import { OpenClawIcon } from "./icons/OpenClawIcon";
 import { EntityGraphHero } from "./illustrations/EntityGraphHero";
 import { ScrollRevealOnce } from "./ScrollRevealOnce";
@@ -358,9 +360,17 @@ function HomeAgentToolChips({
           <CursorIcon className={iconClass} aria-hidden />
           Cursor
         </Link>
+        <Link to="/neotoma-with-opencode" className={chipClass}>
+          <OpenCodeIcon className={iconClass} aria-hidden />
+          OpenCode
+        </Link>
         <Link to="/neotoma-with-openclaw" className={chipClass}>
           <OpenClawIcon className={iconClass} aria-hidden />
           OpenClaw
+        </Link>
+        <Link to="/neotoma-with-ironclaw" className={chipClass}>
+          <IronClawIcon className={iconClass} aria-hidden />
+          IronClaw
         </Link>
       </div>
     </div>

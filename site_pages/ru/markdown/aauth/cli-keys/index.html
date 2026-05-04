@@ -38,10 +38,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
     <title>AAuth CLI keys and hardware backends (Markdown) | Neotoma</title>
-    <script type="module" crossorigin="" src="/assets/main-CaoWcp2k.js"></script>
-    <link rel="stylesheet" crossorigin="" href="/assets/main-BBds_bdF.css">
+    <script type="module" crossorigin="" src="/assets/main-aNEaYUJL.js"></script>
+    <link rel="stylesheet" crossorigin="" href="/assets/main-a7BqVBLd.css">
   
-    <!-- build: local-1777360387837 -->
+    <!-- build: local-1777885129871 -->
       <link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/aauth/cli-keys">
     <link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/aauth/cli-keys">
     <link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/aauth/cli-keys">
@@ -61,7 +61,7 @@
     <div id="root"><iframe title="Markdown capture" aria-hidden="true" width="1280" height="900" class="pointer-events-none fixed left-[-9999px] top-0 z-[-1] border-0 opacity-0" sandbox="allow-same-origin allow-scripts allow-forms"></iframe><div class="min-h-screen bg-background text-foreground"><pre class="whitespace-pre-wrap break-words p-4 font-mono text-[13px] leading-relaxed text-foreground">&lt;!--
   Full-page Markdown export (rendered HTML → GFM).
   Source: https://neotoma.io/ru/aauth/cli-keys
-  Generated: 2026-04-28T07:16:09.680Z
+  Generated: 2026-05-04T09:02:00.180Z
 --&gt;
 # AAuth CLI keys and hardware backends
 
@@ -93,7 +93,7 @@ Notably: Windows/TBS reuses the TPM 2.0 verifier unchanged even though the CLI t
 
 `src/cli/aauth_signer.ts` supports five key-storage backends, recorded in `signer.json` as `backend`:
 
--   **`software`** (default), private key at `~/.config/neotoma/aauth/private.jwk`; any platform; tier `software`, or `operator_attested` if allowlisted.
+-   **`software`** (default), private key at `~/.neotoma/aauth/private.jwk`; any platform; tier `software`, or `operator_attested` if allowlisted.
 -   **`apple-secure-enclave`** , macOS Secure Enclave keychain entry, referenced by `se_key_tag`; tier `hardware` when the JWT carries a verified `cnf.attestation`.
 -   **`tpm2`** , Linux TPM 2.0 persistent handle (`tpm2_handle`, default `0x81010000`) under the configured `tpm2_hierarchy`; tier `hardware` when the JWT carries a verified TPM 2.0 envelope.
 -   **`tbs`** , Windows TBS / NCrypt key under the Microsoft Platform Crypto Provider, referenced by `tbs_key_name` (default `neotoma-aauth-aik`); tier `hardware` when the JWT carries a verified TPM 2.0 envelope (TBS reuses the same server verifier).
@@ -216,7 +216,7 @@ PIN handling for YubiKey: every call that does not pass `pin` explicitly relies 
 
 ## Operator environment
 
--   `NEOTOMA_AAUTH_PRIVATE_JWK_PATH`, override JWK location for all backends (default `~/.config/neotoma/aauth/private.jwk`).
+-   `NEOTOMA_AAUTH_PRIVATE_JWK_PATH`, override JWK location for all backends (default `~/.neotoma/aauth/private.jwk`).
 -   `NEOTOMA_AAUTH_SE_KEY_TAG`, override the keychain tag on darwin (default `io.neotoma.aauth.cli.default`).
 -   `NEOTOMA_AAUTH_TPM2_HANDLE`, override the TPM 2.0 persistent handle on linux (default `0x81010000`).
 -   `NEOTOMA_AAUTH_TPM2_HIERARCHY`, override the TPM 2.0 hierarchy on linux (`owner` or `endorsement`; default `owner`).

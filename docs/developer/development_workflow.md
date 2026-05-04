@@ -112,7 +112,7 @@ git push -u origin feature/FU-XXX-short-description
 FU-XXX: Brief description
 - Detailed change 1
 - Detailed change 2
-References: docs/specs/MVP_FEATURE_UNITS.md
+References: docs/feature_units/completed/FU-XXX/FU-XXX_spec.md
 ```
 **Examples:**
 ```
@@ -121,7 +121,7 @@ FU-101: Implement entity resolution
 - Add generateEntityId with hash-based IDs
 - Add entity resolution service
 - Add unit tests for determinism
-References: docs/specs/MVP_FEATURE_UNITS.md
+References: docs/feature_units/completed/FU-101/FU-101_spec.md
 ```
 **Commit Rules:**
 - One logical change per commit
@@ -246,8 +246,8 @@ git branch -d feature/FU-XXX-short-description
 ## Feature Unit Integration
 ### When Feature Unit is Complete
 1. **Update Feature Unit Status:**
-   - Mark as complete in `docs/specs/MVP_FEATURE_UNITS.md`
-   - Move spec to `docs/feature_units/completed/FU-XXX/` (if detailed spec exists)
+   - Move spec to `docs/feature_units/completed/FU-XXX/`
+   - Update release status or tracking docs that reference the FU
 2. **Update Documentation:**
    - Update subsystem docs if patterns changed
    - Add error codes to `docs/reference/error_codes.md` (if new codes added)

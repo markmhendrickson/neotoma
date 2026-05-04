@@ -1,9 +1,9 @@
 ---
-description: "Ensures checkpoints are automatically updated in status.md when their trigger batches complete"
-alwaysApply: true
+description: "Ensures checkpoints are automatically updated in status.md when their trigger batches complete. Load when working in repos with status.md and checkpoint batches."
+alwaysApply: false
 ---
 
-<!-- Source: foundation/agent_instructions/cursor_rules/checkpoint_management.mdc -->
+<!-- Source: foundation/.cursor/rules/checkpoint_management.mdc -->
 
 # Checkpoint Management Rule
 

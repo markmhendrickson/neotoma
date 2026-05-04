@@ -11,7 +11,7 @@
 #### 1.1 Canonical Specs (Authoritative Sources)
 - **Manifest**: `docs/NEOTOMA_MANIFEST.md`
 - **Internal MCP Release Spec**: `docs/specs/INTERNAL_MCP_RELEASE.md`
-- **MVP Feature Units**: `docs/specs/MVP_FEATURE_UNITS.md`
+- **MVP Feature Units**: `docs/releases/archived/mvp_planning/MVP_FEATURE_UNITS.md`
 - **MCP Specification**: `docs/specs/MCP_SPEC.md`
 This release plan coordinates the internal MCP release scope into a concrete release plan.
 ### 2. Scope
@@ -192,5 +192,5 @@ The detailed test specifications for these flows live in `docs/releases/v0.1.0/i
 ### 10. Feature Unit Specifications
 **Specification Sources:**
 - **Standalone Specs:** FU-050 through FU-054 have standalone spec files in `docs/feature_units/completed/FU-XXX/`
-- **MVP_FEATURE_UNITS.md:** All other FUs have specifications in `docs/specs/MVP_FEATURE_UNITS.md`
+- **MVP_FEATURE_UNITS.md:** All other FUs have specifications in `docs/releases/archived/mvp_planning/MVP_FEATURE_UNITS.md`
 **See:** `fu_spec_status.md` for complete status of all FUs.
