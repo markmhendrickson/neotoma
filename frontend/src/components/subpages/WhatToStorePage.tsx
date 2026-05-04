@@ -48,8 +48,8 @@ export function WhatToStorePage() {
 
       <IntegrationSection title="Agents store for you" sectionKey="agent-driven" dividerBefore={false}>
         <p className="text-[14px] leading-6 text-muted-foreground mb-3">
-          You do not need to decide what to store or call any APIs yourself. When Neotoma is
-          connected to an agent through{" "}
+          You do not need to decide what to store or call any APIs yourself. When Neotoma runs
+          with an agent in{" "}
           <Link to="/neotoma-with-cursor" className="text-foreground underline underline-offset-2 hover:no-underline">
             Cursor
           </Link>
@@ -65,9 +65,8 @@ export function WhatToStorePage() {
           <Link to="/mcp" className="text-foreground underline underline-offset-2 hover:no-underline">
             MCP-compatible client
           </Link>
-          . The agent proactively extracts and stores entities from every
-          conversation turn: people mentioned, tasks committed to, decisions made, and facts
-          stated.
+          , the agent proactively extracts and stores entities from every conversation turn:
+          people mentioned, tasks committed to, decisions made, and facts stated.
         </p>
         <p className="text-[14px] leading-6 text-muted-foreground mb-3">
           The agent follows{" "}

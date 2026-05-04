@@ -8,7 +8,7 @@ If an agent or user would later need to recall a fact, verify when it changed, t
 
 ## Agents store for you
 
-You do not need to decide what to store or call any APIs yourself. When Neotoma is connected to an agent through Cursor, Claude, ChatGPT, or any MCP-compatible client, the agent proactively extracts and stores entities from every conversation turn: people mentioned, tasks committed to, decisions made, and facts stated.
+You do not need to decide what to store or call any APIs yourself. When Neotoma runs with an agent in Cursor, Claude, ChatGPT, or any MCP-compatible client, the agent proactively extracts and stores entities from every conversation turn: people mentioned, tasks committed to, decisions made, and facts stated.
 
 The agent follows store recipes that define how to persist conversations, extract entities from attachments, link related records, and preserve provenance without manual intervention. It applies the decision heuristic below on your behalf: if a fact has recall, audit, or relationship value, the agent stores it automatically.
 

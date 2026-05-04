@@ -79,6 +79,18 @@ test.describe("sitePage coverage", () => {
     expect(codeBlockStyle!.backgroundColor).not.toBe("rgb(255, 255, 255)");
   });
 
+  test("what-to-store page explains agent-driven storage", async ({ page }) => {
+    await page.goto("/what-to-store");
+    await page.waitForLoadState("networkidle");
+
+    await expect(page.getByRole("heading", { name: "Agents store for you" })).toBeVisible();
+    await expect(page.getByText(/When Neotoma runs with an agent in Cursor/i)).toBeVisible();
+    await expect(page.getByRole("link", { name: "store recipes" })).toHaveAttribute(
+      "href",
+      "/agent-instructions/store-recipes",
+    );
+  });
+
   test("footer section labels stay distinct from the footer background", async ({ page }) => {
     await page.goto("/");
     await page.waitForLoadState("networkidle");
