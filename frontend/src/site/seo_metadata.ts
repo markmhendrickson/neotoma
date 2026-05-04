@@ -215,7 +215,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/what-to-store": {
     title: "What to store first | Neotoma",
     description:
-      "Pick the first durable facts, commitments, and source-backed records to persist in Neotoma. Tiered guidance from high-value contacts and tasks through derived context.",
+      "Store any entity type in Neotoma. Schemas evolve automatically as new fields appear. Tiered guidance from high-value contacts and tasks through derived context, with flexible schema evolution.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -376,7 +376,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/api": {
     title: "REST API Reference | Neotoma",
     description:
-      "OpenAPI endpoints and parameters for Neotoma: store, retrieve, search, and manage entities via HTTP.",
+      "REST API reference for Neotoma: start the server via CLI, then store, retrieve, search, and manage entities via HTTP. Includes getting-started guide and OpenAPI endpoint catalog.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [

@@ -46,7 +46,96 @@ export function WhatToStorePage() {
         decision was made, or reconstruct state at a point in time: it belongs in Neotoma.
       </p>
 
-      <IntegrationSection title="Tier 1 - High-value facts" sectionKey="tier-1" dividerBefore={false}>
+      <IntegrationSection title="Agents store for you" sectionKey="agent-driven" dividerBefore={false}>
+        <p className="text-[14px] leading-6 text-muted-foreground mb-3">
+          You do not need to decide what to store or call any APIs yourself. When Neotoma is
+          connected to an agent through{" "}
+          <Link to="/neotoma-with-cursor" className="text-foreground underline underline-offset-2 hover:no-underline">
+            Cursor
+          </Link>
+          ,{" "}
+          <Link to="/neotoma-with-claude" className="text-foreground underline underline-offset-2 hover:no-underline">
+            Claude
+          </Link>
+          ,{" "}
+          <Link to="/neotoma-with-chatgpt" className="text-foreground underline underline-offset-2 hover:no-underline">
+            ChatGPT
+          </Link>
+          , or any{" "}
+          <Link to="/mcp" className="text-foreground underline underline-offset-2 hover:no-underline">
+            MCP-compatible client
+          </Link>
+          . The agent proactively extracts and stores entities from every
+          conversation turn: people mentioned, tasks committed to, decisions made, and facts
+          stated.
+        </p>
+        <p className="text-[14px] leading-6 text-muted-foreground mb-3">
+          The agent follows{" "}
+          <Link to="/agent-instructions/store-recipes" className="text-foreground underline underline-offset-2 hover:no-underline">
+            store recipes
+          </Link>{" "}
+          that define how to persist conversations, extract entities from attachments, link
+          related records, and preserve provenance without manual intervention. It
+          applies the decision heuristic below on your behalf: if a fact has recall, audit,
+          or relationship value, the agent stores it automatically.
+        </p>
+        <p className="text-[14px] leading-6 text-muted-foreground mb-3">
+          You can always store data manually via the{" "}
+          <Link to="/cli" className="text-foreground underline underline-offset-2 hover:no-underline">
+            CLI
+          </Link>
+          ,{" "}
+          <Link to="/api" className="text-foreground underline underline-offset-2 hover:no-underline">
+            REST API
+          </Link>
+          , or{" "}
+          <Link to="/mcp" className="text-foreground underline underline-offset-2 hover:no-underline">
+            MCP tools
+          </Link>
+          , correct what was stored, or tell your agent to stop storing specific categories.
+          The default is proactive storage with human oversight, not the other way
+          around.
+        </p>
+      </IntegrationSection>
+
+      <IntegrationSection title="Any entity type, any shape" sectionKey="flexible-schemas">
+        <p className="text-[14px] leading-6 text-muted-foreground mb-3">
+          Neotoma does not require you to define a schema before storing data. Store any entity with
+          a descriptive <code>entity_type</code> and whatever fields the data implies. The{" "}
+          <Link to="/schemas/registry" className="text-foreground underline underline-offset-2 hover:no-underline">
+            schema registry
+          </Link>{" "}
+          infers and evolves schemas automatically as new fields appear.
+        </p>
+        <p className="text-[14px] leading-6 text-muted-foreground mb-3">
+          Common types like <code>contact</code>, <code>task</code>, <code>transaction</code>,
+          and <code>event</code> ship with sensible defaults, but you can create any type by
+          storing an entity with a new <code>entity_type</code>. Fields added later trigger{" "}
+          <Link to="/schemas/versioning" className="text-foreground underline underline-offset-2 hover:no-underline">
+            additive schema evolution
+          </Link>{" "}
+          , minor version bumps that never break existing data.
+        </p>
+        <p className="text-[14px] leading-6 text-muted-foreground mb-3">
+          Unknown fields are preserved in a <code>raw_fragments</code> layer so nothing is
+          silently dropped. As schemas mature, those fragments are promoted into the validated
+          schema automatically. See{" "}
+          <Link to="/schemas" className="text-foreground underline underline-offset-2 hover:no-underline">
+            schemas overview
+          </Link>
+          ,{" "}
+          <Link to="/schemas/merge-policies" className="text-foreground underline underline-offset-2 hover:no-underline">
+            merge policies
+          </Link>
+          , and{" "}
+          <Link to="/schemas/storage-layers" className="text-foreground underline underline-offset-2 hover:no-underline">
+            storage layers
+          </Link>{" "}
+          for the full picture.
+        </p>
+      </IntegrationSection>
+
+      <IntegrationSection title="Tier 1 - High-value facts" sectionKey="tier-1">
         <p className="text-[14px] leading-6 text-muted-foreground mb-3">
           Store these proactively from the first session.
         </p>

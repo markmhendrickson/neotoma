@@ -5,6 +5,13 @@ type NpmPackJsonEntry = {
   files?: Array<{ path?: string }>;
 };
 
+function parseNpmPackJsonOutput(output: string): NpmPackJsonEntry[] {
+  const trimmed = output.trim();
+  const jsonStart = trimmed.lastIndexOf("\n[");
+  const jsonText = jsonStart >= 0 ? trimmed.slice(jsonStart + 1) : trimmed.slice(trimmed.indexOf("["));
+  return JSON.parse(jsonText) as NpmPackJsonEntry[];
+}
+
 describe("npm package contents", () => {
   it("includes openapi.yaml in npm pack output", () => {
     const result = spawnSync("npm", ["pack", "--json", "--dry-run"], {
@@ -17,7 +24,7 @@ describe("npm package contents", () => {
     const output = result.stdout.trim();
     expect(output.length).toBeGreaterThan(0);
 
-    const parsed = JSON.parse(output) as NpmPackJsonEntry[];
+    const parsed = parseNpmPackJsonOutput(output);
     const files = parsed[0]?.files ?? [];
     const filePaths = files.map((file) => file.path).filter(Boolean) as string[];
 

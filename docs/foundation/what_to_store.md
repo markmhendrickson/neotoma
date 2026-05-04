@@ -4,7 +4,23 @@
 
 Neotoma stores any structured fact that benefits from deterministic state evolution, versioning, and provenance. The deciding question is not "is this personal data?" but **"does this fact benefit from being versioned, auditable, and reproducible?"**
 
-If an agent or user would later need to recall a fact, verify when it changed, trace why a decision was made, or reconstruct state at a point in time — it belongs in Neotoma.
+If an agent or user would later need to recall a fact, verify when it changed, trace why a decision was made, or reconstruct state at a point in time: it belongs in Neotoma.
+
+## Agents store for you
+
+You do not need to decide what to store or call any APIs yourself. When Neotoma is connected to an agent through Cursor, Claude, ChatGPT, or any MCP-compatible client, the agent proactively extracts and stores entities from every conversation turn: people mentioned, tasks committed to, decisions made, and facts stated.
+
+The agent follows store recipes that define how to persist conversations, extract entities from attachments, link related records, and preserve provenance without manual intervention. It applies the decision heuristic below on your behalf: if a fact has recall, audit, or relationship value, the agent stores it automatically.
+
+You can always store data manually via the CLI, REST API, or MCP tools, correct what was stored, or tell your agent to stop storing specific categories. The default is proactive storage with human oversight, not the other way around.
+
+## Any entity type, any shape
+
+Neotoma does not require you to define a schema before storing data. Store any entity with a descriptive `entity_type` and whatever fields the data implies. The schema registry infers and evolves schemas automatically as new fields appear.
+
+Common types like `contact`, `task`, `transaction`, and `event` ship with sensible defaults, but you can create any type by storing an entity with a new `entity_type`. Fields added later trigger additive schema evolution: minor version bumps that never break existing data.
+
+Unknown fields are preserved in a `raw_fragments` layer so nothing is silently dropped. As schemas mature, those fragments are promoted into the validated schema automatically.
 
 ## What to store
 

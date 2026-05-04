@@ -5,6 +5,13 @@ import { spawnSync } from "node:child_process";
 
 const ROOT = join(import.meta.dirname, "..", "..");
 
+function parseNpmPackJsonOutput(output: string): Array<{ files?: Array<{ path?: string }> }> {
+  const trimmed = output.trim();
+  const jsonStart = trimmed.lastIndexOf("\n[");
+  const jsonText = jsonStart >= 0 ? trimmed.slice(jsonStart + 1) : trimmed.slice(trimmed.indexOf("["));
+  return JSON.parse(jsonText) as Array<{ files?: Array<{ path?: string }> }>;
+}
+
 describe("OpenClaw plugin packaging", () => {
   describe("openclaw.plugin.json manifest", () => {
     const manifestPath = join(ROOT, "openclaw.plugin.json");
@@ -164,9 +171,7 @@ describe("OpenClaw plugin packaging", () => {
 
       expect(result.status, result.stderr || result.stdout).toBe(0);
 
-      const parsed = JSON.parse(result.stdout.trim()) as Array<{
-        files?: Array<{ path?: string }>;
-      }>;
+      const parsed = parseNpmPackJsonOutput(result.stdout);
       const filePaths = (parsed[0]?.files ?? [])
         .map((f) => f.path)
         .filter(Boolean) as string[];

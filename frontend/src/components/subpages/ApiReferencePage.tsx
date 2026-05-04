@@ -40,6 +40,39 @@ export function ApiReferencePage() {
         snapshots with provenance, and manage typed relationships explicitly.
       </p>
 
+      <h2 className="text-[18px] font-medium tracking-[-0.01em] mt-8 mb-3">Getting started</h2>
+      <p className="text-[15px] leading-7 mb-4">
+        The API server is managed through the{" "}
+        <Link to="/cli" className="text-foreground underline underline-offset-2 hover:no-underline">
+          Neotoma CLI
+        </Link>
+        . After{" "}
+        <Link to="/install" className="text-foreground underline underline-offset-2 hover:no-underline">
+          installing Neotoma
+        </Link>
+        , start the API server:
+      </p>
+      <pre className="rounded-lg border code-block-palette p-4 overflow-x-auto font-mono text-[14px] whitespace-pre-wrap break-words mb-4">{`# Start the development API server (port 3080)
+neotoma api start --env dev
+
+# Start the production API server (port 3180)
+neotoma api start --env prod
+
+# Check server status
+neotoma api status
+
+# View server logs
+neotoma api logs --env dev`}</pre>
+      <p className="text-[15px] leading-7 mb-4">
+        Once the server is running, you can reach it at the base URLs below.
+        The CLI also exposes every API operation directly. Run{" "}
+        <code>neotoma --help</code> to see available commands, or see the{" "}
+        <Link to="/cli" className="text-foreground underline underline-offset-2 hover:no-underline">
+          CLI reference
+        </Link>{" "}
+        for the full command list.
+      </p>
+
       <h2 className="text-[18px] font-medium tracking-[-0.01em] mt-8 mb-3">Base URL</h2>
       <ul className="list-none pl-0 space-y-2 mb-6">
         <li className="text-[15px] leading-7 text-muted-foreground">
