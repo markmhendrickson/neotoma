@@ -10,6 +10,8 @@ import { PermissionsPreflight } from "../PermissionsPreflight";
 import { Card, CardContent } from "../ui/card";
 import { CodexIcon } from "../icons/CodexIcon";
 import { CursorIcon } from "../icons/CursorIcon";
+import { IronClawIcon } from "../icons/IronClawIcon";
+import { OpenCodeIcon } from "../icons/OpenCodeIcon";
 import { OpenClawIcon } from "../icons/OpenClawIcon";
 
 const INTEGRATIONS = [
@@ -38,6 +40,12 @@ const INTEGRATIONS = [
     Icon: CodexIcon,
   },
   {
+    label: "OpenCode",
+    href: "/neotoma-with-opencode",
+    desc: "Lifecycle hooks and MCP memory for OpenCode",
+    Icon: OpenCodeIcon,
+  },
+  {
     label: "Cursor",
     href: "/neotoma-with-cursor",
     desc: "Persistent memory alongside Cursor context",
@@ -48,6 +56,12 @@ const INTEGRATIONS = [
     href: "/neotoma-with-openclaw",
     desc: "User-owned memory for OpenClaw agents",
     Icon: OpenClawIcon,
+  },
+  {
+    label: "IronClaw",
+    href: "/neotoma-with-ironclaw",
+    desc: "Structured MCP memory for IronClaw agents",
+    Icon: IronClawIcon,
   },
 ] as const;
 
@@ -354,7 +368,7 @@ export function InstallPage() {
           to="/connect"
           className="text-foreground underline underline-offset-2 hover:no-underline"
         >
-          Connect a remote Neotoma
+          Connect remotely
         </Link>{" "}
         or try the{" "}
         <Link

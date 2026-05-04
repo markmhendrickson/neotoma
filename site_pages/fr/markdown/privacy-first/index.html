@@ -38,10 +38,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
     <title>Privacy-First Memory (Markdown) | Neotoma</title>
-    <script type="module" crossorigin="" src="/assets/main-CaoWcp2k.js"></script>
-    <link rel="stylesheet" crossorigin="" href="/assets/main-BBds_bdF.css">
+    <script type="module" crossorigin="" src="/assets/main-aNEaYUJL.js"></script>
+    <link rel="stylesheet" crossorigin="" href="/assets/main-a7BqVBLd.css">
   
-    <!-- build: local-1777360387837 -->
+    <!-- build: local-1777885129871 -->
       <link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/privacy-first">
     <link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/privacy-first">
     <link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/privacy-first">
@@ -61,7 +61,7 @@
     <div id="root"><iframe title="Markdown capture" aria-hidden="true" width="1280" height="900" class="pointer-events-none fixed left-[-9999px] top-0 z-[-1] border-0 opacity-0" sandbox="allow-same-origin allow-scripts allow-forms"></iframe><div class="min-h-screen bg-background text-foreground"><pre class="whitespace-pre-wrap break-words p-4 font-mono text-[13px] leading-relaxed text-foreground">&lt;!--
   Full-page Markdown export (rendered HTML → GFM).
   Source: https://neotoma.io/fr/privacy-first
-  Generated: 2026-04-28T07:17:26.845Z
+  Generated: 2026-05-04T09:03:20.336Z
 --&gt;
 # Foundations
 
@@ -81,7 +81,7 @@ Storage is user-controlled at every level. You decide what goes in; nothing is s
 
 Full export and deletion are first-class operations. You can export your entire memory graph at any time, and deletion removes data. It does not mark it inactive or hide it behind a flag. There is no retention period and no "soft delete" that preserves data server-side.
 
-This model means agents can build rich, structured memory without requiring trust in a third-party service. The privacy guarantee is architectural, not policy-based: there is no remote endpoint to breach because the data never leaves your machine.
+This model means agents can build rich, structured memory without requiring trust in a third-party service. The privacy guarantee is architectural, not policy-based: by default, data stays on your machine. When hosted deployment is needed, the operator controls the infrastructure and data location.
 
 See [deterministic memory](/memory-models#deterministic-memory) for the state evolution model and [architecture](/architecture) for the full system design.
 
@@ -93,7 +93,7 @@ Same input always produces the same output. Entity IDs are hash-based, observati
 
 State evolves through a versioned pipeline: sources become observations, observations resolve to entities, entities produce versioned snapshots, and snapshots form the memory graph. Every stage is deterministic and inspectable. You can diff any two versions of an entity or reconstruct its full history from the observation log.
 
-Schema-first extraction enforces structure at the boundary. Extraction rules derive from schema types, not heuristics. Fields are extracted from what is present in the source; nothing is inferred, predicted, or synthesized. Corrections add new observations rather than editing existing ones.
+Schema-first extraction enforces structure at the boundary. Extraction rules derive from schema types, not heuristics. For unstructured files, AI interpretation extracts fields present in the source with full audit trail and idempotence guarantees; it does not synthesize or infer data beyond what the source contains. Corrections add new observations rather than editing existing ones.
 
 This matters because agents that read stale or conflicting state make wrong decisions. With a single agent, write corruption degrades quality gradually. With [multiple agents sharing state](/multi-agent-state), one bad observation propagates at machine speed—triggering downstream actions before any human can intervene. When state evolution is deterministic, every downstream action inherits a known, auditable basis. Debugging becomes reconstruction, not guesswork.
 
@@ -103,7 +103,7 @@ See [memory guarantees](/memory-guarantees) for the full invariant set and [arch
 
 ## Cross-platform
 
-Neotoma provides one memory system across AI tools. Claude, ChatGPT, Cursor, Codex, Claude Code, and OpenClaw all access the same state graph through Model Context Protocol (MCP). Facts stored by one agent are immediately available to every other connected agent: no sync step, no export/import, no duplicate data.
+Neotoma provides one memory system across AI tools. Claude, ChatGPT, Cursor, Codex, OpenCode, Claude Code, OpenClaw, and IronClaw all access the same state graph through Model Context Protocol (MCP). Facts stored by one agent are immediately available to every other connected agent: no sync step, no export/import, no duplicate data.
 
 MCP is the integration layer. Each AI tool connects to Neotoma's MCP server and uses the same store, retrieve, and relationship operations. The CLI and REST API expose the same OpenAPI-backed contract, so humans and apps have identical access. There is one source of truth regardless of the interface.
 
@@ -111,7 +111,7 @@ Neotoma works alongside native memory features (ChatGPT's memory, Claude's proje
 
 No platform lock-in. Your memory graph is a local SQLite database. You own the file, you control what connects to it, and you can export or migrate at any time. Switching AI tools does not mean starting over. The same structured memory is available to the next tool you connect.
 
-See [MCP reference](/mcp) for the full action catalog, [CLI reference](/cli) for terminal commands, and [API reference](/api) for REST endpoints. For per-tool setup guides, see [Cursor](/neotoma-with-cursor), [Claude](/neotoma-with-claude), [Claude Code](/neotoma-with-claude-code), [ChatGPT](/neotoma-with-chatgpt), and [Codex](/neotoma-with-codex).</pre></div><div role="region" aria-label="Notifications (F8)" tabindex="-1" style="pointer-events: none;"><ol tabindex="-1" class="fixed top-0 z-[100] flex w-full flex-col-reverse p-4 sm:bottom-4 sm:right-4 sm:top-auto sm:flex-col sm:max-h-[calc(100vh-1rem)] sm:overflow-y-auto md:max-w-[420px]"></ol></div></div>
+See [MCP reference](/mcp) for the full action catalog, [CLI reference](/cli) for terminal commands, and [API reference](/api) for REST endpoints. For per-tool setup guides, see [Cursor](/neotoma-with-cursor), [Claude](/neotoma-with-claude), [Claude Code](/neotoma-with-claude-code), [ChatGPT](/neotoma-with-chatgpt), [Codex](/neotoma-with-codex), and [OpenCode](/neotoma-with-opencode).</pre></div><div role="region" aria-label="Notifications (F8)" tabindex="-1" style="pointer-events: none;"><ol tabindex="-1" class="fixed top-0 z-[100] flex w-full flex-col-reverse p-4 sm:bottom-4 sm:right-4 sm:top-auto sm:flex-col sm:max-h-[calc(100vh-1rem)] sm:overflow-y-auto md:max-w-[420px]"></ol></div></div>
   
 
 

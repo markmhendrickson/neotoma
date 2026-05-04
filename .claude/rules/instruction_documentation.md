@@ -1,9 +1,9 @@
 ---
-description: "Defines how agents MUST document important instructions, constraints, and guidelines in appropriate files"
-alwaysApply: true
+description: "Document important instructions, constraints, and guidelines in appropriate rule/docs files. Load when user says always/never or when creating or updating rules."
+alwaysApply: false
 ---
 
-<!-- Source: foundation/agent_instructions/cursor_rules/instruction_documentation.mdc -->
+<!-- Source: foundation/.cursor/rules/instruction_documentation.mdc -->
 
 # Instruction Documentation Rule
 
@@ -13,7 +13,7 @@ _(Cursor Rule: Agent Behavior)_
 
 ## Purpose
 
-This document defines how agents MUST document important instructions, constraints, and guidelines in appropriate files. It ensures all instructions are available to Cursor agents via the symlinked rule structure, avoiding single points of failure.
+This document defines how agents MUST document important instructions, constraints, and guidelines in appropriate files. Repositories may use **selective rule injection**: only a small allowlisted kernel is installed into `.claude/rules/`; all other instructions are loaded on demand via the rule router (doc paths or Neotoma skills).
 
 ## Scope
 
@@ -22,6 +22,7 @@ This rule covers:
 - Where to place rules (global vs repository-specific)
 - How rules are discovered via symlink structure
 - Format standards for rule files
+- Multi-model format (single-file structure for Claude, GPT-4, Gemini)
 
 This rule does NOT cover:
 - Content of specific rules (covered by individual rule files)
@@ -49,7 +50,7 @@ cursor_rules:
       - "docs/developer/"              # Development workflow rules
 ```
 
-**Note:** All `*_rules.md` files in `docs/` are automatically symlinked to `.claude/rules/` via the setup script. No central reference file is needed. Rules are discoverable via the symlink structure.
+**Selective rule injection (when `cursor_rules_manifest.json` exists):** Only rules listed in the manifest are installed into `.claude/rules/`. All other rules remain as docs or Neotoma skills and are loaded on demand when the task matches a trigger in the **rule router** (see repo `docs/cursor_rules/rule_router_rules.mdc`). If no manifest exists, setup scripts install all foundation and repo rules (backward compatible).
 
 ## Trigger Patterns
 
@@ -108,7 +109,7 @@ Rules are classified by scope and topic:
   - Workflow/process instructions → `docs/feature_units/standards/` or `docs/developer/`
   - Architectural constraints → `docs/foundation/` or `docs/architecture/`
   - Code conventions → `docs/conventions/`
-- MUST NOT use `.claude/rules/` directly (rules are symlinked automatically)
+- MUST NOT use `.claude/rules/` directly (rules are installed from manifest or full install; edit source and run setup)
 
 ## Documenting Instructions
 
@@ -165,6 +166,7 @@ When [conditions], agents MUST [action].
 
 - MUST / MUST NOT statements (per RFC 2119)
 - ALWAYS / NEVER statements
+- Emphasize MUST NOT and "No X" where the goal is to define boundaries (e.g., no partial implementations, no marking complete without a required check).
 ```
 
 **Language requirements:**
@@ -173,6 +175,40 @@ When [conditions], agents MUST [action].
 - MUST NOT use vague qualifiers: "maybe", "perhaps", "possibly"
 - MUST NOT use marketing language: "powerful", "seamless", "revolutionary"
 - Use simple, declarative sentences with active voice
+
+**Constraints over instructions:**
+- Prefer stating boundaries (MUST NOT / no X) over reminders ("remember to X").
+- Models generally do good things by default; constraints define their boundaries.
+- Example: "No TODOs, no partial implementations" is more effective than "remember to finish implementations."
+
+## Multi-Model Format (SHOULD use for new and revised rules)
+
+Structure rules so they work well across leading LLMs (Claude, GPT-4, Gemini) in a **single file**. Do NOT duplicate rules per model.
+
+**1. XML tags (Claude-optimized)**  
+Use once near the top and for key sections:
+- `<context>` — One short paragraph: what this rule does and why it exists
+- `<requirements>` — Wrap trigger patterns or “what must be true” lists
+- `<constraints>` — Wrap MUST/MUST NOT lists
+
+**2. Numbered step breakdowns (GPT-4-optimized)**  
+For workflows and procedures:
+- Use “Step N.M” sub-steps (e.g. Step 1.1, 1.2, 2.1)
+- One numbered action per line inside each step
+- Keep the same content; add structure, do not remove detail
+
+**3. Quick Reference section (Gemini-optimized)**  
+For rules with workflows or many constraints, add at the end:
+- **Domain:** Topic area (e.g. “Development Workflow”)
+- **Sequence:** Short flow (e.g. “Detect → Validate → Confirm → Execute”)
+- **Required:** Inputs and context (files, config, IDs)
+- **Outputs:** What the rule produces or updates
+- **Constraints:** Condensed MUST/MUST NOT list
+
+**Principles:**
+- One source of truth: one rule file, no per-model copies
+- Additive: keep existing sections; add XML, step numbers, and Quick Reference where they help
+- Optional: base format is required; multi-model elements are recommended for new and revised rules
 
 ## Workflow
 
@@ -220,11 +256,9 @@ Agents MUST NOT:
 
 ## Availability
 
-Cursor agents automatically have access to all rules via symlink structure:
-
-1. **Global rules**: `foundation/agent_instructions/cursor_rules/` files are symlinked to `.claude/rules/` with `foundation_` prefix
-2. **Repository rules**: All `*_rules.md` files in `docs/` subdirectories are automatically symlinked to `.claude/rules/` via setup script
-3. **No central reference file needed**: Rules are discoverable directly via symlink structure
+- **When `cursor_rules_manifest.json` is present:** Only the allowlisted rules (manifest `always_on.foundation_rules` and `always_on.repo_rules`) are installed into `.claude/rules/`. All other instructions are **on-demand**: load via the rule router when the task matches a trigger (router maps to doc paths or Neotoma skill fetch).
+- **When no manifest:** Setup scripts install all foundation rules and all `docs/**/*_rules.*` into `.claude/rules/` (copy or symlink per script).
+- **Never edit `.claude/rules/` directly:** Edit source files in `foundation/agent_instructions/cursor_rules/` or `docs/`; run setup to sync.
 
 ---
 
@@ -249,7 +283,7 @@ Load this document when:
 3. Rules MUST follow the format structure defined in Format Standards section
 4. Repository rules MUST be placed in appropriate `docs/` subdirectory based on topic
 5. Global rules MUST be placed in `foundation/agent_instructions/cursor_rules/`
-6. Agents MUST NOT use `.claude/rules/` directly (rules are symlinked automatically)
+6. Agents MUST NOT use `.claude/rules/` directly (rules are installed from manifest or setup script; edit source and run setup)
 7. Agents MUST NOT defer documentation to future conversations
 
 ### Forbidden Patterns
@@ -268,3 +302,4 @@ Load this document when:
 - [ ] Rule file uses `*_rules.md` naming convention
 - [ ] No references to non-existent central reference files
 - [ ] Instructions documented immediately during same conversation
+- [ ] (Optional) New or revised rules use multi-model format: `<context>`/`<requirements>`/`<constraints>`, numbered sub-steps, Quick Reference for workflows

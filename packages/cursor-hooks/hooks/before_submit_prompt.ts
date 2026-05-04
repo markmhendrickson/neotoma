@@ -8,11 +8,11 @@
  * What we still do here (the parts Cursor honors or that are useful as a
  * passive floor regardless):
  *
- *   1. Persist the user message as a `conversation_message` so the turn is
- *      recorded even if the agent forgets the user-phase store. This is
- *      idempotent with the agent's own MCP write via the shared
- *      idempotency key.
- *   2. Track the user message + entity id + extracted-identifier list in
+ *   1. Persist the conversation + user `conversation_message` so the turn is
+ *      recorded with bounded workspace context even if the agent forgets the
+ *      user-phase store. This is idempotent with the agent's own MCP write
+ *      via the shared idempotency key.
+ *   2. Track the conversation/user entity ids + extracted-identifier list in
  *      per-turn state so `stop.ts` can decide whether to backfill.
  *   3. Bump the failure-hint counter so the next `postToolUse`
  *      `additional_context` injection (the real surface Cursor honors) can
@@ -23,6 +23,8 @@
  */
 
 import {
+  collectHookWorkspaceContext,
+  conversationContextFields,
   getClient,
   harnessProvenance,
   isExpectedNetworkError,
@@ -30,6 +32,7 @@ import {
   makeIdempotencyKey,
   recordConversationTurn,
   runHook,
+  turnContextFields,
   updateTurnState,
 } from "./_common.js";
 
@@ -46,11 +49,11 @@ function extractIdentifiers(prompt: string): string[] {
   return [...found];
 }
 
-function extractEntityId(result: unknown): string | undefined {
+function extractEntityId(result: unknown, index = 0): string | undefined {
   if (!result || typeof result !== "object") return undefined;
   const r = result as { structured?: { entities?: Array<{ entity_id?: string }> } };
-  const first = r.structured?.entities?.[0];
-  if (first && typeof first.entity_id === "string") return first.entity_id;
+  const entity = r.structured?.entities?.[index];
+  if (entity && typeof entity.entity_id === "string") return entity.entity_id;
   return undefined;
 }
 
@@ -71,6 +74,7 @@ async function handle(
     (input.generation_id as string) ??
     String(Date.now());
   const model = (input.model as string) ?? "";
+  const context = collectHookWorkspaceContext(input);
 
   const identifiers = extractIdentifiers(prompt);
 
@@ -85,10 +89,19 @@ async function handle(
     return {};
   }
 
+  let conversationEntityId: string | undefined;
   let userEntityId: string | undefined;
   try {
     const result = await client.store({
       entities: [
+        {
+          entity_type: "conversation",
+          conversation_id: sessionId,
+          title: `Cursor session ${context.repositoryName ?? sessionId}`,
+          thread_kind: "human_agent",
+          ...harnessProvenance({ hook_event: "beforeSubmitPrompt" }),
+          ...conversationContextFields(context),
+        },
         {
           entity_type: "conversation_message",
           role: "user",
@@ -98,9 +111,17 @@ async function handle(
           ...harnessProvenance({ hook_event: "beforeSubmitPrompt" }),
         },
       ],
+      relationships: [
+        {
+          relationship_type: "PART_OF",
+          source_index: 1,
+          target_index: 0,
+        },
+      ],
       idempotency_key: makeIdempotencyKey(sessionId, turnId, "user"),
     });
-    userEntityId = extractEntityId(result);
+    conversationEntityId = extractEntityId(result, 0);
+    userEntityId = extractEntityId(result, 1);
   } catch (err) {
     const level = isExpectedNetworkError(err) ? "debug" : "warn";
     log(level, `beforeSubmitPrompt store failed: ${(err as Error).message}`);
@@ -113,6 +134,7 @@ async function handle(
     model: model || s.model,
     user_message_stored: s.user_message_stored || Boolean(userEntityId),
     user_message_entity_id: userEntityId ?? s.user_message_entity_id,
+    conversation_entity_id: conversationEntityId ?? s.conversation_entity_id,
   }));
 
   // Best-effort: warm up @-identifier retrievals into the in-process Neotoma
@@ -154,11 +176,12 @@ async function handle(
     hookEvent: "before_submit_prompt",
     harness: "cursor",
     model: model || undefined,
-    conversationEntityId: sessionId,
+    conversationEntityId: conversationEntityId ?? sessionId,
     storedEntityIds: userEntityId ? [userEntityId] : undefined,
     retrievedEntityIds:
       retrievedEntityIds.length > 0 ? retrievedEntityIds : undefined,
     startedAt: new Date().toISOString(),
+    ...turnContextFields(context),
   });
 
   return {};

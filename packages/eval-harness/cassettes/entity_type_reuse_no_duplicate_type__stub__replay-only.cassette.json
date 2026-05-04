@@ -1,0 +1,49 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "entity_type_reuse_no_duplicate_type",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-04-29T09:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "I met a new person named Beth Clark at the conference\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. Before choosing an entity_type, check if a semantically equivalent type already exists (e.g. if \"contact\" exists, use it instead of creating \"person\"). Persist conversation, user message, and extracted entities via store_structured with appropriate relationships.\n",
+  "tool_calls": [
+    {
+      "name": "store_structured",
+      "input": {
+        "idempotency_key": "conv-type-reuse-001",
+        "entities": [
+          {
+            "entity_type": "conversation",
+            "conversation_id": "conv-type-reuse-001"
+          },
+          {
+            "entity_type": "conversation_message",
+            "turn_key": "conv-type-reuse-001:1",
+            "role": "user",
+            "sender_kind": "user",
+            "content": "I met a new person named Beth Clark at the conference"
+          },
+          {
+            "entity_type": "contact",
+            "name": "Beth Clark",
+            "context": "Met at conference"
+          }
+        ],
+        "relationships": [
+          { "relationship_type": "PART_OF", "source_index": 1, "target_index": 0 },
+          { "relationship_type": "REFERS_TO", "source_index": 1, "target_index": 2 }
+        ]
+      },
+      "output": {
+        "type": "text",
+        "text": "{\"source_id\":\"stub-src-reuse-1\",\"entities\":[{\"observation_index\":0,\"entity_id\":\"ent_stub_ru01\",\"entity_type\":\"conversation\",\"action\":\"created\"},{\"observation_index\":1,\"entity_id\":\"ent_stub_ru02\",\"entity_type\":\"conversation_message\",\"action\":\"created\"},{\"observation_index\":2,\"entity_id\":\"ent_stub_ru03\",\"entity_type\":\"contact\",\"action\":\"created\"}],\"unknown_fields_count\":0,\"related_entities\":[],\"related_relationships\":[]}"
+      },
+      "sequence": 0
+    }
+  ],
+  "assistant_text": "Stored Beth Clark as a contact from the conference."
+}

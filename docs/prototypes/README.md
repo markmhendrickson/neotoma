@@ -7,9 +7,9 @@
 - **[Changelog](./PROTOTYPE_CHANGELOG.md)** — Version history
 - **[Index](./prototype_index.md)** — Complete file inventory
 ## Overview
-Interactive demonstration of the Neotoma MVP covering **all feature units** from:
-- [`docs/specs/MVP_OVERVIEW.md`](../specs/MVP_OVERVIEW.md)
-- [`docs/specs/MVP_FEATURE_UNITS.md`](../specs/MVP_FEATURE_UNITS.md)
+Interactive demonstration of the original Neotoma MVP covering feature units from archived planning artifacts:
+- [`docs/releases/archived/mvp_planning/MVP_OVERVIEW.md`](../releases/archived/mvp_planning/MVP_OVERVIEW.md)
+- [`docs/releases/archived/mvp_planning/MVP_FEATURE_UNITS.md`](../releases/archived/mvp_planning/MVP_FEATURE_UNITS.md)
 ## Running the Prototype
 ```bash
 npm run dev:prototype
@@ -68,7 +68,7 @@ Review complete workflow coverage → Provide feedback
 ### For Users
 Test all user flows → Report UX issues
 ### For Developers
-Use as reference → Build production MVP per [`MVP_EXECUTION_PLAN.md`](../specs/MVP_EXECUTION_PLAN.md)
+Use as historical reference only. Current implementation guidance lives in `README.md`, `docs/architecture/`, and `docs/subsystems/`.
 **Status**: ✅ Complete  
 **Version**: 2.0.0 (Comprehensive MVP Demo)  
 **Created**: December 2, 2024

@@ -1,0 +1,40 @@
+meta:
+  id: store_failure_surfaces_error
+  description: >
+    The isolated server is configured to fail all store_structured calls.
+    The agent must surface the error to the user rather than silently
+    skipping storage. Tests [ERRORS & RECOVERY] error surfacing policy.
+  tags:
+    - tier2
+    - error_recovery
+    - writ:failure_injection
+
+server_faults:
+  target: store_structured
+  fail_first_n: 10
+  status_code: 500
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system. Always
+  persist the conversation via store_structured. If storage fails after
+  retrying, tell the user that storage failed. Do not silently skip.
+
+user_prompt: |
+  Note that our next board meeting is June 15th at 2pm.
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+instruction_profile: auto
+hooks_enabled: true
+
+driver_options:
+  temperature: 0
+  max_tokens: 2048
+
+expected:
+  - type: reply_text.contains
+    pattern: "fail|error|unable|could not"

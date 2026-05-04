@@ -15,25 +15,26 @@
  *      survive small-model regimes that ignore the MCP instructions.
  *
  *   3. Optional auto follow-up: when `NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP` is
- *      enabled (default `auto` — on for small-model regimes, off for
- *      strong models) and the agent skipped writes, return
- *      `followup_message` so Cursor re-prompts the agent for one
- *      compliance pass. We rely on the hook's `loop_limit: 1` to cap
+ *      enabled (default `auto` — on for every model) and the agent skipped
+ *      writes, return `followup_message` so Cursor re-prompts the agent for
+ *      one compliance pass. We rely on the hook's `loop_limit: 1` to cap
  *      this at a single retry per turn.
  */
 
 import {
   buildCompactReminder,
+  collectHookWorkspaceContext,
+  conversationContextFields,
   diagnoseSkippedStore,
   getClient,
   harnessProvenance,
   isExpectedNetworkError,
-  isSmallModel,
   log,
   makeIdempotencyKey,
   readTurnState,
   recordConversationTurn,
   runHook,
+  turnContextFields,
   writeTurnState,
   type SkippedStoreDiagnosis,
 } from "./_common.js";
@@ -46,16 +47,14 @@ function pickEntityId(result: unknown): string | undefined {
   return undefined;
 }
 
-function complianceFollowupEnabled(model: string): boolean {
+function complianceFollowupEnabled(): boolean {
   const raw = (
     process.env.NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP ?? "auto"
   ).toLowerCase();
   if (raw === "off" || raw === "false" || raw === "0") return false;
   if (raw === "on" || raw === "true" || raw === "1") return true;
-  return (
-    isSmallModel(model) ||
-    process.env.NEOTOMA_HOOK_SMALL_MODEL_DETECTED === "1"
-  );
+  if (raw === "auto") return true;
+  return true;
 }
 
 function followupMessage(
@@ -69,17 +68,25 @@ function followupMessage(
     "(3) closing assistant store with the exact reply text.",
     "Reply with a one-line summary noting the entity_ids stored.",
   ].join(" ");
+  let message = base;
   if (
     diagnosis &&
     (diagnosis.confidence === "high" || diagnosis.confidence === "medium") &&
     diagnosis.classification !== "false_positive_or_no_material_content"
   ) {
-    return `${base} Likely cause: ${diagnosis.classification.replace(
+    message = `${base} Likely cause: ${diagnosis.classification.replace(
       /_/g,
       " "
     )} — ${diagnosis.reason}`;
   }
-  return base;
+  if (diagnosis?.proactive_remediation_required) {
+    const repairs =
+      diagnosis.recommended_repairs.length > 0
+        ? ` Recommended repairs: ${diagnosis.recommended_repairs.join(" ")}`
+        : "";
+    message = `${message} Because this is a Neotoma source checkout, do not stop after backfilling the turn; proactively resolve the repo-owned root cause now when safe.${repairs}`;
+  }
+  return message;
 }
 
 async function handle(
@@ -106,6 +113,7 @@ async function handle(
 
   const state = readTurnState(sessionId, turnId);
   const model = (payload.model as string) ?? state.model ?? "";
+  const context = collectHookWorkspaceContext(payload);
 
   const client = getClient();
   if (!client) return {};
@@ -137,6 +145,7 @@ async function handle(
   const skippedStore = state.store_structured_calls === 0;
   const hadFinalText = Boolean(finalText && finalText.trim().length > 0);
   const hadMaterialContent = hadFinalText || state.tool_invocation_count > 0;
+  const externalDataCalls = state.external_data_tool_calls ?? 0;
   let backfilled = false;
   let conversationEntityId = state.conversation_entity_id;
   let diagnosis: SkippedStoreDiagnosis | undefined;
@@ -153,9 +162,11 @@ async function handle(
           entities: [
             {
               entity_type: "conversation",
-              canonical_name: `Cursor session ${sessionId}`,
-              turn_key: `${sessionId}`,
+              conversation_id: sessionId,
+              title: `Cursor session ${context.repositoryName ?? sessionId}`,
+              thread_kind: "human_agent",
               ...harnessProvenance({ hook_event: "stop_backfill" }),
+              ...conversationContextFields(context),
             },
           ],
           idempotency_key: `conversation-${sessionId}-root`,
@@ -223,10 +234,13 @@ async function handle(
         reason: diagnosis.reason,
         signals: diagnosis.signals,
         local_build: diagnosis.local_build,
+        proactive_remediation_required:
+          diagnosis.proactive_remediation_required,
       },
       recommendedRepairs: diagnosis.recommended_repairs,
       diagnosisConfidence: diagnosis.confidence,
       endedAt: new Date().toISOString(),
+      ...turnContextFields(context),
     });
     if (turnRecord) {
       backfilled = true;
@@ -245,6 +259,37 @@ async function handle(
         }
       }
     }
+  } else if (externalDataCalls > 0 && !skippedStore) {
+    const partialMissed: string[] = ["external_tool_entity_extraction"];
+    await recordConversationTurn(client, {
+      sessionId,
+      turnId,
+      hookEvent: "stop",
+      harness: "cursor",
+      model: model || undefined,
+      status: "partial_compliance",
+      missedSteps: partialMissed,
+      toolInvocationCount: state.tool_invocation_count,
+      storeStructuredCalls: state.store_structured_calls,
+      retrieveCalls: state.retrieve_calls,
+      neotomaToolFailures: state.neotoma_tool_failures,
+      harnessLoopCount: loopCount,
+      conversationEntityId: conversationEntityId ?? sessionId,
+      safetyNetUsed: false,
+      reminderInjected: state.reminder_injected === true,
+      instructionDiagnostics: {
+        classification: "external_tool_data_not_persisted",
+        reason: `${externalDataCalls} external data-bearing tool call(s) observed but no non-bookkeeping entities were stored from their output.`,
+        signals: {
+          external_data_tool_calls: externalDataCalls,
+          store_structured_calls: state.store_structured_calls,
+          tool_invocation_count: state.tool_invocation_count,
+          model: state.model || null,
+        },
+      },
+      endedAt: new Date().toISOString(),
+      ...turnContextFields(context),
+    });
   } else {
     await recordConversationTurn(client, {
       sessionId,
@@ -262,6 +307,7 @@ async function handle(
       safetyNetUsed: false,
       reminderInjected: state.reminder_injected === true,
       endedAt: new Date().toISOString(),
+      ...turnContextFields(context),
     });
   }
 
@@ -286,7 +332,7 @@ async function handle(
     hadMaterialContent &&
     loopCount === 0 &&
     status === "completed" &&
-    complianceFollowupEnabled(model);
+    complianceFollowupEnabled();
   if (!followupAllowed) {
     return backfilled ? {} : {};
   }

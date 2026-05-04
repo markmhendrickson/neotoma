@@ -1,0 +1,41 @@
+meta:
+  id: schema_agnostic_novel_entity
+  description: >
+    User mentions a novel entity type (pet). Agent must store it with a
+    descriptive entity_type without pre-looking up schemas.
+  tags:
+    - tier2
+    - schema
+    - writ:entity
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system. Store
+  any entity the user mentions using a descriptive entity_type and
+  whatever properties the message implies. Do not call list_entity_types
+  or schemas before storing. Link the message to the conversation via
+  PART_OF and to extracted entities via REFERS_TO. Then reply briefly.
+
+user_prompt: |
+  I just adopted a golden retriever named Max. He's 3 years old.
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+instruction_profile: auto
+hooks_enabled: true
+
+driver_options:
+  temperature: 0
+  max_tokens: 2048
+
+expected:
+  - type: store_structured.calls
+    op: gte
+    value: 1
+  - type: entity.exists
+    entity_type_any_of: [pet, animal, dog]
+  - type: relationship.exists
+    relationship_type: PART_OF

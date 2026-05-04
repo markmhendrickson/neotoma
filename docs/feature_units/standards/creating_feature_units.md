@@ -19,7 +19,6 @@ Before creating a Feature Unit, verify:
 1. **Check if spec exists:**
    - Look for `docs/feature_units/completed/FU-XXX/FU-XXX_spec.md`
    - Look for `docs/feature_units/in_progress/FU-XXX/FU-XXX_spec.md`
-   - Look for `docs/specs/MVP_FEATURE_UNITS.md` (for MVP FUs)
 2. **If spec exists:**
    - Load existing spec
    - Validate completeness using template checklist
@@ -76,15 +75,12 @@ Before creating a Feature Unit, verify:
 4. **Dependency Validation (CRITICAL):**
    - Extract all `feature_id`s from `dependencies.requires` in manifest
    - For each dependency, check:
-     - If listed in `docs/specs/MVP_FEATURE_UNITS.md`: check status (✅ Complete | 🔨 Partial | ⏳ Not Started)
-     - If status is **⏳ Not Started**: **REJECT creation** with error:
+    - If dependency spec exists in `docs/feature_units/completed/FU-YYY/`: check `status` field — must be `completed`
+    - If dependency spec exists in `docs/feature_units/in_progress/FU-YYY/`: **REJECT creation** with error:
        ```
        ERROR: Cannot create FU-XXX. Required dependency FU-YYY is not yet implemented.
        Please implement FU-YYY first, or remove the dependency if not actually required.
        ```
-     - If status is **🔨 Partial**: **WARN** but allow (user must confirm)
-     - If status is **✅ Complete**: proceed
-     - If dependency spec exists in `docs/feature_units/completed/FU-YYY/`: check `status` field — must be `completed`
      - If dependency not found: **REJECT** with same error
 5. **Create file structure:**
    ```
@@ -235,7 +231,7 @@ Before creating a Feature Unit, verify:
      mv docs/feature_units/in_progress/FU-XXX docs/feature_units/completed/FU-XXX
      ```
    - Update manifest `status: "completed"`
-   - Update `docs/specs/MVP_FEATURE_UNITS.md` (if MVP FU) with ✅ Complete status
+   - Update release status or tracking docs that reference the FU
    - Merge PR (or wait for merge, then complete)
 ## File Locations
 ### In Progress Feature Units
@@ -274,32 +270,24 @@ function validateDependencies(
   const warnings: string[] = [];
   for (const dep of dependencies) {
     const depId = dep.feature_id;
-    // Check MVP_FEATURE_UNITS.md
-    const mvpStatus = checkMVPStatus(depId);
-    if (mvpStatus === "not_started") {
+    const completedSpec = findCompletedFeatureSpec(depId);
+    const inProgressSpec = findInProgressFeatureSpec(depId);
+    if (inProgressSpec) {
       errors.push(
-        `Dependency FU-${depId} is not yet implemented (status: ⏳ Not Started)`
+        `Dependency FU-${depId} is still in progress`
       );
       continue;
     }
-    if (mvpStatus === "partial") {
-      warnings.push(
-        `Dependency FU-${depId} is partially complete (status: 🔨 Partial)`
-      );
-    }
-    // Check completed feature units
-    const completedSpec = findCompletedSpec(depId);
-    if (completedSpec) {
-      const status = completedSpec.manifest.status;
-      if (status !== "completed") {
-        errors.push(
-          `Dependency FU-${depId} exists but status is "${status}", not "completed"`
-        );
-      }
-    } else if (mvpStatus === null) {
-      // Not in MVP and not completed
+    if (!completedSpec) {
       errors.push(
-        `Dependency FU-${depId} not found in MVP plan or completed features`
+        `Dependency FU-${depId} not found in completed feature units`
+      );
+      continue;
+    }
+    const status = completedSpec.manifest.status;
+    if (status !== "completed") {
+      errors.push(
+        `Dependency FU-${depId} exists but status is "${status}", not "completed"`
       );
     }
   }
@@ -331,7 +319,7 @@ Load when:
 - `docs/feature_units/standards/feature_unit_spec.md` — Spec template
 - `docs/feature_units/standards/manifest_template.yaml` — Manifest template
 - `docs/feature_units/standards/execution_instructions.md` — Implementation flow
-- `docs/specs/MVP_FEATURE_UNITS.md` — For dependency checking
+- `docs/feature_units/completed/` and `docs/feature_units/in_progress/` — For dependency checking
 - `docs/developer/development_workflow.md` — For git/PR process
 ### Constraints Agents Must Enforce
 1. **NEVER create Feature Unit without complete spec**

@@ -20,7 +20,7 @@ This document covers:
 This document does NOT cover:
 - Tier prioritization (see primary_icp.md)
 - GTM strategy (see primary_icp.md)
-- Product roadmap (see MVP_OVERVIEW.md)
+- Product roadmap (see `docs/private/strategy/product_roadmap.md`)
 
 ## Total Addressable Market Summary
 
@@ -2538,7 +2538,7 @@ Load when:
 ### Required Co-Loaded Documents
 - `docs/icp/primary_icp.md` (for primary ICP and tier prioritization)
 - `docs/NEOTOMA_MANIFEST.md` (for foundational context)
-- `docs/specs/MVP_OVERVIEW.md` (for MVP scope)
+- `README.md` and `docs/foundation/product_positioning.md` (for current developer-review scope and positioning)
 ### Constraints Agents Must Enforce
 1. Developer release features MUST serve Tier 1 ICPs (AI Infrastructure Engineers, Agent System Builders, AI-native Operators)
 2. Tier 2 features (Toolchain Integrators) require API stability milestones

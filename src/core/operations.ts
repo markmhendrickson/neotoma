@@ -40,6 +40,7 @@ export interface StoreRelationshipInput {
   target_index?: number;
   source_entity_id?: string;
   target_entity_id?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface StoreInput {
@@ -90,6 +91,13 @@ export interface CreateRelationshipInput {
   relationship_type: string;
   source_entity_id: string;
   target_entity_id: string;
+  source_id?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface CreateRelationshipsInput {
+  relationships: CreateRelationshipInput[];
+  source_id?: string;
 }
 
 export interface Operations {
@@ -131,6 +139,9 @@ export interface Operations {
 
   /** Create a relationship between two existing entities. */
   createRelationship(input: CreateRelationshipInput): Promise<unknown>;
+
+  /** Create multiple relationships between existing entities. */
+  createRelationships(input: CreateRelationshipsInput): Promise<unknown>;
 
   /** Correct an observation (creates a new observation that supersedes the prior). */
   correct(input: { entity_id: string; corrections: Record<string, unknown> }): Promise<unknown>;
@@ -209,6 +220,9 @@ export function createOperations(options: CreateOperationsOptions): Operations {
     },
     async createRelationship(input) {
       return call("create_relationship", input);
+    },
+    async createRelationships(input) {
+      return call("create_relationships", input);
     },
     async correct(input) {
       return call("correct", input);

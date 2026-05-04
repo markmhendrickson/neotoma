@@ -190,9 +190,13 @@ curl http://localhost:3080/health`}</pre>
         <Link to="/schema-management" className="text-foreground underline underline-offset-2 hover:no-underline">
           schema management
         </Link>
-        , and{" "}
+        ,{" "}
         <Link to="/architecture" className="text-foreground underline underline-offset-2 hover:no-underline">
           architecture
+        </Link>
+        , and{" "}
+        <Link to="/tunnel" className="text-foreground underline underline-offset-2 hover:no-underline">
+          expose tunnel
         </Link>
         .
       </p>

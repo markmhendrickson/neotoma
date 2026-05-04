@@ -1,0 +1,60 @@
+meta:
+  id: bounded_retrieval_for_known_entity
+  description: >
+    A contact entity is pre-seeded in the DB. When the user asks about that
+    person, the agent must retrieve and reuse the existing entity rather
+    than creating a duplicate. Tests [RETRIEVAL] bounded retrieval and
+    pre-check dedup.
+  tags:
+    - tier2
+    - retrieval
+    - dedup
+    - writ:abstention
+    - writ:entity
+
+seed_strategy: hybrid_amplified
+source_pattern: "Real conversation referenced a known contact; agent created a duplicate instead of reusing the existing entity."
+privacy_transform: "Name and details replaced with synthetic equivalents."
+
+seed_entities:
+  - entity_type: contact
+    name: Alice Chen
+    email: alice.chen@example.com
+    company: Meridian Labs
+    role: Director of Engineering
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system. Before
+  storing entities, always check if they already exist via bounded
+  retrieval to avoid duplicates. Persist the conversation and user message
+  via store_structured with PART_OF relationships. If an entity already
+  exists, reference it via REFERS_TO without creating a duplicate.
+
+user_prompt: |
+  Tell me about Alice Chen
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+instruction_profile: auto
+hooks_enabled: true
+
+driver_options:
+  temperature: 0
+  max_tokens: 2048
+
+expected:
+  - type: store_structured.calls
+    op: gte
+    value: 1
+  - type: entity.exists
+    entity_type: contact
+  - type: entity.count
+    entity_type: contact
+    op: eq
+    value: 1
+  - type: relationship.exists
+    relationship_type: PART_OF

@@ -22,7 +22,16 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import { NeotomaClient, recordConversationTurn, type StoreEntityInput } from "@neotoma/client";
+import {
+  NeotomaClient,
+  recordConversationTurn,
+  type CreateRelationshipInput,
+  type ListTimelineEventsInput,
+  type RetrieveEntityByIdentifierInput,
+  type StoreEntityInput,
+  type StoreInput,
+  type StoreResult,
+} from "@neotoma/client";
 
 export interface NeotomaOpenCodeOptions {
   baseUrl?: string;
@@ -30,7 +39,26 @@ export interface NeotomaOpenCodeOptions {
   logLevel?: "debug" | "info" | "warn" | "error" | "silent";
   /** Set to false to skip sending `additionalContext` on user messages. */
   injectContext?: boolean;
+  /** Override cwd in stored provenance; defaults to the OpenCode directory or process cwd. */
+  cwd?: string;
+  /** Test seam or custom transport wrapper. */
+  client?: NeotomaClientLike;
 }
+
+export interface NeotomaOpenCodeContext {
+  project?: unknown;
+  client?: unknown;
+  $?: unknown;
+  directory?: string;
+  worktree?: string;
+}
+
+type NeotomaClientLike = {
+  store(input: StoreInput): Promise<StoreResult>;
+  retrieveEntityByIdentifier(input: RetrieveEntityByIdentifierInput): Promise<unknown>;
+  listTimelineEvents(input: ListTimelineEventsInput): Promise<unknown>;
+  createRelationship(input: CreateRelationshipInput): Promise<unknown>;
+};
 
 const LEVEL_ORDER: Record<string, number> = {
   debug: 0,
@@ -79,18 +107,19 @@ function makeIdempotencyKey(
   turnId: string,
   suffix: string
 ): string {
-  const safeSession = sessionId || `opencode-${Date.now()}`;
-  const safeTurn = turnId || String(Date.now());
+  const safeSession = sessionId || "opencode-unknown";
+  const safeTurn = turnId || "unknown";
   return `conversation-${safeSession}-${safeTurn}-${suffix}`;
 }
 
 function harnessProvenance(
+  cwd: string,
   extra?: Record<string, unknown>
 ): Record<string, unknown> {
   return {
     data_source: "opencode-hook",
     harness: "opencode",
-    cwd: process.cwd(),
+    cwd,
     ...(extra ?? {}),
   };
 }
@@ -494,10 +523,89 @@ function writeTurnState(state: TurnState): void {
 
 function pickEntityId(result: unknown): string | undefined {
   if (!result || typeof result !== "object") return undefined;
-  const r = result as { structured?: { entities?: Array<{ entity_id?: string }> } };
-  const first = r.structured?.entities?.[0];
+  return pickEntityIdAt(result, 0);
+}
+
+function pickEntityIdAt(result: unknown, index: number): string | undefined {
+  if (!result || typeof result !== "object") return undefined;
+  const r = result as {
+    structured?: { entities?: Array<{ entity_id?: string }> };
+    entities?: Array<{ entity_id?: string }>;
+  };
+  const first = (r.structured?.entities ?? r.entities)?.[index];
   if (first && typeof first.entity_id === "string") return first.entity_id;
   return undefined;
+}
+
+function looksLikeOpenCodeContext(value: unknown): value is NeotomaOpenCodeContext {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Record<string, unknown>;
+  return (
+    "project" in record ||
+    "directory" in record ||
+    "worktree" in record ||
+    "$" in record
+  );
+}
+
+function contextOptions(ctx: NeotomaOpenCodeContext): NeotomaOpenCodeOptions {
+  return {
+    cwd: ctx.directory ?? ctx.worktree,
+  };
+}
+
+function readString(record: Record<string, unknown>, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim().length > 0) return value;
+  }
+  return undefined;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
+function extractSession(value: unknown): { id?: string; title?: string } {
+  const record = asRecord(value);
+  const session = asRecord(record.session ?? record.properties);
+  return {
+    id:
+      readString(session, ["id", "session_id", "sessionID"]) ??
+      readString(record, ["session_id", "sessionID"]),
+    title:
+      readString(session, ["title", "name"]) ??
+      readString(record, ["title", "session_title"]),
+  };
+}
+
+function extractMessage(value: unknown): {
+  id?: string;
+  text?: string;
+  content?: string;
+  role?: string;
+} {
+  const record = asRecord(value);
+  const message = asRecord(record.message ?? record.part ?? record.properties);
+  return {
+    id:
+      readString(message, ["id", "message_id", "part_id"]) ??
+      readString(record, ["message_id", "part_id"]),
+    text:
+      readString(message, ["text", "body"]) ??
+      readString(record, ["text", "body"]),
+    content:
+      readString(message, ["content"]) ??
+      readString(record, ["content"]),
+    role:
+      readString(message, ["role", "speaker"]) ??
+      readString(record, ["role", "speaker"]),
+  };
+}
+
+function extractTurnId(value: unknown): string | undefined {
+  const record = asRecord(value);
+  return readString(record, ["turnId", "turn_id", "generation_id", "message_id"]);
 }
 
 /**
@@ -506,7 +614,7 @@ function pickEntityId(result: unknown): string | undefined {
  * ```ts
  * // ~/.config/opencode/plugins/neotoma.ts
  * import neotoma from "@neotoma/opencode-plugin";
- * export default neotoma();
+ * export const Neotoma = neotoma();
  * ```
  */
 export function neotomaPlugin(options: NeotomaOpenCodeOptions = {}) {
@@ -519,29 +627,63 @@ export function neotomaPlugin(options: NeotomaOpenCodeOptions = {}) {
     "warn";
   const injectContext = options.injectContext ?? true;
   const log = makeLogger(logLevel ?? "warn");
+  const cwd = options.cwd ?? process.cwd();
 
-  const client = new NeotomaClient({ transport: "http", baseUrl, token });
+  const client =
+    options.client ?? new NeotomaClient({ transport: "http", baseUrl, token });
 
-  return {
+  const hooks = {
     name: "neotoma",
+
+    async event(input: { event?: Record<string, unknown> }) {
+      const event = asRecord(input.event ?? input);
+      const type = readString(event, ["type"]);
+      if (type === "session.created" || type === "session.updated") {
+        await hooks["session.started"]({ session: extractSession(event) });
+      } else if (type === "session.compacted") {
+        await hooks["chat.compacted"]({
+          session: extractSession(event),
+          trigger: "event",
+        });
+      } else if (type === "message.updated") {
+        const message = extractMessage(event);
+        const session = extractSession(event);
+        if (message.role === "user") {
+          await hooks["message.user"]({ session, message });
+        } else if (message.role === "assistant") {
+          await hooks["message.assistant"]({ session, message });
+        }
+      }
+    },
 
     async "session.started"(event: {
       session?: { id?: string; title?: string };
     }) {
-      const sessionId = event.session?.id ?? `opencode-${Date.now()}`;
+      const sessionId = event.session?.id ?? "opencode-unknown";
       try {
-        await client.store({
+        const result = await client.store({
           entities: [
             {
               entity_type: "conversation",
+              conversation_id: sessionId,
               title: event.session?.title ?? "OpenCode session",
               session_id: sessionId,
               started_at: new Date().toISOString(),
-              ...harnessProvenance({ hook_event: "session.started" }),
+              ...harnessProvenance(cwd, { hook_event: "session.started" }),
             },
           ],
           idempotency_key: makeIdempotencyKey(sessionId, "session", "start"),
         });
+        const conversationEntityId = pickEntityId(result);
+        if (conversationEntityId) {
+          const state = readTurnState(sessionId, "session");
+          writeTurnState({
+            ...state,
+            conversation_id: sessionId,
+            generation_id: "session",
+            conversation_entity_id: conversationEntityId,
+          });
+        }
       } catch (err) {
         log("warn", `session.started store failed: ${(err as Error).message}`);
       }
@@ -553,26 +695,42 @@ export function neotomaPlugin(options: NeotomaOpenCodeOptions = {}) {
       model?: string;
     }) {
       const sessionId = event.session?.id ?? "opencode-unknown";
-      const turnId = event.message?.id ?? String(Date.now());
+      const turnId = event.message?.id ?? "unknown";
       const prompt = event.message?.text ?? event.message?.content ?? "";
       const model = event.model ?? "";
 
       let userEntityId: string | undefined;
+      let conversationEntityId: string | undefined;
       try {
         const result = await client.store({
           entities: [
+            {
+              entity_type: "conversation",
+              conversation_id: sessionId,
+              title: "OpenCode session",
+              session_id: sessionId,
+              ...harnessProvenance(cwd, { hook_event: "message.user" }),
+            },
             {
               entity_type: "conversation_message",
               role: "user",
               sender_kind: "user",
               content: prompt,
               turn_key: `${sessionId}:${turnId}`,
-              ...harnessProvenance({ hook_event: "message.user" }),
+              ...harnessProvenance(cwd, { hook_event: "message.user" }),
+            },
+          ],
+          relationships: [
+            {
+              relationship_type: "PART_OF",
+              source_index: 1,
+              target_index: 0,
             },
           ],
           idempotency_key: makeIdempotencyKey(sessionId, turnId, "user"),
         });
-        userEntityId = pickEntityId(result);
+        conversationEntityId = pickEntityIdAt(result, 0);
+        userEntityId = pickEntityIdAt(result, 1);
       } catch (err) {
         log("warn", `message.user store failed: ${(err as Error).message}`);
       }
@@ -583,6 +741,7 @@ export function neotomaPlugin(options: NeotomaOpenCodeOptions = {}) {
         generation_id: turnId,
         model,
         user_message_entity_id: userEntityId,
+        conversation_entity_id: conversationEntityId,
       });
 
       recordConversationTurn(client, {
@@ -591,7 +750,8 @@ export function neotomaPlugin(options: NeotomaOpenCodeOptions = {}) {
         hookEvent: "message.user",
         harness: "opencode",
         startedAt: new Date().toISOString(),
-        cwd: process.cwd(),
+        cwd,
+        conversationEntityId,
       }).catch(() => {});
 
       if (!injectContext) return {};
@@ -649,6 +809,36 @@ export function neotomaPlugin(options: NeotomaOpenCodeOptions = {}) {
       return { system };
     },
 
+    async "experimental.session.compacting"(
+      input: { session?: { id?: string }; model?: string },
+      output: { context?: string[]; prompt?: string }
+    ) {
+      const model = input.model ?? "";
+      output.context = output.context ?? [];
+      output.context.push(buildCompactReminder(model));
+      await hooks["chat.compacted"]({
+        session: input.session,
+        trigger: "experimental.session.compacting",
+      });
+    },
+
+    async "tool.execute.after"(input: Record<string, unknown>, output: Record<string, unknown>) {
+      const toolName =
+        readString(input, ["tool", "tool_name", "name"]) ??
+        readString(output, ["tool", "tool_name", "name"]) ??
+        "unknown";
+      await hooks["tool.called"]({
+        session: extractSession(input),
+        turnId: extractTurnId(input),
+        tool: {
+          name: toolName,
+          input: output.args ?? input.args ?? input,
+          output: output.result ?? output.output ?? output,
+          error: output.error,
+        },
+      });
+    },
+
     async "tool.called"(event: {
       session?: { id?: string };
       turnId?: string;
@@ -660,7 +850,7 @@ export function neotomaPlugin(options: NeotomaOpenCodeOptions = {}) {
       };
     }) {
       const sessionId = event.session?.id ?? "opencode-unknown";
-      const turnId = event.turnId ?? String(Date.now());
+      const turnId = event.turnId ?? "unknown";
       const toolName = event.tool?.name ?? "unknown";
       const hasError = Boolean(event.tool?.error);
       const wasStore = looksLikeStoreStructured(toolName, event.tool?.input);
@@ -685,13 +875,13 @@ export function neotomaPlugin(options: NeotomaOpenCodeOptions = {}) {
               has_error: hasError,
               input_summary: summarize(event.tool?.input),
               output_summary: summarize(event.tool?.output),
-              ...harnessProvenance({ hook_event: "tool.called" }),
+              ...harnessProvenance(cwd, { hook_event: "tool.called" }),
             },
           ],
           idempotency_key: makeIdempotencyKey(
             sessionId,
             turnId,
-            `tool-${toolName}-${Date.now()}`
+            `tool-${toolName}`
           ),
         });
       } catch (err) {
@@ -727,7 +917,7 @@ export function neotomaPlugin(options: NeotomaOpenCodeOptions = {}) {
           invocation_shape: extractInvocationShape(event.tool?.input),
           turn_key: `${sessionId}:${turnId}`,
           hit_count_session: counter.count,
-          ...harnessProvenance({ hook_event: "tool.called.failure" }),
+          ...harnessProvenance(cwd, { hook_event: "tool.called.failure" }),
         };
         try {
           await client.store({
@@ -735,7 +925,7 @@ export function neotomaPlugin(options: NeotomaOpenCodeOptions = {}) {
             idempotency_key: makeIdempotencyKey(
               sessionId,
               turnId,
-              `tool-failure-${toolName}-${errorClass}-${Date.now()}`
+              `tool-failure-${toolName}-${errorClass}`
             ),
           });
         } catch (err) {
@@ -752,7 +942,7 @@ export function neotomaPlugin(options: NeotomaOpenCodeOptions = {}) {
       trigger?: string;
     }) {
       const sessionId = event.session?.id ?? "opencode-unknown";
-      const turnId = String(Date.now());
+      const turnId = event.trigger ?? "compact";
       try {
         await client.store({
           entities: [
@@ -762,7 +952,7 @@ export function neotomaPlugin(options: NeotomaOpenCodeOptions = {}) {
               trigger: event.trigger ?? "auto",
               turn_key: `${sessionId}:${turnId}`,
               observed_at: new Date().toISOString(),
-              ...harnessProvenance({ hook_event: "chat.compacted" }),
+              ...harnessProvenance(cwd, { hook_event: "chat.compacted" }),
             },
           ],
           idempotency_key: makeIdempotencyKey(sessionId, turnId, "compact"),
@@ -778,16 +968,24 @@ export function neotomaPlugin(options: NeotomaOpenCodeOptions = {}) {
       model?: string;
     }) {
       const sessionId = event.session?.id ?? "opencode-unknown";
-      const turnId = event.message?.id ?? String(Date.now());
+      const turnId = event.message?.id ?? "unknown";
       const text = event.message?.text ?? event.message?.content ?? "";
       const state = readTurnState(sessionId, turnId);
       const model = event.model ?? state.model ?? "";
 
       let assistantEntityId: string | undefined;
+      let conversationEntityId = state.conversation_entity_id;
       if (text) {
         try {
           const result = await client.store({
             entities: [
+              {
+                entity_type: "conversation",
+                conversation_id: sessionId,
+                title: "OpenCode session",
+                session_id: sessionId,
+                ...harnessProvenance(cwd, { hook_event: "message.assistant" }),
+              },
               {
                 entity_type: "conversation_message",
                 role: "assistant",
@@ -795,12 +993,20 @@ export function neotomaPlugin(options: NeotomaOpenCodeOptions = {}) {
                 content: text,
                 turn_key: `${sessionId}:${turnId}:assistant`,
                 observed_at: new Date().toISOString(),
-                ...harnessProvenance({ hook_event: "message.assistant" }),
+                ...harnessProvenance(cwd, { hook_event: "message.assistant" }),
+              },
+            ],
+            relationships: [
+              {
+                relationship_type: "PART_OF",
+                source_index: 1,
+                target_index: 0,
               },
             ],
             idempotency_key: makeIdempotencyKey(sessionId, turnId, "assistant"),
           });
-          assistantEntityId = pickEntityId(result);
+          conversationEntityId = pickEntityIdAt(result, 0);
+          assistantEntityId = pickEntityIdAt(result, 1);
         } catch (err) {
           log(
             "debug",
@@ -811,7 +1017,6 @@ export function neotomaPlugin(options: NeotomaOpenCodeOptions = {}) {
 
       const skippedStore = state.store_structured_calls === 0;
       const hadMaterial = Boolean(text) || state.tool_invocation_count > 0;
-      let conversationEntityId = state.conversation_entity_id;
       if (skippedStore && hadMaterial) {
         if (!conversationEntityId) {
           try {
@@ -819,9 +1024,10 @@ export function neotomaPlugin(options: NeotomaOpenCodeOptions = {}) {
               entities: [
                 {
                   entity_type: "conversation",
-                  canonical_name: `OpenCode session ${sessionId}`,
-                  turn_key: sessionId,
-                  ...harnessProvenance({
+                  conversation_id: sessionId,
+                  title: `OpenCode session ${sessionId}`,
+                  session_id: sessionId,
+                  ...harnessProvenance(cwd, {
                     hook_event: "message.assistant_backfill",
                   }),
                 },
@@ -890,6 +1096,25 @@ export function neotomaPlugin(options: NeotomaOpenCodeOptions = {}) {
       });
     },
   };
+  return hooks;
 }
 
-export default neotomaPlugin;
+export function createNeotomaPlugin(options: NeotomaOpenCodeOptions = {}) {
+  return async (ctx: NeotomaOpenCodeContext = {}) =>
+    neotomaPlugin({ ...contextOptions(ctx), ...options });
+}
+
+export async function NeotomaPlugin(ctx: NeotomaOpenCodeContext = {}) {
+  return neotomaPlugin(contextOptions(ctx));
+}
+
+export function neotoma(
+  optionsOrContext: NeotomaOpenCodeOptions | NeotomaOpenCodeContext = {}
+) {
+  if (looksLikeOpenCodeContext(optionsOrContext)) {
+    return neotomaPlugin(contextOptions(optionsOrContext));
+  }
+  return createNeotomaPlugin(optionsOrContext);
+}
+
+export default neotoma;

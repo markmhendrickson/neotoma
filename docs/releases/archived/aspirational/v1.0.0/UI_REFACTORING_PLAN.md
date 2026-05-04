@@ -225,7 +225,7 @@ This document outlines the required UI refactoring to align MVP with main object
 - **Analysis:** `docs/releases/v1.0.0/mvp_analysis_updated.md` — Detailed analysis of current vs. target state
 - **Vocabulary:** `docs/vocabulary/canonical_terms.md` — Main objects and deprecated terms
 - **Release Plan:** `docs/releases/v1.0.0/release_plan.md` — Updated with corrected FU list
-- **Feature Units:** `docs/specs/MVP_FEATURE_UNITS.md` — Updated FU-301, FU-302, FU-601 specs
+- **Feature Units:** `docs/releases/archived/mvp_planning/MVP_FEATURE_UNITS.md` — Historical FU-301, FU-302, FU-601 specs
 - **Architecture:** `docs/architecture/sources_first_ingestion_final.md` — Current architecture
 
 ## Notes

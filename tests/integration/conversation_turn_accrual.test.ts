@@ -25,6 +25,10 @@ interface TurnSeed {
   harness?: string;
   model?: string;
   status?: string;
+  working_directory?: string;
+  git_branch?: string;
+  active_file_refs?: string[];
+  context_source?: string;
   hook_events?: string[];
   missed_steps?: string[];
   tool_invocation_count?: number;
@@ -35,6 +39,15 @@ interface TurnSeed {
   retrieved_entity_ids?: string[];
   started_at?: string;
   ended_at?: string;
+}
+
+interface MessageSeed {
+  id: string;
+  role: string;
+  sender_kind: string;
+  content: string;
+  turn_key: string;
+  observed_at: string;
 }
 
 function entityIdFor(seed: TurnSeed): string {
@@ -56,6 +69,10 @@ function seedTurn(seed: TurnSeed) {
     harness: seed.harness ?? "cursor",
     model: seed.model,
     status: seed.status,
+    working_directory: seed.working_directory,
+    git_branch: seed.git_branch,
+    active_file_refs: seed.active_file_refs ?? [],
+    context_source: seed.context_source,
     hook_events: seed.hook_events ?? [],
     missed_steps: seed.missed_steps ?? [],
     tool_invocation_count: seed.tool_invocation_count ?? 0,
@@ -98,6 +115,86 @@ function seedTurn(seed: TurnSeed) {
   );
 }
 
+function seedMessage(seed: MessageSeed) {
+  const db = getSqliteDb();
+  const snapshot = {
+    role: seed.role,
+    sender_kind: seed.sender_kind,
+    content: seed.content,
+    turn_key: seed.turn_key,
+  };
+
+  db.prepare(
+    `INSERT OR REPLACE INTO entities (id, entity_type, canonical_name, aliases, created_at, updated_at, user_id, first_seen_at, last_seen_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    seed.id,
+    "conversation_message",
+    `conversation_message:${seed.turn_key}`,
+    JSON.stringify([]),
+    seed.observed_at,
+    seed.observed_at,
+    TEST_USER_ID,
+    seed.observed_at,
+    seed.observed_at,
+  );
+
+  db.prepare(
+    `INSERT OR REPLACE INTO entity_snapshots (entity_id, entity_type, schema_version, canonical_name, snapshot, computed_at, observation_count, last_observation_at, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    seed.id,
+    "conversation_message",
+    "1.2",
+    `conversation_message:${seed.turn_key}`,
+    JSON.stringify(snapshot),
+    seed.observed_at,
+    1,
+    seed.observed_at,
+    TEST_USER_ID,
+  );
+}
+
+function seedRelatedEntity(id: string, title: string) {
+  const db = getSqliteDb();
+  const now = "2026-04-28T10:00:30Z";
+  db.prepare(
+    `INSERT OR REPLACE INTO entities (id, entity_type, canonical_name, aliases, created_at, updated_at, user_id, first_seen_at, last_seen_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(id, "task", title, JSON.stringify([]), now, now, TEST_USER_ID, now, now);
+  db.prepare(
+    `INSERT OR REPLACE INTO entity_snapshots (entity_id, entity_type, schema_version, canonical_name, snapshot, computed_at, observation_count, last_observation_at, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    id,
+    "task",
+    "1.0.0",
+    title,
+    JSON.stringify({ title }),
+    now,
+    1,
+    now,
+    TEST_USER_ID,
+  );
+}
+
+function seedRelationship(sourceId: string, targetId: string, relationshipType: string) {
+  const db = getSqliteDb();
+  const now = "2026-04-28T10:00:31Z";
+  const key = `${relationshipType}:${sourceId}:${targetId}`;
+  db.prepare(
+    `INSERT OR REPLACE INTO relationship_snapshots (relationship_key, relationship_type, source_entity_id, target_entity_id, schema_version, snapshot, computed_at, observation_count, last_observation_at, provenance, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    key,
+    relationshipType,
+    sourceId,
+    targetId,
+    "1.0",
+    JSON.stringify({}),
+    now,
+    1,
+    now,
+    JSON.stringify({}),
+    TEST_USER_ID,
+  );
+}
+
 const seeds: TurnSeed[] = [
   {
     entity_type: "conversation_turn",
@@ -106,6 +203,10 @@ const seeds: TurnSeed[] = [
     harness: "cursor",
     model: "claude-4-opus",
     status: "completed",
+    working_directory: "/repo/neotoma",
+    git_branch: "feature/contextual-chat",
+    active_file_refs: ["src/services/schema_definitions.ts"],
+    context_source: "test_seed",
     hook_events: ["before_submit_prompt", "after_tool_use", "stop"],
     tool_invocation_count: 3,
     store_structured_calls: 2,
@@ -147,12 +248,33 @@ const seeds: TurnSeed[] = [
 
 beforeAll(() => {
   for (const seed of seeds) seedTurn(seed);
+  seedMessage({
+    id: "ent_msg_turn_1_user",
+    role: "user",
+    sender_kind: "user",
+    content: "Please check the Neotoma compliance flow.",
+    turn_key: "sess-1:turn-1",
+    observed_at: "2026-04-28T10:00:05Z",
+  });
+  seedMessage({
+    id: "ent_msg_turn_1_assistant",
+    role: "assistant",
+    sender_kind: "assistant",
+    content: "I checked the flow and found the missing store step.",
+    turn_key: "sess-1:turn-1:assistant",
+    observed_at: "2026-04-28T10:00:45Z",
+  });
+  seedRelatedEntity("ent_turn_1_task", "Check Neotoma compliance flow");
+  seedRelationship("ent_msg_turn_1_user", "ent_turn_1_task", "REFERS_TO");
 });
 
 afterAll(() => {
   const db = getSqliteDb();
   const ids = seeds.map((s) => entityIdFor(s));
-  for (const id of ids) {
+  for (const key of ["REFERS_TO:ent_msg_turn_1_user:ent_turn_1_task"]) {
+    db.prepare("DELETE FROM relationship_snapshots WHERE relationship_key = ?").run(key);
+  }
+  for (const id of [...ids, "ent_msg_turn_1_user", "ent_msg_turn_1_assistant", "ent_turn_1_task"]) {
     db.prepare("DELETE FROM entity_snapshots WHERE entity_id = ?").run(id);
     db.prepare("DELETE FROM entities WHERE id = ?").run(id);
   }
@@ -201,8 +323,22 @@ describe("getConversationTurn", () => {
     expect(detail!.turn_key).toBe("sess-1:turn-1");
     expect(detail!.harness).toBe("cursor");
     expect(detail!.model).toBe("claude-4-opus");
+    expect(detail!.working_directory).toBe("/repo/neotoma");
+    expect(detail!.git_branch).toBe("feature/contextual-chat");
+    expect(detail!.active_file_refs).toEqual(["src/services/schema_definitions.ts"]);
+    expect(detail!.context_source).toBe("test_seed");
     expect(detail!.hook_events).toEqual(["before_submit_prompt", "after_tool_use", "stop"]);
     expect(detail!.related_entities).toBeDefined();
+  });
+
+  it("returns user and assistant messages for the turn key", () => {
+    const detail = getConversationTurn(TEST_USER_ID, "sess-1:turn-1");
+    expect(detail).not.toBeNull();
+    expect(detail!.messages).toHaveLength(2);
+    expect(detail!.messages.map((m) => m.sender_kind)).toEqual(["user", "assistant"]);
+    expect(detail!.messages[0]!.content).toBe("Please check the Neotoma compliance flow.");
+    expect(detail!.messages[1]!.turn_key).toBe("sess-1:turn-1:assistant");
+    expect(detail!.messages[0]!.related_entities[0]?.title).toBe("Check Neotoma compliance flow");
   });
 
   it("returns null for a non-existent turn_key", () => {
@@ -270,5 +406,22 @@ describe("HTTP endpoints", () => {
       `${baseUrl}/turns/${encodeURIComponent("nope:nope")}?user_id=${TEST_USER_ID}`,
     );
     expect(res.status).toBe(404);
+  });
+
+  it("GET /admin/compliance/scorecard returns JSON scorecard", async () => {
+    const res = await fetch(
+      `${baseUrl}/admin/compliance/scorecard?user_id=${TEST_USER_ID}&since=90d&group_by=model+harness`,
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      generated_at: string;
+      group_by: string;
+      cells: unknown[];
+      summary: { total_turns: number };
+    };
+    expect(typeof body.generated_at).toBe("string");
+    expect(body.group_by).toBe("model+harness");
+    expect(Array.isArray(body.cells)).toBe(true);
+    expect(typeof body.summary?.total_turns).toBe("number");
   });
 });

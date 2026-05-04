@@ -149,6 +149,12 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     robots: "noindex,nofollow",
     ogType: "website",
   },
+  "/home-2": {
+    title: "Neotoma \u2014 structured state for AI agents",
+    description: "Homepage preview variant (not indexed).",
+    robots: "noindex,nofollow",
+    ogType: "website",
+  },
   "/install": {
     title: "Install | Neotoma",
     description:
@@ -206,6 +212,45 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Docker Install", path: "/install/docker" },
     ],
   },
+  "/what-to-store": {
+    title: "What to store first | Neotoma",
+    description:
+      "Pick the first durable facts, commitments, and source-backed records to persist in Neotoma. Tiered guidance from high-value contacts and tasks through derived context.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "What to store", path: "/what-to-store" },
+    ],
+    keywords: ["what to store", "entity types", "storage guidance", "onboarding"],
+  },
+  "/backup": {
+    title: "Backup and restore | Neotoma",
+    description:
+      "Protect the SQLite database, source files, and reconstruction history. Create timestamped backups with checksums and restore from any snapshot.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Backup and restore", path: "/backup" },
+    ],
+    keywords: ["backup", "restore", "SQLite", "data protection", "recovery"],
+  },
+  "/tunnel": {
+    title: "Expose tunnel | Neotoma",
+    description:
+      "Use HTTPS tunnels to connect remote MCP clients (ChatGPT, claude.ai, cloud agents) to your local Neotoma instance while data stays on your machine.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Expose tunnel", path: "/tunnel" },
+    ],
+    keywords: ["tunnel", "HTTPS", "remote MCP", "ngrok", "Cloudflare", "Tailscale"],
+  },
   "/sandbox": {
     title: "Public sandbox | Neotoma",
     description:
@@ -242,14 +287,14 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     ],
   },
   "/connect": {
-    title: "Connect a remote Neotoma | Neotoma",
+    title: "Connect remotely | Neotoma",
     description:
-      "Connect any AI harness - Claude Code, Claude Desktop, ChatGPT, Codex, Cursor, OpenClaw - to a hosted Neotoma MCP endpoint without installing locally.",
+      "Connect any AI harness - Claude Code, Claude Desktop, ChatGPT, Codex, Cursor, OpenClaw, IronClaw - to a hosted Neotoma MCP endpoint without installing locally.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
-      { name: "Connect", path: "/connect" },
+      { name: "Connect remotely", path: "/connect" },
     ],
   },
   "/docs": {
@@ -953,6 +998,18 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Remote setup", path: "/neotoma-with-codex-connect-remote-http-oauth" },
     ],
   },
+  "/neotoma-with-opencode": {
+    title: "Neotoma with OpenCode | Integration Guide",
+    description:
+      "Add persistent structured memory to OpenCode using Neotoma MCP and the @neotoma/opencode-plugin lifecycle hooks.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "OpenCode", path: "/neotoma-with-opencode" },
+    ],
+  },
   "/neotoma-with-openclaw": {
     title: "Neotoma with OpenClaw | Integration Guide",
     description:
@@ -963,6 +1020,18 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Home", path: "/" },
       { name: "Docs", path: "/docs" },
       { name: "OpenClaw", path: "/neotoma-with-openclaw" },
+    ],
+  },
+  "/neotoma-with-ironclaw": {
+    title: "Neotoma with IronClaw | Integration Guide",
+    description:
+      "Connect IronClaw to Neotoma over MCP so IronClaw agents can use cross-tool structured memory with provenance.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "IronClaw", path: "/neotoma-with-ironclaw" },
     ],
   },
   "/neotoma-with-openclaw-connect-local-stdio": {
@@ -1800,7 +1869,8 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     keywords: ["events", "meetings", "milestones", "calendar", "entity type"],
   },
   "/primitives": {
-    title: "Primitive Record Types | Sources, Interpretations, Observations, Relationships, Timeline Events | Neotoma",
+    title:
+      "Primitive Record Types | Sources, Interpretations, Observations, Relationships, Timeline Events | Neotoma",
     description:
       "Neotoma's five primitive record types: sources, interpretations, observations, relationships, and timeline events. The system-level building blocks behind every entity, snapshot, and audit trail.",
     robots: "index,follow",

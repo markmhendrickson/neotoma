@@ -32,7 +32,7 @@ Analysis of `.cursor/` materials to identify what can be generalized and moved t
 - Already references `foundation/agent-instructions/cursor-commands/create_release.md`
 - Needs to remove Neotoma-specific paths:
   - `docs/feature_units/standards/creating_feature_units.md` → use foundation paths
-  - `docs/specs/MVP_FEATURE_UNITS.md` → remove (repo-specific)
+  - Historical MVP feature-unit inventory references → remove (repo-specific; archived under `docs/releases/archived/mvp_planning/`)
   - `docs/releases/in_progress/` → use configurable path from foundation-config
 
 **Recommendation:** ✅ **MOVE** - Already well-structured for foundation, minimal changes needed

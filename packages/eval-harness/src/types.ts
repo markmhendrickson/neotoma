@@ -52,6 +52,8 @@ export interface ExpectedAssertion {
     | "entity.count"
     | "observation.with_field"
     | "relationship.exists"
+    | "relationship.count"
+    | "reply_text.contains"
     | "turn_compliance.backfilled"
     | "instruction_profile.served"
     | "host_tool.invocations";
@@ -76,6 +78,17 @@ export interface ExpectedAssertion {
   field?: string;
   profile?: InstructionProfile;
   tool_name?: string;
+  /** Substring to look for in `reply_text.contains`. */
+  substring?: string;
+  /** Regex pattern to match in `reply_text.contains`. */
+  pattern?: string;
+}
+
+export type SeedStrategy = "generated" | "real_derived" | "hybrid_amplified";
+
+export interface SeedEntity {
+  entity_type: string;
+  [key: string]: unknown;
 }
 
 export interface ScenarioFile {
@@ -104,6 +117,35 @@ export interface ScenarioFile {
     max_tokens?: number;
     temperature?: number;
     seed?: number;
+  };
+  /**
+   * Hybrid scenario seeding — how the scenario was derived.
+   * `generated` = purely synthetic, `real_derived` = from real transcript,
+   * `hybrid_amplified` = pattern from real usage, anonymized and amplified.
+   */
+  seed_strategy?: SeedStrategy;
+  /** Neotoma entity ID of the source transcript that inspired this scenario. */
+  source_transcript_ref?: string;
+  /** Human-readable description of the failure pattern extracted from the source. */
+  source_pattern?: string;
+  /** Description of how PII was transformed for the committed scenario. */
+  privacy_transform?: string;
+  /**
+   * Entities to pre-seed into the isolated Neotoma DB before the driver
+   * runs. Used for retrieval and dedup scenarios that need existing state.
+   */
+  seed_entities?: SeedEntity[];
+  /**
+   * Server fault injection — configures the isolated server to simulate
+   * failures for error-recovery scenarios.
+   */
+  server_faults?: {
+    /** Target MCP tool or HTTP endpoint to inject faults on. */
+    target: string;
+    /** Number of initial calls to fail before succeeding. */
+    fail_first_n: number;
+    /** HTTP status code to return for failures. Default 500. */
+    status_code?: number;
   };
   expected: ExpectedAssertion[];
 }

@@ -19,8 +19,9 @@ Per-turn telemetry entity that captures hook lifecycle events, tool invocations,
 | `harness` | string | All hooks (`cursor`, `opencode`, `claude-code`, `codex-cli`, `claude-agent-sdk`) |
 | `hook_events` | string[] | Accumulated per-hook: `before_submit_prompt`, `after_tool_use`, `stop`, etc. |
 | `model` | string | Stop hook |
-| `status` | string | Stop hook (`completed`, `backfilled_by_hook`) |
-| `missed_steps` | string[] | Stop hook (e.g. `["user_phase_store_structured"]`) |
+| `status` | string | Stop hook (`completed`, `backfilled_by_hook`, `partial_compliance`) |
+| `missed_steps` | string[] | Stop hook (e.g. `["user_phase_store_structured"]`, `["external_tool_entity_extraction"]`) |
+| `external_data_tool_calls` | number | PostToolUse hook (incremented when non-Neotoma MCP tool returns structured data) |
 | `tool_invocation_count` | number | PostToolUse hook (incremented per tool call) |
 | `store_structured_calls` | number | PostToolUse hook (incremented per store call) |
 | `retrieve_calls` | number | PromptSubmit hook |
@@ -32,6 +33,12 @@ Per-turn telemetry entity that captures hook lifecycle events, tool invocations,
 | `safety_net_used` | boolean | Stop hook |
 | `started_at` | date | PromptSubmit hook |
 | `ended_at` | date | Stop hook |
+| `working_directory` | string | Hook/client when provided; volatile per-turn workspace context |
+| `git_branch` | string | Hook/client when provided; volatile per-turn repository context |
+| `active_file_refs` | string[] | Hook/client when provided; bounded file references, not file contents |
+| `context_source` | string | Hook/client label for where context fields came from |
+
+Stable session context belongs on the parent `conversation` (`client_name`, `harness`, `workspace_kind`, `repository_name`, `repository_root`, `repository_remote`, `scope_summary`) or a linked `repository` / `project` entity. `conversation_turn` stores volatile turn-local context only. Repository and workspace context fields are not identity fields.
 
 ## Lifecycle: which hook contributes which fields
 
@@ -65,6 +72,24 @@ Implemented in `src/services/conversation_turn.ts` and routed in `src/actions.ts
 - **Detail page**: `/turns/:turnKey` — hook-event timeline, counters, related entities, attribution card.
 - **Entity detail**: `TurnProvenanceCard` shown on any entity with a `turn_key`, linking to the turn detail page.
 - **Conversations**: `HookActivityChip` per message showing compact hook activity summary, linking to turn detail.
+
+## Compliance dimensions
+
+### Total-skip detection (existing)
+
+When `store_structured_calls === 0` and the turn had material content, the stop hook classifies the root cause via `diagnoseSkippedStore` and records `missed_steps` such as `user_message_store`, `user_phase_store_structured`, and `assistant_message_store`.
+
+### Partial compliance: external tool entity extraction (v0.6+)
+
+When `store_structured_calls > 0` (agent did call Neotoma) but `external_data_tool_calls > 0` and no non-bookkeeping entities were stored from the external tool output, the stop hook records:
+
+- `status: "partial_compliance"`
+- `missed_steps: ["external_tool_entity_extraction"]`
+- `instruction_diagnostics.classification: "external_tool_data_not_persisted"`
+
+The `external_data_tool_calls` counter is incremented by the PostToolUse hook when `looksLikeExternalDataTool` returns true (non-Neotoma MCP tools like Gmail, calendar, Slack that return structured data).
+
+The compliance scorecard aggregates `external_tool_entity_extraction` alongside existing missed steps, requiring no scorecard code changes.
 
 ## Migration / backward compatibility
 

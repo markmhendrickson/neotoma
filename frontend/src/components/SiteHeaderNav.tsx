@@ -80,6 +80,8 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Input } from "@/components/ui/input";
 import { CodexIcon } from "@/components/icons/CodexIcon";
 import { CursorIcon } from "@/components/icons/CursorIcon";
+import { IronClawIcon } from "@/components/icons/IronClawIcon";
+import { OpenCodeIcon } from "@/components/icons/OpenCodeIcon";
 import { OpenClawIcon } from "@/components/icons/OpenClawIcon";
 import { getLocalizedDocNavCategories } from "@/site/site_data_localized";
 import { USE_CASE_LANDING_PATHS } from "@/site/site_data";
@@ -99,8 +101,10 @@ const DOC_DROPDOWN_FEATURED_HREFS = new Set([
   "/neotoma-with-claude",
   "/neotoma-with-chatgpt",
   "/neotoma-with-codex",
+  "/neotoma-with-opencode",
   "/neotoma-with-cursor",
   "/neotoma-with-openclaw",
+  "/neotoma-with-ironclaw",
   "/api",
   "/mcp",
   "/cli",
@@ -122,8 +126,10 @@ const INTEGRATION_BRAND_ICONS: Record<
   "/neotoma-with-codex": CodexIcon,
   "/neotoma-with-codex-connect-local-stdio": CodexIcon,
   "/neotoma-with-codex-connect-remote-http-oauth": CodexIcon,
+  "/neotoma-with-opencode": OpenCodeIcon,
   "/neotoma-with-cursor": CursorIcon,
   "/neotoma-with-openclaw": OpenClawIcon,
+  "/neotoma-with-ironclaw": IronClawIcon,
   "/neotoma-with-openclaw-connect-local-stdio": OpenClawIcon,
   "/neotoma-with-openclaw-connect-remote-http": OpenClawIcon,
 };

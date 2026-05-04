@@ -9,7 +9,7 @@
 - **Marketing Required**: No (not marketed release)
 #### 1.1 Canonical Specs (Authoritative Sources)
 - **Manifest**: `docs/NEOTOMA_MANIFEST.md`
-- **MVP Overview**: `docs/specs/MVP_OVERVIEW.md`
+- **MVP Overview**: `docs/releases/archived/mvp_planning/MVP_OVERVIEW.md`
 - **MCP Specification**: `docs/specs/MCP_SPEC.md`
 - **Documentation Standards**: `docs/conventions/documentation_standards.md`
 - **Design System**: `docs/ui/design_system.md`

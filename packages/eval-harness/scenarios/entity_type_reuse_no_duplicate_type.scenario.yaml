@@ -1,0 +1,57 @@
+meta:
+  id: entity_type_reuse_no_duplicate_type
+  description: >
+    A contact schema is pre-seeded in the DB. When the user mentions a new
+    person, the agent should use the established "contact" entity_type
+    rather than creating a new "person" type. Tests [ENTITY TYPES] reuse
+    check to prevent type proliferation.
+  tags:
+    - tier2
+    - schema
+    - dedup
+    - writ:entity
+
+seed_strategy: hybrid_amplified
+source_pattern: "Agent created a 'person' entity when a 'contact' schema already existed, leading to type proliferation."
+privacy_transform: "Names and context replaced with synthetic equivalents."
+
+seed_entities:
+  - entity_type: contact
+    name: Pre-existing Contact
+    email: existing@example.com
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system. Before
+  choosing an entity_type, check if a semantically equivalent type already
+  exists (e.g. if "contact" exists, use it instead of creating "person").
+  Persist conversation, user message, and extracted entities via
+  store_structured with appropriate relationships.
+
+user_prompt: |
+  I met a new person named Beth Clark at the conference
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+instruction_profile: auto
+hooks_enabled: true
+
+driver_options:
+  temperature: 0
+  max_tokens: 2048
+
+expected:
+  - type: store_structured.calls
+    op: gte
+    value: 1
+  - type: entity.exists
+    entity_type: contact
+  - type: entity.count
+    entity_type: person
+    op: eq
+    value: 0
+  - type: relationship.exists
+    relationship_type: PART_OF

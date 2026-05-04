@@ -403,7 +403,7 @@ npm run test:e2e
 ${envSetup}
 **Your Task:**
 1. **Verify environment variables are available** (they should be injected automatically via Cursor Secrets)
-2. Load FU specification: \`docs/feature_units/completed/${fuId}/FU-${fuId}_spec.md\` or \`docs/specs/MVP_FEATURE_UNITS.md\`
+2. Load FU specification: \`docs/feature_units/completed/${fuId}/FU-${fuId}_spec.md\` or \`docs/feature_units/in_progress/${fuId}/FU-${fuId}_spec.md\`
 3. Execute Feature Unit workflow:
    - Check if FU spec exists (if not, create it)
    - If UI FU and no prototype, create prototype

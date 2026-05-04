@@ -3,7 +3,8 @@ name: manage_error_debugging
 description: Manage Error Debugging Automation
 ---
 
-<!-- Source: foundation/agent_instructions/cursor_commands/manage_error_debugging.md -->
+<!-- Source: .cursor/skills/manage-error-debugging/SKILL.md -->
+
 
 # Manage Error Debugging Automation
 

@@ -47,6 +47,14 @@ interface OAuthTokens {
   expiresIn: number;
 }
 
+interface OAuthTokenResponse {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+  refresh_token?: string;
+  scope?: string;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 interface _MCPConnection {
   id: string;
@@ -188,6 +196,16 @@ function getLocalConnectionByAccessToken(accessToken: string): LocalConnectionRo
       "SELECT id, user_id, connection_id, refresh_token, access_token, access_token_expires_at, client_name, last_used_at, created_at, revoked_at FROM mcp_oauth_connections WHERE access_token = ? AND revoked_at IS NULL"
     )
     .get(accessToken);
+  return row ? (row as LocalConnectionRow) : null;
+}
+
+function getLocalConnectionByRefreshToken(refreshToken: string): LocalConnectionRow | null {
+  const db = getSqliteDb();
+  const row = db
+    .prepare(
+      "SELECT id, user_id, connection_id, refresh_token, access_token, access_token_expires_at, client_name, last_used_at, created_at, revoked_at FROM mcp_oauth_connections WHERE refresh_token = ? AND revoked_at IS NULL"
+    )
+    .get(refreshToken);
   return row ? (row as LocalConnectionRow) : null;
 }
 
@@ -1158,6 +1176,75 @@ async function exchangeCodeForTokens(
   }
 }
 
+async function exchangeRefreshTokenForTokens(refreshToken: string): Promise<OAuthTokens> {
+  if (isLocalBackend) {
+    throw createOAuthError.tokenExchangeFailed(
+      "Remote refresh exchange is disabled for local backend"
+    );
+  }
+
+  try {
+    const tokenUrl = `${config.authServerUrl}/auth/v1/oauth/token`;
+    const tokenResponse = await fetch(tokenUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        apikey: config.authServiceKey,
+      },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+      }),
+    });
+
+    if (!tokenResponse.ok) {
+      const errorText = await tokenResponse.text();
+      logger.error(`[MCP OAuth] Refresh token exchange failed: ${tokenResponse.status} ${errorText}`);
+
+      let errorJson: any = null;
+      try {
+        errorJson = JSON.parse(errorText);
+      } catch {
+        // Not JSON
+      }
+
+      throw createOAuthError.tokenExchangeFailed(
+        `Refresh token exchange failed: ${tokenResponse.status} ${errorJson?.error_description || errorJson?.error || errorText}`,
+        {
+          status: tokenResponse.status,
+          error: errorJson?.error,
+          error_description: errorJson?.error_description,
+          body: errorText,
+        }
+      );
+    }
+
+    const tokenJson = await tokenResponse.json();
+
+    if (!tokenJson || !tokenJson.access_token) {
+      logger.error("[MCP OAuth] Invalid refresh response: missing access_token");
+      throw createOAuthError.tokenExchangeFailed("Invalid refresh response: missing access_token", {
+        response: tokenJson,
+      });
+    }
+
+    return {
+      accessToken: tokenJson.access_token,
+      refreshToken: tokenJson.refresh_token || refreshToken,
+      expiresIn: tokenJson.expires_in || 3600,
+    };
+  } catch (error: any) {
+    logger.error(`[MCP OAuth] Refresh token exchange error: ${error.message}`);
+
+    if (error instanceof OAuthError) {
+      throw error;
+    }
+    throw createOAuthError.tokenExchangeFailed(`Refresh token exchange failed: ${error.message}`, {
+      error: error.message,
+    });
+  }
+}
+
 /**
  * Handle OAuth callback and store connection
  *
@@ -1375,28 +1462,130 @@ export async function getAccessTokenForConnection(
     };
   }
 
-  // Local-only fallback: mint a new local access token and persist.
-  logger.info(`[MCP OAuth] Refreshing local-only access token for connection: ${connectionId}`);
+  logger.info(`[MCP OAuth] Refreshing access token for connection: ${connectionId}`);
   auditLog("token_refresh_initiated", {
     connectionId,
     userId: connection.user_id,
     success: true,
   });
 
-  const accessToken = generateLocalToken("local_access");
-  const newExpiresAt = new Date(Date.now() + 3600 * 1000);
-  upsertLocalConnection({
-    userId: connection.user_id,
-    connectionId,
-    refreshToken: connection.refresh_token,
-    accessToken,
-    accessTokenExpiresAt: newExpiresAt.toISOString(),
-    clientName: connection.client_name,
-  });
+  const providerRefreshToken = decryptRefreshToken(connection.refresh_token);
+  const tokens = await exchangeRefreshTokenForTokens(providerRefreshToken);
+  const encryptedRefreshToken = tokens.refreshToken === providerRefreshToken
+    ? connection.refresh_token
+    : encryptRefreshToken(tokens.refreshToken);
+  const newExpiresAt = new Date(Date.now() + tokens.expiresIn * 1000);
+  const { error: updateError } = await db
+    .from("mcp_oauth_connections")
+    .update({
+      access_token: tokens.accessToken,
+      refresh_token: encryptedRefreshToken,
+      access_token_expires_at: newExpiresAt.toISOString(),
+      last_used_at: new Date().toISOString(),
+    })
+    .eq("connection_id", connectionId)
+    .is("revoked_at", null);
+
+  if (updateError) {
+    logger.error(`[MCP OAuth] Failed to persist refreshed token: ${updateError.message}`);
+    throw createOAuthError.tokenExchangeFailed(
+      `Failed to persist refreshed token: ${updateError.message}`
+    );
+  }
 
   return {
-    accessToken,
+    accessToken: tokens.accessToken,
     userId: connection.user_id,
+  };
+}
+
+export async function refreshAccessToken(refreshToken: string): Promise<OAuthTokenResponse> {
+  if (!refreshToken || typeof refreshToken !== "string") {
+    throw createOAuthError.tokenExchangeFailed("refresh_token is required");
+  }
+
+  if (isLocalBackend) {
+    const connection = getLocalConnectionByRefreshToken(refreshToken);
+    if (!connection) {
+      throw createOAuthError.connectionNotFound("Connection not found for refresh token");
+    }
+
+    logger.info(`[MCP OAuth] Refreshing local access token for connection: ${connection.connection_id}`);
+    auditLog("token_refresh_initiated", {
+      connectionId: connection.connection_id,
+      userId: connection.user_id,
+      success: true,
+    });
+
+    const accessToken = generateLocalToken("local_access");
+    const expiresAt = new Date(Date.now() + 3600 * 1000);
+    upsertLocalConnection({
+      userId: connection.user_id,
+      connectionId: connection.connection_id,
+      refreshToken: connection.refresh_token,
+      accessToken,
+      accessTokenExpiresAt: expiresAt.toISOString(),
+      clientName: connection.client_name,
+    });
+
+    return {
+      access_token: accessToken,
+      token_type: "Bearer",
+      expires_in: Math.max(0, Math.floor((expiresAt.getTime() - Date.now()) / 1000)),
+      refresh_token: connection.refresh_token,
+      scope: "openid email",
+    };
+  }
+
+  const { data: connection, error } = await db
+    .from("mcp_oauth_connections")
+    .select("*")
+    .eq("refresh_token", refreshToken)
+    .is("revoked_at", null)
+    .single();
+
+  if (error || !connection) {
+    throw createOAuthError.connectionNotFound("Connection not found for refresh token");
+  }
+
+  logger.info(`[MCP OAuth] Refreshing access token via refresh_token for connection: ${connection.connection_id}`);
+  auditLog("token_refresh_initiated", {
+    connectionId: connection.connection_id,
+    userId: connection.user_id,
+    success: true,
+  });
+
+  const providerRefreshToken = decryptRefreshToken(connection.refresh_token);
+  const tokens = await exchangeRefreshTokenForTokens(providerRefreshToken);
+  const encryptedRefreshToken = tokens.refreshToken === providerRefreshToken
+    ? connection.refresh_token
+    : encryptRefreshToken(tokens.refreshToken);
+  const expiresAt = new Date(Date.now() + tokens.expiresIn * 1000);
+
+  const { error: updateError } = await db
+    .from("mcp_oauth_connections")
+    .update({
+      access_token: tokens.accessToken,
+      refresh_token: encryptedRefreshToken,
+      access_token_expires_at: expiresAt.toISOString(),
+      last_used_at: new Date().toISOString(),
+    })
+    .eq("connection_id", connection.connection_id)
+    .is("revoked_at", null);
+
+  if (updateError) {
+    logger.error(`[MCP OAuth] Failed to persist refreshed token: ${updateError.message}`);
+    throw createOAuthError.tokenExchangeFailed(
+      `Failed to persist refreshed token: ${updateError.message}`
+    );
+  }
+
+  return {
+    access_token: tokens.accessToken,
+    token_type: "Bearer",
+    expires_in: Math.max(0, Math.floor((expiresAt.getTime() - Date.now()) / 1000)),
+    refresh_token: encryptedRefreshToken,
+    scope: "openid email",
   };
 }
 
@@ -1415,13 +1604,7 @@ export async function getAccessTokenForConnection(
  * // response.token_type: "Bearer"
  * // response.expires_in: 3600
  */
-export async function getTokenResponseForConnection(connectionId: string): Promise<{
-  access_token: string;
-  token_type: string;
-  expires_in: number;
-  refresh_token?: string;
-  scope?: string;
-}> {
+export async function getTokenResponseForConnection(connectionId: string): Promise<OAuthTokenResponse> {
   // Validate input
   validateConnectionId(connectionId);
 
@@ -1497,6 +1680,12 @@ export async function validateTokenAndGetConnectionId(
     if (!connection) {
       throw createOAuthError.connectionNotFound("Connection not found for access token");
     }
+    if (
+      connection.access_token_expires_at &&
+      new Date(connection.access_token_expires_at).getTime() < Date.now()
+    ) {
+      throw createOAuthError.tokenRefreshFailed(connection.connection_id, "Access token expired");
+    }
     return {
       connectionId: connection.connection_id,
       userId: connection.user_id,
@@ -1506,13 +1695,19 @@ export async function validateTokenAndGetConnectionId(
   // Query mcp_oauth_connections for the access token
   const { data: connection, error } = await db
     .from("mcp_oauth_connections")
-    .select("connection_id, user_id")
+    .select("connection_id, user_id, access_token_expires_at")
     .eq("access_token", accessToken)
     .is("revoked_at", null)
     .single();
 
   if (error || !connection) {
     throw createOAuthError.connectionNotFound("Connection not found for access token");
+  }
+  if (
+    connection.access_token_expires_at &&
+    new Date(connection.access_token_expires_at).getTime() < Date.now()
+  ) {
+    throw createOAuthError.tokenRefreshFailed(connection.connection_id, "Access token expired");
   }
 
   return {

@@ -4,7 +4,7 @@ You are a worker agent executing Feature Unit **{{FU_ID}}** in Batch **{{BATCH_I
 ## Your Task
 ### 1. Load FU Specification
 - **Primary**: `docs/feature_units/completed/{{FU_ID}}/FU-{{FU_ID}}_spec.md`
-- **Fallback**: `docs/specs/MVP_FEATURE_UNITS.md` (search for `{{FU_ID}}`)
+- **Fallback**: `docs/feature_units/in_progress/{{FU_ID}}/FU-{{FU_ID}}_spec.md`
 ### 2. Execute Feature Unit Workflow
 Follow the standard Feature Unit execution workflow:
 1. **Check if FU spec exists**
@@ -155,7 +155,7 @@ await fs.writeFile(STATUS_FILE, JSON.stringify(status, null, 2));
 ```
 ## Error Handling
 ### If FU Spec Not Found
-1. Check if FU exists in `docs/specs/MVP_FEATURE_UNITS.md`
+1. Check if FU exists in `docs/feature_units/in_progress/{{FU_ID}}/FU-{{FU_ID}}_spec.md`
 2. If not found, create FU spec using `Create New Feature Unit` workflow
 3. Update status: `{"status": "spec_created", "message": "Created FU spec"}`
 ### If Tests Fail

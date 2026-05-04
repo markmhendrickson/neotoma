@@ -142,7 +142,7 @@ export const FAQ_ITEMS: FaqItem[] = [
   {
     question: "What AI tools does Neotoma work with?",
     answer:
-      "Neotoma works with any MCP-compatible AI tool: Cursor, Claude (Desktop and claude.ai), Claude Code, ChatGPT, Codex, and OpenClaw. It also provides a REST API and CLI for direct programmatic access.",
+      "Neotoma works with any MCP-compatible AI tool: Cursor, Claude (Desktop and claude.ai), Claude Code, ChatGPT, Codex, OpenCode, OpenClaw, and IronClaw. It also provides a REST API and CLI for direct programmatic access.",
     link: { href: "/docs", label: "Integration guides" },
   },
   {

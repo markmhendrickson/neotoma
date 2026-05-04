@@ -1,0 +1,78 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "closing_assistant_store",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-04-29T09:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "What's the capital of France?\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. Every turn you MUST call store_structured at least twice: once for the conversation and the user message (user-phase store), and once for your assistant reply (closing store). Link each message to the conversation via PART_OF. Then reply briefly.\n",
+  "tool_calls": [
+    {
+      "name": "store_structured",
+      "input": {
+        "idempotency_key": "conversation-closing-ast-1-user",
+        "entities": [
+          {
+            "entity_type": "conversation",
+            "title": "Capital of France"
+          },
+          {
+            "entity_type": "conversation_message",
+            "role": "user",
+            "sender_kind": "user",
+            "content": "What's the capital of France?",
+            "turn_key": "closing-ast-1:1"
+          }
+        ],
+        "relationships": [
+          {
+            "relationship_type": "PART_OF",
+            "source_index": 1,
+            "target_index": 0
+          }
+        ]
+      },
+      "output": [
+        {
+          "type": "input_text",
+          "text": "{\"source_id\":\"stub-src-cas-1\",\"entities\":[{\"observation_index\":0,\"entity_id\":\"ent_stub_cas_001\",\"entity_type\":\"conversation\",\"action\":\"created\",\"canonical_name\":\"conversation:closing-ast-1\",\"resolver_path\":[\"schema:canonical_name_fields:title\",\"existing_row:none\"],\"identity_basis\":\"schema_rule\",\"identity_rule\":\"composite:title\"},{\"observation_index\":1,\"entity_id\":\"ent_stub_cas_002\",\"entity_type\":\"conversation_message\",\"action\":\"created\",\"canonical_name\":\"conversation_message:closing-ast-1:1\",\"resolver_path\":[\"schema:canonical_name_fields:turn_key\",\"existing_row:none\"],\"identity_basis\":\"schema_rule\",\"identity_rule\":\"composite:turn_key\"}],\"unknown_fields_count\":0,\"related_entities\":[],\"related_relationships\":[{\"relationship_key\":\"PART_OF:ent_stub_cas_002:ent_stub_cas_001\",\"relationship_type\":\"PART_OF\",\"source_entity_id\":\"ent_stub_cas_002\",\"target_entity_id\":\"ent_stub_cas_001\",\"schema_version\":\"1.0\",\"snapshot\":{},\"computed_at\":\"2026-04-29T09:00:00.000Z\",\"observation_count\":1,\"last_observation_at\":\"2026-04-29T09:00:00.000Z\",\"provenance\":{},\"user_id\":\"00000000-0000-0000-0000-000000000000\"}]}"
+        }
+      ],
+      "sequence": 0
+    },
+    {
+      "name": "store_structured",
+      "input": {
+        "idempotency_key": "conversation-closing-ast-1-assistant",
+        "entities": [
+          {
+            "entity_type": "conversation_message",
+            "role": "assistant",
+            "sender_kind": "assistant",
+            "content": "The capital of France is Paris.",
+            "turn_key": "closing-ast-1:1:assistant"
+          }
+        ],
+        "relationships": [
+          {
+            "relationship_type": "PART_OF",
+            "source_index": 0,
+            "target_index": "ent_stub_cas_001"
+          }
+        ]
+      },
+      "output": [
+        {
+          "type": "input_text",
+          "text": "{\"source_id\":\"stub-src-cas-1b\",\"entities\":[{\"observation_index\":0,\"entity_id\":\"ent_stub_cas_003\",\"entity_type\":\"conversation_message\",\"action\":\"created\",\"canonical_name\":\"conversation_message:closing-ast-1:1:assistant\",\"resolver_path\":[\"schema:canonical_name_fields:turn_key\",\"existing_row:none\"],\"identity_basis\":\"schema_rule\",\"identity_rule\":\"composite:turn_key\"}],\"unknown_fields_count\":0,\"related_entities\":[],\"related_relationships\":[{\"relationship_key\":\"PART_OF:ent_stub_cas_003:ent_stub_cas_001\",\"relationship_type\":\"PART_OF\",\"source_entity_id\":\"ent_stub_cas_003\",\"target_entity_id\":\"ent_stub_cas_001\",\"schema_version\":\"1.0\",\"snapshot\":{},\"computed_at\":\"2026-04-29T09:00:01.000Z\",\"observation_count\":1,\"last_observation_at\":\"2026-04-29T09:00:01.000Z\",\"provenance\":{},\"user_id\":\"00000000-0000-0000-0000-000000000000\"}]}"
+        }
+      ],
+      "sequence": 1
+    }
+  ],
+  "assistant_text": "The capital of France is Paris."
+}

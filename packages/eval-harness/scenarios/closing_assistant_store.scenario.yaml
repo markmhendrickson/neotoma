@@ -1,0 +1,45 @@
+meta:
+  id: closing_assistant_store
+  description: >
+    Agent must produce a closing assistant store even for simple factual
+    answers. Tests Turn Lifecycle Step 5a/5b — the assistant reply must be
+    persisted as a conversation_message with PART_OF back to the
+    conversation.
+  tags:
+    - tier2
+    - turn_lifecycle
+    - writ:extraction_drift
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system. Every
+  turn you MUST call store_structured at least twice: once for the
+  conversation and the user message (user-phase store), and once for your
+  assistant reply (closing store). Link each message to the conversation
+  via PART_OF. Then reply briefly.
+
+user_prompt: |
+  What's the capital of France?
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+instruction_profile: auto
+hooks_enabled: true
+
+driver_options:
+  temperature: 0
+  max_tokens: 2048
+
+expected:
+  - type: store_structured.calls
+    op: gte
+    value: 2
+  - type: entity.exists
+    entity_type: conversation
+  - type: entity.exists
+    entity_type: conversation_message
+  - type: relationship.exists
+    relationship_type: PART_OF

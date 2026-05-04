@@ -1,0 +1,46 @@
+meta:
+  id: scheduling_cue_creates_task
+  description: >
+    User relays a scheduling cue from a conversation. Agent must create a
+    task to follow up and schedule, linked to the contact.
+  tags:
+    - tier2
+    - tasks
+    - writ:constraint
+    - writ:work_state
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system. When the
+  user mentions a scheduling cue (e.g. "pencil in", "book next", "sync
+  again"), create a task entity for the follow-up and a contact entity for
+  the person. Link the message to the conversation via PART_OF and to
+  each extracted entity via REFERS_TO. Then reply briefly.
+
+user_prompt: |
+  I just talked to Dana — she said let's pencil in another call for May.
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+instruction_profile: auto
+hooks_enabled: true
+
+driver_options:
+  temperature: 0
+  max_tokens: 2048
+
+expected:
+  - type: store_structured.calls
+    op: gte
+    value: 1
+  - type: entity.exists
+    entity_type: task
+  - type: entity.exists
+    entity_type_any_of: [contact, person]
+  - type: relationship.exists
+    relationship_type: REFERS_TO
+  - type: relationship.exists
+    relationship_type: PART_OF

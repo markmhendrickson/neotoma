@@ -107,6 +107,7 @@ import {
 import {
   AnalyzeSchemaCandidatesRequestSchema,
   CorrectEntityRequestSchema,
+  CreateRelationshipsRequestSchema,
   CreateRelationshipRequestSchema,
   DeleteEntityRequestSchema,
   DeleteRelationshipRequestSchema,
@@ -143,11 +144,12 @@ import {
   listRecentRecordActivity,
   parseRecordActivityTypesQuery,
 } from "./services/recent_record_activity.js";
-import { listRecentConversations } from "./services/recent_conversations.js";
+import { getRecentConversationById, listRecentConversations } from "./services/recent_conversations.js";
 import {
   listConversationTurns,
   getConversationTurn,
 } from "./services/conversation_turn.js";
+import { buildComplianceScorecard } from "./services/compliance/scorecard.js";
 import { getAgent, listAgentRecords, listAgents } from "./services/agents_directory.js";
 // import { setupDocumentationRoutes } from "./routes/documentation.js";
 
@@ -2022,21 +2024,40 @@ app.post(
     try {
       const grant_type = req.body?.grant_type;
       const code = req.body?.code;
+      const refresh_token = req.body?.refresh_token;
       logger.info("[MCP OAuth] Token request received", {
         grant_type: grant_type ?? null,
         has_code: typeof code === "string" && code.length > 0,
         code_hint: typeof code === "string" ? code.slice(0, 8) : null,
+        has_refresh_token: typeof refresh_token === "string" && refresh_token.length > 0,
         host: req.header("host") ?? null,
       });
 
-      if (grant_type !== "authorization_code") {
+      if (grant_type !== "authorization_code" && grant_type !== "refresh_token") {
         logger.warn("[MCP OAuth] Token rejected: unsupported grant_type", {
           grant_type: grant_type ?? null,
         });
         return res.status(400).json({
           error: "unsupported_grant_type",
-          error_description: "Only authorization_code is supported",
+          error_description: "Only authorization_code and refresh_token are supported",
         });
+      }
+      if (grant_type === "refresh_token") {
+        if (!refresh_token || typeof refresh_token !== "string") {
+          logger.warn("[MCP OAuth] Token refresh rejected: missing refresh_token");
+          return res
+            .status(400)
+            .json({ error: "invalid_request", error_description: "refresh_token is required" });
+        }
+
+        const { refreshAccessToken } = await import("./services/mcp_oauth.js");
+        const token = await refreshAccessToken(refresh_token);
+        logger.info("[MCP OAuth] Token refreshed", {
+          has_refresh_token: Boolean((token as { refresh_token?: string }).refresh_token),
+        });
+
+        res.setHeader("Content-Type", "application/json");
+        return res.json(token);
       }
       if (!code || typeof code !== "string") {
         logger.warn("[MCP OAuth] Token rejected: missing code");
@@ -3959,6 +3980,28 @@ app.get("/agents/:key/records", async (req, res) => {
   }
 });
 
+// GET /recent_conversations/:conversation_id — Inspector: one conversation with nested messages
+app.get("/recent_conversations/:conversation_id", async (req, res) => {
+  try {
+    const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+    const conversationId = String(req.params.conversation_id ?? "").trim();
+    const item = getRecentConversationById(userId, conversationId);
+    if (!item) {
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", "Conversation not found");
+    }
+    return res.json(item);
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to load conversation",
+      "DB_QUERY_FAILED",
+      "APIError:recent_conversation_detail"
+    );
+  }
+});
+
 // GET /recent_conversations — Inspector: conversations with nested messages (SQLite)
 app.get("/recent_conversations", async (req, res) => {
   try {
@@ -3969,8 +4012,11 @@ app.get("/recent_conversations", async (req, res) => {
       typeof req.query.activity_after === "string" ? req.query.activity_after.trim() || null : null;
     const activity_before =
       typeof req.query.activity_before === "string" ? req.query.activity_before.trim() || null : null;
+    const agentKeyRaw =
+      typeof req.query.agent_key === "string" ? req.query.agent_key.trim() : "";
+    // UI and bookmarks may send agent_key=all; never treat that as a real deriveAgentKey value.
     const agent_key =
-      typeof req.query.agent_key === "string" ? req.query.agent_key.trim() || null : null;
+      agentKeyRaw.length > 0 && agentKeyRaw.toLowerCase() !== "all" ? agentKeyRaw : null;
     const result = listRecentConversations(userId, limit, offset, {
       activity_after,
       activity_before,
@@ -4023,6 +4069,41 @@ app.get("/turns/:turn_key", async (req, res) => {
     return res.json(result);
   } catch (error) {
     return handleApiError(req, res, error, "Failed to get turn", "DB_QUERY_FAILED", "APIError:turn_detail");
+  }
+});
+
+// GET /admin/compliance/scorecard — Inspector: aggregated hook compliance (SQLite)
+app.get("/admin/compliance/scorecard", async (req, res) => {
+  try {
+    const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+    const since = typeof req.query.since === "string" ? req.query.since : undefined;
+    const until = typeof req.query.until === "string" ? req.query.until : undefined;
+    const group_by = typeof req.query.group_by === "string" ? req.query.group_by : undefined;
+    const min_turns = parseInt(String(req.query.min_turns ?? ""), 10);
+    const min_backfill_rate = parseFloat(String(req.query.min_backfill_rate ?? ""));
+    const top_missed_steps = parseInt(String(req.query.top_missed_steps ?? ""), 10);
+    const include_synthetic =
+      req.query.include_synthetic === "1" || String(req.query.include_synthetic).toLowerCase() === "true";
+
+    const result = buildComplianceScorecard(userId, {
+      since,
+      until,
+      group_by,
+      min_turns: Number.isFinite(min_turns) ? min_turns : undefined,
+      min_backfill_rate: Number.isFinite(min_backfill_rate) ? min_backfill_rate : undefined,
+      top_missed_steps: Number.isFinite(top_missed_steps) ? top_missed_steps : undefined,
+      include_synthetic,
+    });
+    return res.json(result);
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to build compliance scorecard",
+      "DB_QUERY_FAILED",
+      "APIError:compliance_scorecard",
+    );
   }
 });
 
@@ -4666,6 +4747,15 @@ app.post("/observations/create", async (req, res) => {
   }
 });
 
+type StoreRelationshipRef = {
+  relationship_type: string;
+  source_index?: number;
+  target_index?: number;
+  source_entity_id?: string;
+  target_entity_id?: string;
+  metadata?: Record<string, unknown>;
+};
+
 export async function storeStructuredForApi(params: {
   userId: string;
   entities: Record<string, unknown>[];
@@ -4673,11 +4763,7 @@ export async function storeStructuredForApi(params: {
   observationSource?: import("./shared/action_schemas.js").ObservationSource;
   idempotencyKey: string;
   originalFilename?: string;
-  relationships?: Array<{
-    relationship_type: string;
-    source_index: number;
-    target_index: number;
-  }>;
+  relationships?: StoreRelationshipRef[];
   commit?: boolean;
   strict?: boolean;
 }) {
@@ -5141,32 +5227,45 @@ export async function storeStructuredForApi(params: {
   if (commit && relationships && relationships.length > 0) {
     const { relationshipsService } = await import("./services/relationships.js");
     for (const rel of relationships) {
-      const source = resolved[rel.source_index];
-      const target = resolved[rel.target_index];
-      if (!source || !target) {
+      const sourceEntityId =
+        typeof rel.source_entity_id === "string"
+          ? rel.source_entity_id
+          : typeof rel.source_index === "number"
+            ? resolved[rel.source_index]?.entity_id
+            : undefined;
+      const targetEntityId =
+        typeof rel.target_entity_id === "string"
+          ? rel.target_entity_id
+          : typeof rel.target_index === "number"
+            ? resolved[rel.target_index]?.entity_id
+            : undefined;
+      if (!sourceEntityId || !targetEntityId) {
         logger.warn(
-          `[STORE] Skipping relationship: invalid source_index=${rel.source_index} ` +
-            `or target_index=${rel.target_index} (have ${resolved.length} entities).`
+          `[STORE] Skipping relationship: invalid source reference ` +
+            `(source_index=${rel.source_index}, source_entity_id=${rel.source_entity_id}) ` +
+            `or target reference (target_index=${rel.target_index}, ` +
+            `target_entity_id=${rel.target_entity_id}); have ${resolved.length} entities.`
         );
         continue;
       }
       try {
         await relationshipsService.createRelationship({
-          source_entity_id: source.entity_id,
-          target_entity_id: target.entity_id,
+          source_entity_id: sourceEntityId,
+          target_entity_id: targetEntityId,
           relationship_type: rel.relationship_type as never,
           source_id: storageResult.sourceId,
+          metadata: rel.metadata ?? {},
           user_id: userId,
         });
         relationshipsCreated.push({
           relationship_type: rel.relationship_type,
-          source_entity_id: source.entity_id,
-          target_entity_id: target.entity_id,
+          source_entity_id: sourceEntityId,
+          target_entity_id: targetEntityId,
         });
       } catch (relErr) {
         logger.warn(
           `Failed to create relationship ${rel.relationship_type} ` +
-            `${source.entity_id} -> ${target.entity_id}: ${
+            `${sourceEntityId} -> ${targetEntityId}: ${
               relErr instanceof Error ? relErr.message : String(relErr)
             }`
         );
@@ -5298,11 +5397,7 @@ async function handleStorePost(
         idempotencyKey: parsed.data.idempotency_key,
         originalFilename: parsed.data.original_filename,
         relationships: parsed.data.relationships as
-          | Array<{
-              relationship_type: string;
-              source_index: number;
-              target_index: number;
-            }>
+          | StoreRelationshipRef[]
           | undefined,
         commit: (parsed.data as { commit?: boolean }).commit,
         strict: (parsed.data as { strict?: boolean }).strict,
@@ -5912,6 +6007,70 @@ app.post("/create_relationship", async (req, res) => {
       500,
       "DB_QUERY_FAILED",
       error instanceof Error ? error.message : "Failed to create relationship"
+    );
+  }
+});
+
+// Create relationships in batch
+app.post("/create_relationships", async (req, res) => {
+  const parsed = CreateRelationshipsRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn("ValidationError:create_relationships", req, {
+      issues: parsed.error.issues,
+    });
+    return sendValidationError(res, parsed.error.issues);
+  }
+
+  const { relationships, source_id, user_id } = parsed.data;
+  const { relationshipsService } = await import("./services/relationships.js");
+
+  try {
+    const userId = await getAuthenticatedUserId(req, user_id);
+    const created = [];
+    const errors = [];
+    for (const [index, relationship] of relationships.entries()) {
+      try {
+        const snapshot = await relationshipsService.createRelationship({
+          relationship_type: relationship.relationship_type,
+          source_entity_id: relationship.source_entity_id,
+          target_entity_id: relationship.target_entity_id,
+          source_id: relationship.source_id || source_id || null,
+          metadata: relationship.metadata || {},
+          user_id: userId,
+        });
+        created.push({
+          index,
+          ...snapshot,
+        });
+      } catch (error) {
+        errors.push({
+          index,
+          relationship,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    logDebug("Success:create_relationships", req, {
+      requested: relationships.length,
+      created: created.length,
+      errors: errors.length,
+    });
+    return res.json({
+      success: errors.length === 0,
+      requested: relationships.length,
+      created_count: created.length,
+      error_count: errors.length,
+      relationships: created,
+      errors,
+    });
+  } catch (error) {
+    logError("RelationshipCreationError:create_relationships", req, error);
+    return sendError(
+      res,
+      500,
+      "DB_QUERY_FAILED",
+      error instanceof Error ? error.message : "Failed to create relationships"
     );
   }
 });

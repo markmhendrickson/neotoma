@@ -37,6 +37,7 @@ import type {
   RunMode,
   RunSummary,
   ScenarioFile,
+  SeedEntity,
 } from "./types.js";
 
 const PKG_ROOT = resolve(fileURLToPath(import.meta.url), "..", "..");
@@ -103,6 +104,35 @@ function shortToolCallSummary(result: DriverResult): string {
   return [...counts.entries()].map(([name, count]) => `${name}×${count}`).join(", ");
 }
 
+async function seedEntities(
+  baseUrl: string,
+  token: string,
+  entities: SeedEntity[],
+  log: (line: string) => void
+): Promise<void> {
+  const body = {
+    entities,
+    idempotency_key: `seed-${Date.now()}`,
+    commit: true,
+  };
+  const res = await fetch(`${baseUrl}/store`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    log(`[runner] seed failed (${res.status}): ${text.slice(0, 300)}`);
+    throw new Error(`seed_entities failed: HTTP ${res.status}`);
+  }
+  const result = await res.json().catch(() => ({})) as Record<string, unknown>;
+  const created = (result as { entities?: unknown[] }).entities?.length ?? 0;
+  log(`[runner] seeded ${created} entities`);
+}
+
 async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport> {
   const log = opts.log ?? (() => undefined);
   const startedAt = new Date().toISOString();
@@ -160,8 +190,14 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
       env: {
         NEOTOMA_INSTRUCTION_PROFILE_FORCE: effectiveProfile,
       },
+      faults: plan.scenario.server_faults,
     });
     log(`[runner] isolated server up at ${server.baseUrl} (data=${server.dataDir})`);
+
+    if (plan.scenario.seed_entities && plan.scenario.seed_entities.length > 0) {
+      log(`[runner] seeding ${plan.scenario.seed_entities.length} entities into isolated DB`);
+      await seedEntities(server.baseUrl, server.token, plan.scenario.seed_entities, log);
+    }
 
     const invocation: DriverInvocation = {
       scenario: plan.scenario,
@@ -191,6 +227,7 @@ async function runCell(plan: CellPlan, opts: RunnerOptions): Promise<CellReport>
       stats,
       hostToolRegistry: registryForAssertions,
       effectiveProfile,
+      assistantText: driverResult.assistantText,
     });
     pass = assertionFailures.length === 0;
     if (!pass) {

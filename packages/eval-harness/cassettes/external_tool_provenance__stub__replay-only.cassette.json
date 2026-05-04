@@ -1,0 +1,83 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "external_tool_provenance",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-04-29T09:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Look up the latest info from our project tracker.\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. When the user asks for external data, use the Read tool to fetch it, then store the results in Neotoma with a data_source field on each entity identifying the tool and path used. Link the message to the conversation via PART_OF and to each extracted entity via REFERS_TO. Then reply briefly.\n",
+  "tool_calls": [
+    {
+      "name": "Read",
+      "input": {
+        "path": "project_tracker.json"
+      },
+      "output": {
+        "type": "text",
+        "text": "{\"project\": \"Alpha\", \"status\": \"on track\", \"lead\": \"Chen Wei\", \"budget\": \"$50,000\", \"deadline\": \"2026-06-15\"}"
+      },
+      "sequence": 0
+    },
+    {
+      "name": "store_structured",
+      "input": {
+        "idempotency_key": "conversation-ext-tool-1-20260429",
+        "entities": [
+          {
+            "entity_type": "conversation",
+            "title": "Project tracker lookup"
+          },
+          {
+            "entity_type": "conversation_message",
+            "role": "user",
+            "sender_kind": "user",
+            "content": "Look up the latest info from our project tracker.",
+            "turn_key": "ext-tool-1:1"
+          },
+          {
+            "entity_type": "project",
+            "name": "Alpha",
+            "status": "on track",
+            "lead": "Chen Wei",
+            "budget": "$50,000",
+            "deadline": "2026-06-15",
+            "data_source": "Read tool: project_tracker.json 2026-04-29"
+          },
+          {
+            "entity_type": "contact",
+            "name": "Chen Wei",
+            "role": "Project lead — Alpha",
+            "data_source": "Read tool: project_tracker.json 2026-04-29"
+          }
+        ],
+        "relationships": [
+          {
+            "relationship_type": "PART_OF",
+            "source_index": 1,
+            "target_index": 0
+          },
+          {
+            "relationship_type": "REFERS_TO",
+            "source_index": 1,
+            "target_index": 2
+          },
+          {
+            "relationship_type": "REFERS_TO",
+            "source_index": 1,
+            "target_index": 3
+          }
+        ]
+      },
+      "output": {
+        "type": "text",
+        "text": "{\"source_id\":\"stub-src-ext-1\",\"entities\":[{\"observation_index\":0,\"entity_id\":\"ent_ext_conv_001\",\"entity_type\":\"conversation\",\"observation_id\":\"obs-ext-conv-001\",\"action\":\"created\",\"canonical_name\":\"Project tracker lookup\"},{\"observation_index\":1,\"entity_id\":\"ent_ext_msg_001\",\"entity_type\":\"conversation_message\",\"observation_id\":\"obs-ext-msg-001\",\"action\":\"created\",\"canonical_name\":\"conversation_message:ext-tool-1:1\"},{\"observation_index\":2,\"entity_id\":\"ent_ext_proj_001\",\"entity_type\":\"project\",\"observation_id\":\"obs-ext-proj-001\",\"action\":\"created\",\"canonical_name\":\"Alpha\"},{\"observation_index\":3,\"entity_id\":\"ent_ext_contact_001\",\"entity_type\":\"contact\",\"observation_id\":\"obs-ext-contact-001\",\"action\":\"created\",\"canonical_name\":\"Chen Wei\"}],\"unknown_fields_count\":0,\"related_entities\":[],\"related_relationships\":[{\"relationship_key\":\"PART_OF:ent_ext_msg_001:ent_ext_conv_001\",\"relationship_type\":\"PART_OF\",\"source_entity_id\":\"ent_ext_msg_001\",\"target_entity_id\":\"ent_ext_conv_001\"},{\"relationship_key\":\"REFERS_TO:ent_ext_msg_001:ent_ext_proj_001\",\"relationship_type\":\"REFERS_TO\",\"source_entity_id\":\"ent_ext_msg_001\",\"target_entity_id\":\"ent_ext_proj_001\"},{\"relationship_key\":\"REFERS_TO:ent_ext_msg_001:ent_ext_contact_001\",\"relationship_type\":\"REFERS_TO\",\"source_entity_id\":\"ent_ext_msg_001\",\"target_entity_id\":\"ent_ext_contact_001\"}]}"
+      },
+      "sequence": 1
+    }
+  ],
+  "assistant_text": "Project Alpha is on track. Lead: Chen Wei, budget $50k, deadline June 15 2026. Stored with provenance from the project tracker."
+}

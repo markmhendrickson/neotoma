@@ -9,6 +9,8 @@
 
 import type { ToolId } from "./doctor.js";
 import { runDoctor } from "./doctor.js";
+import { runHooksInstall } from "./hooks.js";
+import { toHookHarness } from "./hooks_detect.js";
 import type { PermissionPatch } from "./permissions.js";
 import { writePermissionsForTool, toolFromString } from "./permissions.js";
 
@@ -45,6 +47,7 @@ export interface RunSetupOptions {
     init?: () => Promise<SetupStepResult>;
     mcpConfigure?: () => Promise<SetupStepResult>;
     cliInstructionsConfigure?: () => Promise<SetupStepResult>;
+    hooksInstall?: () => Promise<SetupStepResult>;
   };
 }
 
@@ -83,6 +86,10 @@ export async function runSetup(options: RunSetupOptions = {}): Promise<SetupRepo
     }
   }
 
+  const existingMcp = Object.values(doctorBefore.mcp_servers_detected).some((c) => c.has_neotoma || c.has_neotoma_dev);
+  const mcpStep = steps.find((s) => s.id === "mcp-configure");
+  const mcpConfigured = existingMcp || Boolean(mcpStep?.ok && !mcpStep.skipped);
+
   // Step 3: CLI instructions configure
   if (options.runners?.cliInstructionsConfigure) {
     steps.push(await options.runners.cliInstructionsConfigure());
@@ -104,7 +111,67 @@ export async function runSetup(options: RunSetupOptions = {}): Promise<SetupRepo
     }
   }
 
-  // Step 4: permission patches
+  // Step 4: lifecycle hooks. MCP config is the signal that the harness should
+  // also get its reliability-floor hooks where the harness supports them.
+  if (options.runners?.hooksInstall) {
+    steps.push(await options.runners.hooksInstall());
+  } else {
+    const hookHarness = tool ? toHookHarness(tool) : null;
+    if (!hookHarness) {
+      steps.push({
+        id: "hooks",
+        ok: true,
+        changed: false,
+        skipped: true,
+        reason: tool ? `tool ${tool} does not support lifecycle hooks` : "tool not specified",
+      });
+    } else if (!mcpConfigured) {
+      steps.push({
+        id: "hooks",
+        ok: true,
+        changed: false,
+        skipped: true,
+        reason: "mcp-not-configured",
+      });
+    } else if (doctorBefore.hooks.installed[hookHarness]?.present) {
+      steps.push({
+        id: "hooks",
+        ok: true,
+        changed: false,
+        skipped: true,
+        reason: "already-installed",
+      });
+    } else if (dryRun) {
+      steps.push({ id: "hooks", ok: true, changed: true, skipped: true, reason: "dry-run" });
+    } else if (!doctorBefore.data.initialized) {
+      steps.push({
+        id: "hooks",
+        ok: true,
+        changed: false,
+        skipped: true,
+        reason: "data-not-initialized",
+      });
+    } else {
+      const result = await runHooksInstall({
+        tool: hookHarness,
+        cwd,
+        dryRun: false,
+        yes: true,
+        force: false,
+      });
+      steps.push({
+        id: "hooks",
+        ok: result.ok,
+        changed: result.ok && !result.message.includes("already installed"),
+        details: {
+          message: result.message,
+          delegated_to: result.delegated_to,
+        },
+      });
+    }
+  }
+
+  // Step 5: permission patches
   const permissionPatches: PermissionPatch[] = [];
   if (tool && !options.skipPermissions && tool !== "openclaw" && tool !== "claude-desktop") {
     const patches = await writePermissionsForTool(tool, cwd, {

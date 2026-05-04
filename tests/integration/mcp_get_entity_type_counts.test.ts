@@ -13,11 +13,19 @@ function sortCounts(byType: Record<string, number>): Record<string, number> {
 
 describe("MCP get_entity_type_counts tool", () => {
   let server: NeotomaServer;
-  const testUserId = "00000000-0000-0000-0000-000000000000";
+  const testUserId = "11111111-1111-1111-1111-111111111111";
 
-  beforeAll(() => {
+  beforeAll(async () => {
     server = new NeotomaServer();
     (server as any).authenticatedUserId = testUserId;
+    await (server as any).store({
+      user_id: testUserId,
+      idempotency_key: "mcp-get-entity-type-counts-seed",
+      entities: [
+        { entity_type: "task", title: "MCP counts seed A" },
+        { entity_type: "task", title: "MCP counts seed B" },
+      ],
+    });
   });
 
   it("returns canonical entity counts by type for the authenticated user", async () => {

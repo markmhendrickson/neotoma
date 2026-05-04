@@ -1,0 +1,40 @@
+meta:
+  id: greeting_must_still_store
+  description: >
+    Even a simple greeting must trigger at least one store call. Tests
+    that agents do not skip storage for minimal messages — the turn
+    lifecycle mandates persistence regardless of message complexity.
+  tags:
+    - tier2
+    - turn_lifecycle
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system. Every
+  turn you MUST call store_structured to persist the conversation and the
+  user message, even for greetings and minimal messages. Link the message
+  to the conversation via PART_OF. Then reply briefly.
+
+user_prompt: |
+  Hi there!
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+instruction_profile: auto
+hooks_enabled: true
+
+driver_options:
+  temperature: 0
+  max_tokens: 2048
+
+expected:
+  - type: store_structured.calls
+    op: gte
+    value: 1
+  - type: entity.exists
+    entity_type: conversation_message
+  - type: turn_compliance.backfilled
+    value: false

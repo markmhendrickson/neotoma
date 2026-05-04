@@ -211,6 +211,44 @@ describe("CLI store commands", () => {
       }
     });
 
+    it("should reuse one conversation entity for turns with the same conversation id", async () => {
+      const conversationId = `cli-turn-shared-${Date.now()}`;
+      const first = JSON.parse(
+        (
+          await execAsync(
+            `${CLI_PATH} store-turn --conversation-id "${conversationId}" --conversation-title "CLI Shared Conversation" --turn-key "${conversationId}:1" --message "First turn" --user-id "${TEST_USER_ID}" --json`
+          )
+        ).stdout
+      );
+      const second = JSON.parse(
+        (
+          await execAsync(
+            `${CLI_PATH} store-turn --conversation-id "${conversationId}" --conversation-title "CLI Shared Conversation" --turn-key "${conversationId}:2" --message "Second turn" --user-id "${TEST_USER_ID}" --json`
+          )
+        ).stdout
+      );
+
+      const firstConversation = (Array.isArray(first.entities) ? first.entities : []).find(
+        (entity: any) => entity.entity_type === "conversation",
+      );
+      const secondConversation = (Array.isArray(second.entities) ? second.entities : []).find(
+        (entity: any) => entity.entity_type === "conversation",
+      );
+      const firstConversationId = firstConversation?.entity_id ?? firstConversation?.id;
+      const secondConversationId = secondConversation?.entity_id ?? secondConversation?.id;
+      expect(firstConversationId).toBeDefined();
+      expect(secondConversationId).toBe(firstConversationId);
+
+      for (const result of [first, second]) {
+        if (Array.isArray(result.entities)) {
+          for (const entity of result.entities) {
+            if (entity?.id) tracker.trackEntity(entity.id);
+            if (entity?.entity_id) tracker.trackEntity(entity.entity_id);
+          }
+        }
+      }
+    });
+
     it("should generate default turn_key when omitted", async () => {
       const conversationTitle = `CLI Turn Defaults ${Date.now()}`;
       const result = JSON.parse(
@@ -240,6 +278,44 @@ describe("CLI store commands", () => {
         const turnKey = (snapshot?.snapshot as Record<string, unknown> | undefined)?.turn_key;
         expect(typeof turnKey).toBe("string");
         expect(String(turnKey)).toMatch(/^chat:\d+$/);
+      }
+    });
+
+    it("should keep generated default turns in separate conversations", async () => {
+      const first = JSON.parse(
+        (
+          await execAsync(
+            `${CLI_PATH} store-turn --conversation-title "CLI Default Isolated" --message "First default" --user-id "${TEST_USER_ID}" --json`
+          )
+        ).stdout
+      );
+      const second = JSON.parse(
+        (
+          await execAsync(
+            `${CLI_PATH} store-turn --conversation-title "CLI Default Isolated" --message "Second default" --user-id "${TEST_USER_ID}" --json`
+          )
+        ).stdout
+      );
+
+      const firstConversation = (Array.isArray(first.entities) ? first.entities : []).find(
+        (entity: any) => entity.entity_type === "conversation",
+      );
+      const secondConversation = (Array.isArray(second.entities) ? second.entities : []).find(
+        (entity: any) => entity.entity_type === "conversation",
+      );
+      const firstConversationId = firstConversation?.entity_id ?? firstConversation?.id;
+      const secondConversationId = secondConversation?.entity_id ?? secondConversation?.id;
+      expect(firstConversationId).toBeDefined();
+      expect(secondConversationId).toBeDefined();
+      expect(secondConversationId).not.toBe(firstConversationId);
+
+      for (const result of [first, second]) {
+        if (Array.isArray(result.entities)) {
+          for (const entity of result.entities) {
+            if (entity?.id) tracker.trackEntity(entity.id);
+            if (entity?.entity_id) tracker.trackEntity(entity.entity_id);
+          }
+        }
       }
     });
   });

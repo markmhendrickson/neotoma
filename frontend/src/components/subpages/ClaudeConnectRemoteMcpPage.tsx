@@ -32,48 +32,10 @@ export function ClaudeConnectRemoteMcpPage() {
         </p>
         <ol className="list-decimal pl-5 space-y-4 mb-2">
           <li className="text-[15px] leading-7">
-            <strong>Install a tunnel provider:</strong> Neotoma&apos;s <code>--tunnel</code>{" "}
-            flag needs either{" "}
-            <a href="https://ngrok.com/download" target="_blank" rel="noopener noreferrer" className={extLink}>
-              ngrok
-            </a>{" "}
-            or{" "}
-            <a href="https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/" target="_blank" rel="noopener noreferrer" className={extLink}>
-              Cloudflare Tunnel (cloudflared)
-            </a>{" "}
-            installed on your machine. Install one:
-            <CopyableCodeBlock
-              code={`# ngrok (via Homebrew)\nbrew install ngrok\nngrok config add-authtoken <YOUR_NGROK_TOKEN>\n\n# or Cloudflare Tunnel\nbrew install cloudflared`}
-              className="mt-2 mb-1"
-            />
-            <p className="text-[14px] leading-6 text-muted-foreground mt-1">
-              ngrok requires a free account and auth token from{" "}
-              <a href="https://dashboard.ngrok.com/get-started/your-authtoken" target="_blank" rel="noopener noreferrer" className={extLink}>
-                dashboard.ngrok.com
-              </a>
-              . You can set the token as an environment variable instead of running{" "}
-              <code>ngrok config</code>:
-            </p>
-            <CopyableCodeBlock
-              code={`# In your shell profile or .env\nexport NGROK_AUTHTOKEN=<YOUR_NGROK_TOKEN>`}
-              className="mt-2 mb-1"
-            />
-            <p className="text-[14px] leading-6 text-muted-foreground mt-1">
-              Cloudflare Tunnel works without an account for quick tunnels. If both
-              providers are installed, Neotoma auto-detects which to use; pass{" "}
-              <code>--tunnel-provider ngrok</code> or <code>--tunnel-provider cloudflare</code>{" "}
-              to choose explicitly.
-            </p>
-          </li>
-          <li className="text-[15px] leading-7">
-            <strong>Start the API server with a tunnel:</strong> the <code>--tunnel</code>{" "}
-            flag auto-provisions a public HTTPS URL via ngrok or Cloudflare (whichever is installed)
+            <strong>Start Neotoma with a tunnel:</strong> follow the{" "}
+            <Link to="/tunnel" className={extLink}>tunnel guide</Link> to expose your local
+            Neotoma instance over HTTPS. The quickest path:
             <CopyableCodeBlock code={`neotoma api start --env prod --tunnel`} className="mt-2 mb-1" />
-            <p className="text-[14px] leading-6 text-muted-foreground mt-1">
-              The tunnel URL is printed to the console and written to{" "}
-              <code>/tmp/ngrok-mcp-url.txt</code>. You can also use a reverse proxy or your own
-              domain instead of <code>--tunnel</code>.
-            </p>
           </li>
           <li className="text-[15px] leading-7">
             <strong>Connect in claude.ai:</strong> go to Settings &rarr; MCP Servers and add

@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "compact_profile_still_stores",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "compact",
+    "recorded_at": "2026-04-29T09:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "What time is it in Tokyo?\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. Always store the conversation and user message before responding, even when using a compact instruction profile. Then reply briefly.\n",
+  "tool_calls": [
+    {
+      "name": "store_structured",
+      "input": {
+        "idempotency_key": "conversation-compact-1-20260429",
+        "entities": [
+          {
+            "entity_type": "conversation",
+            "title": "Time in Tokyo"
+          },
+          {
+            "entity_type": "conversation_message",
+            "role": "user",
+            "sender_kind": "user",
+            "content": "What time is it in Tokyo?",
+            "turn_key": "compact-1:1"
+          }
+        ],
+        "relationships": [
+          {
+            "relationship_type": "PART_OF",
+            "source_index": 1,
+            "target_index": 0
+          }
+        ]
+      },
+      "output": {
+        "type": "text",
+        "text": "{\"source_id\":\"stub-src-compact-1\",\"entities\":[{\"observation_index\":0,\"entity_id\":\"ent_compact_conv_001\",\"entity_type\":\"conversation\",\"observation_id\":\"obs-compact-conv-001\",\"action\":\"created\",\"canonical_name\":\"Time in Tokyo\"},{\"observation_index\":1,\"entity_id\":\"ent_compact_msg_001\",\"entity_type\":\"conversation_message\",\"observation_id\":\"obs-compact-msg-001\",\"action\":\"created\",\"canonical_name\":\"conversation_message:compact-1:1\"}],\"unknown_fields_count\":0,\"related_entities\":[],\"related_relationships\":[{\"relationship_key\":\"PART_OF:ent_compact_msg_001:ent_compact_conv_001\",\"relationship_type\":\"PART_OF\",\"source_entity_id\":\"ent_compact_msg_001\",\"target_entity_id\":\"ent_compact_conv_001\"}]}"
+      },
+      "sequence": 0
+    }
+  ],
+  "assistant_text": "Tokyo is UTC+9. Right now it's approximately 6:00 PM JST on April 29, 2026."
+}

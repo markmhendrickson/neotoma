@@ -1,0 +1,44 @@
+meta:
+  id: user_identity_extraction
+  description: >
+    User self-identifies with name and email. Agent must store the user
+    as a contact or person entity. Tests the user identity extraction
+    rule.
+  tags:
+    - tier2
+    - extraction
+    - writ:entity
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system. In one
+  store_structured call, persist (a) a `conversation` entity, (b) a
+  `conversation_message` for the user's message linked to the conversation
+  via PART_OF, and (c) every entity the user mentions or implies (people,
+  contacts, identity) linked from the message via REFERS_TO. When the
+  user self-identifies, store them as a contact or person. Then reply
+  briefly.
+
+user_prompt: |
+  My name is Jordan Rivera and my email is jordan@example.com
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+instruction_profile: auto
+hooks_enabled: true
+
+driver_options:
+  temperature: 0
+  max_tokens: 2048
+
+expected:
+  - type: store_structured.calls
+    op: gte
+    value: 1
+  - type: entity.exists
+    entity_type_any_of: [contact, person]
+  - type: relationship.exists
+    relationship_type: PART_OF

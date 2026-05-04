@@ -59,15 +59,16 @@ import {
   Waypoints,
   Zap,
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 import { SiClaude, SiOpenai } from "react-icons/si";
 import { CodexIcon } from "@/components/icons/CodexIcon";
 import { CursorIcon } from "@/components/icons/CursorIcon";
+import { IronClawIcon } from "@/components/icons/IronClawIcon";
+import { OpenCodeIcon } from "@/components/icons/OpenCodeIcon";
 import { OpenClawIcon } from "@/components/icons/OpenClawIcon";
 import { DOC_NAV_CATEGORIES } from "@/site/site_data";
 
-/** Lucide icons for doc nav items by icon name (matches sidebar). */
-export const DOC_NAV_ICONS: Record<string, LucideIcon> = {
+/** Icons for doc nav items by icon name (matches sidebar). */
+export const DOC_NAV_ICONS: Record<string, React.ComponentType<DocPageIconProps>> = {
   Archive,
   Bookmark,
   BookOpen,
@@ -97,6 +98,7 @@ export const DOC_NAV_ICONS: Record<string, LucideIcon> = {
   Heart,
   History,
   Home,
+  IronClaw: IronClawIcon,
   Key,
   Landmark,
   Layers,
@@ -105,6 +107,7 @@ export const DOC_NAV_ICONS: Record<string, LucideIcon> = {
   MessageCircle,
   MessageSquare,
   Monitor,
+  OpenCode: OpenCodeIcon,
   Package,
   Palette,
   PanelRight,
@@ -144,8 +147,10 @@ export const INTEGRATION_BRAND_ICONS: Record<
   "/neotoma-with-codex": CodexIcon,
   "/neotoma-with-codex-connect-local-stdio": CodexIcon,
   "/neotoma-with-codex-connect-remote-http-oauth": CodexIcon,
+  "/neotoma-with-opencode": OpenCodeIcon,
   "/neotoma-with-cursor": CursorIcon,
   "/neotoma-with-openclaw": OpenClawIcon,
+  "/neotoma-with-ironclaw": IronClawIcon,
   "/neotoma-with-openclaw-connect-local-stdio": OpenClawIcon,
   "/neotoma-with-openclaw-connect-remote-http": OpenClawIcon,
 };

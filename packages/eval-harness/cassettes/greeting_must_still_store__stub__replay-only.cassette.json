@@ -1,0 +1,49 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "greeting_must_still_store",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-04-29T09:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "Hi there!\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. Every turn you MUST call store_structured to persist the conversation and the user message, even for greetings and minimal messages. Link the message to the conversation via PART_OF. Then reply briefly.\n",
+  "tool_calls": [
+    {
+      "name": "store_structured",
+      "input": {
+        "idempotency_key": "conversation-greeting-1-user",
+        "entities": [
+          {
+            "entity_type": "conversation",
+            "title": "Greeting"
+          },
+          {
+            "entity_type": "conversation_message",
+            "role": "user",
+            "sender_kind": "user",
+            "content": "Hi there!",
+            "turn_key": "greeting-1:1"
+          }
+        ],
+        "relationships": [
+          {
+            "relationship_type": "PART_OF",
+            "source_index": 1,
+            "target_index": 0
+          }
+        ]
+      },
+      "output": [
+        {
+          "type": "input_text",
+          "text": "{\"source_id\":\"stub-src-greet-1\",\"entities\":[{\"observation_index\":0,\"entity_id\":\"ent_stub_greet_001\",\"entity_type\":\"conversation\",\"action\":\"created\",\"canonical_name\":\"conversation:Greeting\",\"resolver_path\":[\"schema:canonical_name_fields:title\",\"existing_row:none\"],\"identity_basis\":\"schema_rule\",\"identity_rule\":\"composite:title\"},{\"observation_index\":1,\"entity_id\":\"ent_stub_greet_002\",\"entity_type\":\"conversation_message\",\"action\":\"created\",\"canonical_name\":\"conversation_message:greeting-1:1\",\"resolver_path\":[\"schema:canonical_name_fields:turn_key\",\"existing_row:none\"],\"identity_basis\":\"schema_rule\",\"identity_rule\":\"composite:turn_key\"}],\"unknown_fields_count\":0,\"related_entities\":[],\"related_relationships\":[{\"relationship_key\":\"PART_OF:ent_stub_greet_002:ent_stub_greet_001\",\"relationship_type\":\"PART_OF\",\"source_entity_id\":\"ent_stub_greet_002\",\"target_entity_id\":\"ent_stub_greet_001\",\"schema_version\":\"1.0\",\"snapshot\":{},\"computed_at\":\"2026-04-29T09:00:00.000Z\",\"observation_count\":1,\"last_observation_at\":\"2026-04-29T09:00:00.000Z\",\"provenance\":{},\"user_id\":\"00000000-0000-0000-0000-000000000000\"}]}"
+        }
+      ],
+      "sequence": 0
+    }
+  ],
+  "assistant_text": "Hello! How can I help you today?"
+}

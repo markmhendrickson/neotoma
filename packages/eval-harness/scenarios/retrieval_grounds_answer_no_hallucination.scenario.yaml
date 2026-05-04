@@ -1,0 +1,55 @@
+meta:
+  id: retrieval_grounds_answer_no_hallucination
+  description: >
+    A task entity is pre-seeded in the DB. When the user asks about their
+    tasks, the agent must retrieve and cite the existing task in its reply
+    rather than inventing facts. Tests [RETRIEVAL] answer grounding.
+  tags:
+    - tier2
+    - retrieval
+    - grounding
+    - writ:abstention
+
+seed_strategy: hybrid_amplified
+source_pattern: "User asked about pending tasks; agent hallucinated tasks not in memory instead of citing stored records."
+privacy_transform: "Task details replaced with synthetic equivalents."
+
+seed_entities:
+  - entity_type: task
+    title: Pay invoice #4421
+    due_date: "2026-05-15"
+    status: pending
+    counterparty: Acme Consulting
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system. When the
+  user asks about their data, retrieve existing entities from Neotoma and
+  ground your answer in what you find. Do not invent facts that are not
+  stored. Persist the conversation and user message via store_structured.
+
+user_prompt: |
+  What tasks do I have?
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+instruction_profile: auto
+hooks_enabled: true
+
+driver_options:
+  temperature: 0
+  max_tokens: 2048
+
+expected:
+  - type: store_structured.calls
+    op: gte
+    value: 1
+  - type: entity.exists
+    entity_type: task
+  - type: relationship.exists
+    relationship_type: PART_OF
+  - type: reply_text.contains
+    pattern: "4421|invoice|Pay invoice"

@@ -17,7 +17,7 @@ This document does NOT cover:
 **Metric Collection Infrastructure:**
 - **Technical metrics** (latency, errors, system health): Prometheus + Grafana
 - **Product analytics** (activation, retention, funnels): PostHog (recommended) or Mixpanel
-- See `docs/specs/MVP_FEATURE_UNITS.md` Phase 8 for implementation details
+- Historical Phase 8 implementation planning is archived in `docs/releases/archived/mvp_planning/MVP_FEATURE_UNITS.md`; current metrics priorities are phase-specific and documented in `docs/private/strategy/metrics_measurement_strategy.md`.
 ## 1. Product Activation Metrics
 ### 1.1 First-Session Activation
 **Goal:** User completes meaningful interaction within first 5 minutes.

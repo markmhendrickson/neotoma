@@ -133,7 +133,7 @@ export function SandboxLandingPage() {
         <CopyableCodeBlock code={CLAUDE_CODE_REMOTE_MCP} className="mb-6" />
 
         <p className="text-[14px] leading-6 text-muted-foreground">
-          Other harnesses: see <Link to="/connect" className={extLink}>Connect a remote Neotoma</Link>{" "}
+          Other harnesses: see <Link to="/connect" className={extLink}>Connect remotely</Link>{" "}
           for per-tool snippets (Claude Desktop, ChatGPT, Codex, OpenClaw). The live sandbox also
           renders a harness picker directly at its root URL -{" "}
           <a

@@ -1,7 +1,7 @@
 {
   "meta": {
     "id": "agent_skips_store",
-    "description": "Agent finishes a turn without ever calling store_structured. The stop hook must (a) emit a turn_compliance observation with status=backfilled_by_hook, (b) attach an instruction_diagnostics block classifying the skipped store, and (c) for small models with NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP=auto/on, return a follow-up message that includes a likely-cause sentence; strong models (auto resolves to off) MUST NOT receive a follow-up.",
+    "description": "Agent finishes a turn without ever calling store_structured. The stop hook must (a) emit a turn_compliance observation with status=backfilled_by_hook, (b) attach an instruction_diagnostics block classifying the skipped store, and (c) with NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP=auto/on, return a follow-up message that includes a likely-cause sentence for every model.",
     "harnesses": ["cursor-hooks"],
     "models": ["composer-2", "gpt-5.5-fast", "claude-haiku-4", "claude-sonnet-4.5", "gpt-5.5-medium"],
     "tags": ["compliance", "stop-hook", "diagnosis"]
@@ -70,12 +70,14 @@
       },
       "claude-sonnet-4.5": {
         "stop": [
-          { "field": "followup_message", "presence": "absent" }
+          { "field": "followup_message", "presence": "present", "matches": "Neotoma compliance pass" },
+          { "field": "followup_message", "matches": "Likely cause: hook state incomplete" }
         ]
       },
       "gpt-5.5-medium": {
         "stop": [
-          { "field": "followup_message", "presence": "absent" }
+          { "field": "followup_message", "presence": "present", "matches": "Neotoma compliance pass" },
+          { "field": "followup_message", "matches": "Likely cause: hook state incomplete" }
         ]
       }
     }

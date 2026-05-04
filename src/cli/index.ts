@@ -7355,11 +7355,16 @@ mcpCommand
     "--user-level",
     "Include user-level MCP config paths (e.g. ~/.cursor/mcp.json, Claude, Windsurf)"
   )
-  .action(async (_opts: { userLevel?: boolean }) => {
+  .option("--install-hooks", "Install or verify Neotoma lifecycle hooks for hook-capable MCP harnesses", true)
+  .option("--no-hooks", "Skip installing or verifying lifecycle hooks after MCP config is present")
+  .option("--yes", "Skip confirmation prompts for hook installation", false)
+  .action(async (opts: { userLevel?: boolean; installHooks?: boolean; hooks?: boolean; yes?: boolean }) => {
     const outputMode = resolveOutputMode();
 
     try {
-      const { scanForMcpConfigs, offerInstall } = await import("./mcp_config_scan.js");
+      const { scanForMcpConfigs, offerInstall, inferHookHarnessesFromMcpConfigs } = await import(
+        "./mcp_config_scan.js"
+      );
       const devPortEnv = process.env.NEOTOMA_SESSION_DEV_PORT;
       const prodPortEnv = process.env.NEOTOMA_SESSION_PROD_PORT;
       const devPort = devPortEnv && /^\d+$/.test(devPortEnv) ? parseInt(devPortEnv, 10) : undefined;
@@ -7432,6 +7437,41 @@ mcpCommand
         process.stdout.write(success("✓ ") + result.message + nl());
       } else if (result.message !== "Dev and prod Neotoma servers are already configured.") {
         process.stdout.write(result.message + nl());
+      }
+
+      const shouldInstallHooks = opts.hooks !== false && opts.installHooks !== false;
+      if (shouldInstallHooks) {
+        const { configs: updatedConfigs } = await scanForMcpConfigs(process.cwd(), {
+          includeUserLevel: true,
+          userLevelFirst: false,
+          devPort,
+          prodPort,
+          neotomaRepoRoot: repoRoot,
+        });
+        const hookHarnesses = inferHookHarnessesFromMcpConfigs(updatedConfigs);
+        if (hookHarnesses.length > 0) {
+          if (process.stdout.isTTY || opts.yes) {
+            const { runHooksInstall } = await import("./hooks.js");
+            for (const tool of hookHarnesses) {
+              const hookResult = await runHooksInstall({
+                tool,
+                cwd: process.cwd(),
+                dryRun: false,
+                yes: Boolean(opts.yes),
+                force: false,
+              });
+              const prefix = hookResult.ok ? success("✓ ") : warn("⚠ ");
+              process.stdout.write(prefix + hookResult.message + nl());
+            }
+          } else {
+            process.stdout.write(
+              dim("Tip: Run ") +
+                pathStyle("neotoma hooks install --tool " + hookHarnesses[0] + " --yes") +
+                dim(" to add lifecycle hooks for this MCP harness.") +
+                nl()
+            );
+          }
+        }
       }
 
       if (result.installed && process.stdout.isTTY && repoRoot) {
@@ -8418,9 +8458,9 @@ program
     process.exitCode = exitCode;
   });
 
-// `neotoma hooks` — lifecycle hook install/uninstall/status. Deliberately
-// separate from `neotoma setup`: hooks are offered during activation (after
-// the first-Aha timeline) rather than at install time. See install.md.
+// `neotoma hooks` — lifecycle hook install/uninstall/status. Setup flows call
+// this after MCP is configured; the runtime MCP server never mutates harness
+// hook configuration on its own.
 const hooksCommand = program
   .command("hooks")
   .description(
@@ -10905,25 +10945,43 @@ observationsCommand
 
 relationshipsCommand
   .command("create")
-  .description("Create a relationship between two entities")
+  .description("Create one relationship, or a batch from --file")
   .option("--source-entity-id <id>", "Source entity ID (required)")
   .option("--target-entity-id <id>", "Target entity ID (required)")
   .option("--relationship-type <type>", "Relationship type (required)")
   .option("--user-id <userId>", "User ID")
   .option("--metadata <json>", "Relationship metadata as JSON")
+  .option("--file <path>", "JSON file containing an array or { relationships: [...] } batch")
   .action(async (opts) => {
     const outputMode = resolveOutputMode();
-    if (!opts.sourceEntityId) throw new Error("--source-entity-id is required");
-    if (!opts.targetEntityId) throw new Error("--target-entity-id is required");
-    if (!opts.relationshipType) throw new Error("--relationship-type is required");
     const config = await readConfig();
     const token = await getCliToken();
     const api = createApiClient({
       baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
       token,
     });
-    const metadata = opts.metadata ? JSON.parse(opts.metadata) : undefined;
     const effectiveUserId = resolveEffectiveUserId(opts.userId);
+    if (opts.file) {
+      const parsedFile = JSON.parse(readFileSync(opts.file, "utf8"));
+      const relationships = Array.isArray(parsedFile) ? parsedFile : parsedFile.relationships;
+      if (!Array.isArray(relationships) || relationships.length === 0) {
+        throw new Error("--file must contain a non-empty relationship array");
+      }
+      const { data, error } = await api.POST("/create_relationships", {
+        body: {
+          relationships,
+          ...(effectiveUserId ? { user_id: effectiveUserId } : {}),
+        } as any,
+      });
+      if (error) throw new Error("Failed to create relationships");
+      writeOutput(data, outputMode);
+      return;
+    }
+
+    if (!opts.sourceEntityId) throw new Error("--source-entity-id is required");
+    if (!opts.targetEntityId) throw new Error("--target-entity-id is required");
+    if (!opts.relationshipType) throw new Error("--relationship-type is required");
+    const metadata = opts.metadata ? JSON.parse(opts.metadata) : undefined;
     const { data, error } = await api.POST("/create_relationship", {
       body: {
         relationship_type: opts.relationshipType as any,
@@ -12142,9 +12200,21 @@ program
     );
   });
 
+function deriveConversationIdFromTurnKey(turnKey: string): string {
+  const withoutAssistant = turnKey.endsWith(":assistant")
+    ? turnKey.slice(0, -":assistant".length)
+    : turnKey;
+  const lastColon = withoutAssistant.lastIndexOf(":");
+  if (lastColon > 0) {
+    return withoutAssistant.slice(0, lastColon);
+  }
+  return withoutAssistant || `chat:${Date.now()}`;
+}
+
 program
   .command("store-turn")
   .description("Store one chat turn (conversation + message + optional entities) in one request")
+  .option("--conversation-id <id>", "Stable conversation/session ID shared by all turns in the chat")
   .option("--conversation-title <title>", "Conversation title")
   .option("--message <text>", "Turn message content")
   .option("--role <role>", "Message role (default: user)", "user")
@@ -12170,6 +12240,9 @@ program
 
     const timestampMs = Date.now();
     const turnKey = opts.turnKey ?? `chat:${timestampMs}`;
+    const conversationId =
+      opts.conversationId ??
+      (opts.turnKey ? deriveConversationIdFromTurnKey(turnKey) : turnKey);
     const idempotencyKey = opts.idempotencyKey ?? `conversation-chat-${timestampMs}-${randomUUID()}`;
 
     let extractedEntities: Array<Record<string, unknown>> = [];
@@ -12183,7 +12256,11 @@ program
 
     const messageRole = opts.role ?? "user";
     const entities = [
-      { entity_type: "conversation", title: opts.conversationTitle ?? "Chat conversation" },
+      {
+        entity_type: "conversation",
+        conversation_id: conversationId,
+        title: opts.conversationTitle ?? "Chat conversation",
+      },
       {
         entity_type: "conversation_message",
         role: messageRole,

@@ -39,10 +39,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
     <title>Multi-Agent Shared State | Write Integrity for Multi-Agent Systems (Markdown) | Neotoma</title>
-    <script type="module" crossorigin="" src="/assets/main-CaoWcp2k.js"></script>
-    <link rel="stylesheet" crossorigin="" href="/assets/main-BBds_bdF.css">
+    <script type="module" crossorigin="" src="/assets/main-aNEaYUJL.js"></script>
+    <link rel="stylesheet" crossorigin="" href="/assets/main-a7BqVBLd.css">
   
-    <!-- build: local-1777360387837 -->
+    <!-- build: local-1777885129871 -->
       <link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/multi-agent-state">
     <link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/multi-agent-state">
     <link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/multi-agent-state">
@@ -62,13 +62,22 @@
     <div id="root"><iframe title="Markdown capture" aria-hidden="true" width="1280" height="900" class="pointer-events-none fixed left-[-9999px] top-0 z-[-1] border-0 opacity-0" sandbox="allow-same-origin allow-scripts allow-forms"></iframe><div class="min-h-screen bg-background text-foreground"><pre class="whitespace-pre-wrap break-words p-4 font-mono text-[13px] leading-relaxed text-foreground">&lt;!--
   Full-page Markdown export (rendered HTML → GFM).
   Source: https://neotoma.io/ur/multi-agent-state
-  Generated: 2026-04-28T07:16:50.135Z
+  Generated: 2026-05-04T09:02:41.096Z
 --&gt;
 Multi-Agent State
 
 # When agents share state, write integrity stops being optional
 
 A single agent writing to a single memory store degrades gracefully: bad writes erode quality over time. When multiple agents write to shared state, one bad observation propagates at machine speed, triggering downstream actions before any human can intervene. The failure mode shifts from gradual drift to cascade failure.
+
+On this page
+
+-   [Single-agent systems hide write-integrity failures](#single-agent-systems-hide-write-integrity-failures)
+-   [What breaks when agents share state](#what-breaks-when-agents-share-state)
+-   [How one bad write triggers a chain reaction](#how-one-bad-write-triggers-a-chain-reaction)
+-   [How multi-agent systems emerge](#how-multi-agent-systems-emerge)
+-   [Between your agents and your database](#between-your-agents-and-your-database)
+-   [Every observation is traceable from day one](#every-observation-is-traceable-from-day-one)
 
 The masking effect
 
@@ -82,126 +91,13 @@ Failure modes
 
 ## What breaks when agents share state
 
-When Agent A writes observations that Agent B reads and acts on, a fundamentally different failure topology emerges. These are not edge cases—they are structural properties of any multi-writer system without integrity guarantees.
-
-Contradiction amplification
-
-Two agents store conflicting facts about the same entity from different interactions. A third agent takes action on whichever fact the retrieval layer surfaces, with no basis for adjudicating between them.
-
-Without write integrity
-
-No forensic path. The retrieval layer returns one version; the contradiction is invisible until downstream consequences surface.
-
-With write integrity
-
-Append-only observation log with timestamps and source attribution. Both facts are preserved. The reducer surfaces the conflict deterministically.
-
-Silent overwrite cascades
-
-Agent A updates a record. Agent B, operating on a stale read, writes its own update that implicitly reverts Agent A's change. Neither agent throws an error.
-
-Without write integrity
-
-In a mutable database, this is nearly undetectable. The overwrite looks like a normal write. Previous state is gone.
-
-With write integrity
-
-In an append-only log with hash-linked observations, implicit overwrites are structurally impossible. Every write is a new observation, not a mutation.
-
-Trust boundary collapse
-
-Shared state implicitly means each agent trusts the other's writes. But agents have different capabilities, prompt contexts, and error profiles.
-
-Without write integrity
-
-A financial analysis agent and a support chatbot have equal write authority over the same entity state. No schema constraint distinguishes them.
-
-With write integrity
-
-Schema-constrained writes enforce what each agent can write. Observations carry writer identity and context. The reducer applies priority rules.
-
 Cascade example
 
 ## How one bad write triggers a chain reaction
 
-A SaaS company runs three agents sharing state about customer accounts: inbound support, account health scoring, and renewal/upsell recommendations.
-
-1
-
-Support agent
-
-Processes a frustrated customer and stores: "customer expressed dissatisfaction with pricing, considering alternatives."
-
-The customer was frustrated with a billing error, not pricing. The LLM-mediated extraction compressed the interaction into a misleading summary.
-
-2
-
-Health-scoring agent
-
-Reads the support observation, downgrades the account, stores: "high churn risk, recommend retention intervention."
-
-Acted on unfaithful source data. The downgrade is a correct inference from wrong premises.
-
-3
-
-Renewal agent
-
-Reads the downgraded score, generates and sends a discount offer—within minutes, no human in the loop.
-
-Retrieval worked at every step. The failure was in the write. Nothing in the system could trace the chain from bad observation to wrong action.
-
-What write integrity changes
-
--   Every observation links to its source interaction, not a summarized derivative
--   The health-scoring agent sees the raw observation with provenance, not a flat fact
--   Contradiction between billing-error and pricing-dissatisfaction surfaces as a conflict, not a silent overwrite
--   The full causal chain from observation to action is traversable after the fact
-
 Multi-agent topologies
 
 ## How multi-agent systems emerge (and where database decisions lock in)
-
-Most multi-agent systems are not designed as multi-agent systems. They accrete: one agent for support, another for ops, then someone connects them. Database choices made at topology 1 are baked in by topology 3. Migrating from mutable to append-only state is a rearchitecture, not a library swap.
-
-Hub-and-spoke
-
-Low write risk
-
-Current dominant pattern
-
-One primary agent faces the user and delegates subtasks to specialized agents. Shared state is the primary agent's context window. Subordinate agents are stateless tool calls.
-
-Cursor delegates to code, research, and analysis sub-agents. The hub manages all state.
-
-Pipeline agents
-
-Medium write risk
-
-Now – 12 months
-
-Sequential handoffs where each agent processes and enriches a work item. Each agent reads state written by the previous agent and appends its own.
-
-Lead qualification → company research → outreach drafting → meeting scheduling. A bad write at step 2 calibrates every downstream agent wrong.
-
-Event-driven with shared context
-
-High write risk
-
-12 – 24 months
-
-Multiple agents subscribe to events from a shared environment, maintain their own perspectives, and write observations back to a common store. No orchestrator.
-
-CRM agents, support agents, and billing agents all react to customer events independently. Concurrent writes from different interpretive frameworks, no coordinator to catch contradictions.
-
-Persistent autonomous agents
-
-Critical write risk
-
-18 – 36 months
-
-Agents running continuously, maintaining evolving world models, periodically synchronizing with other agents or a shared truth store. Context windows cannot serve as memory.
-
-Always-on monitoring agents maintaining state across days or weeks, synchronizing findings with planning agents that act on the accumulated picture.
 
 Integration model
 

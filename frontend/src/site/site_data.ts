@@ -15,7 +15,7 @@ export interface SiteSection {
   label: string;
   /** Short label for sidebar nav (e.g. "Bugs" instead of "Report or fix bugs") */
   shortLabel: string;
-  /** Lucide icon name for sidebar (e.g. "Bug", "Terminal") */
+  /** Icon name for sidebar (e.g. "Bug", "Terminal", "OpenCode") */
   icon: string;
 }
 
@@ -360,8 +360,11 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
       { label: "Documentation", href: "/docs", icon: "Home" },
       { label: "Evaluate", href: "/evaluate", icon: "ClipboardCheck" },
       { label: "Meet the creator", href: "/meet", icon: "CalendarClock" },
+      { label: "What to store first", href: "/what-to-store", icon: "BookOpen" },
       { label: "Install", href: "/install", icon: "Download" },
-      { label: "Connect a remote Neotoma", href: "/connect", icon: "Plug" },
+      { label: "Backup and restore", href: "/backup", icon: "Database" },
+      { label: "Connect remotely", href: "/connect", icon: "Plug" },
+      { label: "Expose tunnel", href: "/tunnel", icon: "SatelliteDish" },
       { label: "Walkthrough", href: "/walkthrough", icon: "Waypoints" },
     ],
   },
@@ -375,12 +378,14 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
   {
     title: "Integrations",
     items: [
-      { label: "Claude Code", href: "/neotoma-with-claude-code", icon: "Code" },
-      { label: "Claude", href: "/neotoma-with-claude", icon: "MessageSquare" },
       { label: "ChatGPT", href: "/neotoma-with-chatgpt", icon: "MessageCircle" },
+      { label: "Claude", href: "/neotoma-with-claude", icon: "MessageSquare" },
+      { label: "Claude Code", href: "/neotoma-with-claude-code", icon: "Code" },
       { label: "Codex", href: "/neotoma-with-codex", icon: "Monitor" },
       { label: "Cursor", href: "/neotoma-with-cursor", icon: "PanelRight" },
+      { label: "IronClaw", href: "/neotoma-with-ironclaw", icon: "IronClaw" },
       { label: "OpenClaw", href: "/neotoma-with-openclaw", icon: "Sparkles" },
+      { label: "OpenCode", href: "/neotoma-with-opencode", icon: "OpenCode" },
     ],
   },
   {
@@ -553,7 +558,8 @@ npm install -g neotoma
 neotoma doctor --json
 
 # 3. Run the full idempotent setup for the current harness
-neotoma setup --tool claude-code --yes   # or: --tool cursor | --tool codex | --tool openclaw`,
+neotoma setup --tool claude-code --yes   # or: --tool cursor | --tool codex | --tool openclaw
+neotoma hooks install --tool opencode --yes   # optional OpenCode lifecycle hooks`,
   agentInstallPrompt: `Read https://neotoma.io/install and carry me through the install-first Neotoma flow.
 
 Use \`neotoma\` commands for status and setup. If Neotoma is already installed, start with \`neotoma doctor --json\`; otherwise install it and run \`neotoma setup --tool <my_tool> --yes\`.

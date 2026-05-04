@@ -38,10 +38,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
     <title>Inspector, Settings · Attribution policy (Markdown) | Neotoma</title>
-    <script type="module" crossorigin="" src="/assets/main-CaoWcp2k.js"></script>
-    <link rel="stylesheet" crossorigin="" href="/assets/main-BBds_bdF.css">
+    <script type="module" crossorigin="" src="/assets/main-aNEaYUJL.js"></script>
+    <link rel="stylesheet" crossorigin="" href="/assets/main-a7BqVBLd.css">
   
-    <!-- build: local-1777360387837 -->
+    <!-- build: local-1777885129871 -->
       <link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/inspector/settings/attribution-policy">
     <link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/inspector/settings/attribution-policy">
     <link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/inspector/settings/attribution-policy">
@@ -61,7 +61,7 @@
     <div id="root"><iframe title="Markdown capture" aria-hidden="true" width="1280" height="900" class="pointer-events-none fixed left-[-9999px] top-0 z-[-1] border-0 opacity-0" sandbox="allow-same-origin allow-scripts allow-forms"></iframe><div class="min-h-screen bg-background text-foreground"><pre class="whitespace-pre-wrap break-words p-4 font-mono text-[13px] leading-relaxed text-foreground">&lt;!--
   Full-page Markdown export (rendered HTML → GFM).
   Source: https://neotoma.io/hi/inspector/settings/attribution-policy
-  Generated: 2026-04-28T07:16:04.650Z
+  Generated: 2026-05-04T09:01:55.165Z
 --&gt;
 # Inspector, Settings · Attribution policy
 
@@ -151,7 +151,7 @@ Attribution policy panel, global mode, minimum tier, per-path overrides, and a d
 
 -   allow Accept writes at every tier, including `anonymous`. Suitable for personal-use mode and sandbox.
 -   warn Accept writes but emit an `attribution_decision warn` log line whenever the request lands below the minimum tier. Useful while rolling AAuth out across an existing fleet of agents.
--   reject Refuse writes below the minimum tier with a structured 401 error. The recommended setting for shared/server installs once your agents are signing.
+-   reject Refuse writes below the minimum tier with a structured 403 error. The recommended setting for shared/server installs once your agents are signing.
 
 ◆
 
@@ -160,9 +160,10 @@ Attribution policy panel, global mode, minimum tier, per-path overrides, and a d
 Requests above the configured floor are accepted (subject to global mode); requests below it are warned or rejected. The four tiers, in descending strength:
 
 1.  `hardware`, verified AAuth signature with hardware-backed attestation (TPM 2.0, Apple Secure Enclave, Yubikey).
-2.  `software`, verified AAuth signature without an attested hardware backing.
-3.  `unverified_client`, recognisable `clientInfo` but no signature.
-4.  `anonymous`, neither signature nor recognisable client.
+2.  `operator_attested`, verified AAuth signature with `iss` (or `iss:sub`) in the operator allowlist.
+3.  `software`, verified AAuth signature without an attested hardware backing or operator allowlist match.
+4.  `unverified_client`, recognisable `clientInfo` but no signature.
+5.  `anonymous`, neither signature nor recognisable client.
 
 ◆
 

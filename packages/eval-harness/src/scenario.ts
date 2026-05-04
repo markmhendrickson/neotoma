@@ -48,6 +48,22 @@ function normalizeScenario(raw: unknown, file: string): ScenarioFile {
     );
   }
 
+  const seedStrategy = o.seed_strategy as ScenarioFile["seed_strategy"] | undefined;
+  if (seedStrategy != null) {
+    assertField(
+      ["generated", "real_derived", "hybrid_amplified"].includes(seedStrategy),
+      `seed_strategy must be one of generated|real_derived|hybrid_amplified`,
+      file
+    );
+    if (seedStrategy === "real_derived" || seedStrategy === "hybrid_amplified") {
+      assertField(
+        typeof o.source_pattern === "string" && o.source_pattern.length > 0,
+        `source_pattern is required when seed_strategy is ${seedStrategy}`,
+        file
+      );
+    }
+  }
+
   const scenario: ScenarioFile = {
     meta: {
       id: meta!.id as string,
@@ -64,6 +80,16 @@ function normalizeScenario(raw: unknown, file: string): ScenarioFile {
     instruction_profile: instruction_profile ?? "auto",
     hooks_enabled: typeof o.hooks_enabled === "boolean" ? o.hooks_enabled : true,
     driver_options: (o.driver_options as ScenarioFile["driver_options"]) ?? {},
+    seed_strategy: seedStrategy,
+    source_transcript_ref: typeof o.source_transcript_ref === "string" ? o.source_transcript_ref : undefined,
+    source_pattern: typeof o.source_pattern === "string" ? o.source_pattern : undefined,
+    privacy_transform: typeof o.privacy_transform === "string" ? o.privacy_transform : undefined,
+    seed_entities: Array.isArray(o.seed_entities)
+      ? (o.seed_entities as ScenarioFile["seed_entities"])
+      : undefined,
+    server_faults: o.server_faults && typeof o.server_faults === "object"
+      ? (o.server_faults as ScenarioFile["server_faults"])
+      : undefined,
     expected: o.expected as ScenarioFile["expected"],
   };
   return scenario;

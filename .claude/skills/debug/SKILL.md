@@ -3,7 +3,15 @@ name: debug
 description: Debug Command
 ---
 
-<!-- Source: foundation/agent_instructions/cursor_commands/debug.md -->
+<!-- Source: foundation/.cursor/skills/debug/SKILL.md -->
+
+---
+name: debug
+description: Debug workflow per foundation command.
+triggers:
+  - debug
+  - /debug
+---
 
 # Debug Command
 
@@ -961,8 +969,8 @@ Error Debugging Watcher Logs (last 50 lines)
 
 ## Related Documentation
 
-- `foundation/agent_instructions/cursor_commands/report.md` - Error reporting workflow
-- `foundation/agent_instructions/cursor_commands/fix_feature_bug.md` - Bug fix workflow
+- Skill `report-error` (`.cursor/skills/report-error/SKILL.md`) - Error reporting workflow
+- Skill `fix-feature-bug` (`.cursor/skills/fix-feature-bug/SKILL.md`) - Bug fix workflow
 - `foundation-config.yaml` - Configuration file
 
 ## Deprecated Commands

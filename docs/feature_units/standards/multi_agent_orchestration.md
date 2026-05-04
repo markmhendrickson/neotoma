@@ -83,7 +83,7 @@ async function spawnWorkerAgent(fuId: string, batchId: number): Promise<string> 
 ```markdown
 You are a worker agent executing Feature Unit {{FU_ID}} in Batch {{BATCH_ID}} for Release {{RELEASE_ID}}.
 **Your Task:**
-1. Load FU specification: `docs/feature_units/completed/{{FU_ID}}/FU-{{FU_ID}}_spec.md` or `docs/specs/MVP_FEATURE_UNITS.md`
+1. Load FU specification: `docs/feature_units/completed/{{FU_ID}}/FU-{{FU_ID}}_spec.md` or `docs/feature_units/in_progress/{{FU_ID}}/FU-{{FU_ID}}_spec.md`
 2. Execute Feature Unit workflow:
    - Check if FU spec exists (if not, create it)
    - If UI FU and no prototype, create prototype

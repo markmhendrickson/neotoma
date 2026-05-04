@@ -108,8 +108,6 @@ Content MUST have:
 
 ### Step 4: Quality Check
 
-For Neotoma site and SEO copy in `frontend/src/components/subpages/`, `SitePage.tsx`, `SeoHead.tsx`, and `frontend/src/site/seo_metadata.ts`, run `npm run lint:site-copy` before committing. It runs automatically in husky pre-commit.
-
 Before completing content work:
 1. Scan for AI phrases listed above
 2. Replace with natural alternatives

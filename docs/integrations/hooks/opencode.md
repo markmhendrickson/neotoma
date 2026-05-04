@@ -2,6 +2,18 @@
 
 ## Install
 
+For the npm plugin path, add the package to `opencode.json`:
+
+```json
+{
+  "plugin": ["@neotoma/opencode-plugin"]
+}
+```
+
+OpenCode installs npm plugins with Bun at startup.
+
+For a local plugin file:
+
 ```bash
 npm install @neotoma/opencode-plugin @neotoma/client
 ```
@@ -10,19 +22,18 @@ Register in your OpenCode plugin config, e.g. `~/.config/opencode/plugins/neotom
 
 ```ts
 import neotoma from "@neotoma/opencode-plugin";
-export default neotoma();
+
+export const Neotoma = neotoma();
 ```
 
 ## Events handled
 
 | OpenCode event | Behavior |
 | --- | --- |
-| `session.started` | Create `conversation` entity, initialise turn state, optionally inject the compact reminder for small models. |
-| `message.user` | User message capture + retrieval injection. |
-| `experimental.chat.system.transform` | System-message system-prompt transform; optional small-model reminder injection. |
-| `tool.called` | `tool_invocation` observation, OR `tool_invocation_failure` capture when the call errored on a Neotoma-relevant tool. |
-| `chat.compacted` | `context_event` marker. |
-| `message.assistant` | Assistant message safety net + compliance backfill. |
+| `event` (`session.created`, `session.compacted`, `message.updated`) | Session anchor, compaction marker, and best-effort message capture. |
+| `tool.execute.after` | `tool_invocation` observation, OR `tool_invocation_failure` capture when the call errored on a Neotoma-relevant tool. |
+| `experimental.session.compacting` | Adds the compact Neotoma turn checklist to the compaction context and stores a `context_event`. |
+| Legacy aliases | `session.started`, `message.user`, `experimental.chat.system.transform`, `tool.called`, `chat.compacted`, and `message.assistant` remain for older OpenCode builds and direct tests. |
 
 Every hook above also accretes onto a single `conversation_turn` keyed by `(session_id, turn_id)` (idempotency key `conversation-{sessionId}-{turnId}-turn`). The legacy `turn_compliance` entity remains as a registered alias so historical rows continue to surface under `/turns`. See [`docs/subsystems/conversation_turn.md`](../../subsystems/conversation_turn.md).
 

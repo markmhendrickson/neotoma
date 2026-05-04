@@ -66,6 +66,16 @@ export interface StoreChatTurnInput {
   conversationTitle?: string;
   /** Platform name (e.g. "cursor"). */
   platform?: string;
+  /** Client or harness name that supplied this chat context. */
+  clientName?: string;
+  /** Coarse workspace kind, e.g. "git_repository" or "plain_directory". */
+  workspaceKind?: string;
+  /** Stable repository/project context when supplied by the host. */
+  repositoryName?: string;
+  repositoryRoot?: string;
+  repositoryRemote?: string;
+  /** Short human summary of the bounded session scope. */
+  scopeSummary?: string;
   /** Model identifier, if known. */
   model?: string;
   /** The user and/or assistant messages for this turn. */
@@ -101,6 +111,13 @@ export async function storeChatTurn(
       conversation_id: input.conversationId,
       title: input.conversationTitle ?? `Conversation ${input.conversationId}`,
       platform: input.platform,
+      client_name: input.clientName,
+      harness: input.platform,
+      workspace_kind: input.workspaceKind,
+      repository_name: input.repositoryName,
+      repository_root: input.repositoryRoot,
+      repository_remote: input.repositoryRemote,
+      scope_summary: input.scopeSummary,
       ...(input.conversationExtra ?? {}),
     },
   ];
@@ -293,6 +310,10 @@ export interface ConversationTurnInput {
   startedAt?: string;
   endedAt?: string;
   cwd?: string;
+  workingDirectory?: string;
+  gitBranch?: string;
+  activeFileRefs?: string[];
+  contextSource?: string;
   extra?: Record<string, unknown>;
   idempotencyKey?: string;
 }
@@ -342,6 +363,10 @@ export async function recordConversationTurn(
   if (input.startedAt) entity.started_at = input.startedAt;
   if (input.endedAt) entity.ended_at = input.endedAt;
   if (input.cwd) entity.cwd = input.cwd;
+  if (input.workingDirectory) entity.working_directory = input.workingDirectory;
+  if (input.gitBranch) entity.git_branch = input.gitBranch;
+  if (input.activeFileRefs?.length) entity.active_file_refs = [...input.activeFileRefs];
+  if (input.contextSource) entity.context_source = input.contextSource;
   if (input.extra) Object.assign(entity, input.extra);
 
   const idempotencyKey = input.idempotencyKey ?? `conversation-${input.sessionId}-${input.turnId}-turn`;

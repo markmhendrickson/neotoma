@@ -3,7 +3,8 @@ name: create_prototype
 description: Create Prototype
 ---
 
-<!-- Source: foundation/agent_instructions/cursor_commands/create_prototype.md -->
+<!-- Source: .cursor/skills/create-prototype/SKILL.md -->
+
 
 # Create Prototype
 

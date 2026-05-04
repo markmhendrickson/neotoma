@@ -3,7 +3,8 @@ name: fix_feature_bug
 description: Fix Feature Bug
 ---
 
-<!-- Source: foundation/agent_instructions/cursor_commands/fix_feature_bug.md -->
+<!-- Source: .cursor/skills/fix-feature-bug/SKILL.md -->
+
 
 # Fix Feature Bug
 

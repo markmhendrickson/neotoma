@@ -900,7 +900,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
 
   conversation: {
     entity_type: "conversation",
-    schema_version: "1.2",
+    schema_version: "1.3",
     metadata: {
       label: "Conversation",
       description: "Chat conversation container entity.",
@@ -922,8 +922,18 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         // agent<->agent (A2A) or multi-party threads. Optional; defaults to
         // "human_agent" when omitted.
         thread_kind: { type: "string", required: false },
+        client_name: { type: "string", required: false },
+        harness: { type: "string", required: false },
+        workspace_kind: { type: "string", required: false },
+        // Stable repository label plus optional local checkout path. Keep the
+        // absolute path as context only; it is intentionally excluded from
+        // canonical_name_fields because paths move and can include usernames.
+        repository_name: { type: "string", required: false },
+        repository_root: { type: "string", required: false },
+        repository_remote: { type: "string", required: false },
+        scope_summary: { type: "string", required: false, preserveCase: true },
       },
-      // v1.2: session-scoped identity via caller-supplied `conversation_id`.
+      // v1.2+: session-scoped identity via caller-supplied `conversation_id`.
       // When absent, resolution falls through to the heuristic path; the
       // schema-level `name_collision_policy: reject` (R2) then converts that
       // heuristic match into ERR_STORE_RESOLUTION_FAILED instead of silently
@@ -935,6 +945,13 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       merge_policies: {
         title: { strategy: "highest_priority", tie_breaker: "source_priority" },
         thread_kind: { strategy: "last_write" },
+        client_name: { strategy: "last_write" },
+        harness: { strategy: "last_write" },
+        workspace_kind: { strategy: "last_write" },
+        repository_name: { strategy: "last_write" },
+        repository_root: { strategy: "last_write" },
+        repository_remote: { strategy: "last_write" },
+        scope_summary: { strategy: "last_write" },
       },
     },
   },
@@ -2518,7 +2535,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
 
   conversation_turn: {
     entity_type: "conversation_turn",
-    schema_version: "1.0",
+    schema_version: "1.1",
     metadata: {
       label: "Conversation Turn",
       description:
@@ -2551,6 +2568,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         started_at: { type: "date", required: false },
         ended_at: { type: "date", required: false },
         cwd: { type: "string", required: false },
+        working_directory: { type: "string", required: false },
+        git_branch: { type: "string", required: false },
+        active_file_refs: { type: "array", required: false },
+        context_source: { type: "string", required: false },
       },
       canonical_name_fields: [{ composite: ["session_id", "turn_id"] }],
       name_collision_policy: "reject",
@@ -2578,6 +2599,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         started_at: { strategy: "last_write" },
         ended_at: { strategy: "last_write" },
         cwd: { strategy: "last_write" },
+        working_directory: { strategy: "last_write" },
+        git_branch: { strategy: "last_write" },
+        active_file_refs: { strategy: "last_write" },
+        context_source: { strategy: "last_write" },
       },
     },
   },

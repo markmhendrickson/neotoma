@@ -4,7 +4,7 @@ Every **version tag** published to GitHub MUST have a matching **[GitHub Release
 
 **Before notes or `release-notes:render`:** Run preflight — `git fetch`, `git log origin/main..origin/dev`, `git status`, submodules, and choose compare range (prefer tag on `main` after merge; provisional draft from `dev` OK if re-rendered after tag). If the working tree is dirty, the `/release` preview **must** merge local changes into the same supplement sections as committed work (as if already committed); see `.cursor/skills/release/SKILL.md` Step 3. Commit only what should ship before tagging, respecting protected paths.
 
-**Agent workflow:** When the user asks to **prepare a release** (or equivalent), follow the `/release` skill (`.cursor/skills/release/SKILL.md`). Do not use commit lists alone as the narrative. The preview step must show the same rendered Markdown body later passed to `gh release create --notes-file`.
+**Agent workflow:** When the user asks to **prepare a release** (or equivalent), follow the `/release` skill (`.cursor/skills/release/SKILL.md`). Do not use commit lists alone as the narrative. The preview step must show the same rendered Markdown body later passed to `gh release create --notes-file`. A full release includes GitHub Release creation, npm publish, and `sandbox.neotoma.io` deployment unless the user explicitly scopes one of those surfaces out.
 
 ## Template layout
 
@@ -127,3 +127,20 @@ gh release create "$TAG" --title "$TAG" --notes-file /tmp/gh-release-"$TAG".md
 ```
 
 The `/release` skill ([`.cursor/skills/release/SKILL.md`](../../.cursor/skills/release/SKILL.md)) requires this flow for all future releases.
+
+## Deploy sandbox.neotoma.io
+
+A normal `/release` is also **not finished** until the public sandbox host is redeployed and verified. After npm publish succeeds and the registry reports the new version, deploy the Fly sandbox app:
+
+```bash
+flyctl deploy -c fly.sandbox.toml --remote-only
+```
+
+Then verify:
+
+```bash
+curl -fsS -H "Accept: application/json" https://sandbox.neotoma.io/
+curl -fsSI https://sandbox.neotoma.io/health | grep -i '^x-neotoma-sandbox: 1'
+```
+
+The root JSON must report the release version and `mode: "sandbox"`. Skip this only when the user explicitly confirmed a no-sandbox release scope. If the sandbox deploy fails after npm publish, treat the release as partially shipped and continue debugging the sandbox deployment rather than reporting completion.

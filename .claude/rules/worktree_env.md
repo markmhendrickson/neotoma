@@ -1,9 +1,9 @@
 ---
-description: "Rules for managing environment files when working in git worktrees, especially Cursor worktrees"
-alwaysApply: true
+description: "Rules for managing environment files when working in git worktrees, especially Cursor worktrees. Load when in a worktree or configuring .env across branches."
+alwaysApply: false
 ---
 
-<!-- Source: foundation/agent_instructions/cursor_rules/worktree_env.mdc -->
+<!-- Source: foundation/.cursor/rules/worktree_env.mdc -->
 
 # Worktree Environment Rules
 

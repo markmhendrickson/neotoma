@@ -40,6 +40,21 @@ const DOC_CATEGORIES = [
       },
       { label: "Install", href: "/install", desc: "Install and initialize Neotoma locally" },
       {
+        label: "What to store first",
+        href: "/what-to-store",
+        desc: "Pick the first durable facts, commitments, and source-backed records to persist",
+      },
+      {
+        label: "Backup and restore",
+        href: "/backup",
+        desc: "Protect the SQLite database, source files, and reconstruction history",
+      },
+      {
+        label: "Expose tunnel",
+        href: "/tunnel",
+        desc: "Use HTTPS tunnels when remote MCP clients cannot launch local stdio",
+      },
+      {
         label: "Walkthrough",
         href: "/walkthrough",
         desc: "End-to-end example across operating, building, and debugging",
@@ -50,9 +65,9 @@ const DOC_CATEGORIES = [
     title: "Integrations",
     items: [
       {
-        label: "Claude Code",
-        href: "/neotoma-with-claude-code",
-        desc: "Persistent memory for Claude Code's local CLI agent",
+        label: "ChatGPT",
+        href: "/neotoma-with-chatgpt",
+        desc: "Deterministic memory for ChatGPT conversations",
       },
       {
         label: "Claude",
@@ -60,9 +75,9 @@ const DOC_CATEGORIES = [
         desc: "Structured state alongside Claude platform memory",
       },
       {
-        label: "ChatGPT",
-        href: "/neotoma-with-chatgpt",
-        desc: "Deterministic memory for ChatGPT conversations",
+        label: "Claude Code",
+        href: "/neotoma-with-claude-code",
+        desc: "Persistent memory for Claude Code's local CLI agent",
       },
       {
         label: "Codex",
@@ -75,9 +90,19 @@ const DOC_CATEGORIES = [
         desc: "Persistent memory alongside Cursor context",
       },
       {
+        label: "IronClaw",
+        href: "/neotoma-with-ironclaw",
+        desc: "Structured MCP memory for IronClaw agents",
+      },
+      {
         label: "OpenClaw",
         href: "/neotoma-with-openclaw",
         desc: "User-owned memory for OpenClaw agents",
+      },
+      {
+        label: "OpenCode",
+        href: "/neotoma-with-opencode",
+        desc: "Lifecycle hooks and MCP memory for OpenCode",
       },
     ],
   },

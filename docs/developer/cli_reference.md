@@ -119,6 +119,7 @@ All `npm run <script>` commands in one place. Scripts follow the three-category 
 | `watch:full`, `dev:full`                     | 3080, Vite, WS | API + UI + build + resource banner + **`vite build --watch`** for Inspector into `dist/inspector` (`NEOTOMA_INSPECTOR_LIVE_BUILD=1`: no long cache + **full page reload** when `index.html` mtime changes after each rebuild) |
 | `watch:full:prod`, `dev:full:prod`           | 3180, Vite, WS | Same as `watch:full` with `NEOTOMA_ENV=production` and prod-scoped Inspector watch (`watch:inspector:prod`) |
 | `watch:inspector`, `watch:inspector:prod`    | —              | Inspector only: `vite build --watch` → repo `dist/inspector` (use with API already running, or rely on `watch:full` / `watch:full:prod`) |
+| `watch:mcp:dev-shim`, `dev:mcp:dev-shim`     | —              | Stable stdio dev shim that restarts its MCP worker behind the client connection |
 | `watch:mcp:stdio`, `dev:mcp:stdio`           | —              | MCP stdio watch                       |
 | `watch:mcp:stdio:prod`, `dev:mcp:stdio:prod` | —              | MCP stdio, production env             |
 | `dev:server+mcp`                             | 3080, 8280     | API + MCP HTTP + build                |
@@ -321,6 +322,8 @@ Commands for managing MCP server configuration files (Cursor, Claude Code, Winds
 
 - `neotoma mcp check`: Scan for MCP config files in current directory and subdirectories, detect whether dev and prod Neotoma servers are configured, and offer to install missing servers.
   - `--user-level`: Include user-level MCP config paths (e.g. `~/.cursor/mcp.json`, Claude, Windsurf) in scan (default: project-local only).
+  - `--install-hooks` / `--no-hooks`: Install or skip matching Neotoma lifecycle hooks when a configured MCP path maps to a hook-capable harness. Hook installation is enabled by default for non-JSON runs; use `--no-hooks` to limit the command to MCP config only.
+  - `--yes`: Skip hook installation confirmation prompts. MCP server config prompts still follow the normal interactive flow.
   - Scans for known config file patterns:
     - **Cursor:** `.cursor/mcp.json`, `.mcp.json` (project), `~/.cursor/mcp.json` (user-level with `--user-level`)
     - **Claude Code:** `claude_desktop_config.json` (project or user-level with `--user-level`):
@@ -333,12 +336,13 @@ Commands for managing MCP server configuration files (Cursor, Claude Code, Winds
   - For each found config, checks for `neotoma-dev` and `neotoma` server entries (based on `command` script names or `url` patterns). In Claude Desktop's `claude_desktop_config.json`, new entries use `mcpsrv_neotoma_dev` and `mcpsrv_neotoma`, and legacy `neotoma-dev` / `neotoma` keys are reported for repair because Claude Desktop validates server IDs as UUIDs or `mcpsrv_*` tags.
   - If any config is missing dev or prod servers, prompts to add them with absolute script paths.
   - If no config files found, offers to create `.cursor/mcp.json` in current directory.
-  - Uses Neotoma source root (from `findRepoRoot`, config, or `NEOTOMA_REPO_ROOT`) to resolve absolute script paths for `run_neotoma_mcp_stdio.sh` and `run_neotoma_mcp_stdio_prod.sh`.
+  - Uses Neotoma source root (from `findRepoRoot`, config, or `NEOTOMA_REPO_ROOT`) to resolve absolute script paths for `run_neotoma_mcp_stdio.sh` and `run_neotoma_mcp_stdio_prod.sh`. The dev shim wrapper `run_neotoma_mcp_stdio_dev_shim.sh` is detected as a dev server when present in an MCP config, but it is not installed as the default local MCP command.
+  - After install, verifies or installs lifecycle hooks for hook-capable harnesses inferred from the configured MCP paths (for example `.cursor/mcp.json` → Cursor hooks, `.codex/config.toml` → Codex hooks). Harnesses without an auto-installer print the matching manual instruction.
   - After install, shows a reminder to run `neotoma cli-instructions check`; when MCP servers are installed interactively, it can also prompt to add CLI instructions if missing.
 
 **Dev vs Prod detection patterns:**
 
-- **Dev:** `command` contains `run_neotoma_mcp_stdio.sh` or `run_neotoma_mcp_stdio_dev_watch.sh`, or `url` contains `localhost:3080/mcp` or `127.0.0.1:3080/mcp`. During connect-only sessions, the currently selected instance port is also considered for dev if the active env is dev.
+- **Dev:** `command` contains `run_neotoma_mcp_stdio.sh`, `run_neotoma_mcp_stdio_dev_watch.sh`, or `run_neotoma_mcp_stdio_dev_shim.sh`, or `url` contains `localhost:3080/mcp` or `127.0.0.1:3080/mcp`. During connect-only sessions, the currently selected instance port is also considered for dev if the active env is dev.
 - **Prod:** `command` contains `run_neotoma_mcp_stdio_prod.sh` or `run_neotoma_mcp_stdio_prod_watch.sh`, or `url` contains `localhost:3180/mcp`, `127.0.0.1:3180/mcp`, or `neotoma.fly.dev/mcp`. During connect-only sessions, the currently selected instance port is also considered for prod if the active env is prod.
 
 **Example workflow:**
@@ -352,6 +356,9 @@ neotoma mcp check
 
 # Scan including user-level configs (Cursor, Claude, Windsurf)
 neotoma mcp check --user-level
+
+# Configure MCP and install matching hooks without hook prompts
+neotoma mcp check --user-level --yes
 ```
 
 ### CLI instructions (prefer MCP when available, CLI as backup)
@@ -397,6 +404,9 @@ See `docs/developer/agent_cli_configuration.md` for the rule text and strategy.
 
 ### Relationships
 
+- `neotoma relationships create --source-entity-id <id> --target-entity-id <id> --relationship-type <type>`: Create one relationship.
+  - `--metadata <json>`: attach relationship metadata.
+  - `--file <path>`: create a batch from a JSON array, or an object with `relationships: [...]`. Each entry uses `relationship_type`, `source_entity_id`, `target_entity_id`, and optional `metadata`.
 - `neotoma relationships list <entityId>`:
   - `--direction <direction>`: inbound, outbound, or both
 - `neotoma relationships get-snapshot <relationshipType> <sourceEntityId> <targetEntityId>`: Get relationship snapshot with provenance (observations). Relationship type is one of: PART_OF, CORRECTS, REFERS_TO, SETTLES, DUPLICATE_OF, DEPENDS_ON, SUPERSEDES, EMBEDS.

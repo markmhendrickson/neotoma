@@ -37,7 +37,7 @@ v0.6.0 is an agent-runtime hardening release: AAuth-aware attribution and a `/se
 **Shipped artifacts**
 
 - `openapi.yaml` grows ~900 lines for the new session, agents, entity-split, attribution, provenance, feedback, and validation surfaces; `src/shared/openapi_types.ts` is regenerated to match.
-- Updated schema snapshots land under `docs/subsystems/schema_snapshots/` for `conversation` (v1.0–v1.2), `agent_message` (v1.0–v1.1, retained as alias), and new `conversation_message` (v1.0–v1.2).
+- Updated schema snapshots land under `docs/subsystems/schema_snapshots/` for `conversation` (v1.0–v1.3, including bounded workspace/repository context), `agent_message` (v1.0–v1.1, retained as alias), and new `conversation_message` (v1.0–v1.2).
 - The npm package picks up the CLI/runtime changes plus the updated docs and snapshots via the existing `files` list (`dist`, `openapi.yaml`, `openclaw.plugin.json`, `skills`, `LICENSE`, `README.md`). The `files` list itself is unchanged.
 
 ## API surface & contracts
@@ -90,6 +90,7 @@ The MCP server ships `docs/developer/mcp/instructions.md` to every connected cli
 - **`observation_source` usage** — agents are instructed to set it only for non-LLM-summary writers (sensor emitter, state-machine step, human confirmation, bulk import) and leave it unset for ordinary chat extraction.
 - **`conversation_message` canonicalization** — new writes use `conversation_message` + `sender_kind`; `agent_message` remains an accepted alias for pre-v0.6 clients.
 - **A2A fields** — agent-to-agent traffic is expected to set `sender_kind: "agent"` with `sender_agent_id` / `recipient_agent_id`; `conversation.thread_kind` categorizes the thread topology.
+- **Chat context scope** — agents may attach bounded host-provided conversation context (`client_name` / `harness`, workspace kind, repository name/root/remote, and a short scope summary) plus volatile per-turn context on `conversation_turn`, while keeping all context fields optional and non-identity-bearing.
 - **Reply-cited provenance edges (Step 5b.1)** — the closing assistant store now includes `REFERS_TO` edges from the assistant message to every entity the reply materially cites or produces, tightening the provenance graph without linking every retrieval result.
 - **`Ambiguous (N)` display group** — agents surface structured `HEURISTIC_MERGE` warnings from store responses in chat alongside `Created`/`Updated`/`Retrieved`.
 - **`[ATTRIBUTION & AGENT IDENTITY]` block** — codifies AAuth preflight via `get_session_identity` / `GET /session` / `neotoma auth session`, forbidden `clientInfo` values, trust-tier badging, and impersonation policy.
@@ -105,7 +106,7 @@ The MCP server ships `docs/developer/mcp/instructions.md` to every connected cli
 - **`packages/claude-code-plugin`** — `stop.py` and `user_prompt_submit.py` align with the new message shape and attribution fields.
 - **`packages/opencode-plugin`** — updated to match the same conventions.
 - **`packages/claude-agent-sdk-adapter`** — attribution/session metadata threaded through the adapter.
-- **`packages/client` (TypeScript client)** — `helpers.ts` exposes `ChatTurnSenderKind`, the new `sender_kind`, A2A id fields, and canonical `conversation_message` typing; `diagnose.ts` and `turn_report.ts` align with the new attribution/diagnostic surface.
+- **`packages/client` (TypeScript client)** — `helpers.ts` exposes `ChatTurnSenderKind`, the new `sender_kind`, A2A id fields, bounded conversation/workspace context fields, and canonical `conversation_message` typing; `diagnose.ts` and `turn_report.ts` align with the new attribution/diagnostic surface.
 
 ## Agent feedback pipeline (end-to-end)
 

@@ -12,6 +12,7 @@
  */
 
 import {
+  CreateRelationshipsInput,
   CreateRelationshipInput,
   ListObservationsInput,
   ListTimelineEventsInput,
@@ -56,6 +57,7 @@ export interface LocalOperations {
   listTimelineEvents(input: ListTimelineEventsInput): Promise<unknown>;
   retrieveRelatedEntities(input: RetrieveRelatedEntitiesInput): Promise<unknown>;
   createRelationship(input: CreateRelationshipInput): Promise<unknown>;
+  createRelationships(input: CreateRelationshipsInput): Promise<unknown>;
   correct(input: { entity_id: string; corrections: Record<string, unknown> }): Promise<unknown>;
   listEntityTypes(input?: { search?: string }): Promise<unknown>;
   getEntityTypeCounts(input?: Record<string, unknown>): Promise<unknown>;
@@ -136,6 +138,11 @@ export class LocalTransport implements NeotomaTransport {
   async createRelationship(input: CreateRelationshipInput): Promise<unknown> {
     const ops = await this.resolveOperations();
     return ops.createRelationship(input);
+  }
+
+  async createRelationships(input: CreateRelationshipsInput): Promise<unknown> {
+    const ops = await this.resolveOperations();
+    return ops.createRelationships(input);
   }
 
   async correct(input: {

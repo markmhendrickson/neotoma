@@ -20,6 +20,39 @@ function logSchemaRegistryInfo(message: string): void {
   process.stderr.write(`${message}\n`);
 }
 
+async function applyBuiltInSchemaIdentityDefaults(
+  entry: SchemaRegistryEntry | null,
+): Promise<SchemaRegistryEntry | null> {
+  if (!entry) return entry;
+  const { ENTITY_SCHEMAS } = await import("./schema_definitions.js");
+  const builtIn = ENTITY_SCHEMAS[entry.entity_type];
+  const builtInDefinition = builtIn?.schema_definition;
+  if (!builtInDefinition) return entry;
+
+  const schemaDefinition = { ...entry.schema_definition };
+  let changed = false;
+  if (
+    !schemaDefinition.canonical_name_fields &&
+    builtInDefinition.canonical_name_fields
+  ) {
+    schemaDefinition.canonical_name_fields = builtInDefinition.canonical_name_fields;
+    changed = true;
+  }
+  if (
+    !schemaDefinition.name_collision_policy &&
+    builtInDefinition.name_collision_policy
+  ) {
+    schemaDefinition.name_collision_policy = builtInDefinition.name_collision_policy;
+    changed = true;
+  }
+  if (!schemaDefinition.identity_opt_out && builtInDefinition.identity_opt_out) {
+    schemaDefinition.identity_opt_out = builtInDefinition.identity_opt_out;
+    changed = true;
+  }
+
+  return changed ? { ...entry, schema_definition: schemaDefinition } : entry;
+}
+
 export interface ConverterDefinition {
   from: "number" | "string" | "boolean" | "array" | "object";
   to: "string" | "number" | "date" | "boolean" | "array" | "object";
@@ -478,12 +511,14 @@ export class SchemaRegistryService {
     if (userId) {
       const userSchema = await this.loadUserSpecificSchema(entityType, userId);
       if (userSchema) {
-        return userSchema;
+        return await applyBuiltInSchemaIdentityDefaults(userSchema);
       }
     }
 
     // 2. Fall back to global schema
-    return await this.loadGlobalSchema(entityType);
+    return await applyBuiltInSchemaIdentityDefaults(
+      await this.loadGlobalSchema(entityType),
+    );
   }
 
   /**

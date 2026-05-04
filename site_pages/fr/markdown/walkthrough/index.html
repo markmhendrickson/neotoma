@@ -38,10 +38,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
     <title>Walkthrough (Markdown) | Neotoma</title>
-    <script type="module" crossorigin="" src="/assets/main-CaoWcp2k.js"></script>
-    <link rel="stylesheet" crossorigin="" href="/assets/main-BBds_bdF.css">
+    <script type="module" crossorigin="" src="/assets/main-aNEaYUJL.js"></script>
+    <link rel="stylesheet" crossorigin="" href="/assets/main-a7BqVBLd.css">
   
-    <!-- build: local-1777360387837 -->
+    <!-- build: local-1777885129871 -->
       <link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/walkthrough">
     <link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/walkthrough">
     <link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/walkthrough">
@@ -61,7 +61,7 @@
     <div id="root"><iframe title="Markdown capture" aria-hidden="true" width="1280" height="900" class="pointer-events-none fixed left-[-9999px] top-0 z-[-1] border-0 opacity-0" sandbox="allow-same-origin allow-scripts allow-forms"></iframe><div class="min-h-screen bg-background text-foreground"><pre class="whitespace-pre-wrap break-words p-4 font-mono text-[13px] leading-relaxed text-foreground">&lt;!--
   Full-page Markdown export (rendered HTML → GFM).
   Source: https://neotoma.io/fr/walkthrough
-  Generated: 2026-04-28T07:17:21.130Z
+  Generated: 2026-05-04T09:03:14.617Z
 --&gt;
 # Walkthrough
 
@@ -99,7 +99,7 @@ Example operation
 
 Representative MCP or CLI payload from the walkthrough.
 
-store({ entities: \[ { entity\_type: "contact", name: "Sarah Chen", company: "Lattice Health", role: "VP Engineering", context: "Freelance data-pipeline project" }, { entity\_type: "task", title: "Send SOW to Sarah Chen", status: "pending", due\_date: "2025-04-02", rate: "$180/hr" } \], relationships: \[ { relationship\_type: "REFERS\_TO", source\_index: 1, target\_index: 0 } \], idempotency\_key: "cursor-session-sarah-sow-1710268800" })
+store\_structured({ entities: \[ { entity\_type: "contact", name: "Sarah Chen", company: "Lattice Health", title: "VP Engineering", context: "Freelance data-pipeline project" }, { entity\_type: "task", title: "Send SOW to Sarah Chen", status: "pending", date\_due: "2026-04-02", rate: "$180/hr" } \], relationships: \[ { relationship\_type: "REFERS\_TO", source\_index: 1, target\_index: 0 } \], idempotency\_key: "cursor-session-sarah-sow-1710268800" })
 
 Response
 
@@ -135,7 +135,7 @@ Example operation
 
 Representative MCP or CLI payload from the walkthrough.
 
-{ entity\_id: "ent\_a7c3f1e209b4d8...", entity\_type: "contact", snapshot: { name: "Sarah Chen", company: "Lattice Health", role: "VP Engineering", context: "Freelance data-pipeline project" }, observation\_count: 1, last\_observation\_at: "2025-03-31T14:22:00Z" }
+{ entity\_id: "ent\_a7c3f1e209b4d8...", entity\_type: "contact", snapshot: { name: "Sarah Chen", company: "Lattice Health", title: "VP Engineering", context: "Freelance data-pipeline project" }, observation\_count: 1, last\_observation\_at: "2026-03-31T14:22:00Z" }
 
 The agent drafts the SOW and records the completed task with a note on what was sent.
 
@@ -149,7 +149,7 @@ Example operation
 
 Representative MCP or CLI payload from the walkthrough.
 
-store({ entities: \[ { entity\_type: "task", title: "Send SOW to Sarah Chen", status: "completed", completed\_at: "2025-04-01T09:15:00Z", note: "SOW sent via email - 40hr engagement, $180/hr, starts Apr 7" } \], idempotency\_key: "claude-session-sow-sent-1710355200" })
+store\_structured({ entities: \[ { entity\_type: "task", title: "Send SOW to Sarah Chen", status: "completed", completed\_at: "2026-04-01T09:15:00Z", note: "SOW sent via email - 40hr engagement, $180/hr, starts Apr 7" } \], idempotency\_key: "claude-session-sow-sent-1710355200" })
 
 The task entity now has two observations: the original from Cursor (pending) and the update from Claude (completed). Both are preserved. No re-prompting was needed - Claude had the same state Cursor stored.
 
@@ -169,7 +169,7 @@ Example operation
 
 Representative MCP or CLI payload from the walkthrough.
 
-store({ entities: \[ { entity\_type: "contact", name: "Sarah Chen", company: "Lattice Health", role: "VP Engineering", context: "Scope expanded: data pipeline + monitoring dashboard", rate: "$195/hr" } \], idempotency\_key: "chatgpt-session-sarah-scope-1711046400" })
+store\_structured({ entities: \[ { entity\_type: "contact", name: "Sarah Chen", company: "Lattice Health", title: "VP Engineering", context: "Scope expanded: data pipeline + monitoring dashboard", rate: "$195/hr" } \], idempotency\_key: "chatgpt-session-sarah-scope-1711046400" })
 
 Later, back in Cursor, you ask: "What's the latest on the Lattice Health project?" The agent retrieves the current snapshot and sees the full history.
 
@@ -191,7 +191,7 @@ Example operation
 
 Representative MCP or CLI payload from the walkthrough.
 
-{ entity\_id: "ent\_a7c3f1e209b4d8...", entity\_type: "contact", snapshot: { name: "Sarah Chen", company: "Lattice Health", role: "VP Engineering", context: "Scope expanded: data pipeline + monitoring dashboard", rate: "$195/hr" }, observation\_count: 2, last\_observation\_at: "2025-04-07T11:30:00Z" }
+{ entity\_id: "ent\_a7c3f1e209b4d8...", entity\_type: "contact", snapshot: { name: "Sarah Chen", company: "Lattice Health", title: "VP Engineering", context: "Scope expanded: data pipeline + monitoring dashboard", rate: "$195/hr" }, observation\_count: 2, last\_observation\_at: "2026-04-07T11:30:00Z" }
 
 The snapshot reflects the latest state. The original observation is preserved, so you can trace what changed - the scope expanded from "data pipeline" to "data pipeline + monitoring dashboard" and the rate went from $180 to $195.
 
@@ -209,7 +209,7 @@ Example operation
 
 Representative MCP or CLI payload from the walkthrough.
 
-$ neotoma observations list --entity-id ent\_a7c3f1e209b4d8... OBSERVATION\_ID CREATED\_AT SOURCE obs\_91a0e3cf... 2025-03-31T14:22:00Z agent:cursor-session-4f2a context: Freelance data-pipeline project rate: (not set) obs\_c8e6b2f4... 2025-04-07T11:30:00Z agent:chatgpt-session-7d1b context: Scope expanded: data pipeline + monitoring dashboard rate: $195/hr
+$ neotoma observations list --entity-id ent\_a7c3f1e209b4d8... OBSERVATION\_ID CREATED\_AT SOURCE obs\_91a0e3cf... 2026-03-31T14:22:00Z agent:cursor-session-4f2a context: Freelance data-pipeline project rate: (not set) obs\_c8e6b2f4... 2026-04-07T11:30:00Z agent:chatgpt-session-7d1b context: Scope expanded: data pipeline + monitoring dashboard rate: $195/hr
 
 Every field traces to a source, a timestamp, and the tool that authored it. Across three tools and multiple sessions, you have one consistent record with a full trail.
 

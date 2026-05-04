@@ -1,9 +1,9 @@
 ---
-description: "Ensures agents load documentation in the correct order to establish proper context before proceeding with work"
-alwaysApply: true
+description: "Load documentation in the correct order to establish context before proceeding. Load when starting work that requires multiple docs or rule files."
+alwaysApply: false
 ---
 
-<!-- Source: foundation/agent_instructions/cursor_rules/document_loading_order.mdc -->
+<!-- Source: foundation/.cursor/rules/document_loading_order.mdc -->
 
 # Document Loading Order Rule
 

@@ -1,0 +1,44 @@
+meta:
+  id: display_rule_neotoma_section
+  description: >
+    User mentions a purchase. Agent must extract the entity and render the
+    Neotoma disclosure section in its reply. Tests the COMMUNICATION &
+    DISPLAY rule requiring a Neotoma section when entities are created.
+  tags:
+    - tier2
+    - display
+    - writ:extraction_drift
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system. Persist
+  all entities the user mentions via store_structured (conversation,
+  conversation_message, and extracted entities with PART_OF and REFERS_TO
+  relationships). After storing, reply with a brief confirmation that
+  includes a Neotoma section showing what was stored.
+
+user_prompt: |
+  I bought a new laptop for $1,499 from Apple
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+instruction_profile: auto
+hooks_enabled: true
+
+driver_options:
+  temperature: 0
+  max_tokens: 2048
+
+expected:
+  - type: store_structured.calls
+    op: gte
+    value: 1
+  - type: entity.exists
+    entity_type_any_of: [transaction, purchase, receipt]
+  - type: relationship.exists
+    relationship_type: PART_OF
+  - type: reply_text.contains
+    substring: Neotoma

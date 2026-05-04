@@ -1,9 +1,9 @@
 ---
-description: "Prevents accidental commits of private, sensitive, or confidential documentation and data."
-alwaysApply: true
+description: "Prevent accidental commits of private, sensitive, or confidential data; run pre-commit security audit. Load when staging or committing, or when editing protected paths."
+alwaysApply: false
 ---
 
-<!-- Source: foundation/agent_instructions/cursor_rules/security.mdc -->
+<!-- Source: foundation/.cursor/rules/security.mdc -->
 
 # Security Rule
 
@@ -13,7 +13,7 @@ Configuration: This rule uses protected paths configured in `foundation-config.y
 
 ## Pre-Commit Security Audit
 
-Before staging or committing ANY changes, perform the following checks:
+Before staging or committing ANY changes, agents MUST perform the following checks:
 
 ### 1. Protected Paths Check
 
@@ -112,69 +112,19 @@ If potential credentials are found, review manually before proceeding.
 
 The security audit must be executed BEFORE running `git add -A` or staging any files.
 
-### Audit Script
+### Agent Responsibilities
 
-The audit script should load protected paths from `foundation-config.yaml`:
+Agents MUST:
+- Perform security audit checks before staging or committing files
+- Load protected paths from `foundation-config.yaml` if available
+- Abort commit immediately if any violations are detected
+- Alert user clearly about security violations
 
-```bash
-#!/bin/bash
-set -e
-
-echo "🔒 Running pre-commit security audit..."
-
-# Load protected paths from foundation-config.yaml
-# (Implementation depends on YAML parsing - use yq, python, or node)
-PROTECTED_PATHS=($(yq eval '.security.pre_commit_audit.protected_paths[]' foundation-config.yaml 2>/dev/null || echo ""))
-
-# Check 1: Protected paths
-for path in "${PROTECTED_PATHS[@]}"; do
-  if git status --porcelain | grep -E "^[AM]|^\?\?" | grep -qE "$path"; then
-    echo "❌ SECURITY VIOLATION: Files in $path detected!"
-    echo "Files:"
-    git status --porcelain | grep -E "^[AM]|^\?\?" | grep "$path"
-    exit 1
-  fi
-
-  if git diff --cached --name-only 2>/dev/null | grep -qE "$path"; then
-    echo "❌ SECURITY VIOLATION: Files in $path already staged!"
-    echo "Files:"
-    git diff --cached --name-only | grep "$path"
-    exit 1
-  fi
-done
-
-# Check 2: Environment files (if enabled)
-if yq eval '.security.pre_commit_audit.check_env_files' foundation-config.yaml 2>/dev/null | grep -q "true"; then
-  if git status --porcelain | grep -qE "\.env"; then
-    echo "❌ SECURITY VIOLATION: .env files detected!"
-    git status --porcelain | grep "\.env"
-    exit 1
-  fi
-
-  if git diff --cached --name-only 2>/dev/null | grep -qE "\.env"; then
-    echo "❌ SECURITY VIOLATION: .env files already staged!"
-    git diff --cached --name-only | grep "\.env"
-    exit 1
-  fi
-fi
-
-# Check 3: Data directory (if enabled)
-if yq eval '.security.pre_commit_audit.check_data_directory' foundation-config.yaml 2>/dev/null | grep -q "true"; then
-  if git status --porcelain | grep -E "^[AM]|^\?\?" | grep -qE "^data/"; then
-    echo "❌ SECURITY VIOLATION: Files in data/ directory detected!"
-    git status --porcelain | grep -E "^[AM]|^\?\?" | grep "^data/"
-    exit 1
-  fi
-
-  if git diff --cached --name-only 2>/dev/null | grep -qE "^data/"; then
-    echo "❌ SECURITY VIOLATION: Files in data/ directory already staged!"
-    git diff --cached --name-only | grep "^data/"
-    exit 1
-  fi
-fi
-
-echo "✅ Security audit passed"
-```
+Agents MUST NOT:
+- Bypass or skip security checks
+- Commit files in protected paths
+- Suggest workarounds to security checks
+- Use `--no-verify` flag to skip hooks (if hooks are configured)
 
 ## Enforcement
 
@@ -209,12 +159,3 @@ security:
 ## Exceptions
 
 No exceptions. Private documentation must never be committed to public repositories.
-
-
-
-
-
-
-
-
-

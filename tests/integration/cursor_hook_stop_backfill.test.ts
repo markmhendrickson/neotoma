@@ -7,8 +7,8 @@
  *     so the client store/retrieve calls fail fast. The hook is
  *     best-effort: it must not crash, and it must still:
  *       (a) write `followup_message` when no `store_structured` call
- *           was observed in the turn AND a small model was in use AND
- *           `NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP=on`.
+ *           was observed in the turn and
+ *           `NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP` is `auto` or `on`.
  *       (b) NOT write `followup_message` when the agent already called
  *           store_structured at least once in the same turn.
  *       (c) NOT write `followup_message` when
@@ -83,7 +83,7 @@ describe("cursor-hooks stop backfill integration", () => {
     }
   });
 
-  it("emits followup_message for small models when store_structured was skipped", () => {
+  it("emits followup_message by default when store_structured was skipped", () => {
     if (!existsSync(STOP_HOOK)) {
       throw new Error(
         "cursor-hooks dist not built; run `npm --prefix packages/cursor-hooks run build`"
@@ -96,17 +96,88 @@ describe("cursor-hooks stop backfill integration", () => {
         sessionId,
         turnId: "turn-1",
         text: "Sure, I edited the file as requested.",
-        model: "composer-2",
+        model: "claude-sonnet-4.5",
         status: "completed",
         loop_count: 0,
       },
-      { ...baseEnv, NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP: "on" }
+      { ...baseEnv, NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP: "auto" }
     );
     expect(stop.status).toBe(0);
     const out = stop.stdout.trim() ? JSON.parse(stop.stdout) : {};
     expect(typeof out.followup_message).toBe("string");
     expect(out.followup_message).toMatch(/Neotoma compliance pass/);
     expect(out.followup_message).toMatch(/store_structured/);
+  });
+
+  it("counts wrapped Neotoma CallMcpTool store_structured as a store", () => {
+    if (!existsSync(AFTER_TOOL_USE) || !existsSync(STOP_HOOK)) {
+      throw new Error("cursor-hooks dist not built");
+    }
+    const sessionId = "cursor-stop-backfill-wrapped-store";
+    const turnId = "turn-1";
+
+    const seed = runHook(
+      AFTER_TOOL_USE,
+      {
+        sessionId,
+        turnId,
+        tool_name: "CallMcpTool",
+        tool_input: {
+          server: "user-neotoma",
+          toolName: "store_structured",
+          arguments: {
+            entities: [{ entity_type: "conversation_message", role: "user" }],
+          },
+        },
+        tool_output: {},
+        model: "claude-sonnet-4.5",
+      },
+      baseEnv
+    );
+    expect(seed.status).toBe(0);
+
+    const stop = runHook(
+      STOP_HOOK,
+      {
+        sessionId,
+        turnId,
+        text: "Stored.",
+        model: "claude-sonnet-4.5",
+        status: "completed",
+        loop_count: 0,
+      },
+      { ...baseEnv, NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP: "auto" }
+    );
+    expect(stop.status).toBe(0);
+    const out = stop.stdout.trim() ? JSON.parse(stop.stdout) : {};
+    expect(out.followup_message).toBeUndefined();
+  });
+
+  it("nudges after wrapped external MCP calls before a Neotoma store", () => {
+    if (!existsSync(AFTER_TOOL_USE)) {
+      throw new Error("cursor-hooks dist not built");
+    }
+    const seed = runHook(
+      AFTER_TOOL_USE,
+      {
+        sessionId: "cursor-stop-backfill-gmail",
+        turnId: "turn-1",
+        tool_name: "CallMcpTool",
+        tool_input: {
+          server: "user-gmail",
+          toolName: "search_emails",
+          arguments: { query: "newer_than:30d", maxResults: 5 },
+        },
+        tool_output: {
+          messages: [{ id: "email-1", subject: "Example" }],
+        },
+        model: "claude-sonnet-4.5",
+      },
+      baseEnv
+    );
+    expect(seed.status).toBe(0);
+    const out = seed.stdout.trim() ? JSON.parse(seed.stdout) : {};
+    expect(out.additional_context).toMatch(/Every turn must interact with Neotoma/);
   });
 
   it("does NOT emit followup_message when the agent already called store_structured", () => {
@@ -151,7 +222,7 @@ describe("cursor-hooks stop backfill integration", () => {
     expect(out.followup_message).toBeUndefined();
   });
 
-  it("respects NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP=off even for small models", () => {
+  it("respects NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP=off", () => {
     const sessionId = "cursor-stop-backfill-3";
     const stop = runHook(
       STOP_HOOK,

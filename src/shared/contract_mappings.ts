@@ -322,6 +322,20 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     notes: "Inspector HTTP-only; conversations with nested messages.",
   },
   {
+    operationId: "getRecentConversation",
+    method: "get",
+    path: "/recent_conversations/{conversation_id}",
+    adapter: "infra",
+    notes: "Inspector HTTP-only; single conversation transcript payload.",
+  },
+  {
+    operationId: "getComplianceScorecard",
+    method: "get",
+    path: "/admin/compliance/scorecard",
+    adapter: "infra",
+    notes: "Inspector HTTP-only; hook compliance backfill aggregates.",
+  },
+  {
     operationId: "storeStructured",
     method: "post",
     path: "/store",
@@ -382,6 +396,14 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     adapter: "both",
     mcpTool: "create_relationship",
     cliCommand: "request --operation createRelationship",
+  },
+  {
+    operationId: "createRelationships",
+    method: "post",
+    path: "/create_relationships",
+    adapter: "both",
+    mcpTool: "create_relationships",
+    cliCommand: "request --operation createRelationships",
   },
   {
     operationId: "listRelationshipsForEntity",
@@ -597,6 +619,7 @@ export const MCP_TOOL_TO_OPERATION_ID: Record<string, string> = {
   list_observations: "listObservationsForEntity",
   retrieve_field_provenance: "getFieldProvenance",
   create_relationship: "createRelationship",
+  create_relationships: "createRelationships",
   list_relationships: "listRelationshipsForEntity",
   retrieve_entities: "queryEntities",
   list_timeline_events: "listTimeline",

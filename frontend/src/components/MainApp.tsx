@@ -11,6 +11,7 @@ import { Layout } from "@/components/Layout";
 import { NotFound } from "@/components/NotFound";
 import { SitePage } from "@/components/SitePage";
 import { SitePageAlt } from "@/components/SitePageAlt";
+import { SitePageHome2 } from "@/components/SitePageHome2";
 import { TerminologyPage } from "@/components/subpages/TerminologyPage";
 import { AgentInstructionsPage } from "@/components/subpages/AgentInstructionsPage";
 import { AgentInstructionsStoreRecipesPage } from "@/components/subpages/AgentInstructionsStoreRecipesPage";
@@ -43,6 +44,9 @@ import { InspectorSettingsFeedbackPage } from "@/components/subpages/InspectorSe
 import { InstallPage } from "@/components/subpages/InstallPage";
 import { InstallManualPage } from "@/components/subpages/InstallManualPage";
 import { InstallDockerPage } from "@/components/subpages/InstallDockerPage";
+import { WhatToStorePage } from "@/components/subpages/WhatToStorePage";
+import { BackupGuidePage } from "@/components/subpages/BackupGuidePage";
+import { TunnelGuidePage } from "@/components/subpages/TunnelGuidePage";
 import { SandboxLandingPage } from "@/components/subpages/SandboxLandingPage";
 import { SandboxTermsOfUsePage } from "@/components/subpages/SandboxTermsOfUsePage";
 import { HostedLandingPage } from "@/components/subpages/HostedLandingPage";
@@ -64,7 +68,9 @@ import { NeotomaWithChatGPTPage } from "@/components/subpages/NeotomaWithChatGPT
 import { NeotomaWithCodexPage } from "@/components/subpages/NeotomaWithCodexPage";
 import { CodexConnectLocalStdioPage } from "@/components/subpages/CodexConnectLocalStdioPage";
 import { CodexConnectRemoteHttpOauthPage } from "@/components/subpages/CodexConnectRemoteHttpOauthPage";
+import { NeotomaWithOpenCodePage } from "@/components/subpages/NeotomaWithOpenCodePage";
 import { NeotomaWithOpenClawPage } from "@/components/subpages/NeotomaWithOpenClawPage";
+import { NeotomaWithIronClawPage } from "@/components/subpages/NeotomaWithIronClawPage";
 import { OpenClawConnectLocalStdioPage } from "@/components/subpages/OpenClawConnectLocalStdioPage";
 import { OpenClawConnectRemoteHttpPage } from "@/components/subpages/OpenClawConnectRemoteHttpPage";
 import { MemoryGuaranteesPage } from "@/components/subpages/MemoryGuaranteesPage";
@@ -156,6 +162,7 @@ type AppRoute = {
 
 const APP_ROUTES: readonly AppRoute[] = [
   { path: "/", element: <SitePage /> },
+  { path: "/home-2", element: <SitePageHome2 /> },
   { path: "/home/x7k9m2vp", element: <SitePageAlt /> },
   { path: "/terminology", element: <TerminologyPage /> },
   { path: "/agent-instructions", element: <AgentInstructionsPage /> },
@@ -212,6 +219,9 @@ const APP_ROUTES: readonly AppRoute[] = [
   { path: "/install", element: <InstallPage /> },
   { path: "/install/manual", element: <InstallManualPage /> },
   { path: "/install/docker", element: <InstallDockerPage /> },
+  { path: "/what-to-store", element: <WhatToStorePage /> },
+  { path: "/backup", element: <BackupGuidePage /> },
+  { path: "/tunnel", element: <TunnelGuidePage /> },
   { path: "/sandbox", element: <SandboxLandingPage /> },
   { path: "/sandbox/terms-of-use", element: <SandboxTermsOfUsePage /> },
   { path: "/hosted", element: <HostedLandingPage /> },
@@ -242,7 +252,9 @@ const APP_ROUTES: readonly AppRoute[] = [
   { path: "/neotoma-with-codex", element: <NeotomaWithCodexPage /> },
   { path: "/neotoma-with-codex-connect-local-stdio", element: <CodexConnectLocalStdioPage /> },
   { path: "/neotoma-with-codex-connect-remote-http-oauth", element: <CodexConnectRemoteHttpOauthPage /> },
+  { path: "/neotoma-with-opencode", element: <NeotomaWithOpenCodePage /> },
   { path: "/neotoma-with-openclaw", element: <NeotomaWithOpenClawPage /> },
+  { path: "/neotoma-with-ironclaw", element: <NeotomaWithIronClawPage /> },
   { path: "/neotoma-with-openclaw-connect-local-stdio", element: <OpenClawConnectLocalStdioPage /> },
   { path: "/neotoma-with-openclaw-connect-remote-http", element: <OpenClawConnectRemoteHttpPage /> },
   { path: "/memory-guarantees", element: <MemoryGuaranteesPage /> },
@@ -322,7 +334,9 @@ const BASENAME_TO_ROOT_PAGE: Record<string, JSX.Element> = {
   "/neotoma-with-claude-code": <NeotomaWithClaudeCodePage />,
   "/neotoma-with-chatgpt": <NeotomaWithChatGPTPage />,
   "/neotoma-with-codex": <NeotomaWithCodexPage />,
+  "/neotoma-with-opencode": <NeotomaWithOpenCodePage />,
   "/neotoma-with-openclaw": <NeotomaWithOpenClawPage />,
+  "/neotoma-with-ironclaw": <NeotomaWithIronClawPage />,
 };
 
 function getRootElement(): JSX.Element {

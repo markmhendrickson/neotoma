@@ -38,10 +38,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
     <title>Codex remote setup (HTTP with OAuth) (Markdown) | Neotoma</title>
-    <script type="module" crossorigin="" src="/assets/main-CaoWcp2k.js"></script>
-    <link rel="stylesheet" crossorigin="" href="/assets/main-BBds_bdF.css">
+    <script type="module" crossorigin="" src="/assets/main-aNEaYUJL.js"></script>
+    <link rel="stylesheet" crossorigin="" href="/assets/main-a7BqVBLd.css">
   
-    <!-- build: local-1777360387837 -->
+    <!-- build: local-1777885129871 -->
       <link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/neotoma-with-codex-connect-remote-http-oauth">
     <link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/neotoma-with-codex-connect-remote-http-oauth">
     <link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/neotoma-with-codex-connect-remote-http-oauth">
@@ -61,7 +61,7 @@
     <div id="root"><iframe title="Markdown capture" aria-hidden="true" width="1280" height="900" class="pointer-events-none fixed left-[-9999px] top-0 z-[-1] border-0 opacity-0" sandbox="allow-same-origin allow-scripts allow-forms"></iframe><div class="min-h-screen bg-background text-foreground"><pre class="whitespace-pre-wrap break-words p-4 font-mono text-[13px] leading-relaxed text-foreground">&lt;!--
   Full-page Markdown export (rendered HTML → GFM).
   Source: https://neotoma.io/ca/neotoma-with-codex-connect-remote-http-oauth
-  Generated: 2026-04-28T07:16:27.784Z
+  Generated: 2026-05-04T09:02:16.830Z
 --&gt;
 # Codex remote setup (HTTP with OAuth)
 
@@ -75,35 +75,7 @@ Running Codex on the same machine as Neotoma? See [Codex local setup (stdio)](/n
 
 Codex sandboxes can connect to remote MCP servers over HTTP. Use this when Neotoma is not installed locally in the sandbox. Start with local install on your host machine, then configure remote access:
 
-1.  **Install a tunnel provider:** Neotoma's `--tunnel` flag needs either [ngrok](https://ngrok.com/download) or [Cloudflare Tunnel (cloudflared)](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/) installed on your machine. Install one:
-    
-    Code snippet
-    
-    Copy the exact snippet shown below.
-    
-    ```
-    # ngrok (via Homebrew)
-    brew install ngrok
-    ngrok config add-authtoken &lt;YOUR_NGROK_TOKEN&gt;
-    
-    # or Cloudflare Tunnel
-    brew install cloudflared
-    ```
-    
-    ngrok requires a free account and auth token from [dashboard.ngrok.com](https://dashboard.ngrok.com/get-started/your-authtoken). You can set the token as an environment variable instead of running `ngrok config`:
-    
-    Code snippet
-    
-    Copy the exact snippet shown below.
-    
-    ```
-    # In your shell profile or .env
-    export NGROK_AUTHTOKEN=&lt;YOUR_NGROK_TOKEN&gt;
-    ```
-    
-    Cloudflare Tunnel works without an account for quick tunnels. If both providers are installed, Neotoma auto-detects which to use; pass `--tunnel-provider ngrok` or `--tunnel-provider cloudflare` to choose explicitly.
-    
-2.  **Start the API server with a tunnel:** the `--tunnel` flag auto-provisions a public HTTPS URL via ngrok or Cloudflare (whichever is installed)
+1.  **Start Neotoma with a tunnel:** follow the [tunnel guide](/tunnel) to expose your local Neotoma instance over HTTPS. The quickest path:
     
     Code snippet
     
@@ -113,9 +85,7 @@ Codex sandboxes can connect to remote MCP servers over HTTP. Use this when Neoto
     neotoma api start --env prod --tunnel
     ```
     
-    The tunnel URL is printed to the console and written to `/tmp/ngrok-mcp-url.txt`. You can also use a reverse proxy or your own domain instead of `--tunnel`.
-    
-3.  **Configure HTTP transport with OAuth** in your Codex config. Replace the URL with your tunnel URL
+2.  **Configure HTTP transport with OAuth** in your Codex config. Replace the URL with your tunnel URL
     
     Code snippet
     

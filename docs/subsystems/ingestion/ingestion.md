@@ -137,7 +137,7 @@ Chat transcripts (e.g., logs exported from LLM apps like ChatGPT) require **non-
   - Non-deterministically convert raw chat exports into well-structured JSON files (one observation per JSON object with explicit entity types and fields)
   - Feed the resulting JSON files into the standard deterministic ingestion path
 - Neotoma's State Layer ingestion pipeline never performs non-deterministic interpretation of chat content
-- See `docs/specs/MVP_FEATURE_UNITS.md` for chat-to-JSON CLI feature unit details
+- See `docs/releases/archived/mvp_planning/MVP_FEATURE_UNITS.md` for historical chat-to-JSON CLI feature unit planning.
 ### 2.2 Validation Rules
 ```typescript
 function validateFile(file: File): ValidationResult {

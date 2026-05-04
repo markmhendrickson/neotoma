@@ -27,11 +27,11 @@ All hero and post imagery MUST follow this style. Apply it when prompting image 
 | Rule | Requirement |
 |------|--------------|
 | **Background** | Solid black only. No gradients, no white sections, no mixed backgrounds. |
-| **Foreground** | White line-art exclusively. No fills, no shading, no gradients within shapes. |
-| **Line work** | Consistent thin white outlines. Clean, minimal line weight. |
-| **Color** | Monochromatic black and white only. No gray, no other colors. |
-| **Composition** | Elements in lower portion of frame. Generous negative (black) space above. |
-| **Aesthetic** | Stylized, iconic, minimalist. Not realistic or photorealistic. |
+| **Foreground** | White line-art. Subtle edge shading for dimensionality is encouraged; large filled areas and color gradients are not. |
+| **Line work** | Polished, refined white outlines with consistent stroke weight. Lines should feel engraved or blueprint-quality — smooth curves, clean joints, slight dimensional depth on edges. Not sketchy or rough. |
+| **Color** | Monochromatic black and white only. No gray tones or other colors outside of subtle edge shading for depth. |
+| **Composition** | Scene-based or centered. Objects may sit on surfaces with perspective (e.g. an angled desk, a platform). Generous negative (black) space around the subject. |
+| **Aesthetic** | Polished, dimensional, iconic. Technical engraving or refined blueprint feel. Not flat/clip-art, not photorealistic. Symbolic objects should feel like they have weight and presence. |
 | **Typography** | None. No text, labels, or captions within the image. |
 
 **Focal brand:** When the post is about a specific product or brand (e.g. Notion, Claude, OpenAI), focus the hero on that brand using recognizable shapes or motifs in the same white line-art style. No logos or wordmarks; the image should read as "this post is about X" at a glance.
@@ -41,10 +41,12 @@ All hero and post imagery MUST follow this style. Apply it when prompting image 
 When generating a new hero or post image, use a prompt that enforces the style. Example structure:
 
 ```
-[Subject or theme]. Black background only. White line-art only, thin clean outlines, no fills or shading. Minimalist, iconic, stylized. No text or labels. Composition with elements in lower portion of frame and generous negative space above.
+[Subject or theme]. Pure black background. White line-art with polished, refined outlines and subtle edge shading for dimensionality. Engraving or blueprint quality — smooth curves, clean joints, slight depth on edges. Objects may sit on a surface with perspective. Iconic, symbolic, not photorealistic. No text or labels. Generous negative (black) space around the subject.
 ```
 
-Replace `[Subject or theme]` with the post topic (e.g. "Agent memory and a source of truth", "Claude Memory tool as a simple box with a key", "Bitcoin wallet and MCP").
+Replace `[Subject or theme]` with the post topic (e.g. "Agent memory and a source of truth", "Three robot faces in wax-seal stamps on a desk", "Calendar grid connected to a mesh network").
+
+**Style references:** `know-which-of-your-agents-wrote-what-hero.png` (wax seals with dimensional depth on angled desk), `the-argument-cagan-already-won-hero.png` (geometric Atlas figure with polished wireframe).
 
 ## Asset variants (when a repo supports them)
 

@@ -20,6 +20,7 @@ import {
 } from "../../src/cli/permissions.ts";
 import { runSetup } from "../../src/cli/setup.ts";
 import { runDoctor } from "../../src/cli/doctor.ts";
+import { detectHooks } from "../../src/cli/hooks_detect.ts";
 
 async function mkTmp(prefix: string): Promise<string> {
   return await fs.mkdtemp(path.join(os.tmpdir(), `${prefix}-`));
@@ -183,14 +184,14 @@ describe("runSetup", () => {
     await fs.rm(home, { recursive: true, force: true });
   });
 
-  it("returns a report with all four steps and honors --dry-run", async () => {
+  it("returns a report with all setup steps and honors --dry-run", async () => {
     const report = await runSetup({
       tool: "cursor",
       dryRun: true,
       cwd,
       runners: {
         init: async () => ({ id: "init", ok: true, changed: false, skipped: true, reason: "dry-run" }),
-        mcpConfigure: async () => ({ id: "mcp-configure", ok: true, changed: false, skipped: true, reason: "dry-run" }),
+        mcpConfigure: async () => ({ id: "mcp-configure", ok: true, changed: true }),
         cliInstructionsConfigure: async () => ({
           id: "cli-instructions",
           ok: true,
@@ -201,10 +202,11 @@ describe("runSetup", () => {
       },
     });
     const stepIds = report.steps.map((s) => s.id);
-    expect(stepIds).toEqual(["init", "mcp-configure", "cli-instructions", "permissions"]);
+    expect(stepIds).toEqual(["init", "mcp-configure", "cli-instructions", "hooks", "permissions"]);
     expect(report.dry_run).toBe(true);
     expect(report.tool).toBe("cursor");
     expect(report.overall_ok).toBe(true);
+    expect(report.steps.find((s) => s.id === "hooks")?.reason).toBe("dry-run");
   });
 
   it("writes permission files when dryRun is false", async () => {
@@ -214,7 +216,7 @@ describe("runSetup", () => {
       cwd,
       runners: {
         init: async () => ({ id: "init", ok: true, changed: false, skipped: true, reason: "stub" }),
-        mcpConfigure: async () => ({ id: "mcp-configure", ok: true, changed: false, skipped: true, reason: "stub" }),
+        mcpConfigure: async () => ({ id: "mcp-configure", ok: true, changed: true }),
         cliInstructionsConfigure: async () => ({
           id: "cli-instructions",
           ok: true,
@@ -228,6 +230,33 @@ describe("runSetup", () => {
     const claudePath = path.join(cwd, ".claude", "settings.local.json");
     const body = await fs.readFile(claudePath, "utf8");
     expect(body).toContain("Bash(neotoma:*)");
+    expect(report.steps.find((s) => s.id === "hooks")?.reason).toBe("data-not-initialized");
+  });
+
+  it("uses the injected hooks installer when MCP is configured for a hook-capable tool", async () => {
+    const report = await runSetup({
+      tool: "cursor",
+      dryRun: false,
+      cwd,
+      runners: {
+        init: async () => ({ id: "init", ok: true, changed: false, skipped: true, reason: "stub" }),
+        mcpConfigure: async () => ({ id: "mcp-configure", ok: true, changed: true }),
+        cliInstructionsConfigure: async () => ({
+          id: "cli-instructions",
+          ok: true,
+          changed: false,
+          skipped: true,
+          reason: "stub",
+        }),
+        hooksInstall: async () => ({ id: "hooks", ok: true, changed: true }),
+      },
+    });
+
+    expect(report.steps.find((s) => s.id === "hooks")).toMatchObject({
+      id: "hooks",
+      ok: true,
+      changed: true,
+    });
   });
 });
 
@@ -301,6 +330,44 @@ describe("runDoctor", () => {
       else process.env.NEOTOMA_MIRROR_PATH = originalMirrorPath;
       await fs.rm(cwd, { recursive: true, force: true });
       await fs.rm(mirrorDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("detectHooks", () => {
+  it("recognizes Cursor hooks written with command strings", async () => {
+    const cwd = await mkTmp("ntm-hooks-cursor");
+    try {
+      await fs.mkdir(path.join(cwd, ".cursor"), { recursive: true });
+      await fs.writeFile(
+        path.join(cwd, ".cursor", "hooks.json"),
+        JSON.stringify(
+          {
+            version: 1,
+            hooks: {
+              stop: [
+                {
+                  command: "node /opt/neotoma/packages/cursor-hooks/dist/stop.js",
+                  loop_limit: 1,
+                },
+              ],
+            },
+          },
+          null,
+          2
+        )
+      );
+
+      const report = await detectHooks({
+        cwd,
+        currentTool: "cursor",
+        mcpConfigured: true,
+      });
+
+      expect(report.installed.cursor.present).toBe(true);
+      expect(report.eligible_for_offer).toBe(false);
+    } finally {
+      await fs.rm(cwd, { recursive: true, force: true });
     }
   });
 });

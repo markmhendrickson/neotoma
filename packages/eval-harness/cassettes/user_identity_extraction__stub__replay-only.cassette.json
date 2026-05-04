@@ -1,0 +1,60 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "user_identity_extraction",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-04-29T09:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "My name is Jordan Rivera and my email is jordan@example.com\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. In one store_structured call, persist (a) a `conversation` entity, (b) a `conversation_message` for the user's message linked to the conversation via PART_OF, and (c) every entity the user mentions or implies (people, contacts, identity) linked from the message via REFERS_TO. When the user self-identifies, store them as a contact or person. Then reply briefly.\n",
+  "tool_calls": [
+    {
+      "name": "store_structured",
+      "input": {
+        "idempotency_key": "conversation-user-id-1-user",
+        "entities": [
+          {
+            "entity_type": "conversation",
+            "title": "User self-identification — Jordan Rivera"
+          },
+          {
+            "entity_type": "conversation_message",
+            "role": "user",
+            "sender_kind": "user",
+            "content": "My name is Jordan Rivera and my email is jordan@example.com",
+            "turn_key": "user-id-1:1"
+          },
+          {
+            "entity_type": "contact",
+            "name": "Jordan Rivera",
+            "email": "jordan@example.com",
+            "notes": "Self-identified by user."
+          }
+        ],
+        "relationships": [
+          {
+            "relationship_type": "PART_OF",
+            "source_index": 1,
+            "target_index": 0
+          },
+          {
+            "relationship_type": "REFERS_TO",
+            "source_index": 1,
+            "target_index": 2
+          }
+        ]
+      },
+      "output": [
+        {
+          "type": "input_text",
+          "text": "{\"source_id\":\"stub-src-uid-1\",\"entities\":[{\"observation_index\":0,\"entity_id\":\"ent_stub_uid_001\",\"entity_type\":\"conversation\",\"action\":\"created\",\"canonical_name\":\"conversation:User self-identification\",\"resolver_path\":[\"schema:canonical_name_fields:title\",\"existing_row:none\"],\"identity_basis\":\"schema_rule\",\"identity_rule\":\"composite:title\"},{\"observation_index\":1,\"entity_id\":\"ent_stub_uid_002\",\"entity_type\":\"conversation_message\",\"action\":\"created\",\"canonical_name\":\"conversation_message:user-id-1:1\",\"resolver_path\":[\"schema:canonical_name_fields:turn_key\",\"existing_row:none\"],\"identity_basis\":\"schema_rule\",\"identity_rule\":\"composite:turn_key\"},{\"observation_index\":2,\"entity_id\":\"ent_stub_uid_003\",\"entity_type\":\"contact\",\"action\":\"created\",\"canonical_name\":\"Jordan Rivera\",\"resolver_path\":[\"name_key:name\",\"existing_row:none\"],\"identity_basis\":\"heuristic_name\",\"identity_rule\":\"name_key:name\"}],\"unknown_fields_count\":0,\"related_entities\":[],\"related_relationships\":[{\"relationship_key\":\"PART_OF:ent_stub_uid_002:ent_stub_uid_001\",\"relationship_type\":\"PART_OF\",\"source_entity_id\":\"ent_stub_uid_002\",\"target_entity_id\":\"ent_stub_uid_001\",\"schema_version\":\"1.0\",\"snapshot\":{},\"computed_at\":\"2026-04-29T09:00:00.000Z\",\"observation_count\":1,\"last_observation_at\":\"2026-04-29T09:00:00.000Z\",\"provenance\":{},\"user_id\":\"00000000-0000-0000-0000-000000000000\"},{\"relationship_key\":\"REFERS_TO:ent_stub_uid_002:ent_stub_uid_003\",\"relationship_type\":\"REFERS_TO\",\"source_entity_id\":\"ent_stub_uid_002\",\"target_entity_id\":\"ent_stub_uid_003\",\"schema_version\":\"1.0\",\"snapshot\":{},\"computed_at\":\"2026-04-29T09:00:00.000Z\",\"observation_count\":1,\"last_observation_at\":\"2026-04-29T09:00:00.000Z\",\"provenance\":{},\"user_id\":\"00000000-0000-0000-0000-000000000000\"}]}"
+        }
+      ],
+      "sequence": 0
+    }
+  ],
+  "assistant_text": "Nice to meet you, Jordan. I've saved your name and email."
+}

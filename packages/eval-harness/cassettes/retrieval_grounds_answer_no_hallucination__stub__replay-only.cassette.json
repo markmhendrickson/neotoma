@@ -1,0 +1,52 @@
+{
+  "meta": {
+    "format_version": 1,
+    "scenario_id": "retrieval_grounds_answer_no_hallucination",
+    "provider": "stub",
+    "model": "replay-only",
+    "instruction_profile": "auto",
+    "recorded_at": "2026-04-29T09:00:00.000Z",
+    "cost_usd": 0
+  },
+  "user_prompt": "What tasks do I have?\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. When the user asks about their data, retrieve existing entities from Neotoma and ground your answer in what you find. Do not invent facts that are not stored. Persist the conversation and user message via store_structured.\n",
+  "tool_calls": [
+    {
+      "name": "retrieve_entities",
+      "input": { "entity_type": "task", "limit": 20 },
+      "output": {
+        "type": "text",
+        "text": "{\"entities\":[{\"entity_id\":\"ent_seed_task_4421\",\"entity_type\":\"task\",\"canonical_name\":\"task:Pay invoice #4421\",\"snapshot\":{\"title\":\"Pay invoice #4421\",\"due_date\":\"2026-05-15\",\"status\":\"pending\",\"counterparty\":\"Acme Consulting\"}}]}"
+      },
+      "sequence": 0
+    },
+    {
+      "name": "store_structured",
+      "input": {
+        "idempotency_key": "conv-tasks-list-001",
+        "entities": [
+          {
+            "entity_type": "conversation",
+            "conversation_id": "conv-tasks-list-001"
+          },
+          {
+            "entity_type": "conversation_message",
+            "turn_key": "conv-tasks-list-001:1",
+            "role": "user",
+            "sender_kind": "user",
+            "content": "What tasks do I have?"
+          }
+        ],
+        "relationships": [
+          { "relationship_type": "PART_OF", "source_index": 1, "target_index": 0 }
+        ]
+      },
+      "output": {
+        "type": "text",
+        "text": "{\"source_id\":\"stub-src-tasks-1\",\"entities\":[{\"observation_index\":0,\"entity_id\":\"ent_stub_tl01\",\"entity_type\":\"conversation\",\"action\":\"created\"},{\"observation_index\":1,\"entity_id\":\"ent_stub_tl02\",\"entity_type\":\"conversation_message\",\"action\":\"created\"}],\"unknown_fields_count\":0,\"related_entities\":[],\"related_relationships\":[]}"
+      },
+      "sequence": 1
+    }
+  ],
+  "assistant_text": "You have one pending task:\n\n- **Pay invoice #4421** — due 2026-05-15, counterparty: Acme Consulting"
+}

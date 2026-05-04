@@ -3,7 +3,15 @@ name: report
 description: Report Error Command
 ---
 
-<!-- Source: foundation/agent_instructions/cursor_commands/report.md -->
+<!-- Source: foundation/.cursor/skills/report/SKILL.md -->
+
+---
+name: report
+description: Generate report per foundation report command.
+triggers:
+  - report
+  - /report
+---
 
 # Report Error Command
 
@@ -583,7 +591,7 @@ The Cursor Cloud Agent will:
 
 ### With `fix_feature_bug`
 
-- Errors classified as bugs can trigger the `fix_feature_bug` command
+- Errors classified as bugs can trigger the `fix-feature-bug` skill
 - Agent can auto-classify certain error types as bugs
 - Bug fix workflow will update error report resolution status
 
@@ -1493,8 +1501,8 @@ BASE_FILENAME="error_${TIMESTAMP}_runtime.json"
 
 ## Related Documentation
 
-- `.claude/skills/foundation_fix_feature_bug.md` - Bug fix workflow
-- `.claude/skills/foundation_analyze.md` - Analysis command
-- `.claude/skills/foundation_debug.md` - Debug workflow
+- Skill `fix-feature-bug` (`.cursor/skills/fix-feature-bug/SKILL.md`) - Bug fix workflow
+- Skill `analyze` (`.cursor/skills/analyze/SKILL.md`) - Analysis workflow
+- Skill `debug` (`.cursor/skills/debug/SKILL.md`) - Debug workflow
 - `foundation-config.yaml` - Configuration file (in repository root)
 

@@ -293,7 +293,7 @@ Once internal MCP release is validated:
 ## Documentation References
 - [`docs/NEOTOMA_MANIFEST.md`](../NEOTOMA_MANIFEST.md) — Foundational principles
 - [`docs/specs/MCP_SPEC.md`](./MCP_SPEC.md) — MCP action specifications
-- [`docs/specs/MVP_FEATURE_UNITS.md`](./MVP_FEATURE_UNITS.md) — Complete Feature Unit inventory
+- [`docs/releases/archived/mvp_planning/MVP_FEATURE_UNITS.md`](../releases/archived/mvp_planning/MVP_FEATURE_UNITS.md) — Historical MVP Feature Unit inventory
 - [`docs/architecture/architecture.md`](../architecture/architecture.md) — System architecture
 - [`docs/subsystems/ingestion/ingestion.md`](../subsystems/ingestion/ingestion.md) — Ingestion pipeline
 **Status:** 📋 Specification Complete

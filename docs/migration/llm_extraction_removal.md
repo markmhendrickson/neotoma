@@ -348,7 +348,7 @@ After MVP launch, consider **hybrid approach**:
 - `docs/NEOTOMA_MANIFEST.md` section 5.1 — Determinism Above All
 - `docs/subsystems/record_types.md` — Complete type catalog, extraction rules
 - `docs/subsystems/ingestion/ingestion.md` section 5 — Schema detection patterns
-- `docs/specs/MVP_EXECUTION_PLAN.md` FU-100 — Implementation plan
+- `docs/releases/archived/mvp_planning/MVP_EXECUTION_PLAN.md` FU-100 — Historical implementation plan
 - `docs/architecture/determinism.md` — Determinism requirements
 ## Agent Instructions
 ### When to Load This Document
@@ -362,7 +362,7 @@ Load `docs/migration/llm_extraction_removal.md` when:
 - `docs/NEOTOMA_MANIFEST.md` (determinism requirements)
 - `docs/subsystems/record_types.md` (type catalog, extraction rules)
 - `docs/subsystems/ingestion/ingestion.md` (ingestion pipeline)
-- `docs/specs/MVP_EXECUTION_PLAN.md` (FU-100 details)
+- `docs/releases/archived/mvp_planning/MVP_EXECUTION_PLAN.md` (historical FU-100 details)
 ### Constraints Agents Must Enforce
 1. **Zero LLM calls in MVP:** Code MUST NOT call `openai.chat.completions.create()` or equivalent
 2. **Determinism required:** Same file → same extraction, always (100 runs → 100 identical results)

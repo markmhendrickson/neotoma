@@ -63,7 +63,7 @@ All five harness packages received a coordinated rewrite to share the same turn-
 - New `session_start.ts` hook: initializes per-turn state, optionally injects compact reminder for small models, seeds recent timeline retrievals.
 - `before_submit_prompt.ts`: user message capture and identifier-retrieval warmup. (Cursor drops `additional_context` from this hook; reminders use `sessionStart` and `postToolUse` instead.)
 - New `post_tool_use_failure.ts`: captures `tool_invocation_failure` entities for Neotoma-relevant tools, bumps per-`(tool, error_class)` counter on disk.
-- `after_tool_use.ts` (renamed from `postToolUse` in docs): `tool_invocation` observation, optional small-model reminder, failure-hint surfacing.
+- `after_tool_use.ts` (renamed from `postToolUse` in docs): `tool_invocation` observation, per-turn reminder before any Neotoma store, wrapped MCP call detection, failure-hint surfacing.
 - `stop.ts`: `conversation_message` safety net, compliance backfill with bounded root-cause classification (`instruction_diagnostics`, `diagnosis_confidence`, `recommended_repairs`), classifier-driven `followup_message` for non-compliant turns.
 - `_common.ts`: per-turn state management (`NEOTOMA_HOOK_STATE_DIR`), failure-signal accumulator with PII scrub, error classification, small-model detection, `isExpectedNetworkError` downgrade, `ConversationTurnObservationInput` type, `accreteTurn` helper.
 - 12+ new env vars: `NEOTOMA_HOOK_STATE_DIR`, `NEOTOMA_HOOK_FEEDBACK_HINT`, `NEOTOMA_HOOK_FEEDBACK_HINT_THRESHOLD`, `NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP`, `NEOTOMA_HOOK_SMALL_MODEL_PATTERNS`, `NEOTOMA_HOOK_SMALL_MODEL_DETECTED`, `NEOTOMA_HOOK_DETECTED_MODEL`, `NEOTOMA_LOCAL_BUILD`, `NEOTOMA_HOOK_CONNECTION_ID`.

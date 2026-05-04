@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 
 interface EntityGraphHeroProps {
   className?: string;
+  /** Tighter max width for compact hero layouts (e.g. homepage v2). */
+  compact?: boolean;
 }
 
 const NODES = [
@@ -32,7 +34,7 @@ const OBSERVATIONS: { text: string; nodeIdx: number }[] = [
 
 const OBSERVATION_INTERVAL_MS = 2400;
 
-export function EntityGraphHero({ className = "" }: EntityGraphHeroProps) {
+export function EntityGraphHero({ className = "", compact = false }: EntityGraphHeroProps) {
   const [visible, setVisible] = useState(false);
   const [obsIdx, setObsIdx] = useState(0);
   const [reduceMotion, setReduceMotion] = useState(false);
@@ -76,7 +78,9 @@ export function EntityGraphHero({ className = "" }: EntityGraphHeroProps) {
   return (
     <div
       ref={ref}
-      className={`relative mx-auto w-full max-w-[420px] lg:max-w-none ${className}`}
+      className={`relative mx-auto w-full ${
+        compact ? "max-w-[280px] sm:max-w-[300px] lg:max-w-[320px]" : "max-w-[420px] lg:max-w-none"
+      } ${className}`}
       style={{ perspective: "1200px" }}
     >
       <div

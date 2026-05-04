@@ -7,10 +7,10 @@
  *    timeline reflects the agent's work even if the agent never writes a
  *    structured memory via MCP.
  *
- * 2. Prompt-local reinforcement: when the running model looks like a small
- *    / fast model and the agent has not yet emitted a `store_structured`
- *    call this turn, return `additional_context` reminding it of the
- *    Neotoma must-do list. Cursor honors `additional_context` on
+ * 2. Prompt-local reinforcement: when the agent has not yet emitted a
+ *    `store_structured` call this turn, return `additional_context`
+ *    reminding it of the Neotoma must-do list. Cursor honors
+ *    `additional_context` on
  *    `postToolUse` (verified against the documented contract). This is
  *    the surface the previous `beforeSubmitPrompt.additionalContext` was
  *    trying to fill — Cursor drops it there but accepts it here.
@@ -23,17 +23,19 @@ import { type StoreEntityInput } from "@neotoma/client";
 
 import {
   buildCompactReminder,
+  collectHookWorkspaceContext,
   formatFailureHint,
   getClient,
   harnessProvenance,
-  isSmallModel,
   log,
-  looksLikeRetrieve,
+  looksLikeExternalDataTool,
+  looksLikeRetrieveInvocation,
   looksLikeStoreStructured,
   makeIdempotencyKey,
   readFailureHint,
   recordConversationTurn,
   runHook,
+  turnContextFields,
   updateTurnState,
 } from "./_common.js";
 
@@ -59,6 +61,9 @@ function shouldNudgeForReply(toolName: string): boolean {
     lower === "search" ||
     lower === "shell" ||
     lower === "semanticsearch" ||
+    lower === "callmcptool" ||
+    lower === "call_mcp_tool" ||
+    lower.includes("callmcptool") ||
     lower.startsWith("mcp_") ||
     lower.includes("read_file") ||
     lower.includes("list_dir")
@@ -104,9 +109,11 @@ async function handle(
     (input.model as string) ??
     process.env.NEOTOMA_HOOK_DETECTED_MODEL ??
     "";
+  const context = collectHookWorkspaceContext(input);
 
   const wasStore = looksLikeStoreStructured(toolName, toolInput);
-  const wasRetrieve = looksLikeRetrieve(toolName);
+  const wasRetrieve = looksLikeRetrieveInvocation(toolName, toolInput);
+  const wasExternalData = looksLikeExternalDataTool(toolName, toolInput, toolResult);
   const nextState = updateTurnState(sessionId, turnId, (s) => ({
     ...s,
     conversation_id: sessionId,
@@ -114,6 +121,7 @@ async function handle(
     model: model || s.model,
     store_structured_calls: s.store_structured_calls + (wasStore ? 1 : 0),
     retrieve_calls: s.retrieve_calls + (wasRetrieve ? 1 : 0),
+    external_data_tool_calls: s.external_data_tool_calls + (wasExternalData ? 1 : 0),
     tool_invocation_count: s.tool_invocation_count + 1,
   }));
 
@@ -158,6 +166,7 @@ async function handle(
       retrieveCalls: nextState.retrieve_calls,
       neotomaToolFailures: nextState.neotoma_tool_failures,
       storedEntityIds: toolEntityId ? [toolEntityId] : undefined,
+      ...turnContextFields(context),
     });
 
     if (toolEntityId && turnRecord?.entityId) {
@@ -177,17 +186,21 @@ async function handle(
   }
 
   const parts: string[] = [];
-  const detected =
-    isSmallModel(model) ||
-    process.env.NEOTOMA_HOOK_SMALL_MODEL_DETECTED === "1";
   const noStoreYet = nextState.store_structured_calls === 0;
   if (
-    detected &&
     noStoreYet &&
     !wasStore &&
     shouldNudgeForReply(toolName)
   ) {
     parts.push(buildCompactReminder(model));
+  }
+
+  if (wasExternalData) {
+    parts.push(
+      "[External tool returned data] Per store-first rule: extract and store entities from this tool's output " +
+      "as structured Neotoma entities (with data_source and api_response_data) before composing your reply. " +
+      "Conversation bookkeeping alone is not sufficient."
+    );
   }
 
   const hint = readFailureHint(sessionId);

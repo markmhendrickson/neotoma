@@ -48,6 +48,92 @@ components:
         timestamp:
           type: string
           format: date-time
+    RecentConversationRelatedEntity:
+      type: object
+      properties:
+        entity_id:
+          type: string
+        entity_type:
+          type: string
+          nullable: true
+        canonical_name:
+          type: string
+          nullable: true
+        title:
+          type: string
+          nullable: true
+        relationship_type:
+          type: string
+    ConversationTurnHookSummary:
+      type: object
+      properties:
+        hook_event_count:
+          type: integer
+        tool_invocation_count:
+          type: integer
+        store_structured_calls:
+          type: integer
+        retrieve_calls:
+          type: integer
+        retrieved_entity_count:
+          type: integer
+        stored_entity_count:
+          type: integer
+        neotoma_tool_failures:
+          type: integer
+    RecentConversationMessage:
+      type: object
+      properties:
+        message_id:
+          type: string
+        canonical_name:
+          type: string
+          nullable: true
+        role:
+          type: string
+          nullable: true
+        sender_kind:
+          type: string
+          nullable: true
+        content:
+          type: string
+          nullable: true
+        turn_key:
+          type: string
+          nullable: true
+        activity_at:
+          type: string
+        related_entities:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecentConversationRelatedEntity'
+        hook_summary:
+          anyOf:
+            - type: "null"
+            - $ref: '#/components/schemas/ConversationTurnHookSummary'
+    RecentConversationItem:
+      type: object
+      properties:
+        conversation_id:
+          type: string
+        canonical_name:
+          type: string
+          nullable: true
+        title:
+          type: string
+          nullable: true
+        activity_at:
+          type: string
+        message_count:
+          type: integer
+        latest_write_provenance:
+          type: object
+          nullable: true
+          additionalProperties: true
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecentConversationMessage'
     StoreResolutionIssue:
       type: object
       description: |
@@ -1061,6 +1147,42 @@ components:
               type: integer
         last_updated:
           type: string
+    StoreRelationshipInput:
+      oneOf:
+        - type: object
+          required: [relationship_type, source_index, target_index]
+          additionalProperties: false
+          properties:
+            relationship_type:
+              type: string
+              enum: [PART_OF, CORRECTS, REFERS_TO, SETTLES, DUPLICATE_OF, DEPENDS_ON, SUPERSEDES, EMBEDS, works_at, owns, manages, part_of, related_to, depends_on, references, transacted_with, member_of, reports_to, located_at, created_by, funded_by, acquired_by, subsidiary_of, partner_of, competitor_of, supplies_to, contracted_with, invested_in]
+            source_index:
+              type: integer
+              minimum: 0
+              description: Index into the entities array for the source entity.
+            target_index:
+              type: integer
+              minimum: 0
+              description: Index into the entities array for the target entity.
+            metadata:
+              type: object
+              additionalProperties: true
+        - type: object
+          required: [relationship_type, source_entity_id, target_entity_id]
+          additionalProperties: false
+          properties:
+            relationship_type:
+              type: string
+              enum: [PART_OF, CORRECTS, REFERS_TO, SETTLES, DUPLICATE_OF, DEPENDS_ON, SUPERSEDES, EMBEDS, works_at, owns, manages, part_of, related_to, depends_on, references, transacted_with, member_of, reports_to, located_at, created_by, funded_by, acquired_by, subsidiary_of, partner_of, competitor_of, supplies_to, contracted_with, invested_in]
+            source_entity_id:
+              type: string
+              description: Existing source entity ID.
+            target_entity_id:
+              type: string
+              description: Existing target entity ID.
+            metadata:
+              type: object
+              additionalProperties: true
     StoreRequest:
       type: object
       additionalProperties: false
@@ -1086,20 +1208,11 @@ components:
         relationships:
           type: array
           description: |
-            Optional. Create relationships between entities in this request. Indices refer to the entities array (0-based).
+            Optional. Create relationships between entities in this request.
+            Use `source_index`/`target_index` for entities in the request, or
+            `source_entity_id`/`target_entity_id` for existing entities.
           items:
-            type: object
-            required: [relationship_type, source_index, target_index]
-            properties:
-              relationship_type:
-                type: string
-                enum: [PART_OF, CORRECTS, REFERS_TO, SETTLES, DUPLICATE_OF, DEPENDS_ON, SUPERSEDES, EMBEDS, works_at, owns, manages, part_of, related_to, depends_on, references, transacted_with, member_of, reports_to, located_at, created_by, funded_by, acquired_by, subsidiary_of, partner_of, competitor_of, supplies_to, contracted_with, invested_in]
-              source_index:
-                type: integer
-                minimum: 0
-              target_index:
-                type: integer
-                minimum: 0
+            $ref: '#/components/schemas/StoreRelationshipInput'
         source_priority:
           type: integer
         observation_source:
@@ -1176,23 +1289,12 @@ components:
         relationships:
           type: array
           description: |
-            Optional. Create relationships between entities in this request. Indices refer to the entities array (0-based).
+            Optional. Create relationships between entities in this request.
+            Use `source_index`/`target_index` for entities in the request, or
+            `source_entity_id`/`target_entity_id` for existing entities.
             Enables one-call chat persistence: store [conversation, conversation_message] with relationships [{ relationship_type: "PART_OF", source_index: 1, target_index: 0 }]. (`agent_message` remains accepted as a legacy alias for pre-v0.6 clients.)
           items:
-            type: object
-            required: [relationship_type, source_index, target_index]
-            properties:
-              relationship_type:
-                type: string
-                enum: [PART_OF, CORRECTS, REFERS_TO, SETTLES, DUPLICATE_OF, DEPENDS_ON, SUPERSEDES, EMBEDS, works_at, owns, manages, part_of, related_to, depends_on, references, transacted_with, member_of, reports_to, located_at, created_by, funded_by, acquired_by, subsidiary_of, partner_of, competitor_of, supplies_to, contracted_with, invested_in]
-              source_index:
-                type: integer
-                minimum: 0
-                description: Index into the entities array for the source entity
-              target_index:
-                type: integer
-                minimum: 0
-                description: Index into the entities array for the target entity
+            $ref: '#/components/schemas/StoreRelationshipInput'
         source_priority:
           type: integer
         observation_source:
@@ -2537,6 +2639,64 @@ paths:
                   offset:
                     type: integer
 
+  /admin/compliance/scorecard:
+    get:
+      summary: Compliance scorecard (conversation_turn aggregates)
+      description: |
+        Aggregates `conversation_turn` / legacy `turn_compliance` / `turn_activity`
+        rows from SQLite for the authenticated user into per-cell backfill rates.
+        Powers the Inspector compliance dashboard.
+      operationId: getComplianceScorecard
+      parameters:
+        - in: query
+          name: user_id
+          required: false
+          schema: { type: string }
+        - in: query
+          name: since
+          required: false
+          description: ISO timestamp/date or relative window (`24h`, `7d`, `30d`, `90d`)
+          schema: { type: string }
+        - in: query
+          name: until
+          required: false
+          schema: { type: string }
+        - in: query
+          name: group_by
+          required: false
+          schema:
+            type: string
+            enum:
+              - model+harness
+              - model
+              - harness
+              - profile
+              - model+harness+profile
+        - in: query
+          name: min_turns
+          required: false
+          schema: { type: integer }
+        - in: query
+          name: min_backfill_rate
+          required: false
+          schema: { type: number }
+        - in: query
+          name: top_missed_steps
+          required: false
+          schema: { type: integer }
+        - in: query
+          name: include_synthetic
+          required: false
+          schema: { type: boolean }
+      responses:
+        "200":
+          description: Scorecard JSON
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
   /agents:
     get:
       summary: List agents (writers) seen across the write-path tables
@@ -2928,6 +3088,9 @@ paths:
                               role:
                                 type: string
                                 nullable: true
+                              sender_kind:
+                                type: string
+                                nullable: true
                               content:
                                 type: string
                                 nullable: true
@@ -2960,6 +3123,39 @@ paths:
                     type: integer
                   offset:
                     type: integer
+
+  /recent_conversations/{conversation_id}:
+    get:
+      summary: Get one conversation with nested messages
+      description: |
+        Returns the same payload shape as a single element of `GET /recent_conversations` `items`,
+        including all `PART_OF` messages, non-`PART_OF` related entities per message, and optional
+        per-turn hook summaries. Used by the Inspector conversation detail view.
+      operationId: getRecentConversation
+      parameters:
+        - in: path
+          name: conversation_id
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: user_id
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Conversation with nested messages
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecentConversationItem'
+        '404':
+          description: Conversation not found or not visible to the caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
 
   /observations/create:
     post:
@@ -3350,6 +3546,69 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/RelationshipSnapshot' }
+
+  /create_relationships:
+    post:
+      summary: Create relationships
+      operationId: createRelationships
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [relationships]
+              additionalProperties: false
+              properties:
+                relationships:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [relationship_type, source_entity_id, target_entity_id]
+                    additionalProperties: false
+                    properties:
+                      relationship_type:
+                        type: string
+                        enum: [PART_OF, CORRECTS, REFERS_TO, SETTLES, DUPLICATE_OF, DEPENDS_ON, SUPERSEDES, EMBEDS, works_at, owns, manages, part_of, related_to, depends_on, references, transacted_with, member_of, reports_to, located_at, created_by, funded_by, acquired_by, subsidiary_of, partner_of, competitor_of, supplies_to, contracted_with, invested_in]
+                      source_entity_id:
+                        type: string
+                      target_entity_id:
+                        type: string
+                      source_id:
+                        type: string
+                      metadata:
+                        type: object
+                        additionalProperties: true
+                source_id:
+                  type: string
+                user_id:
+                  type: string
+      responses:
+        '200':
+          description: Relationships created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  requested:
+                    type: integer
+                  created_count:
+                    type: integer
+                  error_count:
+                    type: integer
+                  relationships:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RelationshipSnapshot'
+                  errors:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
 
   /list_relationships:
     post:

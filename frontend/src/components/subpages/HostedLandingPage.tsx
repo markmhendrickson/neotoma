@@ -43,7 +43,7 @@ const FLAVORS: HostedFlavor[] = [
       "Examples: ngrok, Cloudflare tunnel, Tailscale funnel, Fly.io app pointed at the local DB.",
       "The root URL of your tunnel renders the same mode-aware landing page shipped with Neotoma, with connect snippets prefilled to your host.",
     ],
-    cta: { label: "Install guide", to: "/install" },
+    cta: { label: "Tunnel guide", to: "/tunnel" },
   },
   {
     id: "managed-prod",
@@ -142,11 +142,13 @@ export function HostedLandingPage() {
       <IntegrationSection title="Local first" sectionKey="local-first">
         <p className="text-[15px] leading-7 text-muted-foreground mb-3">
           Most Neotoma users run locally. Your data stays on your machine, every agent on that
-          machine shares one dataset, and you can expose it to remote agents later via a tunnel
-          without migrating storage.
+          machine shares one dataset, and you can expose it to remote agents later via a{" "}
+          <Link to="/tunnel" className={extLink}>tunnel</Link> without migrating storage.
         </p>
         <p className="text-[14px] leading-6 text-muted-foreground">
           <Link to="/install" className={extLink}>Install guide →</Link>
+          {" · "}
+          <Link to="/tunnel" className={extLink}>Expose tunnel →</Link>
           {" · "}
           <Link to="/connect" className={extLink}>Connect a remote instance →</Link>
           {" · "}

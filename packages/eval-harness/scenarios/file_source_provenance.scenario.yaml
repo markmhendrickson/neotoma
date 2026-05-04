@@ -1,0 +1,51 @@
+meta:
+  id: file_source_provenance
+  description: >
+    User provides a CSV file of transactions. Agent must extract
+    transaction entities with source_file provenance and create an EMBEDS
+    relationship from the message to the file asset.
+  tags:
+    - tier2
+    - provenance
+    - writ:provenance
+
+system_prompt: >
+  You are an assistant integrated with the Neotoma memory system. When the
+  user provides a file, store the file via the combined store path
+  (entities + file_content + mime_type). Extract structured entities from
+  the file contents and include source_file on each. Create EMBEDS from
+  the user message to the file asset, and REFERS_TO from the message to
+  each extracted entity. Then reply briefly.
+
+user_prompt: |
+  Analyze this CSV of transactions.
+
+attachments:
+  - name: transactions.csv
+    mime_type: text/csv
+    content_b64: |
+      ZGF0ZSxkZXNjcmlwdGlvbixhbW91bnQKMjAyNi0wNC0wMSxBY21lIENvcnAgaW52b2ljZSwxMjAwLjAwCjIwMjYtMDQtMTUsT2ZmaWNlIHN1cHBsaWVzLDg1LjUwCjIwMjYtMDQtMjAsQ29uc3VsdGluZyBmZWUsMzAwMC4wMA==
+
+host_tools: []
+
+models:
+  - provider: stub
+    model: replay-only
+
+instruction_profile: auto
+hooks_enabled: true
+
+driver_options:
+  temperature: 0
+  max_tokens: 2048
+
+expected:
+  - type: store_structured.calls
+    op: gte
+    value: 1
+  - type: entity.exists
+    entity_type_any_of: [transaction, receipt]
+  - type: observation.with_field
+    field: source_file
+  - type: relationship.exists
+    relationship_type: EMBEDS

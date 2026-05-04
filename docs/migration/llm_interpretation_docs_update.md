@@ -7,6 +7,8 @@
 
 Updated documentation to reflect that AI interpretation is allowed for unstructured files (PDFs, images) with full auditability and system-level idempotence. Removed outdated "rule-based only" constraints that conflicted with the current architecture (v0.2.0+).
 
+**Historical note:** The MVP planning documents referenced below have since been retired to `docs/releases/archived/mvp_planning/`. Current implementation guidance lives in `README.md`, `docs/architecture/`, `docs/subsystems/`, and `docs/specs/MCP_SPEC.md`.
+
 ## Key Changes
 
 ### Architectural Clarification
@@ -29,7 +31,7 @@ Updated documentation to reflect that AI interpretation is allowed for unstructu
 ## Files Updated
 
 ### Core Specifications
-1. **`docs/specs/MVP_OVERVIEW.md`**
+1. **`docs/releases/archived/mvp_planning/MVP_OVERVIEW.md`**
    - Updated extraction approach description
    - Changed "Rule-based extraction only" to "AI interpretation for unstructured files"
    - Updated key differentiators section
@@ -57,11 +59,11 @@ Updated documentation to reflect that AI interpretation is allowed for unstructu
    - Synced with updated source file
 
 ### MVP Documentation
-6. **`docs/specs/MVP_FEATURE_UNITS.md`**
+6. **`docs/releases/archived/mvp_planning/MVP_FEATURE_UNITS.md`**
    - Updated FU-100 extraction approach
    - Changed constraints to require interpretation service
 
-7. **`docs/specs/FUNCTIONAL_REQUIREMENTS.md`**
+7. **`docs/releases/archived/mvp_planning/FUNCTIONAL_REQUIREMENTS.md`**
    - Updated extraction requirement
    - Changed validation checklist
 

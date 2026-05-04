@@ -1,9 +1,9 @@
 ---
-description: "Automatically detects feature unit creation intent from user patterns and triggers the feature unit creation workflow"
-alwaysApply: true
+description: "Automatically detects feature unit creation intent from user patterns and triggers the feature unit creation workflow. Load when user mentions new feature or feature unit."
+alwaysApply: false
 ---
 
-<!-- Source: foundation/agent_instructions/cursor_rules/feature_unit_detection.mdc -->
+<!-- Source: foundation/.cursor/rules/feature_unit_detection.mdc -->
 
 # Feature Unit Creation Detection Rule
 
@@ -74,7 +74,7 @@ If context suggests feature unit creation (mentions "feature", feature IDs, feat
 
 1. **Load required documents:**
    - `foundation/development/feature_unit_workflow.md` (primary workflow)
-   - `foundation/agent_instructions/cursor_commands/create_feature_unit.md` (command implementation, or `.claude/skills/foundation_create_feature_unit.md` if symlinked)
+   - Skill `create-feature-unit` (`.cursor/skills/create-feature-unit/SKILL.md` or `foundation/agent_instructions/cursor_skills/create-feature-unit/SKILL.md`)
    - `foundation/development/templates/feature_unit_spec_template.md` (spec template)
    - `foundation/development/templates/manifest_template_simple.yaml` or `manifest_template_extended.yaml` (manifest template, based on config)
    - Repository-specific FU inventory (if configured)

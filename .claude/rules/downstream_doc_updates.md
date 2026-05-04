@@ -1,9 +1,9 @@
 ---
-description: "Ensures that when upstream documentation is updated, all downstream documentation that depends on it is also updated to maintain consistency"
-alwaysApply: true
+description: "When upstream documentation is updated, update all downstream docs that depend on it. Load when editing docs that other docs reference."
+alwaysApply: false
 ---
 
-<!-- Source: foundation/agent_instructions/cursor_rules/downstream_doc_updates.mdc -->
+<!-- Source: foundation/.cursor/rules/downstream_doc_updates.mdc -->
 
 # Downstream Documentation Update Rule
 

@@ -546,7 +546,7 @@ Ordered by how quickly each data type delivers value.
 ### Required Co-Loaded Documents
 
 - `docs/NEOTOMA_MANIFEST.md` (always)
-- `docs/specs/MVP_OVERVIEW.md` (for MVP scope)
+- `README.md` and `docs/foundation/product_positioning.md` (for current developer-review scope and positioning)
 - `docs/icp/profiles.md` (for detailed profiles)
 - `docs/icp/developer_release_targeting.md` (for release-specific targeting and activation risks)
 

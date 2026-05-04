@@ -592,6 +592,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/compliance/scorecard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Compliance scorecard (conversation_turn aggregates)
+         * @description Aggregates `conversation_turn` / legacy `turn_compliance` / `turn_activity`
+         *     rows from SQLite for the authenticated user into per-cell backfill rates.
+         *     Powers the Inspector compliance dashboard.
+         */
+        get: operations["getComplianceScorecard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/agents": {
         parameters: {
             query?: never;
@@ -890,6 +912,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/recent_conversations/{conversation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get one conversation with nested messages
+         * @description Returns the same payload shape as a single element of `GET /recent_conversations` `items`,
+         *     including all `PART_OF` messages, non-`PART_OF` related entities per message, and optional
+         *     per-turn hook summaries. Used by the Inspector conversation detail view.
+         */
+        get: operations["getRecentConversation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/observations/create": {
         parameters: {
             query?: never;
@@ -1156,6 +1200,23 @@ export interface paths {
         put?: never;
         /** Create relationship */
         post: operations["createRelationship"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/create_relationships": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create relationships */
+        post: operations["createRelationships"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1504,6 +1565,44 @@ export interface components {
             trace_id?: string;
             /** Format: date-time */
             timestamp?: string;
+        };
+        RecentConversationRelatedEntity: {
+            entity_id?: string;
+            entity_type?: string | null;
+            canonical_name?: string | null;
+            title?: string | null;
+            relationship_type?: string;
+        };
+        ConversationTurnHookSummary: {
+            hook_event_count?: number;
+            tool_invocation_count?: number;
+            store_structured_calls?: number;
+            retrieve_calls?: number;
+            retrieved_entity_count?: number;
+            stored_entity_count?: number;
+            neotoma_tool_failures?: number;
+        };
+        RecentConversationMessage: {
+            message_id?: string;
+            canonical_name?: string | null;
+            role?: string | null;
+            sender_kind?: string | null;
+            content?: string | null;
+            turn_key?: string | null;
+            activity_at?: string;
+            related_entities?: components["schemas"]["RecentConversationRelatedEntity"][];
+            hook_summary?: null | components["schemas"]["ConversationTurnHookSummary"];
+        };
+        RecentConversationItem: {
+            conversation_id?: string;
+            canonical_name?: string | null;
+            title?: string | null;
+            activity_at?: string;
+            message_count?: number;
+            latest_write_provenance?: {
+                [key: string]: unknown;
+            } | null;
+            messages?: components["schemas"]["RecentConversationMessage"][];
         };
         /**
          * @description A single per-observation failure inside an
@@ -2142,6 +2241,27 @@ export interface components {
             };
             last_updated?: string;
         };
+        StoreRelationshipInput: {
+            /** @enum {string} */
+            relationship_type: "PART_OF" | "CORRECTS" | "REFERS_TO" | "SETTLES" | "DUPLICATE_OF" | "DEPENDS_ON" | "SUPERSEDES" | "EMBEDS" | "works_at" | "owns" | "manages" | "part_of" | "related_to" | "depends_on" | "references" | "transacted_with" | "member_of" | "reports_to" | "located_at" | "created_by" | "funded_by" | "acquired_by" | "subsidiary_of" | "partner_of" | "competitor_of" | "supplies_to" | "contracted_with" | "invested_in";
+            /** @description Index into the entities array for the source entity. */
+            source_index: number;
+            /** @description Index into the entities array for the target entity. */
+            target_index: number;
+            metadata?: {
+                [key: string]: unknown;
+            };
+        } | {
+            /** @enum {string} */
+            relationship_type: "PART_OF" | "CORRECTS" | "REFERS_TO" | "SETTLES" | "DUPLICATE_OF" | "DEPENDS_ON" | "SUPERSEDES" | "EMBEDS" | "works_at" | "owns" | "manages" | "part_of" | "related_to" | "depends_on" | "references" | "transacted_with" | "member_of" | "reports_to" | "located_at" | "created_by" | "funded_by" | "acquired_by" | "subsidiary_of" | "partner_of" | "competitor_of" | "supplies_to" | "contracted_with" | "invested_in";
+            /** @description Existing source entity ID. */
+            source_entity_id: string;
+            /** @description Existing target entity ID. */
+            target_entity_id: string;
+            metadata?: {
+                [key: string]: unknown;
+            };
+        };
         /**
          * @description Unified store payload. Supports structured only, unstructured only, or
          *     both in one request. Top-level field set is closed: unknown request
@@ -2153,13 +2273,12 @@ export interface components {
             entities?: {
                 [key: string]: unknown;
             }[];
-            /** @description Optional. Create relationships between entities in this request. Indices refer to the entities array (0-based). */
-            relationships?: {
-                /** @enum {string} */
-                relationship_type: "PART_OF" | "CORRECTS" | "REFERS_TO" | "SETTLES" | "DUPLICATE_OF" | "DEPENDS_ON" | "SUPERSEDES" | "EMBEDS" | "works_at" | "owns" | "manages" | "part_of" | "related_to" | "depends_on" | "references" | "transacted_with" | "member_of" | "reports_to" | "located_at" | "created_by" | "funded_by" | "acquired_by" | "subsidiary_of" | "partner_of" | "competitor_of" | "supplies_to" | "contracted_with" | "invested_in";
-                source_index: number;
-                target_index: number;
-            }[];
+            /**
+             * @description Optional. Create relationships between entities in this request.
+             *     Use `source_index`/`target_index` for entities in the request, or
+             *     `source_entity_id`/`target_entity_id` for existing entities.
+             */
+            relationships?: components["schemas"]["StoreRelationshipInput"][];
             source_priority?: number;
             /**
              * @description Classifies the *kind* of write being performed, orthogonal to
@@ -2214,17 +2333,12 @@ export interface components {
                 [key: string]: unknown;
             }[];
             /**
-             * @description Optional. Create relationships between entities in this request. Indices refer to the entities array (0-based).
+             * @description Optional. Create relationships between entities in this request.
+             *     Use `source_index`/`target_index` for entities in the request, or
+             *     `source_entity_id`/`target_entity_id` for existing entities.
              *     Enables one-call chat persistence: store [conversation, conversation_message] with relationships [{ relationship_type: "PART_OF", source_index: 1, target_index: 0 }]. (`agent_message` remains accepted as a legacy alias for pre-v0.6 clients.)
              */
-            relationships?: {
-                /** @enum {string} */
-                relationship_type: "PART_OF" | "CORRECTS" | "REFERS_TO" | "SETTLES" | "DUPLICATE_OF" | "DEPENDS_ON" | "SUPERSEDES" | "EMBEDS" | "works_at" | "owns" | "manages" | "part_of" | "related_to" | "depends_on" | "references" | "transacted_with" | "member_of" | "reports_to" | "located_at" | "created_by" | "funded_by" | "acquired_by" | "subsidiary_of" | "partner_of" | "competitor_of" | "supplies_to" | "contracted_with" | "invested_in";
-                /** @description Index into the entities array for the source entity */
-                source_index: number;
-                /** @description Index into the entities array for the target entity */
-                target_index: number;
-            }[];
+            relationships?: components["schemas"]["StoreRelationshipInput"][];
             source_priority?: number;
             /**
              * @description Classifies the *kind* of write being performed, orthogonal to
@@ -3456,6 +3570,38 @@ export interface operations {
             };
         };
     };
+    getComplianceScorecard: {
+        parameters: {
+            query?: {
+                user_id?: string;
+                /** @description ISO timestamp/date or relative window (`24h`, `7d`, `30d`, `90d`) */
+                since?: string;
+                until?: string;
+                group_by?: "model+harness" | "model" | "harness" | "profile" | "model+harness+profile";
+                min_turns?: number;
+                min_backfill_rate?: number;
+                top_missed_steps?: number;
+                include_synthetic?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scorecard JSON */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
     listAgentGrants: {
         parameters: {
             query?: {
@@ -3709,6 +3855,7 @@ export interface operations {
                                 message_id?: string;
                                 canonical_name?: string | null;
                                 role?: string | null;
+                                sender_kind?: string | null;
                                 content?: string | null;
                                 turn_key?: string | null;
                                 activity_at?: string;
@@ -3725,6 +3872,39 @@ export interface operations {
                         limit?: number;
                         offset?: number;
                     };
+                };
+            };
+        };
+    };
+    getRecentConversation: {
+        parameters: {
+            query?: {
+                user_id?: string;
+            };
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Conversation with nested messages */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecentConversationItem"];
+                };
+            };
+            /** @description Conversation not found or not visible to the caller */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
         };
@@ -4162,6 +4342,52 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RelationshipSnapshot"];
+                };
+            };
+        };
+    };
+    createRelationships: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    relationships: {
+                        /** @enum {string} */
+                        relationship_type: "PART_OF" | "CORRECTS" | "REFERS_TO" | "SETTLES" | "DUPLICATE_OF" | "DEPENDS_ON" | "SUPERSEDES" | "EMBEDS" | "works_at" | "owns" | "manages" | "part_of" | "related_to" | "depends_on" | "references" | "transacted_with" | "member_of" | "reports_to" | "located_at" | "created_by" | "funded_by" | "acquired_by" | "subsidiary_of" | "partner_of" | "competitor_of" | "supplies_to" | "contracted_with" | "invested_in";
+                        source_entity_id: string;
+                        target_entity_id: string;
+                        source_id?: string;
+                        metadata?: {
+                            [key: string]: unknown;
+                        };
+                    }[];
+                    source_id?: string;
+                    user_id?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Relationships created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        success?: boolean;
+                        requested?: number;
+                        created_count?: number;
+                        error_count?: number;
+                        relationships?: components["schemas"]["RelationshipSnapshot"][];
+                        errors?: {
+                            [key: string]: unknown;
+                        }[];
+                    };
                 };
             };
         };
