@@ -3683,17 +3683,19 @@ export class NeotomaServer {
         "./services/schema_definitions.js"
       );
 
-      // Prefer a code-defined canonical alias before deciding this type is
-      // truly "unknown". This keeps `conversation_message` on the seeded
-      // identity-bearing schema even when the DB only has legacy rows (for
-      // example `agent_message`) or no active row yet.
-      const canonicalFromAlias = resolveEntityTypeFromAlias(entityType);
-      if (!getSchemaDefinition(entityType) && canonicalFromAlias) {
-        entityType = canonicalFromAlias;
+      // DB-registered schemas take priority over code-defined aliases.
+      // A user who registered `organization` should not have it silently
+      // remapped to the built-in `company` alias.
+      let schema = await schemaRegistry.loadActiveSchema(entityType, userId);
+
+      if (!schema && !getSchemaDefinition(entityType)) {
+        const canonicalFromAlias = resolveEntityTypeFromAlias(entityType);
+        if (canonicalFromAlias) {
+          entityType = canonicalFromAlias;
+          schema = await schemaRegistry.loadActiveSchema(entityType, userId);
+        }
       }
 
-      // Load schema for validation from database.
-      let schema = await schemaRegistry.loadActiveSchema(entityType, userId);
       let codeSchema = getSchemaDefinition(entityType);
 
       // Schema-agnostic duplicate-type collapse: before auto-creating a new
