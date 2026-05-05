@@ -159,9 +159,13 @@ export async function runInterpretation(
       let entityType = (entityData.entity_type as string) ||
                       (entityData.type as string) ||
                       "generic";
-      // Resolve to canonical type via schema-defined aliases (no hardcoded map)
-      const resolvedType = resolveEntityTypeFromAlias(entityType);
-      if (resolvedType) entityType = resolvedType;
+      // DB-registered schemas take priority over code-defined aliases so a
+      // user-registered type like `organization` is not silently remapped to
+      // the built-in `company` alias.
+      if (!dbTypes.has(entityType) && !getSchemaDefinition(entityType)) {
+        const resolvedType = resolveEntityTypeFromAlias(entityType);
+        if (resolvedType) entityType = resolvedType;
+      }
       // Refine type by field fit (considers dynamic + code schemas when another schema fits better)
       const extractedFieldKeys = Object.keys(entityData).filter(
         (k) => k !== "entity_type" && k !== "type"
