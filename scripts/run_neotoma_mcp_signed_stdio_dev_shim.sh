@@ -33,28 +33,45 @@ done
 export NEOTOMA_ACTIONS_DISABLE_AUTOSTART=1
 export MCP_PROXY_AAUTH="${MCP_PROXY_AAUTH:-1}"
 
-# Optional: read bound API port from repo .dev-serve/local_http_port (written by
-# HTTP Actions on listen) so mcp.json can omit MCP_PROXY_DOWNSTREAM_URL and stay in
-# sync when pick-port or EADDRINUSE moves off the preferred port. Set in mcp.json:
-#   "env": { "NEOTOMA_MCP_USE_LOCAL_PORT_FILE": "1" }
-#
-# The port file can outlive the API process (stale port). We TCP-probe before use;
-# if nothing listens, fall back to MCP_PROXY_DOWNSTREAM_URL or :3080. Override
-# probe timeout with NEOTOMA_MCP_PORT_PROBE_MS (default 1200, max 5000).
+# Optional: read bound API port from .dev-serve/local_http_port_<dev|prod> (parallel
+# dev + prod) or legacy local_http_port. Set in mcp.json, e.g.:
+#   "env": { "NEOTOMA_MCP_USE_LOCAL_PORT_FILE": "1", "NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE": "dev" }
+# Preset A sets PROFILE per slot. TCP-probe before use; override timeout with
+# NEOTOMA_MCP_PORT_PROBE_MS (default 1200, max 5000).
 _use_pf="${NEOTOMA_MCP_USE_LOCAL_PORT_FILE:-}"
+_profile="${NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE:-}"
 if [ "$_use_pf" = "1" ] || [ "$_use_pf" = "true" ]; then
-  _pf="${REPO_ROOT}/.dev-serve/local_http_port"
-  if [ -f "$_pf" ]; then
+  case "$_profile" in
+    prod)
+      _fallback="${MCP_PROXY_DOWNSTREAM_URL:-http://127.0.0.1:3180/mcp}"
+      _port_files="${REPO_ROOT}/.dev-serve/local_http_port_prod"
+      ;;
+    dev)
+      _fallback="${MCP_PROXY_DOWNSTREAM_URL:-http://127.0.0.1:3080/mcp}"
+      _port_files="${REPO_ROOT}/.dev-serve/local_http_port_dev ${REPO_ROOT}/.dev-serve/local_http_port"
+      ;;
+    *)
+      _fallback="${MCP_PROXY_DOWNSTREAM_URL:-http://127.0.0.1:3080/mcp}"
+      _port_files="${REPO_ROOT}/.dev-serve/local_http_port"
+      ;;
+  esac
+  _resolved=0
+  for _pf in $_port_files; do
+    if [ ! -f "$_pf" ]; then
+      continue
+    fi
     # shellcheck disable=SC2002
     _port="$(sed 's/#.*//' "$_pf" | tr -d '[:space:]' || true)"
     case "$_port" in
       ''|*[!0-9]*) _port="" ;;
     esac
-    if [ -n "$_port" ] && [ "$_port" -ge 1 ] && [ "$_port" -le 65535 ] 2>/dev/null; then
-      # shellcheck disable=SC2016
-      if _NEOTOMA_SHIM_PROBE_HOST=127.0.0.1 \
-        _NEOTOMA_SHIM_PROBE_PORT="$_port" \
-        node <<'NODE'
+    if [ -z "$_port" ] || [ "$_port" -lt 1 ] || [ "$_port" -gt 65535 ] 2>/dev/null; then
+      continue
+    fi
+    # shellcheck disable=SC2016
+    if _NEOTOMA_SHIM_PROBE_HOST=127.0.0.1 \
+      _NEOTOMA_SHIM_PROBE_PORT="$_port" \
+      node <<'NODE'
 const net = require("node:net");
 const host = process.env._NEOTOMA_SHIM_PROBE_HOST;
 const port = Number(process.env._NEOTOMA_SHIM_PROBE_PORT);
@@ -76,25 +93,21 @@ s.on("timeout", () => {
 });
 s.on("error", () => process.exit(1));
 NODE
-      then
-        export MCP_PROXY_DOWNSTREAM_URL="http://127.0.0.1:${_port}/mcp"
-        echo "[neotoma-mcp-signed-shim] NEOTOMA_MCP_USE_LOCAL_PORT_FILE: using port ${_port} from ${_pf}" >&2
-      else
-        echo "[neotoma-mcp-signed-shim] NEOTOMA_MCP_USE_LOCAL_PORT_FILE: port ${_port} from ${_pf} is not accepting connections (API stopped or still starting?); falling back to MCP_PROXY_DOWNSTREAM_URL or http://127.0.0.1:3080/mcp" >&2
-        export MCP_PROXY_DOWNSTREAM_URL="${MCP_PROXY_DOWNSTREAM_URL:-http://127.0.0.1:3080/mcp}"
-      fi
-    else
-      echo "[neotoma-mcp-signed-shim] NEOTOMA_MCP_USE_LOCAL_PORT_FILE: invalid content in ${_pf}; falling back to MCP_PROXY_DOWNSTREAM_URL or default" >&2
-      export MCP_PROXY_DOWNSTREAM_URL="${MCP_PROXY_DOWNSTREAM_URL:-http://127.0.0.1:3080/mcp}"
+    then
+      export MCP_PROXY_DOWNSTREAM_URL="http://127.0.0.1:${_port}/mcp"
+      echo "[neotoma-mcp-signed-shim] NEOTOMA_MCP_USE_LOCAL_PORT_FILE: using port ${_port} from ${_pf}" >&2
+      _resolved=1
+      break
     fi
-  else
-    echo "[neotoma-mcp-signed-shim] NEOTOMA_MCP_USE_LOCAL_PORT_FILE: missing ${_pf} (start the API first); falling back to MCP_PROXY_DOWNSTREAM_URL or default" >&2
-    export MCP_PROXY_DOWNSTREAM_URL="${MCP_PROXY_DOWNSTREAM_URL:-http://127.0.0.1:3080/mcp}"
+  done
+  if [ "$_resolved" != "1" ]; then
+    echo "[neotoma-mcp-signed-shim] NEOTOMA_MCP_USE_LOCAL_PORT_FILE: no reachable port from port files (profile=${_profile:-legacy}); falling back to ${_fallback}" >&2
+    export MCP_PROXY_DOWNSTREAM_URL="$_fallback"
   fi
 else
   export MCP_PROXY_DOWNSTREAM_URL="${MCP_PROXY_DOWNSTREAM_URL:-http://127.0.0.1:3080/mcp}"
 fi
-unset _use_pf _pf _port
+unset _use_pf _profile _pf _port _port_files _resolved _fallback
 
 # The local API's canonical AAuth authority is `localhost:<port>` by default,
 # even though Cursor configs often point the proxy at 127.0.0.1. Sign with the

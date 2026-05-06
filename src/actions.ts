@@ -1227,7 +1227,7 @@ app.all("/mcp", async (req, res) => {
       const hadSessionHeader = typeof sessionId === "string" && sessionId.length > 0;
       if (hadSessionHeader) {
         logger.warn(
-          `[MCP HTTP] Unknown or expired Mcp-Session-Id (first 8 chars): ${sessionId!.slice(0, 8)}… — often wrong replica behind a load balancer, API restart, or stale client state`,
+          `[MCP HTTP] Unknown or expired Mcp-Session-Id (first 8 chars): ${sessionId!.slice(0, 8)}... often wrong replica behind a load balancer, API restart, or stale client state`,
         );
         return res.status(503).json({
           jsonrpc: "2.0",
@@ -7931,7 +7931,7 @@ export async function startHTTPServer() {
       // eslint-disable-next-line no-console
       console.log(`HTTP Actions listening on :${boundPort}`);
       if (process.env.NODE_ENV !== "test") {
-        writeLocalHttpPortFile(config.projectRoot, boundPort);
+        writeLocalHttpPortFile(config.projectRoot, boundPort, config.environment);
       }
 
       // Start background OAuth state cleanup job

@@ -496,10 +496,6 @@ export function neotomaServerEntries(
   };
 }
 
-function maybeEnv(env: Record<string, string>): { env?: Record<string, string> } {
-  return Object.keys(env).length > 0 ? { env } : {};
-}
-
 function downstreamUrlForEnv(env: "dev" | "prod", sessionPorts?: SessionPorts): string {
   const port = env === "dev" ? sessionPorts?.devPort : sessionPorts?.prodPort;
   if (port != null) return `http://127.0.0.1:${port}/mcp`;
@@ -586,18 +582,23 @@ export function neotomaServerEntriesForTransport(
     const signedShimScript = path.join(scriptsDir, "run_neotoma_mcp_signed_stdio_dev_shim.sh");
     const devDownstreamUrl = transport === "d" ? downstreamUrlForEnv("prod", sessionPorts) : downstreamUrlForEnv("dev", sessionPorts);
     const prodDownstreamUrl = downstreamUrlForEnv("prod", sessionPorts);
+    const devEnv: Record<string, string> = {
+      NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE: "dev",
+      ...(devDownstreamUrl === DEFAULT_DEV_MCP_URL
+        ? {}
+        : { MCP_PROXY_DOWNSTREAM_URL: devDownstreamUrl }),
+    };
     return {
       "neotoma-dev": {
         command: signedShimScript,
-        ...maybeEnv(
-          devDownstreamUrl === DEFAULT_DEV_MCP_URL
-            ? {}
-            : { MCP_PROXY_DOWNSTREAM_URL: devDownstreamUrl }
-        ),
+        env: devEnv,
       },
       neotoma: {
         command: signedShimScript,
-        env: { MCP_PROXY_DOWNSTREAM_URL: prodDownstreamUrl },
+        env: {
+          NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE: "prod",
+          MCP_PROXY_DOWNSTREAM_URL: prodDownstreamUrl,
+        },
       },
     };
   }
@@ -622,12 +623,18 @@ export function neotomaServerEntriesForTransport(
     "neotoma-dev": {
       command: process.execPath,
       args: [cliEntrypoint, "mcp", "proxy", "--aauth"],
-      env: { MCP_PROXY_DOWNSTREAM_URL: devDownstreamUrl },
+      env: {
+        NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE: "dev",
+        MCP_PROXY_DOWNSTREAM_URL: devDownstreamUrl,
+      },
     },
     neotoma: {
       command: process.execPath,
       args: [cliEntrypoint, "mcp", "proxy", "--aauth"],
-      env: { MCP_PROXY_DOWNSTREAM_URL: prodDownstreamUrl },
+      env: {
+        NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE: "prod",
+        MCP_PROXY_DOWNSTREAM_URL: prodDownstreamUrl,
+      },
     },
   };
 }
