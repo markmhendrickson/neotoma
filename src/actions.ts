@@ -1215,10 +1215,38 @@ app.all("/mcp", async (req, res) => {
       // Connect transport to server
       await serverInstance.runHTTP(transport);
     } else if (!transport) {
+      const rpcId =
+        req.body &&
+        typeof req.body === "object" &&
+        !Array.isArray(req.body) &&
+        "id" in req.body &&
+        (typeof (req.body as { id: unknown }).id === "string" ||
+          typeof (req.body as { id: unknown }).id === "number")
+          ? (req.body as { id: string | number }).id
+          : null;
+      const hadSessionHeader = typeof sessionId === "string" && sessionId.length > 0;
+      if (hadSessionHeader) {
+        logger.warn(
+          `[MCP HTTP] Unknown or expired Mcp-Session-Id (first 8 chars): ${sessionId!.slice(0, 8)}… — often wrong replica behind a load balancer, API restart, or stale client state`,
+        );
+        return res.status(503).json({
+          jsonrpc: "2.0",
+          error: {
+            code: -32001,
+            message:
+              "Service Unavailable: MCP session is unknown on this API instance. If you run multiple replicas, enable sticky sessions for POST /mcp (or route /mcp to a single instance). Otherwise restart the MCP client so initialize runs again after a server restart.",
+          },
+          id: rpcId,
+        });
+      }
       return res.status(400).json({
         jsonrpc: "2.0",
-        error: { code: -32000, message: "Bad Request: No valid session ID provided" },
-        id: null,
+        error: {
+          code: -32000,
+          message:
+            "Bad Request: No MCP session on this request. Send an initialize JSON-RPC message first, then include the mcp-session-id response header on every subsequent POST.",
+        },
+        id: rpcId,
       });
     }
 
