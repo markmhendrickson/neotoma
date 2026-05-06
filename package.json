@@ -1,6 +1,6 @@
 {
   "name": "neotoma",
-  "version": "0.10.1",
+  "version": "0.11.0",
   "description": "MCP server for structured personal data memory with unified source ingestion",
   "main": "dist/index.js",
   "type": "module",
@@ -38,8 +38,8 @@
     "watch:mcp:dev-shim": "tsx src/mcp_dev_shim.ts",
     "watch:mcp:stdio": "tsx watch src/index.ts",
     "watch:mcp:stdio:prod": "cross-env NEOTOMA_ENV=production tsx watch src/index.ts",
-    "watch:prod": "node scripts/pick-port.js 3180 -- cross-env NEOTOMA_ENV=production npx concurrently --kill-others-on-fail=false --restart-tries=0 --timestamp='HH:mm:ss' --prefix='{time} [{name}]' --names='api   ,build' 'tsx watch src/actions.ts' 'tsc --watch --preserveWatchOutput'",
-    "watch:prod:tunnel": "node scripts/pick-port.js 3180 -- cross-env NEOTOMA_ENV=production TUNNEL_NONINTERACTIVE=1 npx concurrently --kill-others-on-fail --restart-tries=0 --timestamp='HH:mm:ss' --prefix='{time} [{name}]' --names='tunnel,api   ,build' 'bash scripts/setup-https-tunnel.sh' 'bash scripts/run-dev-server-with-tunnel-url.sh' 'tsc --watch --preserveWatchOutput'",
+    "watch:prod": "npm run build:inspector:watch-target:prod && node scripts/pick-port.js 3180 -- cross-env NEOTOMA_ENV=production NEOTOMA_INSPECTOR_LIVE_BUILD=1 npx concurrently --kill-others-on-fail=false --restart-tries=0 --timestamp='HH:mm:ss' --prefix='{time} [{name}]' --names='api   ,build,insp ' 'tsx watch src/actions.ts' 'tsc --watch --preserveWatchOutput' 'npm run watch:inspector:prod'",
+    "watch:prod:tunnel": "npm run build:inspector:watch-target:prod && node scripts/pick-port.js 3180 -- cross-env NEOTOMA_ENV=production NEOTOMA_INSPECTOR_LIVE_BUILD=1 TUNNEL_NONINTERACTIVE=1 npx concurrently --kill-others-on-fail --restart-tries=0 --timestamp='HH:mm:ss' --prefix='{time} [{name}]' --names='tunnel,api   ,build,insp ' 'bash scripts/setup-https-tunnel.sh' 'bash scripts/run-dev-server-with-tunnel-url.sh' 'tsc --watch --preserveWatchOutput' 'npm run watch:inspector:prod'",
     "watch:inspector": "cross-env VITE_PUBLIC_BASE_PATH=/inspector/ NEOTOMA_INSPECTOR_OUT_DIR=../dist/inspector npm --prefix inspector run build:watch",
     "watch:inspector:prod": "cross-env VITE_PUBLIC_BASE_PATH=/inspector/ NEOTOMA_INSPECTOR_OUT_DIR=../dist/inspector VITE_NEOTOMA_ENV=prod npm --prefix inspector run build:watch",
     "watch:full": "npm run build:inspector:watch-target && node scripts/pick-port.js --print-resources 3080 5195 3001 -- cross-env NEOTOMA_INSPECTOR_LIVE_BUILD=1 npx concurrently --kill-others-on-fail=false --restart-tries=0 --timestamp='HH:mm:ss' --prefix='{time} [{name}]' --prefix-colors='blue,green,magenta,yellow,cyan' --names='server,app  ,build ,links ,insp ' 'npm run watch:server' 'npm run watch:ui' 'tsc --watch --preserveWatchOutput' 'npm run dev:resources:watch' 'npm run watch:inspector'",
@@ -188,6 +188,7 @@
   },
   "files": [
     "dist",
+    "docs/developer/mcp/instructions.md",
     "openapi.yaml",
     "openclaw.plugin.json",
     "skills",

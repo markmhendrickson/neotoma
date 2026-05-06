@@ -178,6 +178,10 @@ export const config = {
     process.env.NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY ||
     process.env.MCP_TOKEN_ENCRYPTION_KEY ||
     "",
+  /** When true, MCP clients receive the compact instruction block (same body as runtime fallback) instead of the full fenced block from docs — for dual-host setups that already load workspace Neotoma rules. */
+  mcpCompactInstructions:
+    (process.env.NEOTOMA_MCP_COMPACT_INSTRUCTIONS || "").toLowerCase() === "1" ||
+    (process.env.NEOTOMA_MCP_COMPACT_INSTRUCTIONS || "").toLowerCase() === "true",
   oauthClientId: process.env.NEOTOMA_OAUTH_CLIENT_ID || "",
   requireKeyForOauth:
     (process.env.NEOTOMA_REQUIRE_KEY_FOR_OAUTH || "true").toLowerCase() !== "false",

@@ -44,6 +44,15 @@ import {
   formatUpgradeCommand,
 } from "../version_check.js";
 import { shutdownLocalTransport } from "../shared/local_transport.js";
+import { registerMcpProxyCommand } from "./mcp_proxy.js";
+import {
+  extractFirstFencedCodeBlock,
+  mcpInstructionsPath,
+  readMcpInstructionsMarkdown,
+  resolveNeotomaPackageRoot,
+} from "../mcp_instruction_doc.js";
+import { registerProcessesCommands } from "./commands/processes.js";
+import { buildInspectorFeedbackAdminUnlockPageUrl } from "./inspector_admin_unlock_url.js";
 import {
   accent,
   black,
@@ -1768,7 +1777,7 @@ async function _writeServerUrlSections(devPort: number, prodPort: number): Promi
     : await readTunnelUrls();
 
   process.stdout.write(subHeading("Dev") + "\n");
-  process.stdout.write(dim("Local:  ") + pathStyle(`http://127.0.0.1:${devPort}/mcp`) + "\n");
+  process.stdout.write(dim("Local:  ") + pathStyle(`http://localhost:${devPort}/mcp`) + "\n");
   if (devUrl) {
     const svc = tunnelServiceFromUrl(devUrl);
     process.stdout.write(dim("Tunnel: ") + pathStyle(`${devUrl}/mcp`) + dim(` (${svc})`) + "\n");
@@ -1783,7 +1792,7 @@ async function _writeServerUrlSections(devPort: number, prodPort: number): Promi
   process.stdout.write("\n");
 
   process.stdout.write(subHeading("Prod") + "\n");
-  process.stdout.write(dim("Local:  ") + pathStyle(`http://127.0.0.1:${prodPort}/mcp`) + "\n");
+  process.stdout.write(dim("Local:  ") + pathStyle(`http://localhost:${prodPort}/mcp`) + "\n");
   if (prodUrl) {
     const svc = tunnelServiceFromUrl(prodUrl);
     process.stdout.write(dim("Tunnel: ") + pathStyle(`${prodUrl}/mcp`) + dim(` (${svc})`) + "\n");
@@ -2045,6 +2054,14 @@ export function resolveEffectiveUserId(optsUserId?: string): string | undefined 
   return undefined;
 }
 
+function isHttpOnlyInspectorAdminUnlockCommand(cmd: Command): boolean {
+  if (cmd.name() !== "unlock") return false;
+  const admin = cmd.parent;
+  if (!admin || admin.name() !== "admin") return false;
+  const inspector = admin.parent;
+  return Boolean(inspector && inspector.name() === "inspector");
+}
+
 // No preAction auth validation: CLI uses MCP-style auth (key-derived or no token),
 // not stored OAuth. auth login remains for MCP Connect (Cursor) setup.
 program.hook("preAction", (_thisCommand, actionCommand) => {
@@ -2084,6 +2101,15 @@ program.hook("preAction", (_thisCommand, actionCommand) => {
   // requested. This avoids per-command local transport startup flakes across large
   // CLI suites while preserving explicit offline coverage.
   if (isTestEnv && !effectiveOffline) {
+    process.env.NEOTOMA_FORCE_LOCAL_TRANSPORT = "false";
+    process.env.NEOTOMA_DISABLE_OFFLINE_FALLBACK = "true";
+    return;
+  }
+
+  // `inspector admin unlock` only talks to the HTTP API (challenge + redeem); it never
+  // uses in-process SQLite. Default offline transport would show `transport=offline`
+  // even though this command requires a reachable API — align env with `--api-only`.
+  if (!effectiveOffline && isHttpOnlyInspectorAdminUnlockCommand(actionCommand as Command)) {
     process.env.NEOTOMA_FORCE_LOCAL_TRANSPORT = "false";
     process.env.NEOTOMA_DISABLE_OFFLINE_FALLBACK = "true";
     return;
@@ -2220,6 +2246,7 @@ type InitAuthMode = "dev_local" | "oauth" | "key_derived" | "skip";
 type InitInstallScope = "user" | "project" | "both";
 type InitScopeSelection = InitInstallScope | "skip";
 type InitMcpEnv = "dev" | "prod" | "both";
+type InitMcpTransport = "a" | "b" | "c" | "d";
 type InitKeySource = "create" | "existing" | "skip";
 
 type InitAuthSummary = {
@@ -2283,6 +2310,24 @@ function normalizeInitMcpEnv(input?: string): InitMcpEnv | null {
   if (normalized === "1" || normalized === "dev") return "dev";
   if (normalized === "2" || normalized === "prod" || normalized === "production") return "prod";
   if (normalized === "3" || normalized === "both" || normalized === "all") return "both";
+  return null;
+}
+
+function normalizeInitMcpTransport(input?: string): InitMcpTransport | null {
+  const normalized = (input || "").trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized === "1" || normalized === "a" || normalized === "signed" || normalized === "signed-dev-shim") {
+    return "a";
+  }
+  if (normalized === "2" || normalized === "b" || normalized === "dev-shim" || normalized === "shim") {
+    return "b";
+  }
+  if (normalized === "3" || normalized === "c" || normalized === "direct" || normalized === "stdio") {
+    return "c";
+  }
+  if (normalized === "4" || normalized === "d" || normalized === "prod" || normalized === "prod-parity") {
+    return "d";
+  }
   return null;
 }
 
@@ -4396,7 +4441,7 @@ program
 
     const envName = preferredEnv === "dev" ? "Dev" : "Prod";
     process.stdout.write(subHeading(envName) + "\n");
-    process.stdout.write(dim("Local:  ") + pathStyle(`http://127.0.0.1:${port}/mcp`) + "\n");
+    process.stdout.write(dim("Local:  ") + pathStyle(`http://localhost:${port}/mcp`) + "\n");
     if (tunnelUrl) {
       const svc = tunnelServiceFromUrl(tunnelUrl);
       process.stdout.write(
@@ -4447,6 +4492,10 @@ const initCommand = program
     "MCP server environment to apply: dev, prod, or both (used when MCP configuration runs)"
   )
   .option(
+    "--mcp-transport <mode>",
+    "MCP preset: a signed HTTP proxy, b unsigned/local stdio (default), c direct stdio, d both slots→prod /mcp"
+  )
+  .option(
     "--configure-cli <choice>",
     "Configure CLI instructions: yes/no (skip corresponding prompt when provided)"
   )
@@ -4485,6 +4534,7 @@ const initCommand = program
       scope?: string;
       configureMcp?: string;
       mcpEnv?: string;
+      mcpTransport?: string;
       configureCli?: string;
       openaiApiKey?: string;
       sourceCheckout?: string;
@@ -4540,6 +4590,10 @@ const initCommand = program
         const mcpEnvFromFlag = normalizeInitMcpEnv(opts.mcpEnv);
         if (opts.mcpEnv && !mcpEnvFromFlag) {
           throw new Error("Invalid --mcp-env. Use dev, prod, or both.");
+        }
+        const mcpTransportFromFlag = normalizeInitMcpTransport(opts.mcpTransport);
+        if (opts.mcpTransport && !mcpTransportFromFlag) {
+          throw new Error("Invalid --mcp-transport. Use a, b, c, or d.");
         }
         let keySourceFromFlag = normalizeInitKeySource(opts.keySource);
         if (opts.keySource && !keySourceFromFlag) {
@@ -5390,12 +5444,13 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
           const nextSteps = [
             "Copy .env.example to .env and configure",
             "Start the API: neotoma api start --env dev",
-            "Configure MCP configuration: neotoma mcp config",
-            "Run neotoma cli-instructions check to add the rule to Cursor, Claude, and Codex",
+            "Run the full harness setup: neotoma setup --tool <tool> --yes",
+            "Configure MCP only: neotoma mcp config",
+            "Configure agent CLI instructions only: neotoma cli config --yes",
           ];
           if (mcpMissingAny) {
             nextSteps.push(
-              "Run neotoma mcp check to add production server (or development+production) to MCP configurations"
+              "Run neotoma mcp config to add production server (or development+production) to MCP configurations"
             );
           }
           if (initAuthSummary.mode === "oauth") {
@@ -6126,11 +6181,14 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
         } else {
           try {
             suspendLiveProgress();
-            const { offerInstall } = await import("./mcp_config_scan.js");
-            mcpInstallResult = await offerInstall(mcpScan.configs, initMcpRoot, {
+            const { configureMcpServers } = await import("./harness_configure.js");
+            mcpInstallResult = await configureMcpServers({
+              cwd: process.cwd(),
+              repoRoot: initMcpRoot,
               boxAlreadyShown: outputMode === "pretty" && process.stdout.isTTY,
               autoInstallScope: selectedInitScope,
               autoInstallEnv: mcpEnvFromFlag ?? (useAdvancedPrompts ? undefined : ("prod" as const)),
+              mcpTransport: mcpTransportFromFlag ?? undefined,
               ...(useAdvancedPrompts
                 ? {}
                 : {
@@ -6163,14 +6221,14 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
               process.stdout.write(
                 nl() +
                   dim("Run ") +
-                  pathStyle("neotoma mcp check") +
+                  pathStyle("neotoma mcp config") +
                   dim(
                     " later to add production server (or development+production) to your MCP configurations."
                   ) +
                   nl()
               );
             }
-            setInitProgress("mcp", "failed", "run neotoma mcp check");
+            setInitProgress("mcp", "failed", "run neotoma mcp config");
           }
         }
 
@@ -6201,60 +6259,31 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
                   })()
                 : Promise.resolve(true));
             if (configureCli) {
-              const {
-                scanAgentInstructions,
-                offerAddPreferCliRule,
-                getUserAppliedRulePaths,
-                PROJECT_APPLIED_RULE_PATHS,
-              } =
-                await import("./agent_instructions_scan.js");
-              const scanResult = await scanAgentInstructions(initMcpRoot, {
-                includeUserLevel: true,
+              const { configureCliInstructions } = await import("./harness_configure.js");
+              const preferredCliScope: "project" | "user" | "both" =
+                mcpInstallResult?.scope ??
+                (selectedInitScope === "project" ||
+                selectedInitScope === "user" ||
+                selectedInitScope === "both"
+                  ? selectedInitScope
+                  : "user");
+              const { added, skipped } = await configureCliInstructions({
+                cwd: initMcpRoot,
+                scope: preferredCliScope,
               });
-              const appliedCliPaths: string[] = [];
-              const userRulePaths = getUserAppliedRulePaths();
-              if (scanResult.appliedProject.cursor) {
-                appliedCliPaths.push(path.join(initMcpRoot, PROJECT_APPLIED_RULE_PATHS.cursor));
-              }
-              if (scanResult.appliedProject.claude) {
-                appliedCliPaths.push(path.join(initMcpRoot, PROJECT_APPLIED_RULE_PATHS.claude));
-              }
-              if (scanResult.appliedProject.codex) {
-                appliedCliPaths.push(path.join(initMcpRoot, PROJECT_APPLIED_RULE_PATHS.codex));
-              }
-              if (userRulePaths) {
-                if (scanResult.appliedUser.cursor) appliedCliPaths.push(userRulePaths.cursor);
-                if (scanResult.appliedUser.claude) appliedCliPaths.push(userRulePaths.claude);
-                if (scanResult.appliedUser.codex) appliedCliPaths.push(userRulePaths.codex);
-              }
-              if (scanResult.missingInApplied || scanResult.needsUpdateInApplied) {
-                const preferredCliScope: "project" | "user" | "both" | undefined =
-                  mcpInstallResult?.scope ??
-                  (selectedInitScope === "project" ||
-                  selectedInitScope === "user" ||
-                  selectedInitScope === "both"
-                    ? selectedInitScope
-                    : useAdvancedPrompts
-                      ? undefined
-                      : "user");
-                const { added, skipped } = await offerAddPreferCliRule(scanResult, {
-                  nonInteractive: false,
-                  ...(preferredCliScope ? { scope: preferredCliScope } : {}),
-                });
-                if (added.length > 0) {
-                  cliUpdatedPaths = added;
-                  setInitProgress("cli", "done", `updated ${added.length} file(s)`);
-                  setInitProgressSummaryLines(
-                    "cli",
-                    summarizePathChanges(cliUpdatedPaths, appliedCliPaths)
-                  );
-                } else if (skipped) {
-                  setInitProgress("cli", "done", "already up to date");
-                  setInitProgressSummaryLines("cli", summarizePathChanges([], appliedCliPaths));
-                }
+              if (added.length > 0) {
+                cliUpdatedPaths = added;
+                setInitProgress("cli", "done", `updated ${added.length} file(s)`);
+                setInitProgressSummaryLines(
+                  "cli",
+                  summarizePathChanges(cliUpdatedPaths, [])
+                );
+              } else if (skipped) {
+                setInitProgress("cli", "done", "already up to date");
+                setInitProgressSummaryLines("cli", summarizePathChanges([], []));
               } else {
                 setInitProgress("cli", "done", "already up to date");
-                setInitProgressSummaryLines("cli", summarizePathChanges([], appliedCliPaths));
+                setInitProgressSummaryLines("cli", summarizePathChanges([], []));
               }
             } else {
               setInitProgress("cli", "skipped", "user skipped");
@@ -6420,11 +6449,11 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
             ) + "\n"
           );
           process.stdout.write(
-            bullet("Check/update MCP config: " + pathStyle("neotoma mcp check")) + "\n"
+            bullet("Check/update MCP config: " + pathStyle("neotoma mcp config")) + "\n"
           );
           process.stdout.write(
             bullet(
-              "Refresh CLI instructions: " + pathStyle("neotoma cli-instructions check")
+              "Refresh CLI instructions: " + pathStyle("neotoma cli config --yes")
             ) + "\n"
           );
           process.stdout.write(
@@ -7144,11 +7173,11 @@ authCommand
 authCommand
   .command("keygen")
   .description(
-    "Generate an AAuth keypair under ~/.neotoma/aauth/ so the CLI can sign outbound requests. Without it CLI calls land as anonymous / unverified_client.",
+    "Generate an AAuth keypair under ~/.neotoma/aauth/ for signed HTTP (CLI --api-only, neotoma mcp proxy --aauth, signed dev shim). Without it those clients land as anonymous / unverified_client.",
   )
   .option("--alg <alg>", "Signing algorithm: ES256 (default) or EdDSA", "ES256")
   .option("--sub <sub>", "AAuth subject (self-reported identity)")
-  .option("--iss <iss>", "AAuth issuer (defaults to https://neotoma.cli.local)")
+  .option("--iss <iss>", "AAuth issuer (defaults to https://neotoma.cursor.local)")
   .option("--force", "Overwrite an existing keypair", false)
   .action(async (opts: { alg?: string; sub?: string; iss?: string; force?: boolean }) => {
     const outputMode = resolveOutputMode();
@@ -7197,7 +7226,7 @@ authCommand
         );
         process.stdout.write(
           dim(
-            "Signed CLI requests will now land as hardware/software tier in attribution. " +
+            "Signed CLI and MCP-proxy requests will now land as hardware/software tier in attribution. " +
               "Run `neotoma auth session` to confirm.",
           ) + "\n",
         );
@@ -7240,10 +7269,63 @@ authCommand
     }
   });
 
+const instructionsCommand = program
+  .command("instructions")
+  .description("Canonical Neotoma agent instructions (same text MCP sends to clients)");
+
+instructionsCommand
+  .command("print")
+  .description(
+    "Print the first fenced code block from docs/developer/mcp/instructions.md bundled with this package"
+  )
+  .option("--format <fmt>", "plain (default) or md (wrap in a markdown fence)", "plain")
+  .action((opts: { format?: string }) => {
+    const outputMode = resolveOutputMode();
+    const pkgRoot = resolveNeotomaPackageRoot();
+    const docPath = mcpInstructionsPath(pkgRoot);
+    const raw = readMcpInstructionsMarkdown(pkgRoot);
+    if (!raw) {
+      const msg = `Could not read ${docPath}. Reinstall the neotoma package or use a source checkout with docs.`;
+      if (outputMode === "json") {
+        writeOutput({ error: "instructions_file_unreadable", path: docPath, message: msg }, outputMode);
+      } else {
+        process.stderr.write(_errorStyle(msg) + nl());
+      }
+      process.exitCode = 1;
+      return;
+    }
+    const body = extractFirstFencedCodeBlock(raw);
+    if (!body) {
+      const msg = `No fenced code block found in ${docPath}`;
+      if (outputMode === "json") {
+        writeOutput({ error: "instructions_fence_missing", path: docPath, message: msg }, outputMode);
+      } else {
+        process.stderr.write(_errorStyle(msg) + nl());
+      }
+      process.exitCode = 1;
+      return;
+    }
+    if (outputMode === "json") {
+      writeOutput({ path: docPath, body, format: opts.format ?? "plain" }, outputMode);
+      return;
+    }
+    const fmt = (opts.format ?? "plain").toLowerCase();
+    if (fmt === "md") {
+      process.stdout.write("```\n" + body + "\n```\n");
+    } else if (fmt === "plain") {
+      process.stdout.write(body + "\n");
+    } else {
+      process.stderr.write(
+        _errorStyle(`Unknown --format ${opts.format}; use plain or md`) + nl()
+      );
+      process.exitCode = 1;
+    }
+  });
+
 const mcpCommand = program.command("mcp").description("MCP server configuration");
 
 mcpCommand
-  .command("config")
+  .command("guide")
   .description("Show MCP configuration guidance for Cursor and other clients")
   .option("--no-check", "Skip checking for existing MCP config files")
   .action(async (opts: { check?: boolean }) => {
@@ -7320,7 +7402,7 @@ mcpCommand
       dim("Full guide: ") + pathStyle("docs/developer/mcp_cursor_setup.md") + nl()
     );
 
-    // Optionally run scan and suggest mcp check if servers are missing (use session ports when set)
+    // Optionally run scan and suggest mcp config if servers are missing (use session ports when set)
     const checkEnabled = opts.check !== false;
     if (checkEnabled) {
       try {
@@ -7337,7 +7419,7 @@ mcpCommand
           process.stdout.write(
             nl() +
               dim("Tip: Run ") +
-              pathStyle("neotoma mcp check") +
+              pathStyle("neotoma mcp config") +
               dim(" to scan and add dev/prod servers to your MCP config files.") +
               nl()
           );
@@ -7349,7 +7431,8 @@ mcpCommand
   });
 
 mcpCommand
-  .command("check")
+  .command("config")
+  .alias("check")
   .description("Scan for MCP config files and offer to install dev/prod servers if missing")
   .option(
     "--user-level",
@@ -7358,8 +7441,31 @@ mcpCommand
   .option("--install-hooks", "Install or verify Neotoma lifecycle hooks for hook-capable MCP harnesses", true)
   .option("--no-hooks", "Skip installing or verifying lifecycle hooks after MCP config is present")
   .option("--yes", "Skip confirmation prompts for hook installation", false)
-  .action(async (opts: { userLevel?: boolean; installHooks?: boolean; hooks?: boolean; yes?: boolean }) => {
+  .option(
+    "--mcp-transport <mode>",
+    "MCP preset: a signed HTTP proxy, b unsigned/local stdio (default), c direct stdio, d both slots→prod /mcp"
+  )
+  .option(
+    "--rewrite-neotoma-mcp",
+    "Rewrite existing neotoma-dev/neotoma entries in chosen install scope to match the selected transport (not only fill missing slots)"
+  )
+  .action(
+    async (opts: {
+      userLevel?: boolean;
+      installHooks?: boolean;
+      hooks?: boolean;
+      yes?: boolean;
+      mcpTransport?: string;
+      rewriteNeotomaMcp?: boolean;
+    }) => {
+    if (process.argv.includes("check")) {
+      process.stderr.write("Deprecated: use `neotoma mcp config` instead of `neotoma mcp check`.\n");
+    }
     const outputMode = resolveOutputMode();
+    const mcpTransportFromFlag = normalizeInitMcpTransport(opts.mcpTransport);
+    if (opts.mcpTransport && !mcpTransportFromFlag) {
+      throw new Error("Invalid --mcp-transport. Use a, b, c, or d.");
+    }
 
     try {
       const { scanForMcpConfigs, offerInstall, inferHookHarnessesFromMcpConfigs } = await import(
@@ -7406,13 +7512,13 @@ mcpCommand
       }
 
       if (configs.length === 0) {
-        process.stdout.write(heading("MCP configuration check") + nl() + nl());
+        process.stdout.write(heading("MCP configuration") + nl() + nl());
         process.stdout.write(
           "No MCP configuration files found (user-level or project-level)." + nl()
         );
         process.stdout.write(nl());
       } else {
-        process.stdout.write(heading("MCP configuration check") + nl() + nl());
+        process.stdout.write(heading("MCP configuration") + nl() + nl());
         process.stdout.write(
           "Found " + bold(String(configs.length)) + " MCP configuration file(s):" + nl() + nl()
         );
@@ -7432,6 +7538,8 @@ mcpCommand
         devPort,
         prodPort,
         cwd: process.cwd(),
+        mcpTransport: mcpTransportFromFlag ?? undefined,
+        rewriteExistingNeotoma: Boolean(opts.rewriteNeotomaMcp),
       });
       if (result.installed) {
         process.stdout.write(success("✓ ") + result.message + nl());
@@ -7501,7 +7609,7 @@ mcpCommand
 
       process.stdout.write(
         dim("Tip: Run ") +
-          pathStyle("neotoma cli-instructions check") +
+          pathStyle("neotoma cli config") +
           dim(" to add the rule to Cursor, Claude, and Codex.") +
           nl()
       );
@@ -7517,16 +7625,19 @@ mcpCommand
     }
   });
 
-const agentInstructionsCommand = program
-  .command("cli-instructions")
-  .description("Configure CLI instructions: prefer MCP when available, CLI as backup");
+registerMcpProxyCommand(mcpCommand);
 
-agentInstructionsCommand
-  .command("config")
+const cliCommand = program
+  .command("cli")
+  .description("Configure agent CLI instructions: prefer MCP when available, CLI as backup");
+
+cliCommand
+  .command("guide")
   .description(
     "Show guidance for adding 'prefer MCP when available, CLI as backup' to Cursor, Claude, and Codex"
   )
   .action(() => {
+    process.stderr.write("Deprecated: use `neotoma cli guide` instead of `neotoma cli-instructions config`.\n");
     const outputMode = resolveOutputMode();
     if (outputMode === "json") {
       writeOutput(
@@ -7545,7 +7656,157 @@ agentInstructionsCommand
           },
           docs: "docs/developer/agent_cli_configuration.md",
           instruction_source: "docs/developer/cli_agent_instructions.md",
-          run_check: "neotoma cli-instructions check",
+          canonical_behavioral_instructions:
+            "docs/developer/mcp/instructions.md (fenced block); print with: neotoma instructions print",
+          run_config: "neotoma cli config",
+        },
+        outputMode
+      );
+      return;
+    }
+    process.stdout.write(
+      heading("CLI instructions guide: prefer MCP when available, CLI as backup") + nl() + nl()
+    );
+    process.stdout.write(
+      "Add the rule so it is applied in Cursor, Claude Code, and Codex (only paths each IDE loads count)." +
+        nl()
+    );
+    process.stdout.write(
+      dim("Rule content source: ") + pathStyle("docs/developer/cli_agent_instructions.md") + nl()
+    );
+    process.stdout.write(nl());
+    process.stdout.write(bold("Project (this repo):") + nl());
+    process.stdout.write("  Cursor: " + pathStyle(".cursor/rules/neotoma_cli.mdc") + nl());
+    process.stdout.write("  Claude: " + pathStyle(".claude/rules/neotoma_cli.mdc") + nl());
+    process.stdout.write("  Codex:  " + pathStyle(".codex/neotoma_cli.md") + nl());
+    process.stdout.write(nl());
+    process.stdout.write(bold("User (all projects):") + nl());
+    process.stdout.write("  " + pathStyle("~/.cursor/rules/neotoma_cli.mdc") + " (Cursor)" + nl());
+    process.stdout.write("  " + pathStyle("~/.claude/rules/neotoma_cli.mdc") + " (Claude)" + nl());
+    process.stdout.write("  " + pathStyle("~/.codex/neotoma_cli.md") + " (Codex)" + nl());
+    process.stdout.write(nl());
+    process.stdout.write(
+      dim("Run ") +
+        pathStyle("neotoma cli config") +
+        dim(" to add or update missing environments.") +
+        nl()
+    );
+    process.stdout.write(
+      dim("Canonical MCP instruction block (for CLI-only hosts): ") +
+        pathStyle("neotoma instructions print") +
+        nl()
+    );
+    process.stdout.write(
+      dim("Docs: ") + pathStyle("docs/developer/agent_cli_configuration.md") + nl()
+    );
+  });
+
+cliCommand
+  .command("config")
+  .description(
+    "Scan for agent CLI instruction files and add/update Cursor, Claude, and Codex applied paths"
+  )
+  .option("--user-level", "Include user-level paths in scan", true)
+  .option("--no-user-level", "Scan project only")
+  .option("--scope <scope>", "Install scope: project, user, or both", "project")
+  .option("--yes", "Apply without prompting", false)
+  .action(async (opts: { userLevel?: boolean; scope?: string; yes?: boolean }) => {
+    const outputMode = resolveOutputMode();
+    const scopeInput = (opts.scope ?? "project").trim().toLowerCase();
+    const scope =
+      scopeInput === "project" || scopeInput === "user" || scopeInput === "both"
+        ? scopeInput
+        : null;
+    if (!scope) {
+      throw new Error("Invalid --scope. Use project, user, or both.");
+    }
+    try {
+      const {
+        scanAgentInstructions,
+        applyCliInstructions,
+      } = await import("./agent_instructions_scan.js");
+      const result = await scanAgentInstructions(process.cwd(), {
+        includeUserLevel: opts.userLevel !== false,
+      });
+      const applyResult = opts.yes
+        ? await applyCliInstructions(result, { scope })
+        : { added: [] as string[], skipped: true };
+      const payload = {
+        projectRoot: result.projectRoot,
+        applied: result.applied,
+        applied_project: result.appliedProject,
+        applied_user: result.appliedUser,
+        stale_project: result.staleProject,
+        stale_user: result.staleUser,
+        missing_in_applied: result.missingInApplied,
+        needs_update_in_applied: result.needsUpdateInApplied,
+        scope,
+        added: applyResult.added,
+        skipped: applyResult.skipped,
+      };
+      if (outputMode === "json") {
+        writeOutput(payload, outputMode);
+        return;
+      }
+      process.stdout.write(heading("CLI instructions config") + nl() + nl());
+      if (!opts.yes) {
+        process.stdout.write(
+          warn("No files written. Re-run with --yes to apply ") +
+            pathStyle(`--scope ${scope}`) +
+            "." +
+            nl()
+        );
+      } else if (applyResult.added.length > 0) {
+        process.stdout.write(success("Added or updated rule at:") + nl());
+        for (const p of applyResult.added) process.stdout.write("  " + pathStyle(p) + nl());
+      } else {
+        process.stdout.write(success("CLI instructions are already up to date for the selected scope.") + nl());
+      }
+    } catch (err) {
+      if (outputMode === "json") {
+        writeOutput({ error: err instanceof Error ? err.message : String(err) }, outputMode);
+      } else {
+        process.stderr.write(
+          "Error configuring CLI instructions: " +
+            (err instanceof Error ? err.message : String(err)) +
+            nl()
+        );
+      }
+      process.exitCode = 1;
+    }
+  });
+
+const agentInstructionsCommand = program
+  .command("cli-instructions")
+  .description("Deprecated alias for `neotoma cli` agent instruction configuration");
+
+agentInstructionsCommand
+  .command("config")
+  .description(
+    "Show guidance for adding 'prefer MCP when available, CLI as backup' to Cursor, Claude, and Codex"
+  )
+  .action(() => {
+    const outputMode = resolveOutputMode();
+    if (outputMode === "json") {
+        writeOutput(
+        {
+          message:
+            "Prefer Neotoma MCP when installed and running; use CLI as backup when MCP is not available.",
+          project_applied_paths: {
+            cursor: ".cursor/rules/neotoma_cli.mdc",
+            claude: ".claude/rules/neotoma_cli.mdc",
+            codex: ".codex/neotoma_cli.md",
+          },
+          user_paths_linux: {
+            cursor: "~/.cursor/rules/neotoma_cli.mdc",
+            claude: "~/.claude/rules/neotoma_cli.mdc",
+            codex: "~/.codex/neotoma_cli.md",
+          },
+          docs: "docs/developer/agent_cli_configuration.md",
+          instruction_source: "docs/developer/cli_agent_instructions.md",
+          canonical_behavioral_instructions:
+            "docs/developer/mcp/instructions.md (fenced block); print with: neotoma instructions print",
+          run_config: "neotoma cli config",
         },
         outputMode
       );
@@ -7574,8 +7835,13 @@ agentInstructionsCommand
     process.stdout.write(nl());
     process.stdout.write(
       dim("Run ") +
-        pathStyle("neotoma cli-instructions check") +
+        pathStyle("neotoma cli config") +
         dim(" to add to missing environments.") +
+        nl()
+    );
+    process.stdout.write(
+      dim("Canonical MCP instruction block (for CLI-only hosts): ") +
+        pathStyle("neotoma instructions print") +
         nl()
     );
     process.stdout.write(
@@ -7592,6 +7858,7 @@ agentInstructionsCommand
   .option("--no-user-level", "Scan project only")
   .option("--yes", "Non-interactive: only report, do not offer to add")
   .action(async (opts: { userLevel?: boolean; yes?: boolean }) => {
+    process.stderr.write("Deprecated: use `neotoma cli config` instead of `neotoma cli-instructions check`.\n");
     const outputMode = resolveOutputMode();
     try {
       const {
@@ -8377,6 +8644,131 @@ feedbackCommand
     }
   });
 
+const inspectorCommand = program.command("inspector").description("Inspector helper commands");
+const inspectorAdminCommand = inspectorCommand
+  .command("admin")
+  .description("Inspector admin helper commands");
+
+inspectorAdminCommand
+  .command("unlock")
+  .description(
+    "Redeem an Inspector feedback-admin challenge with the configured CLI AAuth key (same signing path as MCP/API CLI traffic)",
+  )
+  .option(
+    "--challenge <challenge>",
+    "Challenge shown by the Inspector locked admin-feedback panel",
+  )
+  .option(
+    "--inspector-base <url>",
+    "Inspector SPA root (origin + basename), e.g. http://localhost:5175/inspector — overrides NEOTOMA_INSPECTOR_BASE_URL and the default {api}/inspector guess",
+  )
+  .option(
+    "--skip-browser-url",
+    "After redeem, do not print the Inspector unlock confirmation URL (text mode only)",
+  )
+  .option("--open", "Open the Inspector unlock confirmation URL in the default browser (after redeem)")
+  .action(async (opts) => {
+    const outputMode = resolveOutputMode();
+    const config = await readConfig();
+    const baseUrl = (await resolveBaseUrl(program.opts().baseUrl, config)).replace(/\/$/, "");
+    let challenge = typeof opts.challenge === "string" ? opts.challenge.trim() : "";
+    let challengeExpiresAt: string | undefined;
+
+    const { cliSignedFetch, loadCliSignerConfig } = await import("./aauth_signer.js");
+    const signerConfig = await loadCliSignerConfig();
+    if (!signerConfig) {
+      throw new Error(
+        "No AAuth CLI keypair found (~/.neotoma/aauth/private.jwk). Run `neotoma auth keygen` once, then retry. " +
+          "Inspector admin unlock must call /admin/feedback/auth/redeem with an RFC 9421 signature so the API resolves a trusted tier; without keys the request is anonymous and redeem is rejected.",
+      );
+    }
+
+    if (!challenge) {
+      const challengeRes = await fetch(`${baseUrl}/admin/feedback/auth/challenge`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+        signal: AbortSignal.timeout(10000),
+      });
+      const challengeBody = (await challengeRes.json().catch(() => ({}))) as {
+        challenge?: string;
+        expires_at?: string;
+        message?: string;
+      };
+      if (!challengeRes.ok || !challengeBody.challenge) {
+        throw new Error(
+          challengeBody.message ??
+            `Failed to request Inspector admin challenge (HTTP ${challengeRes.status}).`,
+        );
+      }
+      challenge = challengeBody.challenge;
+      challengeExpiresAt = challengeBody.expires_at;
+    }
+
+    const redeemRes = await cliSignedFetch(`${baseUrl}/admin/feedback/auth/redeem`, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify({ challenge }),
+      signal: AbortSignal.timeout(10000),
+    });
+    const redeemBody = (await redeemRes.json().catch(() => ({}))) as {
+      ok?: boolean;
+      tier?: string;
+      expires_at?: string;
+      message?: string;
+      error?: string;
+    };
+    if (!redeemRes.ok || redeemBody.ok !== true) {
+      throw new Error(
+        redeemBody.message ??
+          redeemBody.error ??
+          `Inspector admin unlock failed (HTTP ${redeemRes.status}).`,
+      );
+    }
+
+    const inspectorBaseOpt =
+      typeof opts.inspectorBase === "string" && opts.inspectorBase.trim().length > 0
+        ? opts.inspectorBase.trim()
+        : undefined;
+    let inspectorUnlockUrl: string | undefined;
+    try {
+      inspectorUnlockUrl = buildInspectorFeedbackAdminUnlockPageUrl({
+        apiBaseUrl: baseUrl,
+        challenge,
+        inspectorBaseUrl: inspectorBaseOpt,
+      });
+    } catch {
+      inspectorUnlockUrl = undefined;
+    }
+
+    const payload = {
+      ok: true,
+      challenge,
+      challenge_expires_at: challengeExpiresAt,
+      tier: redeemBody.tier,
+      session_expires_at: redeemBody.expires_at,
+      inspector_unlock_url: inspectorUnlockUrl,
+      next_step:
+        "Open inspector_unlock_url in a browser logged into this Inspector (same API URL as Settings). Legacy: ?feedback_unlock_challenge= on /feedback or GET /admin/feedback/auth/session?challenge=…",
+    };
+    if (outputMode === "json") {
+      writeOutput(payload, outputMode);
+    } else {
+      process.stdout.write(`Inspector admin unlock redeemed (${redeemBody.tier}).\n`);
+      const printUrl = !opts.skipBrowserUrl;
+      if (printUrl && inspectorUnlockUrl) {
+        process.stdout.write(`\nOpen this URL to finish in the browser (sets the admin cookie):\n  ${inspectorUnlockUrl}\n`);
+      } else if (printUrl && !inspectorUnlockUrl) {
+        process.stdout.write(
+          `\nCould not derive an Inspector unlock URL. Set NEOTOMA_INSPECTOR_BASE_URL to your SPA root (e.g. http://localhost:5175/inspector) or pass --inspector-base.\n`,
+        );
+      }
+      if (opts.open && inspectorUnlockUrl) {
+        openBrowser(inspectorUnlockUrl);
+      }
+    }
+  });
+
 program
   .command("triage")
   .description(
@@ -8439,19 +8831,56 @@ program
   )
   .option("--tool <tool>", "Target harness (claude-code|cursor|codex|openclaw|claude-desktop)")
   .option("--scope <scope>", "Permission scope (project|user|both)", "project")
+  .option("--install-scope <scope>", "MCP + CLI instruction install scope (project|user|both)", "project")
+  .option(
+    "--mcp-transport <mode>",
+    "MCP preset: a signed HTTP proxy, b unsigned/local stdio (default), c direct stdio, d both slots→prod /mcp"
+  )
+  .option(
+    "--rewrite-neotoma-mcp",
+    "Rewrite existing neotoma-dev/neotoma entries in chosen install scope to match the selected transport",
+    false
+  )
+  .option("--skip-hooks", "Skip lifecycle hook/plugin installation", false)
+  .option("--all-harnesses", "Install hooks for all hook-capable harnesses inferred from MCP configs", false)
   .option("--dry-run", "Plan the setup without writing files", false)
-  .option("--yes", "Assume yes for prompts (currently unused; runners default to non-interactive)", false)
+  .option("--yes", "Assume yes for prompts", false)
   .option("--skip-permissions", "Skip permission-file writes", false)
   .action(async (opts) => {
     const outputMode = resolveOutputMode();
+    const mcpTransport = normalizeInitMcpTransport(opts.mcpTransport);
+    if (opts.mcpTransport && !mcpTransport) {
+      throw new Error("Invalid --mcp-transport. Use a, b, c, or d.");
+    }
+    const installScopeInput = String(opts.installScope ?? "project").toLowerCase();
+    const installScope =
+      installScopeInput === "project" || installScopeInput === "user" || installScopeInput === "both"
+        ? installScopeInput
+        : null;
+    if (!installScope) {
+      throw new Error("Invalid --install-scope. Use project, user, or both.");
+    }
     const { runSetup } = await import("./setup.js");
+    const { createDefaultSetupRunners } = await import("./setup_runners.js");
+    const cwd = process.cwd();
     const report = await runSetup({
       tool: opts.tool ?? null,
       dryRun: Boolean(opts.dryRun),
       yes: Boolean(opts.yes),
       skipPermissions: Boolean(opts.skipPermissions),
+      skipHooks: Boolean(opts.skipHooks),
       scope: opts.scope ?? "project",
-      cwd: process.cwd(),
+      cwd,
+      runners: createDefaultSetupRunners({
+        cwd,
+        dryRun: Boolean(opts.dryRun),
+        yes: Boolean(opts.yes),
+        installScope,
+        mcpTransport: mcpTransport ?? undefined,
+        rewriteExistingNeotoma: Boolean(opts.rewriteNeotomaMcp),
+        skipHooks: Boolean(opts.skipHooks),
+        allHarnesses: Boolean(opts.allHarnesses),
+      }),
     });
     const exitCode = report.overall_ok ? 0 : 1;
     writeOutput(report, outputMode);
@@ -9500,6 +9929,12 @@ mirrorCommand
     }
   });
 
+registerProcessesCommands(program, {
+  resolveOutputMode,
+  writeOutput,
+  writeCliError,
+});
+
 // ── Logs ──────────────────────────────────────────────────────────────────
 
 const logsCommand = program.command("logs").description("View and decrypt persistent log files");
@@ -10505,6 +10940,16 @@ entitiesCommand
           ? `Failed to get entity: ${status} ${detail}`
           : `Failed to get entity: ${detail}`;
         if (status === 401) msg += ". Run `neotoma auth login` to sign in.";
+        if (
+          status === 404 &&
+          !/^ent_/i.test(id) &&
+          !msg.includes("Run `neotoma auth login`")
+        ) {
+          msg += `\n${dim(
+            "This command expects an entity ID (ent_…). For names, slugs, or other identifiers, run: neotoma entities search " +
+              JSON.stringify(id)
+          )}`;
+        }
         throw new Error(msg);
       }
       if (outputMode === "pretty") {
@@ -11870,6 +12315,15 @@ program
     "--file-idempotency-key <key>",
     "Optional idempotency key for file path in combined store"
   )
+  .option("--interpretation-source-id <id>", "Existing source_id to link as interpretation provenance")
+  .option(
+    "--interpretation-source-ref <ref>",
+    "Source created by this store request to interpret: structured or unstructured"
+  )
+  .option(
+    "--interpretation-config <json>",
+    "JSON object with interpretation audit config (extractor_type, model, prompt_hash, schema_version, etc.)"
+  )
   .option("--plan", "Dry-run: resolve entities and return planned actions without committing")
   .option("--dry-run", "Alias for --plan")
   .option(
@@ -11892,7 +12346,20 @@ program
       const raw = await fs.readFile(opts.file, "utf-8");
       entities = JSON.parse(raw);
     }
-    const hasStructured = Array.isArray(entities);
+    if (
+      entities &&
+      typeof entities === "object" &&
+      !Array.isArray(entities) &&
+      Array.isArray((entities as { entities?: unknown }).entities)
+    ) {
+      entities = (entities as { entities: unknown[] }).entities;
+    }
+    if (entities !== undefined && entities !== null && !Array.isArray(entities)) {
+      if (typeof entities === "object") {
+        entities = [entities as Record<string, unknown>];
+      }
+    }
+    const hasStructured = Array.isArray(entities) && (entities as unknown[]).length > 0;
     const hasUnstructured = Boolean(opts.filePath || opts.fileContent);
 
     if (!hasStructured && !hasUnstructured) {
@@ -11931,10 +12398,6 @@ program
       }
     }
 
-    if (entities && !Array.isArray(entities)) {
-      throw new Error("Entities must be an array");
-    }
-
     const structuredBody: Record<string, unknown> = {};
     if (hasStructured) {
       const idempotencyKey = opts.idempotencyKey ?? createIdempotencyKey({ entities });
@@ -11956,6 +12419,15 @@ program
           ? opts.file
           : path.resolve(process.cwd(), opts.file);
         structuredBody.original_filename = path.basename(resolvedFile);
+      }
+      if (opts.interpretationSourceId || opts.interpretationSourceRef || opts.interpretationConfig) {
+        const interpretation: Record<string, unknown> = {};
+        if (opts.interpretationSourceId) interpretation.source_id = opts.interpretationSourceId;
+        if (opts.interpretationSourceRef) interpretation.source_ref = opts.interpretationSourceRef;
+        if (opts.interpretationConfig) {
+          interpretation.interpretation_config = JSON.parse(opts.interpretationConfig as string);
+        }
+        structuredBody.interpretation = interpretation;
       }
     }
 
@@ -12297,192 +12769,6 @@ program
   });
 
 program
-  .command("store-structured")
-  .description("Store structured JSON data as entities")
-  .option("--file-path <path>", "Path to JSON file")
-  .option("--file-content <content>", "Inline JSON content")
-  .option("--entity-type <type>", "Entity type to use if not in data")
-  .option("--user-id <id>", "User ID for the operation")
-  .option("--source-priority <priority>", "Source priority (default: 100)")
-  .option(
-    "--observation-source <kind>",
-    "Kind of write: sensor, llm_summary (default), workflow_state, human, or import"
-  )
-  .action(async (opts) => {
-    const outputMode = resolveOutputMode();
-    const config = await readConfig();
-    const token = await getCliToken();
-    const api = createApiClient({
-      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
-      token,
-    });
-
-    let rawContent: string;
-    let originalFilename: string | undefined;
-
-    if (opts.filePath) {
-      const resolvedPath = path.isAbsolute(opts.filePath)
-        ? opts.filePath
-        : path.resolve(process.cwd(), opts.filePath);
-      rawContent = await fs.readFile(resolvedPath, "utf-8");
-      originalFilename = path.basename(resolvedPath);
-    } else if (opts.fileContent) {
-      rawContent = opts.fileContent as string;
-    } else {
-      throw new Error("Provide --file-path or --file-content");
-    }
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(rawContent);
-    } catch {
-      throw new Error("Invalid JSON content");
-    }
-
-    // Normalize to array of entity objects
-    let entityArray: Record<string, unknown>[];
-    if (Array.isArray(parsed)) {
-      entityArray = parsed as Record<string, unknown>[];
-    } else {
-      entityArray = [parsed as Record<string, unknown>];
-    }
-
-    // Apply entity_type from option if missing from data
-    const defaultEntityType = opts.entityType ?? "document";
-    entityArray = entityArray.map((e) => {
-      if (!e.entity_type && !e.type) {
-        return { ...e, entity_type: defaultEntityType };
-      }
-      return e;
-    });
-
-    const sourcePriority = opts.sourcePriority ? parseInt(opts.sourcePriority as string, 10) : 100;
-    const idempotencyKey = createIdempotencyKey({ entities: entityArray });
-
-    const observationSource = opts.observationSource
-      ? normalizeObservationSourceFlag(opts.observationSource as string)
-      : undefined;
-
-    const { data, error } = await api.POST("/store", {
-      body: {
-        entities: entityArray,
-        idempotency_key: idempotencyKey,
-        source_priority: sourcePriority,
-        ...(observationSource ? { observation_source: observationSource } : {}),
-        original_filename: originalFilename,
-        user_id: opts.userId,
-      },
-    });
-    if (error) throw new Error("Failed to store structured data");
-    const storeResult = data as Record<string, unknown> | null;
-    const entitiesList =
-      storeResult && Array.isArray((storeResult as any).entities)
-        ? ((storeResult as any).entities as any[])
-        : [];
-    const created = entitiesList
-      .map((e) => ({ id: (e?.entity_id ?? e?.id) as string | undefined }))
-      .filter((e) => typeof e.id === "string" && e.id.length > 0);
-    // Defensive guard (v0.5.1+): see note on `store` above. `store-structured`
-    // always commits (no --plan flag). Warn only when there are zero created
-    // entities, the response is NOT an idempotency replay, and the resolved
-    // entities array is empty (no matches/updates either) — that combination
-    // is a silent failure. Matched/updated entities are fine.
-    if (storeResult) {
-      const createdCount = Number((storeResult as any).entities_created ?? 0);
-      const replayed = Boolean((storeResult as any).replayed);
-      if (createdCount === 0 && !replayed && entitiesList.length === 0) {
-        process.stderr.write(
-          "warning: store returned entities_created=0 without replayed=true. " +
-            "No entities were committed and this was not an idempotency replay. " +
-            "Check entity_type schemas, user_id scope, and payload shape " +
-            "(wrap fields at the top level of each entity, not under `attributes`).\n"
-        );
-      }
-    }
-    if (storeResult) {
-      writeOutput(
-        {
-          ...storeResult,
-          entities_created_count: (storeResult as any).entities_created,
-          entities_created: created,
-        },
-        outputMode
-      );
-    } else {
-      writeOutput(data, outputMode);
-    }
-  });
-
-program
-  .command("store-unstructured")
-  .description("Store raw unstructured file content")
-  .option("--file-path <path>", "Path to file to store")
-  .option("--file-content <content>", "Inline file content to store")
-  .option("--user-id <id>", "User ID for the operation")
-  .option("--idempotency-key <key>", "Idempotency key to prevent duplicate stores")
-  .action(async (opts) => {
-    const outputMode = resolveOutputMode();
-    const config = await readConfig();
-    const token = await getCliToken();
-    const api = createApiClient({
-      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
-      token,
-    });
-
-    let fileBuffer: Buffer | undefined;
-    let originalFilename: string | undefined;
-    let resolvedPath: string | undefined;
-
-    if (opts.filePath) {
-      const pathFromFlag = path.isAbsolute(opts.filePath)
-        ? opts.filePath
-        : path.resolve(process.cwd(), opts.filePath);
-      await fs.access(pathFromFlag);
-      resolvedPath = pathFromFlag;
-      originalFilename = path.basename(pathFromFlag);
-    } else if (opts.fileContent) {
-      fileBuffer = Buffer.from(opts.fileContent as string, "utf-8");
-    } else {
-      throw new Error("Provide --file-path or --file-content");
-    }
-
-    const ext = originalFilename
-      ? path.extname(originalFilename).toLowerCase()
-      : resolvedPath
-        ? path.extname(resolvedPath).toLowerCase()
-        : "";
-    const mimeMap: Record<string, string> = {
-      ".json": "application/json",
-      ".txt": "text/plain",
-      ".csv": "text/csv",
-      ".md": "text/markdown",
-      ".pdf": "application/pdf",
-    };
-    const mimeType = resolvedPath ? inferMimeTypeForPath(resolvedPath) : mimeMap[ext] ?? "text/plain";
-    const body = resolvedPath
-      ? {
-          file_path: resolvedPath,
-          mime_type: mimeType,
-          original_filename: originalFilename,
-          idempotency_key: opts.idempotencyKey,
-          user_id: opts.userId,
-        }
-      : {
-          file_content: fileBuffer!.toString("base64"),
-          mime_type: mimeType,
-          original_filename: originalFilename,
-          idempotency_key:
-            opts.idempotencyKey ??
-            createIdempotencyKey({ content: fileBuffer!.toString("base64") }),
-          user_id: opts.userId,
-        };
-
-    const { data, error } = await api.POST("/store", { body });
-    if (error) throw new Error(`Failed to store unstructured content: ${JSON.stringify(error)}`);
-    writeOutput(data, outputMode);
-  });
-
-program
   .command("upload <path>")
   .description("Store an unstructured file")
   .option("--idempotency-key <key>", "Idempotency key (default: content hash)")
@@ -12779,6 +13065,92 @@ function printEntitiesByTypeTable(stats: StatsData): void {
   }
   process.stdout.write("\n");
 }
+
+const interpretationsCommand = program.command("interpretations").description("Interpretation commands");
+
+interpretationsCommand
+  .command("list")
+  .description("List interpretation runs")
+  .option("--source-id <id>", "Filter by source ID")
+  .option("--limit <n>", "Maximum rows to return", "100")
+  .option("--offset <n>", "Pagination offset", "0")
+  .option("--user-id <id>", "User ID for the operation")
+  .action(async (opts) => {
+    const outputMode = resolveOutputMode();
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({
+      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      token,
+    });
+
+    const { data, error } = await api.GET("/interpretations", {
+      params: {
+        query: {
+          source_id: opts.sourceId,
+          limit: Number.parseInt(opts.limit as string, 10),
+          offset: Number.parseInt(opts.offset as string, 10),
+          user_id: opts.userId,
+        },
+      },
+    });
+    if (error) throw new Error(`Failed to list interpretations: ${JSON.stringify(error)}`);
+    writeOutput(data, outputMode);
+  });
+
+interpretationsCommand
+  .command("create")
+  .description("Create an interpretation run from agent-extracted entities")
+  .requiredOption("--source-id <id>", "Existing source ID to interpret")
+  .requiredOption("--entities <path>", "Path to JSON file containing extracted entities array")
+  .option("--interpretation-config <json>", "JSON interpretation audit config")
+  .option("--relationships <path>", "Path to JSON file containing store relationship refs")
+  .option("--idempotency-key <key>", "Optional replay-safe operation key")
+  .option("--user-id <id>", "User ID for the operation")
+  .action(async (opts) => {
+    const outputMode = resolveOutputMode();
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({
+      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      token,
+    });
+
+    const entitiesPath = path.isAbsolute(opts.entities)
+      ? opts.entities
+      : path.resolve(process.cwd(), opts.entities);
+    const entities = JSON.parse(await fs.readFile(entitiesPath, "utf-8"));
+    if (!Array.isArray(entities) || entities.length === 0) {
+      throw new Error("--entities must point to a non-empty JSON array");
+    }
+    let relationships: Array<Record<string, unknown>> | undefined;
+    if (opts.relationships) {
+      const relationshipsPath = path.isAbsolute(opts.relationships)
+        ? opts.relationships
+        : path.resolve(process.cwd(), opts.relationships);
+      const parsedRelationships = JSON.parse(await fs.readFile(relationshipsPath, "utf-8"));
+      if (!Array.isArray(parsedRelationships)) {
+        throw new Error("--relationships must point to a JSON array");
+      }
+      relationships = parsedRelationships as Array<Record<string, unknown>>;
+    }
+
+    const body = {
+      source_id: opts.sourceId as string,
+      entities: entities as Array<Record<string, unknown>>,
+      ...(opts.interpretationConfig
+        ? { interpretation_config: JSON.parse(opts.interpretationConfig as string) }
+        : {}),
+      ...(relationships ? { relationships: relationships as any } : {}),
+      idempotency_key: opts.idempotencyKey,
+      user_id: opts.userId,
+    };
+    const { data, error } = await api.POST("/interpretations/create", {
+      body: body as any,
+    });
+    if (error) throw new Error(`Failed to create interpretation: ${JSON.stringify(error)}`);
+    writeOutput(data, outputMode);
+  });
 
 // Add new corrections command (after interpretations command)
 const correctionsCommand = program.command("corrections").description("Correction commands");

@@ -1,10 +1,12 @@
 /**
  * `neotoma setup` — composite onboarding command.
  *
- * Collapses `init --yes --idempotent`, `mcp config --yes`,
- * `cli-instructions config --yes`, and permission-file writes into one
+ * Collapses `init --yes --idempotent`, `mcp config`,
+ * `cli config`, hooks/plugin install, and permission-file writes into one
  * agent-runnable call so harnesses only need wildcard approval for
  * `neotoma *` to complete the full install-first flow.
+ *
+ * Read-only guidance stays under `mcp guide` and `cli guide`.
  */
 
 import type { ToolId } from "./doctor.js";
@@ -42,6 +44,8 @@ export interface RunSetupOptions {
   skipPermissions?: boolean;
   /** Permission scope for tools that expose project+user files. */
   scope?: "project" | "user" | "both";
+  /** Skip lifecycle hook/plugin installation. */
+  skipHooks?: boolean;
   /** Injected runners to keep setup pure + testable. */
   runners?: {
     init?: () => Promise<SetupStepResult>;
@@ -55,6 +59,7 @@ export async function runSetup(options: RunSetupOptions = {}): Promise<SetupRepo
   const cwd = options.cwd ?? process.cwd();
   const dryRun = options.dryRun ?? false;
   const doctorBefore = await runDoctor({ cwd });
+  let currentDoctor = doctorBefore;
 
   const toolInput = typeof options.tool === "string" ? toolFromString(options.tool) : (options.tool ?? null);
   const tool: ToolId | null = toolInput ?? doctorBefore.current_tool_hint;
@@ -64,7 +69,8 @@ export async function runSetup(options: RunSetupOptions = {}): Promise<SetupRepo
   // Step 1: init (idempotent)
   if (options.runners?.init) {
     steps.push(await options.runners.init());
-  } else if (doctorBefore.data.initialized) {
+    if (!dryRun) currentDoctor = await runDoctor({ cwd });
+  } else if (currentDoctor.data.initialized) {
     steps.push({ id: "init", ok: true, changed: false, skipped: true, reason: "already-initialized" });
   } else if (dryRun) {
     steps.push({ id: "init", ok: true, changed: true, skipped: true, reason: "dry-run" });
@@ -75,8 +81,9 @@ export async function runSetup(options: RunSetupOptions = {}): Promise<SetupRepo
   // Step 2: mcp configure
   if (options.runners?.mcpConfigure) {
     steps.push(await options.runners.mcpConfigure());
+    if (!dryRun) currentDoctor = await runDoctor({ cwd });
   } else {
-    const hasMcp = Object.values(doctorBefore.mcp_servers_detected).some((c) => c.has_neotoma || c.has_neotoma_dev);
+    const hasMcp = Object.values(currentDoctor.mcp_servers_detected).some((c) => c.has_neotoma || c.has_neotoma_dev);
     if (hasMcp) {
       steps.push({ id: "mcp-configure", ok: true, changed: false, skipped: true, reason: "already-configured" });
     } else if (dryRun) {
@@ -86,15 +93,16 @@ export async function runSetup(options: RunSetupOptions = {}): Promise<SetupRepo
     }
   }
 
-  const existingMcp = Object.values(doctorBefore.mcp_servers_detected).some((c) => c.has_neotoma || c.has_neotoma_dev);
+  const existingMcp = Object.values(currentDoctor.mcp_servers_detected).some((c) => c.has_neotoma || c.has_neotoma_dev);
   const mcpStep = steps.find((s) => s.id === "mcp-configure");
   const mcpConfigured = existingMcp || Boolean(mcpStep?.ok && !mcpStep.skipped);
 
   // Step 3: CLI instructions configure
   if (options.runners?.cliInstructionsConfigure) {
     steps.push(await options.runners.cliInstructionsConfigure());
+    if (!dryRun) currentDoctor = await runDoctor({ cwd });
   } else {
-    const ci = doctorBefore.cli_instructions;
+    const ci = currentDoctor.cli_instructions;
     const hasAny =
       ci.project.cursor ||
       ci.project.claude ||
@@ -115,6 +123,14 @@ export async function runSetup(options: RunSetupOptions = {}): Promise<SetupRepo
   // also get its reliability-floor hooks where the harness supports them.
   if (options.runners?.hooksInstall) {
     steps.push(await options.runners.hooksInstall());
+  } else if (options.skipHooks) {
+    steps.push({
+      id: "hooks",
+      ok: true,
+      changed: false,
+      skipped: true,
+      reason: "skip-hooks",
+    });
   } else {
     const hookHarness = tool ? toHookHarness(tool) : null;
     if (!hookHarness) {
@@ -133,7 +149,7 @@ export async function runSetup(options: RunSetupOptions = {}): Promise<SetupRepo
         skipped: true,
         reason: "mcp-not-configured",
       });
-    } else if (doctorBefore.hooks.installed[hookHarness]?.present) {
+    } else if (currentDoctor.hooks.installed[hookHarness]?.present) {
       steps.push({
         id: "hooks",
         ok: true,
@@ -143,7 +159,7 @@ export async function runSetup(options: RunSetupOptions = {}): Promise<SetupRepo
       });
     } else if (dryRun) {
       steps.push({ id: "hooks", ok: true, changed: true, skipped: true, reason: "dry-run" });
-    } else if (!doctorBefore.data.initialized) {
+    } else if (!currentDoctor.data.initialized) {
       steps.push({
         id: "hooks",
         ok: true,
@@ -174,9 +190,14 @@ export async function runSetup(options: RunSetupOptions = {}): Promise<SetupRepo
   // Step 5: permission patches
   const permissionPatches: PermissionPatch[] = [];
   if (tool && !options.skipPermissions && tool !== "openclaw" && tool !== "claude-desktop") {
+    // claude-code defaults to "both" so the neotoma wildcard allow lands in
+    // both the project-scoped settings.local.json and the user-scoped
+    // settings.json. The user-level entry makes the allow available across
+    // all projects, not just the one where setup was run.
+    const defaultScope = tool === "claude-code" ? "both" : "project";
     const patches = await writePermissionsForTool(tool, cwd, {
       dryRun,
-      scope: options.scope ?? "project",
+      scope: options.scope ?? defaultScope,
     });
     permissionPatches.push(...patches);
     steps.push({

@@ -1,6 +1,10 @@
 import { Link } from "react-router-dom";
 import { DetailPage } from "../DetailPage";
 import { IntegrationSection } from "../IntegrationSection";
+import { useLocale } from "@/i18n/LocaleContext";
+import { localizePath } from "@/i18n/routing";
+
+const extLink = "text-foreground underline underline-offset-2 hover:no-underline";
 
 const tierRowClass = "border-b border-border last:border-b-0";
 const tierLabelClass =
@@ -9,15 +13,19 @@ const tierExampleClass = "py-2 text-[14px] leading-6 text-muted-foreground";
 
 function TierTable({
   rows,
+  categoryHeader,
+  examplesHeader,
 }: {
   rows: { category: string; examples: string }[];
+  categoryHeader: string;
+  examplesHeader: string;
 }) {
   return (
     <table className="w-full text-left mb-2">
       <thead>
         <tr className="border-b border-border">
-          <th className="pb-1 text-[13px] font-medium text-muted-foreground">Category</th>
-          <th className="pb-1 text-[13px] font-medium text-muted-foreground">Examples</th>
+          <th className="pb-1 text-[13px] font-medium text-muted-foreground">{categoryHeader}</th>
+          <th className="pb-1 text-[13px] font-medium text-muted-foreground">{examplesHeader}</th>
         </tr>
       </thead>
       <tbody>
@@ -33,238 +41,214 @@ function TierTable({
 }
 
 export function WhatToStorePage() {
+  const { locale, subpage } = useLocale();
+  const w = subpage.whatToStore;
+  const lp = (path: string) => localizePath(path, locale);
+
   return (
-    <DetailPage title="What to store first">
+    <DetailPage title={w.title}>
       <p className="text-[15px] leading-7 mb-4">
-        Neotoma stores any structured fact that benefits from deterministic state evolution,
-        versioning, and provenance. The deciding question is not &ldquo;is this personal
-        data?&rdquo; but <strong>does this fact benefit from being versioned, auditable, and
-        reproducible?</strong>
+        {w.introP1BeforeStrong}
+        <strong>{w.introStrong}</strong>
+        {w.introP1AfterStrong}
       </p>
-      <p className="text-[14px] leading-6 text-muted-foreground mb-6">
-        If an agent or user would later need to recall a fact, verify when it changed, trace why a
-        decision was made, or reconstruct state at a point in time: it belongs in Neotoma.
-      </p>
+      <p className="text-[14px] leading-6 text-muted-foreground mb-6">{w.introP2}</p>
 
-      <IntegrationSection title="Agents store for you" sectionKey="agent-driven" dividerBefore={false}>
+      <IntegrationSection title={w.sectionAgentsTitle} sectionKey="agent-driven" dividerBefore={false}>
         <p className="text-[14px] leading-6 text-muted-foreground mb-3">
-          You do not need to decide what to store or call any APIs yourself. When Neotoma runs
-          with an agent in{" "}
-          <Link to="/neotoma-with-cursor" className="text-foreground underline underline-offset-2 hover:no-underline">
-            Cursor
+          {w.agentsP1BeforeCursor}
+          <Link to={lp("/neotoma-with-cursor")} className={extLink}>
+            {w.linkHarnessCursor}
           </Link>
-          ,{" "}
-          <Link to="/neotoma-with-claude" className="text-foreground underline underline-offset-2 hover:no-underline">
-            Claude
+          {w.agentsP1AfterCursor}
+          <Link to={lp("/neotoma-with-claude")} className={extLink}>
+            {w.linkHarnessClaude}
           </Link>
-          ,{" "}
-          <Link to="/neotoma-with-chatgpt" className="text-foreground underline underline-offset-2 hover:no-underline">
-            ChatGPT
+          {w.agentsP1AfterClaude}
+          <Link to={lp("/neotoma-with-chatgpt")} className={extLink}>
+            {w.linkHarnessChatgpt}
           </Link>
-          , or any{" "}
-          <Link to="/mcp" className="text-foreground underline underline-offset-2 hover:no-underline">
-            MCP-compatible client
+          {w.agentsP1AfterChatgpt}
+          <Link to={lp("/mcp")} className={extLink}>
+            {w.linkHarnessMcpClient}
           </Link>
-          , the agent proactively extracts and stores entities from every conversation turn:
-          people mentioned, tasks committed to, decisions made, and facts stated.
+          {w.agentsP1AfterMcp}
         </p>
         <p className="text-[14px] leading-6 text-muted-foreground mb-3">
-          The agent follows{" "}
-          <Link to="/agent-instructions/store-recipes" className="text-foreground underline underline-offset-2 hover:no-underline">
-            store recipes
-          </Link>{" "}
-          that define how to persist conversations, extract entities from attachments, link
-          related records, and preserve provenance without manual intervention. It
-          applies the decision heuristic below on your behalf: if a fact has recall, audit,
-          or relationship value, the agent stores it automatically.
+          {w.agentsP2BeforeRecipes}
+          <Link to={lp("/agent-instructions/store-recipes")} className={extLink}>
+            {w.linkStoreRecipes}
+          </Link>
+          {w.agentsP2AfterRecipes}
         </p>
         <p className="text-[14px] leading-6 text-muted-foreground mb-3">
-          You can always store data manually via the{" "}
-          <Link to="/cli" className="text-foreground underline underline-offset-2 hover:no-underline">
-            CLI
+          {w.agentsP3BeforeCli}
+          <Link to={lp("/cli")} className={extLink}>
+            {w.linkCli}
           </Link>
-          ,{" "}
-          <Link to="/api" className="text-foreground underline underline-offset-2 hover:no-underline">
-            REST API
+          {w.agentsP3AfterCli}
+          <Link to={lp("/api")} className={extLink}>
+            {w.linkRestApi}
           </Link>
-          , or{" "}
-          <Link to="/mcp" className="text-foreground underline underline-offset-2 hover:no-underline">
-            MCP tools
+          {w.agentsP3AfterApi}
+          <Link to={lp("/mcp")} className={extLink}>
+            {w.linkMcpTools}
           </Link>
-          , correct what was stored, or tell your agent to stop storing specific categories.
-          The default is proactive storage with human oversight, not the other way
-          around.
+          {w.agentsP3AfterMcp}
+          {w.agentsP3End}
         </p>
       </IntegrationSection>
 
-      <IntegrationSection title="Any entity type, any shape" sectionKey="flexible-schemas">
+      <IntegrationSection title={w.sectionFlexibleTitle} sectionKey="flexible-schemas">
         <p className="text-[14px] leading-6 text-muted-foreground mb-3">
-          Neotoma does not require you to define a schema before storing data. Store any entity with
-          a descriptive <code>entity_type</code> and whatever fields the data implies. The{" "}
-          <Link to="/schemas/registry" className="text-foreground underline underline-offset-2 hover:no-underline">
-            schema registry
-          </Link>{" "}
-          infers and evolves schemas automatically as new fields appear.
+          {w.flexibleP1BeforeRegistry}
+          <code className="text-[13px]">entity_type</code>
+          {w.flexibleP1BetweenCodeAndRegistry}
+          <Link to={lp("/schemas/registry")} className={extLink}>
+            {w.linkSchemaRegistry}
+          </Link>
+          {w.flexibleP1AfterRegistry}
         </p>
         <p className="text-[14px] leading-6 text-muted-foreground mb-3">
-          Common types like <code>contact</code>, <code>task</code>, <code>transaction</code>,
-          and <code>event</code> ship with sensible defaults, but you can create any type by
-          storing an entity with a new <code>entity_type</code>. Fields added later trigger{" "}
-          <Link to="/schemas/versioning" className="text-foreground underline underline-offset-2 hover:no-underline">
-            additive schema evolution
-          </Link>{" "}
-          , minor version bumps that never break existing data.
+          {w.flexibleP2BeforeTypes}
+          <code className="text-[13px]">contact</code>, <code className="text-[13px]">task</code>,{" "}
+          <code className="text-[13px]">transaction</code>, and <code className="text-[13px]">event</code>
+          {w.flexibleP2AfterTypesBeforeNewType}
+          <code className="text-[13px]">entity_type</code>
+          {w.flexibleP2AfterEntityType}
+          <Link to={lp("/schemas/versioning")} className={extLink}>
+            {w.linkAdditiveSchemaEvolution}
+          </Link>
+          {w.flexibleP2AfterEvolution}
         </p>
         <p className="text-[14px] leading-6 text-muted-foreground mb-3">
-          Unknown fields are preserved in a <code>raw_fragments</code> layer so nothing is
-          silently dropped. As schemas mature, those fragments are promoted into the validated
-          schema automatically. See{" "}
-          <Link to="/schemas" className="text-foreground underline underline-offset-2 hover:no-underline">
-            schemas overview
+          {w.flexibleP3BeforeRaw}
+          <code className="text-[13px]">raw_fragments</code>
+          {w.flexibleP3AfterRawBeforeSee}
+          <Link to={lp("/schemas")} className={extLink}>
+            {w.linkSchemasOverview}
           </Link>
-          ,{" "}
-          <Link to="/schemas/merge-policies" className="text-foreground underline underline-offset-2 hover:no-underline">
-            merge policies
+          {w.flexibleP3BetweenOverviewAndMerge}
+          <Link to={lp("/schemas/merge-policies")} className={extLink}>
+            {w.linkMergePolicies}
           </Link>
-          , and{" "}
-          <Link to="/schemas/storage-layers" className="text-foreground underline underline-offset-2 hover:no-underline">
-            storage layers
-          </Link>{" "}
-          for the full picture.
+          {w.flexibleP3BetweenMergeAndStorage}
+          <Link to={lp("/schemas/storage-layers")} className={extLink}>
+            {w.linkStorageLayers}
+          </Link>
+          {w.flexibleP3End}
         </p>
       </IntegrationSection>
 
-      <IntegrationSection title="Tier 1 - High-value facts" sectionKey="tier-1">
-        <p className="text-[14px] leading-6 text-muted-foreground mb-3">
-          Store these proactively from the first session.
-        </p>
+      <IntegrationSection title={w.sectionTier1Title} sectionKey="tier-1">
+        <p className="text-[14px] leading-6 text-muted-foreground mb-3">{w.tier1Intro}</p>
         <TierTable
-          rows={[
-            { category: "People and relationships", examples: "Contacts, companies, organizations, role connections" },
-            { category: "Commitments and tasks", examples: "Obligations, action items, deadlines, promises made" },
-            { category: "Events and decisions", examples: "Meetings, milestones, choices with rationale" },
-            { category: "Financial facts", examples: "Transactions, invoices, receipts, contracts, payments owed" },
-          ]}
+          rows={w.tier1Rows}
+          categoryHeader={w.tableHeaderCategory}
+          examplesHeader={w.tableHeaderExamples}
         />
       </IntegrationSection>
 
-      <IntegrationSection title="Tier 2 - Contextual facts" sectionKey="tier-2">
-        <p className="text-[14px] leading-6 text-muted-foreground mb-3">
-          Store when encountered in conversation, documents, or external tools.
-        </p>
+      <IntegrationSection title={w.sectionTier2Title} sectionKey="tier-2">
+        <p className="text-[14px] leading-6 text-muted-foreground mb-3">{w.tier2Intro}</p>
         <TierTable
-          rows={[
-            { category: "Preferences and standards", examples: "User preferences, conventions, style guides, stated constraints" },
-            { category: "Project context", examples: "Codebase entities, architectural decisions, release metadata, config" },
-            { category: "Documents and artifacts", examples: "Uploaded files with extracted structure, reports, specifications" },
-          ]}
+          rows={w.tier2Rows}
+          categoryHeader={w.tableHeaderCategory}
+          examplesHeader={w.tableHeaderExamples}
         />
       </IntegrationSection>
 
-      <IntegrationSection title="Tier 3 - Derived context" sectionKey="tier-3">
-        <p className="text-[14px] leading-6 text-muted-foreground mb-3">
-          Store when the derived record carries future recall, audit, or relationship value.
-        </p>
+      <IntegrationSection title={w.sectionTier3Title} sectionKey="tier-3">
+        <p className="text-[14px] leading-6 text-muted-foreground mb-3">{w.tier3Intro}</p>
         <TierTable
-          rows={[
-            { category: "Conversations", examples: "Agent interactions with provenance (persisted per-turn)" },
-            { category: "Session state", examples: "Active environment, running tools, current working context" },
-            { category: "External data", examples: "Records pulled from email, calendar, web, APIs, other MCPs" },
-          ]}
+          rows={w.tier3Rows}
+          categoryHeader={w.tableHeaderCategory}
+          examplesHeader={w.tableHeaderExamples}
         />
       </IntegrationSection>
 
-      <IntegrationSection title="Before-and-after examples" sectionKey="examples">
+      <IntegrationSection title={w.sectionExamplesTitle} sectionKey="examples">
         <div className="space-y-4">
           <div className="rounded-lg border border-border bg-muted/20 p-4">
-            <h3 className="text-[15px] font-medium mb-1">Contacts from a conversation</h3>
+            <h3 className="text-[15px] font-medium mb-1">{w.exampleContacts.title}</h3>
             <p className="text-[14px] leading-6 text-muted-foreground mb-1">
-              <span className="font-medium text-foreground">Before:</span> You mention &ldquo;Clayton
-              from Acme&rdquo; in a chat. Next session, the agent has no idea who Clayton is.
+              <span className="font-medium text-foreground">{w.exampleContacts.beforeLabel}</span>{" "}
+              {w.exampleContacts.beforeText}
             </p>
             <p className="text-[14px] leading-6 text-muted-foreground">
-              <span className="font-medium text-foreground">After:</span> Agent stores a{" "}
-              <code>contact</code> entity with name, company, and a REFERS_TO link to the
-              conversation. Next session, Clayton&rsquo;s full context is retrieved instantly.
+              <span className="font-medium text-foreground">{w.exampleContacts.afterLabel}</span>{" "}
+              {w.exampleContacts.afterText}
             </p>
           </div>
           <div className="rounded-lg border border-border bg-muted/20 p-4">
-            <h3 className="text-[15px] font-medium mb-1">Task from a commitment</h3>
+            <h3 className="text-[15px] font-medium mb-1">{w.exampleTask.title}</h3>
             <p className="text-[14px] leading-6 text-muted-foreground mb-1">
-              <span className="font-medium text-foreground">Before:</span> &ldquo;I need to follow up
-              with Sarah by Friday.&rdquo; The commitment exists only in that session.
+              <span className="font-medium text-foreground">{w.exampleTask.beforeLabel}</span>{" "}
+              {w.exampleTask.beforeText}
             </p>
             <p className="text-[14px] leading-6 text-muted-foreground">
-              <span className="font-medium text-foreground">After:</span> Agent stores a{" "}
-              <code>task</code> entity with title, due date, and REFERS_TO Sarah&rsquo;s contact.
-              Task persists across sessions and tools.
+              <span className="font-medium text-foreground">{w.exampleTask.afterLabel}</span>{" "}
+              {w.exampleTask.afterText}
             </p>
           </div>
           <div className="rounded-lg border border-border bg-muted/20 p-4">
-            <h3 className="text-[15px] font-medium mb-1">Decision with rationale</h3>
+            <h3 className="text-[15px] font-medium mb-1">{w.exampleDecision.title}</h3>
             <p className="text-[14px] leading-6 text-muted-foreground mb-1">
-              <span className="font-medium text-foreground">Before:</span> You decide on PostgreSQL
-              over MySQL. Three weeks later, no one remembers why.
+              <span className="font-medium text-foreground">{w.exampleDecision.beforeLabel}</span>{" "}
+              {w.exampleDecision.beforeText}
             </p>
             <p className="text-[14px] leading-6 text-muted-foreground">
-              <span className="font-medium text-foreground">After:</span> Agent stores a{" "}
-              <code>decision_note</code> with rationale and context. The reasoning is versioned and
-              traceable.
+              <span className="font-medium text-foreground">{w.exampleDecision.afterLabel}</span>{" "}
+              {w.exampleDecision.afterText}
             </p>
           </div>
         </div>
       </IntegrationSection>
 
-      <IntegrationSection title="Decision heuristic" sectionKey="heuristic">
-        <p className="text-[14px] leading-6 text-muted-foreground mb-3">
-          When deciding whether to store something, apply this test. If any answer is yes, store it.
-        </p>
+      <IntegrationSection title={w.sectionHeuristicTitle} sectionKey="heuristic">
+        <p className="text-[14px] leading-6 text-muted-foreground mb-3">{w.heuristicIntro}</p>
         <ol className="list-decimal pl-5 space-y-1 text-[14px] leading-6 text-muted-foreground">
           <li>
-            <span className="font-medium text-foreground">Recallability</span>: Would an agent or
-            user need this fact again in a future session?
+            <span className="font-medium text-foreground">{w.heuristicLi1Strong}</span>
+            {w.heuristicLi1Body}
           </li>
           <li>
-            <span className="font-medium text-foreground">Auditability</span>: Would someone need
-            to know when this was recorded or how it changed?
+            <span className="font-medium text-foreground">{w.heuristicLi2Strong}</span>
+            {w.heuristicLi2Body}
           </li>
           <li>
-            <span className="font-medium text-foreground">Reproducibility</span>: Would
-            reconstructing past state require this fact?
+            <span className="font-medium text-foreground">{w.heuristicLi3Strong}</span>
+            {w.heuristicLi3Body}
           </li>
           <li>
-            <span className="font-medium text-foreground">Relationship value</span>: Does this
-            connect to other entities (people, tasks, events)?
+            <span className="font-medium text-foreground">{w.heuristicLi4Strong}</span>
+            {w.heuristicLi4Body}
           </li>
         </ol>
       </IntegrationSection>
 
-      <IntegrationSection title="What NOT to store" sectionKey="not-store">
+      <IntegrationSection title={w.sectionNotStoreTitle} sectionKey="not-store">
         <TierTable
-          rows={[
-            { category: "Ephemeral output", examples: "No future recall value; no benefit from versioning" },
-            { category: "Duplicate records", examples: "Already in Neotoma; check before storing" },
-            { category: "Inferred or predicted data", examples: "Neotoma stores facts, not guesses" },
-            { category: "Unapproved data", examples: "Explicit user control required" },
-            { category: "Credentials and secrets", examples: "Belong in secret managers, not state layers" },
-          ]}
+          rows={w.notStoreRows}
+          categoryHeader={w.tableHeaderCategory}
+          examplesHeader={w.tableHeaderExamples}
         />
       </IntegrationSection>
 
       <p className="text-[14px] leading-6 text-muted-foreground mt-8">
-        Ready to start?{" "}
-        <Link to="/install" className="text-foreground underline underline-offset-2 hover:no-underline">
-          Install Neotoma
+        {w.footerReady}
+        <Link to={lp("/install")} className={extLink}>
+          {w.linkInstallNeotoma}
         </Link>
-        , then{" "}
-        <Link to="/walkthrough" className="text-foreground underline underline-offset-2 hover:no-underline">
-          follow the walkthrough
-        </Link>{" "}
-        to see storage in action. See{" "}
-        <Link to="/backup" className="text-foreground underline underline-offset-2 hover:no-underline">
-          backup and restore
-        </Link>{" "}
-        to protect your data.
+        {w.footerAfterInstall}
+        <Link to={lp("/walkthrough")} className={extLink}>
+          {w.linkWalkthrough}
+        </Link>
+        {w.footerAfterWalkthrough}
+        <Link to={lp("/backup")} className={extLink}>
+          {w.linkBackupRestore}
+        </Link>
+        {w.footerEnd}
       </p>
     </DetailPage>
   );

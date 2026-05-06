@@ -162,6 +162,30 @@ describe("CLI entity subcommands", () => {
         expect(threw).toBe(true);
       });
     });
+
+    it("should append search hint on 404 when argument is not an ent_ id", async () => {
+      await withTempHome(async (homeDir) => {
+        await setupConfig(homeDir);
+        const fetchMock = vi.fn(async () =>
+          new Response(JSON.stringify({ error: "Entity not found" }), {
+            status: 404,
+            headers: { "Content-Type": "application/json" },
+          })
+        );
+        vi.stubGlobal("fetch", fetchMock);
+
+        const { runCli } = await loadCli();
+        let errMsg = "";
+        try {
+          await runCli(["node", "cli", "entities", "get", "planadigm", "--json"]);
+        } catch (e) {
+          errMsg = e instanceof Error ? e.message : String(e);
+        }
+        expect(errMsg).toContain("404");
+        expect(errMsg).toContain("entities search");
+        expect(errMsg).toContain("planadigm");
+      });
+    });
   });
 
   // ── entities search (mock-fetch) ─────────────────────────────────────────────

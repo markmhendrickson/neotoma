@@ -3,10 +3,9 @@
  * Installs or removes Neotoma Codex CLI hooks by writing a config
  * snippet to ~/.codex/config.toml.
  *
- * Codex CLI discovers external hooks via config.toml keys like:
- *   [notify] command = [...]
- * We wire Neotoma's hook scripts into those keys while preserving any
- * unrelated entries already present.
+ * Codex expects a root-level `notify = ["argv0", "argv1", …]` (argv array),
+ * not a `[notify]` table with `command = …` (that shape errors as map vs sequence).
+ * We wire Neotoma's hook scripts while preserving unrelated entries.
  */
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
@@ -24,11 +23,27 @@ function hookPath(name) {
 const MARKER = "# BEGIN neotoma-codex-hooks";
 const END_MARKER = "# END neotoma-codex-hooks";
 
+/** Codex requires a top-level history.persistence key; insert once if absent (TOML merges repeated [history]). */
+function ensureHistoryPersistenceLine(toml) {
+  if (/^\s*persistence\s*=/m.test(toml)) return toml;
+  return toml.replace(
+    /^(\[history\][^\n]*)$/m,
+    '$1\n# Required by Codex CLI; omitting yields: missing field persistence in history.\npersistence = "save-all"\n'
+  );
+}
+
+/** Older Neotoma snippets used `[notify]` + `command = […]`; Codex expects `notify = […]`. */
+function migrateLegacyNotifyTableToArray(toml) {
+  return toml.replace(
+    /^\[notify\]\s*\n\s*command\s*=\s*(\[[^\]]+\])\s*$/m,
+    "notify = $1"
+  );
+}
+
 function buildBlock() {
   const python = process.env.NEOTOMA_PYTHON ?? "python3";
   return `${MARKER}
-[notify]
-command = ["${python}", "${hookPath("notify.py")}"]
+notify = ["${python}", "${hookPath("notify.py")}"]
 
 [history]
 session_start_command = ["${python}", "${hookPath("session_start.py")}"]
@@ -75,7 +90,9 @@ function main() {
     return;
   }
 
-  const next = stripped.replace(/\n+$/g, "\n") + "\n" + buildBlock();
+  let next = stripped.replace(/\n+$/g, "\n") + "\n" + buildBlock();
+  next = migrateLegacyNotifyTableToArray(next);
+  next = ensureHistoryPersistenceLine(next);
   writeFileSync(configPath, next);
   console.log(`Installed Neotoma Codex hooks into ${configPath}`);
 }

@@ -18,6 +18,31 @@ describe("StoreStructuredRequestSchema", () => {
       })
     ).not.toThrow();
   });
+
+  it("accepts explicit interpretation provenance", () => {
+    expect(() =>
+      StoreStructuredRequestSchema.parse({
+        entities: [{ entity_type: "contact", name: "Test Contact" }],
+        idempotency_key: "idemp_test_key",
+        interpretation: {
+          source_id: "source_test",
+          interpretation_config: { extractor_type: "agent", schema_version: "1.0" },
+        },
+      })
+    ).not.toThrow();
+  });
+
+  it("rejects interpretation provenance without a source", () => {
+    expect(() =>
+      StoreStructuredRequestSchema.parse({
+        entities: [{ entity_type: "contact", name: "Test Contact" }],
+        idempotency_key: "idemp_test_key",
+        interpretation: {
+          interpretation_config: { extractor_type: "agent" },
+        },
+      })
+    ).toThrow();
+  });
 });
 
 describe("StoreRequestSchema", () => {

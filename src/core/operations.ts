@@ -104,10 +104,10 @@ export interface Operations {
   /** Store structured and/or unstructured data. See docs/developer/mcp/instructions.md. */
   store(input: StoreInput): Promise<StoreResult>;
 
-  /** Alias for store() preserving the MCP `store_structured` action name. */
+  /** @deprecated Use {@link Operations.store}. */
   storeStructured(input: StoreInput): Promise<StoreResult>;
 
-  /** Alias for store() preserving the MCP `store_unstructured` action name. */
+  /** @deprecated Use {@link Operations.store}. */
   storeUnstructured(input: StoreInput): Promise<StoreResult>;
 
   /** List entities by type or time window. */
@@ -195,10 +195,10 @@ export function createOperations(options: CreateOperationsOptions): Operations {
       return call<StoreResult>("store", input);
     },
     async storeStructured(input) {
-      return call<StoreResult>("store_structured", input);
+      return call<StoreResult>("store", input);
     },
     async storeUnstructured(input) {
-      return call<StoreResult>("store_unstructured", input);
+      return call<StoreResult>("store", input);
     },
     async retrieveEntities(input) {
       return call("retrieve_entities", input);

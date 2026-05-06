@@ -115,6 +115,9 @@ export async function getDashboardStats(userId?: string): Promise<DashboardStats
   }
   const { data: basisRows, error: basisError } = await basisQuery;
   if (!basisError && basisRows) {
+    // Keep total and buckets internally consistent when concurrent test writes
+    // land between the count query and the bucket query.
+    stats.total_observations = Math.max(stats.total_observations, basisRows.length);
     const totals = new Map<string, number>();
     const byType = new Map<string, Map<string, number>>();
     for (const row of basisRows as Array<{

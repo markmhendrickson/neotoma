@@ -215,6 +215,42 @@ describe("installInspectorMount — integration", () => {
     expect(body).toContain("127.0.0.1");
   });
 
+  it("redirects GET /inspector (no trailing slash) to /inspector/", async () => {
+    tmpDir = path.join(process.cwd(), "tmp", "inspector-test-slash-" + Date.now());
+    mkdirSync(tmpDir, { recursive: true });
+    writeFileSync(path.join(tmpDir, "index.html"), FIXTURE_HTML);
+
+    const app = express();
+    installInspectorMount(
+      app,
+      cleanEnv({ NEOTOMA_INSPECTOR_STATIC_DIR: tmpDir }),
+      noopLogger(),
+    );
+
+    const base = await listenApp(app);
+    const res = await fetch(`${base}/inspector`, { redirect: "manual" });
+    expect(res.status).toBe(308);
+    expect(res.headers.get("location")).toBe("/inspector/");
+  });
+
+  it("preserves query string when redirecting /inspector → /inspector/", async () => {
+    tmpDir = path.join(process.cwd(), "tmp", "inspector-test-q-" + Date.now());
+    mkdirSync(tmpDir, { recursive: true });
+    writeFileSync(path.join(tmpDir, "index.html"), FIXTURE_HTML);
+
+    const app = express();
+    installInspectorMount(
+      app,
+      cleanEnv({ NEOTOMA_INSPECTOR_STATIC_DIR: tmpDir }),
+      noopLogger(),
+    );
+
+    const base = await listenApp(app);
+    const res = await fetch(`${base}/inspector?handoff=1`, { redirect: "manual" });
+    expect(res.status).toBe(308);
+    expect(res.headers.get("location")).toBe("/inspector/?handoff=1");
+  });
+
   it("serves deep-linked SPA routes", async () => {
     tmpDir = path.join(process.cwd(), "tmp", "inspector-test-deep-" + Date.now());
     mkdirSync(tmpDir, { recursive: true });

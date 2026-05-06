@@ -8,8 +8,8 @@
     {
       "name": "neotoma",
       "source": "./",
-      "description": "Deterministic state layer for Claude Code — retrieval injection, observation capture, compaction awareness, persistence safety net. Pairs with the Neotoma MCP server for agent-driven structured storage.",
-      "version": "0.1.0",
+      "description": "Neotoma lifecycle hooks: Claude Code plugin (plugin.json + Python) and in-package Cursor wiring (.cursor/hooks.json + Node). Same reliability goals; hook names and compaction coverage follow each harness. MCP/CLI remain the portable storage path. Complements MCP — structured writes in-channel; hooks for lifecycle MCP cannot see.",
+      "version": "0.1.1",
       "category": "memory",
       "tags": ["memory", "state", "observability", "provenance", "cross-tool"]
     }

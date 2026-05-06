@@ -15,6 +15,7 @@ import { DetailPage } from "../DetailPage";
 import { StateFlowDiagram } from "../illustrations/StateFlowDiagram";
 import { SectionDivider } from "../ui/section_divider";
 import { DOC_TABLE_SCROLL_OUTER_CLASS, TableScrollWrapper } from "../ui/table-scroll-wrapper";
+import { useLocale } from "@/i18n/LocaleContext";
 
 const FOUNDATIONS = [
   {
@@ -164,41 +165,29 @@ function SectionHeading({ id, children }: { id: string; children: string }) {
 }
 
 export function ArchitecturePage() {
+  const { subpage } = useLocale();
+  const arch = subpage.architecture;
   return (
-    <DetailPage title="Architecture">
-      <p className="text-[16px] leading-7 font-medium text-foreground mb-6">
-        Neotoma's architecture is built on three foundations: append-only observation logs for immutability, deterministic reducers for consistent state composition, and schema-bound entity types for structural guarantees.
-      </p>
+    <DetailPage title={arch.title}>
+      <p className="text-[16px] leading-7 font-medium text-foreground mb-6">{arch.lead}</p>
 
       <nav className="rounded-lg border toc-panel p-4 mb-8">
-        <p className="text-[14px] font-medium mb-2">On this page</p>
+        <p className="text-[14px] font-medium mb-2">{arch.tocTitle}</p>
         <ul className="list-none pl-0 space-y-1 text-[14px]">
-          <li><a href="#state-flow" className="text-foreground underline hover:text-foreground">How state flows</a></li>
-          <li><a href="#how-data-enters" className="text-foreground underline hover:text-foreground">How data enters Neotoma</a></li>
-          <li><a href="#guarantees" className="text-foreground underline hover:text-foreground">Guarantees</a></li>
-          <li><a href="#foundations" className="text-foreground underline hover:text-foreground">Three foundations</a></li>
-          <li><a href="#agent-loop" className="text-foreground underline hover:text-foreground">How agents remember</a></li>
-          <li><a href="#what-this-is-not" className="text-foreground underline hover:text-foreground">What this is not</a></li>
-          <li><a href="#problems-solved" className="text-foreground underline hover:text-foreground">Problems solved</a></li>
-          <li><a href="#terminology" className="text-foreground underline hover:text-foreground">Core terminology</a></li>
-          <li><a href="#interfaces" className="text-foreground underline hover:text-foreground">Interfaces</a></li>
-          <li><a href="#principles" className="text-foreground underline hover:text-foreground">Core principles</a></li>
-          <li><a href="#preview-status" className="text-foreground underline hover:text-foreground">Developer preview status</a></li>
-          <li><a href="#go-deeper" className="text-foreground underline hover:text-foreground">Go deeper</a></li>
+          {arch.tocLinks.map((link) => (
+            <li key={link.id}>
+              <a href={`#${link.id}`} className="text-foreground underline hover:text-foreground">
+                {link.label}
+              </a>
+            </li>
+          ))}
         </ul>
       </nav>
 
       {/* The invariant */}
       <section className="mb-6">
-        <p className="text-[15px] leading-7 font-medium text-foreground mb-4">
-          Memory evolves deterministically. Given the same observations, Neotoma produces the same
-          entity snapshots. Every state change is versioned with full provenance. Nothing mutates
-          silently; nothing overwrites implicitly.
-        </p>
-        <p className="text-[15px] leading-7 text-muted-foreground">
-          This means you can inspect any entity at any point in time, diff two versions, and replay
-          the full sequence of changes that produced the current state.
-        </p>
+        <p className="text-[15px] leading-7 font-medium text-foreground mb-4">{arch.invariantP1}</p>
+        <p className="text-[15px] leading-7 text-muted-foreground">{arch.invariantP2}</p>
       </section>
 
       <SectionDivider />

@@ -320,7 +320,7 @@ describe("CLI store commands", () => {
     });
   });
 
-  describe("store-structured command", () => {
+  describe("store --file (structured JSON payloads)", () => {
     it("should store structured data with --json", async () => {
       const testFile = join(testDir, "structured.json");
       await writeFile(
@@ -333,7 +333,7 @@ describe("CLI store commands", () => {
       );
 
       const { stdout } = await execAsync(
-        `${CLI_PATH} store-structured --file-path "${testFile}" --user-id "${TEST_USER_ID}" --json`
+        `${CLI_PATH} store --file "${testFile}" --user-id "${TEST_USER_ID}" --json`
       );
 
       const result = JSON.parse(stdout);
@@ -343,18 +343,19 @@ describe("CLI store commands", () => {
       expect(result).toHaveProperty("entities_created");
     });
 
-    it("should store structured data with --entity-type", async () => {
+    it("should store structured data with entity_type in payload", async () => {
       const testFile = join(testDir, "structured-typed.json");
       await writeFile(
         testFile,
         JSON.stringify({
+          entity_type: "company",
           name: "Test Company",
           industry: "Technology",
         })
       );
 
       const { stdout } = await execAsync(
-        `${CLI_PATH} store-structured --file-path "${testFile}" --user-id "${TEST_USER_ID}" --entity-type company --json`
+        `${CLI_PATH} store --file "${testFile}" --user-id "${TEST_USER_ID}" --json`
       );
 
       const result = JSON.parse(stdout);
@@ -369,19 +370,19 @@ describe("CLI store commands", () => {
 
       await expect(
         execAsync(
-          `${CLI_PATH} store-structured --file-path "${testFile}" --user-id "${TEST_USER_ID}" --json`
+          `${CLI_PATH} store --file "${testFile}" --user-id "${TEST_USER_ID}" --json`
         )
       ).rejects.toThrow();
     });
   });
 
-  describe("store-unstructured command", () => {
+  describe("store --file-path (raw file payloads)", () => {
     it("should store unstructured text with --json", async () => {
       const testFile = join(testDir, "unstructured.txt");
       await writeFile(testFile, "This is unstructured text content");
 
       const { stdout } = await execAsync(
-        `${CLI_PATH} store-unstructured --file-path "${testFile}" --user-id "${TEST_USER_ID}" --json`
+        `${CLI_PATH} store --file-path "${testFile}" --user-id "${TEST_USER_ID}" --json`
       );
 
       const result = JSON.parse(stdout);
@@ -395,7 +396,7 @@ describe("CLI store commands", () => {
       await writeFile(testFile, "Meeting notes from Jan 15 with Bob Smith");
 
       const { stdout } = await execAsync(
-        `${CLI_PATH} store-unstructured --file-path "${testFile}" --user-id "${TEST_USER_ID}" --json`
+        `${CLI_PATH} store --file-path "${testFile}" --user-id "${TEST_USER_ID}" --json`
       );
 
       const result = JSON.parse(stdout);
@@ -409,7 +410,7 @@ describe("CLI store commands", () => {
       await writeFile(testFile, "");
 
       const { stdout } = await execAsync(
-        `${CLI_PATH} store-unstructured --file-path "${testFile}" --user-id "${TEST_USER_ID}" --json`
+        `${CLI_PATH} store --file-path "${testFile}" --user-id "${TEST_USER_ID}" --json`
       );
 
       const result = JSON.parse(stdout);
@@ -424,7 +425,7 @@ describe("CLI store commands", () => {
       const content = JSON.stringify({ test: "data" });
 
       const { stdout } = await execAsync(
-        `${CLI_PATH} store-structured --file-content '${content}' --user-id "${TEST_USER_ID}" --json`
+        `${CLI_PATH} store --file-content '${content}' --user-id "${TEST_USER_ID}" --json`
       );
 
       const result = JSON.parse(stdout);

@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { DetailPage } from "../DetailPage";
 import { LEGAL_PAGE_LINK_CLASS } from "@/site/legal_page_link";
 import { SANDBOX_TERMS_DOC_PATH } from "@/site/sandbox_doc_paths";
+import { useLocale } from "@/i18n/LocaleContext";
 const PUBLISHER_HREF = "https://markmhendrickson.com";
 const CONTACT_EMAIL = "contact@neotoma.io";
 
@@ -15,8 +16,9 @@ const PRIVACY_EFFECTIVE_DATE = "2026-04-24";
  * post-incorporation publication and is not yet live.
  */
 export function PrivacyPage() {
+  const { subpage } = useLocale();
   return (
-    <DetailPage title="Privacy Notice">
+    <DetailPage title={subpage.privacy.title}>
       <p className="text-[13px] text-muted-foreground mb-6">
         Version {PRIVACY_VERSION} &middot; effective {PRIVACY_EFFECTIVE_DATE}
       </p>

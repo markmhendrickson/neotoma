@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { exec } from "child_process";
 import { promisify } from "util";
 import fs from "node:fs/promises";
@@ -10,19 +10,27 @@ import {
   detectNeotomaServers,
   findMcpConfigPaths,
   inferHookHarnessesFromMcpConfigs,
+  ensureAAuthKeysForSignedTransport,
+  neotomaServerEntriesForTransport,
   neotomaServerEntries,
   offerInstall,
   parseInstallEnvironmentChoice,
+  parseMcpTransportChoice,
   scanForMcpConfigs,
 } from "../../src/cli/mcp_config_scan.ts";
 
 const execAsync = promisify(exec);
 const CLI_PATH = "node dist/cli/index.js";
 
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.resetModules();
+});
+
 describe("CLI MCP and instruction commands", () => {
-  describe("mcp config", () => {
+  describe("mcp guide", () => {
     it("should return configuration guidance with --json", async () => {
-      const { stdout } = await execAsync(`${CLI_PATH} mcp config --json`);
+      const { stdout } = await execAsync(`${CLI_PATH} mcp guide --json`);
       const result = JSON.parse(stdout);
       expect(result).toHaveProperty("cursor_config_path");
       expect(result).toHaveProperty("example_config");
@@ -31,9 +39,9 @@ describe("CLI MCP and instruction commands", () => {
     });
   });
 
-  describe("mcp check", () => {
+  describe("mcp config", () => {
     it("should return scan results with --json", async () => {
-      const { stdout } = await execAsync(`${CLI_PATH} mcp check --json`);
+      const { stdout } = await execAsync(`${CLI_PATH} mcp config --json`);
       const result = JSON.parse(stdout);
       expect(result).toHaveProperty("configs");
       expect(result).toHaveProperty("missingAny");
@@ -41,10 +49,49 @@ describe("CLI MCP and instruction commands", () => {
     });
   });
 
+  describe("mcp check", () => {
+    it("remains a deprecated alias for config with --json", async () => {
+      const { stdout, stderr } = await execAsync(`${CLI_PATH} mcp check --json`);
+      const result = JSON.parse(stdout);
+      expect(result).toHaveProperty("configs");
+      expect(stderr).toMatch(/Deprecated: use `neotoma mcp config`/);
+    });
+  });
+
   describe("mcp check env choice parsing", () => {
     it("maps option 3 to both", () => {
       expect(parseInstallEnvironmentChoice("3")).toBe("both");
       expect(parseInstallEnvironmentChoice("both")).toBe("both");
+    });
+  });
+
+  describe("mcp transport choice parsing", () => {
+    it("defaults to transport preset b", () => {
+      expect(parseMcpTransportChoice("")).toBe("b");
+      expect(parseMcpTransportChoice("1")).toBe("a");
+      expect(parseMcpTransportChoice("a")).toBe("a");
+    });
+
+    it("maps transport aliases to A-D modes", () => {
+      expect(parseMcpTransportChoice("dev-shim")).toBe("b");
+      expect(parseMcpTransportChoice("direct")).toBe("c");
+      expect(parseMcpTransportChoice("prod-parity")).toBe("d");
+    });
+  });
+
+  describe("signed transport key setup", () => {
+    it("generates AAuth keys for signed transports when missing", async () => {
+      const tmpHome = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-aauth-home-"));
+      vi.stubEnv("HOME", tmpHome);
+
+      await ensureAAuthKeysForSignedTransport("a", true);
+      const privateJwk = await fs.readFile(
+        path.join(tmpHome, ".neotoma", "aauth", "private.jwk"),
+        "utf-8"
+      );
+
+      expect(privateJwk).toContain("\"kid\"");
+      await expect(ensureAAuthKeysForSignedTransport("a", true)).resolves.toBeUndefined();
     });
   });
 
@@ -81,6 +128,52 @@ describe("CLI MCP and instruction commands", () => {
       });
       expect(result.installed).toBe(false);
       expect(result.message.toLowerCase()).toContain("already configured in user-level mcp configs");
+    });
+
+    it("rewrites existing Cursor user mcp.json when rewriteExistingNeotoma and transport are set", async () => {
+      const tmpHome = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-mcp-rewrite-home-"));
+      const cursorConfigPath = path.join(tmpHome, ".cursor", "mcp.json");
+      const originalHome = process.env.HOME;
+      try {
+        process.env.HOME = tmpHome;
+        await fs.mkdir(path.dirname(cursorConfigPath), { recursive: true });
+        const entriesB = neotomaServerEntriesForTransport(process.cwd(), undefined, "b");
+        await fs.writeFile(
+          cursorConfigPath,
+          JSON.stringify({ mcpServers: { "neotoma-dev": entriesB["neotoma-dev"], neotoma: entriesB.neotoma } }, null, 2)
+        );
+
+        const result = await offerInstall(
+          [{ path: cursorConfigPath, hasDev: true, hasProd: true }],
+          process.cwd(),
+          {
+            silent: true,
+            rewriteExistingNeotoma: true,
+            autoInstallScope: "user",
+            autoInstallEnv: "both",
+            mcpTransport: "d",
+            skipProjectSync: true,
+          }
+        );
+
+        expect(result.installed).toBe(true);
+        const parsed = JSON.parse(await fs.readFile(cursorConfigPath, "utf-8")) as {
+          mcpServers?: Record<string, { env?: Record<string, string> }>;
+        };
+        expect(parsed.mcpServers?.["neotoma-dev"]?.env?.MCP_PROXY_DOWNSTREAM_URL).toBe(
+          "http://127.0.0.1:3180/mcp"
+        );
+        expect(parsed.mcpServers?.neotoma?.env?.MCP_PROXY_DOWNSTREAM_URL).toBe(
+          "http://127.0.0.1:3180/mcp"
+        );
+      } finally {
+        if (originalHome === undefined) {
+          delete process.env.HOME;
+        } else {
+          process.env.HOME = originalHome;
+        }
+        await fs.rm(tmpHome, { recursive: true, force: true });
+      }
     });
 
     it("uses Claude Desktop compliant server ids when adding missing servers", async () => {
@@ -189,6 +282,25 @@ describe("CLI MCP and instruction commands", () => {
       );
       expect(entries.neotoma.command.startsWith(staleRoot)).toBe(false);
     });
+
+    it("builds signed dev-shim entries for transport A", () => {
+      const entries = neotomaServerEntriesForTransport(process.cwd(), undefined, "a");
+      expect("command" in entries["neotoma-dev"]).toBe(true);
+      if (!("command" in entries["neotoma-dev"])) return;
+      expect(entries["neotoma-dev"].command).toContain("run_neotoma_mcp_signed_stdio_dev_shim.sh");
+      expect(entries["neotoma-dev"].env).toBeUndefined();
+      expect("command" in entries.neotoma).toBe(true);
+      if (!("command" in entries.neotoma)) return;
+      expect(entries.neotoma.env?.MCP_PROXY_DOWNSTREAM_URL).toBe("http://127.0.0.1:3180/mcp");
+    });
+
+    it("builds prod data-plane override entries for transport D", () => {
+      const entries = neotomaServerEntriesForTransport(process.cwd(), undefined, "d");
+      expect("command" in entries["neotoma-dev"]).toBe(true);
+      if (!("command" in entries["neotoma-dev"])) return;
+      expect(entries["neotoma-dev"].env?.MCP_PROXY_DOWNSTREAM_URL).toBe("http://127.0.0.1:3180/mcp");
+      expect(entries.neotoma.env?.MCP_PROXY_DOWNSTREAM_URL).toBe("http://127.0.0.1:3180/mcp");
+    });
   });
 
   describe("mcp server detection for dist entrypoint configs", () => {
@@ -196,6 +308,17 @@ describe("CLI MCP and instruction commands", () => {
       const config = {
         "neotoma-dev": {
           command: "/opt/neotoma/scripts/run_neotoma_mcp_stdio_dev_shim.sh",
+        },
+      };
+      const result = detectNeotomaServers(config);
+      expect(result.hasDev).toBe(true);
+      expect(result.hasProd).toBe(false);
+    });
+
+    it("recognizes the signed dev shim wrapper as a dev server", () => {
+      const config = {
+        "neotoma-dev": {
+          command: "/opt/neotoma/scripts/run_neotoma_mcp_signed_stdio_dev_shim.sh",
         },
       };
       const result = detectNeotomaServers(config);
@@ -267,14 +390,32 @@ describe("CLI MCP and instruction commands", () => {
     });
   });
 
-  describe("cli-instructions config", () => {
+  describe("cli guide", () => {
     it("should return instruction path guidance with --json", async () => {
-      const { stdout } = await execAsync(`${CLI_PATH} cli-instructions config --json`);
+      const { stdout } = await execAsync(`${CLI_PATH} cli guide --json`);
       const result = JSON.parse(stdout);
       expect(result).toHaveProperty("message");
       expect(result).toHaveProperty("project_applied_paths");
       expect(result).toHaveProperty("instruction_source");
-      expect(result).toHaveProperty("run_check");
+      expect(result).toHaveProperty("canonical_behavioral_instructions");
+      expect(result.canonical_behavioral_instructions).toContain("neotoma instructions print");
+      expect(result).toHaveProperty("run_config");
+    });
+  });
+
+  describe("instructions print", () => {
+    it("prints MCP fenced body as plain text", async () => {
+      const { stdout } = await execAsync(`${CLI_PATH} instructions print`);
+      expect(stdout).toMatch(/\[TURN LIFECYCLE\]/);
+      expect(stdout).toContain("**`store`**");
+    });
+
+    it("supports --json", async () => {
+      const { stdout } = await execAsync(`${CLI_PATH} --json instructions print`);
+      const result = JSON.parse(stdout);
+      expect(result).toHaveProperty("body");
+      expect(result.body).toMatch(/\[TURN LIFECYCLE\]/);
+      expect(result).toHaveProperty("path");
     });
   });
 

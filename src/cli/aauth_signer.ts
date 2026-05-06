@@ -1,5 +1,5 @@
 /**
- * CLI-side AAuth signer.
+ * Local AAuth signer (`~/.neotoma/aauth/`).
  *
  * Mirrors `services/agent-site/netlify/lib/aauth_signer.ts` but sources the
  * private JWK from a keypair on disk at `~/.neotoma/aauth/private.jwk`.
@@ -10,6 +10,9 @@
  *   - `createApiClient` in `src/shared/api_client.ts` when a keypair is
  *     configured, so outbound CLI requests carry an AAuth signature and
  *     land as `hardware` / `software` tier instead of `anonymous`.
+ *   - `neotoma mcp proxy --aauth` and the signed MCP dev shim, which read
+ *     the same directory so Cursor (stdio MCP) and the CLI share one agent
+ *     identity unless overridden with env vars.
  *
  * The private JWK never leaves the user's machine. Public-key discovery
  * happens out-of-band: the server verifies signatures against the
@@ -24,6 +27,14 @@ import path from "node:path";
 import { fetch as signedFetchImpl } from "@hellocoop/httpsig";
 import { SignJWT, calculateJwkThumbprint, exportJWK, generateKeyPair, importJWK } from "jose";
 
+/** Default issuer written by `neotoma auth keygen` (shared CLI + MCP proxy). */
+export const DEFAULT_AAUTH_ISSUER = "https://neotoma.cursor.local";
+
+/** Default `sub` for software keys: Cursor-oriented, still valid for CLI HTTP. */
+export function defaultAauthSoftwareSubject(): string {
+  return `cursor-agent@${os.hostname() || "localhost"}`;
+}
+
 export const AAUTH_CONFIG_DIR = path.join(os.homedir(), ".neotoma", "aauth");
 export const AAUTH_PRIVATE_JWK_PATH = path.join(AAUTH_CONFIG_DIR, "private.jwk");
 export const AAUTH_PUBLIC_JWK_PATH = path.join(AAUTH_CONFIG_DIR, "public.jwk");
@@ -32,7 +43,7 @@ export const AAUTH_CONFIG_PATH = path.join(AAUTH_CONFIG_DIR, "config.json");
 export type SupportedAlg = "ES256" | "EdDSA";
 
 export interface SignerFileConfig {
-  /** AAuth subject — self-reported identity (e.g. `cli@markmhendrickson.local`). */
+  /** AAuth subject — self-reported identity (e.g. `cursor-agent@myhost.local`). */
   sub: string;
   /** AAuth issuer — the authority that attests to this key. */
   iss: string;
@@ -88,14 +99,14 @@ export async function generateAndStoreKeypair(options?: {
   config: SignerFileConfig;
 }> {
   const alg = options?.alg ?? "ES256";
-  const sub = options?.sub ?? `cli@${os.hostname() || "localhost"}`;
-  const iss = options?.iss ?? "https://neotoma.cli.local";
+  const sub = options?.sub ?? defaultAauthSoftwareSubject();
+  const iss = options?.iss ?? DEFAULT_AAUTH_ISSUER;
   await ensureConfigDir();
 
   if (!options?.force && (await fileExists(AAUTH_PRIVATE_JWK_PATH))) {
     throw new CliSignerConfigError(
       `Refusing to overwrite existing keypair at ${AAUTH_PRIVATE_JWK_PATH}. ` +
-        `Pass --force to rotate, or move the old key aside first.`,
+        `Pass --force to rotate, or move the old key aside first.`
     );
   }
 
@@ -105,23 +116,15 @@ export async function generateAndStoreKeypair(options?: {
   const privateJwk = (await exportJWK(privateKey)) as Record<string, unknown>;
   const publicJwk = (await exportJWK(publicKey)) as Record<string, unknown>;
   const thumbprint = await calculateJwkThumbprint(
-    publicJwk as Parameters<typeof calculateJwkThumbprint>[0],
+    publicJwk as Parameters<typeof calculateJwkThumbprint>[0]
   );
   privateJwk.alg = alg;
   publicJwk.alg = alg;
   privateJwk.kid = thumbprint;
   publicJwk.kid = thumbprint;
 
-  await fs.writeFile(
-    AAUTH_PRIVATE_JWK_PATH,
-    JSON.stringify(privateJwk, null, 2),
-    { mode: 0o600 },
-  );
-  await fs.writeFile(
-    AAUTH_PUBLIC_JWK_PATH,
-    JSON.stringify(publicJwk, null, 2),
-    { mode: 0o644 },
-  );
+  await fs.writeFile(AAUTH_PRIVATE_JWK_PATH, JSON.stringify(privateJwk, null, 2), { mode: 0o600 });
+  await fs.writeFile(AAUTH_PUBLIC_JWK_PATH, JSON.stringify(publicJwk, null, 2), { mode: 0o644 });
   const config: SignerFileConfig = { sub, iss, kid: thumbprint, token_ttl_sec: 300 };
   await fs.writeFile(AAUTH_CONFIG_PATH, JSON.stringify(config, null, 2), {
     mode: 0o600,
@@ -155,7 +158,7 @@ export async function loadCliSignerConfig(): Promise<LoadedSignerConfig | null> 
     privateJwk = JSON.parse(raw) as Record<string, unknown>;
   } catch (err) {
     throw new CliSignerConfigError(
-      `Failed to read AAuth private key at ${AAUTH_PRIVATE_JWK_PATH}: ${(err as Error).message}`,
+      `Failed to read AAuth private key at ${AAUTH_PRIVATE_JWK_PATH}: ${(err as Error).message}`
     );
   }
 
@@ -166,21 +169,31 @@ export async function loadCliSignerConfig(): Promise<LoadedSignerConfig | null> 
       cfg = { ...cfg, ...(JSON.parse(raw) as SignerFileConfig) };
     } catch (err) {
       throw new CliSignerConfigError(
-        `Failed to parse AAuth config at ${AAUTH_CONFIG_PATH}: ${(err as Error).message}`,
+        `Failed to parse AAuth config at ${AAUTH_CONFIG_PATH}: ${(err as Error).message}`
       );
     }
   }
 
-  const sub = process.env.NEOTOMA_CLI_AAUTH_SUB || cfg.sub || `cli@${os.hostname() || "localhost"}`;
-  const iss = process.env.NEOTOMA_CLI_AAUTH_ISS || cfg.iss || "https://neotoma.cli.local";
+  const sub =
+    process.env.NEOTOMA_AAUTH_SUB ||
+    process.env.NEOTOMA_CLI_AAUTH_SUB ||
+    cfg.sub ||
+    defaultAauthSoftwareSubject();
+  const iss =
+    process.env.NEOTOMA_AAUTH_ISS ||
+    process.env.NEOTOMA_CLI_AAUTH_ISS ||
+    cfg.iss ||
+    DEFAULT_AAUTH_ISSUER;
   const kid =
+    process.env.NEOTOMA_AAUTH_KID ||
     process.env.NEOTOMA_CLI_AAUTH_KID ||
     cfg.kid ||
     (typeof privateJwk.kid === "string" ? (privateJwk.kid as string) : undefined);
   const ttl = Number.parseInt(
-    process.env.NEOTOMA_CLI_AAUTH_TOKEN_TTL_SEC ??
+    process.env.NEOTOMA_AAUTH_TOKEN_TTL_SEC ??
+      process.env.NEOTOMA_CLI_AAUTH_TOKEN_TTL_SEC ??
       String(cfg.token_ttl_sec ?? 300),
-    10,
+    10
   );
 
   return {
@@ -201,8 +214,8 @@ function resolveAlg(jwk: Record<string, unknown>): SupportedAlg {
   if (jwk.kty === "OKP" && jwk.crv === "Ed25519") return "EdDSA";
   throw new CliSignerConfigError(
     `Unsupported JWK for AAuth signing: kty=${String(jwk.kty)} crv=${String(jwk.crv)} alg=${String(
-      jwk.alg,
-    )}`,
+      jwk.alg
+    )}`
   );
 }
 
@@ -220,10 +233,15 @@ export async function mintCliAgentTokenJwt(config: LoadedSignerConfig): Promise<
   const key = await importJWK(config.privateJwk as Parameters<typeof importJWK>[0], alg);
   const publicJwk = publicPartOf(config.privateJwk);
   const jkt = await calculateJwkThumbprint(
-    publicJwk as Parameters<typeof calculateJwkThumbprint>[0],
+    publicJwk as Parameters<typeof calculateJwkThumbprint>[0]
   );
   const ttl = Math.max(30, config.tokenTtlSec ?? 300);
-  const builder = new SignJWT({ jkt })
+  // RFC 9449 / AAuth: bind the signing key in the agent JWT via `cnf.jwk`
+  // (httpsig verifies this matches the message-signing key material).
+  const builder = new SignJWT({
+    jkt,
+    cnf: { jwk: publicJwk as import("jose").JWK },
+  })
     .setProtectedHeader({
       alg,
       typ: "aa-agent+jwt",
@@ -244,6 +262,16 @@ export interface CliSignedFetchOptions {
   configOverride?: LoadedSignerConfig;
 }
 
+const AAUTH_COMPONENTS_WITH_BODY = [
+  "@method",
+  "@authority",
+  "@path",
+  "content-type",
+  "content-digest",
+  "signature-key",
+] as const;
+const AAUTH_COMPONENTS_WITHOUT_BODY = ["@method", "@authority", "@path", "signature-key"] as const;
+
 /**
  * Signed fetch for CLI -> Neotoma API calls. Mirrors the agent-site
  * signed fetch but with CLI-sourced configuration. Returns an unsigned
@@ -252,7 +280,7 @@ export interface CliSignedFetchOptions {
  */
 export async function cliSignedFetch(
   url: string,
-  options: CliSignedFetchOptions,
+  options: CliSignedFetchOptions
 ): Promise<Response> {
   const config = options.configOverride ?? (await loadCliSignerConfig());
   if (!config) {
@@ -274,12 +302,11 @@ export async function cliSignedFetch(
     signingKey: config.privateJwk as unknown as JsonWebKey,
     signatureKey: { type: "jwt", jwt },
     label: "aasig",
+    components: options.body ? [...AAUTH_COMPONENTS_WITH_BODY] : [...AAUTH_COMPONENTS_WITHOUT_BODY],
   })) as Response;
 
   if (!response || typeof (response as Response).status !== "number") {
-    throw new CliSignerConfigError(
-      `cliSignedFetch returned unexpected shape for ${url}.`,
-    );
+    throw new CliSignerConfigError(`cliSignedFetch returned unexpected shape for ${url}.`);
   }
   return response;
 }
@@ -290,7 +317,7 @@ export async function cliSignedFetch(
  */
 export async function buildSignedCurlExample(
   url: string,
-  bodyJson: string,
+  bodyJson: string
 ): Promise<{
   curl: string;
   headers: Record<string, string>;
@@ -298,7 +325,7 @@ export async function buildSignedCurlExample(
   const config = await loadCliSignerConfig();
   if (!config) {
     throw new CliSignerConfigError(
-      `No AAuth keypair found at ${AAUTH_PRIVATE_JWK_PATH}. Run \`neotoma auth keygen\` first.`,
+      `No AAuth keypair found at ${AAUTH_PRIVATE_JWK_PATH}. Run \`neotoma auth keygen\` first.`
     );
   }
   // Execute a real sign and capture headers via a mock fetch (the hellocoop
@@ -346,7 +373,7 @@ export async function describeConfiguredSigner(): Promise<
     const alg = resolveAlg(cfg.privateJwk);
     const publicJwk = publicPartOf(cfg.privateJwk);
     const thumbprint = await calculateJwkThumbprint(
-      publicJwk as Parameters<typeof calculateJwkThumbprint>[0],
+      publicJwk as Parameters<typeof calculateJwkThumbprint>[0]
     );
     return {
       configured: true,

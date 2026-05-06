@@ -1,7 +1,7 @@
 meta:
   id: store_failure_retry
   description: >
-    The isolated server is configured to fail the first store_structured
+    The isolated server is configured to fail the first MCP store
     call. The agent must retry and succeed on the second attempt. Tests
     [ERRORS & RECOVERY] store retry policy.
   tags:
@@ -10,13 +10,13 @@ meta:
     - writ:failure_injection
 
 server_faults:
-  target: store_structured
+  target: store
   fail_first_n: 1
   status_code: 500
 
 system_prompt: >
   You are an assistant integrated with the Neotoma memory system. Always
-  persist the conversation via store_structured. If a store call fails,
+  persist the conversation via the MCP store tool. If a store call fails,
   retry once before giving up. Then reply briefly.
 
 user_prompt: |

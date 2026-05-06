@@ -65,7 +65,7 @@ import {
 } from "@/i18n/routing";
 import { useEffectiveRoutePath } from "@/hooks/useEffectiveRoutePath";
 import { isMarketingFullPageRoute } from "@/site/full_page_paths";
-import { FAQ_ITEMS, faqQuestionToSectionId } from "@/site/faq_items";
+import { getFaqItems } from "@/site/faq_items";
 import {
   NavigationMenu,
   NavigationMenuContent,
@@ -78,6 +78,7 @@ import {
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Input } from "@/components/ui/input";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { CodexIcon } from "@/components/icons/CodexIcon";
 import { CursorIcon } from "@/components/icons/CursorIcon";
 import { IronClawIcon } from "@/components/icons/IronClawIcon";
@@ -432,7 +433,7 @@ function SiteNavSearch({
   alwaysShowInput?: boolean;
 }) {
   const navigate = useNavigate();
-  const { dict } = useLocale();
+  const { dict, subpage } = useLocale();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [query, setQuery] = useState("");
@@ -440,7 +441,10 @@ function SiteNavSearch({
   /** Start collapsed so mobile sheet open does not autofocus the input (keyboard). Visibility uses alwaysShowInput. */
   const [expanded, setExpanded] = useState(false);
 
-  const localizedDocCategories = useMemo(() => getLocalizedDocNavCategories(dict), [dict]);
+  const localizedDocCategories = useMemo(() => getLocalizedDocNavCategories(dict, locale), [
+    dict,
+    locale,
+  ]);
 
   const useCasePathSet = useMemo(() => new Set(USE_CASE_LANDING_PATHS), []);
 
@@ -453,8 +457,8 @@ function SiteNavSearch({
         byHref.set(item.href, { label: item.label, href: item.href, category: category.title });
       }
     }
-    for (const item of FAQ_ITEMS) {
-      const href = `/faq#${faqQuestionToSectionId(item.question)}`;
+    for (const item of getFaqItems(locale)) {
+      const href = `/faq#${item.sectionId}`;
       const searchText = [item.question, item.answer, item.detail]
         .filter(Boolean)
         .join(" ")
@@ -462,12 +466,12 @@ function SiteNavSearch({
       byHref.set(href, {
         label: item.question,
         href,
-        category: "FAQ",
+        category: subpage.faq.title,
         searchText,
       });
     }
     return [...byHref.values()];
-  }, [localizedDocCategories, useCasePathSet]);
+  }, [localizedDocCategories, useCasePathSet, locale, subpage.faq.title]);
 
   const topPages = useMemo(() => {
     const byHref = new Map(pages.map((p) => [p.href, p]));
@@ -659,7 +663,10 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
   useEffect(() => {
     setAppNavBarVisible(headerScrollVisible);
   }, [headerScrollVisible, setAppNavBarVisible]);
-  const localizedDocCategories = useMemo(() => getLocalizedDocNavCategories(dict), [dict]);
+  const localizedDocCategories = useMemo(() => getLocalizedDocNavCategories(dict, locale), [
+    dict,
+    locale,
+  ]);
 
   const featuredDocCategories = useMemo(() => {
     const featured = localizedDocCategories
@@ -707,17 +714,26 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
           Neotoma
         </a>
         {!isMarketingFullPageRoute(routeBase) && (
-          <span className="hidden md:inline-flex min-w-0 max-w-[140px] items-center gap-1 overflow-hidden rounded border border-sidebar-border bg-sidebar-accent/40 px-1.5 py-0.5 text-[11px] text-sidebar-foreground/80">
-            <FlaskConical className="h-3 w-3 shrink-0" aria-hidden />
-            <a
-              href="https://markmhendrickson.com/posts/neotoma-developer-release"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="min-w-0 truncate text-sidebar-foreground/80 no-underline hover:text-sidebar-accent-foreground transition-colors"
-            >
-              {dict.developerPreview}
-            </a>
-          </span>
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="hidden md:inline-flex min-w-0 max-w-[140px] cursor-default items-center gap-1 overflow-hidden rounded border border-sidebar-border bg-sidebar-accent/40 px-1.5 py-0.5 text-[11px] text-sidebar-foreground/80 outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar">
+                  <FlaskConical className="h-3 w-3 shrink-0" aria-hidden />
+                  <a
+                    href="https://markmhendrickson.com/posts/neotoma-developer-release"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="min-w-0 truncate text-sidebar-foreground/80 no-underline hover:text-sidebar-accent-foreground transition-colors"
+                  >
+                    {dict.developerPreview}
+                  </a>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-sm text-[12px] leading-snug">
+                {dict.developerPreview}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         )}
       </div>
 

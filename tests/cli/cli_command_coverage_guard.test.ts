@@ -10,6 +10,7 @@ describe("CLI command coverage guard", () => {
       "api",
       "auth",
       "backup",
+      "cli",
       "cli-instructions",
       "corrections",
       "dev",
@@ -17,6 +18,7 @@ describe("CLI command coverage guard", () => {
       "edit",
       "entities",
       "init",
+      "instructions",
       "interpretations",
       "ingest",
       "logs",
@@ -26,6 +28,7 @@ describe("CLI command coverage guard", () => {
       "observations",
       "options",
       "preferences",
+      "processes",
       "recent",
       "relationships",
       "schemas",
@@ -37,8 +40,6 @@ describe("CLI command coverage guard", () => {
       "storage",
       "store",
       "store-turn",
-      "store-structured",
-      "store-unstructured",
       "timeline",
       "discover",
       "ingest-transcript",
@@ -56,6 +57,7 @@ describe("CLI command coverage guard", () => {
       "triage", // thin dispatcher over ingest/admin flows covered by feedback pipeline tests
       "list-recent-changes", // read-only reporting command; behavior is covered by recent/activity integration tests
       "agents", // namespace dispatcher; subcommands (e.g. `agents grants import`) are covered by their own integration tests
+      "inspector", // UI launcher namespace; behavior is covered by inspector/server integration flows
     ]);
 
     const uncovered = commandNames.filter(

@@ -230,6 +230,18 @@ CLI behavior can be pinned per invocation via flags or across invocations via en
 
 Any new runtime override must follow this precedence model: add the env var read in the `preAction` hook in `src/cli/index.ts` alongside the existing transport variables, use a `NEOTOMA_`-prefixed name, let an explicit flag override it, and document it in the table above. See `docs/architecture/change_guardrails_rules.mdc` for the cross-cutting guardrails.
 
+### MCP signed shim (`mcp.json` — not CLI `preAction`)
+
+Cursor reads these from the **`env`** block for **`run_neotoma_mcp_signed_stdio_dev_shim.sh`** (they are **not** parsed by `neotoma` CLI `preAction`; document them here for discoverability).
+
+| Environment variable | Values | Purpose |
+|----------------------|--------|---------|
+| `NEOTOMA_MCP_USE_LOCAL_PORT_FILE` | `1` / `true` | **Shim:** read `<repo>/.dev-serve/local_http_port` (written on HTTP bind) and set `MCP_PROXY_DOWNSTREAM_URL` after a successful TCP probe. **CLI:** `resolveBaseUrl()` uses the same file and probe (after session port env, before `config.json` `base_url`) so API commands such as `inspector admin unlock` target the live port. Repo root order: `NEOTOMA_PROJECT_ROOT`, then `project_root` / `repo_root` in `~/.config/neotoma/config.json`, then `cwd`. |
+| `NEOTOMA_MCP_PORT_PROBE_MS` | integer ms (200–5000, default 1200) | TCP probe timeout for the port file in both the shim and the CLI. |
+| `MCP_PROXY_DOWNSTREAM_URL` | URL | Explicit downstream `/mcp`; used when port-file mode is off, or as fallback when the file is missing / probe fails. |
+
+Details, defaults, and verification steps: **`docs/developer/mcp/proxy.md`**.
+
 ### Update check (stderr notice)
 
 When the CLI runs in an interactive context (TTY, not `--json`), it may check the npm registry for a newer version of the package. If an update is available, it writes one or two lines to **stderr only** (e.g. "Update available: neotoma 0.2.15 → 0.2.16" and "Run: npm i -g neotoma@latest"). The check is fire-and-forget and does not block startup. To disable: set `NO_UPDATE_NOTIFIER=1` or pass `--no-update-check`. The check is also skipped when `CI` is set. Cache: `~/.config/neotoma/update_check.json` with a 24-hour TTL so the registry is not queried on every run.
@@ -248,7 +260,8 @@ When the CLI runs in an interactive context (TTY, not `--json`), it may check th
 - **Data commands (entities, relationships, sources, observations, timeline, store, schemas, stats, corrections, snapshots):** offline-first in-process local transport by default (no API server required).
 - **Explicit local path:** pass `--offline`.
 - **Strict remote path:** pass `--api-only`.
-- **Server lifecycle commands (`api start|stop|status|logs|processes`):** server-management behavior is unchanged and not redirected to local fallback.
+- **Server lifecycle commands (`api start|stop|status|logs`):** server-management behavior is unchanged and not redirected to local fallback.
+- **Local OS inspection (`processes list|kill`):** uses `ps` only; does not use the Neotoma API or offline SQLite transport.
 - **Watch/storage/logs/backup:** already local backend commands and continue to run without a running API.
 
 **Transport default rationale:** The CLI defaults to offline-first so that data commands work without a running API (e.g. `neotoma entities list` works right after `neotoma init`). The native SQLite addon is lazy-loaded only when a data command actually uses the local DB, so entry points that never touch the DB (e.g. `neotoma --help`, `neotoma api start`) do not trigger macOS permission prompts. The first time a user runs a data command, the local DB may be opened and the OS may show a one-time permission prompt for the native addon; this is an accepted tradeoff for out-of-the-box usability. Use `--api-only` if you want to avoid loading the local DB and require the API instead.
@@ -268,7 +281,7 @@ neotoma session --servers
 
 ### Initialization
 
-- `neotoma init`: Initialize Neotoma for first-time use. Creates data directories, initializes the SQLite database, and can prompt to create encryption keys for privacy-first mode. Default flow is auto-detection-first: if a source checkout is detected, init targets project `.env`; otherwise it configures user `.env` at `~/.config/neotoma/.env` without prompting for a source path. Source-path prompts only appear in personalization mode. In interactive mode (TTY), init can prompt to set `OPENAI_API_KEY` for LLM extraction. Init can also prompt to add CLI instructions (`neotoma cli-instructions check`) when missing.
+- `neotoma init`: Initialize Neotoma for first-time use. Creates data directories, initializes the SQLite database, and can prompt to create encryption keys for privacy-first mode. Default flow is auto-detection-first: if a source checkout is detected, init targets project `.env`; otherwise it configures user `.env` at `~/.config/neotoma/.env` without prompting for a source path. Source-path prompts only appear in personalization mode. In interactive mode (TTY), init can prompt to set `OPENAI_API_KEY` for LLM extraction. Init can also delegate harness setup through the same MCP and CLI instruction path used by `neotoma setup`.
   - `--data-dir <path>`: Custom data directory path. Default: `./data` (if in repo) or `~/neotoma/data` (if installed globally).
   - `--force`: Overwrite existing configuration.
   - `--skip-db`: Skip database initialization.
@@ -291,6 +304,24 @@ neotoma init --data-dir /path/to/data
 - Encryption key (if user chooses key-derived auth when prompted): `~/.config/neotoma/keys/neotoma.key` (mode 0600).
 - Environment file target: project `<checkout>/.env` when checkout is detected, otherwise `~/.config/neotoma/.env`
 
+### Harness setup
+
+- `neotoma setup`: One-shot, idempotent harness setup. It runs init when needed, configures MCP entries, applies agent CLI instruction files, installs lifecycle hooks or the Claude Code plugin for the selected harness, then patches permission allowlists where the harness supports them.
+  - `--tool <claude-code|cursor|codex|openclaw|claude-desktop>`: Target harness. If omitted, `doctor` supplies the current tool hint when available.
+  - `--install-scope <project|user|both>`: Scope for MCP entries and agent CLI instruction files.
+  - `--scope <project|user|both>`: Permission-file scope only. This is intentionally separate from `--install-scope`.
+  - `--mcp-transport <a|b|c|d>`: Same transport presets as `neotoma mcp config`.
+  - `--rewrite-neotoma-mcp`: Rewrite existing Neotoma MCP entries in the selected install scope.
+  - `--skip-hooks`: Skip lifecycle hook/plugin installation.
+  - `--all-harnesses`: Infer hook-capable harnesses from MCP configs and install hooks for all of them. The default remains one harness via `--tool` or the `doctor` hint.
+  - `--dry-run`: Plan the setup without writing files.
+  - `--yes`: Suppress prompts in init, MCP config, CLI instruction config, and hook install paths.
+  - `--skip-permissions`: Skip permission-file writes.
+
+`neotoma setup` writes a structured report when the global `--output json` flag is active. The report includes `steps[]`, `permission_patches`, `doctor_before`, `doctor_after`, and `overall_ok`, which lets agent-led installs show exactly what changed.
+
+Use `neotoma setup --tool <harness> --yes` for the normal greenfield path. Use `neotoma mcp config` or `neotoma cli config` when only one layer needs repair.
+
 ### Reset
 
 - `neotoma reset`: Reset local Neotoma state to a clean slate.
@@ -311,19 +342,32 @@ CLI uses the same auth patterns as MCP and REST API. Local CLI commands can run 
 - `neotoma auth mcp-token`: Print MCP auth token derived from private key (when encryption is enabled). Add to mcp.json headers.
 - If key-authenticated OAuth is unavailable, configure `Authorization: Bearer <NEOTOMA_BEARER_TOKEN>` for MCP instead of OAuth.
 
+- `neotoma inspector admin unlock`: Redeem a feedback-admin challenge via the same CLI AAuth signer used for signed API traffic; prints an Inspector URL to **`/feedback/admin-unlock?challenge=…`** (and optional `--open`). Omit `--challenge` to mint one from the API. When the Inspector dev server runs on another origin, set `NEOTOMA_INSPECTOR_BASE_URL` or pass `--inspector-base`. Use `--skip-browser-url` to suppress the printed link in text mode. When the HTTP API binds a non-default port, set **`NEOTOMA_MCP_USE_LOCAL_PORT_FILE=1`** (same as the MCP signed shim) so `--base-url` resolution reads `.dev-serve/local_http_port` after a successful TCP probe; set **`NEOTOMA_PROJECT_ROOT`** if the file lives outside `cwd`.
+
 ### MCP configuration
 
-Commands for managing MCP server configuration files (Cursor, Claude Code, Windsurf, etc.):
+Commands for managing MCP server configuration files (Cursor, Claude Code, Windsurf, etc.). The CLI uses symmetric verbs: `guide` is read-only guidance; `config` mutates files.
 
-- `neotoma mcp config`: Show MCP configuration guidance for Cursor and other clients.
-  - `--no-check`: Skip checking for existing MCP config files (default: check and suggest `mcp check` if servers are missing).
+- `neotoma mcp guide`: Show MCP configuration guidance for Cursor and other clients.
+  - `--no-check`: Skip checking for existing MCP config files (default: check and suggest `mcp config` if servers are missing).
   - Prints example JSON config for Cursor with URL or stdio server entries.
-  - After printing config, scans current directory for MCP config files and suggests running `neotoma mcp check` if dev or prod servers are missing.
+  - After printing config, scans current directory for MCP config files and suggests running `neotoma mcp config` if dev or prod servers are missing.
 
-- `neotoma mcp check`: Scan for MCP config files in current directory and subdirectories, detect whether dev and prod Neotoma servers are configured, and offer to install missing servers.
+- `neotoma mcp config`: Scan for MCP config files in current directory and subdirectories, detect whether dev and prod Neotoma servers are configured, and offer to install missing servers.
+  - `--rewrite-neotoma-mcp`: After you pick install scope and transport, rewrite **existing** `neotoma-dev` / `neotoma` (or Claude Desktop `mcpsrv_*`) entries in that scope to match the preset. Without this flag, configs that already have both slots are skipped so transport changes only apply where something was still missing.
   - `--user-level`: Include user-level MCP config paths (e.g. `~/.cursor/mcp.json`, Claude, Windsurf) in scan (default: project-local only).
   - `--install-hooks` / `--no-hooks`: Install or skip matching Neotoma lifecycle hooks when a configured MCP path maps to a hook-capable harness. Hook installation is enabled by default for non-JSON runs; use `--no-hooks` to limit the command to MCP config only.
   - `--yes`: Skip hook installation confirmation prompts. MCP server config prompts still follow the normal interactive flow.
+  - `--mcp-transport <a|b|c|d>`: Transport preset. TTY installs prompt when omitted; non-TTY defaults to `b`.
+
+**MCP transport presets:**
+
+| Preset | Use when | Notes |
+| --- | --- | --- |
+| `a` | You want signed HTTP `/mcp` proxy entries with AAuth attribution. | Requires a reachable Neotoma API for each configured slot (`neotoma-dev` → dev, `neotoma` → prod). |
+| `b` | You want the lowest-friction local MCP setup. | Default. Packaged npm installs launch Neotoma directly over stdio; source checkouts use the unsigned dev shim. |
+| `c` | You explicitly want direct stdio entries. | Best for simple local clients that do not need HTTP proxy parity. |
+| `d` | You want both MCP slots to point at prod HTTP `/mcp`. | Signed proxy path; requires prod API reachability. |
   - Scans for known config file patterns:
     - **Cursor:** `.cursor/mcp.json`, `.mcp.json` (project), `~/.cursor/mcp.json` (user-level with `--user-level`)
     - **Claude Code:** `claude_desktop_config.json` (project or user-level with `--user-level`):
@@ -336,39 +380,56 @@ Commands for managing MCP server configuration files (Cursor, Claude Code, Winds
   - For each found config, checks for `neotoma-dev` and `neotoma` server entries (based on `command` script names or `url` patterns). In Claude Desktop's `claude_desktop_config.json`, new entries use `mcpsrv_neotoma_dev` and `mcpsrv_neotoma`, and legacy `neotoma-dev` / `neotoma` keys are reported for repair because Claude Desktop validates server IDs as UUIDs or `mcpsrv_*` tags.
   - If any config is missing dev or prod servers, prompts to add them with absolute script paths.
   - If no config files found, offers to create `.cursor/mcp.json` in current directory.
-  - Uses Neotoma source root (from `findRepoRoot`, config, or `NEOTOMA_REPO_ROOT`) to resolve absolute script paths for `run_neotoma_mcp_stdio.sh` and `run_neotoma_mcp_stdio_prod.sh`. The dev shim wrapper `run_neotoma_mcp_stdio_dev_shim.sh` is detected as a dev server when present in an MCP config, but it is not installed as the default local MCP command.
+  - Uses Neotoma source root (from `findRepoRoot`, config, or `NEOTOMA_REPO_ROOT`) to resolve absolute script paths for the selected transport. Preset `a` emits signed shim / `mcp proxy --aauth` with dev+prod downstreams as above; `b` emits unsigned dev shim; `c` emits direct stdio scripts; `d` emits signed shim with prod downstream for both MCP server entries.
   - After install, verifies or installs lifecycle hooks for hook-capable harnesses inferred from the configured MCP paths (for example `.cursor/mcp.json` → Cursor hooks, `.codex/config.toml` → Codex hooks). Harnesses without an auto-installer print the matching manual instruction.
-  - After install, shows a reminder to run `neotoma cli-instructions check`; when MCP servers are installed interactively, it can also prompt to add CLI instructions if missing.
+  - After install, shows a reminder to run `neotoma cli config`; when MCP servers are installed interactively, it can also prompt to add CLI instructions if missing.
+  - `neotoma mcp check` is retained as a deprecated alias for `neotoma mcp config` during the migration window.
+
+**MCP transport presets:**
+
+- **A:** signed shim + AAuth. Installs **both** `neotoma-dev` and `neotoma`: dev slot → dev API `http://127.0.0.1:3080/mcp` (default when `neotoma-dev` omits `MCP_PROXY_DOWNSTREAM_URL`, matching `run_neotoma_mcp_signed_stdio_dev_shim.sh`), prod slot → prod API `http://127.0.0.1:3180/mcp` (via `scripts/run_neotoma_mcp_signed_stdio_dev_shim.sh` or packaged `neotoma mcp proxy --aauth`). Requires matching API processes to be reachable.
+- **B (default):** unsigned/local stdio. Packaged npm installs launch `dist/index.js` directly over stdio so local MCP does not require a separate API process; source checkouts use `scripts/run_neotoma_mcp_stdio_dev_shim.sh`, and prod entries add `NEOTOMA_ENV=production`.
+- **C:** direct stdio. Uses `scripts/run_neotoma_mcp_stdio.sh` for dev and `scripts/run_neotoma_mcp_stdio_prod.sh` for prod. Reconnect the MCP client after code changes.
+- **D:** signed prod parity. Signed shim with `MCP_PROXY_DOWNSTREAM_URL=http://127.0.0.1:3180/mcp` for **both** slots (including `neotoma-dev`), so both MCP entries hit the prod HTTP `/mcp` when the prod API is on the default port.
 
 **Dev vs Prod detection patterns:**
 
-- **Dev:** `command` contains `run_neotoma_mcp_stdio.sh`, `run_neotoma_mcp_stdio_dev_watch.sh`, or `run_neotoma_mcp_stdio_dev_shim.sh`, or `url` contains `localhost:3080/mcp` or `127.0.0.1:3080/mcp`. During connect-only sessions, the currently selected instance port is also considered for dev if the active env is dev.
-- **Prod:** `command` contains `run_neotoma_mcp_stdio_prod.sh` or `run_neotoma_mcp_stdio_prod_watch.sh`, or `url` contains `localhost:3180/mcp`, `127.0.0.1:3180/mcp`, or `neotoma.fly.dev/mcp`. During connect-only sessions, the currently selected instance port is also considered for prod if the active env is prod.
+- **Dev:** `command` contains `run_neotoma_mcp_stdio.sh`, `run_neotoma_mcp_stdio_dev_watch.sh`, `run_neotoma_mcp_stdio_dev_shim.sh`, or `run_neotoma_mcp_signed_stdio_dev_shim.sh` under a dev server id, or `url` contains `localhost:3080/mcp` or `127.0.0.1:3080/mcp`. During connect-only sessions, the currently selected instance port is also considered for dev if the active env is dev.
+- **Prod:** `command` contains `run_neotoma_mcp_stdio_prod.sh`, `run_neotoma_mcp_stdio_prod_watch.sh`, or `run_neotoma_mcp_signed_stdio_dev_shim.sh` under a prod server id / prod downstream URL, or `url` contains `localhost:3180/mcp`, `127.0.0.1:3180/mcp`, or `neotoma.fly.dev/mcp`. During connect-only sessions, the currently selected instance port is also considered for prod if the active env is prod.
 
 **Example workflow:**
 
 ```bash
 # Show config guidance and check if servers are configured
-neotoma mcp config
+neotoma mcp guide
 
 # Scan project-local MCP configs and add missing servers
-neotoma mcp check
+neotoma mcp config
 
 # Scan including user-level configs (Cursor, Claude, Windsurf)
-neotoma mcp check --user-level
+neotoma mcp config --user-level
+
+# Deterministically install direct stdio entries without the transport prompt
+neotoma mcp config --user-level --mcp-transport c
 
 # Configure MCP and install matching hooks without hook prompts
-neotoma mcp check --user-level --yes
+neotoma mcp config --user-level --yes
+
+# Interactive: refresh user-level Cursor/Claude JSON entries to transport D even when dev+prod already exist
+neotoma mcp config --rewrite-neotoma-mcp
 ```
 
 ### CLI instructions (prefer MCP when available, CLI as backup)
 
-Commands to ensure agent instructions tell agents to use the Neotoma CLI when running locally and MCP when remote:
+Commands to ensure agent instructions tell agents to use the Neotoma CLI when running locally and MCP when remote. Like MCP, `guide` is read-only and `config` mutates files:
 
-- `neotoma cli-instructions config`: Show guidance for adding the "prefer MCP when available, CLI as backup" rule to Cursor, Claude, and Codex (project: `.cursor/rules/`, `.claude/rules/`, `.codex/`; user: `~/.cursor/rules/`, `~/.claude/rules/`, `~/.codex/`). Does not modify files.
-- `neotoma cli-instructions check`: Scan only paths that each IDE actually loads (applied paths). Reports Cursor, Claude, and Codex separately; if missing in any, prompts to add to project (all three), user (all three), or both. Writes to `.cursor/rules/neotoma_cli.mdc`, `.claude/rules/neotoma_cli.mdc`, `.codex/neotoma_cli.md` so the instruction is applied in all three environments.
+- `neotoma cli guide`: Show guidance for adding the "prefer MCP when available, CLI as backup" rule to Cursor, Claude, and Codex (project: `.cursor/rules/`, `.claude/rules/`, `.codex/`; user: `~/.cursor/rules/`, `~/.claude/rules/`, `~/.codex/`). Does not modify files.
+- `neotoma cli config`: Scan only paths that each IDE actually loads (applied paths). Reports Cursor, Claude, and Codex separately and, with `--yes`, writes missing or stale files to the selected scope.
+  - `--scope <project|user|both>`: Choose where to apply instruction files. This is separate from `neotoma setup --scope`, which controls permission-file patches.
+  - `--yes`: Apply without prompting. Without `--yes`, the command reports what would change.
+- `neotoma cli-instructions config` and `neotoma cli-instructions check` are deprecated aliases for `neotoma cli guide` and `neotoma cli config`.
+- `neotoma instructions print`: Print the first fenced code block from `docs/developer/mcp/instructions.md` bundled with this package (same text MCP sends to clients). Use `--format md` to wrap output in a markdown fence, or `--json` with global JSON output mode for `{ path, body }`.
   - `--user-level` / `--no-user-level`: Include or exclude user-level paths in scan (default: include).
-  - `--yes`: Non-interactive; only report status and print snippet path, do not offer to add.
 
 See `docs/developer/agent_cli_configuration.md` for the rule text and strategy.
 
@@ -431,14 +492,13 @@ See `docs/developer/agent_cli_configuration.md` for the rule text and strategy.
 
 ### Interpretations
 
-- `neotoma interpretations reinterpret [sourceId]`:
-  - `--source-id <id>`: Source ID to reinterpret.
-  - `--interpretation-id <id>`: Resolve source from an existing interpretation.
-  - `--interpretation-config <json>`: Override interpretation settings for this run.
-- `neotoma interpretations interpret-uninterpreted`:
-  - `--limit <n>`: Max number of sources to process (default: 50).
-  - `--dry-run`: Return source IDs that would be interpreted without running interpretation.
-  - `--interpretation-config <json>`: Optional settings applied to each backfill run.
+- `neotoma interpretations list`: List interpretation runs.
+  - `--source-id <id>`: Filter by source.
+  - `--limit <n>` / `--offset <n>`: Pagination.
+- `neotoma interpretations create --source-id <id> --entities <path>`: Create an interpretation row for an existing source from agent-extracted flat entities.
+  - `--interpretation-config <json>`: Audit configuration such as extractor type/version, model, prompt hash, schema version, and agent notes.
+  - `--relationships <path>`: Optional JSON array of relationship refs to create after entity observations.
+  - `--idempotency-key <key>`: Optional replay-safe operation key.
 
 ### Store
 
@@ -448,6 +508,7 @@ See `docs/developer/agent_cli_configuration.md` for the rule text and strategy.
     - Use `--json=` (equals, no space) so the payload is parsed as entities input.
     - Bare `--json` (without `=`) remains the global output-format flag.
   - `--file <path>`: Path to JSON file containing entity array. Use for long payloads.
+  - `--interpretation-source-id <id>` / `--interpretation-source-ref <structured|unstructured>` plus `--interpretation-config <json>`: Opt into Source -> Interpretation -> Observation provenance for source-derived extraction. Omit for ordinary already-structured/chat-native facts.
   - Silent-failure guard (v0.5.1+): when a commit-mode store returns `entities_created=0`, no resolved entities, and is not an idempotency replay (`replayed: true`), the CLI emits a non-fatal stderr warning so agents/humans don't mistake an empty result for success. Typical root cause: fields nested under `attributes` (see v0.5.0 breaking change) or mismatched `user_id` scope.
   - Idempotency replays: `POST /store` returns `replayed: true` when a request is a deterministic re-commit of a previously committed `(user_id, idempotency_key)` tuple. Use this to distinguish "same call, no new work" from "call produced zero entities."
 
@@ -494,6 +555,11 @@ For chat persistence recipes, MCP and CLI use the same underlying store contract
   - `--human`: Output one sentence per change (e.g. "Created person \"George\"", "Updated relationship \"wife\" for person \"Alice\" with person \"Bob\""). No timestamps, emoji, or IDs.
   - `--tail`: Only show changes from now (skip existing records).
   - When encryption is on, set `NEOTOMA_KEY_FILE_PATH` or `NEOTOMA_MNEMONIC`.
+
+### Processes (local OS only)
+
+- `neotoma processes list` (default for `neotoma processes`): Scan `ps` for processes whose argv matches Neotoma checkout paths, `tsx watch src/actions.ts`, `run_neotoma_mcp*.sh`, `run_watch_build_launchd.sh`, `mcp proxy`, orchestrator (`pick-port` / `concurrently`), `tsc --watch`, `esbuild`, Cursor hooks under the repo, etc. **TCP listen ports** per PID come from a single `lsof -nP -iTCP -sTCP:LISTEN -F pn` pass (comma-separated in the PORTS column, `-` when none); if `lsof` is missing or fails, PORTS stays `-`. Text mode also prints the full `ps` command line **word-wrapped within the COMMAND column** to the current terminal width (continuation lines are blank under PID/PPID/LABEL/PORTS so COMMAND stays aligned). `--json` prints `{ "processes": [...] }` with `ports` (number array) and each full `command` on one line.
+- `neotoma processes kill <pids...>`: One or more PIDs as separate tokens (e.g. `neotoma processes kill 92450 18852`) or a single comma/space string in quotes. Re-runs the same classifier; **only PIDs that appear in a fresh scan** are signalled (prevents typos from killing unrelated processes). Default signal is **SIGTERM**; use `--signal SIGKILL` when needed. `--dry-run` prints the plan. On a TTY, prompts once unless `--force`. Non-TTY requires `--force`.
 
 ### Mirror
 

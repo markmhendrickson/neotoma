@@ -9,10 +9,10 @@
     "cost_usd": 0
   },
   "user_prompt": "Hi there!\n",
-  "system_prompt": "You are an assistant integrated with the Neotoma memory system. Every turn you MUST call store_structured to persist the conversation and the user message, even for greetings and minimal messages. Link the message to the conversation via PART_OF. Then reply briefly.\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. Every turn you MUST call the MCP store tool to persist the conversation and the user message, even for greetings and minimal messages. Link the message to the conversation via PART_OF. Then reply briefly.\n",
   "tool_calls": [
     {
-      "name": "store_structured",
+      "name": "store",
       "input": {
         "idempotency_key": "conversation-greeting-1-user",
         "entities": [

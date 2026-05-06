@@ -15,27 +15,24 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const insertedRows: Array<Record<string, unknown>> = [];
 
+function rawFragmentsTable() {
+  const chain: any = {
+    select: () => chain,
+    eq: () => chain,
+    maybeSingle: async () => ({ data: null }),
+    insert: (row: Record<string, unknown>) => ({
+      select: async () => {
+        insertedRows.push(row);
+        return { data: [row], error: null };
+      },
+    }),
+  };
+  return chain;
+}
+
 vi.mock("../../src/db.js", () => ({
   db: {
-    from: () => ({
-      select: () => ({
-        eq: () => ({
-          eq: () => ({
-            eq: () => ({
-              eq: () => ({
-                maybeSingle: async () => ({ data: null }),
-              }),
-            }),
-          }),
-        }),
-      }),
-      insert: (row: Record<string, unknown>) => ({
-        select: async () => {
-          insertedRows.push(row);
-          return { data: [row], error: null };
-        },
-      }),
-    }),
+    from: () => rawFragmentsTable(),
   },
 }));
 
@@ -137,5 +134,45 @@ describe("raw_fragments isolation across multi-entity store_structured", () => {
     });
     expect(insertedRows).toHaveLength(1);
     expect(insertedRows[0].fragment_key).toBe("keep_me");
+  });
+
+  it("persists entity_id when provided so same-source same-type fragments stay isolated", async () => {
+    const sourceId = "src_same_type";
+    const userId = "00000000-0000-0000-0000-000000000000";
+
+    await storeUnknownFields({
+      sourceId,
+      userId,
+      entityId: "ent_tesy",
+      entityType: "organization",
+      schemaVersion: "1.0",
+      unknownFields: { slug: "tesy" },
+    });
+    await storeUnknownFields({
+      sourceId,
+      userId,
+      entityId: "ent_planadigm",
+      entityType: "organization",
+      schemaVersion: "1.0",
+      unknownFields: { slug: "planadigm" },
+    });
+
+    expect(insertedRows).toHaveLength(2);
+    expect(insertedRows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          entity_id: "ent_tesy",
+          entity_type: "organization",
+          fragment_key: "slug",
+          fragment_value: "tesy",
+        }),
+        expect.objectContaining({
+          entity_id: "ent_planadigm",
+          entity_type: "organization",
+          fragment_key: "slug",
+          fragment_value: "planadigm",
+        }),
+      ]),
+    );
   });
 });

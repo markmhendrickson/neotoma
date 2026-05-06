@@ -19,8 +19,8 @@ This document covers:
 
 This document does NOT cover:
 
-- MCP protocol details (see MCP SDK docs)
-- Implementation internals (see `src/server.ts`)
+- General MCP protocol mechanics (see MCP SDK docs). **§ 1.1** documents one Neotoma-specific **`initialize`** requirement for client discovery.
+- Other implementation internals (see `src/server.ts`)
 - Database schema (see `docs/subsystems/schema.md`)
 
 ## 1. MCP Architecture in Neotoma
@@ -52,6 +52,12 @@ flowchart LR
 - All requests validated at MCP layer
 - All responses structured and typed
 - All errors use ErrorEnvelope
+
+### 1.1 Client discovery (`initialize` capabilities)
+
+Neotoma’s MCP `initialize` result **must** advertise the same **server capability objects** registered on the underlying MCP `Server` instance (notably `tools: { listChanged: true }` together with `resources`). Some hosts (including Cursor) use the **`initialize` capability block** for MCP UI and tool discovery; returning a bare `tools: {}` there can hide tools even when `tools/list` would succeed.
+
+Implementation: `NEOTOMA_MCP_DECLARED_CAPABILITIES` in `src/server.ts` is spread into both authenticated and unauthenticated `initialize` handlers so it stays aligned with the `Server` constructor. See `docs/developer/mcp_cursor_setup.md` (troubleshooting) and `docs/developer/mcp/proxy.md`.
 
 ## 2. Authentication
 
@@ -198,10 +204,10 @@ flowchart LR
 | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ------------------------ |
 | `store` | **Unified** [storing](../vocabulary/canonical_terms.md#storing) for all [source](../vocabulary/canonical_terms.md#source) (unstructured and structured) | Strong      | Yes (content-hash based) |
 
-**Note:** `store` is the single unified action for all [source](../vocabulary/canonical_terms.md#source). It accepts either:
+**Note:** `store` is the single unified MCP action for all [source](../vocabulary/canonical_terms.md#source). Legacy MCP tool names `store_structured` and `store_unstructured` were removed; clients MUST use `store` only. It accepts either:
 
-- Unstructured: `{file_content, mime_type}` for unstructured [source](../vocabulary/canonical_terms.md#source) that needs [interpretation](../vocabulary/canonical_terms.md#interpretation)
-- Structured: `{entities: [{entity_type, ...}]}` for pre-structured [source](../vocabulary/canonical_terms.md#source)
+- Unstructured: `file_path` or (`file_content` + `mime_type`) so bytes land in the immutable **sources** table (content-addressed SHA-256 per user; response includes `source_id` / `content_hash`).
+- Structured: `{entities: [{entity_type, ...}]}` for agent- or tool-derived rows (chat-native writes keep `interpretation_id` null on observations unless you attach an `interpretation` block tied to a file [source](../vocabulary/canonical_terms.md#source)).
 
 ### 2.2 File Operations
 
@@ -222,6 +228,7 @@ flowchart LR
 | `retrieve_graph_neighborhood`   | [Retrieve](../vocabulary/canonical_terms.md#retrieving) complete graph context around node                                                                                                                                                   | Strong      | Yes           | MVP        |
 | `list_entity_types`             | List all available [entity types](../vocabulary/canonical_terms.md#entity-type) with schema information, optionally filtered by keyword                                                                                                      | Strong      | Yes           | MVP        |
 | `merge_entities`                | Merge duplicate [entities](../vocabulary/canonical_terms.md#entity)                                                                                                                                                                          | Strong      | Yes           | MVP        |
+| `split_entity`                  | Split a predicate-selected subset of observations out of an over-merged [entity](../vocabulary/canonical_terms.md#entity)                                                                                                                    | Strong      | Yes           | Available  |
 
 ### 2.4 [Observation](../vocabulary/canonical_terms.md#observation) and [Relationship](../vocabulary/canonical_terms.md#relationship) Operations ([Retrieving](../vocabulary/canonical_terms.md#retrieving))
 
@@ -269,8 +276,8 @@ The unified `store` action handles all [source](../vocabulary/canonical_terms.md
 
 Choose the storage path based on **where the data came from**, not only on what format you have. This keeps provenance correct (artifact vs agent-derived) and avoids double interpretation of files.
 
-- **Conversation-sourced or tool-sourced:** Data from what the user said in chat, or from another MCP/tool (e.g. email, calendar) where the agent is extracting entities. Use the **structured** path: `store` or `store_structured` with an `entities` array. Omit `original_filename`.
-- **File-sourced or resource-sourced:** User attached a file, or the agent has a file/blob to preserve as an artifact. Use the **unstructured** path: `store` or `store_unstructured` with `file_content`+`mime_type` or `file_path` to preserve the raw artifact. If you also need entities from that file, parse/extract first and send those entities in the same combined request.
+- **Conversation-sourced or tool-sourced:** Data from what the user said in chat, or from another MCP/tool (e.g. email, calendar) where the agent is extracting entities. Use the **structured** path: `store` with an `entities` array. Omit `original_filename`.
+- **File-sourced or resource-sourced:** User attached a file, or the agent has a file/blob to preserve as an artifact. Use `store` with `file_content`+`mime_type` or `file_path` so the raw bytes become a **sources** row. If you also need entities from that file, parse/extract client-side (or use `parse_file` / vision) and send those entities in the same combined `store` request; optionally include an `interpretation` block so observations link to both `source_id` and `interpretation_id` per [`docs/subsystems/interpretations.md`](../subsystems/interpretations.md).
 
 **For Unstructured [Source](../vocabulary/canonical_terms.md#source):**
 
@@ -283,9 +290,12 @@ Choose the storage path based on **where the data came from**, not only on what 
 }
 ```
 
-**IMPORTANT:** Agents SHOULD extract entities from readable files before storing when structured data is needed. Use `parse_file` for PDFs, read text/CSV/JSON/Markdown directly, and use vision directly for images. If parsing yields nothing usable, store the raw file only.
+**IMPORTANT — two provenance modes for file-backed facts:**
 
-Flow: parse/read file (agent-side) → extract entities if needed → [Store](../vocabulary/canonical_terms.md#storing) raw file and optional entities → [Entity schema](../vocabulary/canonical_terms.md#entity-schema) processing for structured entities → [Observations](../vocabulary/canonical_terms.md#observation)
+1. **Agent-side extraction (default for chat recipes):** Read/parse the file (`parse_file` for PDFs, direct read for text/CSV/JSON/Markdown, vision for images), build `entities`, then call `store` with those entities. Optionally include the same `file_path` / `file_content`+`mime_type` in the same request so the raw artifact is also a **sources** row and you add an `interpretation` block when you want observations tied to that extraction run (see interpretations doc). If parsing yields nothing usable, call `store` file-only.
+2. **Server-side interpretation:** When you want Neotoma to record an interpretation pipeline against a stored **source**, use `store` with file bytes plus `interpretation: { source_ref: "unstructured", interpretation_config: … }` (or follow up with `create_interpretation` for an existing `source_id`). Do not confuse “agent read the file in chat” (no server interpretation unless you request it) with “server interpretation job” (explicit `interpretation` / `create_interpretation`).
+
+Flow (typical): parse/read file (agent-side when needed) → single `store` (file leg + optional entities + optional `interpretation`) → schema projection → [Observations](../vocabulary/canonical_terms.md#observation)
 
 **For Structured [Source](../vocabulary/canonical_terms.md#source):**
 
@@ -410,15 +420,15 @@ This minimizes round-trips for common cases and keeps discovery for ambiguous or
 | Entity Relationships     | `neotoma://entity/{entity_id}/relationships`  | All relationships for an entity (inbound and outbound)                         | No - requires entity ID                                                                |
 | All Relationships        | `neotoma://relationships`                     | All relationships regardless of type                                           | Yes - always available                                                                 |
 | Relationship Collections | `neotoma://relationships/{relationship_type}` | All relationships of a specific type (e.g., `neotoma://relationships/PART_OF`) | Yes - dynamically enumerated                                                           |
-| Timeline (Year)          | `neotoma://timeline/{year}`                   | All timeline events in a specific year (e.g., `neotoma://timeline/2024`)       | Yes - dynamically enumerated                                                           |
-| Timeline (Month)         | `neotoma://timeline/{year}-{month}`           | All timeline events in a specific month (e.g., `neotoma://timeline/2024-01`)   | Yes - dynamically enumerated                                                           |
+| Timeline (Year)          | `neotoma://timeline/{year}`                   | All timeline events in a specific year (e.g., `neotoma://timeline/2024`)       | No — valid for `read_resource` / templates; not listed in `list_resources`            |
+| Timeline (Month)         | `neotoma://timeline/{year}-{month}`           | All timeline events in a specific month (e.g., `neotoma://timeline/2024-01`)   | No — valid for `read_resource` / templates; not listed in `list_resources`            |
 | Source                   | `neotoma://source/{source_id}`                | Specific source with metadata                                                  | No - requires source ID                                                                |
 | Source Collection        | `neotoma://sources`                           | All sources                                                                    | Yes - always available                                                                 |
 
 **Resource Discovery:**
 
 - Use MCP `list_resources` to discover available resources dynamically
-- Resources are generated based on actual data (timeline years, relationship types available)
+- Resources are generated based on actual data (relationship types, etc.); timeline year/month URIs are not bulk-enumerated in `list_resources` (use `read_resource` or templates)
 - Use `list_resource_templates` to discover resource templates (e.g., `neotoma://entities/{entity_type}`)
 - Entity type discovery: Use `neotoma://entity_types` resource (enumerated) or `list_entity_types` action (for detailed schema information with keyword filtering)
 - User context is respected where applicable
@@ -587,8 +597,6 @@ Clients can subscribe to resource updates:
 ### 3.1 `store` (Unified)
 
 **Purpose:** Unified [storing](../vocabulary/canonical_terms.md#storing) for all [source](../vocabulary/canonical_terms.md#source). Accepts unstructured (files) or structured (JSON with [entity types](../vocabulary/canonical_terms.md#entity-type)). Content-addressed storage with SHA-256 deduplication per user.
-
-**Atomic alternatives:** Prefer `store_structured` for structured entities and `store_unstructured` for raw files when you do not need the unified tool.
 
 **Combined Request Schema (both in one call):**
 
@@ -1940,6 +1948,75 @@ At least one of `fields_to_add` or `fields_to_remove` must be provided and non-e
 **Response:** List of stale snapshots found and any repairs performed.
 
 **Determinism:** Yes (read-only scan; repairs are deterministic recomputations)
+
+### 3.29 `split_entity`
+
+**Purpose:** Repair over-merged [entities](../vocabulary/canonical_terms.md#entity) by re-pointing a predicate-selected subset of one entity's [observations](../vocabulary/canonical_terms.md#observation) onto a new or pre-existing entity. This is the inverse of `merge_entities` and preserves the immutable observation-content guarantee: `fields`, `observed_at`, `source_id`, and `interpretation_id` are never modified.
+
+**Request Schema:**
+
+```typescript
+{
+  source_entity_id: string; // Required: over-merged entity to split from
+  predicate: {
+    observed_at_gte?: string; // Optional: ISO-8601 lower bound
+    source_id_in?: string[]; // Optional: match observations from these sources
+    observation_field_equals?: {
+      field: string; // Required when using this predicate form
+      value?: string; // Optional exact string comparison
+      value_starts_with?: string; // Optional string-prefix comparison
+    };
+  };
+  new_entity: {
+    entity_type: string; // Required
+    canonical_name: string; // Required for deterministic new ID derivation
+    target_entity_id?: string; // Optional: existing entity to receive observations
+  };
+  idempotency_key: string; // Required: replay-safe split key
+  reason?: string; // Optional: audit rationale
+  user_id?: string; // Optional: inferred from auth context
+}
+```
+
+At least one predicate form is required. The operation refuses predicates that match zero observations (no-op) or every observation (rename/merge case; use `correct` or `merge_entities` instead).
+
+**Response Schema:**
+
+```typescript
+{
+  split_id: string;
+  source_entity_id: string;
+  new_entity_id: string;
+  observations_moved: number;
+  split_at: string; // ISO 8601
+  replayed: boolean;
+}
+```
+
+**Behavior:**
+
+1. Resolve `(user_id, idempotency_key)`; replay identical requests with `replayed: true` and reject mismatched reuses with `ERR_IDEMPOTENCY_MISMATCH`.
+2. Validate the source entity exists and is not merged away.
+3. Select source observations matching the schema-agnostic predicate.
+4. Re-point matched observations' `entity_id` foreign key to `target_entity_id` or to a deterministic new entity ID derived from `(entity_type, canonical_name)`.
+5. Recompute snapshots for both source and target entities and insert an `entity_splits` audit row.
+
+Typed relationships remain bound to the source entity. Callers must rebuild appropriate edges onto the split target via `create_relationship` when needed.
+
+**Errors:**
+
+| Code | HTTP | Meaning | Retry? |
+| ---- | ---- | ------- | ------ |
+| `RESOURCE_NOT_FOUND` | 404 | Source entity does not exist for this user | No |
+| `VALIDATION_INVALID_FORMAT` | 400 | Source already merged, invalid predicate, predicate matched zero observations, or predicate matched every observation | No |
+| `ERR_IDEMPOTENCY_MISMATCH` | 400 | `idempotency_key` was reused with a different canonicalized predicate | No |
+
+**Consistency:** Strong (observations are rebound and snapshots recomputed synchronously)
+**Determinism:** Yes (same source, predicate, target identity, and idempotency key → same split result)
+
+**Related Documents:**
+
+- [`docs/subsystems/entity_merge.md`](../subsystems/entity_merge.md): Merge and split repair semantics
 
 ## 4. Error Envelope Standard
 

@@ -9,10 +9,10 @@
     "cost_usd": 0
   },
   "user_prompt": "Remember that I prefer dark mode in all apps.\n",
-  "system_prompt": "You are an assistant integrated with the Neotoma memory system. Always persist the conversation via store_structured. If a store call fails, retry once before giving up. Then reply briefly.\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. Always persist the conversation via the MCP store tool. If a store call fails, retry once before giving up. Then reply briefly.\n",
   "tool_calls": [
     {
-      "name": "store_structured",
+      "name": "store",
       "input": {
         "idempotency_key": "conv-retry-001-attempt-1",
         "entities": [
@@ -32,7 +32,7 @@
       "sequence": 0
     },
     {
-      "name": "store_structured",
+      "name": "store",
       "input": {
         "idempotency_key": "conv-retry-001-attempt-2",
         "entities": [

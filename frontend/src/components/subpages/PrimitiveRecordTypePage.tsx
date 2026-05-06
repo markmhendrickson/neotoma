@@ -426,7 +426,7 @@ const PRIMITIVE_RECORD_TYPE_GUIDES: PrimitiveRecordTypeGuide[] = [
       { field: "entity_id", type: "string", purpose: "The entity this observation is about (resolved during ingestion, user-scoped)" },
       { field: "schema_version", type: "string", purpose: "Active entity schema version at extraction time" },
       { field: "source_id", type: "string", purpose: "What raw content produced this observation" },
-      { field: "interpretation_id", type: "string | null", purpose: "Which extraction run produced this; NULL for structured store_structured writes" },
+      { field: "interpretation_id", type: "string | null", purpose: "Which extraction run produced this; NULL for structured `store` writes (entities without file-backed interpretation)" },
       { field: "observed_at", type: "Date", purpose: "When this observation was made (or extracted from the source)" },
       { field: "specificity_score", type: "number", purpose: "Reducer tie-break: how specific this observation is for its fields" },
       { field: "source_priority", type: "number", purpose: "0 (AI) / 100 (structured agent) / 1000 (user correction). Corrections always win." },
@@ -455,7 +455,7 @@ const PRIMITIVE_RECORD_TYPE_GUIDES: PrimitiveRecordTypeGuide[] = [
         id: "writes",
         heading: "Where observations come from",
         body:
-          "Three writers create observations: structured store_structured calls (source_priority 100, interpretation_id NULL), AI interpretation pipelines on completion (source_priority 0, interpretation_id set), and explicit user corrections via correct() (source_priority 1000). All writes flow through service_role on the MCP server.",
+          "Three writers create observations: structured `store` calls with an entities payload (source_priority 100, interpretation_id NULL), AI interpretation pipelines on completion (source_priority 0, interpretation_id set), and explicit user corrections via correct() (source_priority 1000). All writes flow through service_role on the MCP server.",
       },
     ],
     mustList: [
@@ -589,7 +589,7 @@ Snapshot (merged):       metadata: { amount: 1500, currency: "USD", payment_meth
         id: "derivation",
         heading: "How events are derived",
         body:
-          "Three writers invoke timeline event derivation: structured store_structured ingestion, AI interpretation completion, and reducer snapshot recomputation. The writer selects fields via the schema's temporal_fields declaration (preferred) or a curated allow-set + strict date-shape regex (legacy fallback). System fields like created_at, updated_at, and computed_at are denylisted.",
+          "Three writers invoke timeline event derivation: structured `store` ingestion, AI interpretation completion, and reducer snapshot recomputation. The writer selects fields via the schema's temporal_fields declaration (preferred) or a curated allow-set + strict date-shape regex (legacy fallback). System fields like created_at, updated_at, and computed_at are denylisted.",
       },
       {
         id: "deterministic-id",

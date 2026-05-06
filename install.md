@@ -108,6 +108,14 @@ Run `neotoma setup --tool <current_tool> --yes`. This composes:
 Use `--dry-run` first if the harness is strict; `--json` returns a structured
 report of every step, including changed files.
 
+For the full flag surface (`--install-scope` for MCP + CLI instruction files,
+permission `--scope`, `--mcp-transport`, `--rewrite-neotoma-mcp`,
+`--skip-hooks`, `--all-harnesses`, `--dry-run`, and `--skip-permissions`), see
+[`docs/developer/cli_reference.md#harness-setup`](docs/developer/cli_reference.md#harness-setup).
+The default MCP transport is **B**: local stdio for normal npm onboarding, with
+transport **A** available when you want signed HTTP `/mcp` proxy entries and
+the API is already running.
+
 **If the user is already installed**
 
 Run `neotoma doctor --json` to verify, then `neotoma setup --tool <tool> --yes`
@@ -435,7 +443,7 @@ usage. If `neotoma setup` was run in Phase 2, most of this is already in place.
    `configure-permissions`, re-run `neotoma setup --tool <tool> --yes` to
    close the gap. Do NOT grep, `ls`, or `cat` config files to verify state.
 2. When reading the content of a specific config or instruction file is
-   needed, use `neotoma mcp config --json` and `neotoma cli-instructions config --json`
+   needed, use `neotoma mcp guide --json` and `neotoma cli guide --json`
    to print authoritative content. Do NOT search for "where the content is
    defined" across the codebase.
 3. If the user started in a local environment, offer to help configure
@@ -581,7 +589,7 @@ command. Do NOT fall back to shell introspection (`python3 -c`, `grep -r`,
 - The developer / repo-integration branch must not ingest files or store entities. Its output is a written integration plan only. Any ingest requires a separate, explicit user request that re-enters the personal or mixed branch.
 - The preview contract (Activation step 4) is mandatory even for single-file or single-transcript ingests. Count-only summaries are forbidden as the first post-action output.
 - Do not improvise shell introspection in place of `neotoma doctor --json`,
-  `neotoma mcp config --json`, or `neotoma cli-instructions config --json`.
+  `neotoma mcp guide --json`, or `neotoma cli guide --json`.
   Every fact these commands surface is authoritative; searching for "where X is
   defined" in the codebase is a permission-prompt anti-pattern.
 - Do not run arbitrary `npm run <script>` in the user's repositories during

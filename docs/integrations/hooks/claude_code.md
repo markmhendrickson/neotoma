@@ -10,8 +10,10 @@ Pairs with the Neotoma MCP server. Hooks provide the reliability floor (guarante
 pip install neotoma-client
 
 # 3. Install the plugin in Claude Code.
-#    From a local checkout:
-claude plugin install ./packages/claude-code-plugin
+#    From a local checkout: register the plugin directory as a marketplace, then
+#    install by id (the bare `claude plugin install` CLI only accepts plugin@marketplace):
+claude plugin marketplace add /ABS/PATH/TO/neotoma/packages/claude-code-plugin
+claude plugin install neotoma@neotoma-marketplace
 
 #    Or from the Neotoma marketplace (once published):
 #    /plugin marketplace add markmhendrickson/neotoma

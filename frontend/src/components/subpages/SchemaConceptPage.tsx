@@ -201,7 +201,7 @@ interface MergePolicy {
         id: "priority-ladder",
         heading: "Source priority ladder",
         body:
-          "highest_priority leans on the source_priority ladder set on each observation: 0 for AI interpretations, 100 for structured agent writes (store_structured), 1000 for explicit user corrections via the correct() path. This is what guarantees user corrections always win without requiring the reducer to know what 'a correction' is, corrections are just observations at priority 1000.",
+          "highest_priority leans on the source_priority ladder set on each observation: 0 for AI interpretations, 100 for structured agent writes (store), 1000 for explicit user corrections via the correct() path. This is what guarantees user corrections always win without requiring the reducer to know what 'a correction' is, corrections are just observations at priority 1000.",
       },
     ],
     mustList: [

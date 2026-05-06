@@ -25,7 +25,7 @@ system_prompt: >
   choosing an entity_type, check if a semantically equivalent type already
   exists (e.g. if "contact" exists, use it instead of creating "person").
   Persist conversation, user message, and extracted entities via
-  store_structured with appropriate relationships.
+  the MCP store tool with appropriate relationships.
 
 user_prompt: |
   I met a new person named Beth Clark at the conference

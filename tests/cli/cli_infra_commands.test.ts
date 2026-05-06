@@ -120,19 +120,38 @@ describe("CLI infrastructure command smoke tests", () => {
       expect(out).toMatch(/config|check|watch/i);
     });
 
+    it("mcp guide --help shows usage", async () => {
+      const out = await getHelp("mcp guide");
+      expect(out).toMatch(/guide|Usage|Options/i);
+    });
+
     it("mcp config --help shows usage", async () => {
       const out = await getHelp("mcp config");
       expect(out).toMatch(/config|Usage|Options/i);
+      expect(out).toMatch(/--rewrite-neotoma-mcp/i);
     });
 
     it("mcp check --help shows usage", async () => {
       const out = await getHelp("mcp check");
       expect(out).toMatch(/check|Usage|Options/i);
+      expect(out).toMatch(/--rewrite-neotoma-mcp/i);
     });
 
     it("mcp watch --help shows usage", async () => {
       const out = await getHelp("mcp watch");
       expect(out).toMatch(/watch|Usage|Options/i);
+    });
+
+    it("cli help lists guide and config subcommands", async () => {
+      const out = await getHelp("cli");
+      expect(out).toMatch(/guide/i);
+      expect(out).toMatch(/config/i);
+    });
+
+    it("cli config --help shows scope and yes flags", async () => {
+      const out = await getHelp("cli config");
+      expect(out).toMatch(/--scope/i);
+      expect(out).toMatch(/--yes/i);
     });
 
     it("watch accepts env as first argument (e.g. watch dev)", async () => {
@@ -311,14 +330,14 @@ describe("CLI infrastructure command smoke tests", () => {
       const { stdout } = await execAsync(
         `NEOTOMA_SESSION_ENV=dev NEOTOMA_SESSION_DEV_PORT=3080 ${CLI_PATH} servers`
       );
-      expect(stdout).toContain("http://127.0.0.1:3080/mcp");
+      expect(stdout).toContain("http://localhost:3080/mcp");
     });
 
     it("servers should honor selected session instance port", async () => {
       const { stdout } = await execAsync(
         `NEOTOMA_SESSION_ENV=prod NEOTOMA_SESSION_API_PORT=9191 ${CLI_PATH} servers`
       );
-      expect(stdout).toContain("http://127.0.0.1:9191/mcp");
+      expect(stdout).toContain("http://localhost:9191/mcp");
     });
 
     it("storage info should return JSON payload", async () => {

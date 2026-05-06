@@ -120,6 +120,7 @@ const SCHEMA_STATEMENTS = [
     id TEXT PRIMARY KEY,
     source_id TEXT,
     interpretation_id TEXT,
+    entity_id TEXT,
     entity_type TEXT NOT NULL,
     fragment_key TEXT NOT NULL,
     fragment_value TEXT,
@@ -367,6 +368,7 @@ function ensureSchema(db: SqliteDatabase): void {
     addColumnIfMissing(db, "entities", "first_seen_at", "TEXT");
     addColumnIfMissing(db, "entities", "last_seen_at", "TEXT");
     addColumnIfMissing(db, "timeline_events", "event_date", "TEXT");
+    addColumnIfMissing(db, "raw_fragments", "entity_id", "TEXT");
     addColumnIfMissing(db, "auto_enhancement_queue", "fragment_key", "TEXT");
     addColumnIfMissing(db, "auto_enhancement_queue", "frequency_count", "INTEGER");
     addColumnIfMissing(db, "auto_enhancement_queue", "confidence_score", "REAL");

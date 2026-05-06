@@ -480,7 +480,7 @@ export async function queryEntities(
         const defaultUserId = "00000000-0000-0000-0000-000000000000";
         let fragmentQuery = db
           .from("raw_fragments")
-          .select("fragment_key, fragment_value, last_seen, source_id")
+          .select("fragment_key, fragment_value, last_seen, source_id, entity_id")
           .eq("entity_type", entityType)
           .in("source_id", Array.from(sourceIdsForType));
 
@@ -494,30 +494,55 @@ export async function queryEntities(
           fragmentQuery = fragmentQuery.or(`user_id.is.null,user_id.eq.${defaultUserId}`);
         }
 
+        const { data: observationsForSources } = await db
+          .from("observations")
+          .select("entity_id, source_id")
+          .eq("entity_type", entityType)
+          .in("source_id", Array.from(sourceIdsForType));
+        const legacyEntityCountsBySource = new Map<string, Set<string>>();
+        for (const obs of observationsForSources || []) {
+          if (!obs.source_id || !obs.entity_id) continue;
+          if (!legacyEntityCountsBySource.has(obs.source_id)) {
+            legacyEntityCountsBySource.set(obs.source_id, new Set());
+          }
+          legacyEntityCountsBySource.get(obs.source_id)!.add(obs.entity_id);
+        }
+
         const { data: fragments } = await fragmentQuery;
 
         if (fragments && fragments.length > 0) {
           // Group fragments by entity (via source_id -> entity_id mapping)
           for (const fragment of fragments) {
-            // Find which entity this fragment belongs to
-            for (const entityId of entityIdsOfType) {
-              const sources = entitySources.get(entityId);
-              if (sources && sources.has(fragment.source_id)) {
-                if (!rawFragmentsByEntity.has(entityId)) {
-                  rawFragmentsByEntity.set(entityId, {});
-                }
-                const entityFragments = rawFragmentsByEntity.get(entityId)!;
-                const key = fragment.fragment_key;
-                const lastSeen = fragment.last_seen || "";
-                
-                // Last-write wins (most recent last_seen)
-                // Store last_seen separately for comparison
-                const lastSeenKey = `__${key}_last_seen`;
-                if (!(key in entityFragments) || 
-                    ((entityFragments as any)[lastSeenKey] || "") < lastSeen) {
-                  entityFragments[key] = fragment.fragment_value;
-                  (entityFragments as any)[lastSeenKey] = lastSeen; // Track for comparison
-                }
+            const fragmentEntityId =
+              typeof (fragment as { entity_id?: unknown }).entity_id === "string"
+                ? (fragment as { entity_id: string }).entity_id
+                : null;
+            const candidateEntityIds = fragmentEntityId
+              ? [fragmentEntityId]
+              : legacyEntityCountsBySource.get(fragment.source_id)?.size === 1
+                ? [
+                    Array.from(
+                      legacyEntityCountsBySource.get(fragment.source_id) ?? [],
+                    )[0],
+                  ]
+                : [];
+
+            for (const entityId of candidateEntityIds) {
+              if (!entityIdsOfType.includes(entityId)) continue;
+              if (!rawFragmentsByEntity.has(entityId)) {
+                rawFragmentsByEntity.set(entityId, {});
+              }
+              const entityFragments = rawFragmentsByEntity.get(entityId)!;
+              const key = fragment.fragment_key;
+              const lastSeen = fragment.last_seen || "";
+              
+              // Last-write wins (most recent last_seen)
+              // Store last_seen separately for comparison
+              const lastSeenKey = `__${key}_last_seen`;
+              if (!(key in entityFragments) || 
+                  ((entityFragments as any)[lastSeenKey] || "") < lastSeen) {
+                entityFragments[key] = fragment.fragment_value;
+                (entityFragments as any)[lastSeenKey] = lastSeen; // Track for comparison
               }
             }
           }
@@ -640,7 +665,7 @@ export async function getEntityWithProvenance(
     // Query raw_fragments for these sources with matching entity_type
     let fragmentQuery = db
       .from("raw_fragments")
-      .select("fragment_key, fragment_value, last_seen, first_seen, source_id")
+      .select("fragment_key, fragment_value, last_seen, first_seen, source_id, entity_id")
       .eq("entity_type", entity.entity_type)
       .in("source_id", sourceIds);
 
@@ -654,6 +679,20 @@ export async function getEntityWithProvenance(
       fragmentQuery = fragmentQuery.or(`user_id.is.null,user_id.eq.${defaultUserId}`);
     }
 
+    const { data: observationsForSources } = await db
+      .from("observations")
+      .select("entity_id, source_id")
+      .eq("entity_type", entity.entity_type)
+      .in("source_id", sourceIds);
+    const legacyEntityCountsBySource = new Map<string, Set<string>>();
+    for (const obs of observationsForSources || []) {
+      if (!obs.source_id || !obs.entity_id) continue;
+      if (!legacyEntityCountsBySource.has(obs.source_id)) {
+        legacyEntityCountsBySource.set(obs.source_id, new Set());
+      }
+      legacyEntityCountsBySource.get(obs.source_id)!.add(obs.entity_id);
+    }
+
     const { data: fragments, error: fragmentError } = await fragmentQuery;
 
     if (fragmentError) {
@@ -663,6 +702,20 @@ export async function getEntityWithProvenance(
       const fragmentMap = new Map<string, { value: unknown; last_seen: string }>();
       
       for (const fragment of fragments) {
+        const fragmentEntityId =
+          typeof (fragment as { entity_id?: unknown }).entity_id === "string"
+            ? (fragment as { entity_id: string }).entity_id
+            : null;
+        if (fragmentEntityId && fragmentEntityId !== entityId) continue;
+        if (
+          !fragmentEntityId &&
+          (legacyEntityCountsBySource.get(fragment.source_id)?.size ?? 0) !== 1
+        ) {
+          // Legacy fragments have only source_id + entity_type. If that source
+          // produced multiple entities of the same type, attribution is
+          // ambiguous and showing them risks cross-entity contamination.
+          continue;
+        }
         const key = fragment.fragment_key;
         const lastSeen = fragment.last_seen || fragment.first_seen || "";
         

@@ -27,9 +27,7 @@ import {
   MEMORY_GUARANTEE_ROWS,
 } from "../site/site_data";
 import {
-  FAQ_QUESTION_BUILDING_YOUR_OWN_MEMORY_SYSTEM,
-  FAQ_QUESTION_NOT_FOR_THOUGHT_PARTNER,
-  faqQuestionToSectionId,
+  FAQ_DEEP_LINK_SECTION_IDS,
 } from "../site/faq_items";
 
 import { useRepoMetaClient } from "../hooks/useRepoMetaClient";
@@ -315,6 +313,8 @@ function HomeAgentToolChips({
   align?: "center" | "start";
   compact?: boolean;
 }) {
+  const { pack } = useLocale();
+  const { ariaLabel, worksWith } = pack.homeBody.agentToolChips;
   const chipClass = compact
     ? "inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-[13px] font-medium text-foreground/90 no-underline transition-colors hover:bg-muted"
     : "inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3.5 py-2.5 text-[14px] font-medium text-foreground/90 no-underline transition-colors hover:bg-muted";
@@ -328,12 +328,12 @@ function HomeAgentToolChips({
   return (
     <div
       className={`flex flex-col items-center pt-1 ${stackGap} md:flex-row md:flex-wrap md:items-center ${alignmentClass}`}
-      aria-label="AI agents and tools"
+      aria-label={ariaLabel}
     >
       <span
         className={`${labelClass} w-full shrink-0 text-center md:w-auto ${align === "start" ? "lg:text-left" : ""}`}
       >
-        Works with
+        {worksWith}
       </span>
       <div
         className={`flex w-full max-w-full flex-wrap items-center justify-center ${rowClass} md:contents`}
@@ -541,7 +541,7 @@ function SectionEdgeIndicators({
 
 function EvaluateSectionCta() {
   return (
-    <div className="flex w-full max-w-lg flex-col items-stretch gap-4 text-left">
+    <div className="mx-auto flex w-full max-w-lg flex-col items-stretch gap-4 text-left lg:mx-0">
       <HomeEvaluatePromptBlock copyFeedbackId="evaluate-section-prompt-alt" hideIntro />
     </div>
   );
@@ -792,7 +792,7 @@ export function SitePageAlt() {
                         Neotoma plugs in as an MCP server. Your agents keep working the same way
                         &mdash; they just get{" "}
                         <Link
-                          to={`/faq#${faqQuestionToSectionId(FAQ_QUESTION_BUILDING_YOUR_OWN_MEMORY_SYSTEM)}`}
+                          to={`/faq#${FAQ_DEEP_LINK_SECTION_IDS.buildingYourOwnMemorySystem}`}
                           className={WHO_CALLOUT_FAQ_LINK_CLASS}
                         >
                           state that stays correct
@@ -879,7 +879,7 @@ export function SitePageAlt() {
                       <p>
                         Not for{" "}
                         <Link
-                          to={`/faq#${faqQuestionToSectionId(FAQ_QUESTION_NOT_FOR_THOUGHT_PARTNER)}`}
+                          to={`/faq#${FAQ_DEEP_LINK_SECTION_IDS.notForThoughtPartner}`}
                           className={WHO_CALLOUT_FAQ_LINK_CLASS}
                         >
                           one-off thought-partner workflows or note-taking apps

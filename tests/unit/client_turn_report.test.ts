@@ -12,15 +12,15 @@ describe("renderTurnReport", () => {
         { label: "Follow up on invoice", entityType: "task", entityId: "ent_task1" },
         { label: "Ana Pérez", entityType: "contact", entityId: "ent_contact1" },
       ],
-      inspectorBaseUrl: "http://localhost:5174",
+      inspectorBaseUrl: "http://localhost:5175",
     });
     expect(out).toContain("🧠 Neotoma");
     expect(out).toContain("Created (2)");
     expect(out).toContain(
-      "✅ Follow up on invoice ([inspect](http://localhost:5174/entities/ent_task1)) (`task`)"
+      "✅ Follow up on invoice ([inspect](http://localhost:5175/entities/ent_task1)) (`task`)"
     );
     expect(out).toContain(
-      "👤 Ana Pérez ([inspect](http://localhost:5174/entities/ent_contact1)) (`contact`)"
+      "👤 Ana Pérez ([inspect](http://localhost:5175/entities/ent_contact1)) (`contact`)"
     );
     expect(out).not.toContain("Updated");
     expect(out).not.toContain("Reads");
@@ -122,11 +122,11 @@ describe("renderTurnReport", () => {
           severity: "warning",
         },
       ],
-      inspectorBaseUrl: "http://localhost:5174",
+      inspectorBaseUrl: "http://localhost:5175",
     });
     expect(out).toContain("Repairs (1)");
     expect(out).toContain(
-      "🟡 Backfilled missing user message ([inspect](http://localhost:5174/entities/ent_repair1)) (`neotoma_repair`)"
+      "🟡 Backfilled missing user message ([inspect](http://localhost:5175/entities/ent_repair1)) (`neotoma_repair`)"
     );
   });
 
@@ -188,7 +188,7 @@ describe("resolveInspectorBaseUrl", () => {
     const prev2 = process.env.NEOTOMA_FRONTEND_URL;
     delete process.env.NEOTOMA_FRONTEND_URL;
     try {
-      expect(resolveInspectorBaseUrl()).toBe("http://localhost:5174");
+      expect(resolveInspectorBaseUrl()).toBe("http://localhost:5175");
     } finally {
       if (prev2 !== undefined) process.env.NEOTOMA_FRONTEND_URL = prev2;
     }

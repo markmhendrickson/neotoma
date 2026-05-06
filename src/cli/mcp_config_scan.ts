@@ -97,12 +97,16 @@ function getUserLevelCodexConfigPath(): string | null {
  * Write neotoma-dev and neotoma into user-level ~/.codex/config.toml so Codex sees them.
  * Replaces or appends the Neotoma marker block; leaves other user options intact.
  */
-async function syncCodexUserConfig(repoRoot: string, sessionPorts?: SessionPorts): Promise<void> {
+async function syncCodexUserConfig(
+  repoRoot: string,
+  sessionPorts?: SessionPorts,
+  transport: McpTransportChoice = "b"
+): Promise<void> {
   const userPath = getUserLevelCodexConfigPath();
   if (!userPath) return;
 
   const launchTarget = resolveMcpLaunchTarget(repoRoot);
-  const entries = neotomaServerEntries(repoRoot, sessionPorts);
+  const entries = neotomaServerEntriesForTransport(repoRoot, sessionPorts, transport);
   const blocks: string[] = [];
   for (const [id, config] of Object.entries(entries)) {
     const lines = [`[mcp_servers.${id}]`];
@@ -286,6 +290,8 @@ export function detectNeotomaServers(
     const url = serverConfig.url || "";
     const args = Array.isArray(serverConfig.args) ? serverConfig.args.map((arg) => String(arg)) : [];
     const envMode = String(serverConfig.env?.NEOTOMA_ENV ?? "").toLowerCase();
+    const downstreamUrl = String(serverConfig.env?.MCP_PROXY_DOWNSTREAM_URL ?? "");
+    const downstreamPort = downstreamUrl ? portFromUrl(downstreamUrl) : null;
     const hasDistArg = args.some((arg) => isDistMcpEntrypointArg(arg));
     const id = serverId.toLowerCase();
     const idHintsDev = id.includes("dev");
@@ -294,9 +300,15 @@ export function detectNeotomaServers(
     const isDevCommand =
       command.includes("run_neotoma_mcp_stdio.sh") ||
       command.includes("run_neotoma_mcp_stdio_dev_watch.sh") ||
-      command.includes("run_neotoma_mcp_stdio_dev_shim.sh");
+      command.includes("run_neotoma_mcp_stdio_dev_shim.sh") ||
+      (command.includes("run_neotoma_mcp_signed_stdio_dev_shim.sh") &&
+        (idHintsDev || (!idHintsProd && (downstreamPort === wantDevPort || downstreamPort === 3080))));
     const isProdCommand =
-      command.includes("run_neotoma_mcp_stdio_prod.sh") || command.includes("run_neotoma_mcp_stdio_prod_watch.sh");
+      command.includes("run_neotoma_mcp_stdio_prod.sh") ||
+      command.includes("run_neotoma_mcp_stdio_prod_watch.sh") ||
+      (command.includes("run_neotoma_mcp_signed_stdio_dev_shim.sh") &&
+        (idHintsProd ||
+          (!idHintsDev && (downstreamPort === wantProdPort || downstreamPort === 3180 || envMode === "production"))));
 
     if (url) {
       const port = portFromUrl(url);
@@ -416,6 +428,12 @@ export function analyzeMcpConfigIssues(
  * This lets MCP clients launch Neotoma directly without requiring a separate API server.
  */
 type McpServerEntry = { url: string } | { command: string; args?: string[]; env?: Record<string, string> };
+export type McpTransportChoice = "a" | "b" | "c" | "d";
+
+/** Default HTTP /mcp for `neotoma api start --env dev` (port 3080). */
+const DEFAULT_DEV_MCP_URL = "http://127.0.0.1:3080/mcp";
+/** Default HTTP /mcp for `neotoma api start --env prod` (port 3180). */
+const DEFAULT_PROD_MCP_URL = "http://127.0.0.1:3180/mcp";
 
 function hasRequiredMcpScripts(root: string): boolean {
   const scriptsDir = path.join(root, "scripts");
@@ -474,6 +492,235 @@ export function neotomaServerEntries(
       command: process.execPath,
       args: [distEntrypoint],
       env: { ...baseEnv, NEOTOMA_ENV: "production" },
+    },
+  };
+}
+
+function maybeEnv(env: Record<string, string>): { env?: Record<string, string> } {
+  return Object.keys(env).length > 0 ? { env } : {};
+}
+
+function downstreamUrlForEnv(env: "dev" | "prod", sessionPorts?: SessionPorts): string {
+  const port = env === "dev" ? sessionPorts?.devPort : sessionPorts?.prodPort;
+  if (port != null) return `http://127.0.0.1:${port}/mcp`;
+  return env === "dev" ? DEFAULT_DEV_MCP_URL : DEFAULT_PROD_MCP_URL;
+}
+
+export function parseMcpTransportChoice(answer: string | undefined): McpTransportChoice {
+  const a = (answer ?? "").trim().toLowerCase();
+  if (a === "1" || a === "a" || a === "signed" || a === "signed-dev-shim") return "a";
+  if (a === "2" || a === "b" || a === "dev-shim" || a === "shim") return "b";
+  if (a === "3" || a === "c" || a === "direct" || a === "stdio") return "c";
+  if (a === "4" || a === "d" || a === "prod" || a === "prod-parity") return "d";
+  return "b";
+}
+
+async function promptMcpTransport(): Promise<McpTransportChoice> {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  return new Promise<McpTransportChoice>((resolve, reject) => {
+    let settled = false;
+    rl.on("close", () => {
+      if (!settled) {
+        settled = true;
+        reject(new InitAbortError());
+      }
+    });
+    rl.question(
+      "Choose MCP transport (what gets written for neotoma-dev + neotoma in mcp.json):\n" +
+        "\n" +
+        "  (1) A — Signed stdio shim + AAuth\n" +
+        "      Cursor speaks stdio; child process signs HTTP to /mcp. neotoma-dev → dev API;\n" +
+        "      neotoma → prod API (two slots, two backends).\n" +
+        "\n" +
+        "  (2) B — Unsigned/local stdio (default)\n" +
+        "      Lower-ceremony local setup: packaged installs launch Neotoma directly over stdio.\n" +
+        "      Source checkouts use the unsigned dev shim with the same dev/prod slots.\n" +
+        "\n" +
+        "  (3) C — Direct stdio (no HTTP shim)\n" +
+        "      MCP runs Neotoma stdio entrypoints directly; reconnect the MCP client after\n" +
+        "      code changes that affect the server process.\n" +
+        "\n" +
+        "  (4) D — Signed shim, prod API on both slots\n" +
+        "      neotoma-dev and neotoma both use the prod /mcp URL (default\n" +
+        "      http://127.0.0.1:3180/mcp). Use when you want prod data behind both entries.\n" +
+        "\n" +
+        "Choose [1-4] (default: 2): ",
+      (answer) => {
+        if (settled) return;
+        settled = true;
+        rl.close();
+        resolve(parseMcpTransportChoice(answer));
+      }
+    );
+  });
+}
+
+export function neotomaServerEntriesForTransport(
+  repoRoot: string,
+  sessionPorts?: SessionPorts,
+  transport: McpTransportChoice = "b"
+): {
+  "neotoma-dev": McpServerEntry;
+  neotoma: McpServerEntry;
+} {
+  if (transport === "c") return neotomaServerEntries(repoRoot, sessionPorts);
+
+  const launchTarget = resolveMcpLaunchTarget(repoRoot);
+  if (launchTarget.mode === "scripts") {
+    const scriptsDir = path.join(launchTarget.root, "scripts");
+    if (transport === "b") {
+      const shimScript = path.join(scriptsDir, "run_neotoma_mcp_stdio_dev_shim.sh");
+      return {
+        "neotoma-dev": { command: shimScript },
+        neotoma: {
+          command: shimScript,
+          env: { NEOTOMA_ENV: "production" },
+        },
+      };
+    }
+
+    const signedShimScript = path.join(scriptsDir, "run_neotoma_mcp_signed_stdio_dev_shim.sh");
+    const devDownstreamUrl = transport === "d" ? downstreamUrlForEnv("prod", sessionPorts) : downstreamUrlForEnv("dev", sessionPorts);
+    const prodDownstreamUrl = downstreamUrlForEnv("prod", sessionPorts);
+    return {
+      "neotoma-dev": {
+        command: signedShimScript,
+        ...maybeEnv(
+          devDownstreamUrl === DEFAULT_DEV_MCP_URL
+            ? {}
+            : { MCP_PROXY_DOWNSTREAM_URL: devDownstreamUrl }
+        ),
+      },
+      neotoma: {
+        command: signedShimScript,
+        env: { MCP_PROXY_DOWNSTREAM_URL: prodDownstreamUrl },
+      },
+    };
+  }
+
+  const distEntrypoint = path.join(launchTarget.root, "dist", "index.js");
+  const cliEntrypoint = path.join(launchTarget.root, "dist", "cli", "index.js");
+  const baseEnv = { NEOTOMA_ACTIONS_DISABLE_AUTOSTART: "1" };
+  if (transport === "b") {
+    return {
+      "neotoma-dev": { command: process.execPath, args: [distEntrypoint], env: baseEnv },
+      neotoma: {
+        command: process.execPath,
+        args: [distEntrypoint],
+        env: { ...baseEnv, NEOTOMA_ENV: "production" },
+      },
+    };
+  }
+
+  const devDownstreamUrl = transport === "d" ? downstreamUrlForEnv("prod", sessionPorts) : downstreamUrlForEnv("dev", sessionPorts);
+  const prodDownstreamUrl = downstreamUrlForEnv("prod", sessionPorts);
+  return {
+    "neotoma-dev": {
+      command: process.execPath,
+      args: [cliEntrypoint, "mcp", "proxy", "--aauth"],
+      env: { MCP_PROXY_DOWNSTREAM_URL: devDownstreamUrl },
+    },
+    neotoma: {
+      command: process.execPath,
+      args: [cliEntrypoint, "mcp", "proxy", "--aauth"],
+      env: { MCP_PROXY_DOWNSTREAM_URL: prodDownstreamUrl },
+    },
+  };
+}
+
+/**
+ * Detect whether AAuth keys exist at the standard CLI location
+ * (`~/.neotoma/aauth/private.jwk`). When present, the proxy path
+ * should be offered as the recommended MCP entry.
+ */
+export function hasAAuthKeys(): boolean {
+  const aAuthKeyPath = path.join(os.homedir(), ".neotoma", "aauth", "private.jwk");
+  return existsSync(aAuthKeyPath);
+}
+
+export async function ensureAAuthKeysForSignedTransport(
+  transport: McpTransportChoice,
+  silent: boolean
+): Promise<void> {
+  if (transport !== "a" && transport !== "d") return;
+  if (hasAAuthKeys()) return;
+
+  const { generateAndStoreKeypair } = await import("./aauth_signer.js");
+  try {
+    const result = await generateAndStoreKeypair();
+    if (!silent) {
+      process.stdout.write(`Generated AAuth keypair for signed MCP transport (${result.thumbprint}).\n`);
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `Unable to generate AAuth keypair for signed MCP transport. Run \`neotoma auth keygen\` manually, then retry. ${message}`
+    );
+  }
+}
+
+/**
+ * Build MCP server entries that use the identity proxy instead of direct stdio.
+ * The proxy bridges stdio to HTTP with clientInfo injection and optional AAuth signing.
+ */
+export function neotomaProxyServerEntries(
+  repoRoot: string,
+  options?: { aauth?: boolean; downstreamUrl?: string },
+): {
+  "neotoma-dev": McpServerEntry;
+  neotoma: McpServerEntry;
+} {
+  const launchTarget = resolveMcpLaunchTarget(repoRoot);
+  const aauth = options?.aauth ?? hasAAuthKeys();
+  const proxyArgs = aauth ? ["mcp", "proxy", "--aauth"] : ["mcp", "proxy"];
+
+  if (launchTarget.mode === "scripts") {
+    const proxyScript = path.join(launchTarget.root, "scripts", "run_neotoma_mcp_proxy.sh");
+    const env: Record<string, string> = {};
+    if (options?.downstreamUrl) {
+      env.MCP_PROXY_DOWNSTREAM_URL = options.downstreamUrl;
+    }
+    return {
+      "neotoma-dev": {
+        command: proxyScript,
+        ...(Object.keys(env).length > 0 ? { env } : {}),
+      },
+      neotoma: {
+        command: proxyScript,
+        env: {
+          ...env,
+          MCP_PROXY_DOWNSTREAM_URL: options?.downstreamUrl ?? "http://localhost:3180/mcp",
+        },
+      },
+    };
+  }
+
+  const distEntrypoint = path.join(launchTarget.root, "dist", "cli", "index.js");
+  const baseEnv: Record<string, string> = {};
+  if (options?.downstreamUrl) {
+    baseEnv.MCP_PROXY_DOWNSTREAM_URL = options.downstreamUrl;
+  }
+
+  return {
+    "neotoma-dev": {
+      command: process.execPath,
+      args: [distEntrypoint, ...proxyArgs],
+      env: {
+        ...baseEnv,
+        MCP_PROXY_DOWNSTREAM_URL: options?.downstreamUrl ?? "http://localhost:3080/mcp",
+      },
+    },
+    neotoma: {
+      command: process.execPath,
+      args: [distEntrypoint, ...proxyArgs],
+      env: {
+        ...baseEnv,
+        MCP_PROXY_DOWNSTREAM_URL: options?.downstreamUrl ?? "http://localhost:3180/mcp",
+      },
     },
   };
 }
@@ -751,8 +998,14 @@ export async function scanForMcpConfigs(
  * Prompt user for yes/no input. In a TTY, a single y/n keypress submits immediately
  * and is echoed once; otherwise uses readline (e.g. for non-interactive or tests).
  * Rejects with InitAbortError on EOF (Cmd+D).
+ * When `defaultYes` is true, Enter/empty input accepts (same as `Y/n` prompts).
  */
-async function promptYesNo(question: string): Promise<boolean> {
+async function promptYesNo(
+  question: string,
+  opts?: { defaultYes?: boolean }
+): Promise<boolean> {
+  const defaultYes = opts?.defaultYes === true;
+  const hint = defaultYes ? "Y/n" : "y/n";
   const stdin = process.stdin;
   if (!stdin.isTTY) {
     const rl = readline.createInterface({
@@ -767,21 +1020,23 @@ async function promptYesNo(question: string): Promise<boolean> {
           reject(new InitAbortError());
         }
       });
-      rl.question(`${question} (y/n): `, (answer) => {
+      rl.question(`${question} (${hint}): `, (answer) => {
         if (!settled) {
           settled = true;
           rl.close();
-          resolve(
-            (answer ?? "").trim().toLowerCase() === "y" ||
-              (answer ?? "").trim().toLowerCase() === "yes"
-          );
+          const t = (answer ?? "").trim().toLowerCase();
+          if (t === "") {
+            resolve(defaultYes);
+            return;
+          }
+          resolve(t === "y" || t === "yes");
         }
       });
     });
   }
 
   return new Promise<boolean>((resolve, reject) => {
-    process.stdout.write(`${question} (y/n): `);
+    process.stdout.write(`${question} (${hint}): `);
     const wasPaused = stdin.isPaused();
     stdin.setRawMode(true);
     stdin.resume();
@@ -825,8 +1080,12 @@ async function promptYesNo(question: string): Promise<boolean> {
         done(true);
         return;
       }
-      if (lower === "n" || lower === "\r" || lower === "\n") {
+      if (lower === "n") {
         done(false);
+        return;
+      }
+      if (lower === "\r" || lower === "\n") {
+        done(defaultYes);
         return;
       }
     }
@@ -1123,7 +1382,7 @@ export async function offerFix(
   if (silent) {
     return {
       fixed: false,
-      message: "Misconfigurations detected. Run 'neotoma mcp check' to fix.",
+        message: "Misconfigurations detected. Run 'neotoma mcp config' to fix.",
       updatedPaths: [],
     };
   }
@@ -1147,7 +1406,9 @@ export async function offerFix(
   const shouldFix =
     options?.assumeYes ??
     (process.stdin.isTTY
-      ? await promptYesNo("Fix these issues? (Align local MCP URLs and Claude Desktop server IDs)")
+      ? await promptYesNo("Fix these issues? (Align local MCP URLs and Claude Desktop server IDs)", {
+          defaultYes: true,
+        })
       : false);
   if (!shouldFix) {
     return { fixed: false, message: "Fix cancelled.", updatedPaths: [] };
@@ -1242,6 +1503,13 @@ export async function offerInstall(
     autoInstallEnv?: "dev" | "prod" | "both";
     /** Optional init default: skip target prompt and use this scope. */
     autoInstallScope?: "project" | "user" | "both";
+    /** Optional install default: skip transport prompt and use this MCP transport mode. */
+    mcpTransport?: McpTransportChoice;
+    /**
+     * When true, apply the selected transport to every JSON MCP config in the chosen install scope,
+     * not only configs missing dev or prod. Use to switch presets (A–D) or refresh script paths.
+     */
+    rewriteExistingNeotoma?: boolean;
     /** Non-interactive default: accept repair prompts instead of waiting on stdin. */
     assumeYes?: boolean;
     /** When true, do not run sync:mcp (avoids writing project-level MCP configs). */
@@ -1256,6 +1524,7 @@ export async function offerInstall(
   const silent = options?.silent ?? false;
   const cwd = options?.cwd ?? process.cwd();
   let selectedEnv: "dev" | "prod" | null = options?.currentEnv ?? null;
+  let selectedTransport: McpTransportChoice = options?.mcpTransport ?? "b";
   const sessionPorts: SessionPorts | undefined =
     options?.devPort != null || options?.prodPort != null
       ? { devPort: options.devPort, prodPort: options.prodPort }
@@ -1327,20 +1596,29 @@ export async function offerInstall(
         ? rescanned.filter((c) => (selectedEnv === "dev" ? !c.hasDev : !c.hasProd))
         : rescanned.filter((c) => !c.hasDev || !c.hasProd);
       if (stillMissing.length === 0) {
-        return { installed: true, message: fixResult.message };
+        if (!options?.rewriteExistingNeotoma) {
+          return { installed: true, message: fixResult.message };
+        }
+        scopedTargetConfigs = getConfigsForScope(rescanned);
+        scopedMissingConfigs = getMissingFromConfigs(scopedTargetConfigs, selectedEnv);
+      } else {
+        // Fall through to offer adding missing
+        missingConfigs.length = 0;
+        missingConfigs.push(...stillMissing);
+        scopedTargetConfigs = getConfigsForScope(rescanned);
+        scopedMissingConfigs = getMissingFromConfigs(scopedTargetConfigs, selectedEnv);
       }
-      // Fall through to offer adding missing
-      missingConfigs.length = 0;
-      missingConfigs.push(...stillMissing);
-      scopedTargetConfigs = getConfigsForScope(rescanned);
-      scopedMissingConfigs = getMissingFromConfigs(scopedTargetConfigs, selectedEnv);
     } else if (scopedMissingConfigs.length === 0) {
       // User declined fix; no missing servers (only had misconfig)
       return { installed: false, message: "No changes made." };
     }
   }
 
-  if (scopedTargetConfigs.length > 0 && scopedMissingConfigs.length === 0) {
+  if (
+    scopedTargetConfigs.length > 0 &&
+    scopedMissingConfigs.length === 0 &&
+    !options?.rewriteExistingNeotoma
+  ) {
     const scopeSuffix =
       options?.autoInstallScope === "user"
         ? " in user-level MCP configs."
@@ -1359,7 +1637,7 @@ export async function offerInstall(
     if (silent) {
       return {
         installed: false,
-        message: "No MCP config files found. Run 'neotoma mcp check' to create one.",
+        message: "No MCP config files found. Run 'neotoma mcp config' to create one.",
       };
     }
 
@@ -1375,6 +1653,10 @@ export async function offerInstall(
     if (choice === null) {
       return { installed: false, message: "Installation cancelled." };
     }
+    if (!options?.mcpTransport && process.stdin.isTTY) {
+      selectedTransport = await promptMcpTransport();
+    }
+    await ensureAAuthKeysForSignedTransport(selectedTransport, silent);
 
     const cursorDir =
       choice === "user"
@@ -1383,7 +1665,7 @@ export async function offerInstall(
     const configPath = path.join(cursorDir, "mcp.json");
 
     await fs.mkdir(cursorDir, { recursive: true });
-    const entries = neotomaServerEntries(repoRoot, sessionPorts);
+    const entries = neotomaServerEntriesForTransport(repoRoot, sessionPorts, selectedTransport);
     const mcpServers =
       selectedEnv === "dev"
         ? { "neotoma-dev": entries["neotoma-dev"] }
@@ -1410,15 +1692,15 @@ export async function offerInstall(
   }
 
   // Offer to update existing configs
-  if (silent) {
+  if (silent && !(options?.rewriteExistingNeotoma && options?.autoInstallScope)) {
     const msg = selectedEnv
-      ? `Missing ${selectedEnv} server. Run 'neotoma mcp check' to add it.`
-      : "Missing dev or prod servers. Run 'neotoma mcp check' to add them.";
+      ? `Missing ${selectedEnv} server. Run 'neotoma mcp config' to add it.`
+      : "Missing dev or prod servers. Run 'neotoma mcp config' to add them.";
     return { installed: false, message: msg };
   }
 
   const boxAlreadyShown = options?.boxAlreadyShown ?? false;
-  if (!boxAlreadyShown) {
+  if (!boxAlreadyShown && !silent) {
     process.stdout.write("\n" + formatMcpStatusBox(scopedTargetConfigs) + "\n");
   }
   const runningFromSourceCheckout =
@@ -1437,8 +1719,15 @@ export async function offerInstall(
     return { installed: false, message: "Installation cancelled." };
   }
   const scope = installChoiceToScope(installChoice);
+  if (!options?.mcpTransport && process.stdin.isTTY) {
+    selectedTransport = await promptMcpTransport();
+  }
+  await ensureAAuthKeysForSignedTransport(selectedTransport, silent);
+  const configsForInstallTargets = options?.rewriteExistingNeotoma
+    ? scopedTargetConfigs
+    : scopedMissingConfigs;
   let selectedMissingConfigs = filterConfigsByInstallChoice(
-    scopedMissingConfigs,
+    configsForInstallTargets,
     installChoice,
     repoRoot
   );
@@ -1453,9 +1742,10 @@ export async function offerInstall(
     };
   }
 
-  const entries = neotomaServerEntries(repoRoot, sessionPorts);
+  const entries = neotomaServerEntriesForTransport(repoRoot, sessionPorts, selectedTransport);
   const updatedPaths: string[] = [];
   const selectedIncludesCodex = selectedMissingConfigs.some((c) => isCodexConfigPath(c.path));
+  const forceRewriteNeotoma = options?.rewriteExistingNeotoma ?? false;
 
   for (const config of selectedMissingConfigs) {
     if (isCodexConfigPath(config.path)) continue; // Codex uses TOML; updated via sync:mcp from .cursor/mcp.json
@@ -1470,14 +1760,14 @@ export async function offerInstall(
       applyClaudeDesktopServerIdMigration(parsed.mcpServers);
     }
 
-    // Add missing servers (only selected env when selectedEnv is set)
+    // Add or replace Neotoma servers (only selected env when selectedEnv is set)
     if (!selectedEnv || selectedEnv === "dev") {
-      if (!config.hasDev) {
+      if (forceRewriteNeotoma || !config.hasDev) {
         parsed.mcpServers[neotomaServerIdForConfig(config.path, "dev")] = entries["neotoma-dev"];
       }
     }
     if (!selectedEnv || selectedEnv === "prod") {
-      if (!config.hasProd) {
+      if (forceRewriteNeotoma || !config.hasProd) {
         parsed.mcpServers[neotomaServerIdForConfig(config.path, "prod")] = entries.neotoma;
       }
     }
@@ -1508,7 +1798,7 @@ export async function offerInstall(
   // Codex is TOML; update user-level Codex config when selected.
   let syncAlreadyRan = false;
   if (repoRoot && selectedIncludesCodex) {
-    await syncCodexUserConfig(repoRoot, sessionPorts);
+    await syncCodexUserConfig(repoRoot, sessionPorts, selectedTransport);
     const codexPath = getUserLevelCodexConfigPath();
     if (codexPath && !updatedPaths.includes(codexPath)) updatedPaths.push(codexPath);
     if (!options?.skipProjectSync) {

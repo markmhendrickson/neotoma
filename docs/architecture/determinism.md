@@ -813,6 +813,8 @@ When an LLM agent retrieves data from Neotoma, it constructs the query stochasti
 
 **Policy:** Neotoma does not claim zero nondeterminism in the agent-memory interaction. The claim is variance concentration: all nondeterminism resides in the query formulation layer (discrete, schema-bounded, detectable on failure) and is eliminated from the retrieval layer (where in similarity-based systems it is continuous and silent).
 
+**Improvements roadmap:** Architectural improvements to narrow query formulation variance — including query-time entity type normalization, parameter validation, retrieval templates, result diagnostics, and replay testing — are defined in [`query_convergence.md`](./query_convergence.md). Write-path convergence improvements are defined in [`bounded_convergence.md`](./bounded_convergence.md).
+
 ### 11.4 Nondeterminism Location Summary
 
 | System | Query formulation | Retrieval mechanism | Failure mode |
@@ -834,7 +836,8 @@ Load `docs/architecture/determinism.md` when:
 - `docs/NEOTOMA_MANIFEST.md` (determinism as core principle)
 - `docs/architecture/architecture.md` (layer boundaries)
 - `docs/architecture/consistency.md` (eventual vs strong consistency)
-- `docs/architecture/bounded_convergence.md` (agent-layer convergence improvements)
+- `docs/architecture/bounded_convergence.md` (write-path convergence improvements)
+- `docs/architecture/query_convergence.md` (query formulation convergence improvements)
 - `docs/subsystems/schema.md` (schema-based extraction)
 - `docs/testing/testing_standard.md` (deterministic test patterns)
 ### Constraints Agents Must Enforce

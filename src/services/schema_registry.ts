@@ -275,7 +275,7 @@ export interface IconMetadata {
 export interface SchemaMetadata {
   label?: string;
   description?: string;
-  category?: "finance" | "productivity" | "knowledge" | "health" | "media";
+  category?: "finance" | "productivity" | "knowledge" | "health" | "media" | "agent_runtime";
   icon?: IconMetadata;
   test?: boolean; // Mark schemas created for testing
   test_marked_at?: string; // ISO timestamp when test schema was marked
@@ -292,6 +292,28 @@ export interface SchemaRegistryEntry {
   user_id?: string | null;
   scope?: "global" | "user";
   metadata?: SchemaMetadata;
+}
+
+export async function loadCodeDefinedSchemaEntry(
+  entityType: string,
+): Promise<SchemaRegistryEntry | null> {
+  const { ENTITY_SCHEMAS } = await import("./schema_definitions.js");
+  const normalized = normalizeEntityTypeForSchema(entityType);
+  const schema = ENTITY_SCHEMAS[entityType] ?? ENTITY_SCHEMAS[normalized];
+  if (!schema) return null;
+
+  return {
+    id: "",
+    entity_type: schema.entity_type,
+    schema_version: schema.schema_version,
+    schema_definition: schema.schema_definition,
+    reducer_config: schema.reducer_config,
+    active: true,
+    created_at: new Date(0).toISOString(),
+    user_id: null,
+    scope: "global",
+    metadata: schema.metadata ?? {},
+  };
 }
 
 /**
@@ -976,16 +998,17 @@ export class SchemaRegistryService {
           const sourceId = firstFragment.source_id;
           const interpretationId = firstFragment.interpretation_id;
 
-          // Find entity_id from existing observations with same source_id
-          // For structured data (parquet), interpretation_id may be null, so match on source_id only
-          let entityId: string | null = null;
-          if (sourceId) {
+          // Prefer explicit fragment ownership. Legacy fragments only carry
+          // source_id + entity_type, which is ambiguous when one source creates
+          // multiple entities of the same type.
+          let entityId: string | null =
+            typeof firstFragment.entity_id === "string" ? firstFragment.entity_id : null;
+          if (!entityId && sourceId) {
             let obsQuery = db
               .from("observations")
               .select("entity_id")
               .eq("source_id", sourceId)
-              .eq("entity_type", options.entity_type)
-              .limit(1);
+              .eq("entity_type", options.entity_type);
 
             // If interpretation_id exists, also match on it; otherwise match any interpretation_id
             if (interpretationId) {
@@ -995,10 +1018,14 @@ export class SchemaRegistryService {
               obsQuery = obsQuery.is("interpretation_id", null);
             }
 
-            const { data: existingObs } = await obsQuery.maybeSingle();
-
-            if (existingObs) {
-              entityId = existingObs.entity_id;
+            const { data: existingObs } = await obsQuery;
+            const entityIds = new Set<string>(
+              (existingObs || [])
+                .map((obs: { entity_id?: unknown }) => obs.entity_id)
+                .filter((id: unknown): id is string => typeof id === "string"),
+            );
+            if (entityIds.size === 1) {
+              entityId = Array.from(entityIds)[0];
             }
           }
 

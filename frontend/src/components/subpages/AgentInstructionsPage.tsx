@@ -18,7 +18,7 @@ export function AgentInstructionsPage() {
         and display behavior are identical across transports.
       </p>
       <p className={paragraph}>
-        This page mirrors the canonical instruction block shipped to MCP clients at runtime.
+        This page summarizes the canonical instruction block shipped to MCP clients at runtime.
         For the verbatim source see{" "}
         <a
           href="https://github.com/markmhendrickson/neotoma/blob/main/docs/developer/mcp/instructions.md"
@@ -26,15 +26,29 @@ export function AgentInstructionsPage() {
         >
           docs/developer/mcp/instructions.md
         </a>
-        ; the CLI-equivalent rules live in{" "}
+        . The harness file applied by{" "}
+        <code>neotoma cli config --yes</code> is{" "}
         <a
           href="https://github.com/markmhendrickson/neotoma/blob/main/docs/developer/cli_agent_instructions.md"
           className={inlineLink}
         >
           docs/developer/cli_agent_instructions.md
-        </a>
-        . The two are kept in parity by the sync rules under{" "}
-        <code>.cursor/rules/developer_agent_instructions_sync_rules.mdc</code>.
+        </a>{" "}
+        (transport + CLI cheat sheet only). See{" "}
+        <a
+          href="https://github.com/markmhendrickson/neotoma/blob/main/docs/developer/agent_instructions.md"
+          className={inlineLink}
+        >
+          docs/developer/agent_instructions.md
+        </a>{" "}
+        for the map and{" "}
+        <a
+          href="https://github.com/markmhendrickson/neotoma/blob/main/docs/developer/agent_instructions_sync_rules.mdc"
+          className={inlineLink}
+        >
+          docs/developer/agent_instructions_sync_rules.mdc
+        </a>{" "}
+        for the maintainer contract.
       </p>
 
       <h2 className={sectionHeading}>Turn lifecycle</h2>
@@ -55,7 +69,7 @@ export function AgentInstructionsPage() {
         <li className={listItem}>
           <strong className="text-foreground">Step 2, User-phase store.</strong> Persist the
           conversation, the current user message, and any entities implied by the message in
-          one <code>store_structured</code> call. If the user attached a file, include it in
+          one <code>store</code> call. If the user attached a file, include it in
           the same request and add the EMBEDS link. MUST NOT skip this for greetings or
           minimal messages.
         </li>
@@ -71,7 +85,7 @@ export function AgentInstructionsPage() {
         </li>
         <li className={listItem}>
           <strong className="text-foreground">Step 5a, Closing store.</strong> After the
-          user-visible reply is finalized, call <code>store_structured</code> with a single
+          user-visible reply is finalized, call <code>store</code> with a single
           <code>conversation_message</code> entity (<code>role: "assistant"</code>,{" "}
           <code>sender_kind: "assistant"</code>, exact reply text,{" "}
           <code>turn_key: "{`{conversation_id}:{turn_id}:assistant`}"</code>) and an{" "}

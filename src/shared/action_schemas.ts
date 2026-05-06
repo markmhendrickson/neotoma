@@ -296,11 +296,31 @@ export const ObservationSourceSchema = z.enum(OBSERVATION_SOURCE_VALUES);
 
 export type ObservationSource = z.infer<typeof ObservationSourceSchema>;
 
+export const StoreInterpretationInputSchema = z.object({
+  source_id: z.string().min(1).optional(),
+  source_ref: z.enum(["structured", "unstructured"]).optional(),
+  interpretation_config: z.record(z.unknown()).optional(),
+}).refine((data) => Boolean(data.source_id || data.source_ref), {
+  message: "interpretation requires source_id or source_ref",
+});
+
+export type StoreInterpretationInput = z.infer<typeof StoreInterpretationInputSchema>;
+
+export const CreateInterpretationRequestSchema = z.object({
+  source_id: z.string().min(1),
+  entities: z.array(z.record(z.unknown())).min(1),
+  interpretation_config: z.record(z.unknown()).optional(),
+  relationships: z.array(StoreRelationshipInputSchema).optional(),
+  idempotency_key: z.string().min(1).optional(),
+  user_id: z.string().optional(),
+});
+
 export const StoreStructuredRequestSchema = z.object({
   entities: z.array(z.record(z.unknown())),
   relationships: z
     .array(StoreRelationshipInputSchema)
     .optional(),
+  interpretation: StoreInterpretationInputSchema.optional(),
   source_priority: z.number().optional().default(100),
   observation_source: ObservationSourceSchema.optional(),
   idempotency_key: z.string().min(1),
@@ -324,6 +344,7 @@ export const StoreRequestSchema = z
     relationships: z
       .array(StoreRelationshipInputSchema)
       .optional(),
+    interpretation: StoreInterpretationInputSchema.optional(),
     source_priority: z.number().optional().default(100),
     observation_source: ObservationSourceSchema.optional(),
     idempotency_key: z.string().min(1).optional(),

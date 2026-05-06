@@ -1,8 +1,11 @@
 {
   "name": "neotoma",
-  "version": "0.1.0",
-  "description": "Neotoma state layer for Claude Code. Retrieval injection, observation capture, compaction awareness, and persistence safety net — complementing the Neotoma MCP server.",
-  "author": "Mark Hendrickson",
+  "version": "0.1.1",
+  "description": "Harness-specific lifecycle hooks + portable Neotoma access. MCP/CLI work in any agent environment; this artifact is the Claude Code plugin (Python hooks under ${CLAUDE_PLUGIN_ROOT}). The same package also ships a Cursor hook map (.cursor/hooks.json → cursor-hooks) with the same goals but different lifecycle names (e.g. PreCompact is Claude Code–only here). Retrieval injection, tool-call logging, compaction markers where supported, stop-turn persistence safety net — complements MCP (hooks are not MCP tools).",
+  "author": {
+    "name": "Mark Hendrickson",
+    "url": "https://neotoma.io"
+  },
   "homepage": "https://neotoma.io",
   "repository": "https://github.com/markmhendrickson/neotoma",
   "license": "MIT",
@@ -10,36 +13,56 @@
     "SessionStart": [
       {
         "matcher": "*",
-        "type": "command",
-        "command": "python3 ${PLUGIN_DIR}/hooks/session_start.py"
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/session_start.py\""
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
       {
         "matcher": "*",
-        "type": "command",
-        "command": "python3 ${PLUGIN_DIR}/hooks/user_prompt_submit.py"
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/user_prompt_submit.py\""
+          }
+        ]
       }
     ],
     "PostToolUse": [
       {
         "matcher": "*",
-        "type": "command",
-        "command": "python3 ${PLUGIN_DIR}/hooks/post_tool_use.py"
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/post_tool_use.py\""
+          }
+        ]
       }
     ],
     "PreCompact": [
       {
         "matcher": "*",
-        "type": "command",
-        "command": "python3 ${PLUGIN_DIR}/hooks/pre_compact.py"
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/pre_compact.py\""
+          }
+        ]
       }
     ],
     "Stop": [
       {
         "matcher": "*",
-        "type": "command",
-        "command": "python3 ${PLUGIN_DIR}/hooks/stop.py"
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/stop.py\""
+          }
+        ]
       }
     ]
   }

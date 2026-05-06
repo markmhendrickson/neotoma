@@ -77,7 +77,7 @@ export function AauthCapabilitiesPage() {
   "match_iss": "https://agent.example.com",  // optional; both must match when set
   "match_thumbprint": "abcd…",               // optional RFC 7638 JWK thumbprint
   "capabilities": [
-    { "op": "store_structured",    "entity_types": ["neotoma_feedback"] },
+    { "op": "store",               "entity_types": ["neotoma_feedback"] },
     { "op": "create_relationship", "entity_types": ["neotoma_feedback"] },
     { "op": "correct",             "entity_types": ["neotoma_feedback"] },
     { "op": "retrieve",            "entity_types": ["neotoma_feedback"] }
@@ -103,7 +103,7 @@ export function AauthCapabilitiesPage() {
       </h3>
       <ul className="list-none pl-0 space-y-2 mb-4">
         <li className="text-[15px] leading-7 text-muted-foreground">
-          <code>store_structured</code>, creating / observing entities
+          <code>store</code>, creating / observing entities
           (write path).
         </li>
         <li className="text-[15px] leading-7 text-muted-foreground">
@@ -160,7 +160,7 @@ export function AauthCapabilitiesPage() {
       <p className="text-[15px] leading-7 mb-6">
         Only the user who owns the grant (or an agent the user has
         authorised with the bootstrap{" "}
-        <code>(store_structured | correct, agent_grant)</code> capability)
+        <code>(store | correct, agent_grant)</code> capability)
         can flip status. Admission caches the resolved grant for a small
         TTL plus invalidates on observation events, so a revoke propagates
         to in-flight clients within seconds.
@@ -182,7 +182,7 @@ export function AauthCapabilitiesPage() {
           AAuth-admitted callers must hold an explicit capability in their
           grant for the protected type. The bootstrap capability is{" "}
           <code>
-            {`{ op: "store_structured", entity_types: ["agent_grant"] }`}
+            {`{ op: "store", entity_types: ["agent_grant"] }`}
           </code>{" "}
           (and <code>correct</code>).
         </li>
@@ -233,11 +233,11 @@ export function AauthCapabilitiesPage() {
       <pre className="rounded-lg border code-block-palette p-4 overflow-x-auto font-mono text-[14px] whitespace-pre-wrap break-words mb-6">{`{
   "error": {
     "code": "capability_denied",
-    "message": "Agent \\"agent-site@neotoma.io\\" is not permitted to store_structured entity_type \\"person\\".",
-    "op": "store_structured",
+    "message": "Agent \\"agent-site@neotoma.io\\" is not permitted to store entity_type \\"person\\".",
+    "op": "store",
     "entity_type": "person",
     "agent_label": "agent-site@neotoma.io",
-    "hint": "Agent \\"agent-site@neotoma.io\\" holds an active grant but no \\"store_structured\\" capability for entity_type \\"person\\". Edit the grant in Inspector → Agents → Agent grants if intentional."
+    "hint": "Agent \\"agent-site@neotoma.io\\" holds an active grant but no \\"store\\" capability for entity_type \\"person\\". Edit the grant in Inspector → Agents → Agent grants if intentional."
   }
 }`}</pre>
 

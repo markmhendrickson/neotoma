@@ -1,33 +1,36 @@
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { PRODUCT_NAV_SOURCES } from "@/utils/analytics";
-import { FAQ_ITEMS, faqQuestionToSectionId } from "@/site/faq_items";
+import { faqItemSectionId, getFaqItems } from "@/site/faq_items";
 import { DetailPage } from "../DetailPage";
 import { TrackedProductLink } from "../TrackedProductNav";
+import { useLocale } from "@/i18n/LocaleContext";
 
 export type { FaqItem } from "@/site/faq_items";
-export { FAQ_ITEMS, FAQ_QUESTION_GIT_LIKE_AGENT_MEMORY, faqQuestionToSectionId } from "@/site/faq_items";
+export {
+  FAQ_ITEMS,
+  FAQ_ITEMS_EN,
+  FAQ_QUESTION_BUILDING_YOUR_OWN_MEMORY_SYSTEM,
+  FAQ_QUESTION_GIT_LIKE_AGENT_MEMORY,
+  FAQ_QUESTION_NOT_FOR_THOUGHT_PARTNER,
+  faqItemSectionId,
+  faqQuestionToSectionId,
+  getFaqItems,
+} from "@/site/faq_items";
 
 export function FaqPage() {
+  const { locale, subpage } = useLocale();
+  const faqItems = useMemo(() => getFaqItems(locale), [locale]);
   return (
-    <DetailPage title="Frequently asked questions">
-      <p className="text-[15px] leading-7 mb-8">
-        Answers to common questions about Neotoma: what it is, how it compares to other memory systems, how to install it, and what guarantees it provides.
-      </p>
+    <DetailPage title={subpage.faq.title}>
+      <p className="text-[15px] leading-7 mb-8">{subpage.faq.intro}</p>
 
-      {FAQ_ITEMS.map((item) => (
-        <section
-          key={item.question}
-          id={faqQuestionToSectionId(item.question)}
-          className="mb-10 scroll-mt-28"
-        >
-          <h2 className="text-[18px] font-medium tracking-[-0.01em] mb-2">
-            {item.question}
-          </h2>
+      {faqItems.map((item) => (
+        <section key={item.sectionId} id={faqItemSectionId(item)} className="mb-10 scroll-mt-28">
+          <h2 className="text-[18px] font-medium tracking-[-0.01em] mb-2">{item.question}</h2>
           <p className="text-[15px] leading-7 mb-2">{item.answer}</p>
           {item.detail && (
-            <p className="text-[14px] leading-7 text-muted-foreground mb-2">
-              {item.detail}
-            </p>
+            <p className="text-[14px] leading-7 text-muted-foreground mb-2">{item.detail}</p>
           )}
           {item.link &&
             (item.link.href === "/install" ? (

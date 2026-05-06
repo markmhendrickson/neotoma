@@ -97,6 +97,19 @@ function packageInstallerPath(
   return existsSync(candidate) ? candidate : null;
 }
 
+/**
+ * Locate the claude-code plugin package directory within the repo root.
+ * Returns the absolute path if it exists, null otherwise.
+ */
+function claudeCodePluginDir(repoRoot: string): string | null {
+  const candidate = path.join(repoRoot, "packages", "claude-code-plugin");
+  return existsSync(candidate) ? candidate : null;
+}
+
+/** Matches `packages/claude-code-plugin/.claude-plugin/marketplace.json` `name` and plugin entry `name`. */
+const CLAUDE_NEOTOMA_MARKETPLACE_NAME = "neotoma-marketplace";
+const CLAUDE_NEOTOMA_PLUGIN_INSTALL_SPEC = `neotoma@${CLAUDE_NEOTOMA_MARKETPLACE_NAME}`;
+
 async function confirm(question: string): Promise<boolean> {
   if (!process.stdin.isTTY) return false;
   return new Promise((resolve) => {
@@ -104,19 +117,35 @@ async function confirm(question: string): Promise<boolean> {
       input: process.stdin,
       output: process.stdout,
     });
-    rl.question(`${question} [y/N] `, (answer) => {
+    rl.question(`${question} [Y/n] `, (answer) => {
       rl.close();
-      resolve(/^y(es)?$/i.test(answer.trim()));
+      const t = (answer ?? "").trim().toLowerCase();
+      if (t === "" || t === "y" || t === "yes") {
+        resolve(true);
+        return;
+      }
+      resolve(false);
     });
   });
 }
 
-function printSnippetOnly(tool: HookHarnessId): string {
+function printSnippetOnly(tool: HookHarnessId, repoRoot?: string | null): string {
   if (tool === "claude-code") {
+    const pluginDir = repoRoot ? claudeCodePluginDir(repoRoot) : null;
+    if (pluginDir && repoRoot) {
+      return [
+        "Claude Code plugin (local checkout detected). Claude CLI only installs",
+        "  `plugin@marketplace` ids — register this folder as a marketplace, then install:",
+        `  claude plugin marketplace add ${pluginDir}`,
+        `  claude plugin install ${CLAUDE_NEOTOMA_PLUGIN_INSTALL_SPEC}`,
+        "See docs/integrations/hooks/claude_code.md.",
+      ].join("\n");
+    }
     return [
-      "Claude Code plugin: install from the plugin marketplace or add to",
-      "  .claude/plugins.json:",
-      '    { "plugins": [{ "name": "neotoma", "source": "@neotoma/claude-code-plugin" }] }',
+      "Claude Code plugin: install from npm once published:",
+      "  claude plugin install @neotoma/claude-code-plugin",
+      "Or add to .claude/plugins.json:",
+      '  { "plugins": [{ "name": "neotoma", "source": "@neotoma/claude-code-plugin" }] }',
       "See docs/integrations/hooks/claude_code.md.",
     ].join("\n");
   }
@@ -204,7 +233,70 @@ async function doInstall(
 
   const installerPath = packageInstallerPath(opts.tool, repoRoot);
   if (!installerPath) {
-    const snippet = printSnippetOnly(opts.tool);
+    // For claude-code: Claude's `plugin install` only accepts `name@marketplace`
+    // (see code.claude.com plugins reference). Local checkouts ship a catalog at
+    // `packages/claude-code-plugin/.claude-plugin/marketplace.json`; register the
+    // plugin root as a marketplace, then install `neotoma@neotoma-marketplace`.
+    if (opts.tool === "claude-code") {
+      const pluginDir = claudeCodePluginDir(repoRoot);
+      if (pluginDir) {
+        if (opts.dryRun) {
+          return {
+            ok: true,
+            tool: opts.tool,
+            action: "install",
+            message:
+              `[dry-run] would run: claude plugin marketplace add ${pluginDir} && ` +
+              `claude plugin install ${CLAUDE_NEOTOMA_PLUGIN_INSTALL_SPEC}`,
+            delegated_to: pluginDir,
+            status: report.hooks,
+          };
+        }
+        if (!opts.yes) {
+          const ok = await confirm(
+            `Install Neotoma Claude Code plugin? This will run \`claude plugin marketplace add ${pluginDir}\` then \`claude plugin install ${CLAUDE_NEOTOMA_PLUGIN_INSTALL_SPEC}\`.`
+          );
+          if (!ok) {
+            return {
+              ok: false,
+              tool: opts.tool,
+              action: "install",
+              message: "Declined by user.",
+              delegated_to: null,
+              status: report.hooks,
+            };
+          }
+        }
+        const addRes = spawnSync(
+          "claude",
+          ["plugin", "marketplace", "add", pluginDir],
+          { cwd: repoRoot, stdio: "inherit" }
+        );
+        const installRes = spawnSync(
+          "claude",
+          ["plugin", "install", CLAUDE_NEOTOMA_PLUGIN_INSTALL_SPEC],
+          { cwd: repoRoot, stdio: "inherit" }
+        );
+        const ok = installRes.status === 0;
+        const addOk = addRes.status === 0;
+        return {
+          ok,
+          tool: opts.tool,
+          action: "install",
+          message: ok
+            ? `Installed Neotoma Claude Code plugin (${CLAUDE_NEOTOMA_PLUGIN_INSTALL_SPEC}).` +
+                (addOk ? "" : " (marketplace add returned non-zero; it may already be registered.)")
+            : `claude plugin install failed (status ${installRes.status ?? "unknown"}). ` +
+                `Ensure marketplace is registered: claude plugin marketplace add ${pluginDir} ` +
+                `then: claude plugin install ${CLAUDE_NEOTOMA_PLUGIN_INSTALL_SPEC}` +
+                (addOk ? "" : ` (marketplace add exited ${addRes.status ?? "unknown"})`),
+          delegated_to: pluginDir,
+          status: report.hooks,
+        };
+      }
+    }
+
+    const snippet = printSnippetOnly(opts.tool, repoRoot);
     return {
       ok: true,
       tool: opts.tool,

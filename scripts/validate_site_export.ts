@@ -166,6 +166,47 @@ if (badAssetPaths === 0) {
 }
 
 // ---------------------------------------------------------------------------
+// 3c. Non-English prerendered homepages must not retain obvious English hero copy
+// ---------------------------------------------------------------------------
+const NON_ENGLISH_SITE_LOCALES = [
+  "es",
+  "ca",
+  "zh",
+  "hi",
+  "ar",
+  "fr",
+  "pt",
+  "ru",
+  "bn",
+  "ur",
+  "id",
+  "de",
+] as const;
+/** Stable English hero lines from `static_packs` / SitePage — if present in locale HTML, prerender likely missed i18n. */
+const ENGLISH_HOME_SENTINELS = [
+  "Your agents forget.",
+  "Without shared memory across your AI tools:",
+] as const;
+
+let englishHomeSentinelHits = 0;
+for (const loc of NON_ENGLISH_SITE_LOCALES) {
+  const homePath = path.join(siteDir, loc, "index.html");
+  if (!fs.existsSync(homePath)) continue;
+  const html = fs.readFileSync(homePath, "utf-8");
+  for (const phrase of ENGLISH_HOME_SENTINELS) {
+    if (html.includes(phrase)) {
+      fail(
+        `site_pages/${loc}/index.html contains English homepage sentinel "${phrase.slice(0, 48)}${phrase.length > 48 ? "…" : ""}" — locale prerender may be wrong`,
+      );
+      englishHomeSentinelHits++;
+    }
+  }
+}
+if (englishHomeSentinelHits === 0) {
+  pass("No non-English homepage HTML contained English hero sentinels");
+}
+
+// ---------------------------------------------------------------------------
 // 4. 404.html must render the not-found page, not the homepage
 // ---------------------------------------------------------------------------
 const notFoundPath = path.join(siteDir, "404.html");

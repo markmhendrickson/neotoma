@@ -722,7 +722,7 @@ export function buildCompactReminder(model?: string | null | undefined): string 
     "Neotoma turn must-do (compact; full rules at MCP `instructions`):",
     "0. Every turn must interact with Neotoma at least once, usually by storing the conversation turn.",
     "1. Bounded retrieval first when the user message implies known entities (retrieve_entity_by_identifier for ids, retrieve_entities for category lists).",
-    "2. User-phase store (one store_structured call): conversation + user conversation_message (sender_kind=user) + any extracted entities; PART_OF message->conversation; REFERS_TO message->each extracted entity.",
+    "2. User-phase store (one **`store`** MCP call): conversation + user conversation_message (sender_kind=user) + any extracted entities; PART_OF message->conversation; REFERS_TO message->each extracted entity.",
     "3. Tool calls and host edits run AFTER step 2.",
     "4. Closing store: assistant conversation_message (sender_kind=assistant, exact reply text) with REFERS_TO to every entity the reply cites or produced; PART_OF same conversation.",
     "5. Display rule: when this turn created/updated/retrieved non-bookkeeping entities, the visible reply ends with a `🧠 Neotoma` section listing them as bullets.",
@@ -775,11 +775,7 @@ function looksLikeNeotomaCliWrite(command: string): boolean {
       }
       if (candidate.startsWith("-")) continue;
       if (candidate === "dev" || candidate === "prod") continue;
-      return (
-        candidate === "store" ||
-        candidate === "store-structured" ||
-        candidate === "ingest"
-      );
+      return candidate === "store" || candidate === "ingest";
     }
   }
   return false;
@@ -787,9 +783,9 @@ function looksLikeNeotomaCliWrite(command: string): boolean {
 
 /**
  * Conservative heuristic: returns true when a tool name + input look like a
- * Neotoma turn write. Handles direct MCP `store_structured`, generic host
+ * Neotoma turn write. Handles direct MCP **`store`** (legacy: `store_structured`), generic host
  * wrappers such as `CallMcpTool({ server: "user-neotoma", toolName:
- * "store_structured", arguments: ... })`, and Neotoma CLI backup commands
+ * "store", arguments: ... })`, and Neotoma CLI backup commands
  * such as `neotoma --servers=start store ...`. Used by `postToolUse` to bump
  * the compliance counter so `stop.ts` knows whether the agent actually wrote
  * structured memory this turn, regardless of supported transport.
@@ -801,8 +797,13 @@ export function looksLikeStoreStructured(
   if (typeof toolName !== "string") return false;
   const lower = toolName.toLowerCase();
   if (
+    lower === "store" ||
     lower === "store_structured" ||
+    lower === "store_unstructured" ||
     lower.endsWith("_store_structured") ||
+    lower.endsWith("_store_unstructured") ||
+    lower === "mcp_neotoma_store" ||
+    lower === "mcp_user-neotoma_store" ||
     lower === "mcp_neotoma_store_structured" ||
     lower === "mcp_user-neotoma_store_structured"
   ) {
@@ -820,7 +821,10 @@ export function looksLikeStoreStructured(
       typeof server === "string" &&
       server.toLowerCase().includes("neotoma") &&
       typeof wrappedToolName === "string" &&
-      wrappedToolName.toLowerCase() === "store_structured"
+      (() => {
+        const w = wrappedToolName.toLowerCase();
+        return w === "store" || w === "store_structured" || w === "store_unstructured";
+      })()
     ) {
       return true;
     }
@@ -899,7 +903,9 @@ export function isNeotomaRelevantTool(toolName: unknown, toolInput: unknown): bo
       lower.startsWith("mcp_user-neotoma") ||
       lower === "submit_feedback" ||
       lower === "get_feedback_status" ||
+      lower === "store" ||
       lower === "store_structured" ||
+      lower === "store_unstructured" ||
       lower === "retrieve_entities" ||
       lower === "retrieve_entity_by_identifier" ||
       lower === "create_relationship" ||
@@ -1180,6 +1186,29 @@ export function formatFailureHint(hint: FailureHint): string {
 }
 
 /**
+ * Whether the stop hook may return `followup_message` to trigger a
+ * one-shot compliance re-pass (`loop_limit: 1` in Cursor).
+ *
+ * - `NEOTOMA_HOOK_COMPLIANCE_PASSES`: master switch. `off` / `false` / `0`
+ *   disables follow-up regardless of `NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP`.
+ *   Unset or `on` / `true` / `1` defers to the follow-up env.
+ * - `NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP`: `off` / `false` / `0` disables;
+ *   `on` / `true` / `1` / `auto` (default) enables. Ignored when the master
+ *   switch is off.
+ */
+export function isHookComplianceFollowupEnabled(): boolean {
+  const passesRaw = (process.env.NEOTOMA_HOOK_COMPLIANCE_PASSES ?? "").trim().toLowerCase();
+  if (passesRaw === "off" || passesRaw === "false" || passesRaw === "0") {
+    return false;
+  }
+  const raw = (process.env.NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP ?? "auto").toLowerCase();
+  if (raw === "off" || raw === "false" || raw === "0") return false;
+  if (raw === "on" || raw === "true" || raw === "1") return true;
+  if (raw === "auto") return true;
+  return true;
+}
+
+/**
  * Best-effort detection for "this hook is running inside a developer
  * checkout of the Neotoma repo built from source", as opposed to a
  * packaged installation pointing at a remote Neotoma host. Used by the
@@ -1367,7 +1396,7 @@ export function diagnoseSkippedStore(input: DiagnoseSkippedStoreInput): SkippedS
           ]
         : [
             "Reconnect the MCP client so a fresh `initialize` re-delivers Neotoma instructions.",
-            "Ensure NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP is left at `auto` or `on` so the stop-hook follow-up still fires.",
+            "Ensure NEOTOMA_HOOK_COMPLIANCE_PASSES is not `off` and NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP is `auto` or `on` so the stop-hook follow-up still fires.",
           ],
     };
   }
@@ -1377,7 +1406,7 @@ export function diagnoseSkippedStore(input: DiagnoseSkippedStoreInput): SkippedS
       classification: "agent_ignored_available_instructions",
       confidence: "high",
       reason:
-        "Compact reminder was injected and Neotoma tooling was reachable, but the agent did not call store_structured.",
+        "Compact reminder was injected and Neotoma tooling was reachable, but the agent did not call **`store`**.",
       signals,
       local_build: localBuild,
       proactive_remediation_required: localBuild,
@@ -1388,7 +1417,7 @@ export function diagnoseSkippedStore(input: DiagnoseSkippedStoreInput): SkippedS
             "Investigate whether the MCP `[COMPACT MODE]` block omits a contract this model needs; expand `docs/developer/mcp/instructions.md` accordingly.",
           ]
         : [
-            "Leave NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP at `auto` or set it to `on`; only `off` suppresses skipped-store follow-up.",
+            "Leave NEOTOMA_HOOK_COMPLIANCE_PASSES unset or `on`, and NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP at `auto` or `on`; either master `COMPLIANCE_PASSES=off` or `COMPLIANCE_FOLLOWUP=off` suppresses skipped-store follow-up.",
           ],
     };
   }

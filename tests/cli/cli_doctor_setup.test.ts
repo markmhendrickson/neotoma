@@ -19,7 +19,9 @@ import {
   toolFromString,
 } from "../../src/cli/permissions.ts";
 import { runSetup } from "../../src/cli/setup.ts";
-import { runDoctor } from "../../src/cli/doctor.ts";
+import { applyCliInstructions, scanAgentInstructions } from "../../src/cli/agent_instructions_scan.ts";
+import { createDefaultSetupRunners } from "../../src/cli/setup_runners.ts";
+import { detectCurrentToolHint, runDoctor } from "../../src/cli/doctor.ts";
 import { detectHooks } from "../../src/cli/hooks_detect.ts";
 
 async function mkTmp(prefix: string): Promise<string> {
@@ -258,9 +260,77 @@ describe("runSetup", () => {
       changed: true,
     });
   });
+
+  it("default runners can skip hooks explicitly", async () => {
+    const runners = createDefaultSetupRunners({ cwd, skipHooks: true, dryRun: true });
+    const result = await runners.hooksInstall?.();
+    expect(result).toMatchObject({
+      id: "hooks",
+      ok: true,
+      skipped: true,
+      reason: "skip-hooks",
+    });
+  });
+});
+
+describe("applyCliInstructions", () => {
+  let cwd: string;
+  beforeEach(async () => {
+    cwd = await mkTmp("ntm-cli-instructions");
+    await fs.writeFile(path.join(cwd, "package.json"), "{}\n");
+    await fs.mkdir(path.join(cwd, "docs", "developer"), { recursive: true });
+    await fs.writeFile(
+      path.join(cwd, "docs", "developer", "cli_agent_instructions.md"),
+      "# Neotoma transport: MCP when available, CLI as backup\n\nUse CLI as backup.\n"
+    );
+  });
+  afterEach(async () => {
+    await fs.rm(cwd, { recursive: true, force: true });
+  });
+
+  it("writes project applied rule files non-interactively with an explicit scope", async () => {
+    const scan = await scanAgentInstructions(cwd, { includeUserLevel: false });
+    const result = await applyCliInstructions(scan, { scope: "project" });
+    expect(result.added.map((p) => path.relative(cwd, p)).sort()).toEqual([
+      ".claude/rules/neotoma_cli.mdc",
+      ".codex/neotoma_cli.md",
+      ".cursor/rules/neotoma_cli.mdc",
+    ]);
+  });
 });
 
 describe("runDoctor", () => {
+  it("detects Codex from Codex desktop environment variables", async () => {
+    const cwd = await mkTmp("ntm-doctor-codex-env");
+    try {
+      await fs.mkdir(path.join(cwd, ".claude"), { recursive: true });
+      await fs.mkdir(path.join(cwd, ".codex"), { recursive: true });
+
+      expect(
+        detectCurrentToolHint(cwd, {
+          CODEX_SHELL: "1",
+          CODEX_THREAD_ID: "thread-123",
+          CLAUDE_CODE_ENTRYPOINT: "ambient",
+        })
+      ).toBe("codex");
+    } finally {
+      await fs.rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("does not infer a current tool from ambiguous project markers", async () => {
+    const cwd = await mkTmp("ntm-doctor-markers");
+    try {
+      await fs.mkdir(path.join(cwd, ".claude"), { recursive: true });
+      await fs.mkdir(path.join(cwd, ".cursor"), { recursive: true });
+      await fs.mkdir(path.join(cwd, ".codex"), { recursive: true });
+
+      expect(detectCurrentToolHint(cwd, {})).toBeNull();
+    } finally {
+      await fs.rm(cwd, { recursive: true, force: true });
+    }
+  });
+
   it("returns a snapshot with all top-level keys", async () => {
     const cwd = await mkTmp("ntm-doctor-cwd");
     try {

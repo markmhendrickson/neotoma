@@ -116,6 +116,8 @@ gh release edit "$TAG" --notes-file /tmp/gh-release-"$TAG".md
 
 A normal `/release` is **not finished** until the new version is on the npm registry. After the tag is on `origin` and the GitHub Release exists, run **`npm publish`** from the package root (same ordering as `.cursor/skills/release/SKILL.md` Step 4). GitHub Releases alone do not update npm installs. Skip **`npm publish`** only when the user explicitly confirmed a GitHub-only / no-registry scope.
 
+**Registry auth and web login (agents):** If you need to sign in first, run `npm login` in an interactive terminal. When `npm login` prints `Login at: https://www.npmjs.com/login?...`, an agent with shell access may parse that URL from the CLI or terminal output and run `open '<url>'` on macOS or `xdg-open '<url>'` on Linux so the default browser opens the same URL that pressing Enter would open. **Only** open URLs that clearly match the official npmjs.com login/cli flow; prefer explicit user confirmation before running `open`/`xdg-open`. After the browser step, complete any OTP or follow-up prompts, then run **`npm publish`** (and `npm publish --otp=<code>` when 2FA applies).
+
 Before the tag exists, `/release` should still render the preview body to a temp file with `--head-ref` and show that Markdown verbatim for approval. After the tag/commit set is finalized, re-render without `--head-ref` before `gh release create`.
 
 If the **last npm publish** is older than the previous git tag (example: **`v0.4.0`** after **`v0.3.11`** was never on npm):

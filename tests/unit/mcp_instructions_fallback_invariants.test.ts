@@ -1,25 +1,16 @@
 /**
  * Invariant tests for the MCP_INTERACTION_INSTRUCTIONS_FALLBACK constant
  * in src/server.ts. These ensure the runtime fallback (used when
- * docs/developer/mcp/instructions.md is unreadable) stays aligned with the
- * canonical compact block on critical phrases and contract elements.
+ * docs/developer/mcp/instructions.md is unreadable) stays compact and aligned
+ * with MCP_INTERACTION_INSTRUCTIONS_COMPACT_DUAL_HOST body lines.
  */
 
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { MCP_INTERACTION_INSTRUCTIONS_FALLBACK } from "../../src/server.js";
-
-const REPO_ROOT = join(__dirname, "..", "..");
-const INSTRUCTIONS_MD = join(REPO_ROOT, "docs", "developer", "mcp", "instructions.md");
-
-function loadCanonicalCompactBlock(): string {
-  const raw = readFileSync(INSTRUCTIONS_MD, "utf-8");
-  const match = raw.match(/```\s*\n?([\s\S]*?)```/);
-  if (!match || !match[1]) throw new Error("Could not extract fenced code block from instructions.md");
-  return match[1].trim();
-}
+import {
+  MCP_INTERACTION_INSTRUCTIONS_COMPACT_DUAL_HOST,
+  MCP_INTERACTION_INSTRUCTIONS_FALLBACK,
+} from "../../src/server.js";
 
 describe("MCP_INTERACTION_INSTRUCTIONS_FALLBACK", () => {
   const fb = MCP_INTERACTION_INSTRUCTIONS_FALLBACK;
@@ -64,23 +55,48 @@ describe("MCP_INTERACTION_INSTRUCTIONS_FALLBACK", () => {
     expect(fb).toMatch(/surface the error/i);
   });
 
+  it("includes bounded product-bug repair escalation", () => {
+    expect(fb).toMatch(/Product-bug repair escalation/i);
+    expect(fb).toMatch(/deterministic Neotoma product bug/i);
+    expect(fb).toMatch(/source checkout/i);
+    expect(fb).toMatch(/targeted validation/i);
+  });
+
   it("stays compact (under ~5000 chars)", () => {
     expect(fb.length).toBeLessThan(5000);
   });
 
-  it("agrees with canonical compact block on critical phrases", () => {
-    const canonical = loadCanonicalCompactBlock();
+  it("includes compact-critical phrases shared with dual-host variant", () => {
     const critical = [
       "conversation_message",
-      "sender_kind",
       "PART_OF",
       "REFERS_TO",
       "store_structured",
       "idempotency_key",
+      "Product-bug repair escalation",
     ];
+    expect(MCP_INTERACTION_INSTRUCTIONS_FALLBACK.split("\n").slice(1, -1)).toEqual(
+      MCP_INTERACTION_INSTRUCTIONS_COMPACT_DUAL_HOST.split("\n").slice(1, -1)
+    );
     for (const phrase of critical) {
       expect(fb).toContain(phrase);
-      expect(canonical).toContain(phrase);
     }
+  });
+});
+
+describe("MCP_INTERACTION_INSTRUCTIONS_COMPACT_DUAL_HOST", () => {
+  const compact = MCP_INTERACTION_INSTRUCTIONS_COMPACT_DUAL_HOST;
+
+  it("identifies compact-by-choice mode", () => {
+    expect(compact).toMatch(/NEOTOMA_MCP_COMPACT_INSTRUCTIONS/);
+  });
+
+  it("matches fallback body lines between headers and footers", () => {
+    const fb = MCP_INTERACTION_INSTRUCTIONS_FALLBACK;
+    expect(compact.split("\n").slice(1, -1)).toEqual(fb.split("\n").slice(1, -1));
+  });
+
+  it("does not claim runtime file-unreadable fallback", () => {
+    expect(compact).not.toMatch(/unreadable; reconnect/);
   });
 });

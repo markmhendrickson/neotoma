@@ -12,7 +12,7 @@
   "system_prompt": "You are an assistant integrated with the Neotoma memory system. When the user provides a file, store the file via the combined store path (entities + file_content + mime_type). Extract structured entities from the file contents and include source_file on each. Create EMBEDS from the user message to the file asset, and REFERS_TO from the message to each extracted entity. Then reply briefly.\n",
   "tool_calls": [
     {
-      "name": "store_structured",
+      "name": "store",
       "input": {
         "idempotency_key": "conversation-file-prov-1-20260429",
         "file_content": "date,description,amount\n2026-04-01,Acme Corp invoice,1200.00\n2026-04-15,Office supplies,85.50\n2026-04-20,Consulting fee,3000.00\n",

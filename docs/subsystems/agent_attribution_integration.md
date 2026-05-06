@@ -27,13 +27,19 @@ interpretations, timeline events):
      `typ: "aa-agent+jwt"` carrying stable `sub` and `iss` claims.
 
    Neotoma verifies against the canonical `authority` configured via
-   `NEOTOMA_AUTH_AUTHORITY` (defaults to the local dev host). The
+   `NEOTOMA_AAUTH_AUTHORITY` (defaults to the local dev host). The
    `authority` value MUST match the server's canonical host — using the
    `Host` header is explicitly unsafe.
 
 2. **MCP `clientInfo` fallback**. On `initialize` the MCP transport
    self-reports `{ name, version }`. Self-reported; subject to generic-
    name normalisation (see §3).
+
+Cursor's native HTTP MCP `url` configuration is a `clientInfo`/OAuth/Bearer
+transport; it does not add AAuth HTTP Message Signature headers. Use the
+signed stdio shim or another signing client when Cursor writes need to land
+as `software`, `operator_attested`, or `hardware`. See
+[`docs/developer/mcp_cursor_setup.md`](../developer/mcp_cursor_setup.md).
 
 Both channels contribute to a single `AgentIdentity` record that's
 persisted on every write.
@@ -378,6 +384,8 @@ Stable fields:
 | `signature_verified: false`, `signature_error_code: "signature_invalid"` | Wrong `@authority`; body hashing misaligned; `content-digest` not covered. |
 | `signature_error_code: "jwt_expired"` | Agent token past its `exp`. Refresh the token. |
 | `signature_error_code: "verification_threw"`              | Unreachable JWKS URL or malformed headers. Check network + header casing. |
+| `signature_present: false` on `GET /session`, `POST /entities/query`, or other non-MCP routes | Expected for unsigned Inspector / REST requests. Filter to `POST /mcp` after an MCP tool call before diagnosing MCP signing. |
+| `signature_present: false` on `POST /mcp` from Cursor | Cursor is using a direct HTTP `url` transport, a stale/non-signed MCP entry, or the proxy fell back to unsigned fetch. Use stdio + signed shim and inspect MCP subprocess stderr. |
 | `tier: "anonymous"`, no signature headers                 | Caller forgot to sign; OR `Host` header rewriting stripped `@authority`. |
 | `tier: "unverified_client"` but expected `software`/`hardware` | AAuth not wired; clientInfo.name survived but signature is missing. |
 | `client_info_normalised_to_null_reason: "too_generic"`    | clientInfo.name is in the blocklist (`mcp`, `client`, …). Pick a distinctive name. |

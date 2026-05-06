@@ -363,7 +363,7 @@ export function buildToolDefinitions(
       name: "store",
       description: desc(
         "store",
-        "Unified storing for both file-backed and structured sources. For files: provide EITHER file_content (base64-encoded) + mime_type OR file_path. For structured data: provide entities array. File inputs are stored raw with content-addressed SHA-256 deduplication per user. Agents should parse and extract entities before storing when they need structured data from a file; the server no longer performs AI interpretation during store. IMPORTANT FOR STRUCTURED DATA: When storing structured entities with an unregistered entity_type, the system automatically infers and creates a user-specific schema from the data structure. Agents must include ALL fields from the source data, not just fields that match the entity schema. Schema fields are stored in observations (validated), while non-schema fields are automatically stored in raw_fragments.",
+        "Unified storing for both file-backed and structured sources. For files: provide EITHER file_content (base64-encoded) + mime_type OR file_path. For structured data: provide entities array. File inputs are stored raw with content-addressed SHA-256 deduplication per user. Agents should parse and extract entities before storing when they need structured data from a file; include an explicit interpretation block only when those entities are source-derived and should create a Source -> Interpretation -> Observation provenance link. Ordinary structured/chat-native stores omit interpretation and keep observations.interpretation_id null. IMPORTANT FOR STRUCTURED DATA: When storing structured entities with an unregistered entity_type, the system automatically infers and creates a user-specific schema from the data structure. Agents must include ALL fields from the source data, not just fields that match the entity schema. Schema fields are stored in observations (validated), while non-schema fields are automatically stored in raw_fragments.",
       ),
       inputSchema: {
         ...storeBaseSchema,
@@ -391,51 +391,6 @@ export function buildToolDefinitions(
               "Original filename or source label (optional). For unstructured: auto-detected from file_path if not provided. For structured (entities): omit when data is agent-provided (no file origin); the source will have no filename. Pass only when mirroring a real file name or when a display label is desired.",
           },
         },
-      },
-    },
-    {
-      name: "store_structured",
-      description: desc(
-        "store_structured",
-        "Store structured entities only. Use this when you already have entity objects and do not need file ingestion.",
-      ),
-      inputSchema: getOpenApiInputSchemaOrThrow("store_structured"),
-    },
-    {
-      name: "store_unstructured",
-      description: desc(
-        "store_unstructured",
-        "Store raw files only. Provide file_content (base64) + mime_type or file_path.",
-      ),
-      inputSchema: {
-        type: "object",
-        properties: {
-          idempotency_key: {
-            type: "string",
-            description: "Required. Client-provided idempotency key for replay-safe storing.",
-          },
-          file_content: {
-            type: "string",
-            description:
-              "Base64-encoded file content (for unstructured storage). Use file_path for local files instead of base64 encoding.",
-          },
-          file_path: {
-            type: "string",
-            description:
-              "Local file path (alternative to file_content). If provided, file will be read from filesystem.",
-          },
-          mime_type: {
-            type: "string",
-            description:
-              "MIME type (e.g., 'application/pdf', 'text/csv') - required with file_content, optional with file_path",
-          },
-          original_filename: {
-            type: "string",
-            description:
-              "Original filename (optional, auto-detected from file_path if not provided)",
-          },
-        },
-        required: ["idempotency_key"],
       },
     },
     {
@@ -860,6 +815,22 @@ export function buildToolDefinitions(
       },
     },
     {
+      name: "create_interpretation",
+      description: desc(
+        "create_interpretation",
+        "Create an interpretation row for an existing source from agent-extracted flat entities. Observations produced by this tool are linked to both source_id and interpretation_id. Use **`store`** with an interpretation block when the source-derived extraction can be batched in one store call.",
+      ),
+      inputSchema: getOpenApiInputSchemaOrThrow("create_interpretation"),
+    },
+    {
+      name: "list_interpretations",
+      description: desc(
+        "list_interpretations",
+        "List interpretation runs for the authenticated user, optionally filtered by source_id.",
+      ),
+      inputSchema: getOpenApiInputSchemaOrThrow("list_interpretations"),
+    },
+    {
       name: "get_authenticated_user",
       description:
         "Get the authenticated user ID for the current MCP session. Returns the user_id that is automatically used for all authenticated actions.",
@@ -1071,8 +1042,6 @@ export const NEOTOMA_TOOL_NAMES = [
   "retrieve_related_entities",
   "retrieve_graph_neighborhood",
   "store",
-  "store_structured",
-  "store_unstructured",
   "parse_file",
   "correct",
   "merge_entities",
@@ -1088,6 +1057,8 @@ export const NEOTOMA_TOOL_NAMES = [
   "get_schema_recommendations",
   "update_schema_incremental",
   "register_schema",
+  "create_interpretation",
+  "list_interpretations",
   "get_authenticated_user",
   "get_session_identity",
   "health_check_snapshots",

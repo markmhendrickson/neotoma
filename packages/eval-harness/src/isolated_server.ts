@@ -99,11 +99,16 @@ async function startFaultProxy(
         failCount < faults.fail_first_n &&
         (urlPath.includes(faults.target) || urlPath.includes("/store") || urlPath.includes("/mcp"));
 
-      if (shouldFault && faults.target === "store_structured") {
+      if (
+        shouldFault &&
+        (faults.target === "store_structured" || faults.target === "store")
+      ) {
         const body = await readRequestBody(req);
         const isStore =
           urlPath.includes("/store") ||
-          (urlPath.includes("/mcp") && body.includes("store_structured"));
+          (urlPath.includes("/mcp") &&
+            (body.includes("store_structured") ||
+              /"name"\s*:\s*"store"/.test(body)));
         if (isStore) {
           failCount++;
           res.writeHead(statusCode, { "content-type": "application/json" });

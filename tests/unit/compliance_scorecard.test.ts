@@ -80,7 +80,7 @@ describe("compliance scorecard", () => {
       harness: "cursor",
       model: "model-a",
       status: "backfilled_by_hook",
-      missed_steps: ["user_phase_store_structured"],
+      missed_steps: ["user_phase_store"],
       started_at: "2026-04-27T11:00:00.000Z",
       ended_at: "2026-04-27T11:05:00.000Z",
     });
@@ -129,7 +129,7 @@ describe("compliance scorecard", () => {
     expect(cursorA!.total_turns).toBe(2);
     expect(cursorA!.backfilled_turns).toBe(1);
     expect(cursorA!.backfill_rate).toBeCloseTo(0.5, 5);
-    expect(cursorA!.top_missed_steps[0]?.step).toBe("user_phase_store_structured");
+    expect(cursorA!.top_missed_steps[0]?.step).toBe("user_phase_store");
   });
 
   it("respects min_turns filter", () => {

@@ -121,7 +121,7 @@ Before opening a PR that touches any surface in the Touchpoint Matrix, confirm:
 - [ ] `src/shared/contract_mappings.ts` updated for any new `operationId`, MCP tool, or CLI command.
 - [ ] `npm test -- tests/contract/` passes.
 - [ ] New top-level CLI commands listed in `tests/cli/cli_command_coverage_guard.test.ts`.
-- [ ] MCP and CLI agent-instruction parity confirmed via `neotoma cli-instructions check`.
+- [ ] MCP and CLI agent-instruction parity confirmed via `neotoma cli config --yes`.
 - [ ] Runtime overrides follow `flag > env > default` and appear in the cli_reference Runtime overrides table.
 - [ ] New env vars are `NEOTOMA_`-prefixed and read in `preAction`.
 - [ ] Error hints emitted as structured `hint` / `details` fields, not concatenated into `message`.

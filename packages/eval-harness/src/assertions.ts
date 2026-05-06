@@ -137,8 +137,13 @@ function countStoreStructuredCalls(stats: Record<string, unknown> | null): numbe
   const ip = stats.instruction_profile as Record<string, unknown> | undefined;
   if (ip && typeof ip === "object") {
     const calls = (ip as { calls?: Record<string, unknown> }).calls;
-    if (calls && typeof (calls as { store_structured?: unknown }).store_structured === "number") {
-      return (calls as { store_structured: number }).store_structured;
+    if (calls && typeof calls === "object") {
+      const c = calls as Record<string, unknown>;
+      const legacy = c.store_structured;
+      const canonical = c.store;
+      const n =
+        (typeof legacy === "number" ? legacy : 0) + (typeof canonical === "number" ? canonical : 0);
+      if (n > 0) return n;
     }
   }
   // Fallback: many Neotoma builds don't surface the call counter on /stats.
@@ -197,7 +202,7 @@ export async function evaluatePredicate(
       if (actual < 0) {
         return {
           predicate,
-          message: `Cannot read store_structured.calls from /stats payload (server may not expose the counter).`,
+          message: `Cannot read unified store call counts from /stats payload (server may not expose the counter).`,
           expected: { op, value: expected },
           actual: ctx.stats,
         };
@@ -205,7 +210,7 @@ export async function evaluatePredicate(
       if (compareNumber(actual, op, expected)) return null;
       return {
         predicate,
-        message: `Expected store_structured.calls ${op} ${expected}, got ${actual}.`,
+        message: `Expected store_structured.calls (unified MCP/HTTP store) ${op} ${expected}, got ${actual}.`,
         expected: { op, value: expected },
         actual,
       };

@@ -1,5 +1,8 @@
 import { EventEmitter } from "node:events";
+import fs from "node:fs/promises";
 import http from "node:http";
+import os from "node:os";
+import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -42,6 +45,8 @@ describe("CLI API discovery", () => {
     delete process.env.NEOTOMA_SESSION_PROD_PORT;
     delete process.env.NEOTOMA_SESSION_API_PORT;
     delete process.env.NEOTOMA_API_PORTS;
+    delete process.env.NEOTOMA_MCP_USE_LOCAL_PORT_FILE;
+    delete process.env.NEOTOMA_PROJECT_ROOT;
     vi.restoreAllMocks();
   });
 
@@ -75,7 +80,65 @@ describe("CLI API discovery", () => {
   it("resolveBaseUrl prioritizes selected session API port", async () => {
     process.env.NEOTOMA_SESSION_API_PORT = "9234";
     const resolved = await resolveBaseUrl(undefined, {});
-    expect(resolved).toBe("http://127.0.0.1:9234");
+    expect(resolved).toBe("http://localhost:9234");
+  });
+
+  it("resolveBaseUrl session port wins over NEOTOMA_MCP_USE_LOCAL_PORT_FILE", async () => {
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-cli-portfile-"));
+    try {
+      process.env.NEOTOMA_MCP_USE_LOCAL_PORT_FILE = "1";
+      process.env.NEOTOMA_PROJECT_ROOT = tmp;
+      process.env.NEOTOMA_SESSION_API_PORT = "9234";
+      const server = http.createServer((_req, res) => {
+        res.writeHead(200);
+        res.end();
+      });
+      await new Promise<void>((resolve, reject) => {
+        server.listen(0, "127.0.0.1", () => resolve());
+        server.once("error", reject);
+      });
+      const addr = server.address();
+      const dynamicPort =
+        typeof addr === "object" && addr && "port" in addr ? (addr as { port: number }).port : 0;
+      expect(dynamicPort).toBeGreaterThan(0);
+      const portFile = path.join(tmp, ".dev-serve", "local_http_port");
+      await fs.mkdir(path.dirname(portFile), { recursive: true });
+      await fs.writeFile(portFile, `${dynamicPort}\n`, "utf-8");
+      const resolved = await resolveBaseUrl(undefined, { project_root: tmp });
+      expect(resolved).toBe("http://localhost:9234");
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    } finally {
+      await fs.rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it("resolveBaseUrl uses .dev-serve/local_http_port when NEOTOMA_MCP_USE_LOCAL_PORT_FILE=1", async () => {
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-cli-portfile-"));
+    try {
+      process.env.NEOTOMA_MCP_USE_LOCAL_PORT_FILE = "true";
+      process.env.NEOTOMA_PROJECT_ROOT = tmp;
+      const server = http.createServer((_req, res) => {
+        res.writeHead(200);
+        res.end();
+      });
+      await new Promise<void>((resolve, reject) => {
+        server.listen(0, "127.0.0.1", () => resolve());
+        server.once("error", reject);
+      });
+      const addr = server.address();
+      const dynamicPort =
+        typeof addr === "object" && addr && "port" in addr ? (addr as { port: number }).port : 0;
+      expect(dynamicPort).toBeGreaterThan(0);
+      const portFile = path.join(tmp, ".dev-serve", "local_http_port");
+      await fs.mkdir(path.dirname(portFile), { recursive: true });
+      await fs.writeFile(portFile, `${dynamicPort}\n`, "utf-8");
+      mockHttpHealth({});
+      const resolved = await resolveBaseUrl(undefined, { project_root: tmp });
+      expect(resolved).toBe(`http://localhost:${dynamicPort}`);
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    } finally {
+      await fs.rm(tmp, { recursive: true, force: true });
+    }
   });
 
   it("detectRunningApiPorts returns healthy discovered ports", async () => {

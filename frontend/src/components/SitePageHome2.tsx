@@ -32,7 +32,7 @@ import {
   REPO_VERSION,
   MEMORY_GUARANTEE_ROWS,
 } from "../site/site_data";
-import { FAQ_QUESTION_NOT_FOR_THOUGHT_PARTNER, faqQuestionToSectionId } from "../site/faq_items";
+import { FAQ_DEEP_LINK_SECTION_IDS } from "../site/faq_items";
 
 import { useRepoMetaClient } from "../hooks/useRepoMetaClient";
 import {
@@ -204,7 +204,7 @@ const HOME2_FAQ_PREVIEW_ITEMS: { q: string; a: ReactNode }[] = [
       <>
         Neotoma targets multi-session agent workflows where state must stay correct across tools. If you only need ephemeral brainstorming, platform memory is enough. For the boundary we draw on &ldquo;thought-partner&rdquo; workflows, see{" "}
         <Link
-          to={`/faq#${faqQuestionToSectionId(FAQ_QUESTION_NOT_FOR_THOUGHT_PARTNER)}`}
+          to={`/faq#${FAQ_DEEP_LINK_SECTION_IDS.notForThoughtPartner}`}
           className={WHO_CALLOUT_FAQ_LINK_CLASS}
         >
           the FAQ
@@ -325,6 +325,8 @@ function HomeAgentToolChips({
   align?: "center" | "start";
   compact?: boolean;
 }) {
+  const { pack } = useLocale();
+  const { ariaLabel, worksWith } = pack.homeBody.agentToolChips;
   const chipClass = compact
     ? "inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-[13px] font-medium text-foreground/90 no-underline transition-colors hover:bg-muted"
     : "inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3.5 py-2.5 text-[14px] font-medium text-foreground/90 no-underline transition-colors hover:bg-muted";
@@ -338,12 +340,12 @@ function HomeAgentToolChips({
   return (
     <div
       className={`flex flex-col items-center pt-1 ${stackGap} md:flex-row md:flex-wrap md:items-center ${alignmentClass}`}
-      aria-label="AI agents and tools"
+      aria-label={ariaLabel}
     >
       <span
         className={`${labelClass} w-full shrink-0 text-center md:w-auto ${align === "start" ? "lg:text-left" : ""}`}
       >
-        Works with
+        {worksWith}
       </span>
       <div
         className={`flex w-full max-w-full flex-wrap items-center justify-center ${rowClass} md:contents`}

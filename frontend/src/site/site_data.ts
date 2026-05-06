@@ -691,7 +691,7 @@ Turn identity fallback:
 Tool-usage constraints for chat/attachment/entity extraction flows:
 - Do NOT list, glob, or read MCP tool descriptor/schema files for these storage flows.
 - Use only:
-  - store_structured(entities, idempotency_key, relationships, file_path | file_content+mime_type, file_idempotency_key?)
+  - store(entities, idempotency_key, relationships, file_path | file_content+mime_type, file_idempotency_key?, interpretation?, …)
   - create_relationship(relationship_type, source_entity_id, target_entity_id)
 
 Behavior requirements:
@@ -760,7 +760,7 @@ export const GLOSSARY_ROWS: GlossaryRow[] = [
   {
     term: "Storing",
     definition:
-      "Uploading and processing source into the memory graph (unstructured or structured).",
+      "Writing to Neotoma via the unified store path: entities, raw file bytes (sources), or both together.",
   },
   {
     term: "Retrieving",
@@ -1012,31 +1012,21 @@ export const FUNCTIONALITY_MATRIX: FunctionalityRow[] = [
       "cli_schema_commands, mcp_schema_actions, mcp_schema_variations, schema_recommendation (service), schema_recommendation_integration",
   },
   {
-    functionality: "Store structured entities.",
+    functionality:
+      "Store structured entities, raw file bytes (sources), or both in one request (unified).",
     openapi: "POST /store",
-    endpointDescriptions: ["Store structured entities."],
-    endpointParameters: ["body: entities, idempotency_key?, relationships?"],
-    cli: "store",
-    cliParameters: ["--json"],
-    mcp: "store, store_structured",
+    endpointDescriptions: [
+      "Unified store: optional `entities`, optional `file_path` or (`file_content` + `mime_type`), `relationships`, `interpretation`, `idempotency_key` per OpenAPI.",
+    ],
+    endpointParameters: ["body: unified store payload (see OpenAPI `store`)"],
+    cli: "store, ingest",
+    cliParameters: ["--json / --file / --file-path, …", "<path> (ingest)"],
+    mcp: "store",
     mcpParameters: [
-      "entities, file_path?, idempotency_key?",
-      "entities, idempotency_key?, relationships?",
+      "entities?, file_path|file_content+mime_type?, idempotency_key, relationships?, interpretation?, …",
     ],
     testCoverage:
-      "cli_store_commands, cli_to_mcp_store, mcp_store_variations, fixture_mcp_store_replay",
-  },
-  {
-    functionality: "Store an unstructured file.",
-    openapi: "POST /store/unstructured",
-    endpointDescriptions: ["Store an unstructured file."],
-    endpointParameters: ["body: file_path or file_content, mime_type"],
-    cli: "upload <path>",
-    cliParameters: ["<path>, --no-interpret?, --mime-type?"],
-    mcp: "store_unstructured",
-    mcpParameters: ["file_path or file_content, mime_type"],
-    testCoverage:
-      "cli_store_commands, mcp_store_unstructured, mcp_store_parquet, nonjson_csv_store_behavior",
+      "cli_store_commands, cli_to_mcp_store, mcp_store_variations, mcp_store_unstructured, mcp_store_parquet, nonjson_csv_store_behavior, fixture_mcp_store_replay",
   },
   {
     functionality: "Submit a correction or reinterpret a source.",
@@ -1164,18 +1154,18 @@ export const FUNCTIONALITY_MATRIX: FunctionalityRow[] = [
     openapi: "—",
     endpointDescriptions: [],
     endpointParameters: [],
-    cli: "mcp config, mcp check",
-    cliParameters: ["--no-check", "--user-level"],
+    cli: "mcp guide, mcp config",
+    cliParameters: ["--no-check", "--user-level, --mcp-transport"],
     mcp: "—",
     testCoverage: "—",
   },
   {
-    functionality: "Check or install CLI agent instructions for IDEs.",
+    functionality: "Guide or install CLI agent instructions for IDEs.",
     openapi: "—",
     endpointDescriptions: [],
     endpointParameters: [],
-    cli: "cli-instructions config, cli-instructions check",
-    cliParameters: ["—", "--user-level, --yes"],
+    cli: "cli guide, cli config",
+    cliParameters: ["—", "--user-level, --scope, --yes"],
     mcp: "—",
     testCoverage: "—",
   },

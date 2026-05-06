@@ -32,7 +32,8 @@ Every hook above also accretes onto a single `conversation_turn` keyed by `(sess
 | `NEOTOMA_HOOK_STATE_DIR` | `~/.neotoma/hook-state` | Where the hook layer keeps per-turn / per-session state files (failure counters, turn compliance state, profile markers). |
 | `NEOTOMA_HOOK_FEEDBACK_HINT` | `on` | Set to `off` to disable the one-shot failure hint. |
 | `NEOTOMA_HOOK_FEEDBACK_HINT_THRESHOLD` | `2` | Number of failures (per tool + error class, per session) before a hint is surfaced. |
-| `NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP` | `auto` | `auto`/`on` returns `followup_message` on every skipped-store turn, `off` suppresses. |
+| `NEOTOMA_HOOK_COMPLIANCE_PASSES` | (unset) | `off`/`false`/`0` disables hook-driven compliance re-prompts (`followup_message`) regardless of `NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP`. Unset or `on`/`true`/`1` uses the follow-up env below. |
+| `NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP` | `auto` | `auto`/`on` returns `followup_message` on every skipped-store turn when compliance passes are allowed; `off` suppresses. |
 | `NEOTOMA_HOOK_SMALL_MODEL_PATTERNS` | (see source) | Comma-separated regex list overriding the built-in small-model detection. |
 | `NEOTOMA_HOOK_SMALL_MODEL_DETECTED` | (unset) | Test override forcing small-model behavior on/off. |
 | `NEOTOMA_HOOK_DETECTED_MODEL` | (unset) | Override the model id seen by the hook layer. |
@@ -52,7 +53,7 @@ When the stop hook detects a skipped store with material content, it runs `diagn
 | `tooling_unavailable_or_failed` | Transport errors (ECONNREFUSED, fetch_failed) or `neotoma_tool_failures > 0` | Verify Neotoma is running and reachable; tail server logs. |
 | `hook_state_incomplete` | No reminders injected, no tools observed | Re-run the hooks installer; verify `.cursor/hooks.json` and `NEOTOMA_HOOK_STATE_DIR`. |
 | `instruction_delivery_missing_or_stale` | Tools ran but no compact reminder was injected | Reconnect MCP client; confirm `docs/developer/mcp/instructions.md` is reachable from `src/server.ts`. |
-| `agent_ignored_available_instructions` | Reminders injected, tooling reachable, but no `store_structured` call | Add/extend Tier 1 fixtures; check the postToolUse reminder gate and compact instructions. |
+| `agent_ignored_available_instructions` | Reminders injected, tooling reachable, but no MCP **`store`** call | Add/extend Tier 1 fixtures; check the postToolUse reminder gate and compact instructions. |
 | `false_positive_or_no_material_content` | Turn ended without assistant text | Usually safe to ignore; backfill still captured the graph. |
 
 For local repo builds (`NEOTOMA_LOCAL_BUILD=1` or auto-detected), `recommended_repairs` references repo-owned paths (install scripts, eval commands, instruction files). For published builds, repairs reference user-facing actions (reconnect MCP, set env vars, file feedback).

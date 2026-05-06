@@ -10,7 +10,7 @@ When a user has an invalid or expired X-Connection-Id in their Cursor MCP config
 
 1. The MCP server initialization would catch the "connection not found" error
 2. Return an unauthenticated response (with Connect button capabilities)
-3. However, `listTools()` and `listResources()` would silently fail and return empty arrays
+3. However, `listResources()` would silently fail and return an empty array; older `listTools()` behavior also returned an empty array
 4. Cursor would show "No tools, prompts, or resources" with green status
 5. User would not know they need to reconnect
 
@@ -30,6 +30,8 @@ When a user has an invalid or expired X-Connection-Id in their Cursor MCP config
 
 **`listTools()` and `listResources()` handlers:**
 - Enhanced error detection and logging for invalid connection IDs
+- `listTools()` still returns static tool definitions because tool discovery is capability metadata; tool execution remains auth-gated
+- `listResources()` returns an empty array when unauthenticated because resources expose user data
 - Do NOT throw errors (to avoid "Error - Show Output" state)
 - Rely on initialize handler to prevent connection with invalid credentials
 
@@ -67,6 +69,7 @@ When a user has an invalid or expired X-Connection-Id in their Cursor MCP config
 - Logs clear messages distinguishing invalid connections from other auth failures
 - Initialize handler throws error to prevent connection
 - listTools/listResources log but don't throw (to avoid double error states)
+- listTools returns static tool definitions even without auth; callTool enforces auth before any user-scoped operation
 
 #### 3. Updated Unauthenticated Messages
 

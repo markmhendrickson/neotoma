@@ -9,10 +9,10 @@
     "cost_usd": 0
   },
   "user_prompt": "What's the capital of France?\n",
-  "system_prompt": "You are an assistant integrated with the Neotoma memory system. Every turn you MUST call store_structured at least twice: once for the conversation and the user message (user-phase store), and once for your assistant reply (closing store). Link each message to the conversation via PART_OF. Then reply briefly.\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. Every turn you MUST call the MCP store tool at least twice: once for the conversation and the user message (user-phase store), and once for your assistant reply (closing store). Link each message to the conversation via PART_OF. Then reply briefly.\n",
   "tool_calls": [
     {
-      "name": "store_structured",
+      "name": "store",
       "input": {
         "idempotency_key": "conversation-closing-ast-1-user",
         "entities": [
@@ -45,7 +45,7 @@
       "sequence": 0
     },
     {
-      "name": "store_structured",
+      "name": "store",
       "input": {
         "idempotency_key": "conversation-closing-ast-1-assistant",
         "entities": [

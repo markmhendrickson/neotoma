@@ -36,7 +36,7 @@ These **20** repo rules are currently in `.cursor/rules/` and always applied. Pe
 | `conventions_ui_imports_rules.mdc` | `docs/conventions/ui_imports_rules.mdc` | Modifying UI, components |
 | `conventions_ui_style_guide_enforcement_rules.mdc` | `docs/conventions/ui_style_guide_enforcement_rules.mdc` | Modifying UI |
 | `conventions_ui_test_requirements_rules.mdc` | `docs/conventions/ui_test_requirements_rules.mdc` | UI test coverage |
-| `developer_agent_instructions_sync_rules.mdc` | `docs/developer/agent_instructions_sync_rules.mdc` | MCP/CLI instruction parity |
+| `developer_agent_instructions_sync_rules.mdc` | `docs/developer/agent_instructions_sync_rules.mdc` | Canonical-first Neotoma instruction maintenance (superseded name; file lives under `docs/developer/`) |
 | `developer_bug_learning_rules.mdc` | `docs/developer/bug_learning_rules.mdc` | Bug fix, regression test, learning |
 | `developer_cli_debugging_rules.mdc` | `docs/developer/cli_debugging_rules.mdc` | Debugging CLI |
 | `developer_env_check_rules.mdc` | `docs/developer/env_check_rules.mdc` | Env vars, .env, config |
@@ -55,7 +55,7 @@ These **20** repo rules are currently in `.cursor/rules/` and always applied. Pe
 
 ## Manifest enforcement
 
-When `cursor_rules_manifest.json` exists in the repo root and `jq` is installed, `npm run setup:cursor` installs only the kernel (allowlisted foundation rules + the three repo rules). Any other file in `.cursor/rules/` (e.g. `neotoma_cli.mdc`, `docs_anchor_and_docs_ui.mdc`) is removed. The CLI may re-add `neotoma_cli.mdc` when you run `neotoma cli-instructions check` or start a session.
+When `cursor_rules_manifest.json` exists in the repo root and `jq` is installed, `npm run setup:cursor` installs only the kernel (allowlisted foundation rules + the three repo rules). Any other file in `.cursor/rules/` (e.g. `neotoma_cli.mdc`, `docs_anchor_and_docs_ui.mdc`) is removed. The CLI may re-add `neotoma_cli.mdc` when you run `neotoma cli config --yes` or start a session.
 
 ## Why some rules still have alwaysApply: true (Cursor/Claude)
 

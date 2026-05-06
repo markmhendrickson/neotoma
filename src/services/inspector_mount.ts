@@ -194,6 +194,14 @@ export function installInspectorMount(
       return;
     }
 
+    // Align with Vite non-root base: `/inspector` → `/inspector/` so asset URLs resolve.
+    app.use((req, res, next) => {
+      if (req.method !== "GET" && req.method !== "HEAD") return next();
+      if (req.path !== basePath) return next();
+      const suffix = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
+      res.redirect(308, suffix ? `${basePath}/${suffix}` : `${basePath}/`);
+    });
+
     // Cache the injected HTML per process when not in live-build mode. With
     // NEOTOMA_INSPECTOR_LIVE_BUILD=1 (e.g. watch:full + vite build --watch), HTML
     // and assets must be re-read so new hashed chunks and index.html apply

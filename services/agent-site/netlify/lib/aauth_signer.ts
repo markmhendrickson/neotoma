@@ -117,7 +117,10 @@ async function mintAgentTokenJwt(config: SignerConfig): Promise<string> {
     publicJwk as Parameters<typeof calculateJwkThumbprint>[0],
   );
   const ttl = Math.max(30, config.tokenTtlSec ?? 300);
-  const builder = new SignJWT({ jkt })
+  const builder = new SignJWT({
+    jkt,
+    cnf: { jwk: publicJwk as import("jose").JWK },
+  })
     .setProtectedHeader({
       alg,
       typ: "aa-agent+jwt",

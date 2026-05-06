@@ -222,7 +222,7 @@ const seeds: TurnSeed[] = [
     turn_id: "turn-2",
     harness: "cursor",
     status: "backfilled_by_hook",
-    missed_steps: ["user_phase_store_structured"],
+    missed_steps: ["user_phase_store"],
     hook_events: ["stop"],
     started_at: "2026-04-28T10:02:00Z",
     ended_at: "2026-04-28T10:03:00Z",

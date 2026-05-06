@@ -10,6 +10,7 @@ import { db } from "./db.js";
 import { config } from "./config.js";
 import fs from "fs";
 import path from "path";
+import { writeLocalHttpPortFile } from "./utils/local_http_port_file.js";
 import yaml from "js-yaml";
 import {
   ensurePublicKeyRegistered,
@@ -31,7 +32,7 @@ import {
   getAAuthAdmissionFromRequest,
 } from "./middleware/aauth_admission.js";
 import { buildSessionInfo } from "./services/session_info.js";
-import { AttributionPolicyError } from "./services/attribution_policy.js";
+import { AttributionPolicyError, enforceAttributionPolicy } from "./services/attribution_policy.js";
 import { registerFeedbackAdminProxyRoutes } from "./services/feedback/admin_proxy.js";
 import {
   AgentCapabilityError,
@@ -41,6 +42,7 @@ import {
 import {
   getCurrentAAuthAdmission,
   getCurrentAgentIdentity,
+  getCurrentAttribution,
   runWithRequestContext,
 } from "./services/request_context.js";
 import { assertCanWriteProtectedBatch } from "./services/protected_entity_types.js";
@@ -107,6 +109,7 @@ import {
 import {
   AnalyzeSchemaCandidatesRequestSchema,
   CorrectEntityRequestSchema,
+  CreateInterpretationRequestSchema,
   CreateRelationshipsRequestSchema,
   CreateRelationshipRequestSchema,
   DeleteEntityRequestSchema,
@@ -128,7 +131,7 @@ import {
   RetrieveGraphNeighborhoodSchema,
   RetrieveRelatedEntitiesSchema,
   StoreRequestSchema,
-  StoreUnstructuredRequestSchema,
+  type StoreInterpretationInput,
   UpdateSchemaIncrementalRequestSchema,
 } from "./shared/action_schemas.js";
 import { getMimeTypeFromExtension } from "./services/file_text_extraction.js";
@@ -647,6 +650,30 @@ app.get("/server-info", (_req, res) => {
     mcpUrl,
     neotoma_env: readNeotomaConfigEnvironment(),
   });
+});
+
+app.get("/mcp-interaction-instructions", (_req, res) => {
+  const instructionsPath = path.join(
+    config.projectRoot,
+    "docs",
+    "developer",
+    "mcp",
+    "instructions.md"
+  );
+  try {
+    const raw = fs.readFileSync(instructionsPath, "utf-8");
+    const match = raw.match(/```\s*\n?([\s\S]*?)```/);
+    if (match && match[1]) {
+      const text = match[1].trim();
+      if (text) {
+        res.type("text/plain").send(text);
+        return;
+      }
+    }
+  } catch {
+    // fall through to 404
+  }
+  res.status(404).json({ error: "instructions_not_found" });
 });
 
 // ============================================================================
@@ -4592,6 +4619,91 @@ app.get("/interpretations", async (req, res) => {
   }
 });
 
+app.post("/interpretations/create", async (req, res) => {
+  const parsed = CreateInterpretationRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn("ValidationError:interpretations_create", req, { issues: parsed.error.issues });
+    return sendValidationError(res, parsed.error.issues);
+  }
+
+  try {
+    const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+    const { data: source, error: sourceError } = await db
+      .from("sources")
+      .select("id")
+      .eq("id", parsed.data.source_id)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (sourceError) throw sourceError;
+    if (!source) {
+      return sendError(res, 404, "SOURCE_NOT_FOUND", "Source not found for authenticated user");
+    }
+
+    const { runInterpretation } = await import("./services/interpretation.js");
+    const interpretationResult = await runInterpretation({
+      userId,
+      sourceId: parsed.data.source_id,
+      extractedData: parsed.data.entities as Record<string, unknown>[],
+      config: normalizeInterpretationConfig(parsed.data.interpretation_config) as any,
+    });
+
+    const relationshipsCreated: Array<{
+      relationship_type: string;
+      source_entity_id: string;
+      target_entity_id: string;
+    }> = [];
+    if (parsed.data.relationships?.length) {
+      const { relationshipsService } = await import("./services/relationships.js");
+      for (const rel of parsed.data.relationships as StoreRelationshipRef[]) {
+        const sourceEntityId =
+          typeof rel.source_entity_id === "string"
+            ? rel.source_entity_id
+            : typeof rel.source_index === "number"
+              ? interpretationResult.entities[rel.source_index]?.entityId
+              : undefined;
+        const targetEntityId =
+          typeof rel.target_entity_id === "string"
+            ? rel.target_entity_id
+            : typeof rel.target_index === "number"
+              ? interpretationResult.entities[rel.target_index]?.entityId
+              : undefined;
+        if (!sourceEntityId || !targetEntityId) continue;
+        await relationshipsService.createRelationship({
+          source_entity_id: sourceEntityId,
+          target_entity_id: targetEntityId,
+          relationship_type: rel.relationship_type as never,
+          source_id: parsed.data.source_id,
+          metadata: rel.metadata ?? {},
+          user_id: userId,
+        });
+        relationshipsCreated.push({
+          relationship_type: rel.relationship_type,
+          source_entity_id: sourceEntityId,
+          target_entity_id: targetEntityId,
+        });
+      }
+    }
+
+    return res.json({
+      success: true,
+      interpretation_id: interpretationResult.interpretationId,
+      source_id: parsed.data.source_id,
+      entities: interpretationResult.entities.map((entity) => ({
+        entity_id: entity.entityId,
+        entity_type: entity.entityType,
+        observation_id: entity.observationId,
+      })),
+      observations_created: interpretationResult.observationsCreated,
+      unknown_fields_count: interpretationResult.unknownFieldsCount,
+      relationships_created: relationshipsCreated,
+    });
+  } catch (error) {
+    logError("APIError:interpretations_create", req, error);
+    const message = error instanceof Error ? error.message : "Failed to create interpretation";
+    return sendError(res, 500, "INTERPRETATION_CREATE_FAILED", message);
+  }
+});
+
 // GET /api/observations - Get observations with filters (FU-302, FU-601)
 // REQUIRES AUTHENTICATION - all queries filtered by authenticated user_id
 app.get("/observations", async (req, res) => {
@@ -4756,6 +4868,59 @@ type StoreRelationshipRef = {
   metadata?: Record<string, unknown>;
 };
 
+function normalizeInterpretationConfig(
+  configInput?: Record<string, unknown>
+): Record<string, unknown> {
+  return {
+    extractor_type: "agent",
+    extractor_version: "unknown",
+    schema_version: "1.0",
+    ...configInput,
+  };
+}
+
+async function createInterpretationRunForSource(params: {
+  userId: string;
+  sourceId: string;
+  interpretationConfig?: Record<string, unknown>;
+}): Promise<string> {
+  enforceAttributionPolicy("interpretations", getCurrentAgentIdentity());
+  const attribution = getCurrentAttribution();
+  const { data, error } = await db
+    .from("interpretations")
+    .insert({
+      user_id: params.userId,
+      source_id: params.sourceId,
+      interpretation_config: normalizeInterpretationConfig(params.interpretationConfig),
+      status: "running",
+      started_at: new Date().toISOString(),
+      ...(Object.keys(attribution).length > 0 ? { provenance: attribution } : {}),
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    throw new Error(`Failed to create interpretation run: ${error.message}`);
+  }
+  return data.id as string;
+}
+
+async function completeInterpretationRun(params: {
+  interpretationId: string;
+  observationsCreated: number;
+  unknownFieldsCount?: number;
+}): Promise<void> {
+  await db
+    .from("interpretations")
+    .update({
+      status: "completed",
+      completed_at: new Date().toISOString(),
+      observations_created: params.observationsCreated,
+      unknown_fields_count: params.unknownFieldsCount ?? 0,
+    })
+    .eq("id", params.interpretationId);
+}
+
 export async function storeStructuredForApi(params: {
   userId: string;
   entities: Record<string, unknown>[];
@@ -4764,6 +4929,8 @@ export async function storeStructuredForApi(params: {
   idempotencyKey: string;
   originalFilename?: string;
   relationships?: StoreRelationshipRef[];
+  interpretation?: StoreInterpretationInput;
+  interpretationSourceId?: string;
   commit?: boolean;
   strict?: boolean;
 }) {
@@ -4775,6 +4942,8 @@ export async function storeStructuredForApi(params: {
     idempotencyKey,
     originalFilename,
     relationships,
+    interpretation,
+    interpretationSourceId,
     commit: commitInput,
     strict: strictInput,
   } = params;
@@ -4790,7 +4959,7 @@ export async function storeStructuredForApi(params: {
     const entityTypes = entities
       .map((entity) => entity?.entity_type)
       .filter((t): t is string => typeof t === "string" && t.length > 0);
-    enforceAgentCapability("store_structured", entityTypes, capabilityCtx);
+    enforceAgentCapability("store", entityTypes, capabilityCtx);
     const relationshipOp = Array.isArray(relationships) && relationships.length > 0;
     if (relationshipOp) {
       enforceAgentCapability("create_relationship", entityTypes, capabilityCtx);
@@ -4807,7 +4976,7 @@ export async function storeStructuredForApi(params: {
       .filter((t): t is string => typeof t === "string" && t.length > 0);
     assertCanWriteProtectedBatch({
       entity_types: entityTypes,
-      op: "store_structured",
+      op: "store",
       identity: getCurrentAgentIdentity(),
       admission: getCurrentAAuthAdmission(),
     });
@@ -4892,6 +5061,20 @@ export async function storeStructuredForApi(params: {
       source_priority: sourcePriority,
     },
   });
+
+  const resolvedInterpretationSourceId =
+    interpretation?.source_id ??
+    interpretationSourceId ??
+    (interpretation?.source_ref === "structured" ? storageResult.sourceId : undefined);
+  const interpretationId =
+    commit && interpretation && resolvedInterpretationSourceId
+      ? await createInterpretationRunForSource({
+          userId,
+          sourceId: resolvedInterpretationSourceId,
+          interpretationConfig: interpretation.interpretation_config,
+        })
+      : null;
+  const observationSourceId = resolvedInterpretationSourceId ?? storageResult.sourceId;
 
   // Two-pass: first resolve every entity with trace (so CanonicalNameUnresolvedError
   // / MergeRefusedError land per-observation before any writes), then commit
@@ -5150,8 +5333,8 @@ export async function storeStructuredForApi(params: {
         entity_id: r.entity_id,
         entity_type: r.entity_type,
         schema_version: "1.0",
-        source_id: storageResult.sourceId,
-        interpretation_id: null,
+        source_id: observationSourceId,
+        interpretation_id: interpretationId,
         observed_at: new Date().toISOString(),
         specificity_score: 1.0,
         source_priority: sourcePriority,
@@ -5188,7 +5371,7 @@ export async function storeStructuredForApi(params: {
             fields: r.fields,
             schema: schemaEntry.schema_definition,
             userId,
-            sourceId: storageResult.sourceId,
+            sourceId: observationSourceId,
           });
         }
       } catch (linkErr) {
@@ -5253,7 +5436,7 @@ export async function storeStructuredForApi(params: {
           source_entity_id: sourceEntityId,
           target_entity_id: targetEntityId,
           relationship_type: rel.relationship_type as never,
-          source_id: storageResult.sourceId,
+          source_id: observationSourceId,
           metadata: rel.metadata ?? {},
           user_id: userId,
         });
@@ -5300,11 +5483,22 @@ export async function storeStructuredForApi(params: {
     }
   }
 
+  if (commit && interpretationId) {
+    await completeInterpretationRun({
+      interpretationId,
+      observationsCreated: createdEntities.filter((e) => e.observation_id).length,
+      unknownFieldsCount: 0,
+    });
+  }
+
   return {
     success: true,
     replayed: false,
     commit,
     source_id: commit ? storageResult.sourceId : null,
+    ...(interpretationId
+      ? { interpretation_id: interpretationId, interpretation_source_id: observationSourceId }
+      : {}),
     entities_created: commit
       ? createdEntities.filter((e) => e.action === "created" || e.action === "extended").length
       : 0,
@@ -5380,6 +5574,54 @@ async function handleStorePost(
     let structuredResult: Record<string, unknown> | undefined;
     let unstructuredResult: Record<string, unknown> | undefined;
 
+    const storeUnstructuredFromRequest = async (): Promise<Record<string, unknown> | null> => {
+      const fileContent = parsed.data.file_content;
+      let mimeType = parsed.data.mime_type;
+      let originalFilename = parsed.data.original_filename;
+      let resolvedFileBuffer: Buffer | undefined;
+
+      if (hasFilePath) {
+        const resolvedPath = path.isAbsolute(parsed.data.file_path as string)
+          ? (parsed.data.file_path as string)
+          : path.resolve(process.cwd(), parsed.data.file_path as string);
+        resolvedFileBuffer = fs.readFileSync(resolvedPath);
+        if (!mimeType) {
+          const ext = path.extname(resolvedPath).toLowerCase();
+          mimeType = getMimeTypeFromExtension(ext) || "application/octet-stream";
+        }
+        originalFilename = originalFilename || path.basename(resolvedPath);
+      }
+
+      if ((!fileContent && !resolvedFileBuffer) || !mimeType) {
+        sendError(
+          res,
+          400,
+          "VALIDATION_ERROR",
+          "Unstructured store requires file_content+mime_type or file_path"
+        );
+        return null;
+      }
+
+      return await storeUnstructuredForApi({
+        userId,
+        fileContent,
+        fileBuffer: resolvedFileBuffer,
+        mimeType,
+        idempotencyKey:
+          parsed.data.file_idempotency_key ??
+          (!hasEntities ? parsed.data.idempotency_key : undefined),
+        originalFilename,
+      });
+    };
+
+    if (hasUnstructured && parsed.data.interpretation?.source_ref === "unstructured") {
+      const result = await storeUnstructuredFromRequest();
+      if (!result) {
+        return;
+      }
+      unstructuredResult = result;
+    }
+
     if (hasEntities) {
       if (!parsed.data.idempotency_key) {
         return sendError(
@@ -5399,48 +5641,24 @@ async function handleStorePost(
         relationships: parsed.data.relationships as
           | StoreRelationshipRef[]
           | undefined,
+        interpretation: parsed.data.interpretation,
+        interpretationSourceId:
+          parsed.data.interpretation?.source_ref === "unstructured" &&
+          unstructuredResult &&
+          typeof unstructuredResult.source_id === "string"
+            ? unstructuredResult.source_id
+            : undefined,
         commit: (parsed.data as { commit?: boolean }).commit,
         strict: (parsed.data as { strict?: boolean }).strict,
       });
     }
 
-    if (hasUnstructured) {
-      const fileContent = parsed.data.file_content;
-      let mimeType = parsed.data.mime_type;
-      let originalFilename = parsed.data.original_filename;
-      let resolvedFileBuffer: Buffer | undefined;
-
-      if (hasFilePath) {
-        const resolvedPath = path.isAbsolute(parsed.data.file_path as string)
-          ? (parsed.data.file_path as string)
-          : path.resolve(process.cwd(), parsed.data.file_path as string);
-        resolvedFileBuffer = fs.readFileSync(resolvedPath);
-        if (!mimeType) {
-          const ext = path.extname(resolvedPath).toLowerCase();
-          mimeType = getMimeTypeFromExtension(ext) || "application/octet-stream";
-        }
-        originalFilename = originalFilename || path.basename(resolvedPath);
+    if (hasUnstructured && !unstructuredResult) {
+      const result = await storeUnstructuredFromRequest();
+      if (!result) {
+        return;
       }
-
-      if ((!fileContent && !resolvedFileBuffer) || !mimeType) {
-        return sendError(
-          res,
-          400,
-          "VALIDATION_ERROR",
-          "Unstructured store requires file_content+mime_type or file_path"
-        );
-      }
-
-      unstructuredResult = await storeUnstructuredForApi({
-        userId,
-        fileContent,
-        fileBuffer: resolvedFileBuffer,
-        mimeType,
-        idempotencyKey:
-          parsed.data.file_idempotency_key ??
-          (!hasEntities ? parsed.data.idempotency_key : undefined),
-        originalFilename,
-      });
+      unstructuredResult = result;
     }
 
     if (structuredResult && unstructuredResult) {
@@ -5553,34 +5771,6 @@ if (isSandboxMode()) {
     "[Sandbox] AAuth-required write route enabled at POST /sandbox/aauth-only/store",
   );
 }
-
-// POST /api/store/unstructured - Store raw file (base64), optional AI interpretation
-app.post("/store/unstructured", async (req, res) => {
-  const parsed = StoreUnstructuredRequestSchema.safeParse(req.body);
-  if (!parsed.success) {
-    logWarn("ValidationError:store_unstructured", req, { issues: parsed.error.issues });
-    return sendValidationError(res, parsed.error.issues);
-  }
-
-  try {
-    const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
-    const response = await storeUnstructuredForApi({
-      userId,
-      fileContent: parsed.data.file_content,
-      mimeType: parsed.data.mime_type,
-      idempotencyKey: parsed.data.idempotency_key,
-      originalFilename: parsed.data.original_filename,
-    });
-    return res.status(200).json(response);
-  } catch (error) {
-    if (error instanceof Error && error.message.includes("Not authenticated")) {
-      return sendError(res, 401, "AUTH_REQUIRED", error.message);
-    }
-    logError("APIError:store_unstructured", req, error);
-    const message = error instanceof Error ? error.message : "Failed to store unstructured file";
-    return sendError(res, 500, "DB_QUERY_FAILED", message);
-  }
-});
 
 // POST /api/observations/query - Query observations
 app.post("/observations/query", async (req, res) => {
@@ -7461,6 +7651,9 @@ export async function startHTTPServer() {
       }
       // eslint-disable-next-line no-console
       console.log(`HTTP Actions listening on :${boundPort}`);
+      if (process.env.NODE_ENV !== "test") {
+        writeLocalHttpPortFile(config.projectRoot, boundPort);
+      }
 
       // Start background OAuth state cleanup job
       import("./services/mcp_oauth.js").then((oauth) => {

@@ -9,10 +9,10 @@
     "cost_usd": 0
   },
   "user_prompt": "Sarah from Acme Corp sent me an invoice for $5,000 due next month for\nthe consulting project.\n",
-  "system_prompt": "You are an assistant integrated with the Neotoma memory system. In one store_structured call, persist (a) a `conversation` entity, (b) a `conversation_message` for the user's message linked to the conversation via PART_OF, and (c) every entity the user mentions (people, companies, invoices, projects) linked from the message via REFERS_TO. Then reply briefly.\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. In one MCP store call, persist (a) a `conversation` entity, (b) a `conversation_message` for the user's message linked to the conversation via PART_OF, and (c) every entity the user mentions (people, companies, invoices, projects) linked from the message via REFERS_TO. Then reply briefly.\n",
   "tool_calls": [
     {
-      "name": "store_structured",
+      "name": "store",
       "input": {
         "idempotency_key": "conversation-graph-compl-1-20260429",
         "entities": [

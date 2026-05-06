@@ -140,6 +140,7 @@
             "instruction_diagnostics": {
               "classification": "hook_state_incomplete",
               "local_build": true,
+              "proactive_remediation_required": true,
               "reason": "No reminders were injected and no tool calls were observed this turn — sessionStart/postToolUse may not be wired up.",
               "signals": {
                 "had_final_text": true,
@@ -154,7 +155,7 @@
             },
             "missed_steps": [
               "user_message_store",
-              "user_phase_store_structured"
+              "user_phase_store"
             ],
             "model": "claude-sonnet-4.5",
             "neotoma_tool_failures": 0,
@@ -194,7 +195,7 @@
       "hook": "stop",
       "exitCode": 0,
       "output": {
-        "followup_message": "Neotoma compliance pass: the previous turn skipped the required Neotoma writes. Please re-run this turn now using one batched store_structured call: (1) bounded retrieval if the user message implied known entities, (2) user-phase store with conversation + user conversation_message + extracted entities + PART_OF/REFERS_TO links, (3) closing assistant store with the exact reply text. Reply with a one-line summary noting the entity_ids stored. Likely cause: hook state incomplete — No reminders were injected and no tool calls were observed this turn — sessionStart/postToolUse may not be wired up.\n\nNeotoma turn must-do (compact; full rules at MCP `instructions`):\n0. Every turn must interact with Neotoma at least once, usually by storing the conversation turn.\n1. Bounded retrieval first when the user message implies known entities (retrieve_entity_by_identifier for ids, retrieve_entities for category lists).\n2. User-phase store (one store_structured call): conversation + user conversation_message (sender_kind=user) + any extracted entities; PART_OF message->conversation; REFERS_TO message->each extracted entity.\n3. Tool calls and host edits run AFTER step 2.\n4. Closing store: assistant conversation_message (sender_kind=assistant, exact reply text) with REFERS_TO to every entity the reply cites or produced; PART_OF same conversation.\n5. Display rule: when this turn created/updated/retrieved non-bookkeeping entities, the visible reply ends with a `🧠 Neotoma` section listing them as bullets.\nForbidden: skipping store on greetings, persisting only the user message, ending the turn without the assistant store. Idempotency keys are per-turn unique."
+        "followup_message": "Neotoma compliance pass: the previous turn skipped the required Neotoma writes. Please re-run this turn now using one batched **`store`** MCP call: (1) bounded retrieval if the user message implied known entities, (2) user-phase store with conversation + user conversation_message + extracted entities + PART_OF/REFERS_TO links, (3) closing assistant store with the exact reply text. Reply with a one-line summary noting the entity_ids stored. Likely cause: hook state incomplete — No reminders were injected and no tool calls were observed this turn — sessionStart/postToolUse may not be wired up. Because this is a Neotoma source checkout, do not stop after backfilling the turn; proactively resolve the repo-owned root cause now when safe. Recommended repairs: Re-run the cursor-hooks installer (`packages/cursor-hooks/scripts/install.mjs`) and confirm `.cursor/hooks.json` references the compiled hooks. Verify NEOTOMA_HOOK_STATE_DIR is writable and that hooks are emitting JSON on stdout. Run `npm run eval:tier1` against `tests/fixtures/agentic_eval/agent_skips_store.json` to spot regressions.\n\nNeotoma turn must-do (compact; full rules at MCP `instructions`):\n0. Every turn must interact with Neotoma at least once, usually by storing the conversation turn.\n1. Bounded retrieval first when the user message implies known entities (retrieve_entity_by_identifier for ids, retrieve_entities for category lists).\n2. User-phase store (one **`store`** MCP call): conversation + user conversation_message (sender_kind=user) + any extracted entities; PART_OF message->conversation; REFERS_TO message->each extracted entity.\n3. Tool calls and host edits run AFTER step 2.\n4. Closing store: assistant conversation_message (sender_kind=assistant, exact reply text) with REFERS_TO to every entity the reply cites or produced; PART_OF same conversation.\n5. Display rule: when this turn created/updated/retrieved non-bookkeeping entities, the visible reply ends with a `🧠 Neotoma` section listing them as bullets.\nForbidden: skipping store on greetings, persisting only the user message, ending the turn without the assistant store. Idempotency keys are per-turn unique."
       }
     }
   ]

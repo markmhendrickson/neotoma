@@ -174,4 +174,12 @@ describe("harness_snippets: agent prompts", () => {
     expect(out.agentPrompt).not.toContain("http://localhost:3080/mcp");
     expect(out.agentPrompt).toMatch(/stdio/i);
   });
+  it("agent prompt install note references setup, mcp/cli config, and guide commands", () => {
+    const out = buildHarnessSnippet("cursor", ctxFor("sandbox"));
+    expect(out.agentPrompt).toMatch(/neotoma setup/);
+    expect(out.agentPrompt).toMatch(/neotoma mcp config/);
+    expect(out.agentPrompt).toMatch(/neotoma cli config/);
+    expect(out.agentPrompt).toMatch(/neotoma mcp guide/);
+    expect(out.agentPrompt).toMatch(/neotoma cli guide/);
+  });
 });

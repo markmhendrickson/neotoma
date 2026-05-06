@@ -19,7 +19,7 @@ export function AgentInstructionsStoreRecipesPage() {
       <p className={paragraph}>
         Use only the recipes below. MUST NOT list, glob, or read MCP tool descriptor or schema
         files for chat, attachment, or entity-extraction flows. Tool parameters:{" "}
-        <code>store_structured(entities, idempotency_key, relationships, file_path|file_content+mime_type, file_idempotency_key?)</code>{" "}
+        <code>store(entities, idempotency_key, relationships, interpretation?, file_path|file_content+mime_type, file_idempotency_key?)</code>{" "}
         and <code>create_relationship(relationship_type, source_entity_id, target_entity_id)</code>.
         Response IDs come back as <code>structured.entities[].entity_id</code> and{" "}
         <code>unstructured.asset_entity_id</code>.
@@ -119,7 +119,7 @@ export function AgentInstructionsStoreRecipesPage() {
         </li>
         <li className={listItem}>
           <strong className="text-foreground">Store.</strong> One{" "}
-          <code>store_structured</code> with [conversation, user message, …extracted
+          <code>store</code> with [conversation, user message, …extracted
           entities], idempotency key, <code>relationships</code> with{" "}
           <code>PART_OF</code> (message→conversation) and any{" "}
           <code>REFERS_TO</code> edges, plus <code>file_path</code> (resolve to absolute) or{" "}
@@ -150,7 +150,7 @@ export function AgentInstructionsStoreRecipesPage() {
         </li>
         <li className={listItem}>
           When a client does not support inline relationships: call{" "}
-          <code>store_structured</code> first, then{" "}
+          <code>store</code> first, then{" "}
           <code>create_relationship(PART_OF, message_id, conversation_id)</code> and one{" "}
           <code>REFERS_TO</code> per extracted entity.
         </li>

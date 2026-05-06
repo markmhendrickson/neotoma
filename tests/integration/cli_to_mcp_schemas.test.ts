@@ -285,7 +285,7 @@ describe("Cross-layer: CLI schema commands → Database", () => {
       });
 
       const storeResult = await execCliJson(
-        `store-structured --file-path "${filePath}" --user-id "${TEST_USER_ID}"`
+        `store --file "${filePath}" --user-id "${TEST_USER_ID}"`
       );
 
       if (storeResult.source_id) {

@@ -102,7 +102,7 @@ Captured requests:
 
 Snapshot diff (tests/__snapshots__/agentic_eval/agent_skips_store__cursor-hooks__composer-2.snap.json):
   - "missed_steps": [
-  -   "user_phase_store_structured"
+  -   "user_phase_store"
   - ]
   + (missing)
 ```
@@ -236,7 +236,7 @@ Each `(scenario, provider, model)` triple has one cassette under
 ```
 
 In replay mode the driver walks the cassette's `tool_calls[]` and
-re-applies each call — Neotoma MCP tools (`store_structured`,
+re-applies each call — Neotoma MCP tools (**`store`**,
 `create_relationship`, etc.) hit the isolated server live so post-turn
 graph state is reproduced exactly; host-tool calls (Read/Grep/Write) go
 through the registry of canned stubs declared in the scenario.
@@ -317,7 +317,7 @@ Supported predicates in `packages/eval-harness/src/assertions.ts`:
 
 | Predicate | Purpose |
 |-----------|---------|
-| `store_structured.calls` | Count of store calls (from /stats) |
+| `store_structured.calls` | Count of unified **`store`** invocations (from `/stats`; predicate name retained) |
 | `entity.exists` | At least one entity of given type exists |
 | `entity.count` | Entity count matches op/value |
 | `observation.with_field` | At least one observation carries the named field |
@@ -366,7 +366,7 @@ chains over time (80% WRIT)" — telling you exactly where to invest.
 - *Server doesn't come up*: increase log level with
   `NEOTOMA_LOG_LEVEL=debug NEOTOMA_EVAL_VERBOSE=1` and check the
   isolated server's stderr tail in the runner output.
-- *Assertion fails on `store_structured.calls`*: the runner reads from
+- *Assertion fails on `store_structured.calls` (unified store counter)*: the runner reads from
   `/stats`. If the counter is missing the runner reports the predicate
   as inconclusive — verify
   [`docs/subsystems/instruction_profile.md`](./instruction_profile.md)
@@ -483,7 +483,7 @@ sustained over `NEOTOMA_COMPLIANCE_BACKFILL_ALERT_WINDOW`, the
     "threshold": 0.30,
     "window": "24h",
     "cell_total_turns": 3142,
-    "top_missed_steps": [{ "step": "store_structured", "count": 891 }]
+    "top_missed_steps": [{ "step": "user_phase_store", "count": 891 }]
   }
 }
 ```
@@ -522,7 +522,7 @@ high backfill rate?
     │       │   forward; correlate with `instruction_profile` counters
     │       │   to confirm the right profile was served.
     │       └── No deployment? Inspect `top_missed_steps`:
-    │             • `store_structured`     → agent is skipping memory entirely.
+    │             • `user_phase_store` / missing **`store`** → agent is skipping memory entirely.
     │             • `agent_message_part_of` → assistant message stored but
     │                                          not linked. Likely a Tier 2
     │                                          regression or missing

@@ -227,3 +227,7 @@ the edge. Per-agent capability scoping is enforced by
 [`src/services/agent_capabilities.ts`](../../src/services/agent_capabilities.ts);
 see [`docs/subsystems/agent_capabilities.md`](./agent_capabilities.md)
 for the registry format and operator runbook.
+
+## Comprehensive reference
+
+[`feedback_system_architecture.md`](./feedback_system_architecture.md) — Full architectural reference covering every component, file index, type system, environment variables, lifecycle flows, and security model.

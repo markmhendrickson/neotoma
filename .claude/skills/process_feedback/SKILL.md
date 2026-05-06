@@ -1,16 +1,10 @@
 ---
-name: process-feedback
-description: Triage, review, resolve, and update agent feedback submissions as the Neotoma maintainer. Covers the full lifecycle from pending intake through resolution and verification request.
-triggers:
-  - process feedback
-  - /process-feedback
-  - triage feedback
-  - review feedback
-  - feedback queue
-  - pending feedback
-  - resolve feedback
-  - feedback pipeline
+name: process_feedback
+description: Process Feedback
 ---
+
+<!-- Source: .cursor/skills/process-feedback/SKILL.md -->
+
 
 # Process Feedback
 

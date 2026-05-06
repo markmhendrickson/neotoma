@@ -254,7 +254,7 @@ export function InspectorObservationsAndSourcesPage() {
         ingestion agent, idempotency key, when it was first observed) and
         the full list of observations that cite it. The combined-store
         contract guarantees each <code>file_path</code> /{" "}
-        <code>file_content</code> persisted via <code>store_structured</code>{" "}
+        <code>file_content</code> persisted via <code>store</code>{" "}
         becomes one row here, making "what raw artifact backs this fact?" a
         one-click question.
       </p>

@@ -1,7 +1,10 @@
 import fs from "node:fs/promises";
 import http from "node:http";
+import net from "node:net";
 import os from "node:os";
 import path from "node:path";
+
+import { readLocalHttpPortFromFile } from "../utils/local_http_port_file.js";
 
 export type Config = {
   base_url?: string;
@@ -83,8 +86,64 @@ export function baseUrlFromOption(option?: string, config?: Config): string {
   return option || config?.base_url || DEFAULT_BASE_URL;
 }
 
+/** Used only for TCP probes; avoids depending on `localhost` resolution. */
 const DETECT_HOST = "127.0.0.1";
+/**
+ * Host in auto-resolved API base URLs must match the server's AAuth canonical
+ * authority (`canonicalAauthAuthority()` → `config.apiBase` host, default
+ * `localhost`). If the CLI signed `http://127.0.0.1:3080/...` while the API
+ * expects `localhost:3080`, RFC 9421 verification fails and routes see
+ * anonymous tier (e.g. `inspector admin unlock` redeem).
+ */
+const RESOLVED_API_LOOPBACK_HOST = "localhost";
 const DETECT_TIMEOUT_MS = 2000;
+
+function shouldUseLocalHttpPortFileFromEnv(): boolean {
+  const v = process.env.NEOTOMA_MCP_USE_LOCAL_PORT_FILE?.trim().toLowerCase();
+  return v === "1" || v === "true" || v === "yes";
+}
+
+function localHttpPortFileProbeTimeoutMs(): number {
+  const raw = process.env.NEOTOMA_MCP_PORT_PROBE_MS?.trim();
+  const n = raw ? Number(raw) : NaN;
+  const ms = Number.isFinite(n) ? Math.trunc(n) : 1200;
+  return Math.min(5000, Math.max(200, ms));
+}
+
+/**
+ * TCP probe for a listening port (same semantics as MCP signed shim scripts).
+ * Used when `NEOTOMA_MCP_USE_LOCAL_PORT_FILE` is set so the CLI targets the
+ * API port written under `.dev-serve/local_http_port`.
+ */
+export async function tcpProbePortListening(port: number): Promise<boolean> {
+  const timeoutMs = localHttpPortFileProbeTimeoutMs();
+  return new Promise<boolean>((resolve) => {
+    const socket = net.createConnection({ host: DETECT_HOST, port }, () => {
+      socket.destroy();
+      resolve(true);
+    });
+    socket.setTimeout(timeoutMs);
+    socket.once("timeout", () => {
+      socket.destroy();
+      resolve(false);
+    });
+    socket.once("error", () => resolve(false));
+  });
+}
+
+async function tryResolveBaseUrlFromLocalHttpPortFile(_config?: Config): Promise<string | null> {
+  if (!shouldUseLocalHttpPortFileFromEnv()) return null;
+  const root =
+    process.env.NEOTOMA_PROJECT_ROOT?.trim() ||
+    _config?.project_root?.trim() ||
+    _config?.repo_root?.trim() ||
+    process.cwd();
+  const port = await readLocalHttpPortFromFile(root);
+  if (port == null) return null;
+  const listening = await tcpProbePortListening(port);
+  if (!listening) return null;
+  return `http://${RESOLVED_API_LOOPBACK_HOST}:${port}`;
+}
 
 async function probeHealth(port: number): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
@@ -263,7 +322,7 @@ export async function discoverApiInstances(options?: {
     if (!healthy && !includeUnhealthy) continue;
     instances.push({
       port: candidate.port,
-      url: `http://${DETECT_HOST}:${candidate.port}`,
+      url: `http://${RESOLVED_API_LOOPBACK_HOST}:${candidate.port}`,
       envHint: envHintForPort(candidate.port),
       source: candidate.source,
       healthy,
@@ -289,12 +348,16 @@ export async function detectRunningApiPorts(): Promise<number[]> {
 }
 
 /** Base URL when detection finds no server. */
-const FALLBACK_BASE_URL = `http://${DETECT_HOST}:3080`;
+const FALLBACK_BASE_URL = `http://${RESOLVED_API_LOOPBACK_HOST}:3080`;
 
 /**
  * Resolves API base URL: --base-url wins; otherwise prefers session server when set.
  * When a session port (NEOTOMA_SESSION_DEV_PORT or NEOTOMA_SESSION_PROD_PORT) is set,
  * uses it exclusively so commands in a session always target the session server.
+ * When **`NEOTOMA_MCP_USE_LOCAL_PORT_FILE`** is `1`/`true`/`yes`, reads
+ * `<projectRoot>/.dev-serve/local_http_port` (same as the MCP signed shim), TCP-probes
+ * it, and returns `http://localhost:<port>` when listening — after session env and
+ * before `config.base_url` / auto-detect.
  * When no session port is set and multiple APIs respond, chooses by NEOTOMA_ENV
  * (production → 3180, development → 3080) so dev/prod MCP configs do not need
  * session port env vars in mcp.json.
@@ -311,7 +374,7 @@ export async function resolveBaseUrl(option?: string, _config?: Config): Promise
 
   const sessionActive = process.env[SESSION_ACTIVE_PORT_ENV];
   if (sessionActive && /^\d+$/.test(sessionActive)) {
-    return `http://${DETECT_HOST}:${parseInt(sessionActive, 10)}`;
+    return `http://${RESOLVED_API_LOOPBACK_HOST}:${parseInt(sessionActive, 10)}`;
   }
 
   const sessionDev = process.env[SESSION_DEV_PORT_ENV];
@@ -323,15 +386,18 @@ export async function resolveBaseUrl(option?: string, _config?: Config): Promise
   );
 
   if (validSessionPorts.length === 1) {
-    return `http://${DETECT_HOST}:${validSessionPorts[0]}`;
+    return `http://${RESOLVED_API_LOOPBACK_HOST}:${validSessionPorts[0]}`;
   }
   if (validSessionPorts.length === 2) {
     const sessionEnv = process.env.NEOTOMA_SESSION_ENV;
     const preferred: "dev" | "prod" =
       sessionEnv === "dev" || sessionEnv === "prod" ? sessionEnv : "prod";
     const port = preferred === "dev" ? devPort! : prodPort!;
-    return `http://${DETECT_HOST}:${port}`;
+    return `http://${RESOLVED_API_LOOPBACK_HOST}:${port}`;
   }
+
+  const fromLocalPortFile = await tryResolveBaseUrlFromLocalHttpPortFile(_config);
+  if (fromLocalPortFile) return fromLocalPortFile;
 
   const configBaseUrl = _config?.base_url?.trim();
   if (configBaseUrl && configBaseUrl.startsWith("http")) {
@@ -341,7 +407,7 @@ export async function resolveBaseUrl(option?: string, _config?: Config): Promise
   const instances = await discoverApiInstances({ config: _config });
   const ports = instances.map((instance) => instance.port);
   if (ports.length === 0) return FALLBACK_BASE_URL;
-  if (ports.length === 1) return `http://${DETECT_HOST}:${ports[0]}`;
+  if (ports.length === 1) return `http://${RESOLVED_API_LOOPBACK_HOST}:${ports[0]}`;
   // Multiple ports and no session port: prefer explicit session env when provided.
   const devPortDefault = 3080;
   const prodPortDefault = 3180;
@@ -360,5 +426,5 @@ export async function resolveBaseUrl(option?: string, _config?: Config): Promise
         : ports.includes(devPortDefault)
           ? devPortDefault
           : ports[0];
-  return `http://${DETECT_HOST}:${port}`;
+  return `http://${RESOLVED_API_LOOPBACK_HOST}:${port}`;
 }

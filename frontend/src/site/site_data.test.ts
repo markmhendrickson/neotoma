@@ -29,7 +29,7 @@ describe("site_data", () => {
     expect(CLI_COMMANDS_TABLE.length).toBeGreaterThan(10);
     expect(CLI_COMMANDS_TABLE.some((row) => row.command.includes("entities list"))).toBe(true);
     expect(MCP_ACTIONS_TABLE.length).toBeGreaterThan(10);
-    expect(MCP_ACTIONS_TABLE.some((row) => row.action === "store" || row.action === "store_structured")).toBe(true);
+    expect(MCP_ACTIONS_TABLE.some((row) => row.action === "store")).toBe(true);
   });
 
   it("keeps critical code snippets available for rendering", () => {

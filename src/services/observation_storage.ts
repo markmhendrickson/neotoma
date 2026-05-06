@@ -82,7 +82,7 @@ export async function createObservation(
   enforceAttributionPolicy("observations", getCurrentAgentIdentity());
   assertCanWriteProtected({
     entity_type: params.entity_type,
-    op: "store_structured",
+    op: "store",
     identity: getCurrentAgentIdentity(),
     admission: getCurrentAAuthAdmission(),
   });

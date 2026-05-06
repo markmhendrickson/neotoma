@@ -47,7 +47,7 @@ ironclaw mcp add neotoma https://<tunnel-host>/mcp \
 ironclaw mcp test neotoma
 ```
 
-The test should list Neotoma tools such as `store_structured`, `retrieve_entities`, and `retrieve_entity_by_identifier`.
+The test should list Neotoma tools such as **`store`**, `retrieve_entities`, and `retrieve_entity_by_identifier`.
 
 Neotoma does not currently write IronClaw configuration through `neotoma setup --tool ironclaw`. Use IronClaw's own `ironclaw mcp add` command so IronClaw can decide whether to persist the server in its database or disk fallback.
 
@@ -91,7 +91,7 @@ neotoma store --json='[{"entity_type":"task","title":"Follow up","status":"open"
 - `ironclaw mcp list` shows `neotoma` as enabled
 - `ironclaw mcp test neotoma` lists Neotoma tools
 - `retrieve_entities` returns data
-- `store_structured` creates a test record and can be read back
+- **`store`** creates a test record and can be read back
 - The same record is visible from another MCP client such as Cursor, Claude Code, or Codex
 
 ## Troubleshooting

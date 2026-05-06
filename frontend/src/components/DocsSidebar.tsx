@@ -55,7 +55,7 @@ export function DocsSidebar({ siteName: _siteName, belowHeader }: DocsSidebarPro
   const sidebarShowsLabels = isMobile || sidebarState === "expanded";
   const { locale, dict, direction } = useLocale();
   const orderedCategories = useMemo(() => {
-    const categories = [...getLocalizedDocNavCategories(dict)];
+    const categories = [...getLocalizedDocNavCategories(dict, locale)];
     const referenceIndex = categories.findIndex((category) =>
       category.items.some((item) => item.href === "/api")
     );
@@ -71,7 +71,7 @@ export function DocsSidebar({ siteName: _siteName, belowHeader }: DocsSidebarPro
       categories.splice(referenceIndex, 0, useCasesCategory);
     }
     return categories;
-  }, [dict]);
+  }, [dict, locale]);
 
   const isItemActive = useCallback(
     (href: string) => {

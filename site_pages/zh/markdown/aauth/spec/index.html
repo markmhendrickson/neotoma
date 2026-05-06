@@ -37,11 +37,11 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
-    <title>AAuth wire format and verification (Markdown) | Neotoma</title>
-    <script type="module" crossorigin="" src="/assets/main-aNEaYUJL.js"></script>
-    <link rel="stylesheet" crossorigin="" href="/assets/main-a7BqVBLd.css">
+    <title>aauth-spec.md · Neotoma</title>
+    <script type="module" crossorigin="" src="/assets/main-BdjiFK2k.js"></script>
+    <link rel="stylesheet" crossorigin="" href="/assets/main-DEuYkLWD.css">
   
-    <!-- build: local-1777885129871 -->
+    <!-- build: local-1778051820061 -->
       <link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/aauth/spec">
     <link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/aauth/spec">
     <link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/aauth/spec">
@@ -56,166 +56,9 @@
     <link rel="alternate" hreflang="ur" href="https://neotoma.io/ur/markdown/aauth/spec">
     <link rel="alternate" hreflang="id" href="https://neotoma.io/id/markdown/aauth/spec">
     <link rel="alternate" hreflang="de" href="https://neotoma.io/de/markdown/aauth/spec">
-  <link rel="icon" href="/favicon.ico" sizes="any" data-rh="true"><link rel="icon" type="image/svg+xml" href="/favicon.svg" data-rh="true"><link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png" data-rh="true"><link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" data-rh="true"><link rel="manifest" href="/site.webmanifest" data-rh="true"><link rel="canonical" href="https://neotoma.io/zh/markdown/aauth/spec" data-rh="true"><link rel="alternate" hreflang="x-default" href="https://neotoma.io/markdown/aauth/spec" data-rh="true"><link rel="alternate" hreflang="en" href="https://neotoma.io/markdown/aauth/spec" data-rh="true"><link rel="alternate" hreflang="es" href="https://neotoma.io/es/markdown/aauth/spec" data-rh="true"><link rel="alternate" hreflang="ca" href="https://neotoma.io/ca/markdown/aauth/spec" data-rh="true"><link rel="alternate" hreflang="zh" href="https://neotoma.io/zh/markdown/aauth/spec" data-rh="true"><link rel="alternate" hreflang="hi" href="https://neotoma.io/hi/markdown/aauth/spec" data-rh="true"><link rel="alternate" hreflang="ar" href="https://neotoma.io/ar/markdown/aauth/spec" data-rh="true"><link rel="alternate" hreflang="fr" href="https://neotoma.io/fr/markdown/aauth/spec" data-rh="true"><link rel="alternate" hreflang="pt" href="https://neotoma.io/pt/markdown/aauth/spec" data-rh="true"><link rel="alternate" hreflang="ru" href="https://neotoma.io/ru/markdown/aauth/spec" data-rh="true"><link rel="alternate" hreflang="bn" href="https://neotoma.io/bn/markdown/aauth/spec" data-rh="true"><link rel="alternate" hreflang="ur" href="https://neotoma.io/ur/markdown/aauth/spec" data-rh="true"><link rel="alternate" hreflang="id" href="https://neotoma.io/id/markdown/aauth/spec" data-rh="true"><link rel="alternate" hreflang="de" href="https://neotoma.io/de/markdown/aauth/spec" data-rh="true"><meta name="description" content="Markdown export of the rendered /aauth/spec page. Canonical reference for the AAuth wire format, RFC 9421 signature components, JWT confirmation key contract, and Neotoma's trust-tier derivation cascade." data-rh="true"><meta name="author" content="Neotoma" data-rh="true"><meta name="application-name" content="Neotoma" data-rh="true"><meta name="robots" content="noindex,nofollow" data-rh="true"><meta name="theme-color" content="#130918" data-rh="true"><meta property="og:type" content="website" data-rh="true"><meta property="og:site_name" content="Neotoma" data-rh="true"><meta property="og:locale" content="zh_CN" data-rh="true"><meta property="og:title" content="AAuth wire format and verification (Markdown) | Neotoma" data-rh="true"><meta property="og:description" content="Markdown export of the rendered /aauth/spec page. Canonical reference for the AAuth wire format, RFC 9421 signature components, JWT confirmation key contract, and Neotoma's trust-tier derivation cascade." data-rh="true"><meta property="og:url" content="https://neotoma.io/zh/markdown/aauth/spec" data-rh="true"><meta property="og:image" content="https://neotoma.io/neotoma-og-1200x630.png" data-rh="true"><meta property="og:image:width" content="1200" data-rh="true"><meta property="og:image:height" content="630" data-rh="true"><meta property="og:image:alt" content="AAuth wire format and verification (Markdown) | Neotoma. Markdown export of the rendered /aauth/spec page. Canonical reference for the AAuth wire format, RFC 9421 signature components, JWT confi..." data-rh="true"><meta name="keywords" content="AAuth wire format and verification (Markdown), Neotoma, MCP, Model Context Protocol, AI agents, agent memory, deterministic state" data-rh="true"><meta name="twitter:card" content="summary_large_image" data-rh="true"><meta name="twitter:site" content="@markmhendrickson" data-rh="true"><meta name="twitter:title" content="AAuth wire format and verification (Markdown) | Neotoma" data-rh="true"><meta name="twitter:description" content="Markdown export of the rendered /aauth/spec page. Canonical reference for the AAuth wire format, RFC 9421 signature components, JWT confirmation key contract, and Neotoma's trust-tier derivation cascade." data-rh="true"><meta name="twitter:image" content="https://neotoma.io/neotoma-og-1200x630.png" data-rh="true"><meta name="twitter:image:width" content="1200" data-rh="true"><meta name="twitter:image:height" content="630" data-rh="true"><meta name="twitter:image:alt" content="AAuth wire format and verification (Markdown) | Neotoma. Markdown export of the rendered /aauth/spec page. Canonical reference for the AAuth wire format, RFC 9421 signature components, JWT confi..." data-rh="true"><script type="application/ld+json" data-rh="true">{"@context":"https://schema.org","@type":"WebPage","name":"AAuth wire format and verification (Markdown) | Neotoma","description":"Markdown export of the rendered /aauth/spec page. Canonical reference for the AAuth wire format, RFC 9421 signature components, JWT confirmation key contract, and Neotoma's trust-tier derivation cascade.","url":"https://neotoma.io/zh/markdown/aauth/spec","publisher":{"@type":"Organization","name":"Neotoma"},"image":{"@type":"ImageObject","url":"https://neotoma.io/neotoma-og-1200x630.png","width":1200,"height":630,"caption":"AAuth wire format and verification (Markdown) | Neotoma. Markdown export of the rendered /aauth/spec page. Canonical reference for the AAuth wire format, RFC 9421 signature components, JWT confi..."}}</script><script type="application/ld+json" data-rh="true">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://neotoma.io/"},{"@type":"ListItem","position":2,"name":"Docs","item":"https://neotoma.io/docs"},{"@type":"ListItem","position":3,"name":"AAuth","item":"https://neotoma.io/aauth"},{"@type":"ListItem","position":4,"name":"Spec","item":"https://neotoma.io/aauth/spec"}]}</script></head>
+  </head>
   <body>
-    <div id="root"><iframe title="Markdown capture" aria-hidden="true" width="1280" height="900" class="pointer-events-none fixed left-[-9999px] top-0 z-[-1] border-0 opacity-0" sandbox="allow-same-origin allow-scripts allow-forms"></iframe><div class="min-h-screen bg-background text-foreground"><pre class="whitespace-pre-wrap break-words p-4 font-mono text-[13px] leading-relaxed text-foreground">&lt;!--
-  Full-page Markdown export (rendered HTML → GFM).
-  Source: https://neotoma.io/zh/aauth/spec
-  Generated: 2026-05-04T09:01:57.924Z
---&gt;
-# AAuth wire format and verification
-
-This page is the canonical reference for Neotoma's AAuth wire format, signature verification rules, and trust-tier derivation. It is the upstream spec for the verifier in `src/middleware/aauth_verify.ts`, the agent-identity resolution in `src/crypto/agent_identity.ts`, and the attribution-policy seam in `src/services/attribution_policy.ts`.
-
-For an integrator-oriented walkthrough see the [integration guide](/aauth/integration). Cryptographic attestation envelopes (Apple SE, WebAuthn-packed, TPM 2.0) are specified separately on the [attestation](/aauth/attestation) page; CLI keygen and hardware backends are on [CLI keys](/aauth/cli-keys).
-
-## What AAuth is (and is not)
-
--   A writing agent owns a stable keypair (software or hardware-backed) and an `aa-agent+jwt` token carrying `iss`, `sub`, and a `cnf.jwk` confirmation key.
--   The agent signs each HTTP request per RFC 9421. Neotoma verifies the signature, derives a `trust_tier`, and stamps `(agent_thumbprint, agent_sub, agent_iss, trust_tier, …)` onto every durable row.
--   Bearer tokens, OAuth, and MCP `connection_id` continue to resolve the human `user_id`. AAuth never bypasses user-scope resolution.
--   When AAuth is absent, Neotoma falls back to MCP `clientInfo` or `X-Client-Name` / `X-Client-Version` HTTP headers as a self-reported attribution channel. Self-reported channels never reach the `hardware`, `operator_attested`, or `software` tiers, the highest they earn is `unverified_client`.
-
-◆
-
-## Wire format
-
-Neotoma identifies a writing agent over **two channels**, in precedence order.
-
-### 1\. AAuth (signed request)
-
-The request carries:
-
--   `Signature`, the signature bytes (RFC 9421).
--   `Signature-Input`, signature parameters. MUST cover, at minimum: `@authority`, `@method`, `@target-uri`, `content-digest` (when the request has a body), and the `signature-key` header itself.
--   `Signature-Key`, the agent's JWK plus an `aa-agent+jwt` agent token. The JWT carries `typ: "aa-agent+jwt"`, `iss`, `sub`, `iat`, `cnf.jwk`, and optionally `cnf.attestation`.
-
-Verification runs against the canonical `authority` configured via `NEOTOMA_AUTH_AUTHORITY` (defaults to the local dev host). The `authority` value MUST match the server's canonical host, using the request `Host` header is explicitly unsafe and is rejected.
-
-### 2\. MCP `clientInfo` fallback
-
-On `initialize` the MCP transport self-reports `{ name, version }`. Generic names (`mcp`, `client`, `mcp-client`, `unknown`, `anonymous`, …) are dropped through `normaliseClientNameWithReason` and treated as if `clientInfo` were absent. Non-MCP HTTP callers can pass the same information via the `X-Client-Name` and `X-Client-Version` headers.
-
-A successful AAuth verification populates `agent_thumbprint` (RFC 7638), `agent_sub`, `agent_iss`, `agent_algorithm`, and `agent_public_key`. A populated `clientInfo` populates `client_name` and `client_version`. Both halves are persisted; the cascade below chooses the trust tier.
-
-◆
-
-## Verification rules
-
-Performed by `aauth_verify` middleware:
-
-1.  Parse `Signature-Input` and reject if any required component is missing.
-2.  Resolve `@authority` against `NEOTOMA_AUTH_AUTHORITY`. Mismatch fails with `authority_mismatch`.
-3.  Recompute `content-digest` (when the request has a body) and compare to the header. Mismatch fails with `digest_mismatch`.
-4.  Parse the `Signature-Key` header into JWK + JWT. Reject if `typ` is not `aa-agent+jwt` or the JWT is malformed.
-5.  Verify the JWT signature against the embedded JWK. The JWT MUST bind `cnf.jwk` to the same key used to sign the request.
-6.  Check `iat` against the configured AAuth clock-skew window (`NEOTOMA_AUTH_AGENT_TOKEN_MAX_AGE_S`, default 300 s).
-7.  Verify the request signature against the JWK. Failure produces `signature_invalid`.
-8.  If `cnf.attestation` is present, dispatch to the attestation verifier and capture the per-format `attestation_outcome`.
-
-Verifier failures **never** reject the request when the underlying signature is valid; they only prevent tier promotion. The `attribution.decision` block on `GET /session` records the failure reason so operators can debug from the Inspector.
-
-◆
-
-## Trust tiers
-
-A single enum is stamped onto every durable row. Tier resolution is performed once per request, services and clients MUST read the already-resolved `AgentIdentity.trust_tier` from the per-request context and never re-derive it.
-
--   **`hardware`** , AAuth verified AND the JWT carries a `cnf.attestation` the verifier accepts AND (v0.12.0+) the bound key is not revoked.
--   **`operator_attested`** , AAuth verified AND `iss` (or `iss:sub`) is in the operator allowlist.
--   **`software`** , AAuth verified, but no attestation envelope (or attestation failed and operator allowlist did not match), regardless of signing algorithm.
--   **`unverified_client`** , No AAuth, but `clientInfo.name` (or `X-Client-Name`) survived normalisation.
--   **`anonymous`** , Nothing distinctive: generic or absent `clientInfo`, no AAuth, no fallback header.
-
-◆
-
-## Verification cascade
-
-Request
- ├── AAuth Signature header?
- │     no  → non-generic clientInfo or X-Client-Name?
- │            yes → unverified\_client
- │            no  → anonymous
- │     yes → signature verifies?
- │            no  → fall through to clientInfo channel
- │            yes → cnf.attestation present?
- │                   yes → verifier accepts?
- │                          yes → key not revoked?
- │                                 yes → hardware
- │                                 no  → software
- │                          no  → iss / iss:sub in operator allowlist?
- │                                 yes → operator\_attested
- │                                 no  → software
- │                   no  → iss / iss:sub in operator allowlist?
- │                          yes → operator\_attested
- │                          no  → software
-
-◆
-
-## Per-request precedence
-
-For each request Neotoma walks these inputs in order; the first populated field at each layer wins:
-
-AAuth (verified signature + JWT) → agent\_thumbprint, agent\_sub, agent\_iss,
-                                   agent\_algorithm, agent\_public\_key
-        │
-        ▼
-clientInfo.name + version        → client\_name, client\_version
-        │
-        ▼
-X-Client-Name + X-Client-Version → client\_name, client\_version
-        │
-        ▼
-OAuth connection id              → connection\_id
-        │
-        ▼
-(nothing)                        → anonymous
-
-Bearer tokens resolve only `user_id`; they do not mint an attribution tier above `anonymous` on their own.
-
-◆
-
-## Operator policy
-
-The server publishes the active policy on `GET /session` under `policy`:
-
--   **`NEOTOMA_ATTRIBUTION_POLICY`** (`allow` | `warn` | `reject`; default `allow`), global behaviour for `anonymous` writes.
--   **`NEOTOMA_MIN_ATTRIBUTION_TIER`** (`hardware` | `software` | `unverified_client`), minimum tier required.
--   **`NEOTOMA_ATTRIBUTION_POLICY_JSON`** , per-path overrides, e.g. `{"observations":"reject"}`.
-
-Behaviour: `reject` returns `HTTP 403 ATTRIBUTION_REQUIRED` with `min_tier` and `current_tier` in the error envelope. `warn` stamps an `X-Neotoma-Attribution-Warning` response header and emits an `attribution_decision` log line, but completes the write. `allow` is silent. `min_tier` and `per_path` compose: a per-path `reject` always wins over the global `allow`.
-
-Per-agent fine-grained capability scoping (`(op, entity_type)` allow-lists) is layered on top, see [agent capabilities](/aauth/capabilities).
-
-◆
-
-## Diagnostic surface
-
-Every AAuth verification emits a structured `attribution_decision` log event with at least:
-
--   `signature_present`, was a `Signature` header on the request?
--   `signature_verified`, did the cryptographic check pass?
--   `signature_error_code`, when applicable: why verification failed (`authority_mismatch`, `digest_mismatch`, `signature_invalid`, `agent_token_expired`, `unsupported_algorithm`, …).
--   `attestation_outcome`, when present: result of the per-format verifier (`verified`, `format_unsupported`, `key_binding_failed`, `challenge_mismatch`, `chain_invalid`, …).
--   `revocation_outcome` (v0.12.0+), `not_checked`, `live`, `revoked`, or `error_skipped`.
--   `resolved_tier`, final tier as stamped onto the request context.
-
-The same fields are exposed on `GET /session` under `attribution.decision` so client preflight tooling can surface them without scraping logs.
-
-◆
-
-## Transport parity
-
-The same identity contract is threaded through every transport:
-
--   HTTP `/mcp` (MCP-over-HTTP).
--   Direct REST routes (`/store`, `/observations/create`, `/create_relationship`, `/correct`, `/session`, …).
--   MCP stdio.
--   CLI-over-MCP and CLI-over-HTTP.
-
-Per-transport notes live on the [integration](/aauth/integration) page.
-
-Back to [AAuth overview](/aauth).</pre></div><div role="region" aria-label="Notifications (F8)" tabindex="-1" style="pointer-events: none;"><ol tabindex="-1" class="fixed top-0 z-[100] flex w-full flex-col-reverse p-4 sm:bottom-4 sm:right-4 sm:top-auto sm:flex-col sm:max-h-[calc(100vh-1rem)] sm:overflow-y-auto md:max-w-[420px]"></ol></div></div>
+    <div id="root"><iframe title="Markdown capture" aria-hidden="true" width="1280" height="900" class="pointer-events-none fixed left-[-9999px] top-0 z-[-1] border-0 opacity-0" sandbox="allow-same-origin allow-scripts allow-forms"></iframe><div class="min-h-screen bg-background text-foreground"><p class="p-4 text-[15px] text-muted-foreground">Generating Markdown from rendered page…</p></div><div role="region" aria-label="Notifications (F8)" tabindex="-1" style="pointer-events: none;"><ol tabindex="-1" class="fixed top-0 z-[100] flex w-full flex-col-reverse p-4 sm:bottom-4 sm:right-4 sm:top-auto sm:flex-col sm:max-h-[calc(100vh-1rem)] sm:overflow-y-auto md:max-w-[420px]"></ol></div></div>
   
 
 

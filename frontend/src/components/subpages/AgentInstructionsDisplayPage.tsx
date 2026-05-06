@@ -323,7 +323,7 @@ export function AgentInstructionsDisplayPage() {
       <ul className={listClass}>
         <li className={listItem}>
           <strong className="text-foreground">Store retry policy.</strong> If{" "}
-          <code>store_structured</code> fails, retry once with the same payload. If it
+          <code>store</code> fails, retry once with the same payload. If it
           fails again, surface the error to the user (&quot;Storage failed: [error
           message]&quot;) before responding with any retrieved data. Do not silently skip
           storage and respond as if it succeeded.

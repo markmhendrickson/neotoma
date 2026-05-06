@@ -100,6 +100,7 @@ The agent handles npm install, initialization, and MCP configuration. **Manual i
 ```bash
 npm install -g neotoma
 neotoma init
+neotoma setup --tool <cursor|claude-code|codex> --yes
 neotoma mcp config
 ```
 
@@ -220,7 +221,7 @@ Neotoma exposes state via MCP. Local storage only in preview. Local built-in aut
 
 **Setup guides:** [Cursor](https://neotoma.io/neotoma-with-cursor) · [Claude Code](https://neotoma.io/neotoma-with-claude-code) · [Claude](https://neotoma.io/neotoma-with-claude) · [ChatGPT](https://neotoma.io/neotoma-with-chatgpt) · [Codex](https://neotoma.io/neotoma-with-codex) · [OpenCode](docs/integrations/hooks/opencode.md) · [OpenClaw](https://neotoma.io/neotoma-with-openclaw) · [IronClaw](https://neotoma.io/neotoma-with-ironclaw)
 
-For local source iteration, use the stable dev shim (`scripts/run_neotoma_mcp_stdio_dev_shim.sh` or `npm run dev:mcp:dev-shim`) instead of pointing installed MCP clients at a `tsx watch` stdio process. The shim keeps the client-facing JSON-RPC stream stable and asks clients to refresh or reconnect when the tool interface changes.
+For local source iteration, use the stable dev shim (`scripts/run_neotoma_mcp_stdio_dev_shim.sh`) or signed shim (`scripts/run_neotoma_mcp_signed_stdio_dev_shim.sh`) instead of pointing installed MCP clients at a `tsx watch` stdio process. `neotoma mcp config` defaults to **`b`** for low-friction local stdio setup; use **`a`** for signed + AAuth HTTP `/mcp` proxy entries when the Neotoma API is running, **`c`** for direct stdio, or **`d`** when both MCP entries should target prod.
 
 **Agent behavior contract:** Store first, retrieve before storing, extract entities from user input, create tasks for commitments, and attach bounded host context such as repository name/root scope when available. Full instructions: [MCP instructions](docs/developer/mcp/instructions.md) and [CLI agent instructions](docs/developer/cli_agent_instructions.md).
 

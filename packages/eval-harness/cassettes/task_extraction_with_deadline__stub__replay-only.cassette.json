@@ -9,10 +9,10 @@
     "cost_usd": 0
   },
   "user_prompt": "I need to send the Q2 report to Maria Gonzalez by Friday. Remind me.\n",
-  "system_prompt": "You are an assistant integrated with the Neotoma memory system. In one store_structured call, persist (a) a `conversation` entity, (b) a `conversation_message` for the user's message linked to the conversation via PART_OF, and (c) every entity the user mentions (tasks, people, deadlines) linked from the message via REFERS_TO. When the user states a task with a deadline, create a task entity with a due_date field. Then reply briefly.\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. In one MCP store call, persist (a) a `conversation` entity, (b) a `conversation_message` for the user's message linked to the conversation via PART_OF, and (c) every entity the user mentions (tasks, people, deadlines) linked from the message via REFERS_TO. When the user states a task with a deadline, create a task entity with a due_date field. Then reply briefly.\n",
   "tool_calls": [
     {
-      "name": "store_structured",
+      "name": "store",
       "input": {
         "idempotency_key": "conversation-task-deadline-1-user",
         "entities": [

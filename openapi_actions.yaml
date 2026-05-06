@@ -942,7 +942,7 @@ paths:
   /store:
     post:
       summary: Store structured entities, unstructured files, or both
-      operationId: storeStructured
+      operationId: store
       requestBody:
         required: true
         content:
@@ -959,23 +959,6 @@ paths:
                 - $ref: '#/components/schemas/StoreStructuredResponse'
                 - $ref: '#/components/schemas/StoreUnstructuredResponse'
                 - $ref: '#/components/schemas/StoreResponse'
-  /store/unstructured:
-    post:
-      summary: Store unstructured file (raw upload with optional AI interpretation)
-      operationId: storeUnstructured
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/StoreUnstructuredRequest'
-      responses:
-        '200':
-          description: Store result with source_id and optional interpretation
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/StoreUnstructuredResponse'
   /get_entity_snapshot:
     post:
       summary: Get entity snapshot with provenance

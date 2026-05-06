@@ -1087,6 +1087,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/interpretations/create": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create an interpretation from agent-extracted entities */
+        post: operations["createInterpretation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/stats": {
         parameters: {
             query?: never;
@@ -1114,24 +1131,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Store structured entities, unstructured files, or both */
-        post: operations["storeStructured"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/store/unstructured": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Store unstructured file (raw upload with optional AI interpretation) */
-        post: operations["storeUnstructured"];
+        post: operations["store"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1938,7 +1938,7 @@ export interface components {
         };
         AgentCapabilityEntry: {
             /** @enum {string} */
-            op: "store_structured" | "create_relationship" | "correct" | "retrieve";
+            op: "store" | "store_structured" | "create_relationship" | "correct" | "retrieve";
             /**
              * @description Allowed entity types for this op. The single string `*` widens
              *     to any entity_type that is not protected (see
@@ -2206,6 +2206,63 @@ export interface components {
                 [key: string]: unknown;
             } & components["schemas"]["AgentAttribution"];
         };
+        /**
+         * @description Audit configuration for a parser or agent-authored interpretation run.
+         *     Callers may include extractor_type, extractor_version, model,
+         *     prompt_hash, schema_version, agent_notes, and other provenance fields
+         *     needed to explain how extracted observations were produced.
+         */
+        InterpretationConfig: {
+            extractor_type?: string;
+            extractor_version?: string;
+            model?: string;
+            prompt_hash?: string;
+            schema_version?: string;
+            agent_notes?: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * @description Optional interpretation provenance for source-derived structured
+         *     extraction. Supplying this creates an interpretation row and links new
+         *     observations to it. Omit for ordinary already-structured/chat-native
+         *     facts, which keep observations.interpretation_id NULL.
+         */
+        StoreInterpretationInput: {
+            /** @description Existing source to interpret. */
+            source_id?: string;
+            /**
+             * @description Source created by this store request. Use `unstructured` for the raw
+             *     file source in combined file+entities requests, or `structured`
+             *     for the generated JSON source.
+             * @enum {string}
+             */
+            source_ref?: "structured" | "unstructured";
+            interpretation_config?: components["schemas"]["InterpretationConfig"];
+        };
+        CreateInterpretationRequest: {
+            source_id: string;
+            entities: {
+                [key: string]: unknown;
+            }[];
+            interpretation_config?: components["schemas"]["InterpretationConfig"];
+            relationships?: components["schemas"]["StoreRelationshipInput"][];
+            idempotency_key?: string;
+            user_id?: string;
+        };
+        CreateInterpretationResponse: {
+            success?: boolean;
+            interpretation_id?: string;
+            source_id?: string;
+            entities?: {
+                [key: string]: unknown;
+            }[];
+            observations_created?: number;
+            unknown_fields_count?: number;
+            relationships_created?: {
+                [key: string]: unknown;
+            }[];
+        };
         Stats: {
             entities?: number;
             sources?: number;
@@ -2279,6 +2336,7 @@ export interface components {
              *     `source_entity_id`/`target_entity_id` for existing entities.
              */
             relationships?: components["schemas"]["StoreRelationshipInput"][];
+            interpretation?: components["schemas"]["StoreInterpretationInput"];
             source_priority?: number;
             /**
              * @description Classifies the *kind* of write being performed, orthogonal to
@@ -2339,6 +2397,7 @@ export interface components {
              *     Enables one-call chat persistence: store [conversation, conversation_message] with relationships [{ relationship_type: "PART_OF", source_index: 1, target_index: 0 }]. (`agent_message` remains accepted as a legacy alias for pre-v0.6 clients.)
              */
             relationships?: components["schemas"]["StoreRelationshipInput"][];
+            interpretation?: components["schemas"]["StoreInterpretationInput"];
             source_priority?: number;
             /**
              * @description Classifies the *kind* of write being performed, orthogonal to
@@ -2423,6 +2482,8 @@ export interface components {
                 observation_index?: number;
                 entity_id?: string;
             })[];
+            /** @description Interpretation row linked to observations when the request supplied an explicit interpretation block. */
+            interpretation_id?: string | null;
         };
         /**
          * @description Non-fatal warning emitted by entity resolution when a schema declares
@@ -4135,6 +4196,30 @@ export interface operations {
             };
         };
     };
+    createInterpretation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateInterpretationRequest"];
+            };
+        };
+        responses: {
+            /** @description Interpretation result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateInterpretationResponse"];
+                };
+            };
+        };
+    };
     getStats: {
         parameters: {
             query?: {
@@ -4157,7 +4242,7 @@ export interface operations {
             };
         };
     };
-    storeStructured: {
+    store: {
         parameters: {
             query?: never;
             header?: never;
@@ -4190,30 +4275,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StoreResolutionErrorEnvelope"] | components["schemas"]["ErrorEnvelope"];
-                };
-            };
-        };
-    };
-    storeUnstructured: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["StoreUnstructuredRequest"];
-            };
-        };
-        responses: {
-            /** @description Store result with source_id and optional interpretation */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["StoreUnstructuredResponse"];
                 };
             };
         };

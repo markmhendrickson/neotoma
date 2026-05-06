@@ -47,6 +47,7 @@ const ALLOWED_STATUSES: ReadonlySet<AgentGrantStatus> = new Set([
   "revoked",
 ]);
 const ALLOWED_OPS: ReadonlySet<AgentCapabilityOp> = new Set([
+  "store",
   "store_structured",
   "create_relationship",
   "correct",

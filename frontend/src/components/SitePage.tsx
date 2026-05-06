@@ -17,7 +17,6 @@ import {
   MessageSquare,
   Users,
   Waypoints,
-  AlertTriangle,
   Wrench,
   Workflow,
 } from "lucide-react";
@@ -31,13 +30,8 @@ import {
   REPO_STARS_COUNT,
   REPO_VERSION,
   MEMORY_GUARANTEE_ROWS,
-  ICP_PROFILES,
 } from "../site/site_data";
-import {
-  FAQ_QUESTION_BUILDING_YOUR_OWN_MEMORY_SYSTEM,
-  FAQ_QUESTION_NOT_FOR_THOUGHT_PARTNER,
-  faqQuestionToSectionId,
-} from "../site/faq_items";
+import { FAQ_DEEP_LINK_SECTION_IDS } from "../site/faq_items";
 
 const WHO_CALLOUT_FAQ_LINK_CLASS =
   "font-medium text-foreground underline decoration-emerald-600/35 underline-offset-2 hover:decoration-emerald-600/70";
@@ -69,6 +63,7 @@ import heroEvaluateIllus from "@/assets/images/hero/hero_illus_evaluate_agent_pa
 import founderPhoto from "@/assets/images/people/mark_hendrickson.jpg";
 
 import { useLocale } from "@/i18n/LocaleContext";
+import type { HomeScenario } from "@/i18n/locales/home_body_types";
 import { localizePath } from "@/i18n/routing";
 import { cn } from "@/lib/utils";
 import { useSiteHomeEvaluateScrollBannerVisibleSetter } from "@/context/SiteAppNavContext";
@@ -115,294 +110,88 @@ function getLocalizedDotNavSections(pack: ReturnType<typeof useLocale>["pack"]) 
   ];
 }
 
-const GUARANTEE_PREVIEW_CARDS: {
-  slug: string;
-  property: string;
-  failure: string;
-  status: "guaranteed" | "prevented";
-  illus: string;
-}[] = [
-  {
-    slug: "deterministic-state-evolution",
-    property: "Deterministic state",
-    failure:
-      "You run the same pipeline twice and get different results \u2014 no way to trace why.",
-    status: "guaranteed",
-    illus: guaranteeDeterministicStateIllus,
-  },
-  {
-    slug: "versioned-history",
-    property: "Versioned history",
-    failure: "A retry silently overwrites a preference. The original is gone.",
-    status: "guaranteed",
-    illus: guaranteeVersionedHistoryIllus,
-  },
-  {
-    slug: "auditable-change-log",
-    property: "Auditable change log",
-    failure: "Your agent makes a bad call. You can\u2019t trace what data it relied on.",
-    status: "guaranteed",
-    illus: guaranteeAuditableChangeLogIllus,
-  },
-  {
-    slug: "silent-mutation-risk",
-    property: "Silent mutation prevention",
-    failure: "Data changes without your knowledge. You find out when something breaks.",
-    status: "prevented",
-    illus: guaranteeSilentMutationPreventionIllus,
-  },
-  {
-    slug: "schema-constraints",
-    property: "Schema constraints",
-    failure:
-      "An agent writes a malformed record. Nothing rejects it \u2014 errors compound silently.",
-    status: "guaranteed",
-    illus: guaranteeSchemaConstraintsIllus,
-  },
-  {
-    slug: "reproducible-state-reconstruction",
-    property: "Reproducible reconstruction",
-    failure: "Your database corrupts. There\u2019s no path back to a known-good state.",
-    status: "guaranteed",
-    illus: guaranteeReproducibleReconstructionIllus,
-  },
-];
+/** Illustrations keyed by guarantee slug (locale copy lives in `pack.homeBody`). */
+const GUARANTEE_PREVIEW_ILLUS_BY_SLUG: Record<string, string> = {
+  "deterministic-state-evolution": guaranteeDeterministicStateIllus,
+  "versioned-history": guaranteeVersionedHistoryIllus,
+  "auditable-change-log": guaranteeAuditableChangeLogIllus,
+  "silent-mutation-risk": guaranteeSilentMutationPreventionIllus,
+  "schema-constraints": guaranteeSchemaConstraintsIllus,
+  "reproducible-state-reconstruction": guaranteeReproducibleReconstructionIllus,
+};
 
-const GUARANTEE_QA: { q: string; a: string }[] = [
-  {
-    q: "Platform memory (Claude, ChatGPT) is good enough - why add another tool?",
-    a: "Platform memory stores what one vendor decides to remember, in a format you can't inspect or export. It doesn't version, doesn't detect conflicts, and vanishes if you switch tools. Neotoma gives you structured, cross-tool memory you control.",
-  },
-  {
-    q: "Can't I just build this with SQLite or a JSON file?",
-    a: "You can start there - many teams do. But you'll eventually need versioning, conflict detection, schema evolution, and cross-tool sync. That's months of infrastructure work. Neotoma ships those guarantees on day one.",
-  },
-  {
-    q: "Is this production-ready?",
-    a: "Neotoma is in developer preview \u2014 used daily by real agent workflows. The core guarantees (deterministic memory, versioned history, append-only change log) are stable. Install in 5 minutes and let your agent evaluate the fit.",
-  },
-];
-
-/** Home FAQ accordion (before footer); superset of guarantee-focused Q&A plus common install/privacy topics. */
-const HOME_FAQ_PREVIEW_ITEMS: { q: string; a: string }[] = [
-  ...GUARANTEE_QA,
-  {
-    q: "Does Neotoma replace Claude's memory or ChatGPT's?",
-    a: "No \u2014 it works alongside them. Platform memory stores what one vendor decides to remember within that vendor's tool. Neotoma stores facts you control across all your tools. Keep using platform memory for quick context; use Neotoma when you need versioning, auditability, and cross-tool consistency.",
-  },
-  {
-    q: "Does Neotoma send my data to the cloud?",
-    a: "No. Neotoma runs locally by default. Your data stays on your machine in a local SQLite database. There is no cloud sync, no telemetry, and no training on your data unless you choose to expose the API (for example for remote MCP clients).",
-  },
-  {
-    q: "What's the difference between RAG memory and deterministic memory?",
-    a: "RAG stores text chunks and retrieves them by similarity. Neotoma stores structured facts and builds a versioned history for each one; the same inputs always produce the same result. RAG optimizes relevance; deterministic memory optimizes integrity, versioning, and auditability.",
-  },
-  {
-    q: "Does the memory degrade or drift over time?",
-    a: "No. Neotoma uses an append-only observation log with deterministic reducers. Nothing is overwritten or silently dropped. Facts stored six months ago are as retrievable and verifiable as facts stored today \u2014 with full version history and provenance intact. The memory compounds; it never decays.",
-  },
-];
-
-/** Agent memory scenarios: failure (without Neotoma) and success (with Neotoma) variants.
- *  First 4 map to personal-OS data types from the ICP:
- *  [0] Contacts, [1] Tasks & commitments, [2] Financial data, [3] Decisions & provenance */
-const SCENARIOS = [
-  {
-    left: "Use the new email I gave you for Sarah.",
-    fail: "Sent to sarah@oldcompany.com.",
-    succeed: "Sent to sarah@newstartup.io, updated Mar 28. Previous email preserved in v2.",
-    version: "contact\u00B7v3",
-  },
-  {
-    left: "What did I say I'd follow up on with Nick?",
-    fail: "No follow-up items found.",
-    succeed: "You committed to sending the architecture doc by Friday.",
-    version: "task\u00B7v2",
-  },
-  {
-    left: "How much did I spend on cloud hosting last month?",
-    fail: "No hosting expenses found.",
-    succeed: "$847 across AWS and Vercel, up 12% from February.",
-    version: "transaction\u00B7v5",
-  },
-  {
-    left: "Why did my agent post that tweet yesterday?",
-    fail: "No record of a tweet action.",
-    succeed: "Drafted from your content pipeline, approved in session #412.",
-    version: "decision\u00B7v3",
-  },
-  {
-    left: "Continue where we left off yesterday.",
-    fail: "Resuming based on thread from two weeks ago.",
-    succeed: "Resuming yesterday's thread on the migration plan.",
-    version: "conversation\u00B7v7",
-  },
-  {
-    left: "What did we originally agree with Acme Corp back in October?",
-    fail: "No records from October found.",
-    succeed:
-      "Original terms from Oct 12: 18-month engagement, $4,200/mo, with a 90-day exit clause. Amended Jan 8 to $4,800/mo.",
-    version: "contract\u00B7v3",
-  },
-  {
-    left: "Which agent session updated my contact list?",
-    fail: "No session history available.",
-    succeed: "Session #389 in Cursor added 3 contacts from email triage.",
-    version: "agent_session\u00B7v2",
-  },
-  {
-    left: "Was the invoice from Acme Corp paid?",
-    fail: "Unpaid as of Feb 2.",
-    succeed: "Paid Feb 14 via Wise transfer.",
-    version: "transaction\u00B7v3",
-  },
-  {
-    left: "Show my open tasks across all projects.",
-    fail: "Showing 18 open items.",
-    succeed: "Showing 7 open items, 3 due this week.",
-    version: "task\u00B7v5",
-  },
-  {
-    left: "Send that update to Alex from the call last week.",
-    fail: "No contact named Alex found.",
-    succeed: "Sending to Alex Rivera, met at demo call Mar 24.",
-    version: "contact\u00B7v4",
-  },
-  {
-    left: "When's my next appointment this week?",
-    fail: "No upcoming events found.",
-    succeed: "Thursday 10am, dentist. Friday 4pm, call with Simon.",
-    version: "event\u00B7v2",
-  },
-];
-
-const OUTCOME_CARDS: {
-  category: string;
-  Icon: LucideIcon;
-  failTitle: string;
-  failDescription: string;
-  successTitle: string;
-  successDescription: string;
-  scenarioIndex: number;
-}[] = [
-  {
-    category: "Contacts & people",
-    Icon: Users,
-    failTitle: "Silently overwritten, confidently wrong",
-    failDescription:
-      "You corrected a contact's email last week. A different agent session overwrote it with the old address. Your agent sends to the wrong person, and nobody notices until it's too late.",
-    successTitle: "Every version preserved, corrections verified",
-    successDescription:
-      "Both the old and new email are preserved in versioned history. Your agent works from the verified current facts, and you can inspect exactly when and why each value changed.",
-    scenarioIndex: 0,
-  },
-  {
-    category: "Tasks & commitments",
-    Icon: ListChecks,
-    failTitle: "Forgotten follow-up, dropped commitment",
-    failDescription:
-      'You said "I\'ll send that doc by Friday" in a call. No agent recorded it. By Monday, the commitment is gone - no reminder, no trace it existed.',
-    successTitle: "Every commitment persisted, every session",
-    successDescription:
-      "Tasks and commitments are captured from conversation and stored with due dates and context. Your agent surfaces them before they slip - across sessions and tools.",
-    scenarioIndex: 1,
-  },
-  {
-    category: "Financial data",
-    Icon: Receipt,
-    failTitle: "Missing transaction, wrong balance",
-    failDescription:
-      "You asked about last month's spending. Your agent has no memory of the transactions you tracked two weeks ago in a different tool. You start over.",
-    successTitle: "Versioned transactions, consistent totals",
-    successDescription:
-      "Every transaction is stored with full history and source tracking. Ask from any tool and the numbers match \u2014 no re-entry, no conflicting answers.",
-    scenarioIndex: 2,
-  },
-  {
-    category: "Decisions & provenance",
-    Icon: CalendarClock,
-    failTitle: "No trace of why the agent acted",
-    failDescription:
-      "Your agent posted a tweet, sent an email, or made a recommendation. When you ask why, there's no record of the reasoning or the data it used.",
-    successTitle: "Full audit trail for every action",
-    successDescription:
-      'Every decision is stored with its inputs, reasoning, and the session that produced it. When you ask "why did you do that?", the agent can show you exactly.',
-    scenarioIndex: 3,
-  },
-];
-
-const RECORD_TYPE_CARDS: {
-  label: string;
+/** Visual layout for record-type cards; order matches `homeBody.recordTypes.cards`. */
+const RECORD_TYPE_CARD_LAYOUT: {
   href: string;
-  description: string;
   entities: readonly string[];
   accent: string;
   icon: LucideIcon;
   starter?: boolean;
 }[] = [
   {
-    label: "Contacts",
     href: "/types/contacts",
-    description: "People, companies, roles, and the relationships between them.",
     entities: ["contact", "company", "account"],
     accent: "text-blue-600 dark:text-blue-400",
     icon: Users,
     starter: true,
   },
   {
-    label: "Tasks",
     href: "/types/tasks",
-    description: "Obligations, deadlines, habits, and goals tracked across sessions.",
     entities: ["task", "habit", "goal"],
     accent: "text-emerald-600 dark:text-emerald-400",
     icon: ListChecks,
     starter: true,
   },
   {
-    label: "Events",
     href: "/types/events",
-    description: "Meetings, milestones, and the outcomes attached to them.",
     entities: ["event", "meeting", "milestone"],
     accent: "text-violet-600 dark:text-violet-400",
     icon: CalendarClock,
     starter: true,
   },
   {
-    label: "Transactions",
     href: "/types/transactions",
-    description:
-      "Payments, receipts, invoices, and ledger entries versioned instead of overwritten.",
     entities: ["transaction", "invoice", "receipt"],
     accent: "text-amber-600 dark:text-amber-400",
     icon: Receipt,
   },
   {
-    label: "Contracts",
     href: "/types/contracts",
-    description: "Agreements, clauses, and amendments with the exact terms preserved over time.",
     entities: ["contract", "clause", "amendment"],
     accent: "text-slate-600 dark:text-slate-400",
     icon: Scale,
   },
   {
-    label: "Decisions",
     href: "/types/decisions",
-    description: "Choices, rationale, and the audit trail that proves why an agent acted.",
     entities: ["decision", "assessment", "review"],
     accent: "text-rose-600 dark:text-rose-400",
     icon: Waypoints,
   },
 ];
 
-const ANIM_SCENARIOS = SCENARIOS.slice(0, 4);
+/** Stable URL; link label is localized in `homeBody.proof.readFullPost`. */
+const FOUNDER_AGENTIC_STACK_POST_HREF =
+  "https://markmhendrickson.com/posts/what-my-agentic-stack-actually-does/";
+
+/** Numeric proof strip values (stable across locales; labels in `homeBody.proof`). */
+const PROOF_STAT_VALUES = {
+  contacts: "1,100+",
+  tasks: "16,000+",
+  conversations: "900+",
+  agentMessages: "2,000+",
+  entityTypes: "380+",
+} as const;
+
+const OUTCOME_SCENARIO_ICONS: LucideIcon[] = [Users, ListChecks, Receipt, CalendarClock];
+
+const ANIM_SCENARIO_COUNT = 4;
 const SCENE_MS = 5000;
 const TYPE_MS = 1700;
 const THINK_MS = 900;
 const MINI_TRANS_MS = 1600;
 const INTER_SCENE_MS = 1000;
 const FULL_SCENARIO_MS = SCENE_MS + MINI_TRANS_MS + SCENE_MS + INTER_SCENE_MS;
-const TOTAL_MS = ANIM_SCENARIOS.length * FULL_SCENARIO_MS;
+const TOTAL_MS = ANIM_SCENARIO_COUNT * FULL_SCENARIO_MS;
 
 type IllustMsg = {
   key: string;
@@ -432,7 +221,7 @@ function TypewriterBadge({ text, delayMs = 35 }: { text: string; delayMs?: numbe
 function buildSceneMessages(
   sceneElapsed: number,
   fail: boolean,
-  scenario: (typeof ANIM_SCENARIOS)[number],
+  scenario: HomeScenario,
   prefix: string
 ): IllustMsg[] {
   const msgs: IllustMsg[] = [];
@@ -459,6 +248,15 @@ function ForgetfulAgentIllustration({
   className?: string;
   onStateChange?: (state: { scenarioIndex: number; failMode: boolean }) => void;
 }) {
+  const { pack } = useLocale();
+  const animScenarios = useMemo(
+    () => pack.homeBody.scenarios.slice(0, ANIM_SCENARIO_COUNT),
+    [pack.homeBody.scenarios],
+  );
+  const outcomeBridge = pack.homeBody.outcomes.withNeotoma;
+  const sessionWithout = pack.homeBody.outcomes.withoutNeotoma;
+  const sessionWith = pack.homeBody.outcomes.withNeotoma;
+
   const [elapsed, setElapsed] = useState(0);
   const [playing, setPlaying] = useState(true);
   const [dragging, setDragging] = useState(false);
@@ -527,10 +325,10 @@ function ForgetfulAgentIllustration({
 
   const activeScenarioIndex = Math.min(
     Math.floor(elapsed / FULL_SCENARIO_MS),
-    ANIM_SCENARIOS.length - 1
+    animScenarios.length - 1
   );
   const sceneOffset = elapsed - activeScenarioIndex * FULL_SCENARIO_MS;
-  const scenario = ANIM_SCENARIOS[activeScenarioIndex];
+  const scenario = animScenarios[activeScenarioIndex]!;
 
   const isFailScene = sceneOffset < SCENE_MS;
   const isMiniTrans = sceneOffset >= SCENE_MS && sceneOffset < SCENE_MS + MINI_TRANS_MS;
@@ -560,7 +358,7 @@ function ForgetfulAgentIllustration({
       msgs.push({
         key: `lbl-${activeScenarioIndex}`,
         role: "label",
-        text: "with Neotoma",
+        text: outcomeBridge,
         thinking: false,
         fail: false,
       });
@@ -572,7 +370,7 @@ function ForgetfulAgentIllustration({
       {
         key: `lbl-${activeScenarioIndex}`,
         role: "label",
-        text: "with Neotoma",
+        text: outcomeBridge,
         thinking: false,
         fail: false,
       },
@@ -584,7 +382,7 @@ function ForgetfulAgentIllustration({
       {
         key: `lbl-${activeScenarioIndex}`,
         role: "label",
-        text: "with Neotoma",
+        text: outcomeBridge,
         thinking: false,
         fail: false,
       },
@@ -689,7 +487,7 @@ function ForgetfulAgentIllustration({
             <span className="h-2 w-2 rounded-full bg-emerald-400/75 dark:bg-emerald-500/80" />
           </div>
           <span className="col-span-3 sm:col-span-1 text-center">
-            agent session · {failMode ? "without Neotoma" : "with Neotoma"}
+            agent session · {failMode ? sessionWithout : sessionWith}
           </span>
           <div className="hidden sm:block" />
         </div>
@@ -834,8 +632,8 @@ function ForgetfulAgentIllustration({
               onLostPointerCapture={onBarPointerUp}
             >
               <div className="pointer-events-none absolute inset-y-0 left-0 right-0 my-auto h-1.5 overflow-hidden rounded-full">
-                {ANIM_SCENARIOS.map((_, i) => {
-                  const n = ANIM_SCENARIOS.length;
+                {animScenarios.map((_, i) => {
+                  const n = animScenarios.length;
                   const segPct = 100 / n;
                   return (
                     <div
@@ -854,12 +652,12 @@ function ForgetfulAgentIllustration({
                   style={{ width: `${progress * 100}%` }}
                 />
               </div>
-              {ANIM_SCENARIOS.slice(1).map((_, i) => (
+              {animScenarios.slice(1).map((_, i) => (
                 <div
                   key={i}
                   className="pointer-events-none absolute inset-y-0 w-px bg-white/70 shadow-[0_0_0_0.5px_rgba(0,0,0,0.1)] dark:bg-slate-500/50 dark:shadow-none"
                   style={{
-                    left: `${((i + 1) / ANIM_SCENARIOS.length) * 100}%`,
+                    left: `${((i + 1) / animScenarios.length) * 100}%`,
                   }}
                   aria-hidden
                 />
@@ -872,7 +670,7 @@ function ForgetfulAgentIllustration({
               />
             </div>
             <div className="flex shrink-0 gap-0.5 text-[7px] uppercase tracking-wider text-slate-400 dark:text-slate-500">
-              {ANIM_SCENARIOS.map((_, i) => (
+              {animScenarios.map((_, i) => (
                 <button
                   key={i}
                   type="button"
@@ -909,12 +707,17 @@ function OutcomeContextPanel({
   activeScenarioIndex: number;
   failMode: boolean;
 }) {
-  const card = OUTCOME_CARDS[activeScenarioIndex];
+  const { pack } = useLocale();
+  const outcomeCards = pack.homeBody.outcomeCards;
+  const card = outcomeCards[activeScenarioIndex];
   if (!card) return null;
-  const { Icon, category } = card;
+  const Icon = OUTCOME_SCENARIO_ICONS[card.scenarioIndex] ?? Users;
+  const category = card.category;
   const title = failMode ? card.failTitle : card.successTitle;
   const description = failMode ? card.failDescription : card.successDescription;
   const contentKey = `${activeScenarioIndex}-${failMode}`;
+  const sessionWithout = pack.homeBody.outcomes.withoutNeotoma;
+  const sessionWith = pack.homeBody.outcomes.withNeotoma;
 
   return (
     <div
@@ -925,7 +728,7 @@ function OutcomeContextPanel({
       }`}
     >
       <div className="flex items-center gap-1.5 mb-6">
-        {OUTCOME_CARDS.map((_, i) => (
+        {outcomeCards.map((_, i) => (
           <div
             key={i}
             className={`h-1.5 rounded-full transition-all duration-300 ${
@@ -979,7 +782,7 @@ function OutcomeContextPanel({
               failMode ? "bg-rose-500 dark:bg-rose-400" : "bg-emerald-500 dark:bg-emerald-400"
             }`}
           />
-          {failMode ? "without Neotoma" : "with Neotoma"}
+          {failMode ? sessionWithout : sessionWith}
         </div>
       </div>
     </div>
@@ -993,6 +796,8 @@ function OutcomesSlide({
   scrollContainerRef: React.RefObject<HTMLDivElement | null>;
   staticMode: boolean;
 }) {
+  const { pack } = useLocale();
+  const outcomesCopy = pack.homeBody.outcomes;
   const [animState, setAnimState] = useState({ scenarioIndex: 0, failMode: true });
 
   return (
@@ -1002,12 +807,11 @@ function OutcomesSlide({
           <div className="space-y-6 md:space-y-8 max-w-5xl mx-auto">
             <div className="space-y-2 text-center">
               <p className="text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
-                Before &amp; after
+                {outcomesCopy.kicker}
               </p>
-              <h2 className={HOME_SECTION_H2_CLASS}>Same question, different outcome</h2>
+              <h2 className={HOME_SECTION_H2_CLASS}>{outcomesCopy.heading}</h2>
               <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl mx-auto">
-                Without shared memory, agents act on facts they can&rsquo;t verify. With Neotoma,
-                every response reads from versioned, structured history.
+                {outcomesCopy.subtitle}
               </p>
             </div>
 
@@ -1038,11 +842,10 @@ const SLIDE_CLASS =
 /** Reduced mobile padding; md+ keeps generous vertical padding so SectionEdgeIndicators do not overlap copy. */
 const SLIDE_INNER = "w-full max-w-6xl mx-auto px-4 md:px-12 lg:px-16 py-8 md:pt-16 md:pb-16";
 
-const ICP_ICON_MAP: Record<string, LucideIcon> = {
-  Server,
-  Workflow,
-  ArrowLeftRight,
-  Bug,
+const ICP_SLUG_TO_ICON: Record<string, LucideIcon> = {
+  operating: ArrowLeftRight,
+  "building-pipelines": Workflow,
+  "debugging-infrastructure": Bug,
 };
 /** Home page slide section titles (below hero) - single source for visual hierarchy. */
 const HOME_SECTION_H2_CLASS =
@@ -1055,7 +858,7 @@ const IN_VIEW_THRESHOLD = 0.01;
 /** Space reserved at bottom of scroll root when the evaluate banner is shown (bar + breathing room). */
 const EVALUATE_BANNER_SCROLL_PADDING_BOTTOM =
   "max(5.75rem, calc(4.5rem + env(safe-area-inset-bottom, 0px)))";
-/** Stagger for homepage illustration reveals (aligned with StateFlowDiagram STAGGER_MS). */
+/** Stagger for homepage illustration reveals (aligned with StateFlowDiagram hero timings, 120ms steps). */
 const ILLUS_REVEAL_STAGGER_MS = 120;
 
 function isModifiedClick(event: React.MouseEvent<HTMLElement>) {
@@ -1163,6 +966,8 @@ function HomeAgentToolChips({
   align?: "center" | "start";
   compact?: boolean;
 }) {
+  const { pack } = useLocale();
+  const { ariaLabel, worksWith } = pack.homeBody.agentToolChips;
   const chipClass = compact
     ? "inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-[13px] font-medium text-foreground/90 no-underline transition-colors hover:bg-muted"
     : "inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3.5 py-2.5 text-[14px] font-medium text-foreground/90 no-underline transition-colors hover:bg-muted";
@@ -1176,12 +981,12 @@ function HomeAgentToolChips({
   return (
     <div
       className={`flex flex-col items-center pt-1 ${stackGap} md:flex-row md:flex-wrap md:items-center ${alignmentClass}`}
-      aria-label="AI agents and tools"
+      aria-label={ariaLabel}
     >
       <span
         className={`${labelClass} w-full shrink-0 text-center md:w-auto ${align === "start" ? "lg:text-left" : ""}`}
       >
-        Works with
+        {worksWith}
       </span>
       <div
         className={`flex w-full max-w-full flex-wrap items-center justify-center ${rowClass} md:contents`}
@@ -1219,13 +1024,17 @@ const heroProofStripItemClass =
   "rounded-full border border-border/80 bg-background/80 px-3.5 py-2 text-[13px] font-medium text-muted-foreground lg:rounded-none lg:border-0 lg:bg-transparent lg:px-0 lg:py-0";
 
 function HeroProofStrip() {
+  const { pack } = useLocale();
+  const hero = pack.homeBody.hero;
   const { starsCount: liveStars, starsResolved } = useRepoMetaClient(
     REPO_VERSION,
     REPO_RELEASES_COUNT,
     REPO_STARS_COUNT
   );
   const showStarCount = starsResolved || liveStars > 0;
-  const githubLinkLabel = showStarCount ? `${liveStars.toLocaleString()} on GitHub` : "GitHub";
+  const githubLinkLabel = showStarCount
+    ? `${liveStars.toLocaleString()}${hero.onGithubSuffix}`
+    : hero.githubLabel;
   const dot = (
     <span aria-hidden="true" className="hidden text-border lg:inline">
       ·
@@ -1233,9 +1042,7 @@ function HeroProofStrip() {
   );
   return (
     <div className="flex flex-wrap items-center justify-center gap-2.5 text-[13px] font-medium text-muted-foreground lg:inline-flex lg:gap-x-3 lg:gap-y-1 lg:rounded-full lg:border lg:border-border/80 lg:bg-background/80 lg:px-4 lg:py-2 lg:justify-center">
-      <span className={`${heroProofStripItemClass} inline-flex`}>
-        Trustworthy state for AI agents
-      </span>
+      <span className={`${heroProofStripItemClass} inline-flex`}>{hero.trustLine}</span>
       {dot}
       <a
         href="https://github.com/markmhendrickson/neotoma"
@@ -1250,18 +1057,20 @@ function HeroProofStrip() {
         {githubLinkLabel}
       </a>
       {dot}
-      <span className={heroProofStripItemClass}>{REPO_RELEASES_COUNT} releases shipped</span>
+      <span className={heroProofStripItemClass}>
+        {REPO_RELEASES_COUNT} {hero.releasesShipped}
+      </span>
     </div>
   );
 }
 
 function HeroStatePreview() {
+  const { pack } = useLocale();
   return (
     <div className="mx-auto w-full max-w-[420px] lg:max-w-none">
       <StateFlowDiagram variant="hero" className="shadow-[0_18px_48px_-28px_rgba(15,23,42,0.45)]" />
       <p className="mt-3 text-center text-[12px] leading-5 text-muted-foreground lg:text-left">
-        Facts are stored privately under your control. Any agent can retrieve exactly what it needs,
-        with full versioning and provenance.
+        {pack.homeBody.hero.heroStateCaption}
       </p>
     </div>
   );
@@ -1269,7 +1078,7 @@ function HeroStatePreview() {
 
 function EvaluateSectionCta() {
   return (
-    <div className="flex w-full max-w-lg flex-col items-stretch gap-4 text-left">
+    <div className="mx-auto flex w-full max-w-lg flex-col items-stretch gap-4 text-left lg:mx-0">
       <HomeEvaluatePromptBlock copyFeedbackId="evaluate-section-prompt" hideIntro />
     </div>
   );
@@ -1332,29 +1141,9 @@ function SectionEdgeIndicators({
   );
 }
 
-/**
- * Consented public attributions. Named evaluator data in docs/private/icp/field_evidence.md.
- */
-const HERO_QUOTES: { text: string; attribution: string; attributionHref?: string }[] = [
-  {
-    text: "State integrity, not retrieval quality.",
-    attribution: "Agentic app builder",
-  },
-  {
-    text: "Very relevant problem, most people rolling their own.",
-    attribution: "Laurie Voss, npm co-founder",
-  },
-  {
-    text: "Genuinely useful for production agents, overkill for hobbyist chatbots.",
-    attribution: "Production agent evaluator",
-  },
-  {
-    text: "CI/CD for agent state.",
-    attribution: "Tycho Onnasch, co-founder, Zest Protocol",
-  },
-];
-
 function HeroQuotesCarousel() {
+  const { pack } = useLocale();
+  const quotes = pack.homeBody.quotes;
   const trackRef = useRef<HTMLDivElement>(null);
   const [activeIdx, setActiveIdx] = useState(0);
 
@@ -1362,8 +1151,8 @@ function HeroQuotesCarousel() {
     const el = trackRef.current;
     if (!el) return;
     const idx = Math.round(el.scrollLeft / el.offsetWidth);
-    setActiveIdx(Math.min(idx, HERO_QUOTES.length - 1));
-  }, []);
+    setActiveIdx(Math.min(idx, quotes.length - 1));
+  }, [quotes.length]);
 
   const scrollTo = useCallback((idx: number) => {
     const el = trackRef.current;
@@ -1371,7 +1160,7 @@ function HeroQuotesCarousel() {
     el.scrollTo({ left: idx * el.offsetWidth, behavior: "smooth" });
   }, []);
 
-  const quoteCard = (q: (typeof HERO_QUOTES)[number], i: number) => (
+  const quoteCard = (q: (typeof quotes)[number], i: number) => (
     <div
       key={i}
       className="flex flex-col rounded-xl border border-border/60 bg-card/30 p-3 sm:p-5 text-left"
@@ -1406,14 +1195,14 @@ function HeroQuotesCarousel() {
           onScroll={handleScroll}
           className="flex snap-x snap-mandatory overflow-x-auto scrollbar-hide -mx-4 px-4 gap-3"
         >
-          {HERO_QUOTES.map((q, i) => (
+          {quotes.map((q, i) => (
             <div key={i} className="snap-center shrink-0 w-[85vw] max-w-[340px]">
               {quoteCard(q, i)}
             </div>
           ))}
         </div>
         <div className="flex justify-center gap-1.5 mt-3">
-          {HERO_QUOTES.map((_, i) => (
+          {quotes.map((_, i) => (
             <button
               key={i}
               aria-label={`Go to quote ${i + 1}`}
@@ -1430,7 +1219,7 @@ function HeroQuotesCarousel() {
 
       {/* Desktop grid */}
       <div className="hidden sm:grid gap-4 sm:grid-cols-2 max-w-3xl mx-auto">
-        {HERO_QUOTES.map((q, i) => quoteCard(q, i))}
+        {quotes.map((q, i) => quoteCard(q, i))}
       </div>
     </>
   );
@@ -1438,6 +1227,7 @@ function HeroQuotesCarousel() {
 
 export function SitePage({ staticMode = false }: SitePageProps) {
   const { pack, locale } = useLocale();
+  const body = pack.homeBody;
   const navigate = useNavigate();
   const dotNavSections = useMemo(() => getLocalizedDotNavSections(pack), [pack]);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -1586,8 +1376,9 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                     <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(340px,0.92fr)] lg:items-center">
                       <div className="space-y-6 text-center lg:text-left">
                         <h1 className="text-[36px] md:text-[48px] font-semibold tracking-[-0.035em] leading-[1.1]">
-                          <span className="block">{pack.homeHero.titlePrefix}</span>
                           <span className="block">
+                            {pack.homeHero.titlePrefix}
+                            <br />
                             <span className={HERO_TITLE_RECORD_EMPHASIS_CLASS}>
                               {pack.homeHero.titleAccent}
                             </span>{" "}
@@ -1667,24 +1458,22 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                 <div className="space-y-6 md:space-y-8 max-w-5xl mx-auto">
                   <div className="space-y-2 text-center">
                     <p className="text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
-                      Who this is for
+                      {body.who.kicker}
                     </p>
                     <h2 className={HOME_SECTION_H2_CLASS}>
-                      You run AI agents seriously...
+                      {body.who.titleLine1}
                       <span className="mt-1.5 block text-muted-foreground sm:mt-2">
-                        ...and pay the tax for missing memory
+                        {body.who.titleLine2}
                       </span>
                     </h2>
                     <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl mx-auto">
-                      The re-prompting wastes your time and tokens. The deeper risk is when your
-                      agent acts confidently on wrong facts, and you don&rsquo;t find out until the
-                      damage is done.
+                      {body.who.subtitle}
                     </p>
                   </div>
 
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    {ICP_PROFILES.map((profile, index) => {
-                      const Icon = ICP_ICON_MAP[profile.iconName] ?? Server;
+                    {body.who.icpCards.map((profile, index) => {
+                      const Icon = ICP_SLUG_TO_ICON[profile.slug] ?? Server;
                       return (
                         <Link
                           key={profile.slug}
@@ -1703,9 +1492,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                             />
                           </ScrollRevealOnce>
                           <div className="flex min-h-0 flex-1 flex-col px-1 pt-4">
-                            <p className="text-[15px] font-medium text-foreground">
-                              {profile.name}
-                            </p>
+                            <p className="text-[15px] font-medium text-foreground">{profile.name}</p>
                             <p className="mt-2 text-[13px] leading-6 text-muted-foreground">
                               {profile.tagline}
                             </p>
@@ -1726,18 +1513,15 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                         aria-hidden
                       />
                       <p className="text-[13px] leading-5 text-muted-foreground">
-                        <span className="font-medium text-foreground">
-                          Already building your own memory system?
-                        </span>{" "}
-                        Most developers start with SQLite, JSON, markdown, or a custom MCP server.
-                        Neotoma ships{" "}
+                        <span className="font-medium text-foreground">{body.who.calloutHeading}</span>{" "}
+                        {body.who.calloutBodyBeforeLink}
                         <Link
-                          to={`/faq#${faqQuestionToSectionId(FAQ_QUESTION_BUILDING_YOUR_OWN_MEMORY_SYSTEM)}`}
+                          to={`/faq#${FAQ_DEEP_LINK_SECTION_IDS.buildingYourOwnMemorySystem}`}
                           className={WHO_CALLOUT_FAQ_LINK_CLASS}
                         >
-                          the guarantees you&rsquo;d otherwise build and maintain yourself
+                          {body.who.calloutLink}
                         </Link>
-                        : versioning, conflict detection, schema evolution, and cross-tool sync.
+                        {body.who.calloutBodyAfterLink}
                       </p>
                     </div>
                     <div className="mt-2 flex items-start gap-2 border-t border-emerald-500/15 pt-2 text-[12px] leading-5 text-muted-foreground">
@@ -1746,14 +1530,14 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                         aria-hidden
                       />
                       <p>
-                        Not for{" "}
+                        {body.who.calloutNotForLead}
                         <Link
-                          to={`/faq#${faqQuestionToSectionId(FAQ_QUESTION_NOT_FOR_THOUGHT_PARTNER)}`}
+                          to={`/faq#${FAQ_DEEP_LINK_SECTION_IDS.notForThoughtPartner}`}
                           className={WHO_CALLOUT_FAQ_LINK_CLASS}
                         >
-                          one-off thought-partner workflows or note-taking apps
+                          {body.who.calloutNotForLink}
                         </Link>
-                        .
+                        {body.who.calloutNotForTrail}
                       </p>
                     </div>
                   </div>
@@ -1773,14 +1557,11 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                 <div className="space-y-6 md:space-y-8 max-w-5xl mx-auto">
                   <div className="space-y-2 text-center">
                     <p className="text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
-                      Product demo
+                      {body.demo.kicker}
                     </p>
-                    <h2 className={HOME_SECTION_H2_CLASS}>
-                      Inspect, version, diff, and replay what your agents remember
-                    </h2>
+                    <h2 className={HOME_SECTION_H2_CLASS}>{body.demo.title}</h2>
                     <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl mx-auto">
-                      The same operations work from the CLI, the REST API, the Inspector app, or
-                      through any MCP-connected agent. Toggle between views to try each interface.
+                      {body.demo.subtitle}
                     </p>
                   </div>
                   <CliDemoInteractive />
@@ -1797,56 +1578,56 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                 <div className="space-y-6 md:space-y-8 max-w-5xl mx-auto">
                   <div className="space-y-2 text-center">
                     <p className="text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
-                      Guarantees
+                      {body.guarantees.kicker}
                     </p>
-                    <h2 className={HOME_SECTION_H2_CLASS}>
-                      Memory that stays correct from session one to month twelve
-                    </h2>
+                    <h2 className={HOME_SECTION_H2_CLASS}>{body.guarantees.title}</h2>
                     <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl mx-auto">
-                      Chat memory fades. RAG drifts. Markdown and JSON files accumulate silent
-                      conflicts. Neotoma enforces versioning, provenance, and tamper detection that
-                      hold over months and years: not just between recent sessions.
+                      {body.guarantees.subtitle}
                     </p>
                   </div>
 
                   <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
-                    {GUARANTEE_PREVIEW_CARDS.map((card, index) => (
-                      <Link
-                        key={card.slug}
-                        to={`/memory-guarantees#${card.slug}`}
-                        className="group flex flex-row items-center gap-4 overflow-hidden rounded-xl border border-border bg-card/50 p-4 no-underline transition-colors hover:bg-muted/60 hover:border-border/80"
-                      >
-                        <ScrollRevealOnce
-                          scrollContainerRef={scrollContainerRef}
-                          staticMode={staticMode}
-                          staggerMs={index * ILLUS_REVEAL_STAGGER_MS}
-                          className="relative shrink-0 w-[72px] h-[72px] sm:w-[88px] sm:h-[88px] bg-gradient-to-br from-muted/30 to-transparent rounded-lg"
+                    {body.guaranteePreviewCards.map((card, index) => {
+                      const illus = GUARANTEE_PREVIEW_ILLUS_BY_SLUG[card.slug];
+                      if (!illus) return null;
+                      return (
+                        <Link
+                          key={card.slug}
+                          to={`/memory-guarantees#${card.slug}`}
+                          className="group flex flex-row items-center gap-4 overflow-hidden rounded-xl border border-border bg-card/50 p-4 no-underline transition-colors hover:bg-muted/60 hover:border-border/80"
                         >
-                          <img
-                            src={card.illus}
-                            alt=""
-                            width={1024}
-                            height={1024}
-                            className="absolute inset-0 h-full w-full rounded-lg object-contain object-center p-1 opacity-[0.95] dark:opacity-100 transition-transform duration-300 group-hover:scale-[1.05]"
-                            loading="lazy"
-                            decoding="async"
-                          />
-                        </ScrollRevealOnce>
-                        <div className="flex min-h-0 min-w-0 flex-1 items-start gap-2.5">
-                          <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400">
-                            <Check className="h-3 w-3 stroke-[2.5]" aria-hidden />
-                          </span>
-                          <div className="min-w-0">
-                            <p className="text-[14px] font-medium text-foreground leading-5">
-                              {card.property}
-                            </p>
-                            <p className="text-[12px] italic leading-5 text-muted-foreground/70 mt-0.5">
-                              {card.failure}
-                            </p>
+                          <ScrollRevealOnce
+                            scrollContainerRef={scrollContainerRef}
+                            staticMode={staticMode}
+                            staggerMs={index * ILLUS_REVEAL_STAGGER_MS}
+                            className="relative shrink-0 w-[72px] h-[72px] sm:w-[88px] sm:h-[88px] bg-gradient-to-br from-muted/30 to-transparent rounded-lg"
+                          >
+                            <img
+                              src={illus}
+                              alt=""
+                              width={1024}
+                              height={1024}
+                              className="absolute inset-0 h-full w-full rounded-lg object-contain object-center p-1 opacity-[0.95] dark:opacity-100 transition-transform duration-300 group-hover:scale-[1.05]"
+                              loading="lazy"
+                              decoding="async"
+                            />
+                          </ScrollRevealOnce>
+                          <div className="flex min-h-0 min-w-0 flex-1 items-start gap-2.5">
+                            <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400">
+                              <Check className="h-3 w-3 stroke-[2.5]" aria-hidden />
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-[14px] font-medium text-foreground leading-5">
+                                {card.property}
+                              </p>
+                              <p className="text-[12px] italic leading-5 text-muted-foreground/70 mt-0.5">
+                                {card.failure}
+                              </p>
+                            </div>
                           </div>
-                        </div>
-                      </Link>
-                    ))}
+                        </Link>
+                      );
+                    })}
                   </div>
 
                   <div className="flex justify-center pt-2">
@@ -1855,7 +1636,10 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                       className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-4 py-2 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
                     >
                       <Eye className="h-4 w-4 shrink-0" aria-hidden />
-                      See all {MEMORY_GUARANTEE_ROWS.length} guarantees compared
+                      {body.recordTypes.seeAllGuaranteesCta.replace(
+                        "{count}",
+                        String(MEMORY_GUARANTEE_ROWS.length),
+                      )}
                     </Link>
                   </div>
                 </div>
@@ -1871,7 +1655,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                 <div className="mx-auto max-w-4xl space-y-8 py-8 md:py-12">
                   <div className="space-y-2 text-center">
                     <p className="text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
-                      How it&rsquo;s used
+                      {body.proof.kicker}
                     </p>
                     <div className="flex justify-center">
                       <HeroProofStrip />
@@ -1885,17 +1669,12 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                     />
                     <div className="min-w-0 flex-1">
                       <p className="text-[17px] md:text-[19px] leading-8 text-foreground/90 italic">
-                        Running daily for 5+ months across Claude Code, Cursor, ChatGPT, and CLI.
-                        Same state graph from day one: every version preserved, every
-                        correction traceable. Contacts evolve, contracts get amended, tasks close
-                        and reopen. I ask my agents what changed on a deal since October or what I
-                        originally told an investor three months ago. The memory compounds; nothing
-                        silently drifts.
+                        {body.proof.blockquote}
                       </p>
                       <footer className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 text-[13px] text-muted-foreground">
                         <img
                           src={founderPhoto}
-                          alt="Mark Hendrickson"
+                          alt={body.proof.founderPhotoAlt}
                           width={36}
                           height={36}
                           className="h-9 w-9 rounded-full object-cover"
@@ -1903,21 +1682,23 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                           decoding="async"
                         />
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                          <span className="font-medium text-foreground/80">Mark Hendrickson</span>
+                          <span className="font-medium text-foreground/80">
+                            {body.proof.founderName}
+                          </span>
                           <span aria-hidden="true" className="text-border">
                             &middot;
                           </span>
-                          <span>Neotoma creator</span>
+                          <span>{body.proof.founderRole}</span>
                           <span aria-hidden="true" className="text-border">
                             &middot;
                           </span>
                           <a
-                            href="https://markmhendrickson.com/posts/what-my-agentic-stack-actually-does/"
+                            href={FOUNDER_AGENTIC_STACK_POST_HREF}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex items-center gap-1 text-emerald-600 no-underline hover:text-emerald-500 transition-colors dark:text-emerald-400 dark:hover:text-emerald-300"
                           >
-                            Read the full post
+                            {body.proof.readFullPost}
                             <ExternalLink className="h-3 w-3" aria-hidden />
                           </a>
                         </div>
@@ -1928,33 +1709,33 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                   <div className="flex flex-wrap justify-center gap-x-6 gap-y-4 pt-2 text-center text-[13px] text-muted-foreground">
                     <div>
                       <span className="block text-[22px] font-semibold tracking-tight text-foreground">
-                        1,100+
+                        {PROOF_STAT_VALUES.contacts}
                       </span>
-                      contacts
+                      {body.proof.statsContacts}
                     </div>
                     <div>
                       <span className="block text-[22px] font-semibold tracking-tight text-foreground">
-                        16,000+
+                        {PROOF_STAT_VALUES.tasks}
                       </span>
-                      tasks
+                      {body.proof.statsTasks}
                     </div>
                     <div>
                       <span className="block text-[22px] font-semibold tracking-tight text-foreground">
-                        900+
+                        {PROOF_STAT_VALUES.conversations}
                       </span>
-                      conversations
+                      {body.proof.statsConversations}
                     </div>
                     <div>
                       <span className="block text-[22px] font-semibold tracking-tight text-foreground">
-                        2,000+
+                        {PROOF_STAT_VALUES.agentMessages}
                       </span>
-                      agent messages
+                      {body.proof.statsAgentMessages}
                     </div>
                     <div>
                       <span className="block text-[22px] font-semibold tracking-tight text-foreground">
-                        380+
+                        {PROOF_STAT_VALUES.entityTypes}
                       </span>
-                      entity types
+                      {body.proof.statsEntityTypes}
                     </div>
                   </div>
 
@@ -1972,49 +1753,49 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                 <div className="space-y-6 md:space-y-8 max-w-5xl mx-auto">
                   <div className="space-y-2 text-center">
                     <p className="text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
-                      What to store
+                      {body.recordTypes.kicker}
                     </p>
                     <h2 className={HOME_SECTION_H2_CLASS}>
-                      Not sure where to start?{" "}
-                      <span className="whitespace-nowrap">Pick three.</span>
+                      {body.recordTypes.heading}{" "}
+                      <span className="whitespace-nowrap">{body.recordTypes.headingAccent}</span>
                     </h2>
                     <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl mx-auto">
-                      Your contacts, tasks, and events disappear between sessions and tools. Store
-                      them once, versioned and queryable across every agent you run, and stop
-                      re-explaining your world.
+                      {body.recordTypes.subtitle}
                     </p>
                   </div>
 
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    {RECORD_TYPE_CARDS.map((card) => {
-                      const CardIcon = card.icon;
+                    {body.recordTypes.cards.map((cardCopy, i) => {
+                      const layout = RECORD_TYPE_CARD_LAYOUT[i];
+                      if (!layout) return null;
+                      const CardIcon = layout.icon;
                       return (
                         <Link
-                          key={card.label}
-                          to={card.href}
+                          key={cardCopy.label}
+                          to={layout.href}
                           className="group relative flex flex-col rounded-xl border border-border bg-card/50 p-5 no-underline transition-colors hover:bg-muted/60 hover:border-border/80"
                         >
-                          {card.starter && (
+                          {layout.starter && (
                             <span className="absolute -top-2.5 right-3 rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-white dark:bg-emerald-500">
-                              Start here
+                              {body.recordTypes.startHereBadge}
                             </span>
                           )}
                           <div className="flex items-center gap-2.5 mb-2">
                             <span
-                              className={`flex items-center justify-center w-7 h-7 rounded-lg ${card.accent
+                              className={`flex items-center justify-center w-7 h-7 rounded-lg ${layout.accent
                                 .replace("text-", "bg-")
                                 .replace(/dark:text-[^\s]+/, "")
-                                .trim()}/10 ${card.accent} shrink-0`}
+                                .trim()}/10 ${layout.accent} shrink-0`}
                             >
                               <CardIcon className="w-3.5 h-3.5" />
                             </span>
-                            <p className="text-[15px] font-medium text-foreground">{card.label}</p>
+                            <p className="text-[15px] font-medium text-foreground">{cardCopy.label}</p>
                           </div>
                           <p className="text-[13px] leading-5 text-muted-foreground mb-3">
-                            {card.description}
+                            {cardCopy.description}
                           </p>
                           <div className="flex flex-wrap gap-1.5 mt-auto">
-                            {card.entities.map((entity) => (
+                            {layout.entities.map((entity) => (
                               <code
                                 key={entity}
                                 className="bg-muted/60 px-1.5 py-0.5 rounded text-[11px] text-muted-foreground"
@@ -2034,7 +1815,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                       className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-4 py-2 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
                     >
                       <Eye className="h-4 w-4 shrink-0" aria-hidden />
-                      View full guide
+                      {body.recordTypes.viewFullGuideCta}
                     </Link>
                   </div>
                 </div>
@@ -2052,7 +1833,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                     <div className="space-y-3 text-center lg:text-left flex flex-col items-center lg:items-start lg:flex-1 lg:min-w-0">
                       <img
                         src={heroEvaluateIllus}
-                        alt="Neotoma evaluate page preview"
+                        alt={body.evaluate.evaluateIllustrationAlt}
                         width={1536}
                         height={1024}
                         className="w-full max-w-[200px] sm:max-w-[240px] rounded-lg h-auto object-contain"
@@ -2060,18 +1841,14 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                         decoding="async"
                       />
                       <p className="text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
-                        Evaluate it
+                        {body.evaluate.kicker}
                       </p>
-                      <h2 className={HOME_SECTION_H2_CLASS}>
-                        Let your agent decide if Neotoma fits
-                      </h2>
+                      <h2 className={HOME_SECTION_H2_CLASS}>{body.evaluate.title}</h2>
                       <p className="text-[15px] leading-7 text-muted-foreground max-w-lg">
-                        Your agent can read the docs, inspect the evaluation criteria, and tell you
-                        whether Neotoma fits your actual workflow before you install anything.
+                        {body.evaluate.subtitle}
                       </p>
                       <p className="text-[13px] leading-6 text-muted-foreground/80 max-w-lg">
-                        Copy this prompt into any AI agent. It reads the evaluation page, inspects
-                        your context, and judges whether Neotoma fits.
+                        {body.evaluate.promptHint}
                       </p>
                     </div>
 
@@ -2097,7 +1874,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                 </h2>
                 <div className="max-w-2xl mx-auto">
                   <div className="divide-y divide-border/40 rounded-xl border border-border/60 bg-card/30 px-4 py-1 sm:px-5">
-                    {HOME_FAQ_PREVIEW_ITEMS.map((qa) => (
+                    {body.faqPreview.map((qa) => (
                       <details key={qa.q} className="group py-3 text-left first:pt-2">
                         <summary className="flex min-h-[44px] cursor-pointer list-none items-center justify-between gap-3 text-[13px] font-normal leading-snug text-muted-foreground transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden">
                           {qa.q}
@@ -2117,7 +1894,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                       to="/faq"
                       className="text-muted-foreground underline decoration-border/50 underline-offset-[3px] transition-colors hover:text-foreground hover:decoration-foreground/30"
                     >
-                      More questions? See the FAQ
+                      {body.commonQuestions.moreQuestionsLink}
                     </Link>
                   </p>
                 </div>

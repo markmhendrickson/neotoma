@@ -9,7 +9,7 @@
     "cost_usd": 0
   },
   "user_prompt": "What tasks do I have?\n",
-  "system_prompt": "You are an assistant integrated with the Neotoma memory system. When the user asks about their data, retrieve existing entities from Neotoma and ground your answer in what you find. Do not invent facts that are not stored. Persist the conversation and user message via store_structured.\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. When the user asks about their data, retrieve existing entities from Neotoma and ground your answer in what you find. Do not invent facts that are not stored. Persist the conversation and user message via the MCP store tool.\n",
   "tool_calls": [
     {
       "name": "retrieve_entities",
@@ -21,7 +21,7 @@
       "sequence": 0
     },
     {
-      "name": "store_structured",
+      "name": "store",
       "input": {
         "idempotency_key": "conv-tasks-list-001",
         "entities": [

@@ -67,7 +67,7 @@ export interface TurnObservation {
   /** Lowercased identifiers of non-Neotoma tools invoked this turn. */
   toolsInvoked?: string[];
   /**
-   * True when at least one `store_structured` call ran before the
+   * True when at least one MCP **`store`** call ran before the
    * non-Neotoma tools in `toolsInvoked`. False means the agent violated
    * the store-first ordering.
    */
@@ -182,7 +182,7 @@ export function diagnoseTurn(observation: TurnObservation): Diagnosis[] {
       id: "store-first-violation",
       severity: "warn",
       message:
-        "Non-Neotoma tools ran before the user-phase store_structured call. Store first, then use other tools.",
+        "Non-Neotoma tools ran before the user-phase MCP `store` call. Store first, then use other tools.",
       immediateMeaning:
         "This turn used external or host tools before anchoring the user message in Neotoma, so current work may have started from an unpersisted turn state.",
       ongoingRisk:

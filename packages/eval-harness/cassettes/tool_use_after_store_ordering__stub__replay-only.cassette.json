@@ -9,10 +9,10 @@
     "cost_usd": 0
   },
   "user_prompt": "Read the file at docs/architecture.md and summarize it\n",
-  "system_prompt": "You are an assistant integrated with the Neotoma memory system. Always persist the conversation and user message via store_structured BEFORE using any host tools. Then use the Read tool to fulfill the user's request, and reply with a summary.\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. Always persist the conversation and user message via the MCP store tool BEFORE using any host tools. Then use the Read tool to fulfill the user's request, and reply with a summary.\n",
   "tool_calls": [
     {
-      "name": "store_structured",
+      "name": "store",
       "input": {
         "idempotency_key": "conv-tool-order-001",
         "entities": [

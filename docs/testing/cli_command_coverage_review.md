@@ -77,7 +77,7 @@ This document summarizes Neotoma CLI commands and their automated test coverage.
 | Auth | `cli_auth_commands.test.ts` | auth status, logout, mcp-token, login |
 | Entities | `cli_entity_commands.test.ts`, `cli_entity_subcommands.test.ts` | list, get, search, related, neighborhood, delete, restore |
 | Infra | `cli_infra_commands.test.ts` | auth, mcp, storage, backup, logs, api, init, servers, options, dev |
-| MCP | `cli_mcp_commands.test.ts` | mcp config/check, cli-instructions config/check |
+| MCP | `cli_mcp_commands.test.ts` | mcp guide/config/check alias, cli guide/config, cli-instructions aliases |
 | Observations | `cli_observation_commands.test.ts` | list, get, filters |
 | Query | `cli_query_commands.test.ts` | entities, sources, timeline, relationships (list/get patterns) |
 | Relationships | `cli_relationship_commands.test.ts` | create, list, get, delete, restore, get-snapshot |

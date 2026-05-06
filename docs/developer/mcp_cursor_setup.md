@@ -64,7 +64,41 @@ Replace `/absolute/path/to/neotoma` with your actual repo path. No `cwd` or `arg
 
 Use this only when you want the MCP client connection to survive local source reloads. Keep `run_neotoma_mcp_stdio.sh` as the stable default for ordinary local MCP usage. Do not use `run_neotoma_mcp_stdio_dev_watch.sh` as an installed MCP command; watch-mode stdout and process restarts share the JSON-RPC channel and can break stdio MCP.
 
+**Signed dev shim (HTTP `/mcp` + AAuth + same reload model):** when the dev API is up (`neotoma api start --env dev`, default `:3080`) and you have run `neotoma auth keygen`, point `neotoma-dev` at `scripts/run_neotoma_mcp_signed_stdio_dev_shim.sh`. Cursor still speaks stdio MCP; the shim restarts the identity-proxy worker on source changes; the proxy signs requests to `http://127.0.0.1:3080/mcp` when `MCP_PROXY_DOWNSTREAM_URL` is unset. Set `MCP_PROXY_DOWNSTREAM_URL=http://127.0.0.1:3180/mcp` for a signed prod slot. See `docs/developer/mcp/proxy.md` (Dev: stdio + live reload + AAuth).
+
+**Dynamic local API port (optional):** when `npm run watch:prod` (or `pick-port`) binds a port other than the one in `mcp.json`, set **`NEOTOMA_MCP_USE_LOCAL_PORT_FILE=1`** on the signed shim and **omit `MCP_PROXY_DOWNSTREAM_URL`** (or keep it only as a fallback when the port file is missing). On each successful HTTP bind, Neotoma writes **`.dev-serve/local_http_port`** under the repo root (gitignored) with the actual port; the shim reads it and sets `MCP_PROXY_DOWNSTREAM_URL` to `http://127.0.0.1:<port>/mcp` before starting the proxy. Start the API at least once so the file exists; if the file is missing or invalid, the shim falls back to `MCP_PROXY_DOWNSTREAM_URL` or `http://127.0.0.1:3080/mcp` and logs a stderr warning. The port file can **outlive** the API (stale port); the signed shim **TCP-probes** that port first and falls back the same way if nothing is listening (avoiding opaque `fetch failed` / `ECONNREFUSED` loops). Increase `NEOTOMA_MCP_PORT_PROBE_MS` (default 1200, max 5000) if your API is slow to bind.
+
+```json
+{
+  "mcpServers": {
+    "neotoma": {
+      "command": "/absolute/path/to/neotoma/scripts/run_neotoma_mcp_signed_stdio_dev_shim.sh",
+      "env": {
+        "NEOTOMA_MCP_USE_LOCAL_PORT_FILE": "1"
+      }
+    }
+  }
+}
+```
+
+`neotoma setup --tool cursor --yes` and `neotoma mcp config` both use the same MCP installer. Transport presets: **`b`** (default) local stdio for low-friction npm onboarding; **`a`** signed shim + AAuth — `neotoma-dev` → dev `/mcp` (default `:3080`), `neotoma` → prod `/mcp` (default `:3180`); **`c`** direct stdio; **`d`** signed shim with **both** slots → prod `/mcp` (default `http://127.0.0.1:3180/mcp`). Pass `--rewrite-neotoma-mcp` to refresh existing Neotoma entries to a different preset.
+
+### AAuth attribution: HTTP URL vs signed proxy
+
+Cursor's native HTTP MCP configuration (`"url": "http://127.0.0.1:3180/mcp"` or a tunnel URL) does not add RFC 9421 / AAuth signature headers. Those requests can authenticate with OAuth or Bearer tokens, but Neotoma's `attribution_decision.signature_present` remains `false` because the HTTP request has no `Signature`, `Signature-Input`, or `Signature-Key` headers.
+
+Use stdio plus the signed shim when you need verified agent attribution. The shim runs `neotoma mcp proxy --aauth`; the proxy signs the HTTP request before it reaches `/mcp`.
+
+| Cursor MCP shape | `signature_present` | Typical Inspector tier |
+| --- | --- | --- |
+| Direct `"url"` to `/mcp` | `false` | `unverified_client` or `anonymous` |
+| `command` → `run_neotoma_mcp_signed_stdio_dev_shim.sh` → `/mcp` | `true` when keys and authority match | `software` or higher |
+
 Runtime code changes can reload behind the shim. Tool interface changes are different: new tools, removed tools, changed descriptions, schemas, annotations, or `_meta` require client rediscovery. The shim emits `notifications/tools/list_changed` when it detects a changed `tools/list` hash; if Cursor does not refresh its cached tool list, reconnect or reinitialize the MCP server.
+
+### MCP `initialize` and Cursor tool discovery
+
+Neotoma’s custom `initialize` handler **must** echo the same **`capabilities`** object the MCP `Server` was constructed with (`tools: { listChanged: true }`, `resources`, plus OAuth fields when unauthenticated). If `initialize` advertises a bare `tools: {}`, some clients show **resources** but not **tools** even when `tools/list` works. Implementation: **`NEOTOMA_MCP_DECLARED_CAPABILITIES`** in `src/server.ts`; spec note: **`docs/specs/MCP_SPEC.md` § 1.1**. Full proxy/shim/env reference: **`docs/developer/mcp/proxy.md`**.
 
 **Alternative (command + args):**
 
@@ -173,9 +207,19 @@ cat /tmp/ngrok-mcp-url.txt  # get tunnel URL
 
 ### MCP tools not appearing
 
-- Verify authentication succeeded (check MCP status in Cursor settings).
+- Reconnect the MCP server or restart Cursor so it re-runs `tools/list`.
+- Tool definitions should appear before authentication; if they do not, inspect MCP logs for `listTools` errors.
+- Verify authentication succeeded before executing tools that read or write user data (check MCP status in Cursor settings).
 - Restart Cursor completely.
 - Check server logs for errors.
+
+### Signed shim configured but Inspector still shows self-reported
+
+- Filter API logs to `POST /mcp` after a tool call. Neotoma runs the AAuth middleware on every HTTP route, so unrelated Inspector and REST requests such as `GET /session` or `POST /entities/query` normally log `signature_present: false`.
+- Confirm Cursor is using the intended MCP server entry. A workspace can expose both `neotoma-dev` (`:3080`) and `neotoma` (`:3180`), and old sessions may survive until you reconnect the MCP server.
+- Check the MCP subprocess stderr for `[neotoma-mcp-proxy] AAuth signing enabled`. If keys cannot load, the proxy logs `continuing unsigned (unverified_client tier)` unless `MCP_PROXY_FAIL_CLOSED=1` is set.
+- Check authority alignment. The server verifies signatures against `NEOTOMA_AAUTH_AUTHORITY` (or the API base host), while the proxy signs for the downstream URL unless `NEOTOMA_AAUTH_AUTHORITY_OVERRIDE` is set. Mismatches such as `localhost:3180` versus `127.0.0.1:3180` can make verification fail.
+- Treat existing rows as historical. Only new writes after a verified proxy path will show `software` or higher provenance in the Inspector.
 
 ---
 

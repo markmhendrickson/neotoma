@@ -92,7 +92,7 @@ order:
        [`aauth_attestation.md`](./aauth_attestation.md))
 
    Neotoma verifies against the canonical `authority` configured via
-   `NEOTOMA_AUTH_AUTHORITY` (defaults to the local dev host). The
+   `NEOTOMA_AAUTH_AUTHORITY` (defaults to the local dev host). The
    `authority` value MUST match the server's canonical host — using
    the `Host` header is explicitly unsafe and is rejected.
 
@@ -115,7 +115,7 @@ Performed by `src/middleware/aauth_verify.ts`:
 
 1. Parse `Signature-Input` and reject if any required component is
    missing.
-2. Resolve `@authority` against `NEOTOMA_AUTH_AUTHORITY`. Mismatch
+2. Resolve `@authority` against `NEOTOMA_AAUTH_AUTHORITY`. Mismatch
    fails with `authority_mismatch`.
 3. Recompute `content-digest` (when the request has a body) and
    compare to the header. Mismatch fails with `digest_mismatch`.

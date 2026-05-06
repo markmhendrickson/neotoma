@@ -144,7 +144,11 @@ After user confirms, run **every** step below in order through **npm publish and
    ```
 
 9. **Publish to npm (mandatory for a full release)**:
-   From the directory that owns the published `package.json` (repo or workspace root per your monorepo layout), run:
+   From the directory that owns the published `package.json` (repo or workspace root per your monorepo layout):
+
+   - **Registry auth:** If `npm publish` fails for auth or the session is stale, run `npm login` in an interactive terminal when needed.
+   - **Web login URL (agent-assisted):** When `npm login` prints `Login at: https://www.npmjs.com/login?...`, an agent with shell access may parse that URL from the CLI or terminal transcript and run `open '<url>'` on macOS or `xdg-open '<url>'` on Linux so the default browser loads the same page pressing Enter would open. **Only** use URLs that clearly come from official `npm` output for `registry.npmjs.org` / `npmjs.com`; prefer explicit user confirmation before opening browser or running `open`/`xdg-open`. After sign-in completes in the browser, return to the terminal and continue the release (including OTP if 2FA prompts for `npm publish --otp=...`).
+
    ```bash
    npm publish
    ```

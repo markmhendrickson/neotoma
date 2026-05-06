@@ -34,7 +34,7 @@ lowercase snake_case. The runner discovers fixtures by glob.
   "events": [
     { "hook": "sessionStart",       "payload": { "user_prompt_preview": "Tell me about Sara." } },
     { "hook": "beforeSubmitPrompt", "payload": { "prompt": "Tell me about Sara from Acme." } },
-    { "hook": "postToolUse",        "payload": { "tool_name": "store_structured", "tool_input": { "entities": [{ "entity_type": "contact", "name": "Sara" }] } } },
+    { "hook": "postToolUse",        "payload": { "tool_name": "store", "tool_input": { "entities": [{ "entity_type": "contact", "name": "Sara" }] } } },
     { "hook": "stop",               "payload": { "text": "Sara works at Acme." } }
   ],
   "assertions": {
@@ -180,7 +180,7 @@ cell:
 {
   "meta": {
     "id": "agent_skips_store",
-    "description": "Agent finishes a turn without calling store_structured; the stop hook must backfill a turn_compliance observation.",
+    "description": "Agent finishes a turn without calling MCP store; the stop hook must backfill a turn_compliance observation.",
     "harnesses": ["cursor-hooks"],
     "models": ["composer-2"],
     "tags": ["compliance"]
@@ -191,7 +191,7 @@ cell:
   ],
   "assertions": {
     "default": [
-      { "type": "turn_compliance", "status": "backfilled_by_hook", "missed_includes": ["user_phase_store_structured"] }
+      { "type": "turn_compliance", "status": "backfilled_by_hook", "missed_includes": ["user_phase_store"] }
     ]
   },
   "expected_outputs": {

@@ -42,7 +42,7 @@ echo "   Forwarding to http://localhost:${HTTP_PORT}"
 echo ""
 
 # Port-in-use check (skip prompt when TUNNEL_NONINTERACTIVE=1, e.g. dev:api)
-if ! lsof -Pi :${HTTP_PORT} -sTCP:LISTEN -t >/dev/null 2>&1; then
+if ! lsof -Pi :"${HTTP_PORT}" -sTCP:LISTEN -t >/dev/null 2>&1; then
   if [[ "${TUNNEL_NONINTERACTIVE:-}" == "1" ]]; then
     echo "⚠️  Port ${HTTP_PORT} not in use yet; tunnel will start anyway (server starting in parallel)."
   else
@@ -183,9 +183,9 @@ else
   echo ""
 
   if [ -n "$TUNNEL_DOMAIN" ]; then
-    ngrok http ${HTTP_PORT} --domain="${TUNNEL_DOMAIN}" --log=stdout > /tmp/ngrok.log 2>&1 &
+    ngrok http "${HTTP_PORT}" --domain="${TUNNEL_DOMAIN}" --log=stdout > /tmp/ngrok.log 2>&1 &
   else
-    ngrok http ${HTTP_PORT} --log=stdout > /tmp/ngrok.log 2>&1 &
+    ngrok http "${HTTP_PORT}" --log=stdout > /tmp/ngrok.log 2>&1 &
   fi
   NGROK_PID=$!
 
@@ -195,7 +195,7 @@ else
     MAX_RETRIES=10
     RETRY_COUNT=0
     while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-      NGROK_URL=$(curl -s http://localhost:${NGROK_PORT}/api/tunnels 2>/dev/null | grep -o '"public_url":"https://[^"]*"' | head -1 | cut -d'"' -f4 || echo "")
+      NGROK_URL=$(curl -s "http://localhost:${NGROK_PORT}/api/tunnels" 2>/dev/null | grep -o '"public_url":"https://[^"]*"' | head -1 | cut -d'"' -f4 || echo "")
       [ -n "$NGROK_URL" ] && break
       RETRY_COUNT=$((RETRY_COUNT + 1))
       sleep 1
@@ -332,7 +332,7 @@ echo ""
 
 if [ "${TUNNEL_NONINTERACTIVE:-}" = "1" ]; then
   echo "📋 MCP: Add to .cursor/mcp.json: {\"mcpServers\": {\"neotoma\": {\"url\": \"${NGROK_URL}/mcp\"}}}"
-  echo "   Or run: neotoma mcp config   (then restart Cursor)"
+  echo "   Or run: neotoma mcp guide    (then restart Cursor)"
   echo "   To test OAuth (key-auth in browser): neotoma auth login --tunnel"
   echo ""
 fi

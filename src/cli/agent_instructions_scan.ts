@@ -534,7 +534,7 @@ Prefer Neotoma MCP when it is installed and running in this environment; use the
 
 ## Rule
 
-- **When MCP is available:** Use MCP tools (store_structured, create_relationship, etc.) per docs/developer/mcp/instructions.md.
+- **When MCP is available:** Use MCP tools (\`store\`, create_relationship, etc.) per docs/developer/mcp/instructions.md.
 - **When MCP is not available:** Use \`neotoma dev <command>\` (e.g. neotoma dev entities list, neotoma dev store --json='...').
 
 ## When to load
@@ -582,6 +582,8 @@ export const PROJECT_APPLIED_RULE_PATHS = {
   claude: ".claude/rules/neotoma_cli.mdc",
   codex: ".codex/neotoma_cli.md",
 } as const;
+
+export type CliInstructionsScope = "project" | "user" | "both";
 
 /**
  * Create a symlink from the project rule path to the doc file so the rule is always up to date.
@@ -672,7 +674,7 @@ const ADD_TO_OPTIONS = [
  */
 export async function askWhereToAdd(
   defaultChoice: "1" | "2" | "3" = "1"
-): Promise<"project" | "user" | "both" | null> {
+): Promise<CliInstructionsScope | null> {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   const prompt =
     "Add or update to latest:\n  " + ADD_TO_OPTIONS.join("\n  ") + `\n[${defaultChoice}]: `;
@@ -686,6 +688,98 @@ export async function askWhereToAdd(
       else resolve(null);
     });
   });
+}
+
+export interface ApplyCliInstructionsOptions {
+  scope: CliInstructionsScope;
+  env?: "dev" | "prod";
+}
+
+export async function applyCliInstructions(
+  result: AgentInstructionsScanResult,
+  options: ApplyCliInstructionsOptions
+): Promise<{ added: string[]; skipped?: boolean }> {
+  const added: string[] = [];
+  const root = result.projectRoot;
+  const body = await loadCliAgentInstructions(root);
+  const hasCliInstructionDoc = await fileExists(path.join(root, CLI_AGENT_INSTRUCTIONS_DOC_PATH));
+  // When env is provided, build env-specific content and write real files.
+  // Without env, use symlinks so files stay in sync with the docs source.
+  const envBody = options.env ? buildEnvSpecificInstructions(body, options.env) : null;
+  const where = options.scope;
+
+  if (where === "project" || where === "both") {
+    if (!result.appliedProject.cursor || result.staleProject.cursor) {
+      const p = path.join(root, PROJECT_APPLIED_RULE_PATHS.cursor);
+      if (envBody) {
+        await writePreferCliRule(p, envBody);
+      } else if (hasCliInstructionDoc) {
+        await createSymlinkToDoc(root, p);
+      } else {
+        await writePreferCliRule(p, body);
+      }
+      added.push(p);
+    }
+    if (!result.appliedProject.claude || result.staleProject.claude) {
+      const p = path.join(root, PROJECT_APPLIED_RULE_PATHS.claude);
+      if (envBody) {
+        await writePreferCliRule(p, envBody);
+      } else if (hasCliInstructionDoc) {
+        await createSymlinkToDoc(root, p);
+      } else {
+        await writePreferCliRule(p, body);
+      }
+      added.push(p);
+    }
+    if (!result.appliedProject.codex || result.staleProject.codex) {
+      const p = path.join(root, PROJECT_APPLIED_RULE_PATHS.codex);
+      if (envBody) {
+        await writePreferCliRule(p, envBody);
+      } else if (hasCliInstructionDoc) {
+        await createSymlinkToDoc(root, p);
+      } else {
+        await writePreferCliRule(p, body);
+      }
+      added.push(p);
+    }
+  }
+
+  if (where === "user" || where === "both") {
+    const userPaths = getUserAppliedRulePaths();
+    if (!userPaths) return { added, skipped: added.length === 0 };
+    if (!result.appliedUser.cursor || result.staleUser.cursor) {
+      if (envBody) {
+        await writePreferCliRule(userPaths.cursor, envBody);
+      } else if (hasCliInstructionDoc) {
+        await createUserSymlinkToDoc(root, userPaths.cursor);
+      } else {
+        await writePreferCliRule(userPaths.cursor, body);
+      }
+      added.push(userPaths.cursor);
+    }
+    if (!result.appliedUser.claude || result.staleUser.claude) {
+      if (envBody) {
+        await writePreferCliRule(userPaths.claude, envBody);
+      } else if (hasCliInstructionDoc) {
+        await createUserSymlinkToDoc(root, userPaths.claude);
+      } else {
+        await writePreferCliRule(userPaths.claude, body);
+      }
+      added.push(userPaths.claude);
+    }
+    if (!result.appliedUser.codex || result.staleUser.codex) {
+      if (envBody) {
+        await writePreferCliRule(userPaths.codex, envBody);
+      } else if (hasCliInstructionDoc) {
+        await createUserSymlinkToDoc(root, userPaths.codex);
+      } else {
+        await writePreferCliRule(userPaths.codex, body);
+      }
+      added.push(userPaths.codex);
+    }
+  }
+
+  return { added, skipped: added.length === 0 };
 }
 
 /**
@@ -702,12 +796,10 @@ export async function offerAddPreferCliRule(
     nonInteractive?: boolean;
     env?: "dev" | "prod";
     /** When set, use this scope without prompting (e.g. reuse MCP install choice). */
-    scope?: "project" | "user" | "both";
+    scope?: CliInstructionsScope;
   }
 ): Promise<{ added: string[]; skipped?: boolean }> {
   const added: string[] = [];
-  if (options?.nonInteractive) return { added };
-
   const needProject =
     (!result.appliedProject.cursor || result.staleProject.cursor) ||
     (!result.appliedProject.claude || result.staleProject.claude) ||
@@ -718,101 +810,10 @@ export async function offerAddPreferCliRule(
     (!result.appliedUser.codex || result.staleUser.codex);
   if (!needProject && !needUser) return { added };
 
+  if (options?.nonInteractive && !options.scope) return { added };
+
   const where =
     options?.scope ?? (await askWhereToAdd(needProject && needUser ? "3" : needUser ? "2" : "1"));
   if (where === null) return { added };
-
-  const root = result.projectRoot;
-  const body = await loadCliAgentInstructions(root);
-  const hasCliInstructionDoc = await fileExists(path.join(root, CLI_AGENT_INSTRUCTIONS_DOC_PATH));
-  // When env is provided, build env-specific content and write real files.
-  // Without env, use symlinks so files stay in sync with the docs source.
-  const envBody = options?.env ? buildEnvSpecificInstructions(body, options.env) : null;
-
-  if (where === "project" || where === "both") {
-    if (!result.appliedProject.cursor || result.staleProject.cursor) {
-      const p = path.join(root, PROJECT_APPLIED_RULE_PATHS.cursor);
-      if (envBody) {
-        await writePreferCliRule(p, envBody);
-      } else {
-        if (hasCliInstructionDoc) {
-          await createSymlinkToDoc(root, p);
-        } else {
-          await writePreferCliRule(p, body);
-        }
-      }
-      added.push(p);
-    }
-    if (!result.appliedProject.claude || result.staleProject.claude) {
-      const p = path.join(root, PROJECT_APPLIED_RULE_PATHS.claude);
-      if (envBody) {
-        await writePreferCliRule(p, envBody);
-      } else {
-        if (hasCliInstructionDoc) {
-          await createSymlinkToDoc(root, p);
-        } else {
-          await writePreferCliRule(p, body);
-        }
-      }
-      added.push(p);
-    }
-    if (!result.appliedProject.codex || result.staleProject.codex) {
-      const p = path.join(root, PROJECT_APPLIED_RULE_PATHS.codex);
-      if (envBody) {
-        await writePreferCliRule(p, envBody);
-      } else {
-        if (hasCliInstructionDoc) {
-          await createSymlinkToDoc(root, p);
-        } else {
-          await writePreferCliRule(p, body);
-        }
-      }
-      added.push(p);
-    }
-  }
-
-  if (where === "user" || where === "both") {
-    const userPaths = getUserAppliedRulePaths();
-    if (!userPaths) return { added };
-    if (!result.appliedUser.cursor || result.staleUser.cursor) {
-      if (envBody) {
-        await writePreferCliRule(userPaths.cursor, envBody);
-      } else {
-        if (hasCliInstructionDoc) {
-          await createUserSymlinkToDoc(root, userPaths.cursor);
-        } else {
-          await writePreferCliRule(userPaths.cursor, body);
-        }
-      }
-      added.push(userPaths.cursor);
-    }
-    if (!result.appliedUser.claude || result.staleUser.claude) {
-      if (envBody) {
-        await writePreferCliRule(userPaths.claude, envBody);
-      } else {
-        if (hasCliInstructionDoc) {
-          await createUserSymlinkToDoc(root, userPaths.claude);
-        } else {
-          await writePreferCliRule(userPaths.claude, body);
-        }
-      }
-      added.push(userPaths.claude);
-    }
-    if (!result.appliedUser.codex || result.staleUser.codex) {
-      if (envBody) {
-        await writePreferCliRule(userPaths.codex, envBody);
-      } else {
-        if (hasCliInstructionDoc) {
-          await createUserSymlinkToDoc(root, userPaths.codex);
-        } else {
-          await writePreferCliRule(userPaths.codex, body);
-        }
-      }
-      added.push(userPaths.codex);
-    }
-  }
-
-  // If the user chose a valid scope but nothing was written, the chosen paths were already up to date
-  const skipped = added.length === 0;
-  return { added, skipped };
+  return applyCliInstructions(result, { scope: where, env: options?.env });
 }

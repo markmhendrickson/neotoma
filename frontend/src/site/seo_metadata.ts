@@ -1,5 +1,5 @@
 import { GLOSSARY_ROWS, REPO_VERSION, SITE_METADATA } from "./site_data";
-import { FAQ_ITEMS } from "@/site/faq_items";
+import { getFaqItems } from "@/site/faq_items";
 import {
   DEFAULT_LOCALE,
   LOCALE_TO_OG,
@@ -1640,7 +1640,6 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Home", path: "/" },
       { name: "FAQ", path: "/faq" },
     ],
-    faqItems: FAQ_ITEMS.map((item) => ({ question: item.question, answer: item.answer })),
   },
   "/neotoma-vs-platform-memory": {
     title: "Neotoma vs Platform Memory | Claude, ChatGPT, Gemini vs Deterministic State",
@@ -2595,6 +2594,12 @@ export function resolveSeoMetadata(pathname: string): ResolvedSeoMetadata {
               ? pack.seo.memoryGuarantees
               : {};
   const resolvedRouteMetadata = { ...routeMetadata, ...localizedOverride };
+  if (normalizedPath === "/faq") {
+    resolvedRouteMetadata.faqItems = getFaqItems(locale).map((item) => ({
+      question: item.question,
+      answer: item.answer,
+    }));
+  }
   const robots =
     typeof process !== "undefined" && process.env?.SITE_PREVIEW === "1"
       ? "noindex,follow"

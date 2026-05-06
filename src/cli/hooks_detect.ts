@@ -175,8 +175,9 @@ async function detectCodex(): Promise<HookStatus> {
     return { present: false, path: file, other_hook_plugins: [] };
   }
   const present = raw.includes("# BEGIN neotoma-codex-hooks");
-  // Best-effort: identify non-Neotoma hook entries by looking for [notify] /
-  // [history] sections that do not fall inside the Neotoma-marked block.
+  // Best-effort: identify non-Neotoma hook entries outside the Neotoma-marked
+  // block. Codex uses root-level `notify = […]` (not `[notify]`); legacy tables
+  // and stray `[history]` still appear in some configs.
   const others = new Set<string>();
   const withoutBlock = raw.replace(
     /# BEGIN neotoma-codex-hooks[\s\S]*?# END neotoma-codex-hooks/,
@@ -186,6 +187,9 @@ async function detectCodex(): Promise<HookStatus> {
   let match: RegExpExecArray | null;
   while ((match = sectionRe.exec(withoutBlock)) !== null) {
     others.add(`[${match[1]}] (external)`);
+  }
+  if (/^\s*notify\s*=/m.test(withoutBlock)) {
+    others.add("notify (root argv, external)");
   }
   return { present, path: file, other_hook_plugins: [...others] };
 }

@@ -20,10 +20,10 @@ Per-turn telemetry entity that captures hook lifecycle events, tool invocations,
 | `hook_events` | string[] | Accumulated per-hook: `before_submit_prompt`, `after_tool_use`, `stop`, etc. |
 | `model` | string | Stop hook |
 | `status` | string | Stop hook (`completed`, `backfilled_by_hook`, `partial_compliance`) |
-| `missed_steps` | string[] | Stop hook (e.g. `["user_phase_store_structured"]`, `["external_tool_entity_extraction"]`) |
+| `missed_steps` | string[] | Stop hook (e.g. `["user_phase_store"]`, `["external_tool_entity_extraction"]`) |
 | `external_data_tool_calls` | number | PostToolUse hook (incremented when non-Neotoma MCP tool returns structured data) |
 | `tool_invocation_count` | number | PostToolUse hook (incremented per tool call) |
-| `store_structured_calls` | number | PostToolUse hook (incremented per store call) |
+| `store_structured_calls` | number | PostToolUse hook (incremented per MCP **`store`** / legacy store invocation; field name retained for compatibility) |
 | `retrieve_calls` | number | PromptSubmit hook |
 | `neotoma_tool_failures` | number | PostToolUseFailure hook |
 | `injected_context_chars` | number | PromptSubmit hook |
@@ -77,11 +77,11 @@ Implemented in `src/services/conversation_turn.ts` and routed in `src/actions.ts
 
 ### Total-skip detection (existing)
 
-When `store_structured_calls === 0` and the turn had material content, the stop hook classifies the root cause via `diagnoseSkippedStore` and records `missed_steps` such as `user_message_store`, `user_phase_store_structured`, and `assistant_message_store`.
+When `store_structured_calls === 0` and the turn had material content, the stop hook classifies the root cause via `diagnoseSkippedStore` and records `missed_steps` such as `user_message_store`, `user_phase_store`, and `assistant_message_store`.
 
 ### Partial compliance: external tool entity extraction (v0.6+)
 
-When `store_structured_calls > 0` (agent did call Neotoma) but `external_data_tool_calls > 0` and no non-bookkeeping entities were stored from the external tool output, the stop hook records:
+When `store_structured_calls > 0` (agent invoked MCP **`store`**) but `external_data_tool_calls > 0` and no non-bookkeeping entities were stored from the external tool output, the stop hook records:
 
 - `status: "partial_compliance"`
 - `missed_steps: ["external_tool_entity_extraction"]`

@@ -33,7 +33,7 @@ describe("CLI timeline commands", () => {
     );
 
     const { stdout: storeStdout } = await execAsync(
-      `${CLI_PATH} store-structured --file-path "${entityFile}" --json`
+      `${CLI_PATH} store --file "${entityFile}" --json`
     );
     const storeResult = JSON.parse(storeStdout);
     testEntityId = storeResult.entities?.[0]?.entity_id;

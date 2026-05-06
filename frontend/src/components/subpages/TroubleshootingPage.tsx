@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { DetailPage } from "../DetailPage";
+import { useLocale } from "@/i18n/LocaleContext";
 
 const TROUBLESHOOTING_ITEMS = [
   {
@@ -30,8 +31,9 @@ const TROUBLESHOOTING_ITEMS = [
 ];
 
 export function TroubleshootingPage() {
+  const { subpage } = useLocale();
   return (
-    <DetailPage title="Troubleshooting and FAQ">
+    <DetailPage title={subpage.troubleshooting.title}>
       <p className="text-[15px] leading-7 mb-6">
         Use this guide when setup or behavior is unclear. For deterministic systems, the fastest path is to
         inspect state, provenance, and transport mode instead of guessing.

@@ -92,8 +92,8 @@ private scalar never leaves the Enclave. Signing always goes through
 
 ```json
 {
-  "sub": "cli@<hostname>",
-  "iss": "https://neotoma.cli.local",
+  "sub": "cursor-agent@<hostname>",
+  "iss": "https://neotoma.cursor.local",
   "kid": "<jwk-thumbprint>",
   "token_ttl_sec": 300,
   "backend": "apple-secure-enclave",

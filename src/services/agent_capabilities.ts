@@ -32,6 +32,7 @@ import { getCurrentAAuthAdmission } from "./request_context.js";
  * points that touch durable Neotoma state.
  */
 export type AgentCapabilityOp =
+  | "store"
   | "store_structured"
   | "create_relationship"
   | "correct"
@@ -233,13 +234,19 @@ export function contextFromAgentIdentity(
 
 /** ---------- Enforcement ---------- */
 
+function grantOpMatchesRequested(grantOp: AgentCapabilityOp, requestedOp: AgentCapabilityOp): boolean {
+  if (grantOp === requestedOp) return true;
+  const storeFamily = new Set<AgentCapabilityOp>(["store", "store_structured"]);
+  return storeFamily.has(grantOp) && storeFamily.has(requestedOp);
+}
+
 function entryCovers(
   caps: AgentCapabilityEntry[],
   op: AgentCapabilityOp,
   entityType: string,
 ): boolean {
   for (const cap of caps) {
-    if (cap.op !== op) continue;
+    if (!grantOpMatchesRequested(cap.op, op)) continue;
     if (cap.entity_types.includes("*")) return true;
     if (cap.entity_types.includes(entityType)) return true;
   }

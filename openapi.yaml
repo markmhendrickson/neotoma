@@ -662,6 +662,7 @@ components:
         op:
           type: string
           enum:
+            - store
             - store_structured
             - create_relationship
             - correct
@@ -1098,6 +1099,93 @@ components:
           additionalProperties: true
           allOf:
             - $ref: '#/components/schemas/AgentAttribution'
+    InterpretationConfig:
+      type: object
+      additionalProperties: true
+      description: |
+        Audit configuration for a parser or agent-authored interpretation run.
+        Callers may include extractor_type, extractor_version, model,
+        prompt_hash, schema_version, agent_notes, and other provenance fields
+        needed to explain how extracted observations were produced.
+      properties:
+        extractor_type:
+          type: string
+        extractor_version:
+          type: string
+        model:
+          type: string
+        prompt_hash:
+          type: string
+        schema_version:
+          type: string
+        agent_notes:
+          type: string
+    StoreInterpretationInput:
+      type: object
+      additionalProperties: false
+      description: |
+        Optional interpretation provenance for source-derived structured
+        extraction. Supplying this creates an interpretation row and links new
+        observations to it. Omit for ordinary already-structured/chat-native
+        facts, which keep observations.interpretation_id NULL.
+      properties:
+        source_id:
+          type: string
+          description: Existing source to interpret.
+        source_ref:
+          type: string
+          enum: [structured, unstructured]
+          description: |
+            Source created by this store request. Use `unstructured` for the raw
+            file source in combined file+entities requests, or `structured`
+            for the generated JSON source.
+        interpretation_config:
+          $ref: '#/components/schemas/InterpretationConfig'
+    CreateInterpretationRequest:
+      type: object
+      additionalProperties: false
+      required: [source_id, entities]
+      properties:
+        source_id:
+          type: string
+        entities:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        interpretation_config:
+          $ref: '#/components/schemas/InterpretationConfig'
+        relationships:
+          type: array
+          items:
+            $ref: '#/components/schemas/StoreRelationshipInput'
+        idempotency_key:
+          type: string
+        user_id:
+          type: string
+    CreateInterpretationResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        interpretation_id:
+          type: string
+        source_id:
+          type: string
+        entities:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        observations_created:
+          type: integer
+        unknown_fields_count:
+          type: integer
+        relationships_created:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
     Stats:
       type: object
       properties:
@@ -1213,6 +1301,8 @@ components:
             `source_entity_id`/`target_entity_id` for existing entities.
           items:
             $ref: '#/components/schemas/StoreRelationshipInput'
+        interpretation:
+          $ref: '#/components/schemas/StoreInterpretationInput'
         source_priority:
           type: integer
         observation_source:
@@ -1295,6 +1385,8 @@ components:
             Enables one-call chat persistence: store [conversation, conversation_message] with relationships [{ relationship_type: "PART_OF", source_index: 1, target_index: 0 }]. (`agent_message` remains accepted as a legacy alias for pre-v0.6 clients.)
           items:
             $ref: '#/components/schemas/StoreRelationshipInput'
+        interpretation:
+          $ref: '#/components/schemas/StoreInterpretationInput'
         source_priority:
           type: integer
         observation_source:
@@ -1408,6 +1500,10 @@ components:
                     type: integer
                   entity_id:
                     type: string
+        interpretation_id:
+          type: string
+          nullable: true
+          description: Interpretation row linked to observations when the request supplied an explicit interpretation block.
     ResolverWarning:
       type: object
       description: |
@@ -3372,6 +3468,22 @@ paths:
                     items:
                       $ref: '#/components/schemas/Interpretation'
 
+  /interpretations/create:
+    post:
+      summary: Create an interpretation from agent-extracted entities
+      operationId: createInterpretation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateInterpretationRequest' }
+      responses:
+        '200':
+          description: Interpretation result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CreateInterpretationResponse' }
+
   /stats:
     get:
       summary: Get dashboard stats
@@ -3391,7 +3503,7 @@ paths:
   /store:
     post:
       summary: Store structured entities, unstructured files, or both
-      operationId: storeStructured
+      operationId: store
       requestBody:
         required: true
         content:
@@ -3418,22 +3530,6 @@ paths:
                 oneOf:
                   - { $ref: '#/components/schemas/StoreResolutionErrorEnvelope' }
                   - { $ref: '#/components/schemas/ErrorEnvelope' }
-
-  /store/unstructured:
-    post:
-      summary: Store unstructured file (raw upload with optional AI interpretation)
-      operationId: storeUnstructured
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/StoreUnstructuredRequest' }
-      responses:
-        '200':
-          description: Store result with source_id and optional interpretation
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/StoreUnstructuredResponse' }
 
   /get_entity_snapshot:
     post:

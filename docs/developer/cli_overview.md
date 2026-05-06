@@ -130,16 +130,16 @@ For IDE integrations (Cursor, Claude Code, Windsurf), scan and configure dev/pro
 
 ```bash
 # Show MCP config guidance
-neotoma mcp config
+neotoma mcp guide
 
 # Scan for MCP config files and offer to add missing dev/prod servers
-neotoma mcp check
+neotoma mcp config
 
 # Include user-level configs (Cursor, Claude, Windsurf)
-neotoma mcp check --user-level
+neotoma mcp config --user-level
 ```
 
-The `mcp check` command scans current directory and subdirectories for MCP config files (`.cursor/mcp.json`, `claude_desktop_config.json`, `mcp_config.json`), detects whether dev and prod Neotoma servers are configured, and prompts to install missing servers with absolute script paths. See [CLI reference](cli_reference.md#mcp-configuration) for details on detection patterns and supported environments.
+The `mcp config` command scans current directory and subdirectories for MCP config files (`.cursor/mcp.json`, `claude_desktop_config.json`, `mcp_config.json`), detects whether dev and prod Neotoma servers are configured, and prompts to install missing servers with absolute script paths. See [CLI reference](cli_reference.md#mcp-configuration) for details on detection patterns and supported environments.
 
 ## Output modes
 The CLI supports deterministic output formats:

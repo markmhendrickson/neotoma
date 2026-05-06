@@ -160,8 +160,38 @@ resolved per request from `NEOTOMA_FEEDBACK_ADMIN_MODE` (explicit) or the
   admin route to return `501 admin_proxy_unconfigured`; the Inspector
   renders read-only.
 
-All admin routes are gated by the AAuth tier resolver: only `hardware` /
-`software` / `operator_attested` sessions pass `enforceTier`.
+Admin routes are gated by the feedback admin identity resolver. The resolver
+accepts either a direct verified AAuth request with `hardware`, `software`, or
+`operator_attested` tier, or a short-lived local Inspector admin session minted
+from one of those tiers. User bearer tokens, OAuth cookies, and generic
+`clientInfo` attribution do not upgrade admin authorization.
+
+The Inspector unlock flow keeps hosted admin secrets and reusable AAuth private
+keys out of browser code:
+
+1. Browser calls `GET /admin/feedback/preflight` with `credentials: "include"`
+   and renders configured mode, allowed tiers, direct request tier, and active
+   admin-session state.
+2. If locked, browser calls `POST /admin/feedback/auth/challenge` and displays
+   `neotoma inspector admin unlock --challenge <challenge>` (or the operator runs
+   `neotoma inspector admin unlock`, which mints a challenge when omitted).
+3. The CLI redeems the challenge at `POST /admin/feedback/auth/redeem` using the
+   existing CLI AAuth signing path, then prints an **Inspector confirmation URL**
+   (and optional `--open`) targeting `/feedback/admin-unlock?challenge=…` under
+   the SPA root. Override the printed root with `--inspector-base` or
+   `NEOTOMA_INSPECTOR_BASE_URL` when the Inspector runs on a different origin than
+   the API (e.g. Vite on port 5175).
+4. The browser opens that URL; the confirmation page calls
+   `GET /admin/feedback/auth/session?challenge=<challenge>` with credentials
+   included. Once redeemed, the server sets an httpOnly, sameSite=lax cookie for
+   the local admin session. Legacy flows: `GET` the same path from any same-API
+   context, or open Feedback with `?feedback_unlock_challenge=<challenge>`.
+5. `POST /admin/feedback/auth/logout` revokes the local session and clears the
+   cookie.
+
+Challenge and session tokens are random auth-session material only. They are not
+data-layer identifiers and are not persisted as observations. Session records
+store only tier, thumbprint/sub/iss, and created/expires timestamps.
 
 ## Test surface
 
@@ -170,4 +200,8 @@ All admin routes are gated by the AAuth tier resolver: only `hardware` /
 - `tests/integration/feedback_replay_simon_apr21.test.ts` — Apr 21 fixtures resolve against the guidance map
 - `tests/unit/feedback_local_mirror.test.ts` — `localRecordToStoredFeedback` adapter + `mirrorLocalFeedbackToEntity` idempotency and user-scoping
 - `tests/integration/feedback_local_pipeline.test.ts` — submit → admin triage → mirror end-to-end
-- `tests/integration/feedback_admin_proxy.test.ts` — tri-state mode resolver + tier gate
+- `tests/integration/feedback_admin_proxy.test.ts` — tri-state mode resolver, admin unlock bridge, and tier/session gate
+
+## Comprehensive reference
+
+[`feedback_system_architecture.md`](./feedback_system_architecture.md) — Full architectural reference covering every component, file index, type system, environment variables, lifecycle flows, and security model.

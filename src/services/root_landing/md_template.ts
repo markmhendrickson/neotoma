@@ -131,9 +131,14 @@ export function renderLandingMarkdown(ctx: LandingHtmlContext): string {
       ? "Config snippets use stdio; connect Neotoma as a local process."
       : `Config snippets below use this host's MCP URL (\`${ctx.mcpUrl}\`) so you can paste them directly into your harness.`;
 
+  const connectHarnessCliNote =
+    "With the Neotoma CLI installed: `neotoma setup` wires MCP entries and agent instruction files; use `neotoma mcp config` or `neotoma cli config` to update one layer only. For read-only help, run `neotoma mcp guide` or `neotoma cli guide`.";
+
   parts.push("## Connect your harness");
   parts.push("");
   parts.push(harnessLede);
+  parts.push("");
+  parts.push(connectHarnessCliNote);
   parts.push("");
   for (const h of ctx.harnesses) {
     parts.push(renderHarnessMd(h));

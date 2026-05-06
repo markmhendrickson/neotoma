@@ -21,7 +21,7 @@
  * Every entity bullet includes a markdown link to the Neotoma Inspector
  * detail page for that entity (`<base>/entities/<entity_id>`). Callers can
  * override the base via `inspectorBaseUrl`; the default is
- * `http://localhost:5174` (the Inspector SPA's dev port).
+ * `http://localhost:5175` (the Inspector SPA's dev port; see `inspector/vite.config.ts`).
  */
 
 import type { Diagnosis } from "./diagnose.js";
@@ -71,7 +71,7 @@ export interface TurnReportInput {
 /**
  * Resolve the Inspector base URL. Prefers explicit argument, then
  * `NEOTOMA_INSPECTOR_URL`, then `NEOTOMA_FRONTEND_URL`, then the default
- * dev port `http://localhost:5174`.
+ * dev port `http://localhost:5175`.
  */
 export function resolveInspectorBaseUrl(explicit?: string): string {
   if (explicit && explicit.length > 0) return stripTrailingSlash(explicit);
@@ -81,7 +81,7 @@ export function resolveInspectorBaseUrl(explicit?: string): string {
   const fromEnv =
     env.NEOTOMA_INSPECTOR_URL ||
     env.NEOTOMA_FRONTEND_URL ||
-    "http://localhost:5174";
+    "http://localhost:5175";
   return stripTrailingSlash(fromEnv);
 }
 

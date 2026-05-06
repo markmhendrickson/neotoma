@@ -9,7 +9,7 @@
     "cost_usd": 0
   },
   "user_prompt": "Tell me about Alice Chen\n",
-  "system_prompt": "You are an assistant integrated with the Neotoma memory system. Before storing entities, always check if they already exist via bounded retrieval to avoid duplicates. Persist the conversation and user message via store_structured with PART_OF relationships. If an entity already exists, reference it via REFERS_TO without creating a duplicate.\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. Before storing entities, always check if they already exist via bounded retrieval to avoid duplicates. Persist the conversation and user message via the MCP store tool with PART_OF relationships. If an entity already exists, reference it via REFERS_TO without creating a duplicate.\n",
   "tool_calls": [
     {
       "name": "retrieve_entity_by_identifier",
@@ -21,7 +21,7 @@
       "sequence": 0
     },
     {
-      "name": "store_structured",
+      "name": "store",
       "input": {
         "idempotency_key": "conv-retrieval-alice-001",
         "entities": [

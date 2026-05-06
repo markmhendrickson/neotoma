@@ -18,7 +18,7 @@ describe("IronClaw MCP integration artifacts", () => {
     expect(content).toContain("ironclaw mcp test neotoma");
     expect(content).toContain("~/.ironclaw/mcp_servers.json");
     expect(content).toContain("transport");
-    expect(content).toContain("store_structured");
+    expect(content).toContain("`store`");
     expect(content).toContain("Neotoma does not currently write IronClaw configuration");
   });
 
@@ -38,9 +38,9 @@ describe("IronClaw MCP integration artifacts", () => {
 
   it("adds IronClaw SEO, docs navigation, and integration discovery", () => {
     expect(readRepoFile("frontend/src/site/seo_metadata.ts")).toContain("/neotoma-with-ironclaw");
-    expect(readRepoFile("frontend/src/components/subpages/DocsIndexPage.tsx")).toContain("IronClaw");
+    expect(readRepoFile("frontend/src/i18n/locales/docs_index_hub_en.ts")).toContain("IronClaw");
     expect(readRepoFile("frontend/src/site/site_data.ts")).toContain('href: "/neotoma-with-ironclaw"');
-    expect(readRepoFile("frontend/src/components/subpages/ConnectIndexPage.tsx")).toContain("ironclaw mcp add");
+    expect(readRepoFile("frontend/src/i18n/locales/connect_page_strings.ts")).toContain("ironclaw mcp add");
   });
 
   it("does not advertise an unsupported setup mode in site install snippets", () => {

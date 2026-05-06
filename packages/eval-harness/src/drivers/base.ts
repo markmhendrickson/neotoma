@@ -21,6 +21,7 @@ import type {
  * that post-turn graph state is reproduced.
  */
 export const NEOTOMA_TOOL_NAMES = new Set<string>([
+  "store",
   "store_structured",
   "retrieve_entities",
   "retrieve_entity_by_identifier",
@@ -32,6 +33,7 @@ export const NEOTOMA_TOOL_NAMES = new Set<string>([
 
 /** Map MCP tool name → HTTP endpoint we POST to on the isolated server. */
 const TOOL_ENDPOINTS: Record<string, string> = {
+  store: "/store",
   store_structured: "/store",
   retrieve_entities: "/retrieve_entities",
   retrieve_entity_by_identifier: "/retrieve_entity_by_identifier",

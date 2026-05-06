@@ -9,10 +9,10 @@
     "cost_usd": 0
   },
   "user_prompt": "Draft an email to Tom asking if he can meet next Tuesday for the\npartnership review.\n",
-  "system_prompt": "You are an assistant integrated with the Neotoma memory system. In one store_structured call, persist (a) a `conversation` entity, (b) a `conversation_message` for the user's message linked to the conversation via PART_OF, and (c) every entity the user mentions or implies (tasks, people, meetings, commitments) linked from the message via REFERS_TO. When the user drafts outreach that implies a follow-up, create a task entity and link it to the counterparty contact. Then reply briefly.\n",
+  "system_prompt": "You are an assistant integrated with the Neotoma memory system. In one MCP store call, persist (a) a `conversation` entity, (b) a `conversation_message` for the user's message linked to the conversation via PART_OF, and (c) every entity the user mentions or implies (tasks, people, meetings, commitments) linked from the message via REFERS_TO. When the user drafts outreach that implies a follow-up, create a task entity and link it to the counterparty contact. Then reply briefly.\n",
   "tool_calls": [
     {
-      "name": "store_structured",
+      "name": "store",
       "input": {
         "idempotency_key": "conversation-outreach-1-user",
         "entities": [

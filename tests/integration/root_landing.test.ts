@@ -165,6 +165,8 @@ describe("root landing — content negotiation", () => {
     expect(body).toMatch(/<strong>config<\/strong>\s+[^<]+/);
     // Host-aware URL interpolation in the body
     expect(body).toContain("/mcp");
+    expect(body).toMatch(/neotoma setup/);
+    expect(body).toMatch(/neotoma mcp config/);
   });
 
   it("returns Markdown when Accept: text/markdown", async () => {
@@ -176,6 +178,9 @@ describe("root landing — content negotiation", () => {
     const body = await res.text();
     expect(body.startsWith("#")).toBe(true);
     expect(body).toContain("## Connect your harness");
+    expect(body).toMatch(/neotoma setup/);
+    expect(body).toMatch(/neotoma mcp config/);
+    expect(body).toMatch(/neotoma cli guide/);
     expect(body).toContain("**config:**");
     expect(body).toContain("http://127.0.0.1");
     expect(body).toMatch(/```(?:json|shell|toml|text)?\n/);

@@ -73,7 +73,7 @@ describe("cursor postToolUseFailure hook", () => {
     const result = runHook("post_tool_use_failure.js", {
       session_id: "session-A",
       generation_id: "gen-1",
-      tool_name: "mcp_neotoma_store_structured",
+      tool_name: "mcp_neotoma_store",
       tool_input: { entities: [{ entity_type: "note" }] },
       tool_response: { error: "fetch failed" },
     });
@@ -90,7 +90,7 @@ describe("cursor postToolUseFailure hook", () => {
     const entryKeys = Object.keys(state.entries ?? {});
     expect(entryKeys.length).toBe(1);
     const key = entryKeys[0]!;
-    expect(key).toContain("mcp_neotoma_store_structured");
+    expect(key).toContain("mcp_neotoma_store");
     expect(state.entries[key].count).toBe(1);
     expect(state.entries[key].hinted).toBe(false);
   });
@@ -116,7 +116,7 @@ describe("cursor postToolUse (after_tool_use) failure-hint surfacing", () => {
     const payload = {
       session_id: "session-C",
       generation_id: "gen-1",
-      tool_name: "mcp_neotoma_store_structured",
+      tool_name: "mcp_neotoma_store",
       tool_input: { entities: [{ entity_type: "note" }] },
       tool_response: { error: "fetch failed" },
     };
@@ -142,7 +142,7 @@ describe("cursor postToolUse (after_tool_use) failure-hint surfacing", () => {
     const context =
       parsed.additional_context ?? parsed.hookSpecificOutput?.additionalContext ?? "";
     expect(context).toContain("Neotoma hook note");
-    expect(context).toContain("mcp_neotoma_store_structured");
+    expect(context).toContain("mcp_neotoma_store");
 
     const followup = runHook("after_tool_use.js", {
       session_id: "session-C",

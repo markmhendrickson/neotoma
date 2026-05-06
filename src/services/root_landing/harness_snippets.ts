@@ -24,6 +24,8 @@ export type HarnessFlow = "agent" | "human";
 /** Generic placeholder when install root cannot be resolved (e.g. minimal container). */
 export const PLACEHOLDER_STDIO_MCP_SCRIPT =
   "/absolute/path/to/neotoma/scripts/run_neotoma_mcp_stdio.sh";
+export const PLACEHOLDER_PROXY_MCP_SCRIPT =
+  "/absolute/path/to/neotoma/scripts/run_neotoma_mcp_proxy.sh";
 
 export interface HarnessSnippetContext {
   /** Absolute MCP URL for this instance, e.g. `https://sandbox.neotoma.io/mcp`. */
@@ -39,6 +41,11 @@ export interface HarnessSnippetContext {
    * {@link PLACEHOLDER_STDIO_MCP_SCRIPT}.
    */
   stdioMcpScriptPath?: string | null;
+  /**
+   * Absolute path to `scripts/run_neotoma_mcp_proxy.sh` when known.
+   * Used in the proxy tip for HTTP mode with AAuth attribution.
+   */
+  proxyMcpScriptPath?: string | null;
   /** Active sandbox session bearer token (if available via cookie). */
   sessionBearer?: string | null;
 }
@@ -46,6 +53,11 @@ export interface HarnessSnippetContext {
 function resolvedStdioScript(ctx: HarnessSnippetContext): string {
   const p = ctx.stdioMcpScriptPath?.trim();
   return p && p.length > 0 ? p : PLACEHOLDER_STDIO_MCP_SCRIPT;
+}
+
+function resolvedProxyScript(ctx: HarnessSnippetContext): string {
+  const p = ctx.proxyMcpScriptPath?.trim();
+  return p && p.length > 0 ? p : PLACEHOLDER_PROXY_MCP_SCRIPT;
 }
 
 export interface HarnessDescriptor {
@@ -66,6 +78,8 @@ export interface HarnessSnippetResult {
   agentPrompt: string;
   human: { format: string; code: string };
   preflight?: { title: string; code: string; format: string };
+  /** Optional proxy-mode snippet for AAuth-attributed HTTP connections. */
+  proxyTip?: { title: string; format: string; code: string };
 }
 
 const HARNESS_META: Record<HarnessId, Omit<HarnessDescriptor, "preflight">> = {
@@ -161,7 +175,7 @@ It is a public, shared sandbox — treat everything as publicly visible and expe
         ? `Connect Neotoma MCP (local stdio) for this harness. Neotoma runs on this machine; use the stdio transport, not an HTTP URL.`
         : `Connect this Neotoma MCP server for me: ${mcpUrl}`;
 
-  const installNote = `If Neotoma is already installed, confirm with \`neotoma doctor --json\`; otherwise follow ${publicDocsUrl}/install.`;
+  const installNote = `If Neotoma is already installed, confirm with \`neotoma doctor --json\`. Apply MCP + agent instruction defaults with \`neotoma setup\`, or update one layer with \`neotoma mcp config\` or \`neotoma cli config\`. For read-only paths and flags, use \`neotoma mcp guide\` or \`neotoma cli guide\`. Otherwise follow ${publicDocsUrl}/install.`;
 
   const harnessHint: Record<HarnessId, string> = {
     "claude-code": mode === "local"
@@ -331,6 +345,51 @@ function preflightFor(id: HarnessId): HarnessDescriptor["preflight"] | undefined
   }
 }
 
+function proxyTipFor(
+  id: HarnessId,
+  ctx: HarnessSnippetContext,
+): HarnessSnippetResult["proxyTip"] {
+  if (id === "chatgpt") return undefined;
+  if (ctx.mode !== "local") return undefined;
+  const proxyScript = JSON.stringify(resolvedProxyScript(ctx));
+  const title = "AAuth proxy (verified attribution)";
+  switch (id) {
+    case "cursor":
+    case "claude-desktop":
+      return {
+        title,
+        format: "json",
+        code: `// For AAuth-signed writes (run 'neotoma auth keygen' first, set MCP_PROXY_AAUTH=1)
+{
+  "mcpServers": {
+    "neotoma": {
+      "command": ${proxyScript}
+    }
+  }
+}`,
+      };
+    case "claude-code":
+      return {
+        title,
+        format: "shell",
+        code: `# Run 'neotoma auth keygen' first, then:
+claude mcp add neotoma -- ${proxyScript}`,
+      };
+    case "codex":
+      return {
+        title,
+        format: "toml",
+        code: `# Run 'neotoma auth keygen' first, then:
+[mcp_servers.neotoma]
+command = ${proxyScript}`,
+      };
+    case "openclaw":
+      return undefined;
+    default:
+      return undefined;
+  }
+}
+
 export function buildHarnessSnippet(
   id: HarnessId,
   ctx: HarnessSnippetContext,
@@ -345,6 +404,7 @@ export function buildHarnessSnippet(
     agentPrompt: agentConnectPrompt(id, ctx),
     human: humanSnippet(id, ctx),
     preflight: preflightFor(id),
+    proxyTip: proxyTipFor(id, ctx),
   };
 }
 

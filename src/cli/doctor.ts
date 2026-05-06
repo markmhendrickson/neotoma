@@ -197,17 +197,26 @@ function detectVersion(globalPkgDir: string | null): string | null {
 }
 
 /** Heuristically detect which agent harness invoked the CLI (for `current_tool_hint`). */
-function detectCurrentToolHint(cwd: string): ToolId | null {
-  const env = process.env;
+export function detectCurrentToolHint(cwd: string, env: NodeJS.ProcessEnv = process.env): ToolId | null {
+  if (
+    env.OPENAI_CODEX_BUILD ||
+    env.CODEX_HOME ||
+    env.CODEX_SHELL ||
+    env.CODEX_THREAD_ID ||
+    env.CODEX_INTERNAL_ORIGINATOR_OVERRIDE
+  ) {
+    return "codex";
+  }
   if (env.CLAUDE_CODE_ENTRYPOINT || env.CLAUDECODE) return "claude-code";
   if (env.CURSOR_AGENT || env.CURSOR_TRACE_ID || env.CURSOR_IDE) return "cursor";
-  if (env.OPENAI_CODEX_BUILD || env.CODEX_HOME) return "codex";
   if (env.OPENCLAW_SESSION || env.OPENCLAW_CWD) return "openclaw";
   // Second-best: directory-level markers.
   try {
-    if (existsSync(path.join(cwd, ".claude"))) return "claude-code";
-    if (existsSync(path.join(cwd, ".cursor"))) return "cursor";
-    if (existsSync(path.join(cwd, ".codex"))) return "codex";
+    const markers: ToolId[] = [];
+    if (existsSync(path.join(cwd, ".claude"))) markers.push("claude-code");
+    if (existsSync(path.join(cwd, ".cursor"))) markers.push("cursor");
+    if (existsSync(path.join(cwd, ".codex"))) markers.push("codex");
+    if (markers.length === 1) return markers[0]!;
   } catch {
     // ignore
   }

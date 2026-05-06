@@ -43,7 +43,8 @@ npx @neotoma/cursor-hooks --uninstall
 | `NEOTOMA_HOOK_FEEDBACK_HINT` | `on` | Set to `off` to disable the one-shot failure hint surfaced by `postToolUse`. |
 | `NEOTOMA_HOOK_FEEDBACK_HINT_THRESHOLD` | `2` | Minimum repeated-failure count for `(tool, error_class)` before a hint is surfaced. |
 | `NEOTOMA_HOOK_STATE_DIR` | `~/.neotoma/hook-state` | Directory used for per-session failure counters and per-turn compliance state. Override per-test for isolation. |
-| `NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP` | `auto` | `on` \| `off` \| `auto` (default `auto` behaves like `on` for every model). Controls whether `stop` returns `followup_message`. |
+| `NEOTOMA_HOOK_COMPLIANCE_PASSES` | (unset) | Master switch for hook-driven compliance re-prompts. `off` \| `false` \| `0` disables `stop` → `followup_message` regardless of `NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP`. Unset or `on` \| `true` \| `1` defers to `NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP`. |
+| `NEOTOMA_HOOK_COMPLIANCE_FOLLOWUP` | `auto` | `on` \| `off` \| `auto` (default `auto` behaves like `on` for every model). Controls whether `stop` returns `followup_message` when `NEOTOMA_HOOK_COMPLIANCE_PASSES` is not off. |
 | `NEOTOMA_HOOK_SMALL_MODEL_PATTERNS` | (built-in list) | Comma-separated regex list overriding the small-model detection patterns (case-insensitive). |
 | `NEOTOMA_HOOK_SMALL_MODEL_DETECTED` | (set by `sessionStart`) | Internal hint so downstream hooks avoid re-detecting per call. |
 | `NEOTOMA_HOOK_DETECTED_MODEL` | (set by host) | Optional model id forwarded to `postToolUse` when Cursor's payload omits `model`. |

@@ -3,7 +3,10 @@
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
-import { SchemaRegistryService } from "../../src/services/schema_registry.js";
+import {
+  loadCodeDefinedSchemaEntry,
+  SchemaRegistryService,
+} from "../../src/services/schema_registry.js";
 import { db } from "../../src/db.js";
 
 // Mock the database module
@@ -120,6 +123,17 @@ describe("SchemaRegistryService - Incremental Updates", () => {
     service = new SchemaRegistryService();
     mockFrom = vi.fn();
     (db.from as any) = mockFrom;
+  });
+
+  describe("loadCodeDefinedSchemaEntry", () => {
+    it("returns the built-in conversation_message schema without requiring a registry row", async () => {
+      const entry = await loadCodeDefinedSchemaEntry("conversation_message");
+
+      expect(entry).toBeDefined();
+      expect(entry?.entity_type).toBe("conversation_message");
+      expect(entry?.schema_definition.fields.content).toBeDefined();
+      expect(entry?.schema_definition.fields.turn_key).toBeDefined();
+    });
   });
 
   afterEach(() => {
