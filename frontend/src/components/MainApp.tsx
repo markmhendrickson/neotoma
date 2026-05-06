@@ -114,6 +114,8 @@ import { LogisticsLandingPage } from "@/components/subpages/LogisticsLandingPage
 import { PersonalDataLandingPage } from "@/components/subpages/PersonalDataLandingPage";
 import { TradingLandingPage } from "@/components/subpages/TradingLandingPage";
 import { UseCasesIndexPage } from "@/components/subpages/UseCasesIndexPage";
+import { SkillsIndexPage } from "@/components/subpages/SkillsIndexPage";
+import { SkillDetailPage } from "@/components/subpages/SkillDetailPage";
 import { CryptoEngineeringLandingPage } from "@/components/subpages/CryptoEngineeringLandingPage";
 import { BuildVsBuyPage } from "@/components/subpages/BuildVsBuyPage";
 import { MultiAgentStatePage } from "@/components/subpages/MultiAgentStatePage";
@@ -295,6 +297,8 @@ const APP_ROUTES: readonly AppRoute[] = [
   { path: "/trading", element: <TradingLandingPage /> },
   { path: "/crypto-engineering", element: <CryptoEngineeringLandingPage /> },
   { path: "/use-cases", element: <UseCasesIndexPage /> },
+  { path: "/skills", element: <SkillsIndexPage /> },
+  { path: "/skills/:skillSlug", element: <SkillDetailPage /> },
   { path: "/verticals", element: <Navigate to="/use-cases" replace /> },
   { path: "/build-vs-buy", element: <BuildVsBuyPage /> },
   { path: "/multi-agent-state", element: <MultiAgentStatePage /> },

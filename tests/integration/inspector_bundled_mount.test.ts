@@ -7,7 +7,7 @@
  */
 
 import { AddressInfo } from "node:net";
-import { mkdirSync, rmSync, writeFileSync, existsSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync, existsSync, utimesSync } from "node:fs";
 import path from "node:path";
 import express from "express";
 import { afterEach, describe, expect, it } from "vitest";
@@ -18,6 +18,7 @@ import {
   resolveBundledInspectorDir,
   injectInspectorApiBaseMeta,
   appendInspectorLiveReloadScript,
+  computeInspectorBuildOutputStamp,
 } from "../../src/services/inspector_mount.js";
 
 type Server = ReturnType<express.Application["listen"]>;
@@ -109,6 +110,25 @@ describe("appendInspectorLiveReloadScript", () => {
     const out = appendInspectorLiveReloadScript(FIXTURE_HTML, "/inspector/__live/build_stamp");
     expect(out).toContain("/inspector/__live/build_stamp");
     expect(out).toContain("location.reload");
+  });
+});
+
+describe("computeInspectorBuildOutputStamp", () => {
+  it("reflects newer asset mtime under assets/ when index.html unchanged", () => {
+    const dir = path.join(process.cwd(), "tmp", "inspector-stamp-fn-" + Date.now());
+    try {
+      mkdirSync(path.join(dir, "assets"), { recursive: true });
+      writeFileSync(path.join(dir, "index.html"), FIXTURE_HTML);
+      writeFileSync(path.join(dir, "assets", "lazy.js"), "// v1");
+      const before = computeInspectorBuildOutputStamp(dir);
+      expect(before).toBeGreaterThan(0);
+      const future = new Date(Date.now() + 120_000);
+      utimesSync(path.join(dir, "assets", "lazy.js"), future, future);
+      const after = computeInspectorBuildOutputStamp(dir);
+      expect(after).toBeGreaterThan(before);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

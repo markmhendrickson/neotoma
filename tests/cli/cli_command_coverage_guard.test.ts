@@ -8,6 +8,7 @@ describe("CLI command coverage guard", () => {
     // Commands with behavioral coverage in tests/cli.
     const coveredBehavioral = new Set([
       "api",
+      "access",
       "auth",
       "backup",
       "cli",
@@ -43,6 +44,7 @@ describe("CLI command coverage guard", () => {
       "timeline",
       "discover",
       "ingest-transcript",
+      "issues",
       "upload",
     ]);
 

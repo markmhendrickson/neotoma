@@ -1441,6 +1441,25 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Autonomous Trading", path: "/trading" },
     ],
   },
+  "/skills": {
+    title: "Skills | Guided Workflows for Agent Memory | Neotoma",
+    description:
+      "Step-by-step workflows that teach your AI agent to import, extract, and persist data into Neotoma memory. Skills for email, conversations, meetings, finances, contacts, calendar, and more.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Skills", path: "/skills" },
+    ],
+    keywords: [
+      "agent skills",
+      "memory skills",
+      "AI agent workflows",
+      "data import",
+      "email import",
+      "conversation import",
+    ],
+  },
   "/use-cases": {
     title: "Use Cases | State Integrity for AI-Driven Workflows | Neotoma",
     description:

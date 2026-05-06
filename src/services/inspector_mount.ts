@@ -11,6 +11,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type express from "express";
+import type { RequestHandler, Response } from "express";
 import expressStatic from "express";
 
 const DEFAULT_BASE_PATH = "/inspector";
@@ -133,6 +134,41 @@ export function readInspectorIndexHtml(dir: string): string | null {
 }
 
 /**
+ * Fingerprint for `vite build --watch` output used by live-reload polling.
+ *
+ * Using only `index.html` mtime misses lazy-route / code-split rebuilds:
+ * those updates often touch only `assets/*.js` while the HTML shell stays
+ * byte-identical, so the stamp must consider built assets too.
+ */
+export function computeInspectorBuildOutputStamp(staticDir: string): number {
+  let max = 0;
+  const indexPath = path.join(staticDir, "index.html");
+  try {
+    max = Math.max(max, fs.statSync(indexPath).mtimeMs);
+  } catch {
+    return 0;
+  }
+  const assetsDir = path.join(staticDir, "assets");
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(assetsDir, { withFileTypes: true });
+  } catch {
+    return max;
+  }
+  for (const ent of entries) {
+    if (!ent.isFile()) continue;
+    const fp = path.join(assetsDir, ent.name);
+    try {
+      const st = fs.statSync(fp);
+      if (st.mtimeMs > max) max = st.mtimeMs;
+    } catch {
+      /* skip race / deleted between readdir and stat */
+    }
+  }
+  return max;
+}
+
+/**
  * Install the Inspector SPA mount on an Express app.
  *
  * Registered before auth middleware so the SPA shell and assets are reachable
@@ -215,15 +251,14 @@ export function installInspectorMount(
         const activeStaticDir = inspectorLiveBuild
           ? resolveLiveInspectorStaticDir(staticDir)
           : staticDir;
-        const indexPath = path.join(activeStaticDir, "index.html");
-        try {
-          const st = fs.statSync(indexPath);
-          res.set("Cache-Control", "no-store");
-          res.type("application/json");
-          res.json({ stamp: st.mtimeMs, dir: activeStaticDir });
-        } catch {
+        const stamp = computeInspectorBuildOutputStamp(activeStaticDir);
+        if (!stamp) {
           res.status(404).type("application/json").json({ error: "no_index" });
+          return;
         }
+        res.set("Cache-Control", "no-store");
+        res.type("application/json");
+        res.json({ stamp, dir: activeStaticDir });
       });
 
       app.use(
@@ -252,19 +287,34 @@ export function installInspectorMount(
       );
     }
 
-    app.use(
-      basePath,
-      expressStatic.static(staticDir, {
-        index: false,
-        fallthrough: true,
-        maxAge: inspectorLiveBuild ? 0 : "1h",
-        setHeaders: inspectorLiveBuild
-          ? (res) => {
-              res.setHeader("Cache-Control", "no-store");
-            }
-          : undefined,
-      }),
-    );
+    const staticOptions = {
+      index: false,
+      fallthrough: true,
+      maxAge: inspectorLiveBuild ? 0 : "1h",
+      setHeaders: inspectorLiveBuild
+        ? (res: Response) => {
+            res.setHeader("Cache-Control", "no-store");
+          }
+        : undefined,
+    };
+
+    if (inspectorLiveBuild) {
+      const staticHandlerByDir = new Map<string, RequestHandler>();
+      app.use(
+        basePath,
+        (req: express.Request, res: express.Response, next: express.NextFunction) => {
+          const active = resolveLiveInspectorStaticDir(staticDir);
+          let handler = staticHandlerByDir.get(active);
+          if (!handler) {
+            handler = expressStatic.static(active, staticOptions);
+            staticHandlerByDir.set(active, handler);
+          }
+          handler(req, res, next);
+        },
+      );
+    } else {
+      app.use(basePath, expressStatic.static(staticDir, staticOptions));
+    }
 
     app.get(
       [basePath, `${basePath}/*`],
@@ -303,7 +353,7 @@ export function installInspectorMount(
     logger.info(
       `[Inspector] Serving SPA from ${staticDir} at ${basePath}${
         inspectorLiveBuild
-          ? " (live rebuild: no HTML/asset cache; auto-reload when index.html changes)"
+          ? " (live rebuild: no HTML/asset cache; auto-reload when build output changes)"
           : ""
       }`,
     );

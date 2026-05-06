@@ -272,6 +272,13 @@ export interface IconMetadata {
   generated_at: string; // ISO timestamp
 }
 
+export type GuestAccessPolicyMode =
+  | "closed"
+  | "read_only"
+  | "submit_only"
+  | "submitter_scoped"
+  | "open";
+
 export interface SchemaMetadata {
   label?: string;
   description?: string;
@@ -279,6 +286,7 @@ export interface SchemaMetadata {
   icon?: IconMetadata;
   test?: boolean; // Mark schemas created for testing
   test_marked_at?: string; // ISO timestamp when test schema was marked
+  guest_access_policy?: GuestAccessPolicyMode;
 }
 
 export interface SchemaRegistryEntry {
@@ -749,15 +757,27 @@ export class SchemaRegistryService {
 
     const activateSchema = options.activate !== false; // Default to true
 
-    // 1. Load current active schema (user-specific or global)
-    const currentSchema = await this.loadActiveSchema(
+    // 1. Load current active schema (user-specific or global), then fall back to
+    // code-defined ENTITY_SCHEMAS so incremental updates can materialize the
+    // first registry row for built-in types (e.g. conversation_message).
+    let currentSchema = await this.loadActiveSchema(
       options.entity_type,
       options.user_id,
     );
-
     if (!currentSchema) {
-      throw new Error(
-        `No active schema found for entity type: ${options.entity_type}`,
+      const normalized = normalizeEntityTypeForSchema(options.entity_type);
+      const codeDefined =
+        (await loadCodeDefinedSchemaEntry(options.entity_type)) ??
+        (await loadCodeDefinedSchemaEntry(normalized));
+      if (!codeDefined) {
+        throw new Error(
+          `No active schema found for entity type: ${options.entity_type}`,
+        );
+      }
+      currentSchema = codeDefined;
+      logSchemaRegistryInfo(
+        `[SCHEMA_REGISTRY] Incremental update: no active registry row for ${options.entity_type}; ` +
+          `using code-defined baseline v${codeDefined.schema_version}`,
       );
     }
 
@@ -1951,6 +1971,39 @@ export class SchemaRegistryService {
     
     if (error) {
       console.error(`[SCHEMA_REGISTRY] Failed to update icon metadata for ${entityType}:`, error);
+    }
+  }
+
+  /**
+   * Merge partial metadata fields into the active schema row for an entity type.
+   * Preserves existing metadata keys that are not in the patch.
+   */
+  async updateMetadata(
+    entityType: string,
+    patch: Partial<SchemaMetadata>,
+    userId?: string,
+  ): Promise<void> {
+    const schema = await this.loadActiveSchema(entityType, userId);
+    if (!schema) {
+      throw new Error(
+        `No active schema found for entity type "${entityType}"; cannot update metadata.`,
+      );
+    }
+
+    const updatedMetadata: SchemaMetadata = {
+      ...(schema.metadata || {}),
+      ...patch,
+    };
+
+    const { error } = await db
+      .from("schema_registry")
+      .update({ metadata: updatedMetadata })
+      .eq("id", schema.id);
+
+    if (error) {
+      throw new Error(
+        `Failed to update metadata for ${entityType}: ${error.message}`,
+      );
     }
   }
 

@@ -653,6 +653,17 @@ components:
             Per record-type count (`observation`, `source`,
             `interpretation`, `timeline_event`, `relationship`).
             Missing buckets mean zero.
+        observation_entity_type_counts:
+          type: object
+          additionalProperties:
+            type: integer
+          description: |
+            For each distinct agent, counts of **observation** rows grouped
+            by the target entity's `entity_type` (join `entities` on
+            `observations.entity_id`). Surfaces who submitted
+            `product_feedback`, who touched protected `agent_grant` rows,
+            `issue` sync traffic, etc. Omitted when no typed observations
+            exist for that agent.
     AgentCapabilityEntry:
       type: object
       required:
@@ -2075,7 +2086,10 @@ paths:
                   - canonical_name
                   - observation_count
                   - last_observation_at
-                  description: "Non-default values cannot be combined with `search`."
+                  - submitted_at
+                  description: |
+                    Non-default values cannot be combined with `search`.
+                    `submitted_at` orders by `snapshot.created_at` (ISO string), e.g. GitHub issue opened time.
                 sort_order:
                   type: string
                   enum:
@@ -3500,6 +3514,36 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Stats' }
 
+  /access_policies:
+    get:
+      summary: List effective guest access policies for all entity types
+      operationId: getAccessPolicies
+      description: |
+        Returns the effective resolved guest access policy for every entity type
+        that has a non-default (non-closed) policy, plus the default mode.
+        Resolution precedence per type: env var > SchemaMetadata > config file > closed.
+      responses:
+        '200':
+          description: Map of entity types to their effective guest access policy mode
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  policies:
+                    type: object
+                    additionalProperties:
+                      type: string
+                      enum: [closed, read_only, submit_only, submitter_scoped, open]
+                    description: Entity type to effective policy mode
+                  default_mode:
+                    type: string
+                    enum: [closed, read_only, submit_only, submitter_scoped, open]
+                    description: Default mode for entity types not in the policies map
+                required:
+                  - policies
+                  - default_mode
+
   /store:
     post:
       summary: Store structured entities, unstructured files, or both
@@ -3891,6 +3935,90 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+
+  /issues/bulk_close:
+    post:
+      summary: Bulk close issues
+      description: >
+        For each `issue` entity id owned by the caller, closes the GitHub issue when
+        `github_number` is linked, then records `status: closed` in Neotoma.
+      operationId: bulkCloseIssues
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - entity_ids
+              properties:
+                entity_ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items:
+                    type: string
+                user_id:
+                  type: string
+      responses:
+        '200':
+          description: Per-entity outcomes
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                  - results
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+
+  /issues/bulk_remove:
+    post:
+      summary: Bulk remove issues from Neotoma
+      description: >
+        Soft-deletes each `issue` entity. When the issue is still open and linked to
+        GitHub (`github_number` > 0), closes the GitHub issue first.
+      operationId: bulkRemoveIssues
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - entity_ids
+              properties:
+                entity_ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items:
+                    type: string
+                user_id:
+                  type: string
+      responses:
+        '200':
+          description: Per-entity outcomes
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                  - results
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
 
   /delete_entity:
     post:

@@ -77,6 +77,12 @@ export interface AgentGrant extends AgentGrantMatch {
   import_source?: string | null;
   created_at?: string;
   last_observation_at?: string;
+  /** Linked GitHub login (set by `neotoma github link` or Inspector OAuth). */
+  linked_github_login?: string | null;
+  /** Linked GitHub numeric user id. */
+  linked_github_user_id?: number | null;
+  /** Timestamp when GitHub link was verified via OAuth. */
+  linked_github_verified_at?: string | null;
 }
 
 export interface AgentGrantDraft extends AgentGrantMatch {

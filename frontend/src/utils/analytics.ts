@@ -210,7 +210,8 @@ export type CtaName =
   | "meet_with_creator_banner"
   | "meet_page_notion_interview"
   | "demo_inspector_github"
-  | "section_evaluate";
+  | "section_evaluate"
+  | "skill_detail_copy_use_prompt";
 
 /** Track a CTA button/link click with the CTA name and current page. */
 export function sendCtaClick(ctaName: CtaName, pagePath?: string): void {

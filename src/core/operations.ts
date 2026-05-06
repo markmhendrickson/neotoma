@@ -132,9 +132,10 @@ export interface Operations {
   /** Retrieve related entities (graph expansion). */
   retrieveRelatedEntities(input: {
     entity_id: string;
-    relationship_type?: string;
-    direction?: "outgoing" | "incoming" | "both";
-    limit?: number;
+    relationship_types?: string[];
+    direction?: "inbound" | "outbound" | "both";
+    max_hops?: number;
+    include_entities?: boolean;
   }): Promise<unknown>;
 
   /** Create a relationship between two existing entities. */

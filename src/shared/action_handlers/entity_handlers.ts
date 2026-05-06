@@ -9,7 +9,12 @@ interface QueryEntitiesParams {
   entityType?: string;
   includeMerged?: boolean;
   includeSnapshots?: boolean;
-  sortBy?: "entity_id" | "canonical_name" | "observation_count" | "last_observation_at";
+  sortBy?:
+    | "entity_id"
+    | "canonical_name"
+    | "observation_count"
+    | "last_observation_at"
+    | "submitted_at";
   sortOrder?: "asc" | "desc";
   published?: boolean;
   publishedAfter?: string;

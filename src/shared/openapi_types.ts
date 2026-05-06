@@ -1121,6 +1121,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/access_policies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List effective guest access policies for all entity types
+         * @description Returns the effective resolved guest access policy for every entity type
+         *     that has a non-default (non-closed) policy, plus the default mode.
+         *     Resolution precedence per type: env var > SchemaMetadata > config file > closed.
+         */
+        get: operations["getAccessPolicies"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/store": {
         parameters: {
             query?: never;
@@ -1294,6 +1316,46 @@ export interface paths {
          * @description Get complete graph neighborhood including entities, relationships, sources, and events
          */
         post: operations["retrieveGraphNeighborhood"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/issues/bulk_close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk close issues
+         * @description For each `issue` entity id owned by the caller, closes the GitHub issue when `github_number` is linked, then records `status: closed` in Neotoma.
+         */
+        post: operations["bulkCloseIssues"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/issues/bulk_remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk remove issues from Neotoma
+         * @description Soft-deletes each `issue` entity. When the issue is still open and linked to GitHub (`github_number` > 0), closes the GitHub issue first.
+         */
+        post: operations["bulkRemoveIssues"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1933,6 +1995,17 @@ export interface components {
              *     Missing buckets mean zero.
              */
             record_counts: {
+                [key: string]: number;
+            };
+            /**
+             * @description For each distinct agent, counts of **observation** rows grouped
+             *     by the target entity's `entity_type` (join `entities` on
+             *     `observations.entity_id`). Surfaces who submitted
+             *     `product_feedback`, who touched protected `agent_grant` rows,
+             *     `issue` sync traffic, etc. Omitted when no typed observations
+             *     exist for that agent.
+             */
+            observation_entity_type_counts?: {
                 [key: string]: number;
             };
         };
@@ -3126,9 +3199,10 @@ export interface operations {
                     offset?: number;
                     /**
                      * @description Non-default values cannot be combined with `search`.
+                     *     `submitted_at` orders by `snapshot.created_at` (ISO string), e.g. GitHub issue opened time.
                      * @enum {string}
                      */
-                    sort_by?: "entity_id" | "canonical_name" | "observation_count" | "last_observation_at";
+                    sort_by?: "entity_id" | "canonical_name" | "observation_count" | "last_observation_at" | "submitted_at";
                     /**
                      * @description `desc` cannot be combined with `search`.
                      * @enum {string}
@@ -4242,6 +4316,36 @@ export interface operations {
             };
         };
     };
+    getAccessPolicies: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Map of entity types to their effective guest access policy mode */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Entity type to effective policy mode */
+                        policies: {
+                            [key: string]: "closed" | "read_only" | "submit_only" | "submitter_scoped" | "open";
+                        };
+                        /**
+                         * @description Default mode for entity types not in the policies map
+                         * @enum {string}
+                         */
+                        default_mode: "closed" | "read_only" | "submit_only" | "submitter_scoped" | "open";
+                    };
+                };
+            };
+        };
+    };
     store: {
         parameters: {
             query?: never;
@@ -4630,6 +4734,68 @@ export interface operations {
                 content: {
                     "application/json": {
                         [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    bulkCloseIssues: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    entity_ids: string[];
+                    user_id?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Per-entity outcomes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        results: {
+                            [key: string]: unknown;
+                        }[];
+                    };
+                };
+            };
+        };
+    };
+    bulkRemoveIssues: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    entity_ids: string[];
+                    user_id?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Per-entity outcomes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        results: {
+                            [key: string]: unknown;
+                        }[];
                     };
                 };
             };

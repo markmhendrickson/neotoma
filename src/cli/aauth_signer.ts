@@ -227,8 +227,22 @@ function publicPartOf(jwk: Record<string, unknown>): Record<string, unknown> {
   return copy;
 }
 
+/** Shape of a single entry in the `https://neotoma.io/external_actors` JWT claim. */
+export interface ExternalActorClaim {
+  provider: "github";
+  id: number;
+  login: string;
+  linked_at: string;
+}
+
 /** Build and sign an `aa-agent+jwt` agent token with the configured key. */
-export async function mintCliAgentTokenJwt(config: LoadedSignerConfig): Promise<string> {
+export async function mintCliAgentTokenJwt(
+  config: LoadedSignerConfig,
+  options?: {
+    /** When provided, embedded as `https://neotoma.io/external_actors` custom claim. */
+    externalActors?: ExternalActorClaim[];
+  },
+): Promise<string> {
   const alg = resolveAlg(config.privateJwk);
   const key = await importJWK(config.privateJwk as Parameters<typeof importJWK>[0], alg);
   const publicJwk = publicPartOf(config.privateJwk);
@@ -236,12 +250,18 @@ export async function mintCliAgentTokenJwt(config: LoadedSignerConfig): Promise<
     publicJwk as Parameters<typeof calculateJwkThumbprint>[0]
   );
   const ttl = Math.max(30, config.tokenTtlSec ?? 300);
-  // RFC 9449 / AAuth: bind the signing key in the agent JWT via `cnf.jwk`
-  // (httpsig verifies this matches the message-signing key material).
-  const builder = new SignJWT({
+
+  const customClaims: Record<string, unknown> = {
     jkt,
     cnf: { jwk: publicJwk as import("jose").JWK },
-  })
+  };
+  if (options?.externalActors?.length) {
+    customClaims["https://neotoma.io/external_actors"] = options.externalActors;
+  }
+
+  // RFC 9449 / AAuth: bind the signing key in the agent JWT via `cnf.jwk`
+  // (httpsig verifies this matches the message-signing key material).
+  const builder = new SignJWT(customClaims)
     .setProtectedHeader({
       alg,
       typ: "aa-agent+jwt",

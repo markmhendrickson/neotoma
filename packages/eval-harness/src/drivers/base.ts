@@ -27,7 +27,6 @@ export const NEOTOMA_TOOL_NAMES = new Set<string>([
   "retrieve_entity_by_identifier",
   "create_relationship",
   "correct",
-  "submit_feedback",
   "get_session_identity",
 ]);
 
@@ -39,7 +38,6 @@ const TOOL_ENDPOINTS: Record<string, string> = {
   retrieve_entity_by_identifier: "/retrieve_entity_by_identifier",
   create_relationship: "/create_relationship",
   correct: "/correct",
-  submit_feedback: "/feedback/submit",
   get_session_identity: "/session",
 };
 

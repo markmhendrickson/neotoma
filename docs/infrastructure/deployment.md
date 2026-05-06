@@ -504,35 +504,11 @@ functions `sandbox_report_submit` and `sandbox_report_status`. Set
 `AGENT_SITE_SANDBOX_BEARER` on the Netlify site alongside the existing
 feedback bearers.
 
-## Agent feedback pipeline (agent.neotoma.io)
+## Issue reporting (GitHub Issues)
 
-The hosted intake service for `submit_feedback` / `get_feedback_status` runs on Netlify as a set of functions under `services/agent-site/`. See [docs/subsystems/agent_feedback_pipeline.md](../subsystems/agent_feedback_pipeline.md) for the full architecture.
+Issue reporting uses GitHub Issues as the collaborative transport. Issues are filed via `submit_issue` MCP tool or `neotoma issues create` CLI, which push directly to the configured GitHub repository. No Netlify Functions, cron jobs, or hosted services are required.
 
-### Netlify site setup
-
-1. From `services/agent-site/`, run `npm install` then `netlify init` to link a new site to the `agent.neotoma.io` subdomain.
-2. Set the following site environment variables via `netlify env:set`:
-   - `AGENT_SITE_BEARER` — public bearer shared with the Neotoma MCP server
-   - `AGENT_SITE_ADMIN_BEARER` — admin bearer held only by the local cron / triage
-3. Point the `agent.neotoma.io` DNS record at the Netlify site per standard Netlify docs.
-4. Deploy with `netlify deploy --prod` (functions bundled via `esbuild`).
-
-### Local dev
-
-`netlify dev` inside `services/agent-site/` starts a local Functions server on port 8888. Point `AGENT_SITE_BASE_URL=http://localhost:8888` at it to exercise the HTTP transport end-to-end against the local Neotoma MCP.
-
-### Cron (local machine)
-
-Install the launchd template:
-
-```bash
-cp scripts/cron/com.neotoma.feedback-ingest.plist.template \
-   ~/Library/LaunchAgents/com.neotoma.feedback-ingest.plist
-sed -i '' "s|\${REPO_ROOT}|$(pwd)|g" ~/Library/LaunchAgents/com.neotoma.feedback-ingest.plist
-launchctl load ~/Library/LaunchAgents/com.neotoma.feedback-ingest.plist
-```
-
-The cron runs `scripts/cron/ingest_agent_incidents.ts` every 15 minutes. Set `NEOTOMA_FEEDBACK_TRANSPORT=http` + admin bearer in the plist `EnvironmentVariables` dict to target the hosted Blobs store; leave at `local` to triage against the local JSON store.
+Configuration is via `~/.config/neotoma/config.json` and `NEOTOMA_ISSUES_*` environment variables. Authentication uses the GitHub CLI (`gh auth token`). See [docs/subsystems/agent_feedback_pipeline.md](../subsystems/agent_feedback_pipeline.md) for migration details from the old feedback pipeline.
 
 ## Rollback
 ### Rollback to Previous Version

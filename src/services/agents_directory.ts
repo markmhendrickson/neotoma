@@ -20,12 +20,14 @@ import {
 
 export type AgentAttributionTier =
   | "hardware"
+  | "operator_attested"
   | "software"
   | "unverified_client"
   | "anonymous";
 
 const KNOWN_TIERS: ReadonlySet<AgentAttributionTier> = new Set([
   "hardware",
+  "operator_attested",
   "software",
   "unverified_client",
   "anonymous",
@@ -53,6 +55,13 @@ export interface AgentDirectoryEntry {
   total_records: number;
   /** Per record-type counts. Missing buckets mean zero. */
   record_counts: Partial<Record<RecordActivityType, number>>;
+  /**
+   * Observations grouped by target entity type (join `entities`). Used to
+   * surface feedback (`product_feedback`), governance (`agent_grant`), and
+   * other permissioned or high-signal writers on the Agents directory.
+   * Omitted when empty.
+   */
+  observation_entity_type_counts?: Record<string, number>;
 }
 
 export interface ListAgentsResult {
@@ -76,6 +85,8 @@ interface AgentRow {
   client_name: string | null;
   client_version: string | null;
   attribution_tier: string | null;
+  /** Populated for `observation` rows via `entities` join; otherwise null. */
+  entity_type: string | null;
 }
 
 const AGENT_ROWS_SQL = `
@@ -90,8 +101,10 @@ SELECT
   json_extract(o.provenance, '$.agent_iss') AS agent_iss,
   json_extract(o.provenance, '$.client_name') AS client_name,
   json_extract(o.provenance, '$.client_version') AS client_version,
-  json_extract(o.provenance, '$.attribution_tier') AS attribution_tier
+  json_extract(o.provenance, '$.attribution_tier') AS attribution_tier,
+  e.entity_type AS entity_type
 FROM observations o
+LEFT JOIN entities e ON e.id = o.entity_id
 WHERE o.user_id = ?
 
 UNION ALL
@@ -107,7 +120,8 @@ SELECT
   json_extract(s.provenance, '$.agent_iss'),
   json_extract(s.provenance, '$.client_name'),
   json_extract(s.provenance, '$.client_version'),
-  json_extract(s.provenance, '$.attribution_tier')
+  json_extract(s.provenance, '$.attribution_tier'),
+  CAST(NULL AS TEXT) AS entity_type
 FROM sources s
 WHERE s.user_id = ?
 
@@ -124,7 +138,8 @@ SELECT
   json_extract(te.provenance, '$.agent_iss'),
   json_extract(te.provenance, '$.client_name'),
   json_extract(te.provenance, '$.client_version'),
-  json_extract(te.provenance, '$.attribution_tier')
+  json_extract(te.provenance, '$.attribution_tier'),
+  CAST(NULL AS TEXT) AS entity_type
 FROM timeline_events te
 WHERE te.source_id IN (SELECT id FROM sources WHERE user_id = ?)
 
@@ -141,7 +156,8 @@ SELECT
   json_extract(i.provenance, '$.agent_iss'),
   json_extract(i.provenance, '$.client_name'),
   json_extract(i.provenance, '$.client_version'),
-  json_extract(i.provenance, '$.attribution_tier')
+  json_extract(i.provenance, '$.attribution_tier'),
+  CAST(NULL AS TEXT) AS entity_type
 FROM interpretations i
 WHERE i.user_id = ?
 
@@ -158,7 +174,8 @@ SELECT
   json_extract(ro.provenance, '$.agent_iss'),
   json_extract(ro.provenance, '$.client_name'),
   json_extract(ro.provenance, '$.client_version'),
-  json_extract(ro.provenance, '$.attribution_tier')
+  json_extract(ro.provenance, '$.attribution_tier'),
+  CAST(NULL AS TEXT) AS entity_type
 FROM relationship_observations ro
 WHERE ro.user_id = ?
 `;
@@ -253,6 +270,18 @@ function aggregate(rows: AgentRow[]): Map<string, AgentDirectoryEntry> {
     entry.total_records += 1;
     entry.record_counts[row.record_type] =
       (entry.record_counts[row.record_type] ?? 0) + 1;
+
+    if (row.record_type === "observation") {
+      const et = nonEmpty(row.entity_type);
+      if (et) {
+        if (!entry.observation_entity_type_counts) {
+          entry.observation_entity_type_counts = {};
+        }
+        entry.observation_entity_type_counts[et] =
+          (entry.observation_entity_type_counts[et] ?? 0) + 1;
+      }
+    }
+
     entry.first_seen_at = minIso(entry.first_seen_at, activity);
     entry.last_seen_at = maxIso(entry.last_seen_at, activity);
 
@@ -290,6 +319,12 @@ function aggregate(rows: AgentRow[]): Map<string, AgentDirectoryEntry> {
 
   for (const entry of byKey.values()) {
     delete (entry as { _lastTierActivity?: unknown })._lastTierActivity;
+    if (
+      entry.observation_entity_type_counts &&
+      Object.keys(entry.observation_entity_type_counts).length === 0
+    ) {
+      delete entry.observation_entity_type_counts;
+    }
   }
   return byKey as Map<string, AgentDirectoryEntry>;
 }

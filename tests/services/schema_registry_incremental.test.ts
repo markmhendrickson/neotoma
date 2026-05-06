@@ -373,6 +373,47 @@ describe("SchemaRegistryService - Incremental Updates", () => {
       expect(result).toBeDefined();
     });
 
+    it("uses code-defined baseline when loadActiveSchema returns null", async () => {
+      vi.spyOn(service, "loadActiveSchema").mockResolvedValue(null);
+
+      const mockInsert = createChainableQuery({
+        single: vi.fn().mockResolvedValue({
+          data: {
+            id: "materialized-schema-id",
+            entity_type: "conversation_message",
+            schema_version: "1.3",
+            active: true,
+            schema_definition: { fields: {} },
+            reducer_config: { merge_policies: {} },
+          },
+        }),
+      });
+      const { mockSelect, mockUpdateDeactivate, mockUpdateActivate } =
+        mockActivateCalls();
+
+      mockFrom
+        .mockReturnValueOnce(mockInsert)
+        .mockReturnValueOnce(mockSelect)
+        .mockReturnValueOnce(mockUpdateDeactivate)
+        .mockReturnValueOnce(mockUpdateActivate);
+
+      const result = await service.updateSchemaIncremental({
+        entity_type: "conversation_message",
+        fields_to_add: [
+          { field_name: "raw_fragment_promoted_field", field_type: "string" },
+        ],
+        migrate_existing: false,
+      });
+
+      expect(result.entity_type).toBe("conversation_message");
+      expect(result.schema_version).toBe("1.3");
+      const inserted = mockInsert.insert.mock.calls[0][0];
+      expect(inserted.schema_definition.fields.raw_fragment_promoted_field).toEqual({
+        type: "string",
+        required: false,
+      });
+    });
+
     it("should increment schema version correctly", async () => {
       const currentSchema = {
         id: "schema-id",
@@ -647,15 +688,16 @@ describe("SchemaRegistryService - Incremental Updates", () => {
       });
     });
 
-    it("should throw error if no active schema found", async () => {
+    it("throws when neither registry nor code-defined schema exists", async () => {
       vi.spyOn(service, "loadActiveSchema").mockResolvedValue(null);
 
       await expect(
         service.updateSchemaIncremental({
-          entity_type: "transaction",
+          entity_type: "no_such_builtin_type_xyz",
           fields_to_add: [
             { field_name: "new_field", field_type: "string" },
           ],
+          force: true,
         }),
       ).rejects.toThrow("No active schema found");
     });

@@ -94,9 +94,10 @@ export interface ListTimelineEventsInput {
 
 export interface RetrieveRelatedEntitiesInput {
   entity_id: string;
-  relationship_type?: string;
-  direction?: "outgoing" | "incoming" | "both";
-  limit?: number;
+  relationship_types?: string[];
+  direction?: "inbound" | "outbound" | "both";
+  max_hops?: number;
+  include_entities?: boolean;
 }
 
 /**

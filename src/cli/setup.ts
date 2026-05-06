@@ -9,6 +9,10 @@
  * Read-only guidance stays under `mcp guide` and `cli guide`.
  */
 
+import { existsSync, mkdirSync, symlinkSync, readlinkSync, unlinkSync, readdirSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { homedir } from "node:os";
+import { fileURLToPath } from "node:url";
 import type { ToolId } from "./doctor.js";
 import { runDoctor } from "./doctor.js";
 import { runHooksInstall } from "./hooks.js";
@@ -46,12 +50,106 @@ export interface RunSetupOptions {
   scope?: "project" | "user" | "both";
   /** Skip lifecycle hook/plugin installation. */
   skipHooks?: boolean;
+  /** Skip skills installation into the harness. */
+  skipSkills?: boolean;
+  /** Install skills at project level or user level. */
+  skillsScope?: "project" | "user";
   /** Injected runners to keep setup pure + testable. */
   runners?: {
     init?: () => Promise<SetupStepResult>;
     mcpConfigure?: () => Promise<SetupStepResult>;
     cliInstructionsConfigure?: () => Promise<SetupStepResult>;
     hooksInstall?: () => Promise<SetupStepResult>;
+  };
+}
+
+/**
+ * Map a ToolId to the harness skills directory.
+ * "user" scope uses the home-directory path; "project" uses cwd.
+ */
+function getSkillsTarget(tool: ToolId, cwd: string, scope: "project" | "user"): string | null {
+  const harnessMap: Record<ToolId, { dir: string }> = {
+    cursor:          { dir: ".cursor/skills" },
+    "claude-code":   { dir: ".claude/skills" },
+    "claude-desktop": { dir: ".claude/skills" },
+    codex:           { dir: ".codex/skills" },
+    openclaw:        { dir: ".openclaw/skills" },
+  };
+  const entry = harnessMap[tool];
+  if (!entry) return null;
+  const base = scope === "user" ? homedir() : cwd;
+  return join(base, entry.dir);
+}
+
+/**
+ * Resolve the `skills/` directory from the installed npm package.
+ * Works whether the CLI is running from a global install or a local checkout.
+ */
+function getPublishedSkillsSource(): string {
+  const thisFile = fileURLToPath(import.meta.url);
+  const packageRoot = resolve(dirname(thisFile), "..", "..");
+  return join(packageRoot, "skills");
+}
+
+/**
+ * Symlink each published skill into the harness skills directory.
+ * Idempotent: skips skills that already point to the correct source.
+ */
+function installSkills(tool: ToolId, cwd: string, scope: "project" | "user"): SetupStepResult {
+  const targetDir = getSkillsTarget(tool, cwd, scope);
+  if (!targetDir) {
+    return { id: "skills", ok: true, changed: false, skipped: true, reason: `tool ${tool} has no skills directory` };
+  }
+
+  const sourceDir = getPublishedSkillsSource();
+  if (!existsSync(sourceDir)) {
+    return { id: "skills", ok: true, changed: false, skipped: true, reason: "no published skills directory found" };
+  }
+
+  let entries: string[];
+  try {
+    entries = readdirSync(sourceDir, { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name);
+  } catch {
+    return { id: "skills", ok: false, changed: false, reason: "failed to read skills source directory" };
+  }
+
+  if (entries.length === 0) {
+    return { id: "skills", ok: true, changed: false, skipped: true, reason: "no skills to install" };
+  }
+
+  mkdirSync(targetDir, { recursive: true });
+
+  let changed = false;
+  const installed: string[] = [];
+  for (const name of entries) {
+    const src = join(sourceDir, name);
+    const dst = join(targetDir, name);
+    try {
+      if (existsSync(dst)) {
+        try {
+          const current = readlinkSync(dst);
+          if (resolve(current) === resolve(src)) continue;
+        } catch {
+          // dst exists but is not a symlink — skip to avoid overwriting user content
+          continue;
+        }
+        unlinkSync(dst);
+      }
+      symlinkSync(src, dst, "junction");
+      changed = true;
+      installed.push(name);
+    } catch {
+      // non-fatal: individual skill link failure
+    }
+  }
+
+  return {
+    id: "skills",
+    ok: true,
+    changed,
+    details: { installed, target: targetDir, source: sourceDir },
   };
 }
 
@@ -187,7 +285,18 @@ export async function runSetup(options: RunSetupOptions = {}): Promise<SetupRepo
     }
   }
 
-  // Step 5: permission patches
+  // Step 5: install published skills into the harness
+  if (options.skipSkills) {
+    steps.push({ id: "skills", ok: true, changed: false, skipped: true, reason: "skip-skills" });
+  } else if (!tool) {
+    steps.push({ id: "skills", ok: true, changed: false, skipped: true, reason: "tool not specified" });
+  } else if (dryRun) {
+    steps.push({ id: "skills", ok: true, changed: true, skipped: true, reason: "dry-run" });
+  } else {
+    steps.push(installSkills(tool, cwd, options.skillsScope ?? "user"));
+  }
+
+  // Step 6: permission patches
   const permissionPatches: PermissionPatch[] = [];
   if (tool && !options.skipPermissions && tool !== "openclaw" && tool !== "claude-desktop") {
     // claude-code defaults to "both" so the neotoma wildcard allow lands in

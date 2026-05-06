@@ -67,12 +67,6 @@ import {
   upsertEntitySnapshotWithEmbedding,
 } from "./services/entity_snapshot_embedding.js";
 import { getLatestFromRegistry, isUpdateAvailable, formatUpgradeCommand } from "./version_check.js";
-import {
-  isFeedbackAutoSubmitSuppressed,
-  resolveFeedbackTransport,
-} from "./services/feedback_transport.js";
-import { loadFeedbackReportingMode } from "./services/feedback/activation.js";
-import type { SubmitFeedbackArgs } from "./services/feedback/types.js";
 import { buildSessionInfo } from "./services/session_info.js";
 import { AttributionPolicyError } from "./services/attribution_policy.js";
 import {
@@ -134,9 +128,9 @@ const MCP_INTERACTION_INSTRUCTIONS_COMPACT_BODY_LINES = [
   "",
   "Per-turn QA: before finalizing, self-audit for missing user/assistant stores, missing PART_OF/REFERS_TO/EMBEDS relationships, orphaned entities, missing provenance, ignored ErrorEnvelope, and source extraction mistakes. Repair safe gaps in-turn; otherwise list Issues with immediate meaning, risk if unresolved, and recommended resolution.",
   "",
-  "Product-bug repair escalation: when a Neotoma MCP/API/tooling call fails during compliance or QA repair, classify before stopping. Fix caller payload/procedure issues and retry. If it appears to be a deterministic Neotoma product bug and you are inside the Neotoma source checkout, proactively inspect tool docs, trace code, read canonical docs, add or find focused tests, apply the smallest safe fix, and run targeted validation. Stop and ask before schema migrations, auth/security, foundation docs, architecture/layer-boundary changes, destructive data repair, or ambiguous product design. Outside the repo, submit_feedback with redacted reproduction instead of editing the consumer project.",
+  "Product-bug repair escalation: when a Neotoma MCP/API/tooling call fails during compliance or QA repair, classify before stopping. Fix caller payload/procedure issues and retry. If it appears to be a deterministic Neotoma product bug and you are inside the Neotoma source checkout, proactively inspect tool docs, trace code, read canonical docs, add or find focused tests, apply the smallest safe fix, and run targeted validation. Stop and ask before schema migrations, auth/security, foundation docs, architecture/layer-boundary changes, destructive data repair, or ambiguous product design. Outside the repo, submit_issue with redacted reproduction instead of editing the consumer project.",
   "",
-  "Feedback QA: every Issues item about Neotoma product/tooling/doc/schema-instruction behavior needs either a local fix when operating inside the Neotoma repo, or submit_feedback when outside it. If feedback is skipped because of local fix, consent, waiver, or next_check_suggested_at, show that decision in a Feedback group. Never reveal access_token.",
+  "Issue reporting QA: every Issues item about Neotoma product/tooling/doc/schema-instruction behavior needs either a local fix when operating inside the Neotoma repo, or submit_issue when outside it. If issue filing is skipped because of local fix, consent, waiver, or the issue already exists, show that decision in an Issues group.",
   "",
   "Store retry policy: if **`store`** fails, (1) retry once with the same payload; (2) if it fails again, surface the error to the user before responding; (3) do not silently skip storage.",
   "",
@@ -938,83 +932,128 @@ export class NeotomaServer {
     });
   }
 
-  private async submitFeedback(
-    args: unknown
+  private async handleSubmitIssue(
+    args: unknown,
+    userId: string,
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
-    if (isFeedbackAutoSubmitSuppressed()) {
-      throw new McpError(
-        ErrorCode.InvalidRequest,
-        "Feedback auto-submit is disabled via NEOTOMA_FEEDBACK_AUTO_SUBMIT=0",
-      );
-    }
-
     const schema = z.object({
-      kind: z.enum([
-        "incident",
-        "report",
-        "primitive_ask",
-        "doc_gap",
-        "contract_discrepancy",
-        "fix_verification",
-      ]),
       title: z.string().min(1),
       body: z.string().min(1),
-      metadata: z.record(z.any()).optional(),
-      user_consent_captured: z.boolean().optional(),
-      explicit_user_request: z.boolean().optional(),
-      prefer_human_draft: z.boolean().optional(),
-      status_push: z
-        .object({ webhook_url: z.string(), webhook_secret: z.string().optional() })
-        .optional(),
-      parent_feedback_id: z.string().optional(),
-      verification_outcome: z
-        .enum([
-          "verified_working",
-          "verified_working_with_caveat",
-          "unable_to_verify",
-          "verification_failed",
-        ])
-        .optional(),
-      verified_at_version: z.string().optional(),
-      routing_hint: z.enum(["auto", "reopen_parent", "new_child"]).optional(),
+      labels: z.array(z.string()).optional(),
+      visibility: z.enum(["public", "private", "advisory"]).optional(),
     });
-    const parsed = schema.parse(args ?? {}) as SubmitFeedbackArgs;
-    const mode = await loadFeedbackReportingMode();
-    if (mode === "off" && !parsed.explicit_user_request) {
-      throw new McpError(
-        ErrorCode.InvalidRequest,
-        "feedback reporting mode is off; only explicit_user_request=true submissions are accepted",
-      );
-    }
-    if (mode === "consent" && !parsed.user_consent_captured && !parsed.explicit_user_request) {
-      throw new McpError(
-        ErrorCode.InvalidRequest,
-        "feedback reporting mode is consent; set user_consent_captured=true or explicit_user_request=true",
-      );
-    }
-    const transport = resolveFeedbackTransport();
-    const submitterId = this.authenticatedUserId ?? "anonymous";
-    try {
-      const response = await transport.submit(parsed, submitterId);
-      return this.buildTextResponse(response);
-    } catch (err: any) {
-      throw new McpError(ErrorCode.InternalError, `submit_feedback failed: ${err?.message ?? err}`);
-    }
-  }
-
-  private async getFeedbackStatus(
-    args: unknown
-  ): Promise<{ content: Array<{ type: string; text: string }> }> {
-    const schema = z.object({ access_token: z.string().min(1) });
     const parsed = schema.parse(args ?? {});
-    const transport = resolveFeedbackTransport();
+
+    const visibility = parsed.visibility === "advisory" ? "private" : (parsed.visibility ?? "public");
+
+    const { submitIssue } = await import("./services/issues/issue_operations.js");
+    const { createOperations } = await import("./core/operations.js");
+    const ops = createOperations({ server: this, userId });
+
     try {
-      const response = await transport.status(parsed.access_token);
+      const result = await submitIssue(ops, {
+        title: parsed.title,
+        body: parsed.body,
+        labels: parsed.labels,
+        visibility,
+      });
+
+      const response: Record<string, unknown> = { ...result };
+      if (parsed.visibility === "advisory") {
+        response._deprecation = "visibility 'advisory' is deprecated; use 'private' instead.";
+      }
+
       return this.buildTextResponse(response);
     } catch (err: any) {
       throw new McpError(
         ErrorCode.InternalError,
-        `get_feedback_status failed: ${err?.message ?? err}`,
+        `submit_issue failed: ${err?.message ?? err}`,
+      );
+    }
+  }
+
+  private async handleAddIssueMessage(
+    args: unknown,
+    userId: string,
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const schema = z.object({
+      issue_number: z.number().int().positive(),
+      body: z.string().min(1),
+    });
+    const parsed = schema.parse(args ?? {});
+
+    const { addIssueMessage } = await import("./services/issues/issue_operations.js");
+    const { createOperations } = await import("./core/operations.js");
+    const ops = createOperations({ server: this, userId });
+
+    try {
+      const result = await addIssueMessage(ops, {
+        issue_number: parsed.issue_number,
+        body: parsed.body,
+      });
+      return this.buildTextResponse(result);
+    } catch (err: any) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `add_issue_message failed: ${err?.message ?? err}`,
+      );
+    }
+  }
+
+  private async handleGetIssueStatus(
+    args: unknown,
+    userId: string,
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const schema = z.object({
+      issue_number: z.number().int().positive(),
+      skip_sync: z.boolean().optional(),
+    });
+    const parsed = schema.parse(args ?? {});
+
+    const { getIssueStatus } = await import("./services/issues/issue_operations.js");
+    const { createOperations } = await import("./core/operations.js");
+    const ops = createOperations({ server: this, userId });
+
+    try {
+      const result = await getIssueStatus(ops, {
+        issue_number: parsed.issue_number,
+        skip_sync: parsed.skip_sync,
+      });
+      return this.buildTextResponse(result);
+    } catch (err: any) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `get_issue_status failed: ${err?.message ?? err}`,
+      );
+    }
+  }
+
+  private async handleSyncIssues(
+    args: unknown,
+    userId: string,
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const schema = z.object({
+      state: z.enum(["open", "closed", "all"]).optional(),
+      labels: z.array(z.string()).optional(),
+      since: z.string().optional(),
+    });
+    const parsed = schema.parse(args ?? {});
+
+    const { syncIssuesFromGitHub } = await import("./services/issues/sync.js");
+    const { createOperations } = await import("./core/operations.js");
+    const ops = createOperations({ server: this, userId });
+
+    try {
+      const result = await syncIssuesFromGitHub(ops, {
+        state: parsed.state,
+        labels: parsed.labels,
+        since: parsed.since,
+      });
+      return this.buildTextResponse(result);
+    } catch (err: any) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `sync_issues failed: ${err?.message ?? err}`,
       );
     }
   }
@@ -1305,10 +1344,14 @@ export class NeotomaServer {
         return await this.listRecentChanges(args);
       case "npm_check_update":
         return await this.npmCheckUpdate(args);
-      case "submit_feedback":
-        return await this.submitFeedback(args);
-      case "get_feedback_status":
-        return await this.getFeedbackStatus(args);
+      case "submit_issue":
+        return await this.handleSubmitIssue(args, this.getAuthenticatedUserId());
+      case "add_issue_message":
+        return await this.handleAddIssueMessage(args, this.getAuthenticatedUserId());
+      case "get_issue_status":
+        return await this.handleGetIssueStatus(args, this.getAuthenticatedUserId());
+      case "sync_issues":
+        return await this.handleSyncIssues(args, this.getAuthenticatedUserId());
       default:
         throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
     }

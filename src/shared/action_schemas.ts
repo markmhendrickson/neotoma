@@ -121,7 +121,14 @@ export const TimelineEventsRequestSchema = z.object({
 });
 
 const EntityQuerySortBySchema = z
-  .enum(["entity_id", "canonical_name", "observation_count", "last_observation_at"])
+  .enum([
+    "entity_id",
+    "canonical_name",
+    "observation_count",
+    "last_observation_at",
+    /** ISO string at `snapshot.created_at` (e.g. GitHub issue opened / submitted time). */
+    "submitted_at",
+  ])
   .optional()
   .default("entity_id");
 const EntityQuerySortOrderSchema = z.enum(["asc", "desc"]).optional().default("asc");
@@ -129,7 +136,12 @@ const EntityQuerySortOrderSchema = z.enum(["asc", "desc"]).optional().default("a
 function validateEntityQueryCombinations(
   value: {
     search?: string;
-    sort_by?: "entity_id" | "canonical_name" | "observation_count" | "last_observation_at";
+    sort_by?:
+      | "entity_id"
+      | "canonical_name"
+      | "observation_count"
+      | "last_observation_at"
+      | "submitted_at";
     sort_order?: "asc" | "desc";
     published?: boolean;
     published_after?: string;
@@ -337,6 +349,19 @@ export const StoreUnstructuredRequestSchema = z.object({
   user_id: z.string().optional(),
 });
 
+export const ExternalActorInputSchema = z.object({
+  provider: z.literal("github"),
+  login: z.string().min(1),
+  id: z.number(),
+  type: z.enum(["User", "Bot", "Organization"]).optional().default("User"),
+  verified_via: z.enum(["claim", "linked_attestation", "oauth_link", "webhook_signature"]).optional().default("claim"),
+  delivery_id: z.string().optional(),
+  event_type: z.string().optional(),
+  repository: z.string().optional(),
+  event_id: z.number().optional(),
+  comment_id: z.number().optional(),
+}).strict();
+
 export const StoreRequestSchema = z
   .object({
     user_id: z.string().optional(),
@@ -347,6 +372,7 @@ export const StoreRequestSchema = z
     interpretation: StoreInterpretationInputSchema.optional(),
     source_priority: z.number().optional().default(100),
     observation_source: ObservationSourceSchema.optional(),
+    external_actor: ExternalActorInputSchema.optional(),
     idempotency_key: z.string().min(1).optional(),
     file_idempotency_key: z.string().min(1).optional(),
     file_content: z.string().optional(),
@@ -557,4 +583,10 @@ export const RegisterSchemaRequestSchema = z.object({
   user_id: z.string().optional(),
   activate: z.boolean().default(false),
   force: z.boolean().default(false),
+});
+
+/** Bulk inspector actions on `issue` entities (close on GitHub when linked, then persist / delete). */
+export const IssuesBulkEntityIdsRequestSchema = z.object({
+  entity_ids: z.array(z.string().min(1)).min(1).max(100),
+  user_id: z.string().optional(),
 });

@@ -190,7 +190,7 @@ export function DocsSidebar({ siteName: _siteName, belowHeader }: DocsSidebarPro
                           {BrandIcon ? (
                             <BrandIcon className="size-4 shrink-0" aria-hidden />
                           ) : Icon ? (
-                            <Icon aria-hidden />
+                            <Icon className="size-4 shrink-0" aria-hidden />
                           ) : null}
                           <span>{item.label}</span>
                         </Link>

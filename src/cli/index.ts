@@ -8610,38 +8610,136 @@ grantsCommand
     }
   });
 
-const feedbackCommand = program
+program
   .command("feedback")
-  .description("Agent-feedback pipeline preferences (reporting mode, activation state)");
+  .description("[DEPRECATED: Use `neotoma issues config` instead]")
+  .allowUnknownOption(true)
+  .action(async () => {
+    console.error("Error: `neotoma feedback` has been removed. Use `neotoma issues config --mode <value>` instead.");
+    process.exit(1);
+  });
 
-feedbackCommand
-  .command("mode [value]")
-  .description(
-    "Show or set the feedback reporting mode (proactive | consent | off). Default is proactive.",
-  )
-  .action(async (value) => {
-    const outputMode = resolveOutputMode();
-    const {
-      loadFeedbackReportingMode,
-      setFeedbackReportingMode,
-      describeModes,
-      DEFAULT_FEEDBACK_REPORTING_MODE,
-    } = await import("../services/feedback/activation.js");
-    if (!value) {
-      const current = await loadFeedbackReportingMode();
-      if (outputMode === "json") {
-        writeOutput({ mode: current, default: DEFAULT_FEEDBACK_REPORTING_MODE }, outputMode);
-      } else {
-        process.stdout.write(`Current feedback reporting mode: ${current}\n\n${describeModes()}\n`);
-      }
-      return;
-    }
-    await setFeedbackReportingMode(value as "proactive" | "consent" | "off");
-    if (outputMode === "json") {
-      writeOutput({ ok: true, mode: value }, outputMode);
-    } else {
-      process.stdout.write(`Feedback reporting mode set to: ${value}\n`);
-    }
+// ─── Access policy commands ───────────────────────────────────────────────
+const accessCommand = program
+  .command("access")
+  .description("Configure per-entity-type access policies for guest agents.");
+
+accessCommand
+  .command("set <entity_type> <mode>")
+  .description("Set access policy for an entity type (closed, read_only, submit_only, submitter_scoped, open)")
+  .action(async (entityType, mode) => {
+    const { accessSet } = await import("./access.js");
+    await accessSet(entityType, mode, { json: Boolean((program.opts() as { json?: boolean }).json) });
+  });
+
+accessCommand
+  .command("list")
+  .description("Show all configured access policies")
+  .action(async () => {
+    const { accessList } = await import("./access.js");
+    await accessList({ json: Boolean((program.opts() as { json?: boolean }).json) });
+  });
+
+accessCommand
+  .command("reset <entity_type>")
+  .description("Reset an entity type's access policy to default (closed)")
+  .action(async (entityType) => {
+    const { accessReset } = await import("./access.js");
+    await accessReset(entityType, { json: Boolean((program.opts() as { json?: boolean }).json) });
+  });
+
+accessCommand
+  .command("enable-issues")
+  .description("Set issue, conversation, conversation_message to submitter_scoped")
+  .action(async () => {
+    const { accessEnableIssues } = await import("./access.js");
+    await accessEnableIssues({ json: Boolean((program.opts() as { json?: boolean }).json) });
+  });
+
+accessCommand
+  .command("disable-issues")
+  .description("Reset issue, conversation, conversation_message to closed")
+  .action(async () => {
+    const { accessDisableIssues } = await import("./access.js");
+    await accessDisableIssues({ json: Boolean((program.opts() as { json?: boolean }).json) });
+  });
+
+// ─── Issues commands ───────────────────────────────────────────────────────
+const issuesCommand = program
+  .command("issues")
+  .description("GitHub Issues integration: create, message, list, sync, and configure.");
+
+issuesCommand
+  .command("create")
+  .description("Create a new GitHub issue")
+  .requiredOption("--title <title>", "Issue title")
+  .requiredOption("--body <body>", "Issue body (markdown)")
+  .option("--labels <labels>", "Comma-separated labels (e.g. bug,doc_gap)")
+  .option("--advisory", "Create as a private Security Advisory instead of a public issue")
+  .action(async (opts) => {
+    const { issuesCreate } = await import("./issues.js");
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({ baseUrl: await resolveBaseUrl(program.opts().baseUrl, config), token });
+    await issuesCreate({ ...opts, json: Boolean((program.opts() as { json?: boolean }).json) }, api);
+  });
+
+issuesCommand
+  .command("message <number>")
+  .description("Add a message to an existing issue")
+  .requiredOption("--body <body>", "Message body (markdown)")
+  .action(async (number, opts) => {
+    const { issuesMessage } = await import("./issues.js");
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({ baseUrl: await resolveBaseUrl(program.opts().baseUrl, config), token });
+    await issuesMessage(parseInt(number, 10), { ...opts, json: Boolean((program.opts() as { json?: boolean }).json) }, api);
+  });
+
+issuesCommand
+  .command("list")
+  .description("List issues from the configured GitHub repo")
+  .option("--status <status>", "Filter by status: open, closed, all", "open")
+  .option("--labels <labels>", "Filter by comma-separated labels")
+  .option("--since <date>", "Only show issues updated after this ISO date")
+  .option("--no-sync", "Skip implicit sync from GitHub")
+  .action(async (opts) => {
+    const { issuesList } = await import("./issues.js");
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({ baseUrl: await resolveBaseUrl(program.opts().baseUrl, config), token });
+    await issuesList({ ...opts, json: Boolean((program.opts() as { json?: boolean }).json) }, api);
+  });
+
+issuesCommand
+  .command("sync")
+  .description("Full sync of issues from GitHub into local Neotoma")
+  .option("--since <date>", "Only sync issues updated after this ISO date")
+  .option("--state <state>", "Filter by state: open, closed, all", "all")
+  .action(async (opts) => {
+    const { issuesSync } = await import("./issues.js");
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({ baseUrl: await resolveBaseUrl(program.opts().baseUrl, config), token });
+    await issuesSync({ ...opts, json: Boolean((program.opts() as { json?: boolean }).json) }, api);
+  });
+
+issuesCommand
+  .command("config")
+  .description("View or update issues configuration")
+  .option("--repo <owner/repo>", "Set the target GitHub repo")
+  .option("--mode <mode>", "Set reporting mode: proactive, consent, off")
+  .action(async (opts) => {
+    const { issuesConfig } = await import("./issues.js");
+    await issuesConfig({ ...opts, json: Boolean((program.opts() as { json?: boolean }).json) });
+  });
+
+issuesCommand
+  .command("auth")
+  .description("Set up GitHub authentication via gh CLI")
+  .action(async () => {
+    const { issuesAuth } = await import("./issues.js");
+    await issuesAuth({ json: Boolean((program.opts() as { json?: boolean }).json) });
   });
 
 const inspectorCommand = program.command("inspector").description("Inspector helper commands");
@@ -8772,44 +8870,12 @@ inspectorAdminCommand
 program
   .command("triage")
   .description(
-    "Triage the agent-feedback pipeline: run the ingest pass, list pending items, update status, or mark resolved. Respects NEOTOMA_FEEDBACK_TRANSPORT / AGENT_SITE_BASE_URL."
+    "[DEPRECATED: Use `neotoma issues list` and GitHub issue management instead]"
   )
-  .option("--watch", "Continuously run the ingest pass every 15 minutes")
-  .option("--remote", "Force HTTP transport even if AGENT_SITE_BASE_URL is unset (requires env)")
-  .option("--list-pending", "List pending feedback items (use --json for machine-readable output)")
-  .option("--health", "Print classification rate and status counts")
-  .option("--set-status <status>", "Set the status of a feedback item (requires --feedback-id)")
-  .option("--feedback-id <id>", "Feedback id to update")
-  .option("--classification <label>", "Classification label to set alongside --set-status")
-  .option("--triage-notes <text>", "Notes recorded on the feedback")
-  .option("--issue-url <url>", "Append a GitHub issue URL to resolution_links")
-  .option("--pr-url <url>", "Append a pull-request URL to resolution_links")
-  .option("--commit-sha <sha>", "Append a commit SHA to resolution_links")
-  .option("--resolve <feedback-id>", "Mark a feedback item as resolved")
-  .option("--dry-run", "When combined with the default ingest pass, print decisions only")
-  .option(
-    "--mirror-replay <feedback-id>",
-    "Force an immediate Neotoma mirror replay (agent.neotoma.io admin endpoint). Requires AGENT_SITE_BASE_URL + AGENT_SITE_ADMIN_BEARER.",
-  )
-  .action(async (opts) => {
-    const { runTriage } = await import("./triage.js");
-    await runTriage({
-      watch: Boolean(opts.watch),
-      remote: Boolean(opts.remote),
-      listPending: Boolean(opts.listPending),
-      json: Boolean((program.opts() as { json?: boolean }).json),
-      health: Boolean(opts.health),
-      setStatus: opts.setStatus,
-      feedbackId: opts.feedbackId,
-      classification: opts.classification,
-      triageNotes: opts.triageNotes,
-      issueUrl: opts.issueUrl,
-      prUrl: opts.prUrl,
-      commitSha: opts.commitSha,
-      resolve: opts.resolve,
-      dryRun: Boolean(opts.dryRun),
-      mirrorReplay: opts.mirrorReplay,
-    });
+  .allowUnknownOption(true)
+  .action(async () => {
+    console.error("Error: `neotoma triage` has been removed. Use `neotoma issues list` instead.");
+    process.exit(1);
   });
 
 program
@@ -8846,6 +8912,8 @@ program
   .option("--dry-run", "Plan the setup without writing files", false)
   .option("--yes", "Assume yes for prompts", false)
   .option("--skip-permissions", "Skip permission-file writes", false)
+  .option("--skip-skills", "Skip skills installation into the harness", false)
+  .option("--skills-scope <scope>", "Install skills at project or user level (default: user)", "user")
   .action(async (opts) => {
     const outputMode = resolveOutputMode();
     const mcpTransport = normalizeInitMcpTransport(opts.mcpTransport);
@@ -8869,6 +8937,8 @@ program
       yes: Boolean(opts.yes),
       skipPermissions: Boolean(opts.skipPermissions),
       skipHooks: Boolean(opts.skipHooks),
+      skipSkills: Boolean(opts.skipSkills),
+      skillsScope: opts.skillsScope === "project" ? "project" : "user",
       scope: opts.scope ?? "project",
       cwd,
       runners: createDefaultSetupRunners({

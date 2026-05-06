@@ -131,6 +131,25 @@ shell introspection to confirm state.
 - Do NOT `open` URLs, documentation, or application packages on the user's
   machine to verify state.
 
+### Available skills
+
+After install and setup, skills provide guided activation workflows. Each skill handles a specific data import pattern. Ask your agent to run any skill by name, or run `ensure-neotoma` to bootstrap everything.
+
+| Skill | Description |
+|-------|-------------|
+| `ensure-neotoma` | Install Neotoma, configure MCP, verify connectivity. Prereq for all others. |
+| `remember-email` | Import emails, extract contacts, tasks, events, transactions. |
+| `remember-conversations` | Import ChatGPT/Claude/Slack exports, reconstruct timeline. |
+| `remember-meetings` | Ingest transcripts, extract decisions and action items. |
+| `remember-finances` | Import statements, receipts, invoices. |
+| `remember-contacts` | Consolidate contacts from multiple sources. |
+| `remember-calendar` | Import calendar events and commitments. |
+| `remember-codebase` | Developer repo integration and MCP wiring. |
+| `store-data` | Generic: persist any structured data. |
+| `query-memory` | Generic: retrieve from memory. |
+
+Skills ship with the npm package and are installed by `neotoma setup`. [Full catalog →](https://neotoma.io/skills)
+
 ### Phase 3: Activation
 
 Activation is the first successful Neotoma-backed workflow: the user sees value from their own data and can continue with structure, provenance, and correction. If data evaluation was not completed during Phase 1, begin by determining what should be stored first.

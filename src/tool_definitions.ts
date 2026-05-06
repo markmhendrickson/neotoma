@@ -894,106 +894,99 @@ export function buildToolDefinitions(
       annotations: { readOnlyHint: true },
     },
     {
-      name: "submit_feedback",
+      name: "submit_issue",
       description: desc(
-        "submit_feedback",
-        "Submit feedback about Neotoma (incident, report, primitive_ask, doc_gap, contract_discrepancy) or a fix_verification for a prior feedback. " +
-          "PII in `title`/`body`/`metadata.environment.error_message` MUST be redacted or altered before submission; the server applies a backstop redaction pass with hash-stable placeholders. " +
-          "`metadata.environment` MUST include `neotoma_version`, `client_name`, and `os`; include `tool_name`, `error_class`, `error_message`, `invocation_shape` when applicable (error_class and hit_count are best-effort). " +
-          "Returns `feedback_id`, a single-purpose `access_token` for polling, and `next_check_suggested_at`. Do not share or log the access_token beyond the originating agent context.",
+        "submit_issue",
+        "Submit an issue to the operator's Neotoma instance (canonical store). " +
+          "For public issues, optionally publishes to GitHub first for discoverability. " +
+          "For private issues, stays within Neotoma only (never touches GitHub). " +
+          "Creates a local `issue` entity + associated conversation for tracking. " +
+          "Submits to the operator Neotoma instance (default base URL when unset: https://neotoma.markmhendrickson.com). Override with NEOTOMA_ISSUES_TARGET_URL or issues.target_url in config. " +
+          "When a non-empty target URL is configured, the tool fails (MCP error) if that remote store is unreachable or rejects the request; a local row with sync_pending may still be written first. " +
+          "When `pushed_to_github` is false for a public issue, read `github_mirror_guidance` for recommended auth + manual GitHub create + entity update steps.",
       ),
       inputSchema: {
         type: "object",
         properties: {
-          kind: {
+          title: { type: "string", description: "Issue title." },
+          body: { type: "string", description: "Issue body in markdown." },
+          labels: {
+            type: "array",
+            items: { type: "string" },
+            description: "Labels to apply (e.g. bug, doc_gap, enhancement).",
+          },
+          visibility: {
             type: "string",
-            enum: [
-              "incident",
-              "report",
-              "primitive_ask",
-              "doc_gap",
-              "contract_discrepancy",
-              "fix_verification",
-            ],
-            description:
-              "Category of feedback. Use `fix_verification` to attest the outcome of a previously resolved feedback (requires parent_feedback_id, verification_outcome, verified_at_version).",
-          },
-          title: { type: "string", description: "Short human-readable title (PII-redacted)." },
-          body: {
-            type: "string",
-            description:
-              "Detailed description in markdown (PII-redacted). Include reproduction steps, expected vs actual behavior.",
-          },
-          metadata: {
-            type: "object",
-            description:
-              "Structured context. `environment` is required with at minimum { neotoma_version, client_name, os }.",
-          },
-          user_consent_captured: { type: "boolean" },
-          explicit_user_request: { type: "boolean" },
-          prefer_human_draft: {
-            type: "boolean",
-            description:
-              "Opt in to human-authored fixes instead of auto-PR drafts (used by auto-PR rollout gates).",
-          },
-          status_push: {
-            type: "object",
-            description:
-              "Opt in to a push notification when `min_version_including_fix` is assigned. Server POSTs the full status to webhook_url, signed with webhook_secret (HMAC-SHA256) when provided.",
-            properties: {
-              webhook_url: { type: "string" },
-              webhook_secret: { type: "string" },
-            },
-            required: ["webhook_url"],
-          },
-          parent_feedback_id: {
-            type: "string",
-            description: "Required when kind=fix_verification.",
-          },
-          verification_outcome: {
-            type: "string",
-            enum: [
-              "verified_working",
-              "verified_working_with_caveat",
-              "unable_to_verify",
-              "verification_failed",
-            ],
-            description: "Required when kind=fix_verification.",
-          },
-          verified_at_version: {
-            type: "string",
-            description: "Required when kind=fix_verification. Version string tested against.",
-          },
-          routing_hint: {
-            type: "string",
-            enum: ["auto", "reopen_parent", "new_child"],
-            description:
-              "For verification_failed submissions: override server routing heuristic. Default `auto`.",
+            enum: ["public", "private"],
+            description: "Use 'private' for PII-sensitive issues (Neotoma only, no GitHub). 'advisory' is accepted as a deprecated alias for 'private'. Default: 'public'.",
           },
         },
-        required: ["kind", "title", "body"],
+        required: ["title", "body"],
       },
     },
     {
-      name: "get_feedback_status",
+      name: "add_issue_message",
       description: desc(
-        "get_feedback_status",
-        "Poll the status of a previously submitted feedback using its `access_token`. " +
-          "Respect `next_check_suggested_at` — do not poll more frequently. " +
-          "When a fix ships, the response includes `upgrade_guidance` with install commands, verification steps, and optionally a `verification_request` asking the agent to submit a `fix_verification` feedback.",
+        "add_issue_message",
+        "Add a message to an existing issue thread. Submits to the configured operator Neotoma instance first, creates a conversation_message locally, and may push a GitHub comment. " +
+          "Fails with an MCP error if the remote Neotoma store is required (non-empty target URL) but unreachable or rejects the request.",
       ),
       inputSchema: {
         type: "object",
         properties: {
-          access_token: {
-            type: "string",
-            description:
-              "The single-purpose access token returned by submit_feedback. Sufficient for reads — no additional auth required.",
+          issue_number: { type: "number", description: "GitHub issue number." },
+          body: { type: "string", description: "Message body in markdown." },
+        },
+        required: ["issue_number", "body"],
+      },
+    },
+    {
+      name: "get_issue_status",
+      description: desc(
+        "get_issue_status",
+        "Get the current status of an issue including its conversation messages. " +
+          "Implicitly syncs from GitHub if local data is stale (>5min). Pass skip_sync=true to bypass.",
+      ),
+      inputSchema: {
+        type: "object",
+        properties: {
+          issue_number: { type: "number", description: "GitHub issue number." },
+          skip_sync: {
+            type: "boolean",
+            description: "Skip implicit sync from GitHub (use cached local data only).",
           },
         },
-        required: ["access_token"],
+        required: ["issue_number"],
       },
       annotations: { readOnlyHint: true },
+    },
+    {
+      name: "sync_issues",
+      description: desc(
+        "sync_issues",
+        "Full sync of issues from the configured GitHub repo into local Neotoma. " +
+          "Pulls all issues and their messages, creating/updating local entities. " +
+          "Supports filtering by state, labels, and since date.",
+      ),
+      inputSchema: {
+        type: "object",
+        properties: {
+          state: {
+            type: "string",
+            enum: ["open", "closed", "all"],
+            description: "Filter by issue state. Default: 'all'.",
+          },
+          labels: {
+            type: "array",
+            items: { type: "string" },
+            description: "Filter by labels.",
+          },
+          since: {
+            type: "string",
+            description: "Only sync issues updated after this ISO date.",
+          },
+        },
+      },
     },
     {
       name: "npm_check_update",
@@ -1063,8 +1056,10 @@ export const NEOTOMA_TOOL_NAMES = [
   "get_session_identity",
   "health_check_snapshots",
   "list_recent_changes",
-  "submit_feedback",
-  "get_feedback_status",
+  "submit_issue",
+  "add_issue_message",
+  "get_issue_status",
+  "sync_issues",
   "npm_check_update",
 ] as const;
 

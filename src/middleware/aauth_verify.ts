@@ -184,11 +184,20 @@ function serialisePublicKey(publicKey: unknown): string | undefined {
  * - Enforce `exp` if present; ignore otherwise.
  * - Surface `sub` / `iss` for attribution.
  */
+/** Shape of a single external actor claim from the agent_token. */
+export interface ExternalActorTokenClaim {
+  provider: string;
+  id: number;
+  login: string;
+  linked_at?: string;
+}
+
 function validateAgentTokenJwt(raw: string | undefined): {
   sub?: string;
   iss?: string;
   iat?: number;
   attestation?: AttestationEnvelope;
+  externalActorClaims?: ExternalActorTokenClaim[];
   valid: boolean;
   reason?: string;
 } {
@@ -214,12 +223,27 @@ function validateAgentTokenJwt(raw: string | undefined): {
         attestation = candidate as AttestationEnvelope;
       }
     }
+
+    let externalActorClaims: ExternalActorTokenClaim[] | undefined;
+    const extActors = (payload as Record<string, unknown>)["https://neotoma.io/external_actors"];
+    if (Array.isArray(extActors)) {
+      externalActorClaims = extActors.filter(
+        (entry): entry is ExternalActorTokenClaim =>
+          entry != null &&
+          typeof entry === "object" &&
+          typeof (entry as Record<string, unknown>).provider === "string" &&
+          typeof (entry as Record<string, unknown>).id === "number" &&
+          typeof (entry as Record<string, unknown>).login === "string",
+      );
+    }
+
     return {
       valid: true,
       sub: typeof payload.sub === "string" ? payload.sub : undefined,
       iss: typeof payload.iss === "string" ? payload.iss : undefined,
       iat: typeof payload.iat === "number" ? payload.iat : undefined,
       attestation,
+      externalActorClaims: externalActorClaims?.length ? externalActorClaims : undefined,
     };
   } catch (error) {
     return {
@@ -450,12 +474,18 @@ export function aauthVerify(options: AAuthVerifyOptions) {
         iss = jwtCheck.iss;
         iat = jwtCheck.iat;
         attestationEnvelope = jwtCheck.attestation;
+        if (jwtCheck.externalActorClaims?.length) {
+          (req as Request & { _externalActorClaims?: ExternalActorTokenClaim[] })._externalActorClaims =
+            jwtCheck.externalActorClaims;
+        }
       }
 
       const algorithm =
         typeof (result.publicKey as { alg?: string })?.alg === "string"
           ? (result.publicKey as { alg?: string }).alg
           : undefined;
+      const externalActorClaims =
+        (req as Request & { _externalActorClaims?: ExternalActorTokenClaim[] })._externalActorClaims;
       const ctx: AAuthRequestContext = {
         verified: true,
         publicKey: serialisePublicKey(result.publicKey),
@@ -463,6 +493,7 @@ export function aauthVerify(options: AAuthVerifyOptions) {
         algorithm,
         sub,
         iss,
+        ...(externalActorClaims?.length ? { externalActorClaims } : {}),
       };
 
       if (labelClaimsStrictSub) {

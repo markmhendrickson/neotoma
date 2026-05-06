@@ -147,7 +147,17 @@ After user confirms, run **every** step below in order through **npm publish and
    From the directory that owns the published `package.json` (repo or workspace root per your monorepo layout):
 
    - **Registry auth:** If `npm publish` fails for auth or the session is stale, run `npm login` in an interactive terminal when needed.
-   - **Web login URL (agent-assisted):** When `npm login` prints `Login at: https://www.npmjs.com/login?...`, an agent with shell access may parse that URL from the CLI or terminal transcript and run `open '<url>'` on macOS or `xdg-open '<url>'` on Linux so the default browser loads the same page pressing Enter would open. **Only** use URLs that clearly come from official `npm` output for `registry.npmjs.org` / `npmjs.com`; prefer explicit user confirmation before opening browser or running `open`/`xdg-open`. After sign-in completes in the browser, return to the terminal and continue the release (including OTP if 2FA prompts for `npm publish --otp=...`).
+   - **Web login URL (agent-assisted):** When `npm login` prints `Login at: https://www.npmjs.com/login?...`, an agent with shell access may parse that URL from the CLI or terminal transcript and run `open '<url>'` on macOS or `xdg-open '<url>'` on Linux so the default browser loads the same page pressing Enter would open. **Only** use URLs that clearly come from official `npm` output for `registry.npmjs.org` / `npmjs.com`; prefer explicit user confirmation before opening browser or running `open`/`xdg-open`.
+
+   **npm web-login checkpoint (mandatory — do not skip):** Browser sign-in does **not** prove the same shell that will run `npm publish` has a valid token. After any web-login assist **or** when the user says they finished signing in:
+
+   1. **Immediately** run `npm whoami` in the **same** environment you use for `npm publish` (same repo root, same `HOME` / `~/.npmrc`).
+   2. **If `npm whoami` succeeds:** State clearly that the session is authenticated, then run `npm publish` (and `npm publish --otp=<code>` when 2FA applies). Do not advance to sandbox until publish and registry verification succeed.
+   3. **If `npm whoami` still fails (`E401` / unauthorized) or `npm login` exited before completing (for example npm printed `Exit handler never called`):** You **must** end the user-visible turn with an explicit handoff that includes all of the following — do not assume the user knows the next step:
+      - Explain that the browser login authorized the **browser**, not necessarily the **agent shell** (or that the CLI session aborted before writing a token).
+      - Give **copy-paste** commands for the operator to finish auth where `npm publish` will run (their own Terminal with the repo as cwd, or fixing `~/.npmrc` / `NPM_TOKEN` for CI-style shells).
+      - Ask them to reply **`ready`** (or confirm they ran `npm publish` locally and the registry shows `X.Y.Z`) so the next turn **retries `npm whoami` then `npm publish` immediately** without waiting for another vague ping.
+   4. **If the user message is only “I signed in” / “done” in the browser:** Treat that as a signal to run the checkpoint (step 1), not as permission to end the release thread without step 2 or step 3 text above.
 
    ```bash
    npm publish
@@ -222,3 +232,4 @@ If the user says `/release foundation` (or another submodule name):
 - Using only `git log --oneline` as the GitHub Release body
 - Ending execute after the GitHub Release without **`npm publish`** when the user confirmed a normal (npm-included) release
 - Ending execute after **`npm publish`** without deploying and verifying `sandbox.neotoma.io` when the user confirmed a normal sandbox-included release
+- Ending the execute turn right after npm web-login / “I signed in” **without** running the **npm web-login checkpoint** (`npm whoami` → publish or explicit `ready` handoff with copy-paste commands)

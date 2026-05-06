@@ -36,6 +36,7 @@ export interface EntitySchemaMetadata {
     | "agent_runtime";
   aliases?: string[];
   primaryProperties?: string[]; // Optional: can derive from required fields
+  guest_access_policy?: "closed" | "read_only" | "submit_only" | "submitter_scoped" | "open";
 }
 
 export interface EntitySchema {
@@ -906,6 +907,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       description: "Chat conversation container entity.",
       category: "knowledge",
       aliases: ["chat_conversation", "thread"],
+      guest_access_policy: "submitter_scoped",
     },
     schema_definition: {
       fields: {
@@ -965,6 +967,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         "One turn in a conversation. Sender may be a human user, an assistant, another agent, a system, or a tool; see sender_kind. Phase 2 (2026-04) renamed the canonical entity_type from `agent_message`; `agent_message` remains an alias for backward compatibility.",
       category: "knowledge",
       aliases: ["agent_message", "chat_message"],
+      guest_access_policy: "submitter_scoped",
     },
     schema_definition: {
       fields: {
@@ -2506,6 +2509,9 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         notes: { type: "string", required: false },
         last_used_at: { type: "date", required: false },
         import_source: { type: "string", required: false },
+        linked_github_login: { type: "string", required: false },
+        linked_github_user_id: { type: "number", required: false },
+        linked_github_verified_at: { type: "date", required: false },
       },
       // Identity rules: thumbprint pin wins (rotated JWT issuer cannot
       // quietly replace the grant); otherwise a (sub, iss) composite; else
@@ -2529,6 +2535,9 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         match_iss: { strategy: "last_write" },
         match_thumbprint: { strategy: "last_write" },
         import_source: { strategy: "last_write" },
+        linked_github_login: { strategy: "last_write" },
+        linked_github_user_id: { strategy: "last_write" },
+        linked_github_verified_at: { strategy: "last_write" },
       },
     },
   },

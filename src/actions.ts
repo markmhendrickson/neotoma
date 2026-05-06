@@ -33,21 +33,28 @@ import {
 } from "./middleware/aauth_admission.js";
 import { buildSessionInfo } from "./services/session_info.js";
 import { AttributionPolicyError, enforceAttributionPolicy } from "./services/attribution_policy.js";
-import { registerFeedbackAdminProxyRoutes } from "./services/feedback/admin_proxy.js";
 import {
   AgentCapabilityError,
   contextFromAgentIdentity,
   enforceAgentCapability,
 } from "./services/agent_capabilities.js";
 import {
+  assertGuestWriteAllowed,
+  AccessPolicyError,
+  type GuestIdentity,
+} from "./services/access_policy.js";
+import {
   getCurrentAAuthAdmission,
   getCurrentAgentIdentity,
   getCurrentAttribution,
+  getCurrentExternalActor,
+  runWithExternalActor,
   runWithRequestContext,
 } from "./services/request_context.js";
 import { assertCanWriteProtectedBatch } from "./services/protected_entity_types.js";
 import {
   createAgentIdentity as buildAgentIdentity,
+  type ExternalActor,
   getAgentIdentityFromRequest,
   normaliseClientName,
 } from "./crypto/agent_identity.js";
@@ -114,6 +121,7 @@ import {
   CreateRelationshipRequestSchema,
   DeleteEntityRequestSchema,
   DeleteRelationshipRequestSchema,
+  IssuesBulkEntityIdsRequestSchema,
   EntitiesQueryRequestSchema,
   EntitySnapshotRequestSchema,
   FieldProvenanceRequestSchema,
@@ -2611,6 +2619,12 @@ function handleApiError(
       .status(403)
       .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
   }
+  if (error instanceof AccessPolicyError) {
+    logWarn(logContext || "AccessPolicyRejection", req, error.toErrorEnvelope());
+    return res
+      .status(403)
+      .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
+  }
   logError(logContext || "APIError", req, error);
   // SECURITY: do not echo raw Error.message to clients in production; SQLite /
   // filesystem errors frequently leak paths and schema. In development we keep
@@ -2732,6 +2746,78 @@ app.get("/entities/:id", async (req, res) => {
       return sendError(res, 401, "AUTH_REQUIRED", error.message);
     }
     logError("APIError:entity_detail", req, error);
+    const message = error instanceof Error ? error.message : "Failed to get entity";
+    return sendError(res, 500, "DB_QUERY_FAILED", message);
+  }
+});
+
+// GET /api/guest/entities/:id - Guest-accessible entity retrieval with access policy enforcement.
+// Requires AAuth signature or access token. Returns entity data filtered by the
+// entity_type's access policy (read_only/submitter_scoped/open).
+app.get("/guest/entities/:id", async (req, res) => {
+  try {
+    const entityId = req.params.id;
+    const agentIdentity = getCurrentAgentIdentity();
+    const accessToken = (req.headers.authorization?.startsWith("Bearer ")
+      ? req.headers.authorization.slice(7)
+      : req.query.access_token as string | undefined) ?? undefined;
+
+    const guestId: GuestIdentity = {
+      thumbprint: agentIdentity?.thumbprint,
+      sub: agentIdentity?.sub,
+      iss: agentIdentity?.iss,
+      accessToken,
+    };
+
+    if (!guestId.thumbprint && !guestId.accessToken) {
+      return sendError(res, 401, "AUTH_REQUIRED", "Guest access requires AAuth signature or access token.");
+    }
+
+    const { data: entity, error: entityError } = await db
+      .from("entities")
+      .select("id, entity_type, user_id")
+      .eq("id", entityId)
+      .single();
+
+    if (entityError || !entity) {
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
+    }
+
+    const { resolveGuestReadAccess } = await import("./services/access_policy.js");
+    const decision = await resolveGuestReadAccess(entity.entity_type, guestId);
+
+    if (!decision.allowed) {
+      return sendError(res, 403, "ACCESS_POLICY_DENIED",
+        `Access policy "${decision.mode}" for entity_type "${entity.entity_type}" denies guest reads.`);
+    }
+
+    if (decision.scopeFilter === "submitter_only") {
+      const { data: observations } = await db
+        .from("observations")
+        .select("id, agent_thumbprint")
+        .eq("entity_id", entityId);
+
+      const hasMatch = observations?.some((obs: { agent_thumbprint?: string }) => {
+        if (guestId.thumbprint && obs.agent_thumbprint === guestId.thumbprint) return true;
+        return false;
+      });
+
+      if (!hasMatch) {
+        return sendError(res, 403, "ACCESS_POLICY_DENIED",
+          "Submitter-scoped access: you can only read entities you submitted.");
+      }
+    }
+
+    const { getEntityWithProvenance } = await import("./services/entity_queries.js");
+    const entityWithProvenance = await getEntityWithProvenance(entityId);
+
+    if (!entityWithProvenance) {
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
+    }
+
+    return res.json(entityWithProvenance);
+  } catch (error) {
+    logError("APIError:guest_entity_detail", req, error);
     const message = error instanceof Error ? error.message : "Failed to get entity";
     return sendError(res, 500, "DB_QUERY_FAILED", message);
   }
@@ -4778,6 +4864,30 @@ app.get("/stats", async (req, res) => {
   }
 });
 
+// GET /access_policies - List effective guest access policies
+// REQUIRES AUTHENTICATION
+app.get("/access_policies", async (req, res) => {
+  try {
+    await getAuthenticatedUserId(req);
+
+    const { loadAccessPolicies, DEFAULT_MODE } = await import(
+      "./services/access_policy.js"
+    );
+    const policies = await loadAccessPolicies();
+
+    return res.json({ policies, default_mode: DEFAULT_MODE });
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to load access policies",
+      "DB_QUERY_FAILED",
+      "APIError:access_policies",
+    );
+  }
+});
+
 // POST /api/observations/create - Create observation for entity
 // REQUIRES AUTHENTICATION - validates user_id matches authenticated user
 app.post("/observations/create", async (req, res) => {
@@ -4950,12 +5060,33 @@ export async function storeStructuredForApi(params: {
   const commit = commitInput !== false;
   const strict = strictInput === true;
 
+  // Access policy: when the caller is a guest (AAuth-verified but not admitted
+  // via a grant), check per-entity-type access policies. If the policy allows
+  // guest writes, the request proceeds without requiring an agent_grant.
+  const agentIdentity = getCurrentAgentIdentity();
+  const admission = getCurrentAAuthAdmission();
+  const isAAuthVerified = agentIdentity?.thumbprint != null;
+  const isGuest = isAAuthVerified && (!admission || !admission.admitted);
+
+  if (isGuest) {
+    const entityTypes = entities
+      .map((entity) => entity?.entity_type)
+      .filter((t): t is string => typeof t === "string" && t.length > 0);
+    const guestId: GuestIdentity = {
+      thumbprint: agentIdentity.thumbprint,
+      sub: agentIdentity.sub,
+      iss: agentIdentity.iss,
+    };
+    await assertGuestWriteAllowed(entityTypes, guestId);
+  }
+
   // Capability scoping: when the caller is an AAuth-verified agent covered
   // by the capability registry, gate store_structured by entity_type here
-  // before any writes touch the DB. Unknown / anonymous callers fall
-  // through (attribution_policy still gates their writes downstream).
+  // before any writes touch the DB. Guests who passed access policy above
+  // skip grant-based capability enforcement. Unknown / anonymous callers
+  // fall through (attribution_policy still gates their writes downstream).
   const capabilityCtx = contextFromAgentIdentity(getCurrentAgentIdentity());
-  if (capabilityCtx) {
+  if (capabilityCtx && !isGuest) {
     const entityTypes = entities
       .map((entity) => entity?.entity_type)
       .filter((t): t is string => typeof t === "string" && t.length > 0);
@@ -5631,26 +5762,35 @@ async function handleStorePost(
           "idempotency_key is required when entities are provided"
         );
       }
-      structuredResult = await storeStructuredForApi({
-        userId,
-        entities: parsed.data.entities as Record<string, unknown>[],
-        sourcePriority: parsed.data.source_priority ?? 100,
-        observationSource: parsed.data.observation_source,
-        idempotencyKey: parsed.data.idempotency_key,
-        originalFilename: parsed.data.original_filename,
-        relationships: parsed.data.relationships as
-          | StoreRelationshipRef[]
-          | undefined,
-        interpretation: parsed.data.interpretation,
-        interpretationSourceId:
-          parsed.data.interpretation?.source_ref === "unstructured" &&
-          unstructuredResult &&
-          typeof unstructuredResult.source_id === "string"
-            ? unstructuredResult.source_id
-            : undefined,
-        commit: (parsed.data as { commit?: boolean }).commit,
-        strict: (parsed.data as { strict?: boolean }).strict,
-      });
+      const doStore = () =>
+        storeStructuredForApi({
+          userId,
+          entities: parsed.data.entities as Record<string, unknown>[],
+          sourcePriority: parsed.data.source_priority ?? 100,
+          observationSource: parsed.data.observation_source,
+          idempotencyKey: parsed.data.idempotency_key!,
+          originalFilename: parsed.data.original_filename,
+          relationships: parsed.data.relationships as
+            | StoreRelationshipRef[]
+            | undefined,
+          interpretation: parsed.data.interpretation,
+          interpretationSourceId:
+            parsed.data.interpretation?.source_ref === "unstructured" &&
+            unstructuredResult &&
+            typeof unstructuredResult.source_id === "string"
+              ? unstructuredResult.source_id
+              : undefined,
+          commit: (parsed.data as { commit?: boolean }).commit,
+          strict: (parsed.data as { strict?: boolean }).strict,
+        });
+
+      const bodyActor = parsed.data.external_actor as ExternalActor | undefined;
+      const existingActor = getCurrentExternalActor();
+      if (bodyActor && !existingActor) {
+        structuredResult = await runWithExternalActor(bodyActor, doStore) as Record<string, unknown>;
+      } else {
+        structuredResult = await doStore();
+      }
     }
 
     if (hasUnstructured && !unstructuredResult) {
@@ -5738,6 +5878,72 @@ async function handleStorePost(
 
 // POST /api/store - Unified store for structured, unstructured, or combined payloads
 app.post("/store", writeRateLimit, handleStorePost);
+
+// POST /github/webhook - Receive verified GitHub webhook events
+import { verifyGithubSignature, mapEventToStore } from "./services/github_webhook.js";
+
+app.post(
+  "/github/webhook",
+  express.raw({ type: "application/json", limit: "1mb" }),
+  async (req: express.Request, res: express.Response) => {
+    const secret = process.env.GITHUB_WEBHOOK_SECRET;
+    if (!secret) {
+      return res.status(503).json({
+        error: { code: "WEBHOOK_NOT_CONFIGURED", message: "GITHUB_WEBHOOK_SECRET is not set." },
+      });
+    }
+
+    const signatureHeader = req.headers["x-hub-signature-256"] as string | undefined;
+    if (!signatureHeader) {
+      return res.status(401).json({
+        error: { code: "SIGNATURE_MISSING", message: "X-Hub-Signature-256 header is required." },
+      });
+    }
+
+    const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body as string);
+    if (!verifyGithubSignature(rawBody, signatureHeader, secret)) {
+      return res.status(401).json({
+        error: { code: "SIGNATURE_INVALID", message: "Webhook signature verification failed." },
+      });
+    }
+
+    const deliveryId = (req.headers["x-github-delivery"] as string) ?? `unknown-${Date.now()}`;
+    const event = (req.headers["x-github-event"] as string) ?? "";
+
+    let payload: Record<string, unknown>;
+    try {
+      payload = JSON.parse(rawBody.toString("utf-8"));
+    } catch {
+      return res.status(400).json({
+        error: { code: "INVALID_JSON", message: "Could not parse webhook body." },
+      });
+    }
+
+    const storePayload = mapEventToStore(event, payload, deliveryId);
+    if (!storePayload) {
+      return res.status(200).json({ status: "ignored", event, action: (payload as any).action });
+    }
+
+    try {
+      const userId = await getAuthenticatedUserId(req);
+      const result = await runWithExternalActor(storePayload.external_actor, () =>
+        storeStructuredForApi({
+          userId,
+          entities: storePayload.entities,
+          sourcePriority: 100,
+          observationSource: storePayload.observation_source,
+          idempotencyKey: storePayload.idempotency_key,
+          relationships: storePayload.relationships as StoreRelationshipRef[],
+        }),
+      );
+      return res.status(200).json({ status: "processed", delivery_id: deliveryId, result });
+    } catch (error) {
+      logError("APIError:github_webhook", req, error);
+      const message = error instanceof Error ? error.message : "Webhook processing failed";
+      return sendError(res, 500, "WEBHOOK_PROCESSING_FAILED", message);
+    }
+  },
+);
 
 // γ-write: sandbox-only route that EXPLICITLY requires a verified AAuth
 // signature before delegating to the same handleStorePost handler. Unlike the
@@ -6657,6 +6863,56 @@ app.post("/delete_entity", async (req, res) => {
   }
 });
 
+// POST /issues/bulk_close — Close issues (GitHub PATCH when linked), persist closed state
+app.post("/issues/bulk_close", async (req, res) => {
+  const parsed = IssuesBulkEntityIdsRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn("ValidationError:issues_bulk_close", req, { issues: parsed.error.issues });
+    return sendValidationError(res, parsed.error.issues);
+  }
+  try {
+    const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+    const { bulkCloseIssues } = await import("./services/issues/inspector_bulk.js");
+    const { results } = await bulkCloseIssues(userId, parsed.data.entity_ids);
+    logDebug("Success:issues_bulk_close", req, { count: results.length });
+    return res.json({ results });
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to bulk close issues",
+      "DB_QUERY_FAILED",
+      "APIError:issues_bulk_close"
+    );
+  }
+});
+
+// POST /issues/bulk_remove — Close on GitHub when linked and open, then soft-delete locally
+app.post("/issues/bulk_remove", async (req, res) => {
+  const parsed = IssuesBulkEntityIdsRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn("ValidationError:issues_bulk_remove", req, { issues: parsed.error.issues });
+    return sendValidationError(res, parsed.error.issues);
+  }
+  try {
+    const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+    const { bulkRemoveIssues } = await import("./services/issues/inspector_bulk.js");
+    const { results } = await bulkRemoveIssues(userId, parsed.data.entity_ids);
+    logDebug("Success:issues_bulk_remove", req, { count: results.length });
+    return res.json({ results });
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to bulk remove issues",
+      "DB_QUERY_FAILED",
+      "APIError:issues_bulk_remove"
+    );
+  }
+});
+
 // POST /restore_entity - Restore soft-deleted entity
 app.post("/restore_entity", async (req, res) => {
   const parsed = RestoreEntityRequestSchema.safeParse(req.body);
@@ -7232,10 +7488,6 @@ app.get("/session", async (req, res) => {
   }
 });
 
-// /admin/feedback/* — thin proxy to the agent.neotoma.io admin API. See
-// `src/services/feedback/admin_proxy.ts` for gating + env contract.
-registerFeedbackAdminProxyRoutes(app);
-
 // POST /health_check_snapshots - Check for stale entity snapshots
 app.post("/health_check_snapshots", async (req, res) => {
   const schema = z.object({
@@ -7601,17 +7853,16 @@ export async function startHTTPServer() {
   // Initialize encryption service
   await initServerKeys();
 
-  // Seed `neotoma_feedback` schema unconditionally so local-only installs
-  // (no AGENT_SITE_BASE_URL) can mirror feedback into the entity graph.
+  // Seed `issue` schema for the GitHub Issues integration.
   try {
-    const { seedNeotomaFeedbackSchema } = await import(
-      "./services/feedback/seed_schema.js"
+    const { seedIssueSchema } = await import(
+      "./services/issues/seed_schema.js"
     );
-    await seedNeotomaFeedbackSchema();
-    logger.info("[Feedback] neotoma_feedback schema seeded");
+    await seedIssueSchema();
+    logger.info("[Issues] issue schema seeded");
   } catch (err) {
     logger.warn(
-      `[Feedback] failed to seed neotoma_feedback schema: ${(err as Error).message}`,
+      `[Issues] failed to seed issue schema: ${(err as Error).message}`,
     );
   }
 

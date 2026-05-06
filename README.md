@@ -116,6 +116,26 @@ neotoma upload ./invoice.pdf
 
 Results reflect versioned entity state with full provenance. Agents perform the same operations through MCP tool calls (`store`, `retrieve_entities`, `retrieve_entity_by_identifier`).
 
+## Available skills
+
+Skills are guided workflows that teach your AI agent to import, extract, and persist data into Neotoma memory. They ship with the npm package and are installed by `neotoma setup`.
+
+| Skill | Description |
+|-------|-------------|
+| **ensure-neotoma** | Install Neotoma, configure MCP, verify connectivity. Prerequisite for all other skills. |
+| **remember-email** | Configure email MCP, import emails, extract contacts, tasks, events, transactions. |
+| **remember-conversations** | Import ChatGPT/Claude/Slack exports, reconstruct decision timeline. |
+| **remember-meetings** | Ingest meeting transcripts, extract decisions and action items. |
+| **remember-finances** | Import bank statements, receipts, invoices. Extract structured transactions. |
+| **remember-contacts** | Consolidate contacts from email, calendar, chat, vCards, LinkedIn. |
+| **remember-calendar** | Configure calendar MCP, import events and commitments. |
+| **remember-codebase** | Developer repo integration — inventory, architecture decisions, MCP wiring. |
+| **store-data** | Generic: persist any structured data or file with provenance. |
+| **query-memory** | Generic: retrieve what your agent knows about anything. |
+| **recover-sqlite-database** | Troubleshooting: check integrity and recover corrupted Neotoma database. |
+
+[Full skill documentation →](https://neotoma.io/skills) | [Skill strategy →](docs/skills/skill_strategy.md)
+
 ## Interfaces
 
 Three interfaces. One state invariant. Every interface provides the same deterministic behavior regardless of how you access the state layer.

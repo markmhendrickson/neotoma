@@ -53,6 +53,8 @@ function buildMaybeSignedFetch(enabled: boolean): typeof fetch {
   }) as typeof fetch;
 }
 
+export type NeotomaApiClient = ReturnType<typeof createApiClient>;
+
 export function createApiClient(options: ApiClientOptions = {}) {
   const headers: Record<string, string> = {};
   if (options.token) {

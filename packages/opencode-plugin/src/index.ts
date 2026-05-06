@@ -125,8 +125,8 @@ function harnessProvenance(
 }
 
 const NEOTOMA_TOOL_KEYWORDS = new Set([
-  "submit_feedback",
-  "get_feedback_status",
+  "submit_issue",
+  "get_issue_status",
   "store",
   "store_structured",
   "store_unstructured",

@@ -4,7 +4,7 @@ v0.9.0 delivers the bundled Inspector, a unified turn-telemetry pipeline across 
 
 - **Inspector ships inside the npm package.** `neotoma api start` now serves the Inspector SPA at `/inspector` out of the box — no separate build, no `NEOTOMA_INSPECTOR_STATIC_DIR`, no Docker flag. Operators can disable, relocate, or point at an external Inspector via six new `NEOTOMA_INSPECTOR_*` env vars.
 - **Every hook harness reports per-turn telemetry to a single `conversation_turn` entity.** cursor-hooks, opencode-plugin, claude-code-plugin, codex-hooks, and claude-agent-sdk-adapter all accrete onto one `conversation_turn` keyed by `(session_id, turn_id)`, capturing hook events, tool counts, missed steps, compliance status, and — on skipped-store turns — a root-cause classification with recommended repairs. The legacy `turn_compliance` entity is preserved as an alias.
-- **Run the full feedback pipeline locally with zero hosted config.** `submit_feedback` now mirrors every submission into a `neotoma_feedback` entity in the local DB. Inspector `/feedback`, `neotoma triage`, and the ingest cron all work end-to-end on a fresh install. Set `NEOTOMA_FEEDBACK_ADMIN_MODE=disabled` to force read-only.
+- **Run the full feedback pipeline locally with zero hosted config.** Local JSON feedback records mirror into a `neotoma_feedback` entity in the local DB. Inspector `/feedback` and the local store work end-to-end on a fresh install. Set `NEOTOMA_FEEDBACK_ADMIN_MODE=disabled` to force read-only.
 - **Sandbox visitors get ephemeral per-session isolation.** Cookie-based sessions with one-time-code redemption, per-pack seed data, automatic sweep, and full data purge on session end replace the single shared `SANDBOX_PUBLIC_USER_ID`.
 - **Docs site restructured for scannability.** Large monolithic pages (Install, Agent Instructions, Evaluate, AAuth Reference) split into focused sub-pages; "Verticals" renamed to "Use Cases" with a new landing shell.
 
@@ -13,7 +13,7 @@ v0.9.0 delivers the bundled Inspector, a unified turn-telemetry pipeline across 
 **CLI (`neotoma`, `neotoma api start`, …)**
 
 - `neotoma api start` now serves the Inspector at `/inspector` by default. The bundled SPA is baked into `dist/inspector/` at publish time via `prepublishOnly`. No env vars required for the default path.
-- `neotoma triage --set-status` and `--resolve` now mirror triage changes onto the `neotoma_feedback` entity via `mirrorLocalFeedbackToEntity`, keeping the JSON store and entity graph in sync.
+- Local feedback admin flows mirror triage changes onto the `neotoma_feedback` entity via `mirrorLocalFeedbackToEntity`, keeping the JSON store and entity graph in sync.
 - `tsc --watch --preserveWatchOutput` replaces bare `tsc --watch` in all watch/dev scripts and the CLI's internal `api start` spawner, eliminating the terminal-clearing behavior that made concurrent output unreadable.
 
 **Runtime / data layer**

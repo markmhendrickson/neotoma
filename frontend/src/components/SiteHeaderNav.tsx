@@ -98,6 +98,7 @@ const sidebarNavItemClass =
   "!bg-transparent text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus:bg-sidebar-accent focus:text-sidebar-accent-foreground data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground";
 
 const DOC_DROPDOWN_FEATURED_HREFS = new Set([
+  "/skills",
   "/neotoma-with-claude-code",
   "/neotoma-with-claude",
   "/neotoma-with-chatgpt",

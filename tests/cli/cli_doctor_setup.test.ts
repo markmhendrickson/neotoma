@@ -204,7 +204,7 @@ describe("runSetup", () => {
       },
     });
     const stepIds = report.steps.map((s) => s.id);
-    expect(stepIds).toEqual(["init", "mcp-configure", "cli-instructions", "hooks", "permissions"]);
+    expect(stepIds).toEqual(["init", "mcp-configure", "cli-instructions", "hooks", "skills", "permissions"]);
     expect(report.dry_run).toBe(true);
     expect(report.tool).toBe("cursor");
     expect(report.overall_ok).toBe(true);

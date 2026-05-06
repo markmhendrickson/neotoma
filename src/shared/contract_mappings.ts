@@ -162,6 +162,22 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     cliCommand: "entities list",
   },
   {
+    operationId: "bulkCloseIssues",
+    method: "post",
+    path: "/issues/bulk_close",
+    adapter: "cli",
+    cliCommand: "request --operation bulkCloseIssues",
+    notes: "Inspector UI; callable via neotoma request for automation.",
+  },
+  {
+    operationId: "bulkRemoveIssues",
+    method: "post",
+    path: "/issues/bulk_remove",
+    adapter: "cli",
+    cliCommand: "request --operation bulkRemoveIssues",
+    notes: "Inspector UI; closes GitHub when linked before soft-delete.",
+  },
+  {
     operationId: "getEntityById",
     method: "get",
     path: "/entities/{id}",
@@ -314,6 +330,13 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     path: "/stats",
     adapter: "cli",
     cliCommand: "stats",
+  },
+  {
+    operationId: "getAccessPolicies",
+    method: "get",
+    path: "/access_policies",
+    adapter: "both",
+    cliCommand: "access list",
   },
   {
     operationId: "getRecordActivity",

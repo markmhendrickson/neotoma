@@ -100,16 +100,16 @@ export function PrivacyPage() {
       </p>
 
       <h3 className="text-[16px] font-medium mt-4 mb-2">
-        2.2 Agent feedback pipeline
+        2.2 Agent issue reporting and legacy HTTP feedback
       </h3>
       <p className="text-[15px] leading-7 mb-3">
-        When an agent running on your machine submits feedback to{" "}
-        <code>agent.neotoma.io/feedback/submit</code> (via the{" "}
-        <code>submit_feedback</code> MCP tool or the{" "}
-        <code>neotoma feedback</code> CLI), the following is stored:
+        When an agent files a product issue, it uses the Neotoma MCP{" "}
+        <code>submit_issue</code> tool (GitHub Issues plus a local <code>issue</code> row).
+        Separately, optional legacy HTTP intake at{" "}
+        <code>agent.neotoma.io/feedback/submit</code> may still store:
       </p>
       <ul className="list-disc pl-5 text-[15px] leading-7 mb-3 space-y-1">
-        <li>The feedback payload your agent sent (title, body, kind, metadata).</li>
+        <li>The payload your agent sent (title, body, kind, metadata).</li>
         <li>
           A redaction pass that replaces emails, phone numbers, API tokens,
           UUIDs, and home-directory path fragments with{" "}
@@ -117,9 +117,9 @@ export function PrivacyPage() {
           storage.
         </li>
         <li>
-          An <code>access_token</code> scoped to that single feedback row,
-          which is returned to your agent and is the only way to poll status
-          later.
+          An <code>access_token</code> scoped to that single feedback row when
+          using the HTTP path, returned to your agent for status polling on
+          that route only.
         </li>
         <li>
           Environment metadata your agent supplied (OS, Neotoma version,

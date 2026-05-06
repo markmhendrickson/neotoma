@@ -6,7 +6,12 @@
  */
 
 import { db } from "../db.js";
-import { SchemaRegistryService } from "./schema_registry.js";
+import {
+  loadCodeDefinedSchemaEntry,
+  normalizeEntityTypeForSchema,
+  SchemaRegistryService,
+  type SchemaRegistryEntry,
+} from "./schema_registry.js";
 import { logger } from "../utils/logger.js";
 
 export interface FieldRecommendation {
@@ -55,6 +60,21 @@ export class SchemaRecommendationService {
 
   constructor() {
     this.schemaRegistry = new SchemaRegistryService();
+  }
+
+  /** Active registry row, or code-defined ENTITY_SCHEMAS baseline when none. */
+  private async loadSchemaForAutoEnhance(
+    entityType: string,
+    userId?: string,
+  ): Promise<SchemaRegistryEntry | null> {
+    const row = await this.schemaRegistry.loadActiveSchema(entityType, userId);
+    if (row) return row;
+    const normalized = normalizeEntityTypeForSchema(entityType);
+    return (
+      (await loadCodeDefinedSchemaEntry(entityType)) ??
+      (await loadCodeDefinedSchemaEntry(normalized)) ??
+      null
+    );
   }
 
   /**
@@ -109,11 +129,11 @@ export class SchemaRecommendationService {
     }
 
     // 3. Load current schema to check if field exists (type mismatch detection)
-    const currentSchema = await this.schemaRegistry.loadActiveSchema(
+    const currentSchema = await this.loadSchemaForAutoEnhance(
       options.entity_type,
-      options.user_id
+      options.user_id,
     );
-    
+
     const fieldExists = currentSchema?.schema_definition.fields[options.fragment_key];
 
     // 4. Query raw_fragments for this field
@@ -323,12 +343,12 @@ export class SchemaRecommendationService {
       return existing;
     }
 
-    // Check if field already exists in schema
-    const currentSchema = await this.schemaRegistry.loadActiveSchema(
+    // Check if field already exists in schema (registry or code-defined baseline)
+    const currentSchema = await this.loadSchemaForAutoEnhance(
       options.entity_type,
       options.user_id,
     );
-    
+
     const fieldExists = currentSchema?.schema_definition.fields[options.field_name];
     
     // Determine recommendation type based on field existence and converter suggestion

@@ -61,6 +61,22 @@ export const ROOT_LANDING_SITE_NAV: RootLandingNavCategory[] = [
     ],
   },
   {
+    title: "Skills",
+    items: [
+      { label: "All skills", href: "/skills", icon: "Bot" },
+      { label: "Ensure Neotoma", href: "/skills/ensure-neotoma", icon: "Download" },
+      { label: "Remember Email", href: "/skills/remember-email", icon: "Mail" },
+      { label: "Remember Conversations", href: "/skills/remember-conversations", icon: "MessageSquare" },
+      { label: "Remember Meetings", href: "/skills/remember-meetings", icon: "Users" },
+      { label: "Remember Finances", href: "/skills/remember-finances", icon: "Receipt" },
+      { label: "Remember Contacts", href: "/skills/remember-contacts", icon: "BookUser" },
+      { label: "Remember Calendar", href: "/skills/remember-calendar", icon: "CalendarClock" },
+      { label: "Remember Codebase", href: "/skills/remember-codebase", icon: "Code" },
+      { label: "Store Data", href: "/skills/store-data", icon: "Database" },
+      { label: "Query Memory", href: "/skills/query-memory", icon: "Search" },
+    ],
+  },
+  {
     title: "Record types",
     items: [
       { label: "Contacts", href: "/types/contacts", icon: "Users" },

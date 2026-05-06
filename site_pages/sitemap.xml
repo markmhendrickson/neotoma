@@ -80,6 +80,7 @@
   <url><loc>https://neotoma.io/file-based-memory</loc></url>
   <url><loc>https://neotoma.io/database-memory</loc></url>
   <url><loc>https://neotoma.io/deterministic-memory</loc></url>
+  <url><loc>https://neotoma.io/skills</loc></url>
   <url><loc>https://neotoma.io/build-vs-buy</loc></url>
   <url><loc>https://neotoma.io/multi-agent-state</loc></url>
   <url><loc>https://neotoma.io/troubleshooting</loc></url>
@@ -203,6 +204,7 @@
   <url><loc>https://neotoma.io/es/file-based-memory</loc></url>
   <url><loc>https://neotoma.io/es/database-memory</loc></url>
   <url><loc>https://neotoma.io/es/deterministic-memory</loc></url>
+  <url><loc>https://neotoma.io/es/skills</loc></url>
   <url><loc>https://neotoma.io/es/build-vs-buy</loc></url>
   <url><loc>https://neotoma.io/es/multi-agent-state</loc></url>
   <url><loc>https://neotoma.io/es/troubleshooting</loc></url>
@@ -326,6 +328,7 @@
   <url><loc>https://neotoma.io/ca/file-based-memory</loc></url>
   <url><loc>https://neotoma.io/ca/database-memory</loc></url>
   <url><loc>https://neotoma.io/ca/deterministic-memory</loc></url>
+  <url><loc>https://neotoma.io/ca/skills</loc></url>
   <url><loc>https://neotoma.io/ca/build-vs-buy</loc></url>
   <url><loc>https://neotoma.io/ca/multi-agent-state</loc></url>
   <url><loc>https://neotoma.io/ca/troubleshooting</loc></url>
@@ -449,6 +452,7 @@
   <url><loc>https://neotoma.io/zh/file-based-memory</loc></url>
   <url><loc>https://neotoma.io/zh/database-memory</loc></url>
   <url><loc>https://neotoma.io/zh/deterministic-memory</loc></url>
+  <url><loc>https://neotoma.io/zh/skills</loc></url>
   <url><loc>https://neotoma.io/zh/build-vs-buy</loc></url>
   <url><loc>https://neotoma.io/zh/multi-agent-state</loc></url>
   <url><loc>https://neotoma.io/zh/troubleshooting</loc></url>
@@ -572,6 +576,7 @@
   <url><loc>https://neotoma.io/hi/file-based-memory</loc></url>
   <url><loc>https://neotoma.io/hi/database-memory</loc></url>
   <url><loc>https://neotoma.io/hi/deterministic-memory</loc></url>
+  <url><loc>https://neotoma.io/hi/skills</loc></url>
   <url><loc>https://neotoma.io/hi/build-vs-buy</loc></url>
   <url><loc>https://neotoma.io/hi/multi-agent-state</loc></url>
   <url><loc>https://neotoma.io/hi/troubleshooting</loc></url>
@@ -695,6 +700,7 @@
   <url><loc>https://neotoma.io/ar/file-based-memory</loc></url>
   <url><loc>https://neotoma.io/ar/database-memory</loc></url>
   <url><loc>https://neotoma.io/ar/deterministic-memory</loc></url>
+  <url><loc>https://neotoma.io/ar/skills</loc></url>
   <url><loc>https://neotoma.io/ar/build-vs-buy</loc></url>
   <url><loc>https://neotoma.io/ar/multi-agent-state</loc></url>
   <url><loc>https://neotoma.io/ar/troubleshooting</loc></url>
@@ -818,6 +824,7 @@
   <url><loc>https://neotoma.io/fr/file-based-memory</loc></url>
   <url><loc>https://neotoma.io/fr/database-memory</loc></url>
   <url><loc>https://neotoma.io/fr/deterministic-memory</loc></url>
+  <url><loc>https://neotoma.io/fr/skills</loc></url>
   <url><loc>https://neotoma.io/fr/build-vs-buy</loc></url>
   <url><loc>https://neotoma.io/fr/multi-agent-state</loc></url>
   <url><loc>https://neotoma.io/fr/troubleshooting</loc></url>
@@ -941,6 +948,7 @@
   <url><loc>https://neotoma.io/pt/file-based-memory</loc></url>
   <url><loc>https://neotoma.io/pt/database-memory</loc></url>
   <url><loc>https://neotoma.io/pt/deterministic-memory</loc></url>
+  <url><loc>https://neotoma.io/pt/skills</loc></url>
   <url><loc>https://neotoma.io/pt/build-vs-buy</loc></url>
   <url><loc>https://neotoma.io/pt/multi-agent-state</loc></url>
   <url><loc>https://neotoma.io/pt/troubleshooting</loc></url>
@@ -1064,6 +1072,7 @@
   <url><loc>https://neotoma.io/ru/file-based-memory</loc></url>
   <url><loc>https://neotoma.io/ru/database-memory</loc></url>
   <url><loc>https://neotoma.io/ru/deterministic-memory</loc></url>
+  <url><loc>https://neotoma.io/ru/skills</loc></url>
   <url><loc>https://neotoma.io/ru/build-vs-buy</loc></url>
   <url><loc>https://neotoma.io/ru/multi-agent-state</loc></url>
   <url><loc>https://neotoma.io/ru/troubleshooting</loc></url>
@@ -1187,6 +1196,7 @@
   <url><loc>https://neotoma.io/bn/file-based-memory</loc></url>
   <url><loc>https://neotoma.io/bn/database-memory</loc></url>
   <url><loc>https://neotoma.io/bn/deterministic-memory</loc></url>
+  <url><loc>https://neotoma.io/bn/skills</loc></url>
   <url><loc>https://neotoma.io/bn/build-vs-buy</loc></url>
   <url><loc>https://neotoma.io/bn/multi-agent-state</loc></url>
   <url><loc>https://neotoma.io/bn/troubleshooting</loc></url>
@@ -1310,6 +1320,7 @@
   <url><loc>https://neotoma.io/ur/file-based-memory</loc></url>
   <url><loc>https://neotoma.io/ur/database-memory</loc></url>
   <url><loc>https://neotoma.io/ur/deterministic-memory</loc></url>
+  <url><loc>https://neotoma.io/ur/skills</loc></url>
   <url><loc>https://neotoma.io/ur/build-vs-buy</loc></url>
   <url><loc>https://neotoma.io/ur/multi-agent-state</loc></url>
   <url><loc>https://neotoma.io/ur/troubleshooting</loc></url>
@@ -1433,6 +1444,7 @@
   <url><loc>https://neotoma.io/id/file-based-memory</loc></url>
   <url><loc>https://neotoma.io/id/database-memory</loc></url>
   <url><loc>https://neotoma.io/id/deterministic-memory</loc></url>
+  <url><loc>https://neotoma.io/id/skills</loc></url>
   <url><loc>https://neotoma.io/id/build-vs-buy</loc></url>
   <url><loc>https://neotoma.io/id/multi-agent-state</loc></url>
   <url><loc>https://neotoma.io/id/troubleshooting</loc></url>
@@ -1556,6 +1568,7 @@
   <url><loc>https://neotoma.io/de/file-based-memory</loc></url>
   <url><loc>https://neotoma.io/de/database-memory</loc></url>
   <url><loc>https://neotoma.io/de/deterministic-memory</loc></url>
+  <url><loc>https://neotoma.io/de/skills</loc></url>
   <url><loc>https://neotoma.io/de/build-vs-buy</loc></url>
   <url><loc>https://neotoma.io/de/multi-agent-state</loc></url>
   <url><loc>https://neotoma.io/de/troubleshooting</loc></url>
