@@ -2393,6 +2393,32 @@ export interface components {
             };
         };
         /**
+         * @description Upstream artifact author (e.g. GitHub user) stamped into observation
+         *     provenance alongside AAuth agent attribution. Matches
+         *     `ExternalActorInputSchema` in `action_schemas.ts`.
+         */
+        ExternalActorInput: {
+            /** @enum {string} */
+            provider: "github";
+            login: string;
+            id: number;
+            /**
+             * @default User
+             * @enum {string}
+             */
+            type?: "User" | "Bot" | "Organization";
+            /**
+             * @default claim
+             * @enum {string}
+             */
+            verified_via?: "claim" | "linked_attestation" | "oauth_link" | "webhook_signature";
+            delivery_id?: string;
+            event_type?: string;
+            repository?: string;
+            event_id?: number;
+            comment_id?: number;
+        };
+        /**
          * @description Unified store payload. Supports structured only, unstructured only, or
          *     both in one request. Top-level field set is closed: unknown request
          *     fields are rejected with `ERR_UNKNOWN_FIELD` (see
@@ -2420,6 +2446,12 @@ export interface components {
              * @enum {string}
              */
             observation_source?: "sensor" | "llm_summary" | "workflow_state" | "human" | "import";
+            /**
+             * @description Optional upstream author (e.g. GitHub user for issue submission).
+             *     Stamped into observation provenance; must align with
+             *     `ExternalActorInputSchema` (strict — no extra keys).
+             */
+            external_actor?: components["schemas"]["ExternalActorInput"];
             /** @description Required for structured path, optional for unstructured-only path. */
             idempotency_key?: string;
             /** @description Optional idempotency key for file path when sending structured + unstructured in one call. */

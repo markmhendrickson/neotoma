@@ -46,6 +46,7 @@ describe("CLI API discovery", () => {
     delete process.env.NEOTOMA_SESSION_API_PORT;
     delete process.env.NEOTOMA_API_PORTS;
     delete process.env.NEOTOMA_MCP_USE_LOCAL_PORT_FILE;
+    delete process.env.NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE;
     delete process.env.NEOTOMA_PROJECT_ROOT;
     vi.restoreAllMocks();
   });
@@ -106,6 +107,36 @@ describe("CLI API discovery", () => {
       await fs.writeFile(portFile, `${dynamicPort}\n`, "utf-8");
       const resolved = await resolveBaseUrl(undefined, { project_root: tmp });
       expect(resolved).toBe("http://localhost:9234");
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    } finally {
+      await fs.rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it("resolveBaseUrl uses .dev-serve/local_http_port_prod when profile is prod", async () => {
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-cli-portfile-prod-"));
+    try {
+      process.env.NEOTOMA_MCP_USE_LOCAL_PORT_FILE = "true";
+      process.env.NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE = "prod";
+      process.env.NEOTOMA_PROJECT_ROOT = tmp;
+      const server = http.createServer((_req, res) => {
+        res.writeHead(200);
+        res.end();
+      });
+      await new Promise<void>((resolve, reject) => {
+        server.listen(0, "127.0.0.1", () => resolve());
+        server.once("error", reject);
+      });
+      const addr = server.address();
+      const dynamicPort =
+        typeof addr === "object" && addr && "port" in addr ? (addr as { port: number }).port : 0;
+      expect(dynamicPort).toBeGreaterThan(0);
+      const portFile = path.join(tmp, ".dev-serve", "local_http_port_prod");
+      await fs.mkdir(path.dirname(portFile), { recursive: true });
+      await fs.writeFile(portFile, `${dynamicPort}\n`, "utf-8");
+      mockHttpHealth({});
+      const resolved = await resolveBaseUrl(undefined, { project_root: tmp });
+      expect(resolved).toBe(`http://localhost:${dynamicPort}`);
       await new Promise<void>((resolve) => server.close(() => resolve()));
     } finally {
       await fs.rm(tmp, { recursive: true, force: true });

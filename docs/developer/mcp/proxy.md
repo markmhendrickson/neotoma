@@ -23,23 +23,28 @@ Cursor’s `command` usually points at this script instead of invoking `neotoma 
 2. Sets **`NEOTOMA_AAUTH_AUTHORITY_OVERRIDE`** when appropriate.
 3. **`exec`s** `mcp_dev_shim.ts`, whose worker runs **`npx tsx src/cli/index.ts mcp proxy --aauth`** by default.
 
-### Local port file (dynamic `HTTP_PORT`)
+### Local port files (dynamic `HTTP_PORT`, parallel dev + prod)
 
 When **`NEOTOMA_MCP_USE_LOCAL_PORT_FILE=1`** (or `true`) is set in **`mcp.json` → `env`**:
 
-- The shim reads **`<repo>/.dev-serve/local_http_port`** (single line, TCP port; directory is gitignored).
-- That file is written by the **HTTP Actions** server on each successful bind (`src/actions.ts` → `writeLocalHttpPortFile` in `src/utils/local_http_port_file.ts`). **`NODE_ENV=test`** skips the write so Vitest does not clobber a developer file.
+- On each successful HTTP bind, the Actions server writes **`<repo>/.dev-serve/local_http_port_dev`** or **`local_http_port_prod`** from `NEOTOMA_ENV` (`src/actions.ts` → `writeLocalHttpPortFile` in `src/utils/local_http_port_file.ts`). **Dev** also mirrors the legacy **`<repo>/.dev-serve/local_http_port`** so older configs keep working. **`NODE_ENV=test`** skips the write so Vitest does not clobber a developer file.
+- The shim reads port files based on **`NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE`**:
+  - **`dev`** — tries `local_http_port_dev`, then legacy `local_http_port`.
+  - **`prod`** — tries `local_http_port_prod` only.
+  - **Unset** — legacy `local_http_port` only (same as pre-parallel behavior).
+- Preset **A** / packaged **`neotoma mcp config`** entries set **`NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE`** to **`dev`** on `neotoma-dev` and **`prod`** on `neotoma`, so you can run **dev and prod HTTP APIs in parallel** and each MCP slot follows the correct bound port.
 - If the port parses and a **TCP connect** to `127.0.0.1:<port>` succeeds within **`NEOTOMA_MCP_PORT_PROBE_MS`** (default **1200**, clamped **200–5000**), the shim sets `MCP_PROXY_DOWNSTREAM_URL=http://127.0.0.1:<port>/mcp`.
-- Otherwise it falls back to **`MCP_PROXY_DOWNSTREAM_URL`** if set, else **`http://127.0.0.1:3080/mcp`**, and logs a **stderr** warning.
+- Otherwise it falls back to **`MCP_PROXY_DOWNSTREAM_URL`** if set, else **`http://127.0.0.1:3080/mcp`** (dev / legacy) or **`http://127.0.0.1:3180/mcp`** when **`NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE=prod`**, and logs a **stderr** warning.
 
 **Verification:** on MCP spawn, stderr should show `[neotoma-mcp-signed-shim] NEOTOMA_MCP_USE_LOCAL_PORT_FILE: …` and `[neotoma-mcp-proxy] Starting proxy: downstream=…`.
 
 | Variable | Purpose |
 |----------|---------|
-| `NEOTOMA_MCP_USE_LOCAL_PORT_FILE` | `1` / `true` → use `.dev-serve/local_http_port` when present and probe succeeds. |
+| `NEOTOMA_MCP_USE_LOCAL_PORT_FILE` | `1` / `true` → resolve downstream URL from port files + TCP probe. |
+| `NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE` | `dev` or `prod` — which port file(s) to read (preset A sets this per MCP slot). |
 | `NEOTOMA_MCP_PORT_PROBE_MS` | TCP probe timeout in ms (default `1200`, max `5000`). |
 
-**CLI parity:** When the same env vars are set in the shell (not only in `mcp.json`), the **`neotoma` CLI** `resolveBaseUrl()` path reads the same port file and runs the same TCP probe after session port env and before `config.json` `base_url`, returning `http://localhost:<port>` so AAuth authority matches the API (for example `neotoma inspector admin unlock`). Project root: `NEOTOMA_PROJECT_ROOT`, then `project_root` / `repo_root` in `~/.config/neotoma/config.json`, else `cwd`.
+**CLI parity:** When the same env vars are set in the shell (not only in `mcp.json`), the **`neotoma` CLI** `resolveBaseUrl()` path uses the same profile rules and TCP probe after session port env and before `config.json` `base_url`, returning `http://localhost:<port>` so AAuth authority matches the API (for example `neotoma inspector admin unlock`). Profile follows **`NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE`** if set, else **`NEOTOMA_ENV`**. Project root: `NEOTOMA_PROJECT_ROOT`, then `project_root` / `repo_root` in `~/.config/neotoma/config.json`, else `cwd`.
 
 ## MCP `initialize` capabilities
 

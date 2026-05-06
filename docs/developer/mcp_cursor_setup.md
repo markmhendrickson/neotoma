@@ -66,15 +66,24 @@ Use this only when you want the MCP client connection to survive local source re
 
 **Signed dev shim (HTTP `/mcp` + AAuth + same reload model):** when the dev API is up (`neotoma api start --env dev`, default `:3080`) and you have run `neotoma auth keygen`, point `neotoma-dev` at `scripts/run_neotoma_mcp_signed_stdio_dev_shim.sh`. Cursor still speaks stdio MCP; the shim restarts the identity-proxy worker on source changes; the proxy signs requests to `http://127.0.0.1:3080/mcp` when `MCP_PROXY_DOWNSTREAM_URL` is unset. Set `MCP_PROXY_DOWNSTREAM_URL=http://127.0.0.1:3180/mcp` for a signed prod slot. See `docs/developer/mcp/proxy.md` (Dev: stdio + live reload + AAuth).
 
-**Dynamic local API port (optional):** when `npm run watch:prod` (or `pick-port`) binds a port other than the one in `mcp.json`, set **`NEOTOMA_MCP_USE_LOCAL_PORT_FILE=1`** on the signed shim and **omit `MCP_PROXY_DOWNSTREAM_URL`** (or keep it only as a fallback when the port file is missing). On each successful HTTP bind, Neotoma writes **`.dev-serve/local_http_port`** under the repo root (gitignored) with the actual port; the shim reads it and sets `MCP_PROXY_DOWNSTREAM_URL` to `http://127.0.0.1:<port>/mcp` before starting the proxy. Start the API at least once so the file exists; if the file is missing or invalid, the shim falls back to `MCP_PROXY_DOWNSTREAM_URL` or `http://127.0.0.1:3080/mcp` and logs a stderr warning. The port file can **outlive** the API (stale port); the signed shim **TCP-probes** that port first and falls back the same way if nothing is listening (avoiding opaque `fetch failed` / `ECONNREFUSED` loops). Increase `NEOTOMA_MCP_PORT_PROBE_MS` (default 1200, max 5000) if your API is slow to bind.
+**Dynamic local API port (optional):** when `npm run watch:prod` (or `pick-port`) binds a port other than the one in `mcp.json`, set **`NEOTOMA_MCP_USE_LOCAL_PORT_FILE=1`** on the signed shim and **omit `MCP_PROXY_DOWNSTREAM_URL`** (or keep it only as a fallback when the port file is missing). On each successful HTTP bind, Neotoma writes **`.dev-serve/local_http_port_dev`** or **`local_http_port_prod`** from `NEOTOMA_ENV` (dev also mirrors legacy **`local_http_port`**). Set **`NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE`** to **`dev`** or **`prod`** so each MCP entry reads the right file when **dev and prod HTTP APIs run in parallel**; preset **A** sets this automatically on `neotoma-dev` / `neotoma`. The shim TCP-probes before use and falls back to `MCP_PROXY_DOWNSTREAM_URL` or default `:3080` / `:3180` (prod profile). Increase **`NEOTOMA_MCP_PORT_PROBE_MS`** (default 1200, max 5000) if your API is slow to bind.
 
 ```json
 {
   "mcpServers": {
+    "neotoma-dev": {
+      "command": "/absolute/path/to/neotoma/scripts/run_neotoma_mcp_signed_stdio_dev_shim.sh",
+      "env": {
+        "NEOTOMA_MCP_USE_LOCAL_PORT_FILE": "1",
+        "NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE": "dev"
+      }
+    },
     "neotoma": {
       "command": "/absolute/path/to/neotoma/scripts/run_neotoma_mcp_signed_stdio_dev_shim.sh",
       "env": {
-        "NEOTOMA_MCP_USE_LOCAL_PORT_FILE": "1"
+        "NEOTOMA_MCP_USE_LOCAL_PORT_FILE": "1",
+        "NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE": "prod",
+        "MCP_PROXY_DOWNSTREAM_URL": "http://127.0.0.1:3180/mcp"
       }
     }
   }

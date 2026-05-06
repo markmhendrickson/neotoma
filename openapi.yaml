@@ -1282,6 +1282,43 @@ components:
             metadata:
               type: object
               additionalProperties: true
+    ExternalActorInput:
+      type: object
+      additionalProperties: false
+      description: |
+        Upstream artifact author (e.g. GitHub user) stamped into observation
+        provenance alongside AAuth agent attribution. Matches
+        `ExternalActorInputSchema` in `action_schemas.ts`.
+      required:
+        - provider
+        - login
+        - id
+      properties:
+        provider:
+          type: string
+          enum: [github]
+        login:
+          type: string
+        id:
+          type: number
+        type:
+          type: string
+          enum: [User, Bot, Organization]
+          default: User
+        verified_via:
+          type: string
+          enum: [claim, linked_attestation, oauth_link, webhook_signature]
+          default: claim
+        delivery_id:
+          type: string
+        event_type:
+          type: string
+        repository:
+          type: string
+        event_id:
+          type: number
+        comment_id:
+          type: number
     StoreRequest:
       type: object
       additionalProperties: false
@@ -1325,6 +1362,12 @@ components:
             the full semantic contract. Defaults to `llm_summary` when
             unspecified. Applies to every observation created by this
             request.
+        external_actor:
+          $ref: '#/components/schemas/ExternalActorInput'
+          description: |
+            Optional upstream author (e.g. GitHub user for issue submission).
+            Stamped into observation provenance; must align with
+            `ExternalActorInputSchema` (strict — no extra keys).
         idempotency_key:
           type: string
           description: Required for structured path, optional for unstructured-only path.

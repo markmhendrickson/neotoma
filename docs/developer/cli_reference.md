@@ -240,7 +240,8 @@ Cursor reads these from the **`env`** block for **`run_neotoma_mcp_signed_stdio_
 
 | Environment variable | Values | Purpose |
 |----------------------|--------|---------|
-| `NEOTOMA_MCP_USE_LOCAL_PORT_FILE` | `1` / `true` | **Shim:** read `<repo>/.dev-serve/local_http_port` (written on HTTP bind) and set `MCP_PROXY_DOWNSTREAM_URL` after a successful TCP probe. **CLI:** `resolveBaseUrl()` uses the same file and probe (after session port env, before `config.json` `base_url`) so API commands such as `inspector admin unlock` target the live port. Repo root order: `NEOTOMA_PROJECT_ROOT`, then `project_root` / `repo_root` in `~/.config/neotoma/config.json`, then `cwd`. |
+| `NEOTOMA_MCP_USE_LOCAL_PORT_FILE` | `1` / `true` | **Shim:** read `<repo>/.dev-serve/local_http_port_<dev|prod>` (and legacy `local_http_port` for dev) after HTTP bind, then set `MCP_PROXY_DOWNSTREAM_URL` after a successful TCP probe. **CLI:** `resolveBaseUrl()` uses the same rules and probe (after session port env, before `config.json` `base_url`). Repo root order: `NEOTOMA_PROJECT_ROOT`, then `project_root` / `repo_root` in `~/.config/neotoma/config.json`, then `cwd`. |
+| `NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE` | `dev` / `prod` | Which port file the shim and CLI prefer when `NEOTOMA_MCP_USE_LOCAL_PORT_FILE` is on; preset A sets this per MCP slot for parallel dev + prod APIs. If unset, CLI infers from `NEOTOMA_ENV`; shim reads legacy `local_http_port` only. |
 | `NEOTOMA_MCP_PORT_PROBE_MS` | integer ms (200–5000, default 1200) | TCP probe timeout for the port file in both the shim and the CLI. |
 | `MCP_PROXY_DOWNSTREAM_URL` | URL | Explicit downstream `/mcp`; used when port-file mode is off, or as fallback when the file is missing / probe fails. |
 
@@ -346,7 +347,7 @@ CLI uses the same auth patterns as MCP and REST API. Local CLI commands can run 
 - `neotoma auth mcp-token`: Print MCP auth token derived from private key (when encryption is enabled). Add to mcp.json headers.
 - If key-authenticated OAuth is unavailable, configure `Authorization: Bearer <NEOTOMA_BEARER_TOKEN>` for MCP instead of OAuth.
 
-- `neotoma inspector admin unlock`: Redeem a feedback-admin challenge via the same CLI AAuth signer used for signed API traffic; prints an Inspector URL to **`/feedback/admin-unlock?challenge=…`** (and optional `--open`). Omit `--challenge` to mint one from the API. When the Inspector dev server runs on another origin, set `NEOTOMA_INSPECTOR_BASE_URL` or pass `--inspector-base`. Use `--skip-browser-url` to suppress the printed link in text mode. When the HTTP API binds a non-default port, set **`NEOTOMA_MCP_USE_LOCAL_PORT_FILE=1`** (same as the MCP signed shim) so `--base-url` resolution reads `.dev-serve/local_http_port` after a successful TCP probe; set **`NEOTOMA_PROJECT_ROOT`** if the file lives outside `cwd`.
+- `neotoma inspector admin unlock`: Redeem a feedback-admin challenge via the same CLI AAuth signer used for signed API traffic; prints an Inspector URL to **`/feedback/admin-unlock?challenge=…`** (and optional `--open`). Omit `--challenge` to mint one from the API. When the Inspector dev server runs on another origin, set `NEOTOMA_INSPECTOR_BASE_URL` or pass `--inspector-base`. Use `--skip-browser-url` to suppress the printed link in text mode. When the HTTP API binds a non-default port, set **`NEOTOMA_MCP_USE_LOCAL_PORT_FILE=1`** and **`NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE`** when needed (same rules as the MCP signed shim) so `--base-url` resolution reads the matching `.dev-serve/local_http_port_*` file after a successful TCP probe; set **`NEOTOMA_PROJECT_ROOT`** if the file lives outside `cwd`.
 
 ### MCP configuration
 

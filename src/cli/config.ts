@@ -113,7 +113,7 @@ function localHttpPortFileProbeTimeoutMs(): number {
 /**
  * TCP probe for a listening port (same semantics as MCP signed shim scripts).
  * Used when `NEOTOMA_MCP_USE_LOCAL_PORT_FILE` is set so the CLI targets the
- * API port written under `.dev-serve/local_http_port`.
+ * API port written under `.dev-serve/local_http_port_<dev|prod>` (see `readLocalHttpPortFromFile`).
  */
 export async function tcpProbePortListening(port: number): Promise<boolean> {
   const timeoutMs = localHttpPortFileProbeTimeoutMs();
@@ -355,9 +355,10 @@ const FALLBACK_BASE_URL = `http://${RESOLVED_API_LOOPBACK_HOST}:3080`;
  * When a session port (NEOTOMA_SESSION_DEV_PORT or NEOTOMA_SESSION_PROD_PORT) is set,
  * uses it exclusively so commands in a session always target the session server.
  * When **`NEOTOMA_MCP_USE_LOCAL_PORT_FILE`** is `1`/`true`/`yes`, reads
- * `<projectRoot>/.dev-serve/local_http_port` (same as the MCP signed shim), TCP-probes
- * it, and returns `http://localhost:<port>` when listening — after session env and
- * before `config.base_url` / auto-detect.
+ * `<projectRoot>/.dev-serve/local_http_port_<dev|prod>` (or legacy `local_http_port`),
+ * matching **`NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE`** / **`NEOTOMA_ENV`** (same rules as
+ * the MCP signed shim), TCP-probes, and returns `http://localhost:<port>` when
+ * listening — after session env and before `config.base_url` / auto-detect.
  * When no session port is set and multiple APIs respond, chooses by NEOTOMA_ENV
  * (production → 3180, development → 3080) so dev/prod MCP configs do not need
  * session port env vars in mcp.json.
