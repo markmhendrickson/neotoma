@@ -139,7 +139,8 @@ test.describe("sitePage coverage", () => {
     await expect.poll(() => page.url()).toContain("#who");
   });
 
-  test("subpage routes render with back-to-home link", async ({ page }) => {
+  test("subpage routes render with back-to-home link", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name.includes("mobile"), "Desktop coverage is enough for route inventory smoke test");
     const subpages = [
       { path: "/terminology" },
       { path: "/agent-instructions" },

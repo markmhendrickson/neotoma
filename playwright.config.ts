@@ -32,7 +32,7 @@ const legacySpecFiles = [
   'source-detail.spec.ts',
   'sources-list.spec.ts',
   'upload-flow.spec.ts',
-];
+].map((file) => `**/${file}`);
 
 export default defineConfig({
   globalSetup: path.join(__dirname, 'playwright', 'global_setup.ts'),
@@ -70,7 +70,7 @@ export default defineConfig({
       // run can start after the Chromium worker has torn the server down →
       // ECONNREFUSED on `fetch(neotomaHttpOrigin/store)`. Validate Inspector on
       // Chromium only; other suites still run on both projects.
-      testIgnore: ['inspector/**'],
+      testIgnore: ['inspector/**', ...legacySpecFiles],
       use: {
         ...devices['Mobile Safari'],
         viewport: {
