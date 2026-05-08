@@ -41,6 +41,15 @@ export const ROOT_LANDING_SITE_NAV: RootLandingNavCategory[] = [
     ],
   },
   {
+    title: "Architecture",
+    items: [
+      { label: "Foundations", href: "/foundations", icon: "Shield" },
+      { label: "Memory guarantees", href: "/memory-guarantees", icon: "ShieldCheck" },
+      { label: "Architecture", href: "/architecture", icon: "Layers" },
+      { label: "Memory models", href: "/memory-models", icon: "Boxes" },
+    ],
+  },
+  {
     title: "Hosted",
     items: [
       { label: "Hosted Neotoma", href: "/hosted", icon: "Server" },
@@ -121,6 +130,7 @@ export const ROOT_LANDING_SITE_NAV: RootLandingNavCategory[] = [
       { label: "Memory guarantees", href: "/memory-guarantees", icon: "ShieldCheck" },
       { label: "Memory models", href: "/memory-models", icon: "Container" },
       { label: "Foundations", href: "/foundations", icon: "Layers" },
+      { label: "Problem statement", href: "/foundation/problem-statement", icon: "FileText" },
       { label: "Agent instructions", href: "/agent-instructions", icon: "Bot" },
       { label: "Architecture", href: "/architecture", icon: "Building2" },
       { label: "Terminology", href: "/terminology", icon: "Bookmark" },
@@ -143,7 +153,6 @@ export const ROOT_LANDING_SITE_NAV: RootLandingNavCategory[] = [
       { label: "Conversations & turns", href: "/inspector/conversations", icon: "MessageSquare" },
       { label: "Agents & grants", href: "/inspector/agents", icon: "Bot" },
       { label: "Search", href: "/inspector/search", icon: "Search" },
-      { label: "Feedback", href: "/inspector/feedback", icon: "MessageCircle" },
       { label: "Settings", href: "/inspector/settings", icon: "Settings" },
     ],
   },

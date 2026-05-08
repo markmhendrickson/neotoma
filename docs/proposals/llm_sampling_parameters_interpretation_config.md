@@ -18,7 +18,7 @@ This document covers:
 
 This document does NOT cover:
 - Changes to reducers, entity resolution, or other deterministic components
-- Strategy Layer or Execution Layer LLM usage (future work)
+- LLM usage in operational layers above Neotoma (future work)
 
 ## Proposal Context
 

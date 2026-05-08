@@ -19,6 +19,8 @@ import {
   injectInspectorApiBaseMeta,
   appendInspectorLiveReloadScript,
   computeInspectorBuildOutputStamp,
+  isInspectorViteAssetUrlPath,
+  normalizeInspectorUrlPathname,
 } from "../../src/services/inspector_mount.js";
 
 type Server = ReturnType<express.Application["listen"]>;
@@ -43,6 +45,35 @@ function cleanEnv(overrides: Record<string, string | undefined> = {}): NodeJS.Pr
 // ---------------------------------------------------------------------------
 // Unit-level: resolveInspectorMount
 // ---------------------------------------------------------------------------
+
+describe("isInspectorViteAssetUrlPath", () => {
+  it("matches hashed chunk URLs under /assets/", () => {
+    expect(isInspectorViteAssetUrlPath("/inspector", "/inspector/assets/index-abc.js")).toBe(
+      true,
+    );
+    expect(isInspectorViteAssetUrlPath("/inspector", "/inspector/assets/foo.css")).toBe(true);
+  });
+
+  it("does not match SPA routes or bare /inspector", () => {
+    expect(isInspectorViteAssetUrlPath("/inspector", "/inspector/access-policies")).toBe(false);
+    expect(isInspectorViteAssetUrlPath("/inspector", "/inspector/entities/1")).toBe(false);
+    expect(isInspectorViteAssetUrlPath("/inspector", "/inspector")).toBe(false);
+  });
+
+  it("respects custom base path", () => {
+    expect(isInspectorViteAssetUrlPath("/ui", "/ui/assets/chunk.js")).toBe(true);
+    expect(isInspectorViteAssetUrlPath("/ui", "/inspector/assets/chunk.js")).toBe(false);
+  });
+
+  it("ignores query strings", () => {
+    expect(isInspectorViteAssetUrlPath("/inspector", "/inspector/assets/x.js?v=1")).toBe(true);
+  });
+
+  it("treats duplicate slashes like a single slash", () => {
+    expect(normalizeInspectorUrlPathname("/inspector//assets/x.js")).toBe("/inspector/assets/x.js");
+    expect(isInspectorViteAssetUrlPath("/inspector", "/inspector//assets/x.js")).toBe(true);
+  });
+});
 
 describe("resolveInspectorMount", () => {
   it("returns disabled when NEOTOMA_INSPECTOR_DISABLE=1", () => {
@@ -288,6 +319,44 @@ describe("installInspectorMount — integration", () => {
     expect(res.status).toBe(200);
     const body = await res.text();
     expect(body).toContain("<title>Inspector</title>");
+  });
+
+  it("returns 404 text for missing /inspector/assets/* (never SPA HTML)", async () => {
+    tmpDir = path.join(process.cwd(), "tmp", "inspector-test-asset404-" + Date.now());
+    mkdirSync(tmpDir, { recursive: true });
+    writeFileSync(path.join(tmpDir, "index.html"), FIXTURE_HTML);
+
+    const app = express();
+    installInspectorMount(
+      app,
+      cleanEnv({ NEOTOMA_INSPECTOR_STATIC_DIR: tmpDir }),
+      noopLogger(),
+    );
+
+    const base = await listenApp(app);
+    const res = await fetch(`${base}/inspector/assets/missing-chunk-xyz.js`);
+    expect(res.status).toBe(404);
+    expect(res.headers.get("content-type")).toMatch(/text\/plain/);
+    expect(await res.text()).toBe("Not found");
+  });
+
+  it("returns 404 text for missing /inspector//assets/* (double slash, never SPA HTML)", async () => {
+    tmpDir = path.join(process.cwd(), "tmp", "inspector-test-asset404-dslash-" + Date.now());
+    mkdirSync(tmpDir, { recursive: true });
+    writeFileSync(path.join(tmpDir, "index.html"), FIXTURE_HTML);
+
+    const app = express();
+    installInspectorMount(
+      app,
+      cleanEnv({ NEOTOMA_INSPECTOR_STATIC_DIR: tmpDir }),
+      noopLogger(),
+    );
+
+    const base = await listenApp(app);
+    const res = await fetch(`${base}/inspector//assets/missing-chunk-xyz.js`);
+    expect(res.status).toBe(404);
+    expect(res.headers.get("content-type")).toMatch(/text\/plain/);
+    expect(await res.text()).toBe("Not found");
   });
 
   it("does not mount when DISABLE=1", async () => {

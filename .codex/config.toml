@@ -3,9 +3,10 @@
 # See: https://developers.openai.com/codex/config-basic
 
 # --- MCP servers synced from .cursor/mcp.json (do not edit by hand) ---
+[mcp_servers.parquet]
+command = "/Users/markmhendrickson/repos/ateles/mcp/parquet/run-parquet-mcp.sh"
+
 [mcp_servers.web-scraper]
 command = "/Users/markmhendrickson/repos/neotoma/mcp/web-scraper/run-web-scraper-mcp.sh"
 cwd = "/Users/markmhendrickson/repos/neotoma/mcp/web-scraper"
 # --- end synced MCP servers ---
-
-# --- MCP servers synced from .cursor/mcp.json (do not edit by hand) ---

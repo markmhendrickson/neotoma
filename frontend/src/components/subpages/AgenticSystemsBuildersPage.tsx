@@ -2,6 +2,7 @@ import { Brain, Users, GitBranch, Fingerprint, Scale } from "lucide-react";
 import { ICP_PROFILES } from "../../site/site_data";
 import { IcpDetailPage } from "./IcpDetailPage";
 import type { IcpOutcomeCard } from "./IcpDetailPage";
+import { MdxSitePage } from "./MdxSitePage";
 
 const profile = ICP_PROFILES.find((p) => p.slug === "building-pipelines")!;
 
@@ -56,9 +57,10 @@ const outcomes: IcpOutcomeCard[] = [
   },
 ];
 
-export function AgenticSystemsBuildersPage() {
+export function AgenticSystemsBuildersPageBody() {
   return (
     <IcpDetailPage
+      mdxShell
       profile={profile}
       openingHook={
         <p>
@@ -269,4 +271,8 @@ export function AgenticSystemsBuildersPage() {
       closingStatement="The tax is prompt workarounds, dedup hacks, and memory regressions. Neotoma removes that tax and gives you a persistent, provenance-backed substrate to build on."
     />
   );
+}
+
+export function AgenticSystemsBuildersPage() {
+  return <MdxSitePage canonicalPath="/building-pipelines" detailTitle={profile.shortName} />;
 }

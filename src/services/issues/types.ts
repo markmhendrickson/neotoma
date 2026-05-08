@@ -6,7 +6,7 @@
  * and Neotoma conversations as the relational data model.
  */
 
-export type IssueVisibility = "public" | "private" | "advisory";
+export type IssueVisibility = "public" | "private";
 export type IssueStatus = "open" | "closed";
 export type IssueReportingMode = "proactive" | "consent" | "off";
 export type GitHubAuthMethod = "gh_cli" | "bot" | "token";
@@ -24,11 +24,26 @@ export interface IssueCreateParams {
   body: string;
   labels?: string[];
   visibility?: IssueVisibility;
+  /** Optional reporter provenance (Phase 4 daemon / CI). */
+  reporter_git_sha?: string;
+  reporter_git_ref?: string;
+  reporter_channel?: string;
+  reporter_app_version?: string;
+  reporter_ci_run_id?: string;
+  reporter_patch_source_id?: string;
 }
 
 export interface IssueMessageParams {
-  issue_number: number;
+  /** Neotoma `issue` entity id (MCP and HTTP require this). */
+  entity_id?: string;
+  /** GitHub issue number in the configured repo; internal/tests only — not exposed on MCP. */
+  issue_number?: number;
   body: string;
+  /**
+   * Optional guest token for operator read-through / remote append when the local `issue`
+   * row mirrors a remote instance. When omitted, `guest_access_token` on the issue snapshot is used.
+   */
+  guest_access_token?: string;
 }
 
 export interface IssueSyncParams {
@@ -38,8 +53,16 @@ export interface IssueSyncParams {
 }
 
 export interface IssueStatusParams {
-  issue_number: number;
+  /** Neotoma `issue` entity id (MCP requires this). */
+  entity_id?: string;
+  /** GitHub issue number in the configured repo; internal/tests only — not exposed on MCP. */
+  issue_number?: number;
   skip_sync?: boolean;
+  /**
+   * Optional guest token for operator read-through when the local row mirrors a remote issue.
+   * When omitted, `guest_access_token` on the issue snapshot is used.
+   */
+  guest_access_token?: string;
 }
 
 export interface IssuesConfig {
@@ -49,6 +72,8 @@ export interface IssuesConfig {
   sync_staleness_ms: number;
   configured_at: string | null;
   target_url: string | null;
+  /** Optional author label for private/local issues when GitHub user is unavailable. */
+  author_alias?: string | null;
 }
 
 /** Canonical issue submission URL when env and stored `issues.target_url` are unset or blank. */
@@ -57,10 +82,12 @@ export const DEFAULT_ISSUES_TARGET_URL = "https://neotoma.markmhendrickson.com";
 export const DEFAULT_ISSUES_CONFIG: IssuesConfig = {
   github_auth: "gh_cli",
   repo: "markmhendrickson/neotoma",
-  reporting_mode: "proactive",
+  /** Default: require explicit user approval before each `submit_issue` unless the operator opts into `proactive`. */
+  reporting_mode: "consent",
   sync_staleness_ms: 300_000,
   configured_at: null,
   target_url: DEFAULT_ISSUES_TARGET_URL,
+  author_alias: null,
 };
 
 export interface GitHubIssue {
@@ -91,7 +118,7 @@ export interface IssueEntity {
   body: string;
   status: IssueStatus;
   labels: string[];
-  github_number: number;
+  github_number: number | null;
   github_url: string;
   repo: string;
   visibility: IssueVisibility;

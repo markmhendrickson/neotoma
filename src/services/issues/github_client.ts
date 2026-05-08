@@ -6,7 +6,6 @@
  *
  * Supports:
  *   - Public issues (Issues API)
- *   - Security advisories (Repository Security Advisories API)
  *   - Issue comments (as messages)
  */
 

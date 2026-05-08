@@ -126,6 +126,20 @@ describe("OpenClaw plugin packaging", () => {
       const storeTool = tools.find((t: { name: string }) => t.name === "store");
       expect(storeTool!.description).toBe("Custom store description");
     });
+
+    it("issue tools expose entity_id OR issue_number in JSON Schema (MCP client parity)", async () => {
+      const { buildToolDefinitions } = await import("../../src/tool_definitions.js");
+      const tools = buildToolDefinitions();
+      const addMsg = tools.find((t: { name: string }) => t.name === "add_issue_message");
+      const getStatus = tools.find((t: { name: string }) => t.name === "get_issue_status");
+      expect(addMsg?.inputSchema).toMatchObject({
+        required: ["body"],
+        anyOf: [{ required: ["entity_id"] }, { required: ["issue_number"] }],
+      });
+      expect(getStatus?.inputSchema).toMatchObject({
+        anyOf: [{ required: ["entity_id"] }, { required: ["issue_number"] }],
+      });
+    });
   });
 
   describe("openclaw entry module", () => {

@@ -19,6 +19,7 @@ import {
   User,
   Wallet,
 } from "lucide-react";
+import { MdxSitePage } from "./MdxSitePage";
 import { UseCaseLandingShell, type UseCaseConfig } from "./use_case_landing/UseCaseLandingShell";
 
 const CONFIG: UseCaseConfig = {
@@ -232,6 +233,10 @@ const CONFIG: UseCaseConfig = {
   agentLabel: "personal agent",
 };
 
+export function PersonalDataLandingPageBody() {
+  return <UseCaseLandingShell mdxShell config={CONFIG} />;
+}
+
 export function PersonalDataLandingPage() {
-  return <UseCaseLandingShell config={CONFIG} />;
+  return <MdxSitePage canonicalPath="/personal-data" shell="bare" />;
 }

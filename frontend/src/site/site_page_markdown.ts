@@ -7,6 +7,12 @@ import {
   resolveSeoMetadata,
 } from "@/site/seo_metadata";
 
+/**
+ * Markdown bundles here are built from **SEO metadata** (title, description, canonical, …).
+ * Pages authored under `docs/site/pages/` (MDX + `.meta.json`) remain the canonical long-form
+ * source; extend this module later to embed or link raw MDX exports per route when needed.
+ */
+
 const INDEXABLE_SET = new Set(INDEXABLE_SITE_PAGE_PATHS);
 
 /**
@@ -68,7 +74,7 @@ export function buildAllSitePagesMarkdownBundle(): string {
   const intro = [
     "# Neotoma site pages (Markdown bundle)",
     "",
-    "Each section is generated from public SEO metadata for that route (title, description, canonical URL, breadcrumbs, keywords). Full marketing and docs copy lives in the React pages.",
+    "Each section is generated from public SEO metadata for that route (title, description, canonical URL, breadcrumbs, keywords). Long-form copy is migrating to MDX under `docs/site/pages/`; remaining pages still render from React components.",
     "",
   ].join("\n");
   const sections = paths.map((p) => {

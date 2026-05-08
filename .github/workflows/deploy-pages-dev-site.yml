@@ -47,7 +47,7 @@ jobs:
       - name: Build site for preview
         env:
           SITE_PREVIEW: "1"
-        run: npm run build:pages:site
+        run: npm run build:site:pages
 
       - name: Validate locale parity
         run: npm run validate:locales

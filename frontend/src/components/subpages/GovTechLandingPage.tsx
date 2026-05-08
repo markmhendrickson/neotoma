@@ -16,6 +16,7 @@ import {
   Upload,
   UserCheck,
 } from "lucide-react";
+import { MdxSitePage } from "./MdxSitePage";
 import { UseCaseLandingShell, type UseCaseConfig } from "./use_case_landing/UseCaseLandingShell";
 
 const CONFIG: UseCaseConfig = {
@@ -246,6 +247,10 @@ const CONFIG: UseCaseConfig = {
   agentLabel: "eligibility agent",
 };
 
+export function GovTechLandingPageBody() {
+  return <UseCaseLandingShell mdxShell config={CONFIG} />;
+}
+
 export function GovTechLandingPage() {
-  return <UseCaseLandingShell config={CONFIG} />;
+  return <MdxSitePage canonicalPath="/government" shell="bare" />;
 }

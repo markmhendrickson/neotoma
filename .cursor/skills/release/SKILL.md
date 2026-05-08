@@ -65,7 +65,7 @@ Draft the supplement following the section pattern from `docs/developer/github_r
 - **Docs site & CI / tooling**: If applicable.
 - **Internal changes**: Refactors, architecture, dependency, test-only work.
 - **Fixes**: Bug fixes with user/operator impact.
-- **Tests and validation**: What validates confidence.
+- **Tests and validation**: What validates confidence. (Optional: for a committed Markdown test evidence file, run `npm run test:remote:critical:report` or `npm run test:integration:report`, then copy a redacted `.vitest/reports/*.md` into `docs/releases/in_progress/vX.Y.Z/` per [`docs/testing/integration_run_reports.md`](../../../docs/testing/integration_run_reports.md).)
 - **Breaking changes**: None, or list with migration notes.
 
 **Integrated supplement (mandatory for `/release`):** The narrative is always a **single release story** across committed history and the working tree. Walk the default compare range (commits not yet on `main`, plus any user override) **and** fold **all** material uncommitted and untracked work into **the same sections above**, written **as if that work were already committed** — same grouping and reader-facing tone as shipped commits. Do not isolate dirty work in a separate appendix (for example, do not use a standalone **Uncommitted changes pending inclusion** block as the primary description). If paths cannot ship under repo security or submodule policy, state that in **Breaking changes** or a one-line **Ship constraints** item inside the same structure.

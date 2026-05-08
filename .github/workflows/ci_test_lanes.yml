@@ -105,7 +105,7 @@ jobs:
         run: npm run validate:locales
 
       - name: Build site export
-        run: npm run build:pages:site
+        run: npm run build:site:pages
 
       - name: Validate site export
         run: npm run validate:site-export

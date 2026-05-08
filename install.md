@@ -648,9 +648,8 @@ selection rules the CLI follows.
   development server and production server can coexist on the same host).
 - Release-compiled artifacts from `dist/` (via `node dist/actions.js`) when
   running from an **installed** package. On a source checkout (git clone),
-  the CLI falls back to `dev:prod` (tsx + production data dir) and emits a
-  one-line stderr advisory pointing back to this section so operators don't
-  accidentally run a watcher-style dev process in production.
+  the CLI uses the `dev:server:prod` watcher path so contributors can iterate
+  against the production data dir without changing the product CLI command.
 
 ### Reference `systemd` unit
 

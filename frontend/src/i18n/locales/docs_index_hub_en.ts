@@ -115,6 +115,11 @@ export const DOC_INDEX_HUB_EN: DocHubCategory[] = [
         desc: "Privacy-first architecture and cross-platform design",
       },
       {
+        label: "Problem statement",
+        href: "/foundation/problem-statement",
+        desc: "Why Neotoma exists: fragmented data, AI memory limits, and the substrate gap",
+      },
+      {
         label: "Agent instructions",
         href: "/agent-instructions",
         desc: "Mandatory behavioral rules for agents using Neotoma",

@@ -1,0 +1,83 @@
+Schema constraints are a core invariant: malformed writes should fail at store time, not silently degrade state quality. This page covers practical schema workflows for unfamiliar users.
+
+## List and inspect schema types
+
+```
+# List known entity types
+neotoma schemas list
+
+# Inspect one schema
+neotoma schemas get contact
+```
+
+## Store data with schema validation
+
+Store operations validate payloads against the target schema. If required fields are missing or have unexpected types, the observation is still stored but a warning is recorded in the raw fragments layer, so no data is silently lost or misclassified.
+
+```
+# Valid write
+neotoma store --json='[{"entity_type":"contact","name":"Ana Rivera","email":"ana@acme.com"}]'
+
+# Invalid write (example: wrong type for age)
+neotoma store --json='[{"entity_type":"person","name":"Ana Rivera","age":"thirty"}]'
+```
+
+## Evolve schemas incrementally
+
+Add new fields without breaking existing workflows. For larger changes, analyze candidates first, then register updates intentionally.
+
+```
+# Analyze candidate fields from observed data
+neotoma schemas analyze-candidates --entity-type contact
+
+# Recommend schema updates
+neotoma schemas recommendations --entity-type contact
+
+# Register or update schema
+neotoma schemas register --file ./contact_schema.json
+```
+
+## Operational guidance
+
+<ul className="list-none pl-0 space-y-2 mb-6">
+  <li className="text-[15px] leading-7 flex items-start gap-2">
+    <span className="text-emerald-500 mt-0.5 shrink-0" aria-hidden>
+      &rarr;
+    </span>
+    Prefer additive schema changes over destructive renames.
+  </li>
+  <li className="text-[15px] leading-7 flex items-start gap-2">
+    <span className="text-emerald-500 mt-0.5 shrink-0" aria-hidden>
+      &rarr;
+    </span>
+    Use versioned changelogs for schema edits with rationale.
+  </li>
+  <li className="text-[15px] leading-7 flex items-start gap-2">
+    <span className="text-emerald-500 mt-0.5 shrink-0" aria-hidden>
+      &rarr;
+    </span>
+    Test representative payloads before changing production schema.
+  </li>
+  <li className="text-[15px] leading-7 flex items-start gap-2">
+    <span className="text-emerald-500 mt-0.5 shrink-0" aria-hidden>
+      &rarr;
+    </span>
+    Treat schema updates as state-model changes, not UI tweaks.
+  </li>
+</ul>
+
+<p className="text-[14px] leading-6 text-muted-foreground">
+  See{" "}
+  <MdxI18nLink to="/memory-guarantees#schema-constraints" className="text-foreground underline underline-offset-2 hover:no-underline">
+    schema constraints
+  </MdxI18nLink>
+  ,{" "}
+  <MdxI18nLink to="/walkthrough" className="text-foreground underline underline-offset-2 hover:no-underline">
+    data model walkthrough
+  </MdxI18nLink>
+  , and{" "}
+  <MdxI18nLink to="/architecture" className="text-foreground underline underline-offset-2 hover:no-underline">
+    architecture
+  </MdxI18nLink>
+  .
+</p>

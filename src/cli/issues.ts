@@ -1,32 +1,42 @@
 import type { NeotomaApiClient } from "../shared/api_client.js";
-import { githubIssueThreadConversationId } from "../services/issues/github_issue_thread.js";
-import { githubIssueBodyTurnKey, githubIssueCommentTurnKey } from "../services/issues/github_thread_keys.js";
 
 /**
  * CLI implementation for `neotoma issues` commands.
  *
  * Subcommands:
- *   create  -- Create a new GitHub issue
- *   message -- Add a message to an existing issue
- *   list    -- List issues (with sync-if-stale)
- *   sync    -- Explicit full sync from GitHub
+ *   create  -- Submit issue (HTTP POST /issues/submit; same orchestration as MCP submit_issue)
+ *   message -- Append thread message (POST /issues/add_message)
+ *   status  -- Read issue + thread (POST /issues/status)
+ *   list    -- List issues from GitHub (no MCP twin)
+ *   sync    -- Mirror ingest (POST /issues/sync; same as MCP sync_issues)
  *   config  -- View/set issues configuration
  *   auth    -- Trigger gh CLI auth flow
- *
- * GitHub operations are called directly through the service layer.
- * Neotoma storage goes through the HTTP API's /store endpoint.
  */
 
 export interface IssuesCreateOpts {
   title: string;
   body: string;
   labels?: string;
-  advisory?: boolean;
+  /** `public` creates a GitHub issue when possible; `private` stores Neotoma-only (no GitHub create). */
+  visibility?: "public" | "private";
   json?: boolean;
 }
 
 export interface IssuesMessageOpts {
   body: string;
+  json?: boolean;
+  /** Neotoma `issue` entity id (preferred). */
+  entity_id?: string;
+  /** GitHub issue number in configured repo. */
+  issue_number?: number;
+  /** Guest token for operator remote append when the local snapshot does not carry it. */
+  guest_access_token?: string;
+}
+
+export interface IssuesStatusOpts {
+  entity_id: string;
+  skip_sync?: boolean;
+  guest_access_token?: string;
   json?: boolean;
 }
 
@@ -41,12 +51,15 @@ export interface IssuesListOpts {
 export interface IssuesSyncOpts {
   since?: string;
   state?: "open" | "closed" | "all";
+  labels?: string;
   json?: boolean;
 }
 
 export interface IssuesConfigOpts {
   repo?: string;
   mode?: "proactive" | "consent" | "off";
+  authorAlias?: string;
+  clearAuthorAlias?: boolean;
   json?: boolean;
 }
 
@@ -61,156 +74,162 @@ function output(data: unknown, json: boolean): void {
 }
 
 export async function issuesCreate(opts: IssuesCreateOpts, api: NeotomaApiClient): Promise<void> {
-  const { createIssue, mergeNeotomaToolingIssueLabels } = await import("../services/issues/github_client.js");
-  const { loadIssuesConfig } = await import("../services/issues/config.js");
-
-  const config = await loadIssuesConfig();
-  const parsedLabels = opts.labels ? opts.labels.split(",").map((l) => l.trim()) : undefined;
+  const { mergeNeotomaToolingIssueLabels } = await import("../services/issues/github_client.js");
+  const parsedLabels = opts.labels ? opts.labels.split(",").map((l) => l.trim()).filter(Boolean) : undefined;
   const labels = mergeNeotomaToolingIssueLabels(parsedLabels);
-  const now = new Date().toISOString();
+  const visibility = opts.visibility ?? "public";
 
-  let githubIssue: { number: number; html_url: string; user?: { login: string } | null; created_at: string } | null = null;
-  let pushedToGithub = false;
-
-  try {
-    githubIssue = await createIssue({
+  const { data, error } = await api.POST("/issues/submit", {
+    body: {
       title: opts.title,
       body: opts.body,
-      labels,
-    });
-    pushedToGithub = true;
-  } catch (err) {
-    process.stderr.write(`Warning: GitHub push failed: ${(err as Error).message}\n`);
-  }
-
-  const issueNumber = githubIssue?.number ?? 0;
-  const githubUrl = githubIssue?.html_url ?? "";
-  const author = githubIssue?.user?.login ?? "local";
-  const threadConversationId = githubIssueThreadConversationId(config.repo, issueNumber);
-
-  const { data, error } = await api.POST("/store", {
-    body: {
-      entities: [
-        {
-          entity_type: "issue",
-          title: opts.title,
-          body: opts.body,
-          status: "open",
-          labels,
-          github_number: issueNumber,
-          github_url: githubUrl,
-          repo: config.repo,
-          visibility: opts.advisory ? "advisory" : "public",
-          author,
-          created_at: githubIssue?.created_at ?? now,
-          closed_at: null,
-          last_synced_at: pushedToGithub ? now : null,
-          sync_pending: !pushedToGithub,
-          data_source: `github issues api ${config.repo} #${issueNumber} ${now.slice(0, 10)}`,
-        },
-        {
-          entity_type: "conversation",
-          title: `Issue #${issueNumber || "pending"}: ${opts.title}`,
-          thread_kind: "multi_party",
-          ...(threadConversationId ? { conversation_id: threadConversationId } : {}),
-        },
-        {
-          entity_type: "conversation_message",
-          role: "user",
-          sender_kind: "user",
-          content: opts.body,
-          author,
-          github_comment_id: issueNumber ? `issue-body-${issueNumber}` : null,
-          turn_key: issueNumber
-            ? githubIssueBodyTurnKey(config.repo, issueNumber)
-            : `github:${config.repo.trim()}#pending:issue-body`,
-          created_at: githubIssue?.created_at ?? now,
-        },
-      ],
-      relationships: [
-        { relationship_type: "REFERS_TO", source_index: 0, target_index: 1 },
-        { relationship_type: "PART_OF", source_index: 2, target_index: 1 },
-      ],
-      idempotency_key: `issue-create-${config.repo}-${issueNumber || Date.now()}`,
+      labels: labels.length > 0 ? labels : undefined,
+      visibility,
     },
-  }) as { data?: { structured?: { entities?: Array<{ entity_id: string }> } }; error?: unknown };
+  });
 
   if (error) {
-    process.stderr.write(`Store error: ${JSON.stringify(error)}\n`);
+    process.stderr.write(`issues submit failed: ${JSON.stringify(error)}\n`);
+    process.exitCode = 1;
+    return;
   }
 
-  const entityId = (data as any)?.structured?.entities?.[0]?.entity_id ?? "";
+  const row = data as {
+    issue_number?: number;
+    github_url?: string;
+    entity_id?: string;
+    pushed_to_github?: boolean;
+    github_mirror_guidance?: string | null;
+    guest_access_token?: string;
+  } | undefined;
+
+  const issueNumber = row?.issue_number ?? 0;
+  const githubUrl = row?.github_url ?? "";
+  const entityId = row?.entity_id ?? "";
+  const pushedToGithub = Boolean(row?.pushed_to_github);
 
   if (opts.json) {
-    output({ issue_number: issueNumber, github_url: githubUrl, entity_id: entityId, pushed_to_github: pushedToGithub }, true);
+    output(
+      {
+        issue_number: issueNumber,
+        github_url: githubUrl,
+        entity_id: entityId,
+        pushed_to_github: pushedToGithub,
+        guest_access_token: row?.guest_access_token,
+        github_mirror_guidance: row?.github_mirror_guidance ?? null,
+      },
+      true,
+    );
   } else {
-    if (pushedToGithub) {
+    if (pushedToGithub && issueNumber > 0) {
       process.stdout.write(`Created issue #${issueNumber}: ${githubUrl}\n`);
     } else {
-      process.stdout.write(`Issue stored locally (GitHub push pending). Entity: ${entityId}\n`);
+      process.stdout.write(`Issue stored locally (GitHub push pending or private). Entity: ${entityId}\n`);
+      if (row?.github_mirror_guidance) {
+        process.stdout.write(`${row.github_mirror_guidance}\n`);
+      }
+    }
+    if (row?.guest_access_token) {
+      process.stdout.write(
+        "Guest access token returned. Treat it as a credential; pass it to issues status/message when needed.\n",
+      );
     }
   }
 }
 
-export async function issuesMessage(
-  issueNumber: number,
-  opts: IssuesMessageOpts,
-  api: NeotomaApiClient,
-): Promise<void> {
-  const { addIssueComment } = await import("../services/issues/github_client.js");
-
-  let githubComment: { id: number; user?: { login: string } | null; created_at: string } | null = null;
-  let pushedToGithub = false;
-
-  try {
-    githubComment = await addIssueComment(issueNumber, opts.body);
-    pushedToGithub = true;
-  } catch (err) {
-    process.stderr.write(`Warning: GitHub push failed: ${(err as Error).message}\n`);
+export async function issuesMessage(opts: IssuesMessageOpts, api: NeotomaApiClient): Promise<void> {
+  const entityId = opts.entity_id?.trim();
+  const issueNumber = opts.issue_number;
+  const hasEntity = typeof entityId === "string" && entityId.length > 0;
+  const hasNumber = typeof issueNumber === "number" && Number.isFinite(issueNumber) && issueNumber > 0;
+  if (!hasEntity && !hasNumber) {
+    process.stderr.write("Error: provide a GitHub issue number as the command argument or --entity-id\n");
+    process.exitCode = 1;
+    return;
   }
 
-  const now = new Date().toISOString();
-  const author = githubComment?.user?.login ?? "local";
-  const { loadIssuesConfig } = await import("../services/issues/config.js");
-  const config = await loadIssuesConfig();
-  const commentKey = githubComment ? String(githubComment.id) : `local-${Date.now()}`;
-  const threadConversationId = githubIssueThreadConversationId(config.repo, issueNumber);
-
-  await api.POST("/store", {
+  const { data, error } = await api.POST("/issues/add_message", {
     body: {
-      entities: [
-        {
-          entity_type: "conversation",
-          title: `Issue #${issueNumber}`,
-          thread_kind: "multi_party",
-          ...(threadConversationId ? { conversation_id: threadConversationId } : {}),
-        },
-        {
-          entity_type: "conversation_message",
-          role: "user",
-          sender_kind: "user",
-          content: opts.body,
-          author,
-          github_comment_id: commentKey,
-          turn_key: githubIssueCommentTurnKey(config.repo, issueNumber, commentKey),
-          created_at: githubComment?.created_at ?? now,
-        },
-      ],
-      relationships: [
-        { relationship_type: "PART_OF", source_index: 1, target_index: 0 },
-      ],
-      idempotency_key: `issue-message-${config.repo}-${issueNumber}-${commentKey}`,
+      ...(hasEntity ? { entity_id: entityId } : {}),
+      ...(hasNumber ? { issue_number: issueNumber } : {}),
+      body: opts.body,
+      ...(opts.guest_access_token?.trim()
+        ? { guest_access_token: opts.guest_access_token.trim() }
+        : {}),
     },
   });
 
+  if (error) {
+    process.stderr.write(`issues message failed: ${JSON.stringify(error)}\n`);
+    process.exitCode = 1;
+    return;
+  }
+
+  const row = data as {
+    github_comment_id?: string | null;
+    message_entity_id?: string;
+    pushed_to_github?: boolean;
+    submitted_to_neotoma?: boolean;
+  } | undefined;
+
   if (opts.json) {
-    output({ pushed_to_github: pushedToGithub, github_comment_id: githubComment?.id ?? null }, true);
+    output(
+      {
+        pushed_to_github: Boolean(row?.pushed_to_github),
+        github_comment_id: row?.github_comment_id ?? null,
+        message_entity_id: row?.message_entity_id,
+        submitted_to_neotoma: Boolean(row?.submitted_to_neotoma),
+      },
+      true,
+    );
   } else {
-    if (pushedToGithub) {
-      process.stdout.write(`Message added to issue #${issueNumber}\n`);
+    if (row?.pushed_to_github) {
+      process.stdout.write(
+        `Message added${hasNumber ? ` to issue #${issueNumber}` : ""}${row.github_comment_id ? ` (comment ${row.github_comment_id})` : ""}\n`,
+      );
     } else {
-      process.stdout.write(`Message stored locally (GitHub push pending)\n`);
+      process.stdout.write(`Message stored locally (GitHub push pending or private thread)\n`);
     }
+  }
+}
+
+export async function issuesStatus(opts: IssuesStatusOpts, api: NeotomaApiClient): Promise<void> {
+  const { data, error } = await api.POST("/issues/status", {
+    body: {
+      entity_id: opts.entity_id.trim(),
+      skip_sync: opts.skip_sync === true,
+      ...(opts.guest_access_token?.trim()
+        ? { guest_access_token: opts.guest_access_token.trim() }
+        : {}),
+    },
+  });
+
+  if (error) {
+    process.stderr.write(`issues status failed: ${JSON.stringify(error)}\n`);
+    process.exitCode = 1;
+    return;
+  }
+
+  if (opts.json) {
+    output(data, true);
+    return;
+  }
+
+  const row = data as {
+    title?: string;
+    status?: string;
+    issue_number?: number;
+    github_url?: string;
+    messages?: Array<{ author: string; body: string; created_at: string }>;
+    synced?: boolean;
+  } | undefined;
+  process.stdout.write(`${row?.title ?? ""} [${row?.status ?? ""}]`);
+  if (row?.issue_number) process.stdout.write(` #${row.issue_number}`);
+  process.stdout.write("\n");
+  if (row?.github_url) process.stdout.write(`${row.github_url}\n`);
+  process.stdout.write(`synced=${Boolean(row?.synced)}\n\n`);
+  for (const m of row?.messages ?? []) {
+    process.stdout.write(`--- ${m.author} @ ${m.created_at}\n${m.body}\n\n`);
   }
 }
 
@@ -264,142 +283,38 @@ export async function issuesList(opts: IssuesListOpts, api: NeotomaApiClient): P
 }
 
 export async function issuesSync(opts: IssuesSyncOpts, api: NeotomaApiClient): Promise<void> {
-  const { listIssues, listIssueComments } = await import("../services/issues/github_client.js");
-  const { loadIssuesConfig } = await import("../services/issues/config.js");
+  const labelArr = opts.labels
+    ? opts.labels.split(",").map((l) => l.trim()).filter(Boolean)
+    : undefined;
 
-  const config = await loadIssuesConfig();
-  const now = new Date().toISOString();
-  let issuesSynced = 0;
-  let messagesSynced = 0;
-  const errors: string[] = [];
-
-  let ghIssues: Array<{ number: number; title: string; body: string | null; state: string; labels: Array<{ name: string }>; html_url: string; user: { login: string } | null; created_at: string; closed_at: string | null; updated_at: string }>;
-  try {
-    ghIssues = await listIssues({
-      state: opts.state ?? "all",
+  const { data, error } = await api.POST("/issues/sync", {
+    body: {
       since: opts.since,
-    });
-  } catch (err) {
-    errors.push(`Failed to list issues: ${(err as Error).message}`);
-    if (opts.json) {
-      output({ issues_synced: 0, messages_synced: 0, errors }, true);
-    } else {
-      process.stderr.write(`Sync failed: ${(err as Error).message}\n`);
-    }
+      state: opts.state ?? "all",
+      labels: labelArr && labelArr.length > 0 ? labelArr : undefined,
+    },
+  });
+
+  if (error) {
+    process.stderr.write(`issues sync failed: ${JSON.stringify(error)}\n`);
+    process.exitCode = 1;
     return;
   }
 
-  for (const issue of ghIssues) {
-    try {
-      const threadConversationId = githubIssueThreadConversationId(config.repo, issue.number);
-      await api.POST("/store", {
-        body: {
-          entities: [
-            {
-              entity_type: "issue",
-              title: issue.title,
-              body: issue.body ?? "",
-              status: issue.state,
-              labels: issue.labels.map((l) => l.name),
-              github_number: issue.number,
-              github_url: issue.html_url,
-              repo: config.repo,
-              visibility: "public",
-              author: issue.user?.login ?? "unknown",
-              created_at: issue.created_at,
-              closed_at: issue.closed_at,
-              last_synced_at: now,
-              sync_pending: false,
-              data_source: `github issues api ${config.repo} #${issue.number} ${now.slice(0, 10)}`,
-            },
-            {
-              entity_type: "conversation",
-              title: `Issue #${issue.number}: ${issue.title}`,
-              thread_kind: "multi_party",
-              ...(threadConversationId ? { conversation_id: threadConversationId } : {}),
-            },
-            {
-              entity_type: "conversation_message",
-              role: "user",
-              sender_kind: "user",
-              content: issue.body ?? "",
-              author: issue.user?.login ?? "unknown",
-              github_comment_id: `issue-body-${issue.number}`,
-              turn_key: githubIssueBodyTurnKey(config.repo, issue.number),
-              created_at: issue.created_at,
-            },
-          ],
-          relationships: [
-            { relationship_type: "REFERS_TO", source_index: 0, target_index: 1 },
-            { relationship_type: "PART_OF", source_index: 2, target_index: 1 },
-          ],
-          idempotency_key: `issue-sync-${config.repo}-${issue.number}`,
-        },
-      });
-      issuesSynced++;
+  const row = data as {
+    issues_synced?: number;
+    messages_synced?: number;
+    errors?: string[];
+  } | undefined;
 
-      const comments = await listIssueComments(issue.number);
-      for (const comment of comments) {
-        // Same graph shape as the issue row above: issue → conversation (REFERS_TO),
-        // message → conversation (PART_OF). Resolver merges issue + conversation so
-        // each comment attaches to the shared thread instead of a one-off conversation.
-        await api.POST("/store", {
-          body: {
-            entities: [
-              {
-                entity_type: "issue",
-                title: issue.title,
-                body: issue.body ?? "",
-                status: issue.state,
-                labels: issue.labels.map((l) => l.name),
-                github_number: issue.number,
-                github_url: issue.html_url,
-                repo: config.repo,
-                visibility: "public",
-                author: issue.user?.login ?? "unknown",
-                created_at: issue.created_at,
-                closed_at: issue.closed_at,
-                last_synced_at: now,
-                sync_pending: false,
-                data_source: `github issues api ${config.repo} #${issue.number} ${now.slice(0, 10)}`,
-              },
-              {
-                entity_type: "conversation",
-                title: `Issue #${issue.number}: ${issue.title}`,
-                thread_kind: "multi_party",
-                ...(threadConversationId ? { conversation_id: threadConversationId } : {}),
-              },
-              {
-                entity_type: "conversation_message",
-                role: "user",
-                sender_kind: "user",
-                content: comment.body,
-                author: comment.user?.login ?? "unknown",
-                github_comment_id: String(comment.id),
-                turn_key: githubIssueCommentTurnKey(config.repo, issue.number, String(comment.id)),
-                created_at: comment.created_at,
-              },
-            ],
-            relationships: [
-              { relationship_type: "REFERS_TO", source_index: 0, target_index: 1 },
-              { relationship_type: "PART_OF", source_index: 2, target_index: 1 },
-            ],
-            idempotency_key: `issue-comment-sync-${config.repo}-${issue.number}-${comment.id}`,
-          },
-        });
-        messagesSynced++;
-      }
-    } catch (err) {
-      errors.push(`Issue #${issue.number}: ${(err as Error).message}`);
-    }
-  }
+  const issuesSynced = row?.issues_synced ?? 0;
+  const messagesSynced = row?.messages_synced ?? 0;
+  const errors = row?.errors ?? [];
 
   if (opts.json) {
     output({ issues_synced: issuesSynced, messages_synced: messagesSynced, errors }, true);
   } else {
-    process.stdout.write(
-      `Synced ${issuesSynced} issues, ${messagesSynced} messages.\n`,
-    );
+    process.stdout.write(`Synced ${issuesSynced} issues, ${messagesSynced} messages.\n`);
     if (errors.length) {
       process.stderr.write(`Errors:\n${errors.map((e) => `  - ${e}`).join("\n")}\n`);
     }
@@ -409,7 +324,7 @@ export async function issuesSync(opts: IssuesSyncOpts, api: NeotomaApiClient): P
 export async function issuesConfig(opts: IssuesConfigOpts): Promise<void> {
   const { loadIssuesConfig, updateIssuesConfig } = await import("../services/issues/config.js");
 
-  if (!opts.repo && !opts.mode) {
+  if (!opts.repo && !opts.mode && opts.authorAlias === undefined && !opts.clearAuthorAlias) {
     const config = await loadIssuesConfig();
     if (opts.json) {
       output(config, true);
@@ -418,6 +333,7 @@ export async function issuesConfig(opts: IssuesConfigOpts): Promise<void> {
       process.stdout.write(`  GitHub auth: ${config.github_auth}\n`);
       process.stdout.write(`  Repo: ${config.repo}\n`);
       process.stdout.write(`  Reporting mode: ${config.reporting_mode}\n`);
+      process.stdout.write(`  Author alias: ${config.author_alias ?? "not configured"}\n`);
       process.stdout.write(`  Sync staleness: ${config.sync_staleness_ms}ms\n`);
       process.stdout.write(`  Configured at: ${config.configured_at ?? "not configured"}\n`);
     }
@@ -427,6 +343,12 @@ export async function issuesConfig(opts: IssuesConfigOpts): Promise<void> {
   const updates: Record<string, unknown> = {};
   if (opts.repo) updates.repo = opts.repo;
   if (opts.mode) updates.reporting_mode = opts.mode;
+  if (opts.clearAuthorAlias) {
+    updates.author_alias = null;
+  } else if (opts.authorAlias !== undefined) {
+    const alias = opts.authorAlias.trim();
+    updates.author_alias = alias.length > 0 ? alias : null;
+  }
 
   const updated = await updateIssuesConfig(updates as any);
   if (opts.json) {

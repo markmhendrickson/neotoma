@@ -46,13 +46,14 @@ graph LR
 - **Replayable.** Inspect any entity at any point in time. Diff versions. Reconstruct history from the observation log.
 - **Structure-first.** Schema-first extraction with deterministic retrieval. Optional similarity search when embeddings are configured.
 
-### Three foundations
+### Four foundations
 
-| Foundation         | What it means                                                                                                                           |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| **Privacy-first**  | Your data stays local. Never used for training. User-controlled storage, optional encryption at rest. Full export and deletion control. |
-| **Deterministic**  | Same input always produces same output. Schema-first extraction, hash-based entity IDs, full provenance. No silent mutation.            |
-| **Cross-platform** | One memory graph across Claude, ChatGPT, Cursor, OpenClaw, IronClaw, Codex, and CLI. MCP-based access. No platform lock-in. Works alongside native memory. |
+| Foundation                  | What it means                                                                                                                                              |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Privacy-first**           | Your data stays local. Never used for training. Nothing is stored unless you approve it; no background scanning or implicit captures. Full export and deletion control. |
+| **Deterministic**           | Same input always produces same output. Schema-first extraction, hash-based entity IDs, full provenance. No silent mutation.                                |
+| **Immutable and verifiable** | Append-only observations; history cannot be rewritten. Hash-based entity IDs are tamper-evident. Full provenance chain from any state to its source.       |
+| **Cross-platform**          | One memory graph across Claude, ChatGPT, Cursor, OpenClaw, IronClaw, Codex, and CLI. MCP-based access. No platform lock-in. Works alongside native memory. |
 
 ## State guarantees
 
@@ -72,6 +73,8 @@ Most AI memory systems optimize storage or retrieval. Neotoma enforces state int
 | Zero-setup onboarding                | ✓         | ✗               | ✗          | ✗             | ✗             |
 | Semantic similarity search           | ✗         | ✓               | ✗          | ✗             | ✓             |
 | Direct human editability             | ✗         | ✗               | ✓          | ✗             | ✗             |
+| Strong consistency                   | ✗         | ✗               | ✗          | ✓             | ✓             |
+| Transactional writes                 | ✗         | ✗               | ✗          | ✓             | ✓             |
 
 **Platform:** Claude, ChatGPT, Gemini, Copilot. **Retrieval:** Mem0, Zep, LangChain Memory. **Files:** Markdown files, JSON stores, CRDT docs. **Database:** SQLite, Postgres, MySQL. **Neotoma:** Deterministic state layer (reference implementation).
 

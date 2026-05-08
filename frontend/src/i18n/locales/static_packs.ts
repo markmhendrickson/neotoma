@@ -79,6 +79,7 @@ export interface StaticLocalePack {
     onThisPage: string;
     privacyFirst: string;
     deterministic: string;
+    immutable: string;
     crossPlatform: string;
   };
   seo: {
@@ -128,7 +129,7 @@ const EN_PACK: StaticLocalePack = {
     ctaOfficeHoursSubtext:
       "Building a multi-agent stack? Office hours for developers who want to talk architecture.",
     subcopy:
-      "Neotoma is git for what your agents know. Versioned, diffable, replayable state across Claude, Cursor, ChatGPT, and everything else. Stop being the human sync layer.",
+      "State integrity, not retrieval quality. Versioned, diffable, replayable state across Claude, Cursor, ChatGPT, and everything else.",
     curiosityGap:
       "Most memory tools help agents retrieve information. None of them can prove it hasn\u2019t been silently corrupted.",
     audienceTagline: "Durable memory for agents that persists across sessions and tools",
@@ -177,6 +178,7 @@ const EN_PACK: StaticLocalePack = {
     onThisPage: "On this page",
     privacyFirst: "Privacy-first",
     deterministic: "Deterministic",
+    immutable: "Immutable and verifiable",
     crossPlatform: "Cross-platform",
   },
   seo: {
@@ -247,7 +249,7 @@ const LOCALE_PACKS: Record<string, LocalePackOverrides> = {
     },
     siteSections: { intro: "Introducción", personalOs: "Prueba", beforeAfter: "Antes / Después", who: "Quién", demo: "Demo", recordTypes: "Tipos de registro", guarantees: "Garantías", evaluate: "Evaluar", commonQuestions: "Preguntas frecuentes", frequentlyAskedQuestions: "Preguntas frecuentes", inspect: "Inspeccionar", architecture: "Arquitectura", useCases: "Casos de uso", interfaces: "Interfaces", learnMore: "Saber más", resources: "Recursos" },
     memory: { vendors: "Proveedores", representativeProviders: "Proveedores representativos para cada enfoque de memoria", platform: "Plataforma", retrievalRag: "Recuperación / RAG", files: "Archivos", database: "Base de datos", deterministic: "Determinista", platformShort: "Plat.", ragShort: "RAG", filesShort: "Archivos", databaseShort: "BD", deterministicShort: "Det.", onThisPage: "En esta página", showFewer: "Mostrar menos", showAllGuaranteesTemplate: "Mostrar las {count} garantías" },
-    foundations: { title: "Fundamentos", onThisPage: "En esta página", privacyFirst: "Privacidad primero", deterministic: "Determinista", crossPlatform: "Multiplataforma" },
+    foundations: { title: "Fundamentos", onThisPage: "En esta página", privacyFirst: "Privacidad primero", deterministic: "Determinista", immutable: "Inmutable y verificable", crossPlatform: "Multiplataforma" },
     seo: {
       home: { title: "Tus agentes olvidan. Neotoma los hace recordar.", description: "Deja de ser la capa de sincronización humana. Estado determinista y versionado para constructores y operadores multi-agente que usan Claude, Cursor, ChatGPT y herramientas conectadas por MCP." },
       docs: { title: "Documentación de Neotoma | Configuración, API, MCP, CLI", description: "Documentación de Neotoma: configuración, arquitectura, referencias de API y guías operativas." },
@@ -286,7 +288,7 @@ const LOCALE_PACKS: Record<string, LocalePackOverrides> = {
     },
     siteSections: { intro: "Introducció", personalOs: "Prova", beforeAfter: "Abans / Després", who: "Qui", demo: "Demo", recordTypes: "Tipus de registre", guarantees: "Garanties", evaluate: "Avaluar", commonQuestions: "Preguntes freqüents", frequentlyAskedQuestions: "Preguntes freqüents", inspect: "Inspeccionar", architecture: "Arquitectura", useCases: "Casos d'ús", interfaces: "Interfícies", learnMore: "Saber-ne més", resources: "Recursos" },
     memory: { vendors: "Proveïdors", representativeProviders: "Proveïdors representatius per a cada enfocament de memòria", platform: "Plataforma", retrievalRag: "Recuperació / RAG", files: "Fitxers", database: "Base de dades", deterministic: "Determinista", platformShort: "Plat.", ragShort: "RAG", filesShort: "Fitxers", databaseShort: "BD", deterministicShort: "Det.", onThisPage: "En aquesta pàgina", showFewer: "Mostrar menys", showAllGuaranteesTemplate: "Mostrar les {count} garanties" },
-    foundations: { title: "Fonaments", onThisPage: "En aquesta pàgina", privacyFirst: "Privacitat primer", deterministic: "Determinista", crossPlatform: "Multiplataforma" },
+    foundations: { title: "Fonaments", onThisPage: "En aquesta pàgina", privacyFirst: "Privacitat primer", deterministic: "Determinista", immutable: "Immutable i verificable", crossPlatform: "Multiplataforma" },
     seo: {
       home: { title: "Els teus agents obliden. Neotoma els fa recordar.", description: "Deixa de ser la capa de sincronització humana. Estat determinista i versionat per a constructors i operadors multi-agent que usen Claude, Cursor, ChatGPT i eines connectades per MCP." },
       docs: { title: "Documentació de Neotoma | Configuració, API, MCP, CLI", description: "Documentació de Neotoma: configuració, arquitectura, referències d'API i guies operatives." },
@@ -325,7 +327,7 @@ const LOCALE_PACKS: Record<string, LocalePackOverrides> = {
     },
     siteSections: { intro: "简介", personalOs: "证明", beforeAfter: "前后对比", who: "用户", demo: "演示", recordTypes: "记录类型", guarantees: "保证", evaluate: "评估", commonQuestions: "常见问题", frequentlyAskedQuestions: "常见问题", inspect: "检查", architecture: "架构", useCases: "使用场景", interfaces: "接口", learnMore: "了解更多", resources: "资源" },
     memory: { vendors: "供应商", representativeProviders: "每种记忆方式的代表性供应商", platform: "平台", retrievalRag: "检索 / RAG", files: "文件", database: "数据库", deterministic: "确定性", platformShort: "平台", ragShort: "RAG", filesShort: "文件", databaseShort: "数据库", deterministicShort: "确定", onThisPage: "本页内容", showFewer: "显示更少", showAllGuaranteesTemplate: "显示全部 {count} 项保证" },
-    foundations: { title: "基础", onThisPage: "本页内容", privacyFirst: "隐私优先", deterministic: "确定性", crossPlatform: "跨平台" },
+    foundations: { title: "基础", onThisPage: "本页内容", privacyFirst: "隐私优先", deterministic: "确定性", immutable: "不可变且可验证", crossPlatform: "跨平台" },
     seo: {
       home: { title: "你的代理会遗忘。Neotoma 让它们记住。", description: "不再做人工同步层。为运行 Claude、Cursor、ChatGPT 和 MCP 连接工具的多代理构建者和运营者提供确定性、版本化状态。" },
       docs: { title: "Neotoma 文档 | 设置、API、MCP、CLI 参考", description: "Neotoma 文档：设置、架构、API 参考和操作指南。" },
@@ -364,7 +366,7 @@ const LOCALE_PACKS: Record<string, LocalePackOverrides> = {
     },
     siteSections: { intro: "परिचय", personalOs: "प्रमाण", beforeAfter: "पहले / बाद", who: "कौन", demo: "डेमो", recordTypes: "रिकॉर्ड प्रकार", guarantees: "गारंटी", evaluate: "मूल्यांकन", commonQuestions: "सामान्य प्रश्न", frequentlyAskedQuestions: "अक्सर पूछे जाने वाले प्रश्न", inspect: "निरीक्षण", architecture: "आर्किटेक्चर", useCases: "उपयोग के मामले", interfaces: "इंटरफेस", learnMore: "और जानें", resources: "संसाधन" },
     memory: { vendors: "विक्रेता", representativeProviders: "प्रत्येक मेमोरी दृष्टिकोण के प्रतिनिधि प्रदाता", platform: "प्लेटफ़ॉर्म", retrievalRag: "रिट्रीवल / RAG", files: "फ़ाइलें", database: "डेटाबेस", deterministic: "नियतात्मक", platformShort: "प्लेट.", ragShort: "RAG", filesShort: "फ़ाइलें", databaseShort: "DB", deterministicShort: "नियत.", onThisPage: "इस पृष्ठ पर", showFewer: "कम दिखाएं", showAllGuaranteesTemplate: "सभी {count} गारंटी दिखाएं" },
-    foundations: { title: "आधार", onThisPage: "इस पृष्ठ पर", privacyFirst: "गोपनीयता-प्रथम", deterministic: "नियतात्मक", crossPlatform: "क्रॉस-प्लेटफ़ॉर्म" },
+    foundations: { title: "आधार", onThisPage: "इस पृष्ठ पर", privacyFirst: "गोपनीयता-प्रथम", deterministic: "नियतात्मक", immutable: "अपरिवर्तनीय और सत्यापन योग्य", crossPlatform: "क्रॉस-प्लेटफ़ॉर्म" },
     seo: {
       home: { title: "आपके एजेंट भूल जाते हैं। Neotoma उन्हें याद कराता है।", description: "मानव सिंक लेयर बनना बंद करें। Claude, Cursor, ChatGPT, और MCP-कनेक्टेड टूल्स चलाने वाले मल्टी-एजेंट बिल्डर्स और ऑपरेटर्स के लिए नियतात्मक, संस्करणित स्थिति।" },
       docs: { title: "Neotoma दस्तावेज़ | सेटअप, API, MCP, CLI संदर्भ", description: "Neotoma दस्तावेज़: सेटअप, आर्किटेक्चर, API संदर्भ और परिचालन गाइड।" },
@@ -403,7 +405,7 @@ const LOCALE_PACKS: Record<string, LocalePackOverrides> = {
     },
     siteSections: { intro: "مقدمة", personalOs: "إثبات", beforeAfter: "قبل / بعد", who: "من", demo: "عرض", recordTypes: "أنواع السجلات", guarantees: "الضمانات", evaluate: "تقييم", commonQuestions: "أسئلة شائعة", frequentlyAskedQuestions: "الأسئلة المتكررة", inspect: "فحص", architecture: "البنية", useCases: "حالات الاستخدام", interfaces: "الواجهات", learnMore: "اعرف المزيد", resources: "الموارد" },
     memory: { vendors: "الموردون", representativeProviders: "مزودون ممثلون لكل نهج ذاكرة", platform: "المنصة", retrievalRag: "الاسترجاع / RAG", files: "الملفات", database: "قاعدة البيانات", deterministic: "حتمي", platformShort: "منصة", ragShort: "RAG", filesShort: "ملفات", databaseShort: "ق.ب", deterministicShort: "حتمي", onThisPage: "في هذه الصفحة", showFewer: "عرض أقل", showAllGuaranteesTemplate: "عرض جميع الضمانات ({count})" },
-    foundations: { title: "الأساسيات", onThisPage: "في هذه الصفحة", privacyFirst: "الخصوصية أولاً", deterministic: "حتمي", crossPlatform: "متعدد المنصات" },
+    foundations: { title: "الأساسيات", onThisPage: "في هذه الصفحة", privacyFirst: "الخصوصية أولاً", deterministic: "حتمي", immutable: "غير قابل للتغيير وقابل للتحقق", crossPlatform: "متعدد المنصات" },
     seo: {
       home: { title: "وكلاؤك ينسون. Neotoma يجعلهم يتذكرون.", description: "توقف عن كونك طبقة المزامنة البشرية. حالة حتمية ومُصدَّرة لبناة ومشغلي الوكلاء المتعددين الذين يستخدمون Claude وCursor وChatGPT وأدوات MCP." },
       docs: { title: "وثائق Neotoma | الإعداد وAPI وMCP وCLI", description: "وثائق Neotoma: الإعداد والبنية ومراجع API والأدلة التشغيلية." },
@@ -442,7 +444,7 @@ const LOCALE_PACKS: Record<string, LocalePackOverrides> = {
     },
     siteSections: { intro: "Introduction", personalOs: "Preuve", beforeAfter: "Avant / Après", who: "Qui", demo: "Démo", recordTypes: "Types d'enregistrement", guarantees: "Garanties", evaluate: "Évaluer", commonQuestions: "Questions fréquentes", frequentlyAskedQuestions: "Questions fréquemment posées", inspect: "Inspecter", architecture: "Architecture", useCases: "Cas d'utilisation", interfaces: "Interfaces", learnMore: "En savoir plus", resources: "Ressources" },
     memory: { vendors: "Fournisseurs", representativeProviders: "Fournisseurs représentatifs pour chaque approche mémoire", platform: "Plateforme", retrievalRag: "Récupération / RAG", files: "Fichiers", database: "Base de données", deterministic: "Déterministe", platformShort: "Plat.", ragShort: "RAG", filesShort: "Fichiers", databaseShort: "BD", deterministicShort: "Dét.", onThisPage: "Sur cette page", showFewer: "Afficher moins", showAllGuaranteesTemplate: "Afficher les {count} garanties" },
-    foundations: { title: "Fondations", onThisPage: "Sur cette page", privacyFirst: "Confidentialité d'abord", deterministic: "Déterministe", crossPlatform: "Multiplateforme" },
+    foundations: { title: "Fondations", onThisPage: "Sur cette page", privacyFirst: "Confidentialité d'abord", deterministic: "Déterministe", immutable: "Immuable et vérifiable", crossPlatform: "Multiplateforme" },
     seo: {
       home: { title: "Vos agents oublient. Neotoma leur fait se souvenir.", description: "Cessez d'être la couche de synchronisation humaine. État déterministe et versionné pour les constructeurs et opérateurs multi-agents utilisant Claude, Cursor, ChatGPT et les outils connectés MCP." },
       docs: { title: "Documentation Neotoma | Configuration, API, MCP, CLI", description: "Documentation Neotoma : configuration, architecture, références API et guides opérationnels." },
@@ -481,7 +483,7 @@ const LOCALE_PACKS: Record<string, LocalePackOverrides> = {
     },
     siteSections: { intro: "Introdução", personalOs: "Prova", beforeAfter: "Antes / Depois", who: "Quem", demo: "Demo", recordTypes: "Tipos de registro", guarantees: "Garantias", evaluate: "Avaliar", commonQuestions: "Perguntas frequentes", frequentlyAskedQuestions: "Perguntas frequentes", inspect: "Inspecionar", architecture: "Arquitetura", useCases: "Casos de uso", interfaces: "Interfaces", learnMore: "Saiba mais", resources: "Recursos" },
     memory: { vendors: "Fornecedores", representativeProviders: "Fornecedores representativos para cada abordagem de memória", platform: "Plataforma", retrievalRag: "Recuperação / RAG", files: "Arquivos", database: "Banco de dados", deterministic: "Determinístico", platformShort: "Plat.", ragShort: "RAG", filesShort: "Arquivos", databaseShort: "BD", deterministicShort: "Det.", onThisPage: "Nesta página", showFewer: "Mostrar menos", showAllGuaranteesTemplate: "Mostrar todas as {count} garantias" },
-    foundations: { title: "Fundamentos", onThisPage: "Nesta página", privacyFirst: "Privacidade primeiro", deterministic: "Determinístico", crossPlatform: "Multiplataforma" },
+    foundations: { title: "Fundamentos", onThisPage: "Nesta página", privacyFirst: "Privacidade primeiro", deterministic: "Determinístico", immutable: "Imutável e verificável", crossPlatform: "Multiplataforma" },
     seo: {
       home: { title: "Seus agentes esquecem. Neotoma os faz lembrar.", description: "Pare de ser a camada de sincronização humana. Estado determinístico e versionado para construtores e operadores multi-agente que usam Claude, Cursor, ChatGPT e ferramentas conectadas por MCP." },
       docs: { title: "Documentação Neotoma | Configuração, API, MCP, CLI", description: "Documentação do Neotoma: configuração, arquitetura, referências de API e guias operacionais." },
@@ -520,7 +522,7 @@ const LOCALE_PACKS: Record<string, LocalePackOverrides> = {
     },
     siteSections: { intro: "Введение", personalOs: "Доказательство", beforeAfter: "До / После", who: "Кто", demo: "Демо", recordTypes: "Типы записей", guarantees: "Гарантии", evaluate: "Оценить", commonQuestions: "Частые вопросы", frequentlyAskedQuestions: "Часто задаваемые вопросы", inspect: "Инспектировать", architecture: "Архитектура", useCases: "Примеры использования", interfaces: "Интерфейсы", learnMore: "Узнать больше", resources: "Ресурсы" },
     memory: { vendors: "Поставщики", representativeProviders: "Репрезентативные поставщики для каждого подхода к памяти", platform: "Платформа", retrievalRag: "Извлечение / RAG", files: "Файлы", database: "База данных", deterministic: "Детерминированная", platformShort: "Плат.", ragShort: "RAG", filesShort: "Файлы", databaseShort: "БД", deterministicShort: "Дет.", onThisPage: "На этой странице", showFewer: "Показать меньше", showAllGuaranteesTemplate: "Показать все {count} гарантий" },
-    foundations: { title: "Основы", onThisPage: "На этой странице", privacyFirst: "Конфиденциальность прежде всего", deterministic: "Детерминированность", crossPlatform: "Кроссплатформенность" },
+    foundations: { title: "Основы", onThisPage: "На этой странице", privacyFirst: "Конфиденциальность прежде всего", deterministic: "Детерминированность", immutable: "Неизменяемое и проверяемое", crossPlatform: "Кроссплатформенность" },
     seo: {
       home: { title: "Ваши агенты забывают. Neotoma заставляет их помнить.", description: "Перестаньте быть человеческим слоем синхронизации. Детерминированное, версионированное состояние для мультиагентных разработчиков и операторов, использующих Claude, Cursor, ChatGPT и MCP-инструменты." },
       docs: { title: "Документация Neotoma | Настройка, API, MCP, CLI", description: "Документация Neotoma: настройка, архитектура, справка по API и операционные руководства." },
@@ -559,7 +561,7 @@ const LOCALE_PACKS: Record<string, LocalePackOverrides> = {
     },
     siteSections: { intro: "ভূমিকা", personalOs: "প্রমাণ", beforeAfter: "আগে / পরে", who: "কে", demo: "ডেমো", recordTypes: "রেকর্ড প্রকার", guarantees: "গ্যারান্টি", evaluate: "মূল্যায়ন", commonQuestions: "সাধারণ প্রশ্ন", frequentlyAskedQuestions: "প্রায়শই জিজ্ঞাসিত প্রশ্ন", inspect: "পরিদর্শন", architecture: "আর্কিটেকচার", useCases: "ব্যবহারের ক্ষেত্র", interfaces: "ইন্টারফেস", learnMore: "আরও জানুন", resources: "সম্পদ" },
     memory: { vendors: "বিক্রেতা", representativeProviders: "প্রতিটি মেমোরি পদ্ধতির প্রতিনিধি প্রদানকারী", platform: "প্ল্যাটফর্ম", retrievalRag: "পুনরুদ্ধার / RAG", files: "ফাইল", database: "ডেটাবেস", deterministic: "নির্ণায়ক", platformShort: "প্ল্যাট.", ragShort: "RAG", filesShort: "ফাইল", databaseShort: "DB", deterministicShort: "নির্ণা.", onThisPage: "এই পৃষ্ঠায়", showFewer: "কম দেখুন", showAllGuaranteesTemplate: "সমস্ত {count}টি গ্যারান্টি দেখুন" },
-    foundations: { title: "ভিত্তি", onThisPage: "এই পৃষ্ঠায়", privacyFirst: "গোপনীয়তা-প্রথম", deterministic: "নির্ণায়ক", crossPlatform: "ক্রস-প্ল্যাটফর্ম" },
+    foundations: { title: "ভিত্তি", onThisPage: "এই পৃষ্ঠায়", privacyFirst: "গোপনীয়তা-প্রথম", deterministic: "নির্ণায়ক", immutable: "অপরিবর্তনীয় ও যাচাইযোগ্য", crossPlatform: "ক্রস-প্ল্যাটফর্ম" },
     seo: {
       home: { title: "আপনার এজেন্টরা ভুলে যায়। Neotoma তাদের মনে করায়।", description: "মানব সিঙ্ক লেয়ার হওয়া বন্ধ করুন। Claude, Cursor, ChatGPT এবং MCP-সংযুক্ত টুল ব্যবহারকারী মাল্টি-এজেন্ট নির্মাতা ও পরিচালকদের জন্য নির্ণায়ক, সংস্করণযুক্ত অবস্থা।" },
       docs: { title: "Neotoma ডকুমেন্টেশন | সেটআপ, API, MCP, CLI রেফারেন্স", description: "Neotoma ডকুমেন্টেশন: সেটআপ, আর্কিটেকচার, API রেফারেন্স এবং পরিচালন নির্দেশিকা।" },
@@ -598,7 +600,7 @@ const LOCALE_PACKS: Record<string, LocalePackOverrides> = {
     },
     siteSections: { intro: "تعارف", personalOs: "ثبوت", beforeAfter: "پہلے / بعد", who: "کون", demo: "ڈیمو", recordTypes: "ریکارڈ کی اقسام", guarantees: "ضمانتیں", evaluate: "جائزہ", commonQuestions: "عام سوالات", frequentlyAskedQuestions: "اکثر پوچھے جانے والے سوالات", inspect: "معائنہ", architecture: "آرکیٹیکچر", useCases: "استعمال کے معاملات", interfaces: "انٹرفیسز", learnMore: "مزید جانیں", resources: "وسائل" },
     memory: { vendors: "فراہم کنندگان", representativeProviders: "ہر میموری نقطہ نظر کے نمائندہ فراہم کنندگان", platform: "پلیٹ فارم", retrievalRag: "بازیافت / RAG", files: "فائلیں", database: "ڈیٹا بیس", deterministic: "فیصلہ کن", platformShort: "پلیٹ.", ragShort: "RAG", filesShort: "فائلیں", databaseShort: "DB", deterministicShort: "فیص.", onThisPage: "اس صفحے پر", showFewer: "کم دکھائیں", showAllGuaranteesTemplate: "تمام {count} ضمانتیں دکھائیں" },
-    foundations: { title: "بنیادیں", onThisPage: "اس صفحے پر", privacyFirst: "رازداری اول", deterministic: "فیصلہ کن", crossPlatform: "کراس پلیٹ فارم" },
+    foundations: { title: "بنیادیں", onThisPage: "اس صفحے پر", privacyFirst: "رازداری اول", deterministic: "فیصلہ کن", immutable: "ناقابلِ تبدیل اور قابلِ تصدیق", crossPlatform: "کراس پلیٹ فارم" },
     seo: {
       home: { title: "آپ کے ایجنٹ بھول جاتے ہیں۔ Neotoma انہیں یاد کراتا ہے۔", description: "انسانی مطابقت پذیری کی تہہ بننا بند کریں۔ Claude، Cursor، ChatGPT اور MCP سے جڑے ٹولز استعمال کرنے والے ملٹی ایجنٹ بنانے والوں اور آپریٹرز کے لیے فیصلہ کن، ورژن شدہ حالت۔" },
       docs: { title: "Neotoma دستاویزات | سیٹ اپ، API، MCP، CLI حوالہ", description: "Neotoma دستاویزات: سیٹ اپ، آرکیٹیکچر، API حوالہ اور آپریشنل گائیڈز۔" },
@@ -637,7 +639,7 @@ const LOCALE_PACKS: Record<string, LocalePackOverrides> = {
     },
     siteSections: { intro: "Pendahuluan", personalOs: "Bukti", beforeAfter: "Sebelum / Sesudah", who: "Siapa", demo: "Demo", recordTypes: "Jenis rekaman", guarantees: "Jaminan", evaluate: "Evaluasi", commonQuestions: "Pertanyaan umum", frequentlyAskedQuestions: "Pertanyaan yang sering diajukan", inspect: "Inspeksi", architecture: "Arsitektur", useCases: "Kasus penggunaan", interfaces: "Antarmuka", learnMore: "Pelajari lebih lanjut", resources: "Sumber daya" },
     memory: { vendors: "Vendor", representativeProviders: "Penyedia representatif untuk setiap pendekatan memori", platform: "Platform", retrievalRag: "Pengambilan / RAG", files: "File", database: "Database", deterministic: "Deterministik", platformShort: "Plat.", ragShort: "RAG", filesShort: "File", databaseShort: "DB", deterministicShort: "Det.", onThisPage: "Di halaman ini", showFewer: "Tampilkan kurang", showAllGuaranteesTemplate: "Tampilkan semua {count} jaminan" },
-    foundations: { title: "Fondasi", onThisPage: "Di halaman ini", privacyFirst: "Privasi utama", deterministic: "Deterministik", crossPlatform: "Lintas platform" },
+    foundations: { title: "Fondasi", onThisPage: "Di halaman ini", privacyFirst: "Privasi utama", deterministic: "Deterministik", immutable: "Tidak dapat diubah dan dapat diverifikasi", crossPlatform: "Lintas platform" },
     seo: {
       home: { title: "Agen Anda lupa. Neotoma membuat mereka mengingat.", description: "Berhentilah menjadi lapisan sinkronisasi manusia. Status deterministik dan berversi untuk pembangun dan operator multi-agen yang menggunakan Claude, Cursor, ChatGPT, dan alat yang terhubung MCP." },
       docs: { title: "Dokumentasi Neotoma | Pengaturan, API, MCP, CLI", description: "Dokumentasi Neotoma: pengaturan, arsitektur, referensi API, dan panduan operasional." },
@@ -676,7 +678,7 @@ const LOCALE_PACKS: Record<string, LocalePackOverrides> = {
     },
     siteSections: { intro: "Einführung", personalOs: "Beweis", beforeAfter: "Vorher / Nachher", who: "Wer", demo: "Demo", recordTypes: "Datensatztypen", guarantees: "Garantien", evaluate: "Bewerten", commonQuestions: "Häufige Fragen", frequentlyAskedQuestions: "Häufig gestellte Fragen", inspect: "Inspizieren", architecture: "Architektur", useCases: "Anwendungsfälle", interfaces: "Schnittstellen", learnMore: "Mehr erfahren", resources: "Ressourcen" },
     memory: { vendors: "Anbieter", representativeProviders: "Repräsentative Anbieter für jeden Speicheransatz", platform: "Plattform", retrievalRag: "Abruf / RAG", files: "Dateien", database: "Datenbank", deterministic: "Deterministisch", platformShort: "Plat.", ragShort: "RAG", filesShort: "Dateien", databaseShort: "DB", deterministicShort: "Det.", onThisPage: "Auf dieser Seite", showFewer: "Weniger anzeigen", showAllGuaranteesTemplate: "Alle {count} Garantien anzeigen" },
-    foundations: { title: "Grundlagen", onThisPage: "Auf dieser Seite", privacyFirst: "Datenschutz zuerst", deterministic: "Deterministisch", crossPlatform: "Plattformübergreifend" },
+    foundations: { title: "Grundlagen", onThisPage: "Auf dieser Seite", privacyFirst: "Datenschutz zuerst", deterministic: "Deterministisch", immutable: "Unveränderlich und verifizierbar", crossPlatform: "Plattformübergreifend" },
     seo: {
       home: { title: "Ihre Agenten vergessen. Neotoma lässt sie sich erinnern.", description: "Hören Sie auf, die menschliche Synchronisierungsschicht zu sein. Deterministischer, versionierter Zustand für Multi-Agent-Entwickler und -Operatoren, die Claude, Cursor, ChatGPT und MCP-verbundene Tools nutzen." },
       docs: { title: "Neotoma Dokumentation | Einrichtung, API, MCP, CLI-Referenz", description: "Neotoma-Dokumentation: Einrichtung, Architektur, API-Referenzen und Betriebsanleitungen." },

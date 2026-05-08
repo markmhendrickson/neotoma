@@ -183,7 +183,8 @@ export interface Entity {
 }
 
 /**
- * Generate deterministic entity ID from entity type and name
+ * Generate deterministic entity ID from entity type and name.
+ * Validators: {@link isNeotomaEntityId} in `shared/neotoma_entity_id.ts`.
  */
 export function generateEntityId(
   entityType: string,

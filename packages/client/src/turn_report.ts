@@ -215,7 +215,6 @@ function pickDefaultEmoji(entityType: string): string {
     legal_research: "🔍",
     technical_research: "🔍",
     report: "🔍",
-    product_feedback: "💬",
     neotoma_repair: "🛠️",
     conversation: "🧵",
     conversation_message: "💬",

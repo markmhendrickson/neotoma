@@ -57,7 +57,7 @@ export interface AgentDirectoryEntry {
   record_counts: Partial<Record<RecordActivityType, number>>;
   /**
    * Observations grouped by target entity type (join `entities`). Used to
-   * surface feedback (`product_feedback`), governance (`agent_grant`), and
+   * surface feedback (`issue` / conversations), governance (`agent_grant`), and
    * other permissioned or high-signal writers on the Agents directory.
    * Omitted when empty.
    */

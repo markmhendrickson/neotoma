@@ -1,4 +1,7 @@
 {
+  "yaml.schemas": {
+    "https://spec.openapis.org/oas/3.1/schema/2022-10-07": ["openapi.yaml"]
+  },
   "terminal.integrated.scrollback": 100000,
   "terminal.integrated.stickyScroll.enabled": false,
   "files.associations": {
@@ -32,18 +35,3 @@
     "**/.git": true
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

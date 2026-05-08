@@ -31,7 +31,7 @@ interface StoreResolutionErrorEnvelope {
     code: "ERR_STORE_RESOLUTION_FAILED";
     message: string;
     issues: Array<{
-      code: string;                // e.g., 'ERR_CANONICAL_NAME_UNRESOLVED', 'ERR_MERGE_REFUSED'
+      code: string;                // e.g., 'ERR_CANONICAL_NAME_UNRESOLVED', 'ERR_MERGE_REFUSED', 'ERR_CONVERSATION_MESSAGE_ROLE_CONFLICT'
       message: string;
       details?: Record<string, any>;
       // R4 (conversation_entity_collision_fix): `hint` may be a free-form

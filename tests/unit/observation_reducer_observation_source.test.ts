@@ -98,7 +98,7 @@ describe("ObservationReducer - observation_source tie-break", () => {
     vi.clearAllMocks();
   });
 
-  it("uses default priority order (sensor > workflow_state > llm_summary > human > import) when reducer_config omits observation_source_priority", async () => {
+  it("uses default priority order (sensor > workflow_state > llm_summary > human > import > sync) when reducer_config omits observation_source_priority", async () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (schemaRegistry.loadActiveSchema as any).mockResolvedValue(BASE_SCHEMA);
 
@@ -111,6 +111,7 @@ describe("ObservationReducer - observation_source tie-break", () => {
       "llm_summary",
       "human",
       "import",
+      "sync",
     ]);
 
     // Four observations with identical numeric `source_priority` (100).

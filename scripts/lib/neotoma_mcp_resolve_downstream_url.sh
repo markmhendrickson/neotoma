@@ -18,7 +18,16 @@ neotoma_mcp_resolve_mcp_proxy_downstream() {
   local _pf
   local _port
 
-  if [ "$_use_pf" = "1" ] || [ "$_use_pf" = "true" ]; then
+  # Cursor's MCP harness has been observed to silently drop env entries whose
+  # value is `"1"` (apparently treating the JSON string as numeric) when
+  # populating the child env, while still honoring sibling string values like
+  # `"prod"`. That stripped NEOTOMA_MCP_USE_LOCAL_PORT_FILE and pushed the
+  # prod-profile shim down the legacy `else` branch, which defaults to the
+  # dev port (3080) and looks like an intermittent prod outage. Treat an
+  # explicit `prod`/`dev` profile as sufficient to enable port-file mode even
+  # when the boolean flag is missing.
+  if [ "$_use_pf" = "1" ] || [ "$_use_pf" = "true" ] \
+     || [ "$_profile" = "prod" ] || [ "$_profile" = "dev" ]; then
     # Profile-aware defaults — when port-file mode is on, the profile is the
     # source of truth, so an inherited MCP_PROXY_DOWNSTREAM_URL must NOT cross
     # profiles. (A stale dev URL inherited into a prod-profile shim used to

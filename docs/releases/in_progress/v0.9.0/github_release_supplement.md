@@ -46,7 +46,7 @@ v0.9.0 delivers the bundled Inspector, a unified turn-telemetry pipeline across 
 - The Inspector is served at `/inspector` by default on every `neotoma api start`. The root landing page links to it. Previously required `NEOTOMA_INSPECTOR_STATIC_DIR` and a separate build step.
 - Unconfigured feedback installs default to `local` mode instead of returning `501 admin_proxy_unconfigured`. The 501 is now reserved for `NEOTOMA_FEEDBACK_ADMIN_MODE=disabled`.
 - Sandbox mode uses ephemeral per-visitor sessions instead of a single shared `SANDBOX_PUBLIC_USER_ID`. Each visitor gets isolated data seeded from a fixture pack.
-- `watch:full` and `watch:full:prod` now include a concurrent Inspector watcher with live-build mode, plus a `dev:resources:watch` lane showing local resource URLs.
+- `dev` and `dev:full:prod` now include a concurrent Inspector watcher with live-build mode, plus a `dev:links` lane showing local resource URLs.
 - `pack:local` now includes `build:inspector` so local pack testing includes the Inspector.
 - GitHub Pages site build fixes root-absolute asset paths (`/assets/…`) instead of relative paths, fixing broken chunk URLs on nested pages.
 
@@ -100,8 +100,8 @@ All five harness packages received a coordinated rewrite to share the same turn-
 - **"Verticals" → "Use Cases"**: `VerticalsIndexPage` / `VerticalIconTile` / `VerticalLandingShell` deleted; replaced by `UseCasesIndexPage` / `UseCaseIconTile` / `UseCaseLandingShell`.
 - **GitHub Pages build**: Asset paths normalized to root-absolute `/assets/…` everywhere (fixes broken chunk URLs on nested routes). New `finalizeBundledAssetPathsInAllHtml` pass and `validate_site_export.ts` checks.
 - **`pick-port.js`**: New `--print-resources` flag displays local resource URLs (Inspector, MCP, API, UI) alongside port allocation.
-- **`show-dev-resources.js`**: New script (and `dev:resources` / `dev:resources:watch` npm scripts) that prints a summary of local dev resource URLs.
-- **`watch:full` / `watch:full:prod`**: Now include Inspector watcher (`watch:inspector`) and `dev:resources:watch` as concurrent lanes; `NEOTOMA_INSPECTOR_LIVE_BUILD=1` set automatically.
+- **`show-dev-resources.js`**: New script (and `info:dev-resources` / `dev:links` npm scripts) that prints a summary of local dev resource URLs.
+- **`dev` / `dev:full:prod`**: Now include Inspector watcher (`dev:inspector`) and `dev:links` as concurrent lanes; `NEOTOMA_INSPECTOR_LIVE_BUILD=1` set automatically.
 - **New `eval:tier1` / `eval:tier1:update`**: npm scripts for the Tier 1 agentic eval harness.
 - **`--preserveWatchOutput`** added to all `tsc --watch` invocations across npm scripts and CLI internals.
 

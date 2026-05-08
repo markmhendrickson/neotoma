@@ -4,7 +4,7 @@
  * dist/ (and thus the global `neotoma` CLI) in sync with source changes.
  *
  * Usage: node scripts/install_launchd_watch_build.js
- * Or: npm run setup:launchd-watch-build
+ * Or: npm run setup:launchd-cli-sync (alias: setup:launchd-watch-build)
  */
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { homedir, platform } from "os";
@@ -31,7 +31,9 @@ const template = readFileSync(templatePath, "utf-8");
 const plistContent = template.replace(/REPO_ROOT_PLACEHOLDER/g, repoRoot);
 
 const runScript = join(__dirname, "run_watch_build_launchd.sh");
+const apiWatchScript = join(__dirname, "run-neotoma-api-node-watch.sh");
 chmodSync(runScript, 0o755);
+chmodSync(apiWatchScript, 0o755);
 mkdirSync(logDir, { recursive: true });
 mkdirSync(launchAgentsDir, { recursive: true });
 writeFileSync(plistPath, plistContent);

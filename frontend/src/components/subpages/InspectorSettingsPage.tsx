@@ -13,18 +13,12 @@ export function InspectorSettingsPage() {
       <p className="text-[15px] leading-7 mb-4">
         Settings is the Inspector route at <code>/settings</code>: connection to
         the Neotoma API, attribution policy on agent writes, retention, and
-        appearance. The product{" "}
-        <Link
-          to="/inspector/feedback"
-          className="text-foreground underline underline-offset-2 hover:no-underline"
-          {...detailPageCtaLinkProps}
-        >
-          Feedback
-        </Link>{" "}
-        flow is a separate top-level route at <code>/feedback</code> in the app
-        (documented on its own page). Defaults match what an operator gets
-        after running <code>neotoma api start</code> for the first time; many
-        values are editable from the UI and persisted to local Neotoma config.
+        appearance. Issue reporting and triage run through GitHub Issues and
+        the in-app <code>/issues</code> surface (see{" "}
+        <code>docs/subsystems/issues.md</code>
+        in the repo). Defaults match what an operator gets after running{" "}
+        <code>neotoma api start</code> for the first time; many values are
+        editable from the UI and persisted to local Neotoma config.
       </p>
 
       <InspectorPreview

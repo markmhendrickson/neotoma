@@ -4,6 +4,21 @@ Stdio-only MCP clients (Cursor, Claude Code, Codex) can run **`neotoma mcp proxy
 
 Canonical Cursor wiring, screenshots, and transport choice live in **[`mcp_cursor_setup.md`](../mcp_cursor_setup.md)**. This page summarizes **env vars**, the **local port file**, and **links to implementation**.
 
+## Repo launcher scripts
+
+Stable **`mcp.json` `command` paths** stay at the repo-root `scripts/` filenames below (no subdirectory indirection). Optional relocation under e.g. `scripts/mcp_launchers/` with thin forwarders was deferred to avoid churn for operators who hardcode absolute paths. Shared behavior lives in **`scripts/lib/neotoma_mcp_source_env.sh`** (`.env.dev` → `.env` → `.env.development`, first file found) and **`scripts/lib/neotoma_mcp_resolve_downstream_url.sh`** (port-file + TCP probe for `MCP_PROXY_DOWNSTREAM_URL`, used by both HTTP proxy shims).
+
+| Script | Transport | Signing / worker | Reload | Default downstream / entry | Env files (via lib) |
+|--------|-----------|------------------|--------|------------------------------|---------------------|
+| `run_neotoma_mcp_stdio.sh` | stdio → in-process MCP | None (`dist/index.js` or `tsx src/index.ts`) | Manual reconnect after code change | n/a | `.env.dev`, `.env`, `.env.development` |
+| `run_neotoma_mcp_stdio_dev_watch.sh` | stdio → `tsx watch src/index.ts` | None | `tsx watch` (stdout risk; not for installed MCP) | n/a | same |
+| `run_neotoma_mcp_stdio_prod.sh` | stdio → in-process MCP | None; **`NEOTOMA_ENV=production`** | Manual | n/a | same |
+| `run_neotoma_mcp_stdio_prod_watch.sh` | stdio → plain `tsx src/index.ts` | None; prod env | Manual (comment warns: no `watch` on stdio) | n/a | same |
+| `run_neotoma_mcp_stdio_dev_shim.sh` | stdio → **`mcp_dev_shim`** | Worker default in-process MCP | Shim restarts worker on file change | n/a | same |
+| `run_neotoma_mcp_signed_stdio_dev_shim.sh` | stdio → shim → **HTTP `/mcp`** | **`mcp proxy --aauth`** (AAuth) | Shim + worker reload | `http://127.0.0.1:3080/mcp` unless port file / env | same |
+| `run_neotoma_mcp_unsigned_stdio_dev_shim.sh` | stdio → **`mcp proxy`** (no forced AAuth) | `neotoma mcp proxy` | No shim watch (restart MCP to pick up code) | `http://127.0.0.1:3080/mcp` unless port file / env | same |
+| `run_neotoma_mcp_unsigned_stdio_proxy.sh` | same as unsigned shim | Deprecated forwarder: **`exec`** unsigned shim | same | same | n/a |
+
 ## Downstream URL and signing
 
 | Variable | Default / notes |
@@ -23,6 +38,8 @@ Cursor’s `command` usually points at this script instead of invoking `neotoma 
 2. Sets **`NEOTOMA_AAUTH_AUTHORITY_OVERRIDE`** when appropriate.
 3. **`exec`s** `mcp_dev_shim.ts`, whose worker runs **`npx tsx src/cli/index.ts mcp proxy --aauth`** by default.
 
+**Unsigned stdio dev shim:** `scripts/run_neotoma_mcp_unsigned_stdio_dev_shim.sh` runs **`mcp proxy`** without forced AAuth (direct `node` / `npx tsx`; not **`mcp_dev_shim.ts`**) and honors the same **`NEOTOMA_MCP_USE_LOCAL_PORT_FILE`** / **`NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE`** / **`MCP_PROXY_DOWNSTREAM_URL`** resolution as the signed shim. Legacy path **`scripts/run_neotoma_mcp_unsigned_stdio_proxy.sh`** **`exec`**s this file for existing **`mcp.json`** **`command`** values.
+
 ### Local port files (dynamic `HTTP_PORT`, parallel dev + prod)
 
 When **`NEOTOMA_MCP_USE_LOCAL_PORT_FILE=1`** (or `true`) is set in **`mcp.json` → `env`**:
@@ -32,11 +49,11 @@ When **`NEOTOMA_MCP_USE_LOCAL_PORT_FILE=1`** (or `true`) is set in **`mcp.json` 
   - **`dev`** — tries `local_http_port_dev`, then legacy `local_http_port`.
   - **`prod`** — tries `local_http_port_prod` only.
   - **Unset** — legacy `local_http_port` only (same as pre-parallel behavior).
-- Preset **A** / packaged **`neotoma mcp config`** entries set **`NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE`** to **`dev`** on `neotoma-dev` and **`prod`** on `neotoma`, so you can run **dev and prod HTTP APIs in parallel** and each MCP slot follows the correct bound port.
+- **`neotoma cli config`** stdio-shim entries set **`NEOTOMA_MCP_USE_LOCAL_PORT_FILE=1`** and **`NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE`** to **`dev`** on `neotoma-dev` and **`prod`** on `neotoma`, so each slot probes the matching port file when the Actions server writes `.dev-serve/local_http_port_*` (parallel dev + prod with fallback URLs **3080** / **3180**).
 - If the port parses and a **TCP connect** to `127.0.0.1:<port>` succeeds within **`NEOTOMA_MCP_PORT_PROBE_MS`** (default **1200**, clamped **200–5000**), the shim sets `MCP_PROXY_DOWNSTREAM_URL=http://127.0.0.1:<port>/mcp`.
 - Otherwise it falls back to **`MCP_PROXY_DOWNSTREAM_URL`** if set, else **`http://127.0.0.1:3080/mcp`** (dev / legacy) or **`http://127.0.0.1:3180/mcp`** when **`NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE=prod`**, and logs a **stderr** warning.
 
-**Verification:** on MCP spawn, stderr should show `[neotoma-mcp-signed-shim] NEOTOMA_MCP_USE_LOCAL_PORT_FILE: …` and `[neotoma-mcp-proxy] Starting proxy: downstream=…`.
+**Verification:** on MCP spawn, stderr should show `[neotoma-mcp-signed-shim]` or `[neotoma-mcp-unsigned-stdio-dev-shim]` for port-file resolution lines, then `[neotoma-mcp-proxy] Starting proxy: downstream=…`.
 
 | Variable | Purpose |
 |----------|---------|
@@ -58,6 +75,7 @@ Streamable HTTP MCP keeps each session in **process memory** (`mcpTransports` in
 |--------|----------------|------------|
 | **400** — no session header on a non-`initialize` POST | Proxy never stored an id (failed init, stripped response header) or client skipped `initialize` | Restart the MCP server in the IDE; confirm proxy stderr shows a successful downstream `initialize` and that your reverse proxy **forwards** `mcp-session-id` on responses and requests (custom headers are not hop-by-hop but some templates hide unknown headers). |
 | **503** — session header present but unknown on this instance | **Load-balanced replicas** without affinity: `initialize` hit instance A, `tools/call` hit B | Use **sticky sessions** for `POST /mcp` (same as [`/mcp/oauth`](../subsystems/auth.md) guidance), scale MCP to **one** API replica for `/mcp`, or terminate TLS on a single Node process. |
+| **503** — same, while using **`neotoma mcp proxy`** | Transient replica drift or API restart after the IDE finished `initialize` | The proxy **replays `initialize` to downstream once** (without emitting a second `initialize` on stdout), captures a fresh `mcp-session-id`, and **retries the failing RPC once**. If the second attempt still 503s, fix infra (sticky sessions / single `/mcp` worker) or restart the MCP client. |
 | **503** / **400** after deploy or restart | In-memory map cleared | Restart the MCP client once so `initialize` runs again. |
 
 When debugging, read the proxy line `Downstream error status=… body=…` (stderr): the JSON body includes the real `message` from Neotoma or the MCP SDK.

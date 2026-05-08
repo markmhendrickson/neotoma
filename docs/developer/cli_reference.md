@@ -29,8 +29,13 @@ Run via npm scripts: `npm run cli` or `npm run cli:dev` (dev mode with immediate
 The global `neotoma` runs the built files in `dist/`, not the TypeScript source. After you change CLI code, either build once (`npm run build:server`) or run a watcher so the global install stays current:
 
 - **One-off:** `npm run build:server` after CLI changes.
-- **Ongoing (terminal):** Run `npm run watch:build` in a terminal. It runs `tsc --watch` so every save recompiles `dist/`; the next `neotoma` invocation uses the new code. With `npm link`, no re-link is needed.
-- **Ongoing (after reboot):** Run `npm run setup:launchd-watch-build` once. This installs a macOS LaunchAgent that runs `tsc --watch` at login and keeps it running, so the global CLI stays in sync even after restart. Logs: `data/logs/launchd-watch-build.log`. Unload with `launchctl unload ~/Library/LaunchAgents/com.neotoma.watch-build.plist`.
+- **Ongoing (terminal):** Run `npm run dev:types` in a terminal. It runs `tsc --watch` so every save recompiles `dist/`; the next `neotoma` invocation uses the new code. With `npm link`, no re-link is needed.
+- **Ongoing (after reboot):** Run `npm run setup:launchd-cli-sync` once (alias: `setup:launchd-watch-build`). This installs a macOS LaunchAgent that runs `tsc --watch` at login and keeps it running, so the global CLI stays in sync even after restart. Logs: `data/logs/launchd-watch-build.log`. Unload with `launchctl unload ~/Library/LaunchAgents/com.neotoma.watch-build.plist`.
+
+### Dev or prod HTTP at login (macOS)
+
+- **Dev API:** `npm run setup:launchd-dev` (alias `setup:launchd-dev-server`) installs `com.neotoma.dev-server`, which runs `npm run dev:server`. See [`docs/developer/launchd_dev_servers.md`](launchd_dev_servers.md).
+- **Built production-mode API:** `npm run setup:launchd-prod-server` installs `com.neotoma.prod-server`, which runs `npm run start:server:prod`. See [`docs/developer/launchd_prod_server.md`](launchd_prod_server.md).
 
 ### Scheduled GitHub issues sync (macOS)
 
@@ -70,27 +75,27 @@ With a source checkout, the CLI:
 
 To show the intro and then a **command menu** (prompt `> ` and `? for shortcuts`; no servers), use:
 
-- `neotoma --no-session`  
+- `neotoma --no-session`
   You get the same intro panel, then an interactive prompt. Type a command, or `?` / `help` to list commands. Type `exit` or `quit`, or press Ctrl+D, to exit.
 
 To enter a session without starting any servers (connect to an already-running API):
 
-- `neotoma --no-servers` or `neotoma --servers=use-existing`  
+- `neotoma --no-servers` or `neotoma --servers=use-existing`
   Connect-only startup. Detects all available local API instances (not only `3080`/`3180`), prefers `--env` matches when available, and prompts when multiple candidates remain.
 
 To start the API in the **background**:
 
-- `neotoma api start --background --env dev` (or `--env prod`)  
+- `neotoma api start --background --env dev` (or `--env prod`)
   Starts the selected environment only and writes env-specific PID/log files.
 - `neotoma api start --background --env dev --tunnel` (or `--env prod --tunnel`)
   Starts the API with an HTTPS tunnel (ngrok/cloudflared) for remote MCP access. Tunnel URL is written to `/tmp/ngrok-mcp-url.txt` when ready. Use `--tunnel-provider ngrok` or `--tunnel-provider cloudflare` to force a provider; otherwise the script auto-detects from installed tools.
 - `neotoma api start --env dev --tunnel` (or `--env prod --tunnel`, no `--background`)
-  Runs the API and tunnel in the **foreground** in the current terminal (same as `npm run dev:api`). Logs stream to the terminal; Ctrl+C stops both. Tunnel URL: `cat /tmp/ngrok-mcp-url.txt`.
+  Runs the API and tunnel in the **foreground** in the current terminal (same as `npm run dev:server:tunnel`). Logs stream to the terminal; Ctrl+C stops both. Tunnel URL: `cat /tmp/ngrok-mcp-url.txt`.
 
-**`--watch` flag (source checkouts, v0.5.2+).** On a source checkout `neotoma api start --env prod` currently spawns `dev:prod` (tsx watcher with `NEOTOMA_ENV=production`). In **v0.6.0 the default will flip** to the built runner (`start:api:prod`, which builds server TypeScript and runs `dist/actions.js`), which is what headless-production operators actually want. Contributors who want to keep iterating with hot-reload under the prod env should pass `--watch`:
+**`--watch` flag (source checkouts).** The product CLI command remains `neotoma api start`, but source-checkout npm spawn targets now use the `dev:server*` taxonomy. Production-env source checkouts route to `dev:server:prod`; installed-package production starts route to `start:server:prod`.
 
-- `neotoma api start --env prod --watch` — preserves the current watcher behavior across the v0.6.0 flip. In v0.6.0 this routes to `watch:prod` (the `dev:prod` alias is dropped; `watch:prod` itself is unchanged).
-- `neotoma api start --env prod` (no `--watch`) — in v0.5.2 still selects the watcher and prints a one-line stderr deprecation notice announcing the flip. In v0.6.0 this switches to `start:api:prod`.
+- `neotoma api start --env prod --watch` — keeps source-checkout watch behavior explicit.
+- `neotoma api start --env prod --tunnel` — routes to `dev:server:prod:tunnel`.
 
 The flag is a no-op on `--env dev`, on installed-package checkouts without source watch scripts, and on the `--tunnel` path (the tunnel flow always wants the watcher). The deprecation line is suppressed under `--output json`.
 
@@ -98,7 +103,7 @@ For a real **headless / systemd** production deployment, install the published n
 
 ## npm scripts summary
 
-All `npm run <script>` commands in one place. Scripts follow the three-category prefix convention documented in [`docs/developer/package_scripts.md`](package_scripts.md): `watch:*` for developer watchers, `serve:*`/`start:*` for compiled-`dist` runners, `dev:*` for other dev tooling. Some `dev:*` entries remain as aliases for their `watch:*` counterparts for historical reasons; new aliases that cross the category boundary are not introduced.
+All `npm run <script>` commands in one place. Scripts follow the taxonomy documented in [`docs/developer/npm_scripts.md`](npm_scripts.md): `dev:*` for local development and watch processes, `build:*` for one-shot builds, `start:*` for compiled-`dist` runners, and `info:*` for one-shot informational output. Old `watch:*`, `start:api*`, and pages-site names remain as one-release compatibility aliases.
 
 ### Build and start
 
@@ -107,29 +112,31 @@ All `npm run <script>` commands in one place. Scripts follow the three-category 
 | `build:server`   | Compile server TypeScript (`tsc`) → MCP, API, CLI, services                                                                                     |
 | `build:ui`       | Build frontend (Vite)                                                                                                                           |
 | `start:mcp`      | Run built MCP server (stdio)                                                                                                                    |
-| `start:api`      | Run built HTTP Actions API                                                                                                                      |
-| `start:api:prod` | Run `build:server`, then run API with `NEOTOMA_ENV=production`. Prefers port 3180; uses next free port if in use. Does not build UI or run MCP. |
+| `start:server`      | Run built HTTP Actions API                                                                                                                      |
+| `start:api`         | Deprecated alias for `start:server`                                                                                                             |
+| `start:server:prod` | Run `build:server`, pick HTTP port from 3180, set `NEOTOMA_ENV=production`, then run `start:server` (same `node dist/actions.js` as `start:server`). Does not build UI or run MCP. |
+| `start:api:prod`    | Deprecated alias for `start:server:prod`                                                                                                        |
 | `start:ws`       | Run MCP WebSocket bridge                                                                                                                        |
 
 ### Development (watch mode)
 
 | Script                                       | Port           | Description                           |
 | -------------------------------------------- | -------------- | ------------------------------------- |
-| `watch`, `dev`                               | —              | MCP stdio watch                       |
-| `watch:server`, `dev:server`                 | 3080           | HTTP Actions API + watch              |
-| `watch:ui`, `dev:ui`                         | Vite           | Frontend dev server                   |
-| `watch:dev:tunnel`, `dev:api`                | 3080           | API + HTTPS tunnel (Cloudflare/ngrok) |
-| `watch:server+api`, `watch:dev`              | 3080           | API + tunnel + `tsc --watch`          |
-| `watch:full`, `dev:full`                     | 3080, Vite, WS | API + UI + build + resource banner + **`vite build --watch`** for Inspector into `dist/inspector` (`NEOTOMA_INSPECTOR_LIVE_BUILD=1`: no long cache + **full page reload** when build output mtimes change — `index.html` plus `assets/*`, so lazy chunks trigger reload) |
-| `watch:full:prod`, `dev:full:prod`           | 3180, Vite, WS | Same as `watch:full` with `NEOTOMA_ENV=production` and prod-scoped Inspector watch (`watch:inspector:prod`) |
-| `watch:inspector`, `watch:inspector:prod`    | —              | Inspector only: `vite build --watch` → repo `dist/inspector` (use with API already running, or rely on `watch:full` / `watch:full:prod`) |
+| `dev:mcp`, `watch`                           | —              | MCP stdio watch                       |
+| `dev:server`, `watch:server`                 | 3080           | HTTP Actions API + watch              |
+| `dev:ui`, `watch:ui`                         | Vite           | Frontend dev server                   |
+| `dev:server:tunnel`                          | 3080           | API + HTTPS tunnel (Cloudflare/ngrok) |
+| `dev:server:tunnel:types`                    | 3080           | API + tunnel + `tsc --watch`          |
+| `dev`, `dev:full`                            | 3080, Vite, WS | API + UI + build + resource banner + Inspector live build into `dist/inspector` (`NEOTOMA_INSPECTOR_LIVE_BUILD=1`: no long cache + **full page reload** when build output mtimes change — `index.html` plus `assets/*`, so lazy chunks trigger reload). With out-of-package `dist/inspector`, Vite watch uses **chokidar polling** by default so LaunchAgents pick up saves (`NEOTOMA_INSPECTOR_BUILD_WATCH_POLL=0` disables). |
+| `dev:full:prod`                              | 3180, Vite, WS | Same as `dev` with `NEOTOMA_ENV=production` and prod-scoped Inspector watch (`dev:inspector:prod`) |
+| `dev:inspector`, `dev:inspector:prod`        | —              | Inspector only: `vite build --watch` → repo `dist/inspector` (use with API already running, or rely on `dev` / `dev:full:prod`; polling applies when output is `../dist/inspector` per `inspector/vite.config.ts`) |
 | `watch:mcp:dev-shim`, `dev:mcp:dev-shim`     | —              | Stable stdio dev shim that restarts its MCP worker behind the client connection |
-| `watch:mcp:stdio`, `dev:mcp:stdio`           | —              | MCP stdio watch                       |
-| `watch:mcp:stdio:prod`, `dev:mcp:stdio:prod` | —              | MCP stdio, production env             |
-| `dev:server+mcp`                             | 3080, 8280     | API + MCP HTTP + build                |
+| `dev:mcp`                                    | —              | MCP stdio watch                       |
+| `dev:mcp:prod`                               | —              | MCP stdio, production env             |
+| `dev:server:mcp`                             | 3080, 8280     | API + MCP HTTP + build                |
 | `dev:ws`                                     | 3080, 8280     | API + WebSocket bridge watch          |
-| `watch:prod`, `dev:prod`                     | 3180           | API + build, production env           |
-| `watch:prod:tunnel`                          | 3180           | API + tunnel + build, production env  |
+| `dev:server:prod`                            | 3180           | API + build, production env           |
+| `dev:server:prod:tunnel`                     | 3180           | API + tunnel + build, production env  |
 
 Scripts that start servers use the port(s) above when free; if a port is in use, they bind to the next available port (no process killing). See `scripts/pick-port.js`.
 
@@ -164,6 +171,8 @@ Scripts that start servers use the port(s) above when free; if a port is in use,
 | `type-check`             | `tsc --noEmit`                                   |
 | `validate:coverage`      | Validate coverage map                            |
 | `validate:doc-deps`      | Validate doc dependencies                        |
+| `validate:mdx-site`      | Validate `docs/site/pages/**/*.meta.json` + MDX siblings and `ROUTE_METADATA` keys |
+| `validate:routes`        | Site route parity vs `seo_metadata` / `MainApp`  |
 | `doctor`                 | Project health check (env, local SQLite hints)   |
 
 ### Database and schema
@@ -192,7 +201,7 @@ Scripts that start servers use the port(s) above when free; if a port is in use,
 | -------------------------------------- | ----------------------------- |
 | `cli`, `cli:dev`                       | Run Neotoma CLI (built / dev) |
 | `docs:generate`                        | Generate docs                 |
-| `docs:build`, `docs:dev`, `docs:serve` | Docs site build/dev/serve     |
+| `build:docs`, `dev:docs`, `dev:docs:serve` | Docs site build/dev/serve     |
 | `openapi:generate`                     | Generate OpenAPI types        |
 | `branches:prune`                       | Prune merged branches         |
 | `parquet:samples`                      | Create sample parquet files   |
@@ -209,6 +218,12 @@ For environment and ports, see [Getting started](getting_started.md#start-develo
 - `--offline`: Force in-process local transport for data commands (no external API process required).
 - `--api-only`: Force API-only mode; fail when API is unreachable (use when you want to avoid loading the local DB).
 - `--json`: Output machine readable JSON.
+
+### Issues
+
+- `neotoma issues create --title <title> --body <body> [--visibility public|private] [--labels a,b]`: submit an issue through the same orchestration as MCP `submit_issue`. JSON output includes `guest_access_token` when the configured operator instance accepts the issue; treat that value as a credential for later token-scoped status or message calls.
+- `neotoma issues message [number] --body <body> [--entity-id <id>] [--guest-access-token <token>]`: append to an issue thread. Use the guest token when the local issue snapshot does not already carry the operator token.
+- `neotoma issues status --entity-id <id> [--skip-sync] [--guest-access-token <token>]`: print issue metadata and thread messages. The guest token is only needed for remote operator read-through when it is not already stored on the local issue row.
 - `--pretty`: Output formatted JSON.
 - `--no-session`: With no arguments, show intro then command menu (prompt `> `, `? for shortcuts`). No servers started.
 - `--no-servers`: With no arguments, enter session with connect-only behavior.
@@ -233,6 +248,18 @@ CLI behavior can be pinned per invocation via flags or across invocations via en
 `NEOTOMA_USER_ID` must be non-empty when set — an empty or whitespace-only value causes the CLI to fail fast with a clear error rather than silently falling back to the authenticated user. Resolution is performed by `resolveEffectiveUserId()` in `src/cli/index.ts`.
 
 Any new runtime override must follow this precedence model: add the env var read in the `preAction` hook in `src/cli/index.ts` alongside the existing transport variables, use a `NEOTOMA_`-prefixed name, let an explicit flag override it, and document it in the table above. See `docs/architecture/change_guardrails_rules.mdc` for the cross-cutting guardrails.
+
+### Peer sync and HTTP API (server process)
+
+These are read by the Neotoma HTTP server (not the CLI `preAction` hook) for outbound peer sync and optional release-note enrichment:
+
+| Environment variable | Purpose |
+|----------------------|---------|
+| `NEOTOMA_PUBLIC_BASE_URL` | Public base URL of this API (no trailing slash). Required for `POST /peers/{id}/sync` outbound `/sync/webhook` as `sender_peer_url`. |
+| `NEOTOMA_LOCAL_PEER_ID` | Stable id this instance sends as `sender_peer_id`; must match the `peer_id` your counterparty stored for you. |
+| `GITHUB_TOKEN` | Optional bearer for GitHub API when `npm_check_update` runs with `include_release_notes: true`. |
+
+`GET /peers/{peer_id}` returns `remote_health` from probing `{peer_url}/health` and semver compat vs the local package version (same rules as `neotoma compat`). See `docs/subsystems/peer_sync.md`.
 
 ### MCP signed shim (`mcp.json` — not CLI `preAction`)
 
@@ -399,8 +426,8 @@ Commands for managing MCP server configuration files (Cursor, Claude Code, Winds
 
 **Dev vs Prod detection patterns:**
 
-- **Dev:** `command` contains `run_neotoma_mcp_stdio.sh`, `run_neotoma_mcp_stdio_dev_watch.sh`, `run_neotoma_mcp_stdio_dev_shim.sh`, or `run_neotoma_mcp_signed_stdio_dev_shim.sh` under a dev server id, or `url` contains `localhost:3080/mcp` or `127.0.0.1:3080/mcp`. During connect-only sessions, the currently selected instance port is also considered for dev if the active env is dev.
-- **Prod:** `command` contains `run_neotoma_mcp_stdio_prod.sh`, `run_neotoma_mcp_stdio_prod_watch.sh`, or `run_neotoma_mcp_signed_stdio_dev_shim.sh` under a prod server id / prod downstream URL, or `url` contains `localhost:3180/mcp`, `127.0.0.1:3180/mcp`, or `neotoma.fly.dev/mcp`. During connect-only sessions, the currently selected instance port is also considered for prod if the active env is prod.
+- **Dev:** `command` contains `run_neotoma_mcp_stdio.sh`, `run_neotoma_mcp_stdio_dev_watch.sh`, `run_neotoma_mcp_stdio_dev_shim.sh`, `run_neotoma_mcp_signed_stdio_dev_shim.sh`, `run_neotoma_mcp_unsigned_stdio_dev_shim.sh`, or the legacy forwarder `run_neotoma_mcp_unsigned_stdio_proxy.sh` under a dev server id, or `url` contains `localhost:3080/mcp` or `127.0.0.1:3080/mcp`. During connect-only sessions, the currently selected instance port is also considered for dev if the active env is dev.
+- **Prod:** `command` contains `run_neotoma_mcp_stdio_prod.sh`, `run_neotoma_mcp_stdio_prod_watch.sh`, `run_neotoma_mcp_signed_stdio_dev_shim.sh`, `run_neotoma_mcp_unsigned_stdio_dev_shim.sh`, or the legacy forwarder `run_neotoma_mcp_unsigned_stdio_proxy.sh` under a prod server id / prod downstream URL, or `url` contains `localhost:3180/mcp`, `127.0.0.1:3180/mcp`, or `neotoma.fly.dev/mcp`. During connect-only sessions, the currently selected instance port is also considered for prod if the active env is prod.
 
 **Example workflow:**
 
@@ -495,6 +522,24 @@ See `docs/developer/agent_cli_configuration.md` for the rule text and strategy.
 - `neotoma schemas list`
 - `neotoma schemas get <entityType>`
 
+### Peers
+
+Cross-instance peer sync. Backed by `src/services/sync/` and the HTTP `/peers` surface; see [`docs/subsystems/peer_sync.md`](../subsystems/peer_sync.md) for the underlying model and the env vars (`NEOTOMA_PUBLIC_BASE_URL`, `NEOTOMA_LOCAL_PEER_ID`) required on the API process.
+
+- `neotoma peers add --peer-id <id> --name <name> --url <url> --types <csv>`: Register a peer.
+  - `--direction <push|pull|bidirectional>` (default `bidirectional`).
+  - `--sync-scope <all|tagged>` (default `all`). With `tagged`, only entities whose snapshot lists this peer in `sync_peers` are eligible.
+  - `--auth-method <shared_secret|aauth>` (default `shared_secret`).
+  - `--shared-secret <secret>`: HMAC peer secret when `auth-method=shared_secret`.
+  - `--peer-public-key-thumbprint <thumbprint>`: Expected AAuth thumbprint when `auth-method=aauth`.
+  - `--conflict-strategy <last_write_wins|source_priority|manual>` (default `last_write_wins`).
+  - `--target-user-id <id>`: Receiver `user_id` on the peer instance.
+- `neotoma peers list`: List configured peers.
+- `neotoma peers status <peer_id>`: Show peer config plus `remote_health` (probed `{peer_url}/health`) and semver compatibility vs the local package version.
+- `neotoma peers sync <peer_id>`: Run a bounded bilateral catch-up against the peer (push local changed observations, pull remote snapshots through `/sync/entities`).
+  - `--limit <n>`: Cap observations / snapshots per direction.
+- `neotoma peers remove <peer_id>`: Deactivate the peer (does not delete prior `observation_source: "sync"` rows).
+
 ### Interpretations
 
 - `neotoma interpretations list`: List interpretation runs.
@@ -563,7 +608,7 @@ For chat persistence recipes, MCP and CLI use the same underlying store contract
 
 ### Processes (local OS only)
 
-- `neotoma processes list` (default for `neotoma processes`): Scan `ps` for processes whose argv matches Neotoma checkout paths, `tsx watch src/actions.ts`, `run_neotoma_mcp*.sh`, `run_watch_build_launchd.sh`, `mcp proxy`, orchestrator (`pick-port` / `concurrently`), `tsc --watch`, `esbuild`, Cursor hooks under the repo, etc. **TCP listen ports** per PID come from a single `lsof -nP -iTCP -sTCP:LISTEN -F pn` pass (comma-separated in the PORTS column, `-` when none); if `lsof` is missing or fails, PORTS stays `-`. Text mode also prints the full `ps` command line **word-wrapped within the COMMAND column** to the current terminal width (continuation lines are blank under PID/PPID/LABEL/PORTS so COMMAND stays aligned). `--json` prints `{ "processes": [...] }` with `ports` (number array) and each full `command` on one line.
+- `neotoma processes list` (default for `neotoma processes`): Scan `ps` for processes whose argv matches Neotoma checkout paths, `tsx watch src/actions.ts`, `run-neotoma-api-node-watch.sh` / `node --watch-path` + `src/actions.ts`, `run_neotoma_mcp*.sh`, `run_watch_build_launchd.sh`, `mcp proxy`, orchestrator (`pick-port` / `concurrently`), `tsc --watch`, `esbuild`, Cursor hooks under the repo, etc. **TCP listen ports** per PID come from a single `lsof -nP -iTCP -sTCP:LISTEN -F pn` pass (comma-separated in the PORTS column, `-` when none); if `lsof` is missing or fails, PORTS stays `-`. Text mode adds **ENV** (`dev` \| `prod` \| `mix` \| `?`) and **CAT** (comma-separated tags: `server`, `mcp`, `build`, `orchestrator`, `tunnel`, `tooling`, `other`) inferred heuristically from argv and listen ports; a footer line explains the encoding. The full `ps` command line is **word-wrapped within the COMMAND column** to the current terminal width (continuation lines are blank under the fixed columns so COMMAND stays aligned). `--json` prints `{ "processes": [...] }` with `ports` (number array), `env_hint`, `categories` (string array), and each full `command` on one line.
 - `neotoma processes kill <pids...>`: One or more PIDs as separate tokens (e.g. `neotoma processes kill 92450 18852`) or a single comma/space string in quotes. Re-runs the same classifier; **only PIDs that appear in a fresh scan** are signalled (prevents typos from killing unrelated processes). Default signal is **SIGTERM**; use `--signal SIGKILL` when needed. `--dry-run` prints the plan. On a TTY, prompts once unless `--force`. Non-TTY requires `--force`.
 
 ### Mirror
@@ -605,7 +650,7 @@ The CLI and the Inspector share one `applyBatchCorrection` backend (`src/service
   - `--include-bookkeeping`: Include chat bookkeeping (`conversation`, `agent_message`). Excluded by default because they are noise in a memory manifest and already live in conversation history.
   - `--max-field-chars <n>` (default 400): Per-field character cap for long string values. Long bodies (posts, notes, transcripts) are truncated with a deterministic `… (<N> chars truncated)` suffix so one long entity cannot consume the entire line budget. Set to `0` to emit full values.
   - `--order <importance|recency>` (default `importance`): Sort strategy.
-    - `importance`: type-weighted signal score `typeWeight × log2(observation_count + 2) × recency_decay` (half-life 30 days). Tier-1 types (`task`, `contact`, `event`, `transaction`, `product_feedback`, `business_opportunity`, `issue`, `user_persona_insight`, `life_tenets`, `architectural_decision`, `agent_decision`, `release`, `feature_unit`) rank above Tier-2 durable artifacts (`note`, `post`, `meeting_transcription`, `email_message`, `location`, `file_asset`, etc.). Bookkeeping types score 0 when included explicitly.
+    - `importance`: type-weighted signal score `typeWeight × log2(observation_count + 2) × recency_decay` (half-life 30 days). Tier-1 types (`task`, `contact`, `event`, `transaction`, `business_opportunity`, `issue`, `user_persona_insight`, `life_tenets`, `architectural_decision`, `agent_decision`, `release`, `feature_unit`) rank above Tier-2 durable artifacts (`note`, `post`, `meeting_transcription`, `email_message`, `location`, `file_asset`, etc.). Bookkeeping types score 0 when included explicitly.
     - `recency`: `last_observation_at desc`, ties broken by `entity_id asc`.
   - `--user-id <id>`: Scope to a specific user. Defaults to the active local dev user when encryption is off.
 
@@ -690,8 +735,13 @@ neotoma snapshots diff --neotoma ./neotoma.json --external ./fleet.json --parser
 
 - `neotoma backup create`: Create a backup of the local database, sources, and logs.
   - `--output <dir>`: Output directory (default: `./backups`).
+  - `--tar`: After the directory backup is verified, also create `<backup-folder-name>.tar.gz` in the same parent directory as the backup folder (GNU/BSD `tar` on `PATH` required). The timestamped directory is kept; the archive is an additional artifact for transport.
   - Creates a timestamped subdirectory with `neotoma.db`, WAL file, `sources/`, `logs/` (includes `events.log`), and a `manifest.json` with checksums.
+  - **Human output** prints **backup size** first (total bytes on disk for the backup directory, file count, and raw byte count; with `--tar`, the same line also includes the `.tar.gz` size). Then **Backed up from**, **Contents**, **Sizes** (per-component breakdown; the directory total is labeled **total (directory)**), **db_checksum** when recorded. With `--tar`, also an **Archive** line for the `.tar.gz` path and size.
+  - **JSON output** (`--json`) includes **`backup_size`**: `{ bytes, files, human }` for the backup directory walk (same totals as `sizes.total_backup_bytes` / `total_backup_files`, plus a single `human` summary string). With `--tar`, `backup_size` also has `archive_bytes` and `human` includes the archive. Other fields: `manifest_path`, `backed_up_from`, `sizes`, and with `--tar` `archive_path`, `archive_bytes`, `sizes.archive_bytes`.
+  - Exits non-zero if the database copy is missing or under 1 KiB after write, or if `--tar` was set and creating the archive failed.
   - If encryption is enabled, data in the backup remains encrypted. Preserve the key file or mnemonic for restore.
+- `neotoma backup verify <dir>`: Verify a backup directory (manifest, DB size, optional SHA-256 vs manifest). Exits non-zero if invalid. **Human** and **`--json`** both include **`backup_size`** (`bytes`, `files`, `human`) for the full directory tree on disk.
 - `neotoma backup restore`: Restore a backup into the data directory.
   - `--from <dir>`: Backup directory to restore from (required).
   - `--target <dir>`: Target data directory (default: `NEOTOMA_DATA_DIR` or `./data`).

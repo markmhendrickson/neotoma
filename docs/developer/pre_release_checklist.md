@@ -105,7 +105,7 @@ npm run dev
 ### 1.10 MCP watch mode
 
 ```bash
-npm run dev:api
+npm run dev:server:tunnel
 ```
 
 - **Required:** Compiles without errors; watch mode detects file changes as expected.

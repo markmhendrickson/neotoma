@@ -23,6 +23,10 @@ import {
   recomputeSnapshot,
 } from "./snapshot_computation.js";
 import { generateEntityId } from "./entity_resolution.js";
+import {
+  emitEntityLifecycle,
+  emitEntitySnapshotChange,
+} from "../events/substrate_store_emit.js";
 
 /**
  * Declarative predicate describing which observations of the source entity
@@ -361,6 +365,24 @@ export async function splitEntity(params: SplitEntityParams): Promise<SplitResul
   if (auditErr) {
     throw new Error(`Failed to write entity_splits audit row: ${auditErr.message}`);
   }
+
+  const sourceType = (sourceEntity as { entity_type: string }).entity_type;
+  emitEntityLifecycle({
+    user_id: userId,
+    entity_id: sourceEntityId,
+    entity_type: sourceType,
+    event_type: "entity.split",
+    timestamp: splitAt,
+    idempotency_key: idempotencyKey,
+  });
+  emitEntitySnapshotChange({
+    user_id: userId,
+    entity_id: newEntityId,
+    entity_type: newEntity.entity_type,
+    event_type: "entity.created",
+    timestamp: splitAt,
+    idempotency_key: idempotencyKey,
+  });
 
   return {
     split_id: splitId,

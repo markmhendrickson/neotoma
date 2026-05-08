@@ -4,7 +4,7 @@
  * item-1-observation-source).
  *
  * The enum is the public classification of *what kind of write* produced
- * an observation (sensor, llm_summary, workflow_state, human, import).
+ * an observation (sensor, llm_summary, workflow_state, human, import, sync).
  * This test file locks the exact enum membership, case sensitivity, and
  * optional-by-default semantics so a future schema edit cannot silently
  * change the wire contract used by fleet agents and the CLI.
@@ -29,6 +29,7 @@ describe("ObservationSource enum contract", () => {
       "workflow_state",
       "human",
       "import",
+      "sync",
     ]);
   });
 

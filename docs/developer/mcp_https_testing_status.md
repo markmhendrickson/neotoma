@@ -1,6 +1,6 @@
 # MCP HTTPS Testing Status
 
-**Date:** 2026-01-27  
+**Date:** 2026-01-27
 **Status:** ✅ **READY FOR TESTING**
 
 ## Configuration Complete
@@ -39,7 +39,7 @@
 export NEOTOMA_HOST_URL="https://melissia-introrse-correspondently.ngrok-free.dev"
 
 # Restart MCP server
-npm run dev:api
+npm run dev:server:tunnel
 ```
 
 **Or add to `.env` file:**

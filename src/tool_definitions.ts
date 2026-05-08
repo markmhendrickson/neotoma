@@ -894,6 +894,91 @@ export function buildToolDefinitions(
       annotations: { readOnlyHint: true },
     },
     {
+      name: "submit_entity",
+      description: desc(
+        "submit_entity",
+        "Generic config-driven entity submission. Requires an active submission_config row for the target entity_type (operator-seeded; repo does not seed default submission_config rows). Creates the primary entity and, when configured, a linked conversation + initial message and optional guest_access_token. Does not run the GitHub-first issue mirror — use submit_issue for issues with GitHub discoverability.",
+      ),
+      inputSchema: {
+        type: "object",
+        properties: {
+          entity_type: { type: "string", description: "Target entity type (must match an active submission_config target_entity_type)." },
+          fields: {
+            type: "object",
+            additionalProperties: true,
+            description: "Payload merged into the primary entity row (schema-required fields must be present).",
+          },
+          initial_message: {
+            type: "string",
+            description: "When conversation threading is enabled, overrides the first message body (defaults to fields.body or fields.content when omitted).",
+          },
+        },
+        required: ["entity_type", "fields"],
+      },
+    },
+    {
+      name: "add_entity_message",
+      description: desc(
+        "add_entity_message",
+        "Append a conversation_message to the thread linked to a submitted entity (RESolves conversation via REFERS_TO from the root entity, or creates one).",
+      ),
+      inputSchema: {
+        type: "object",
+        properties: {
+          entity_id: { type: "string", description: "Root submitted entity id." },
+          message: { type: "string", description: "Message body (markdown)." },
+        },
+        required: ["entity_id", "message"],
+      },
+    },
+    {
+      name: "get_entity_submission_status",
+      description: desc(
+        "get_entity_submission_status",
+        "Return retrieve_entity_snapshot (JSON) for a submitted entity. Pass guest_access_token when using submit-time token read-back.",
+      ),
+      inputSchema: {
+        type: "object",
+        properties: {
+          entity_id: { type: "string" },
+          guest_access_token: { type: "string", description: "Optional token from submit_entity." },
+        },
+        required: ["entity_id"],
+      },
+      annotations: { readOnlyHint: true },
+    },
+    {
+      name: "list_entity_submissions",
+      description: desc(
+        "list_entity_submissions",
+        "List entities of a given type for the authenticated user (retrieve_entities wrapper).",
+      ),
+      inputSchema: {
+        type: "object",
+        properties: {
+          entity_type: { type: "string" },
+          limit: { type: "integer", minimum: 1, maximum: 200 },
+          offset: { type: "integer", minimum: 0 },
+        },
+        required: ["entity_type"],
+      },
+      annotations: { readOnlyHint: true },
+    },
+    {
+      name: "sync_entity_submissions",
+      description: desc(
+        "sync_entity_submissions",
+        "Sync external mirrors for submissions. entity_type issue delegates to GitHub issue sync; other types return a no-op payload until additional providers exist.",
+      ),
+      inputSchema: {
+        type: "object",
+        properties: {
+          entity_type: { type: "string", description: "Defaults to issue when omitted." },
+        },
+        required: [],
+      },
+    },
+    {
       name: "submit_issue",
       description: desc(
         "submit_issue",
@@ -903,6 +988,7 @@ export function buildToolDefinitions(
           "Creates a local `issue` entity + associated conversation for tracking. " +
           "Submits to the operator Neotoma instance (default base URL when unset: https://neotoma.markmhendrickson.com). Override with NEOTOMA_ISSUES_TARGET_URL or issues.target_url in config. " +
           "When a non-empty target URL is configured, the tool fails (MCP error) if that remote store is unreachable or rejects the request; a local row with sync_pending may still be written first. " +
+          "When the operator accepts the issue, the response includes guest_access_token for token-scoped get_issue_status / add_issue_message read-back when the local snapshot does not already carry the token. " +
           "When `pushed_to_github` is false for a public issue, read `github_mirror_guidance` for recommended auth + manual GitHub create + entity update steps.",
       ),
       inputSchema: {
@@ -918,8 +1004,14 @@ export function buildToolDefinitions(
           visibility: {
             type: "string",
             enum: ["public", "private"],
-            description: "Use 'private' for PII-sensitive issues (Neotoma only, no GitHub). 'advisory' is accepted as a deprecated alias for 'private'. Default: 'public'.",
+            description: "Use 'private' for PII-sensitive issues (Neotoma only, no GitHub mirror). Default: 'public'.",
           },
+          reporter_git_sha: { type: "string", description: "Optional reporter git SHA (Phase 4 daemon)." },
+          reporter_git_ref: { type: "string", description: "Optional reporter git ref / branch name." },
+          reporter_channel: { type: "string", description: "Optional reporter channel (e.g. ci, local)." },
+          reporter_app_version: { type: "string", description: "Optional reporter app or CLI version." },
+          reporter_ci_run_id: { type: "string", description: "Optional CI or workflow run id." },
+          reporter_patch_source_id: { type: "string", description: "Optional source id for reporter patch artifact." },
         },
         required: ["title", "body"],
       },
@@ -928,35 +1020,69 @@ export function buildToolDefinitions(
       name: "add_issue_message",
       description: desc(
         "add_issue_message",
-        "Add a message to an existing issue thread. Submits to the configured operator Neotoma instance first, creates a conversation_message locally, and may push a GitHub comment. " +
+        "Add a message to an existing issue thread. Pass Neotoma `issue` entity_id (from submit_issue, get_issue_status, or Inspector). Submits to the configured operator Neotoma instance first, creates a conversation_message locally, and may push a GitHub comment when the issue has a GitHub mirror. " +
+          "When the local row mirrors a remote operator issue, pass guest_access_token if the token is not already stored on the issue snapshot (same semantics as get_issue_status). " +
           "Fails with an MCP error if the remote Neotoma store is required (non-empty target URL) but unreachable or rejects the request.",
       ),
       inputSchema: {
         type: "object",
         properties: {
-          issue_number: { type: "number", description: "GitHub issue number." },
+          entity_id: {
+            type: "string",
+            description:
+              "Neotoma `issue` entity_id. Use the id returned by submit_issue or Inspector.",
+          },
+          issue_number: {
+            type: "integer",
+            minimum: 1,
+            description: "GitHub issue number in the configured repo; use entity_id for private/local issues.",
+          },
           body: { type: "string", description: "Message body in markdown." },
+          guest_access_token: {
+            type: "string",
+            description:
+              "Optional guest-scoped token for operator Neotoma read-through / remote append when mirroring a remote issue. If omitted, the issue entity's stored guest_access_token is used when present.",
+          },
         },
-        required: ["issue_number", "body"],
+        required: ["body"],
+        anyOf: [{ required: ["entity_id"] }, { required: ["issue_number"] }],
       },
     },
     {
       name: "get_issue_status",
       description: desc(
         "get_issue_status",
-        "Get the current status of an issue including its conversation messages. " +
-          "Implicitly syncs from GitHub if local data is stale (>5min). Pass skip_sync=true to bypass.",
+        "Get the current status of an issue including its conversation messages. Pass Neotoma `issue` entity_id (from submit_issue or Inspector). " +
+          "When the local row mirrors an operator issue (remote_entity_id + issues.target_url), fetches the latest status and thread from that target instance first. " +
+          "Pass guest_access_token when the mirror requires a guest token and it is not stored on the local issue snapshot. " +
+          "When the issue has a GitHub mirror, implicitly syncs from GitHub if local data is stale (>5min). Pass skip_sync=true to skip only the GitHub refresh.",
       ),
       inputSchema: {
         type: "object",
         properties: {
-          issue_number: { type: "number", description: "GitHub issue number." },
+          entity_id: {
+            type: "string",
+            description:
+              "Neotoma `issue` entity_id. Use the id returned by submit_issue or Inspector.",
+          },
+          issue_number: {
+            type: "integer",
+            minimum: 1,
+            description: "GitHub issue number in the configured repo; use entity_id for private/local issues.",
+          },
           skip_sync: {
             type: "boolean",
-            description: "Skip implicit sync from GitHub (use cached local data only).",
+            description:
+              "Skip implicit sync from GitHub when the issue has github_number (does not skip operator read-through for mirrored issues).",
+          },
+          guest_access_token: {
+            type: "string",
+            description:
+              "Optional guest-scoped token for operator read-through when the local issue mirrors remote_entity_id on issues.target_url. If omitted, guest_access_token on the issue snapshot is used when present.",
           },
         },
-        required: ["issue_number"],
+        required: [],
+        anyOf: [{ required: ["entity_id"] }, { required: ["issue_number"] }],
       },
       annotations: { readOnlyHint: true },
     },
@@ -989,6 +1115,86 @@ export function buildToolDefinitions(
       },
     },
     {
+      name: "subscribe",
+      description: desc(
+        "subscribe",
+        "Create a substrate event subscription (webhook or SSE). Requires at least one of entity_types, entity_ids, or event_types. Webhook delivery requires webhook_url (HTTPS in production).",
+      ),
+      inputSchema: getOpenApiInputSchemaOrThrow("subscribe"),
+    },
+    {
+      name: "unsubscribe",
+      description: desc(
+        "unsubscribe",
+        "Deactivate a subscription by subscription_id (soft delete via correction).",
+      ),
+      inputSchema: getOpenApiInputSchemaOrThrow("unsubscribe"),
+    },
+    {
+      name: "list_subscriptions",
+      description: desc(
+        "list_subscriptions",
+        "List active substrate event subscriptions for the current user (webhook secrets omitted).",
+      ),
+      inputSchema: getOpenApiInputSchemaOrThrow("list_subscriptions"),
+    },
+    {
+      name: "get_subscription_status",
+      description: desc(
+        "get_subscription_status",
+        "Get current snapshot for one subscription by subscription_id (webhook secret omitted).",
+      ),
+      inputSchema: getOpenApiInputSchemaOrThrow("get_subscription_status"),
+    },
+    {
+      name: "add_peer",
+      description: desc(
+        "add_peer",
+        "Register a Neotoma peer for cross-instance sync (Phase 5). Stores a peer_config entity; returns shared_secret when auth_method is shared_secret and none was supplied.",
+      ),
+      inputSchema: getOpenApiInputSchemaOrThrow("add_peer"),
+    },
+    {
+      name: "remove_peer",
+      description: desc(
+        "remove_peer",
+        "Deactivate a peer_config row by peer_id (soft delete via correction).",
+      ),
+      inputSchema: getOpenApiInputSchemaOrThrow("remove_peer"),
+    },
+    {
+      name: "list_peers",
+      description: desc(
+        "list_peers",
+        "List configured Neotoma peers for the current user (shared_secret redacted).",
+      ),
+      inputSchema: getOpenApiInputSchemaOrThrow("list_peers"),
+    },
+    {
+      name: "get_peer_status",
+      description: desc(
+        "get_peer_status",
+        "Return one peer_config snapshot by peer_id (secret redacted).",
+      ),
+      inputSchema: getOpenApiInputSchemaOrThrow("get_peer_status"),
+    },
+    {
+      name: "sync_peer",
+      description: desc(
+        "sync_peer",
+        "Run bounded peer sync: push eligible local observations to the peer and pull eligible remote snapshots for bilateral catch-up.",
+      ),
+      inputSchema: getOpenApiInputSchemaOrThrow("sync_peer"),
+    },
+    {
+      name: "resolve_sync_conflict",
+      description: desc(
+        "resolve_sync_conflict",
+        "Resolve a sync conflict using prefer_local, prefer_remote, last_write_wins, source_priority, or manual. prefer_remote requires sender_peer_url.",
+      ),
+      inputSchema: getOpenApiInputSchemaOrThrow("resolve_sync_conflict"),
+    },
+    {
       name: "npm_check_update",
       description: desc(
         "npm_check_update",
@@ -1009,6 +1215,12 @@ export function buildToolDefinitions(
             type: "string",
             description: "Dist tag to check (default: latest)",
             default: "latest",
+          },
+          include_release_notes: {
+            type: "boolean",
+            description:
+              "When true, fetches npm version metadata and optional GitHub release body (best-effort); adds release_url and excerpts. Default false to limit registry/GitHub load.",
+            default: false,
           },
         },
         required: ["packageName", "currentVersion"],
@@ -1060,6 +1272,21 @@ export const NEOTOMA_TOOL_NAMES = [
   "add_issue_message",
   "get_issue_status",
   "sync_issues",
+  "submit_entity",
+  "add_entity_message",
+  "get_entity_submission_status",
+  "list_entity_submissions",
+  "sync_entity_submissions",
+  "subscribe",
+  "unsubscribe",
+  "list_subscriptions",
+  "get_subscription_status",
+  "add_peer",
+  "remove_peer",
+  "list_peers",
+  "get_peer_status",
+  "sync_peer",
+  "resolve_sync_conflict",
   "npm_check_update",
 ] as const;
 

@@ -16,3 +16,12 @@ If a rule can be misinterpreted, formalize it. No ambiguity.
 - No message body ingestion
 - No auto-scanning of cloud drives
 - User explicitly provides all data
+
+## 10.8 Signal Without Strategy
+The state layer may signal state changes to consumers. It must not decide what those changes mean or what to do about them. Signaling is infrastructure; interpretation is the consumer's job.
+
+This mirrors the architectural invariant in `philosophy.md` §5.9 (Signal Without Strategy) in product-principle language. Practical implications for product decisions:
+- Substrate emits events for all state changes; consumers filter, prioritize, and react.
+- No user-facing "important change" decisions live in the substrate.
+- Delivery is best-effort; no retry queues, no dead-letter queues, no ordering guarantees in the substrate.
+- See `scope_decisions.md` SD-002 for the boundary against strategy-layer notifications.

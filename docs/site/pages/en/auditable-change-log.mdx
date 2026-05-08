@@ -1,0 +1,29 @@
+Every modification records who changed what, when, and from which source. This creates field-level
+lineage for every fact in state.
+
+## Before vs after
+
+Before: state changes are visible but origin is unclear. After: every change maps back to a concrete
+tool call or source artifact with timestamped provenance.
+
+```bash
+# Inspect provenance trail
+neotoma observations list --entity-id <entity_id>
+
+# Inspect relationships to source/message entities
+neotoma relationships list --entity-id <entity_id>
+```
+
+This is required for trustworthy multi-agent systems. See
+<MdxI18nLink to="/human-inspectability" className="text-foreground underline hover:text-foreground">
+  human inspectability
+</MdxI18nLink>
+,
+<MdxI18nLink to="/versioned-history" className="text-foreground underline hover:text-foreground">
+  versioned history
+</MdxI18nLink>
+, and
+<MdxI18nLink to="/silent-mutation-risk" className="text-foreground underline hover:text-foreground">
+  silent mutation risk
+</MdxI18nLink>
+.

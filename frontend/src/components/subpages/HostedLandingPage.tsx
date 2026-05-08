@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { Server, Globe, Home, Sparkles } from "lucide-react";
-import { DetailPage } from "../DetailPage";
+import { MdxSitePage } from "./MdxSitePage";
 import { IntegrationSection } from "../IntegrationSection";
 
 const extLink = "text-foreground underline underline-offset-2 hover:no-underline";
@@ -71,9 +71,9 @@ const STATUS_LABEL: Record<HostedFlavor["status"], string> = {
   planned: "Planned",
 };
 
-export function HostedLandingPage() {
+export function HostedLandingPageBody() {
   return (
-    <DetailPage title="Hosted Neotoma">
+    <>
       <p className="text-[15px] leading-7 text-foreground mb-3">
         Neotoma runs the same code in four places: your laptop, a tunnel pointed at your laptop, a
         public demo instance, and - someday - a managed production service. This page explains which
@@ -155,6 +155,10 @@ export function HostedLandingPage() {
           <Link to="/sandbox" className={extLink}>Try the sandbox →</Link>
         </p>
       </IntegrationSection>
-    </DetailPage>
+    </>
   );
+}
+
+export function HostedLandingPage() {
+  return <MdxSitePage canonicalPath="/hosted" detailTitle="Hosted Neotoma" />;
 }

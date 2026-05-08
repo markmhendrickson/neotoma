@@ -114,8 +114,8 @@ export function AgentInstructionsDisplayPage() {
             <li>
               <em>Bullet format:</em> each bullet starts with one schema-typed emoji (✅
               task, 👤 contact, 🏢 company, 📅 event, ✉️ email_message, 🧾 receipt, 💸
-              transaction, 📝 note, 📍 place, 📎 file_asset, 🔍 research, 💬{" "}
-              product_feedback; default 🗂️), uses a short primary label, omits verbs
+              transaction, 📝 note, 📍 place, 📎 file_asset, 🔍 research, 🐛 issue;
+              default 🗂️), uses a short primary label, omits verbs
               already in the group header, and ends with the schema{" "}
               <code>entity_type</code> in inline-code parentheses.
             </li>
@@ -301,9 +301,9 @@ export function AgentInstructionsDisplayPage() {
         </li>
         <li className={listItem}>
           <strong className="text-foreground">Polling and follow-up.</strong> Use{" "}
-          <code>get_issue_status</code> to sync from GitHub when local data is stale; add
-          comments with <code>add_issue_message</code> when you have new reproduction
-          detail.
+          <code>get_issue_status</code> with the issue <code>entity_id</code> to sync from
+          GitHub when local data is stale; add comments with <code>add_issue_message</code>{" "}
+          using the same <code>entity_id</code> when you have new reproduction detail.
         </li>
         <li className={listItem}>
           <strong className="text-foreground">Upgrade guidance on issues.</strong> When the

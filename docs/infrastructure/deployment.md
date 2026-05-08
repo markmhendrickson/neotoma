@@ -13,7 +13,7 @@ This document does NOT cover:
 - Infrastructure scaling (post-MVP)
 - Advanced monitoring (post-MVP)
 ## Marketing site (neotoma.io)
-The static marketing site is built with `npm run build:pages:site` (output: `site_pages/`) and deployed to **GitHub Pages** (`.github/workflows/deploy-pages-site.yml`).
+The static marketing site is built with `npm run build:site:pages` (output: `site_pages/`) and deployed to **GitHub Pages** (`.github/workflows/deploy-pages-site.yml`).
 
 - **Prod:** Push to **main** (or run the workflow manually). Served at **https://neotoma.io** (root).
 - **Dev preview:** Push to **dev** and deploy to a **separate repository** via `.github/workflows/deploy-pages-dev-site.yml`. Served at **https://dev.neotoma.io**.

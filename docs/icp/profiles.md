@@ -58,22 +58,22 @@ The Tier 1 ICP is one person — the personal agentic OS builder/operator — wh
 - **Note:** Significant overlap between segments. Requires education and lower friction than developer release provides.
 - **Deduplicated B2C:** ~100-150M individuals
 
-### Future Product Layer: Strategy (Agentic Portfolio) - ~4-8M individuals
+### Future Product: Strategy (Agentic Portfolio) - ~4-8M individuals
 - **High-Net-Worth Individuals:** 2-5M
 - **Multi-Jurisdiction Residents:** 10-20M (overlap with HNW)
 - **Crypto-Native Power Users:** 500K-1M
 - **Startup Founders with Equity:** 200K-500K
 - **Family-Office-Lite:** 1-2M (overlap with HNW)
-- **Deduplicated Strategy Layer:** ~3-6M individuals
+- **Deduplicated Strategy Product:** ~3-6M individuals
 
-### Future Product Layer: Execution (Agentic Wallet) - ~400K-900K users
+### Future Product: Execution (Agentic Wallet) - ~400K-900K users
 - **High-Frequency On-Chain Actors:** 50K-100K
 - **Agent-Compatible Crypto Users:** 100K-200K
 - **Protocol Explorers:** 200K-500K
 - **Bitcoin/Stacks Power Users:** 50K-100K
-- **Deduplicated Execution Layer:** ~300K-600K users
+- **Deduplicated Execution Product:** ~300K-600K users
 
-### Future Product Layer: Enterprise - ~17K-35K companies
+### Future Product: Enterprise - ~17K-35K companies
 - **Mid-Market + Enterprise Teams:** 10K-20K companies
 - **Companies with Dozens of AI Agents:** 5K-10K companies
 - **Organizations Requiring AI Governance:** 2K-5K organizations
@@ -1429,7 +1429,7 @@ After successfully organizing documents for 2-3 family members and receiving use
 - Expiration date tracking
 - Medical record handling
 - School form recognition
-# Future Product Layer: Strategy (Agentic Portfolio)
+# Future Product: Strategy (Agentic Portfolio)
 
 Requires later product maturity and asset/tax modeling stack.
 
@@ -1906,7 +1906,7 @@ After successfully using Agentic Portfolio for family wealth management and seei
 - Tax optimization capabilities
 - Estate planning features
 - Compliance tracking
-# Future Product Layer: Execution (Agentic Wallet)
+# Future Product: Execution (Agentic Wallet)
 
 Dependent on Agentic Portfolio + chain execution layer.
 
@@ -2258,7 +2258,7 @@ After successfully executing 5-10 Bitcoin/Stacks operations with measurable resu
 - Stacks ecosystem integration
 - Safety systems
 - Strategy execution capabilities
-# Future Product Layer: Enterprise AI Deployments
+# Future Product: Enterprise AI Deployments
 
 Only when Neotoma supports full org-wide agent orchestration.
 
@@ -2543,7 +2543,7 @@ Load when:
 1. Developer release features MUST serve Tier 1 ICPs (AI Infrastructure Engineers, Agent System Builders, AI-native Operators)
 2. Tier 2 features (Toolchain Integrators) require API stability milestones
 3. Tier 3 features (Knowledge Workers, Small Teams) are explicitly post-developer-release
-4. Future Product Layer ICPs require Agentic Portfolio/Wallet/Enterprise layers (not developer-release scope)
+4. Future Product ICPs require Agentic Portfolio/Wallet/Enterprise products (not developer-release scope)
 5. All features must align with ICP pain points and use cases
 6. Language must use infrastructure/guarantees framing, not "AI memory tool"
 ### Validation Checklist

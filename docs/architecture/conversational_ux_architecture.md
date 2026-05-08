@@ -67,11 +67,11 @@ flowchart LR
 - **User expectations:** Internal chat UI creates expectation that Neotoma provides reasoning, strategy, or planning
 - **Architectural violation:** Neotoma MUST NOT implement strategy, execution, or agent logic (see `docs/architecture/architecture.md` section 1.1)
 - **State Layer purity:** Neotoma = truth; Agents = intelligence
-- **Separation of concerns:** Reasoning belongs in upper layers (Strategy Layer, e.g., Agentic Portfolio; Execution Layer, e.g., Agentic Wallet), not State Layer
+- **Separation of concerns:** Reasoning belongs in operational layers (e.g., reasoning-style systems like Agentic Portfolio; effect-style systems like Agentic Wallet), not the State Layer
 **Forbidden patterns:**
 - ❌ LLM-based extraction (violates determinism)
 - ❌ Autonomous agents in State Layer
-- ❌ Predictive analytics (belongs in Strategy Layer, e.g., Agentic Portfolio)
+- ❌ Predictive analytics (belongs in an operational layer, e.g., a reasoning-style system like Agentic Portfolio)
 - ❌ Conversational reasoning (belongs in external agents)
 **Conclusion:** Internal chat creates architectural drag and violates State Layer boundaries.
 ### 2.4 UX Volatility

@@ -355,7 +355,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get entity by ID */
+        /**
+         * Get entity by ID
+         * @description Returns an entity snapshot for the authenticated user. Also accepts a scoped guest capability (`access_token` query parameter or AAuth submitter identity) for entity types whose guest access policy permits reads.
+         */
         get: operations["getEntityById"];
         put?: never;
         post?: never;
@@ -1362,6 +1365,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/issues/add_message": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add message to issue thread
+         * @description Appends a conversation_message to the issue thread (same flow as MCP add_issue_message). May submit to the configured operator Neotoma instance and post a GitHub comment when the issue is linked. Authenticated users can append to their scoped issues; scoped guest callers can append with `guest_access_token` or submitter AAuth identity.
+         */
+        post: operations["issuesAddMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/issues/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit issue
+         * @description Creates a local `issue` row, optional GitHub mirror for public visibility, and optional forward to the configured operator instance (same flow as MCP submit_issue). Authenticated users use the normal user scope. AAuth-signed guest submitters may create operator-side issues when the `issue`, `conversation`, and `conversation_message` guest access policies allow writes; the response includes a guest read-back token.
+         */
+        post: operations["issuesSubmit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/issues/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Get issue status
+         * @description Returns issue snapshot and thread messages; may sync from GitHub when stale and read through to the operator instance when the local row mirrors remote (MCP get_issue_status parity). Authenticated users read within their user scope. Scoped guest callers can read with `guest_access_token` or submitter AAuth identity.
+         */
+        post: operations["issuesGetStatus"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/issues/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sync issues from GitHub
+         * @description Pulls issues and comments from the configured GitHub repo into local Neotoma (MCP sync_issues parity).
+         */
+        post: operations["issuesSync"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/delete_entity": {
         parameters: {
             query?: never;
@@ -1607,6 +1690,195 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/subscribe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create a substrate event subscription (webhook or SSE) */
+        post: operations["subscribe"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/unsubscribe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Deactivate a subscription */
+        post: operations["unsubscribe"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/list_subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** List active subscriptions for the current user */
+        post: operations["listSubscriptions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/get_subscription_status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Get subscription delivery status */
+        post: operations["getSubscriptionStatus"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/events/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Server-sent events stream for a subscription */
+        get: operations["eventsStream"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/peers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List configured Neotoma peers for the authenticated user */
+        get: operations["listPeers"];
+        put?: never;
+        /** Add a Neotoma peer configuration */
+        post: operations["addPeer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/peers/{peer_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get one peer configuration (secret redacted) plus remote /health probe and semver compat vs this server */
+        get: operations["getPeerStatus"];
+        put?: never;
+        post?: never;
+        /** Deactivate a peer configuration */
+        delete: operations["removePeer"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/peers/{peer_id}/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Bounded outbound peer sync (POST signed /sync/webhook per observation) */
+        post: operations["syncPeer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/peers/resolve_sync_conflict": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resolve a sync conflict (prefer_remote re-fetches remote guest snapshot; prefer_local is a no-op with guidance) */
+        post: operations["resolveSyncConflict"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sync/webhook": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply one inbound cross-instance sync notification */
+        post: operations["applySyncWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sync/entities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** List local entity snapshots for an authenticated peer sync pull */
+        post: operations["listSyncEntities"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1675,7 +1947,7 @@ export interface components {
             observation_index?: number;
             entity_type?: string;
             /** @enum {string} */
-            code?: "ERR_CANONICAL_NAME_UNRESOLVED" | "ERR_MERGE_REFUSED";
+            code?: "ERR_CANONICAL_NAME_UNRESOLVED" | "ERR_MERGE_REFUSED" | "ERR_CONVERSATION_MESSAGE_ROLE_CONFLICT";
             message?: string;
             /**
              * @description Code-specific context (e.g. `seen_fields`, `attempted_value`,
@@ -2001,7 +2273,7 @@ export interface components {
              * @description For each distinct agent, counts of **observation** rows grouped
              *     by the target entity's `entity_type` (join `entities` on
              *     `observations.entity_id`). Surfaces who submitted
-             *     `product_feedback`, who touched protected `agent_grant` rows,
+             *     `issue` reports, who touched protected `agent_grant` rows,
              *     `issue` sync traffic, etc. Omitted when no typed observations
              *     exist for that agent.
              */
@@ -2166,13 +2438,14 @@ export interface components {
              *     - `human` — direct human write (acceptance of a suggestion,
              *       Inspector edit, `entities correct`, manual annotation).
              *     - `import` — batch ingestion / ETL / scheduled imports.
+             *     - `sync` — cross-instance replication from a configured Neotoma peer.
              *
              *     Null / missing for legacy rows written before the field
              *     existed; writes default to `llm_summary` when unspecified
              *     because MCP callers are LLM-driven by construction.
              * @enum {string|null}
              */
-            observation_source?: "sensor" | "llm_summary" | "workflow_state" | "human" | "import" | null;
+            observation_source?: "sensor" | "llm_summary" | "workflow_state" | "human" | "import" | "sync" | null;
             fields?: {
                 [key: string]: unknown;
             };
@@ -2384,6 +2657,26 @@ export interface components {
         } | {
             /** @enum {string} */
             relationship_type: "PART_OF" | "CORRECTS" | "REFERS_TO" | "SETTLES" | "DUPLICATE_OF" | "DEPENDS_ON" | "SUPERSEDES" | "EMBEDS" | "works_at" | "owns" | "manages" | "part_of" | "related_to" | "depends_on" | "references" | "transacted_with" | "member_of" | "reports_to" | "located_at" | "created_by" | "funded_by" | "acquired_by" | "subsidiary_of" | "partner_of" | "competitor_of" | "supplies_to" | "contracted_with" | "invested_in";
+            /** @description Index into the entities array for the source entity. */
+            source_index: number;
+            /** @description Existing target entity ID. */
+            target_entity_id: string;
+            metadata?: {
+                [key: string]: unknown;
+            };
+        } | {
+            /** @enum {string} */
+            relationship_type: "PART_OF" | "CORRECTS" | "REFERS_TO" | "SETTLES" | "DUPLICATE_OF" | "DEPENDS_ON" | "SUPERSEDES" | "EMBEDS" | "works_at" | "owns" | "manages" | "part_of" | "related_to" | "depends_on" | "references" | "transacted_with" | "member_of" | "reports_to" | "located_at" | "created_by" | "funded_by" | "acquired_by" | "subsidiary_of" | "partner_of" | "competitor_of" | "supplies_to" | "contracted_with" | "invested_in";
+            /** @description Existing source entity ID. */
+            source_entity_id: string;
+            /** @description Index into the entities array for the target entity. */
+            target_index: number;
+            metadata?: {
+                [key: string]: unknown;
+            };
+        } | {
+            /** @enum {string} */
+            relationship_type: "PART_OF" | "CORRECTS" | "REFERS_TO" | "SETTLES" | "DUPLICATE_OF" | "DEPENDS_ON" | "SUPERSEDES" | "EMBEDS" | "works_at" | "owns" | "manages" | "part_of" | "related_to" | "depends_on" | "references" | "transacted_with" | "member_of" | "reports_to" | "located_at" | "created_by" | "funded_by" | "acquired_by" | "subsidiary_of" | "partner_of" | "competitor_of" | "supplies_to" | "contracted_with" | "invested_in";
             /** @description Existing source entity ID. */
             source_entity_id: string;
             /** @description Existing target entity ID. */
@@ -2431,8 +2724,9 @@ export interface components {
             }[];
             /**
              * @description Optional. Create relationships between entities in this request.
-             *     Use `source_index`/`target_index` for entities in the request, or
-             *     `source_entity_id`/`target_entity_id` for existing entities.
+             *     Use `source_index` or `target_index` for entities in this request,
+             *     and `source_entity_id` or `target_entity_id` for existing entities.
+             *     Index and id endpoints may be mixed in one relationship.
              */
             relationships?: components["schemas"]["StoreRelationshipInput"][];
             interpretation?: components["schemas"]["StoreInterpretationInput"];
@@ -2445,7 +2739,7 @@ export interface components {
              *     request.
              * @enum {string}
              */
-            observation_source?: "sensor" | "llm_summary" | "workflow_state" | "human" | "import";
+            observation_source?: "sensor" | "llm_summary" | "workflow_state" | "human" | "import" | "sync";
             /**
              * @description Optional upstream author (e.g. GitHub user for issue submission).
              *     Stamped into observation provenance; must align with
@@ -2480,6 +2774,11 @@ export interface components {
              * @default false
              */
             strict?: boolean;
+            /**
+             * @description Optional Neotoma peer id to stamp on observations for cross-instance
+             *     sync loop prevention (Phase 5). Requires `observation_source: sync` in practice.
+             */
+            source_peer_id?: string;
         };
         StoreResponse: {
             structured?: components["schemas"]["StoreStructuredResponse"];
@@ -2497,8 +2796,9 @@ export interface components {
             }[];
             /**
              * @description Optional. Create relationships between entities in this request.
-             *     Use `source_index`/`target_index` for entities in the request, or
-             *     `source_entity_id`/`target_entity_id` for existing entities.
+             *     Use `source_index` or `target_index` for entities in this request,
+             *     and `source_entity_id` or `target_entity_id` for existing entities.
+             *     Index and id endpoints may be mixed in one relationship.
              *     Enables one-call chat persistence: store [conversation, conversation_message] with relationships [{ relationship_type: "PART_OF", source_index: 1, target_index: 0 }]. (`agent_message` remains accepted as a legacy alias for pre-v0.6 clients.)
              */
             relationships?: components["schemas"]["StoreRelationshipInput"][];
@@ -2512,7 +2812,7 @@ export interface components {
              *     request.
              * @enum {string}
              */
-            observation_source?: "sensor" | "llm_summary" | "workflow_state" | "human" | "import";
+            observation_source?: "sensor" | "llm_summary" | "workflow_state" | "human" | "import" | "sync";
             idempotency_key: string;
             user_id?: string;
             /**
@@ -2536,6 +2836,8 @@ export interface components {
              * @default false
              */
             strict?: boolean;
+            /** @description Optional peer id stamped on observations for sync loop prevention. */
+            source_peer_id?: string;
         };
         StoreStructuredResponse: {
             success?: boolean;
@@ -3294,6 +3596,8 @@ export interface operations {
             query?: {
                 /** @description Optional user scope. When omitted the authenticated user is used. */
                 user_id?: string;
+                /** @description Optional guest read-back token scoped to this entity. */
+                access_token?: string;
             };
             header?: never;
             path: {
@@ -4833,6 +5137,173 @@ export interface operations {
             };
         };
     };
+    issuesAddMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Neotoma issue entity id (preferred for Inspector deep links). */
+                    entity_id?: string;
+                    /** @description GitHub issue number in the configured repo (MCP parity). */
+                    issue_number?: number;
+                    /** @description Markdown message body. */
+                    body: string;
+                    /** @description Optional guest token for operator Neotoma read-through / remote append when the local issue mirrors a remote instance. If omitted, guest_access_token on the issue snapshot is used. */
+                    guest_access_token?: string;
+                    user_id?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Message stored; flags indicate GitHub / remote submission outcomes. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        github_comment_id: string | null;
+                        message_entity_id: string;
+                        pushed_to_github: boolean;
+                        submitted_to_neotoma: boolean;
+                    };
+                };
+            };
+        };
+    };
+    issuesSubmit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    title: string;
+                    body: string;
+                    labels?: string[];
+                    /** @enum {string} */
+                    visibility?: "public" | "private";
+                    reporter_git_sha?: string;
+                    reporter_git_ref?: string;
+                    reporter_channel?: string;
+                    reporter_app_version?: string;
+                    reporter_ci_run_id?: string;
+                    reporter_patch_source_id?: string;
+                    /** @description Guest submitter compatibility field for an already-created GitHub issue URL. */
+                    github_url?: string;
+                    /** @description Guest submitter compatibility field for an already-created GitHub issue number. */
+                    github_number?: number;
+                    /** @description Guest submitter display author stored on the issue and first thread message. */
+                    author?: string;
+                    /** @description Guest submitter deterministic local issue id for non-GitHub-backed threads. */
+                    local_issue_id?: string;
+                    /** @description Guest submitter timestamp used for deterministic local thread identity. */
+                    submission_timestamp?: string;
+                    user_id?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Issue created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        issue_number: number;
+                        github_url: string;
+                        entity_id: string;
+                        /** @description Alias for `entity_id` returned for guest submitter compatibility. */
+                        issue_entity_id?: string;
+                        conversation_id: string;
+                        remote_entity_id: string;
+                        pushed_to_github: boolean;
+                        submitted_to_neotoma: boolean;
+                        /** @description Guest token returned by the operator instance for remote read-back and append. */
+                        guest_access_token?: string;
+                        /** @description Entity ids written by the guest submitter flow. */
+                        entity_ids?: string[];
+                        github_mirror_guidance: string | null;
+                    };
+                };
+            };
+        };
+    };
+    issuesGetStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    entity_id?: string;
+                    issue_number?: number;
+                    skip_sync?: boolean;
+                    guest_access_token?: string;
+                    user_id?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Issue status payload */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    issuesSync: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    since?: string;
+                    /** @enum {string} */
+                    state?: "open" | "closed" | "all";
+                    labels?: string[];
+                    user_id?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Sync counts and errors */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        issues_synced: number;
+                        messages_synced: number;
+                        errors: string[];
+                    };
+                };
+            };
+        };
+    };
     deleteEntity: {
         parameters: {
             query?: never;
@@ -5224,6 +5695,419 @@ export interface operations {
         };
         responses: {
             /** @description Health check results */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    subscribe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    entity_types?: string[];
+                    entity_ids?: string[];
+                    event_types?: string[];
+                    /** @enum {string} */
+                    delivery_method: "webhook" | "sse";
+                    webhook_url?: string;
+                    webhook_secret?: string;
+                    max_failures?: number;
+                    /**
+                     * @description When set, webhook deliveries skip substrate events whose
+                     *     `source_peer_id` equals this value (prevents notifying a peer
+                     *     about changes that originated from that peer).
+                     */
+                    sync_peer_id?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Subscription created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        subscription_id?: string;
+                        entity_id?: string;
+                        webhook_secret?: string;
+                    } & {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    unsubscribe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    subscription_id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Subscription deactivated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    listSubscriptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description Active subscriptions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    getSubscriptionStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    subscription_id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Subscription status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    eventsStream: {
+        parameters: {
+            query: {
+                subscription_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description text/event-stream */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listPeers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Peer rows (shared_secret omitted) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    addPeer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    peer_id: string;
+                    peer_name: string;
+                    peer_url: string;
+                    /** @enum {string} */
+                    direction: "push" | "pull" | "bidirectional";
+                    entity_types: string[];
+                    /** @enum {string} */
+                    sync_scope: "all" | "tagged";
+                    /** @enum {string} */
+                    auth_method: "aauth" | "shared_secret";
+                    /** @enum {string} */
+                    conflict_strategy: "last_write_wins" | "source_priority" | "manual";
+                    /** @description Optional; generated when auth_method is shared_secret and omitted. */
+                    shared_secret?: string;
+                    /** @description Optional AAuth public-key thumbprint expected from this peer when auth_method is aauth. */
+                    peer_public_key_thumbprint?: string;
+                    /**
+                     * Format: uuid
+                     * @description Optional. Authenticated user_id on the peer instance for outbound POST /sync/webhook target_user_id.
+                     */
+                    sync_target_user_id?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Peer created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    getPeerStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                peer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Peer snapshot with remote health and local API version */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description This Neotoma instance package version (same source as GET /health) */
+                        local_api_version: string;
+                        peer: {
+                            [key: string]: unknown;
+                        };
+                        remote_health: {
+                            reachable: boolean;
+                            /** @description Present when reachable; true when /health returned ok true */
+                            ok?: boolean;
+                            /** @description Peer /health version string or unknown */
+                            version: string;
+                            /** @description Semver compat vs local_api_version (same rules as neotoma compat); false when unreachable or /health not ok */
+                            compatible: boolean;
+                            warning?: string | null;
+                            error?: string | null;
+                        };
+                    };
+                };
+            };
+        };
+    };
+    removePeer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                peer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Peer deactivated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    syncPeer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                peer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Max observations to consider this run (default 200) */
+                    limit?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Sync acknowledgement */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    resolveSyncConflict: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    entity_id: string;
+                    /** @enum {string} */
+                    strategy: "prefer_local" | "prefer_remote" | "last_write_wins" | "source_priority" | "manual";
+                    /** @description Required for prefer_remote — remote Neotoma base URL (GET /entities/{entity_id}) */
+                    sender_peer_url?: string;
+                    /** @description Optional query access_token for guest read on the remote instance */
+                    guest_access_token?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Resolution result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    applySyncWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    sender_peer_id: string;
+                    sender_peer_url: string;
+                    /** Format: uuid */
+                    target_user_id: string;
+                    entity_id: string;
+                    source_observation_id: string;
+                    guest_access_token?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Sync notification applied */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    listSyncEntities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    sender_peer_id: string;
+                    /** Format: uuid */
+                    target_user_id: string;
+                    entity_types: string[];
+                    /** Format: date-time */
+                    observed_after?: string;
+                    limit?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Entity snapshots available to the peer */
             200: {
                 headers: {
                     [name: string]: unknown;

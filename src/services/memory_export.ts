@@ -107,7 +107,6 @@ const TYPE_WEIGHTS: Record<string, number> = {
   person: 3,
   event: 3,
   transaction: 3,
-  product_feedback: 3,
   business_opportunity: 3,
   issue: 3,
   user_persona_insight: 3,

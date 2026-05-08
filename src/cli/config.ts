@@ -350,6 +350,18 @@ export async function detectRunningApiPorts(): Promise<number[]> {
 /** Base URL when detection finds no server. */
 const FALLBACK_BASE_URL = `http://${RESOLVED_API_LOOPBACK_HOST}:3080`;
 
+function normalizePreferredEnv(value: unknown): "dev" | "prod" | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "dev" || normalized === "development") return "dev";
+  if (normalized === "prod" || normalized === "production") return "prod";
+  return null;
+}
+
+function defaultPortForEnv(env: "dev" | "prod"): number {
+  return env === "prod" ? 3180 : 3080;
+}
+
 /**
  * Resolves API base URL: --base-url wins; otherwise prefers session server when set.
  * When a session port (NEOTOMA_SESSION_DEV_PORT or NEOTOMA_SESSION_PROD_PORT) is set,
@@ -359,9 +371,9 @@ const FALLBACK_BASE_URL = `http://${RESOLVED_API_LOOPBACK_HOST}:3080`;
  * matching **`NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE`** / **`NEOTOMA_ENV`** (same rules as
  * the MCP signed shim), TCP-probes, and returns `http://localhost:<port>` when
  * listening — after session env and before `config.base_url` / auto-detect.
- * When no session port is set and multiple APIs respond, chooses by NEOTOMA_ENV
- * (production → 3180, development → 3080) so dev/prod MCP configs do not need
- * session port env vars in mcp.json.
+ * When no session port is set, a session/config preferred env selects the matching
+ * default port even if a different env's API happens to be running, keeping API
+ * clients and local transport on the same SQLite profile.
  */
 export async function resolveBaseUrl(option?: string, _config?: Config): Promise<string> {
   // Precedence: explicit --base-url flag > NEOTOMA_BASE_URL env var > session
@@ -407,25 +419,17 @@ export async function resolveBaseUrl(option?: string, _config?: Config): Promise
 
   const instances = await discoverApiInstances({ config: _config });
   const ports = instances.map((instance) => instance.port);
+  const sessionEnv = normalizePreferredEnv(process.env.NEOTOMA_SESSION_ENV);
+  const configPreferredEnv = normalizePreferredEnv(_config?.preferred_env);
+  const preferredEnv = sessionEnv ?? configPreferredEnv;
+  if (preferredEnv) {
+    const preferredPort = defaultPortForEnv(preferredEnv);
+    return `http://${RESOLVED_API_LOOPBACK_HOST}:${preferredPort}`;
+  }
   if (ports.length === 0) return FALLBACK_BASE_URL;
   if (ports.length === 1) return `http://${RESOLVED_API_LOOPBACK_HOST}:${ports[0]}`;
-  // Multiple ports and no session port: prefer explicit session env when provided.
-  const devPortDefault = 3080;
-  const prodPortDefault = 3180;
-  const sessionEnv = process.env.NEOTOMA_SESSION_ENV;
-  const preferred: "dev" | "prod" | null =
-    sessionEnv === "dev" || sessionEnv === "prod" ? sessionEnv : null;
-  const port =
-    preferred === "dev"
-      ? ports.includes(devPortDefault)
-        ? devPortDefault
-        : ports[0]
-      : preferred === "prod"
-        ? ports.includes(prodPortDefault)
-          ? prodPortDefault
-          : ports[0]
-        : ports.includes(devPortDefault)
-          ? devPortDefault
-          : ports[0];
+  // Multiple ports and no session/config preference: default to development.
+  const devPortDefault = defaultPortForEnv("dev");
+  const port = ports.includes(devPortDefault) ? devPortDefault : ports[0];
   return `http://${RESOLVED_API_LOOPBACK_HOST}:${port}`;
 }

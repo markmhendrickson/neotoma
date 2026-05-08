@@ -1,20 +1,10 @@
 ---
 name: process_feedback
-description: "Triage and manage Neotoma work items via GitHub Issues (`neotoma issues`, MCP issue tools). Supersedes the old feedback pipeline."
-triggers:
-  - process feedback
-  - /process-feedback
-  - triage feedback
-  - review feedback
-  - feedback queue
-  - pending feedback
-  - resolve feedback
-  - feedback pipeline
-  - process issues
-  - triage issues
+description: Process Issues (formerly Process Feedback)
 ---
 
 <!-- Source: .cursor/skills/process-feedback/SKILL.md -->
+
 
 # Process Issues (formerly Process Feedback)
 
@@ -47,9 +37,3 @@ Issues are viewable at `/issues` in the Inspector UI, with individual issue deta
 neotoma issues config --repo <owner/repo> --mode <proactive|consent|off>
 neotoma issues auth  # triggers gh CLI auth flow
 ```
-
-## Reference
-
-- `docs/subsystems/agent_feedback_pipeline.md` — migration notes and legacy HTTP intake
-- `src/services/issues/` — issue operations and sync
-- `src/cli/issues.ts` — CLI implementation

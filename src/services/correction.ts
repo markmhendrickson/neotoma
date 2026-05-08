@@ -16,6 +16,10 @@ import {
 } from "./request_context.js";
 import { enforceAttributionPolicy } from "./attribution_policy.js";
 import { assertCanWriteProtected } from "./protected_entity_types.js";
+import {
+  emitEntitySnapshotChange,
+  emitObservationCreated,
+} from "../events/substrate_store_emit.js";
 
 export interface CreateCorrectionParams {
   entity_id: string;
@@ -25,6 +29,7 @@ export interface CreateCorrectionParams {
   schema_version: string;
   user_id: string;
   idempotency_key?: string;
+  source_peer_id?: string;
 }
 
 export interface CorrectionResult {
@@ -95,12 +100,36 @@ export async function createCorrection(
   }
 
   const snapshot = await recomputeSnapshot(entity_id, user_id);
+  const snap = (snapshot?.snapshot as Record<string, unknown> | null | undefined) ?? null;
+  const emitTs = row.observed_at as string;
+  emitObservationCreated({
+    user_id,
+    entity_id,
+    entity_type,
+    observation_id: observationId,
+    timestamp: emitTs,
+    idempotency_key: idempotency_key,
+    observation_source: "human",
+    source_peer_id: params.source_peer_id,
+  });
+  emitEntitySnapshotChange({
+    user_id,
+    entity_id,
+    entity_type,
+    event_type: "entity.updated",
+    timestamp: emitTs,
+    observation_id: observationId,
+    fields_changed: [field],
+    idempotency_key: idempotency_key,
+    observation_source: "human",
+    source_peer_id: params.source_peer_id,
+  });
 
   return {
     observation_id: observationId,
     entity_id,
     field,
     value,
-    snapshot: snapshot?.snapshot ?? null,
+    snapshot: snap,
   };
 }

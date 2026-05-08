@@ -1,15 +1,19 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import mdx from "@mdx-js/rollup";
 import path from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
-  // Keep scrollback when running under concurrently (e.g. npm run watch:full) so
+  // Keep scrollback when running under concurrently (e.g. npm run dev) so
   // pick-port --print-resources and earlier terminal output are not cleared on HMR/restart.
   clearScreen: false,
-  plugins: [react()],
+  plugins: [
+    { ...mdx({ providerImportSource: "@mdx-js/react" }), enforce: "pre" },
+    react(),
+  ],
   root: "frontend",
   // Load .env / .env.development / .env.production from repo root (same as neotoma site configure).
   envDir: path.resolve(__dirname, "."),
@@ -41,10 +45,16 @@ export default defineConfig({
     port: parseInt(process.env.VITE_PORT || process.env.PORT || "5173", 10),
     host: "0.0.0.0", // Accept connections from proxy
     strictPort: true, // Fail if port is taken instead of auto-incrementing (ensures HMR port matches)
+    // Do not set hmr.host to "localhost": on macOS, localhost can resolve to ::1 while the
+    // dev socket is IPv4-only, so the HMR WebSocket never connects even though the page loads.
+    // Omit host so the client uses the same hostname as the page (localhost, 127.0.0.1, or LAN IP).
     hmr: {
       protocol: "ws",
-      host: "localhost",
       port: parseInt(process.env.VITE_PORT || process.env.PORT || "5173", 10),
+    },
+    watch: {
+      usePolling: process.env.VITE_WATCH_POLLING === "1",
+      ...(process.env.VITE_WATCH_POLLING === "1" ? { interval: 300 } : {}),
     },
     proxy: {
       // Exact match only: "/health" would also match SPA routes like /healthcare

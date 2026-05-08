@@ -17,10 +17,14 @@ import {
   Shield,
   X,
 } from "lucide-react";
-import { Link } from "react-router-dom";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui/collapsible";
-import { SeoHead } from "../SeoHead";
+import { MdxI18nLink } from "@/components/mdx/mdx_i18n_link";
+import { MdxSitePage } from "./MdxSitePage";
 import { sendCtaClick } from "@/utils/analytics";
+
+/** Matches {@link DetailPage} shell title and MDX `page_title`. */
+export const BUILD_VS_BUY_DETAIL_TITLE =
+  "When to add a state integrity layer (and when observability is enough)";
 
 interface GapRow {
   capability: string;
@@ -171,14 +175,10 @@ const ENTITY_TYPE_EXAMPLES: EntityTypeExample[] = [
   },
 ];
 
-export function BuildVsBuyPage() {
+export function BuildVsBuyPageBody() {
   return (
     <>
-      <SeoHead />
-      <div className="min-h-screen bg-background">
-        <div className="mx-auto max-w-5xl px-6 py-20 md:px-12 lg:px-16">
-
-          {/* ── Hero ── */}
+          {/* ── Hero (H1 lives on {@link DetailPage} shell) ── */}
           <section className="space-y-6 pb-20 border-b border-border">
             <div className="inline-flex items-center gap-2 rounded-full border border-border bg-muted/50 px-3 py-1">
               <Scale className="h-3.5 w-3.5 text-muted-foreground" />
@@ -186,12 +186,6 @@ export function BuildVsBuyPage() {
                 Build vs Buy
               </span>
             </div>
-            <h1 className="text-[32px] md:text-[40px] font-medium tracking-[-0.02em] leading-tight max-w-3xl">
-              When to add a state integrity layer{" "}
-              <span className="text-muted-foreground">
-                (and when observability is enough)
-              </span>
-            </h1>
             <p className="text-[17px] leading-8 text-muted-foreground max-w-2xl">
               If you run agents across sessions and tools-IDE, chat, cron, CLI-you
               already pay the tax of re-prompting, manual sync, and homegrown
@@ -283,12 +277,12 @@ export function BuildVsBuyPage() {
             </div>
             <p className="text-[13px] leading-6 text-muted-foreground">
               Building multi-agent systems?{" "}
-              <Link
+              <MdxI18nLink
                 to="/multi-agent-state"
                 className="text-foreground underline underline-offset-2 hover:no-underline"
               >
                 See how shared state accelerates the inflection point
-              </Link>
+              </MdxI18nLink>
               .
             </p>
           </section>
@@ -556,7 +550,7 @@ export function BuildVsBuyPage() {
                   stateIntegrityGap,
                   accent,
                 }) => (
-                  <Link
+                  <MdxI18nLink
                     key={href}
                     to={href}
                     className="group rounded-lg border border-border bg-card p-5 space-y-4 no-underline transition-all hover:border-border/80 hover:shadow-lg hover:shadow-black/5 dark:hover:shadow-black/20"
@@ -587,7 +581,7 @@ export function BuildVsBuyPage() {
                         </p>
                       </div>
                     </div>
-                  </Link>
+                  </MdxI18nLink>
                 ),
               )}
             </div>
@@ -605,12 +599,12 @@ export function BuildVsBuyPage() {
                       ·
                     </span>
                   ) : null}
-                  <Link
+                  <MdxI18nLink
                     to={href}
                     className="text-foreground underline underline-offset-2 hover:no-underline"
                   >
                     {guideLabel}
-                  </Link>
+                  </MdxI18nLink>
                 </Fragment>
               ))}
             </nav>
@@ -724,25 +718,25 @@ export function BuildVsBuyPage() {
               </p>
             </div>
             <div className="flex flex-col sm:flex-row justify-center gap-3">
-              <Link
+              <MdxI18nLink
                 to="/install"
                 className="inline-flex justify-center items-center gap-1.5 rounded-md border border-foreground bg-foreground px-6 py-2.5 text-[14px] font-medium text-background no-underline hover:opacity-90 transition-opacity"
                 onClick={() => sendCtaClick("install")}
               >
                 Install Neotoma
-              </Link>
-              <Link
+              </MdxI18nLink>
+              <MdxI18nLink
                 to="/architecture"
                 className="inline-flex justify-center items-center gap-1.5 rounded-md border border-border bg-card px-6 py-2.5 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
               >
                 Read the architecture
-              </Link>
-              <Link
+              </MdxI18nLink>
+              <MdxI18nLink
                 to="/types/contacts"
                 className="inline-flex justify-center items-center gap-1.5 rounded-md border border-border bg-card px-6 py-2.5 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
               >
                 Record types
-              </Link>
+              </MdxI18nLink>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-4 text-[12px] text-muted-foreground">
               {[
@@ -758,8 +752,12 @@ export function BuildVsBuyPage() {
               ))}
             </div>
           </section>
-        </div>
-      </div>
     </>
+  );
+}
+
+export function BuildVsBuyPage() {
+  return (
+    <MdxSitePage canonicalPath="/build-vs-buy" detailTitle={BUILD_VS_BUY_DETAIL_TITLE} />
   );
 }

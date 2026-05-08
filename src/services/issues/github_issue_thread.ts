@@ -20,3 +20,13 @@ export function githubIssueThreadConversationId(
   }
   return `github_issue_thread:${r}#${githubIssueNumber}`;
 }
+
+export function localIssueThreadConversationId(
+  repo: string,
+  localIssueId: string,
+): string | undefined {
+  const r = repo.trim();
+  const id = localIssueId.trim();
+  if (!r || !id) return undefined;
+  return `local_issue_thread:${r}:${id}`;
+}

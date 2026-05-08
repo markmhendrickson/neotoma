@@ -22,6 +22,14 @@ export interface BackfillResult {
   errors: string[];
 }
 
+function entityPrimaryId(row: { entity_id?: unknown; id?: unknown }): string {
+  const entityId = typeof row.entity_id === "string" ? row.entity_id : "";
+  if (entityId) return entityId;
+  const id = typeof row.id === "string" ? row.id : "";
+  if (id) return id;
+  throw new Error("Entity row missing entity_id");
+}
+
 export async function runAttributionBackfill(ops: Operations): Promise<BackfillResult> {
   const result: BackfillResult = {
     issues_updated: 0,
@@ -85,7 +93,7 @@ export async function runAttributionBackfill(ops: Operations): Promise<BackfillR
       if (!conversation) continue;
 
       const partsResponse = await ops.retrieveRelatedEntities({
-        entity_id: conversation.entity_id,
+        entity_id: entityPrimaryId(conversation as { entity_id?: unknown; id?: unknown }),
         relationship_types: ["PART_OF"],
         direction: "inbound",
       }) as { entities?: Array<{ entity_id: string; entity_type: string; snapshot?: Record<string, unknown>; provenance?: Record<string, unknown> }> };

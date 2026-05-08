@@ -20,6 +20,7 @@ import {
   Users,
   Zap,
 } from "lucide-react";
+import { MdxSitePage } from "./MdxSitePage";
 import { UseCaseLandingShell, type UseCaseConfig } from "./use_case_landing/UseCaseLandingShell";
 
 const CONFIG: UseCaseConfig = {
@@ -257,6 +258,10 @@ const CONFIG: UseCaseConfig = {
   agentLabel: "portfolio agent",
 };
 
+export function PortfolioLandingPageBody() {
+  return <UseCaseLandingShell mdxShell config={CONFIG} />;
+}
+
 export function PortfolioLandingPage() {
-  return <UseCaseLandingShell config={CONFIG} />;
+  return <MdxSitePage canonicalPath="/portfolio" shell="bare" />;
 }

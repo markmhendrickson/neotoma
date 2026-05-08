@@ -1,5 +1,5 @@
 import { Info } from "lucide-react";
-import { Link } from "react-router-dom";
+import { MdxI18nLink } from "@/components/mdx/mdx_i18n_link";
 import {
   MEMORY_GUARANTEE_ROWS,
   MEMORY_MODEL_VENDORS,
@@ -109,13 +109,13 @@ export function MemoryGuaranteesTable() {
                 <span className="truncate">{memory.deterministic}</span>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Link
+                    <MdxI18nLink
                       to="/deterministic-memory"
                       className="inline-flex shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
                       aria-label="More info about Deterministic memory"
                     >
                       <Info className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                    </Link>
+                    </MdxI18nLink>
                   </TooltipTrigger>
                   <TooltipContent className="w-max min-w-[18rem] max-w-[min(36rem,calc(100vw-1.5rem))] text-[13px] leading-5 whitespace-normal">
                     <p>
@@ -134,13 +134,13 @@ export function MemoryGuaranteesTable() {
                 <span className="truncate">{memory.platform}</span>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Link
+                    <MdxI18nLink
                       to="/platform-memory"
                       className="inline-flex shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
                       aria-label="More info about Platform memory"
                     >
                       <Info className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                    </Link>
+                    </MdxI18nLink>
                   </TooltipTrigger>
                   <TooltipContent className="w-max min-w-[18rem] max-w-[min(36rem,calc(100vw-1.5rem))] text-[13px] leading-5 whitespace-normal">
                     <p>Memory and controls provided directly by the model platform.</p>
@@ -156,13 +156,13 @@ export function MemoryGuaranteesTable() {
                 <span className="truncate">{memory.retrievalRag}</span>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Link
+                    <MdxI18nLink
                       to="/retrieval-memory"
                       className="inline-flex shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
                       aria-label="More info about Retrieval memory"
                     >
                       <Info className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                    </Link>
+                    </MdxI18nLink>
                   </TooltipTrigger>
                   <TooltipContent className="w-max min-w-[18rem] max-w-[min(36rem,calc(100vw-1.5rem))] text-[13px] leading-5 whitespace-normal">
                     <p>Memory reconstructed by searching prior context at query time.</p>
@@ -178,13 +178,13 @@ export function MemoryGuaranteesTable() {
                 <span className="truncate">{memory.files}</span>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Link
+                    <MdxI18nLink
                       to="/file-based-memory"
                       className="inline-flex shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
                       aria-label="More info about File-based memory"
                     >
                       <Info className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                    </Link>
+                    </MdxI18nLink>
                   </TooltipTrigger>
                   <TooltipContent className="w-max min-w-[18rem] max-w-[min(36rem,calc(100vw-1.5rem))] text-[13px] leading-5 whitespace-normal">
                     <p>Memory stored in files or artifacts outside a structured memory system.</p>
@@ -200,13 +200,13 @@ export function MemoryGuaranteesTable() {
                 <span className="truncate">{memory.database}</span>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Link
+                    <MdxI18nLink
                       to="/database-memory"
                       className="inline-flex shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
                       aria-label="More info about Database memory"
                     >
                       <Info className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                    </Link>
+                    </MdxI18nLink>
                   </TooltipTrigger>
                   <TooltipContent className="w-max min-w-[18rem] max-w-[min(36rem,calc(100vw-1.5rem))] text-[13px] leading-5 whitespace-normal">
                     <p>Memory stored in a relational database (SQLite, Postgres) with standard CRUD operations.</p>
@@ -226,13 +226,13 @@ export function MemoryGuaranteesTable() {
                 <span className="truncate">{memory.vendors}</span>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Link
+                    <MdxI18nLink
                       to="/memory-vendors"
                       className="ml-1 inline-flex shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
                       aria-label="More info about Vendors"
                     >
                       <Info className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                    </Link>
+                    </MdxI18nLink>
                   </TooltipTrigger>
                   <TooltipContent
                     side="right"
@@ -273,13 +273,13 @@ export function MemoryGuaranteesTable() {
                   {"\u00A0"}
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Link
+                      <MdxI18nLink
                         to={`/memory-guarantees#${row.slug}`}
                         className="inline-flex align-middle shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
                         aria-label={`More info about ${row.property}`}
                       >
                         <Info className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                      </Link>
+                      </MdxI18nLink>
                     </TooltipTrigger>
                     <TooltipContent
                       side="right"

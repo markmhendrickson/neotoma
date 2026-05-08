@@ -47,20 +47,22 @@ We do not run Google Analytics on the marketing site.
 ### 2.2 Issue reporting (GitHub Issues)
 
 When an agent running on your machine files an issue (via the
-`submit_issue` MCP tool or the `neotoma issues create` CLI), the
-following occurs:
+`submit_issue` MCP tool or the `neotoma issues create` CLI), behavior
+depends on **visibility**:
 
-- The issue is created on the configured GitHub repository using your
-  GitHub identity (authenticated via the `gh` CLI).
-- For public issues, PII should be redacted before submission. For
-  sensitive reports, use `visibility: "advisory"` to file via GitHub
-  Security Advisories (private, visible only to maintainers).
-- The issue is also stored locally in your Neotoma database as an
-  `issue` entity linked to a conversation.
-- GitHub's standard privacy policy applies to content stored on GitHub.
+- **Public (default):** the tool attempts to create an issue on the
+  configured GitHub repository using your GitHub identity (via the
+  `gh` CLI). PII should be redacted before submission. The same report is
+  stored locally as an `issue` entity linked to a conversation.
+- **Private:** the report is stored only in your Neotoma database; nothing
+  is sent to the GitHub Issues API.
 
-No data is sent to `agent.neotoma.io`. All issue data flows directly
-between your machine and GitHub's API.
+GitHub's standard privacy policy applies to content that actually lands on
+GitHub (public path only).
+
+No data is sent to `agent.neotoma.io`. Public-issue data flows between
+your machine, GitHub's API, and your local Neotoma instance; private-issue
+data stays on your machine and in your local database.
 
 ### 2.3 Sandbox interactions
 

@@ -44,7 +44,7 @@ None.
 
 - **Baseline CI**: [`.github/workflows/ci_test_lanes.yml`](../../.github/workflows/ci_test_lanes.yml) runs `type-check`, `lint`, `lint:site-copy`, `npm test`, `validate:coverage`, and `validate:doc-deps` on pushes and pull requests.
 - **Frontend CI**: The same workflow runs `npm run test:frontend` in a dedicated jsdom lane.
-- **Site/export CI**: The same workflow runs `validate:routes`, `build:ui`, `validate:locales`, `build:pages:site`, and `validate:site-export`.
+- **Site/export CI**: The same workflow runs `validate:routes`, `build:ui`, `validate:locales`, `build:site:pages`, and `validate:site-export`.
 - **Remote integration lane**: [`.github/workflows/remote_integration_nightly.yml`](../../.github/workflows/remote_integration_nightly.yml) runs `npm run test:remote:critical` on a nightly schedule or manual dispatch when `CI_REMOTE_TESTS_ENABLED=1` is configured for the repo.
 
 ## Qualitative description: default run (npm test) vs skipped
@@ -88,9 +88,9 @@ flowchart TD
 
 ## Automated test suites
 ### Vitest unit tests
-**Directory:** `tests/unit/`  
-**Runner:** `vitest`  
-**Command:** `npm test -- tests/unit`  
+**Directory:** `tests/unit/`
+**Runner:** `vitest`
+**Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env`, see `docs/testing/test_environment_configuration.md`.
 
 Files:
@@ -102,9 +102,9 @@ Files:
 - `tests/unit/schema_inference.test.ts`
 
 ### Vitest service tests
-**Directory:** `tests/services/` and `src/services/__tests__/`  
-**Runner:** `vitest`  
-**Command:** `npm test -- tests/services` or `npm test -- src/services/__tests__`  
+**Directory:** `tests/services/` and `src/services/__tests__/`
+**Runner:** `vitest`
+**Command:** `npm test -- tests/services` or `npm test -- src/services/__tests__`
 **Requirements:** Basic `.env`, see `docs/testing/test_environment_configuration.md`.
 
 Files:
@@ -136,10 +136,10 @@ Files:
 - `src/services/__tests__/schema_icon_service.test.ts`
 
 ### Vitest integration tests
-**Directory:** `tests/integration/`  
-**Runner:** `vitest`  
-**Commands:** `npm run test:integration` (integration only).  
-**Requirements:** Database configured and migrations applied.  
+**Directory:** `tests/integration/`
+**Runner:** `vitest`
+**Commands:** `npm run test:integration` (integration only).
+**Requirements:** Database configured and migrations applied.
 **Note:** Many integration tests run in the default local SQLite path. Only the remote-dependent subset listed in the "What is skipped" section is excluded from `npm test`. Use `RUN_REMOTE_TESTS=1` or `npm run test:remote:critical` for the highest-value remote lane.
 
 Files:
@@ -182,9 +182,9 @@ Files:
 - `tests/integration/v0.2.0_ingestion.test.ts`
 
 ### Vitest release integration tests
-**Directory:** `tests/integration/release/v0.1.0/`  
-**Runner:** `vitest`  
-**Command:** `npm test -- tests/integration/release/v0.1.0`  
+**Directory:** `tests/integration/release/v0.1.0/`
+**Runner:** `vitest`
+**Command:** `npm test -- tests/integration/release/v0.1.0`
 **Requirements:** Same as integration tests, see `docs/testing/test_environment_configuration.md`.
 
 Files:
@@ -204,10 +204,10 @@ Files:
 - `tests/integration/release/v0.1.0/it_validation_schemas.test.ts`
 
 ### Vitest CLI tests
-**Directory:** `tests/cli/`  
-**Runner:** `vitest`  
-**Command:** `npm test -- tests/cli`  
-**Requirements:** Basic `.env`, see `docs/testing/test_environment_configuration.md`.  
+**Directory:** `tests/cli/`
+**Runner:** `vitest`
+**Command:** `npm test -- tests/cli`
+**Requirements:** Basic `.env`, see `docs/testing/test_environment_configuration.md`.
 **Coverage review:** See `docs/testing/cli_command_coverage_review.md` for command-to-test mapping and coverage status.
 
 Files:
@@ -235,19 +235,19 @@ Files:
 - `tests/cli/test_debug_tty.test.ts`
 
 ### Vitest contract tests
-**Directory:** `tests/contract/`  
-**Runner:** `vitest`  
-**Command:** `npm test -- tests/contract`  
+**Directory:** `tests/contract/`
+**Runner:** `vitest`
+**Command:** `npm test -- tests/contract`
 **Requirements:** Basic `.env`, see `docs/testing/test_environment_configuration.md`.
 
 Files:
 - `tests/contract/contract_mapping.test.ts`
 
 ### Frontend Vitest tests
-**Directory:** `frontend/src/`  
-**Runner:** `vitest` (jsdom)  
-**Command:** `npm run test:frontend` or `RUN_FRONTEND_TESTS=1 npm test -- frontend/src`  
-**Note:** Excluded by default from `npm test`; use `RUN_FRONTEND_TESTS=1` or `npm run test:frontend` to run React/frontend tests.  
+**Directory:** `frontend/src/`
+**Runner:** `vitest` (jsdom)
+**Command:** `npm run test:frontend` or `RUN_FRONTEND_TESTS=1 npm test -- frontend/src`
+**Note:** Excluded by default from `npm test`; use `RUN_FRONTEND_TESTS=1` or `npm run test:frontend` to run React/frontend tests.
 **Requirements:** None beyond base repo setup.
 
 Files:
@@ -266,9 +266,10 @@ Files:
 - `frontend/src/utils/vite_chunk_recovery.test.ts`
 
 ### Playwright E2E tests
-**Directory:** `playwright/tests/`  
-**Runner:** `@playwright/test`  
-**Command:** `npm run test:e2e`  
+**Directory:** `playwright/tests/`
+**Runner:** `@playwright/test`
+**Command:** `npm run test:e2e`
+**Inspector-only (builds SPA first):** `npm run test:e2e:inspector`
 **Requirements:** Frontend running and database configured.
 
 Files:
@@ -310,6 +311,7 @@ Files:
 - `playwright/tests/storage-schema.spec.ts`
 - `playwright/tests/timeline-navigation.spec.ts`
 - `playwright/tests/upload-flow.spec.ts`
+- `playwright/tests/inspector/inspector-entity-detail.spec.ts` (Neotoma Inspector at `/inspector/`)
 
 ## Examples
 ### Run all tests
@@ -330,6 +332,11 @@ npm run test:remote:critical
 ### Run Playwright E2E tests
 ```bash
 npm run test:e2e
+```
+
+### Run Inspector Playwright tests (includes `build:inspector`)
+```bash
+npm run test:e2e:inspector
 ```
 
 ## Testing requirements

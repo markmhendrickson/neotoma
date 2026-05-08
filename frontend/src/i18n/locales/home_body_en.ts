@@ -239,6 +239,8 @@ export const HOME_BODY_EN: HomeBodyPack = {
     titleLine2: "...and pay the tax for missing memory",
     subtitle:
       "The re-prompting wastes your time and tokens. The deeper risk is when your agent acts confidently on wrong facts, and you don't find out until the damage is done.",
+    operatorConnector:
+      "One operator, three modes. Different pain, same state layer.",
     calloutHeading: "Already building your own memory system?",
     calloutBodyBeforeLink: "Most developers start with SQLite, JSON, markdown, or a custom MCP server. Neotoma ships ",
     calloutLink: "the guarantees you'd otherwise build and maintain yourself",
@@ -308,7 +310,6 @@ export const HOME_BODY_EN: HomeBodyPack = {
       "Your agent can read the docs, inspect the evaluation criteria, and tell you whether Neotoma fits your actual workflow before you install anything.",
     promptHint:
       "Copy this prompt into any AI agent. It reads the evaluation page, inspects your context, and judges whether Neotoma fits.",
-    evaluateIllustrationAlt: "Neotoma evaluate page preview",
     homeEvaluatePrompt: `Read https://neotoma.io/evaluate. Use any tool, workspace, and chat context already available in this session to assess my real workflow. Avoid ad-hoc shell introspection just to profile me; if Neotoma is already installed, use \`neotoma doctor --json\` for status instead. Then tell me whether Neotoma fits my workflow, what data would be highest value to persist first, and what I should do next.`,
     evaluatePromptPill: "Evaluation prompt",
     evaluatePromptCardSubtitle:

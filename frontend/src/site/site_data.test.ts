@@ -35,6 +35,9 @@ describe("site_data", () => {
   it("keeps critical code snippets available for rendering", () => {
     expect(SITE_CODE_SNIPPETS.installCommands).toContain("npm install -g neotoma");
     expect(SITE_CODE_SNIPPETS.stdioConfigJson).toContain("\"mcpServers\"");
+    expect(SITE_CODE_SNIPPETS.unsignedStdioDevShimMcpJson).toContain(
+      "run_neotoma_mcp_unsigned_stdio_dev_shim.sh",
+    );
     expect(SITE_CODE_SNIPPETS.cliUploadExample).toContain("neotoma ingest");
   });
 

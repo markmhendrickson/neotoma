@@ -6,7 +6,7 @@
 import { execFileSync } from "node:child_process";
 import * as readline from "node:readline";
 import type { Command } from "commander";
-import { getTerminalWidth } from "../format.js";
+import { dim, getTerminalWidth } from "../format.js";
 
 export type OutputMode = "json" | "pretty";
 
@@ -17,6 +17,15 @@ export type NeotomaProcessRow = {
   command: string;
   /** TCP LISTEN ports for this PID (`lsof`); empty when none or lsof unavailable. */
   ports: number[];
+  /**
+   * Heuristic environment: `dev` | `prod` | `mix` (conflicting signals) | `?` (unknown).
+   * Derived from argv tokens (NEOTOMA_ENV, npm script names, launchd wrappers) and listen ports.
+   */
+  env_hint: string;
+  /**
+   * Stable role tags for filtering / tooling (e.g. `server`, `mcp`, `build`, `orchestrator`, `tunnel`, `tooling`, `other`).
+   */
+  categories: string[];
 };
 
 export type ProcessesCliHooks = {
@@ -66,7 +75,8 @@ export function classifyNeotomaProcess(args: string): string | null {
       // cwd-relative tsx watch from a Neotoma checkout
     } else if (
       lower.includes("run-dev-task.js") &&
-      lower.includes("tsx watch src/actions")
+      (lower.includes("tsx watch src/actions") ||
+        (lower.includes("--watch-path") && lower.includes("src/actions.ts")))
     ) {
       // Neotoma dev stack uses this wrapper; argv often has no repo path (cwd-relative).
     } else if (lower.includes("src/actions.ts") && a.includes("neotoma") && lower.includes("tsx")) {
@@ -80,9 +90,22 @@ export function classifyNeotomaProcess(args: string): string | null {
   if (a.includes("run_watch_build_launchd")) return "watch_build_launchd";
   if (lower.includes("mcp proxy") && a.includes("cli/index")) return "mcp_proxy";
   if (a.includes("pick-port.js") && a.includes("neotoma")) return "api_orchestrator";
-  if (a.includes("/bin/concurrently") && a.includes("neotoma") && lower.includes("tsx watch"))
+  if (
+    a.includes("/bin/concurrently") &&
+    a.includes("neotoma") &&
+    (lower.includes("tsx watch") ||
+      lower.includes("run-neotoma-api-node-watch") ||
+      (lower.includes("--watch-path") && lower.includes("src/actions.ts")))
+  ) {
     return "api_orchestrator";
-  if (a.includes("scripts/run-dev-task.js") && lower.includes("tsx watch")) return "run_dev_task";
+  }
+  if (
+    a.includes("scripts/run-dev-task.js") &&
+    (lower.includes("tsx watch") ||
+      (lower.includes("--watch-path") && lower.includes("src/actions.ts")))
+  ) {
+    return "run_dev_task";
+  }
   if (a.includes(".bin/tsx watch src/actions.ts")) {
     if (a.includes("neotoma-hotfix-0.9.1")) return "hotfix_watcher";
     if (a.includes("/private/tmp/neotoma-hotfix") || a.includes("neotoma-hotfix-v0.10.1"))
@@ -94,8 +117,117 @@ export function classifyNeotomaProcess(args: string): string | null {
   if (lower.includes("esbuild") && a.includes("/repos/neotoma/")) return "esbuild_ping";
   if (lower.includes("cursor-hooks") && a.includes("repos/neotoma")) return "cursor_hook";
   if (lower.includes("opencode") && a.includes("repos/neotoma/tmp")) return "opencode_smoke";
+  if (
+    lower.includes("--watch-path") &&
+    (lower.includes("src/actions.ts") || lower.includes("mcp_ws_bridge.ts")) &&
+    (a.includes("repos/neotoma") || a.includes("neotoma-hotfix"))
+  ) {
+    return "api_watcher";
+  }
+  if (lower.includes("run-neotoma-api-node-watch.sh") && a.includes("neotoma")) return "run_dev_task";
   if (lower.includes("src/actions.ts") && a.includes("neotoma")) return "actions_worker";
   return "other_neotoma";
+}
+
+/** Internal classifier label → stable category tags (order not significant until sorted). */
+const LABEL_TO_CATEGORIES: Record<string, string[]> = {
+  api_watcher: ["server"],
+  run_dev_task: ["orchestrator", "server"],
+  tsx_watcher: ["server"],
+  api_orchestrator: ["orchestrator"],
+  mcp_proxy: ["mcp"],
+  mcp_stdio: ["mcp"],
+  tsc_watch: ["build"],
+  watch_build_launchd: ["build"],
+  esbuild_ping: ["build"],
+  cursor_hook: ["tooling"],
+  actions_worker: ["server"],
+  hotfix_watcher: ["server"],
+  tmp_hotfix_watcher: ["server"],
+  opencode_smoke: ["tooling"],
+  other_neotoma: ["other"],
+};
+
+function uniqSortedTags(tags: string[]): string[] {
+  return [...new Set(tags)].sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * Derive display categories from the process classifier label and full argv.
+ * Exported for unit tests.
+ */
+export function deriveProcessCategories(label: string, command: string): string[] {
+  const base = LABEL_TO_CATEGORIES[label] ?? ["other"];
+  const extra: string[] = [];
+  const lower = command.toLowerCase();
+  if (lower.includes("setup-https-tunnel") || lower.includes("ngrok")) {
+    extra.push("tunnel");
+  }
+  return uniqSortedTags([...base, ...extra]);
+}
+
+/**
+ * Heuristic dev / prod / mixed / unknown from argv and listen ports.
+ * Exported for unit tests.
+ */
+export function inferProcessEnvHint(command: string, ports: readonly number[]): string {
+  const c = command;
+  const lower = c.toLowerCase();
+  const hasProdPort = ports.includes(3180);
+  const hasDevPort = ports.includes(3080);
+
+  let prodScore = 0;
+  let devScore = 0;
+
+  if (hasProdPort) prodScore += 2;
+  if (hasDevPort) devScore += 2;
+
+  if (/\bNEOTOMA_ENV=production\b/i.test(c) || /\bNEOTOMA_ENV=prod\b/i.test(c)) prodScore += 3;
+  if (/\bNEOTOMA_ENV=development\b/i.test(c) || /\bNEOTOMA_ENV=dev\b/i.test(c)) devScore += 2;
+
+  if (lower.includes("dev:full:prod") || lower.includes("dev:inspector:prod")) prodScore += 3;
+  if (lower.includes("prod-target") || lower.includes("build:inspector:prod-target"))
+    prodScore += 2;
+  if (lower.includes("run_watch_full_prod_launchd")) prodScore += 3;
+
+  if (lower.includes("run_dev_servers_launchd") || lower.includes("dev:server:tunnel")) devScore += 3;
+  if (lower.includes("dev:server:tunnel:types")) devScore += 2;
+  if (lower.includes("tunnel_noninteractive")) devScore += 1;
+  if (lower.includes("setup-https-tunnel")) devScore += 2;
+
+  if (lower.includes("pick-port.js")) {
+    if (/--print-resources\s+3180\b/.test(c) || /\bpick-port\.js\s+3180\s+5295\s+3101\b/.test(c)) {
+      prodScore += 3;
+    }
+    if (/\bpick-port\.js\s+3080\b/.test(c) && !lower.includes("3180")) {
+      devScore += 2;
+    }
+  }
+
+  if (/\bVITE_NEOTOMA_ENV=prod\b/i.test(c)) prodScore += 1;
+  if (/\bVITE_NEOTOMA_ENV=dev\b/i.test(c)) devScore += 1;
+
+  if (/\bNEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE=prod\b/i.test(c)) prodScore += 2;
+  if (/\bNEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE=dev\b/i.test(c)) devScore += 2;
+
+  if (/127\.0\.0\.1:3180\/mcp|:3180\/mcp/.test(c)) prodScore += 1;
+  if (/127\.0\.0\.1:3080\/mcp|:3080\/mcp/.test(c)) devScore += 1;
+
+  if (/\brun_neotoma_mcp_stdio.*prod\b/i.test(lower) || lower.includes("mcp_stdio_prod")) {
+    prodScore += 2;
+  }
+  if (/\brun_neotoma_mcp_stdio\.sh\b/i.test(lower) && !/prod/.test(lower)) {
+    devScore += 1;
+  }
+
+  if (/\bnode\s+dist\/actions\.js\b/i.test(c) && prodScore === 0 && !hasDevPort) {
+    prodScore += 1;
+  }
+
+  if (prodScore > 0 && devScore > 0) return "mix";
+  if (prodScore > 0) return "prod";
+  if (devScore > 0) return "dev";
+  return "?";
 }
 
 function readPsSnapshot(): string {
@@ -124,6 +256,8 @@ export function parsePsSnapshotForNeotoma(raw: string): NeotomaProcessRow[] {
       label,
       command: parsed.args,
       ports: [],
+      env_hint: inferProcessEnvHint(parsed.args, []),
+      categories: deriveProcessCategories(label, parsed.args),
     });
   }
   out.sort((a, b) => a.pid - b.pid);
@@ -189,9 +323,19 @@ export function enrichProcessRowsWithListenPorts(rows: NeotomaProcessRow[]): Neo
   }));
 }
 
+/** Recompute `env_hint` (uses listen ports) and `categories` after ports are known. */
+export function finalizeNeotomaProcessRows(rows: NeotomaProcessRow[]): NeotomaProcessRow[] {
+  return rows.map((r) => ({
+    ...r,
+    env_hint: inferProcessEnvHint(r.command, r.ports),
+    categories: deriveProcessCategories(r.label, r.command),
+  }));
+}
+
 export function scanNeotomaProcesses(): NeotomaProcessRow[] {
   const rows = parsePsSnapshotForNeotoma(readPsSnapshot());
-  return enrichProcessRowsWithListenPorts(rows);
+  const enriched = enrichProcessRowsWithListenPorts(rows);
+  return finalizeNeotomaProcessRows(enriched);
 }
 
 /** Word-wrap a command for a fixed-width COMMAND column (continuation lines align under column). */
@@ -223,27 +367,35 @@ function formatPortsCell(ports: number[]): string {
   return ports.length > 0 ? ports.join(",") : "-";
 }
 
+function formatCategoriesCell(categories: string[]): string {
+  return categories.length > 0 ? categories.join(",") : "-";
+}
+
 function formatTable(rows: NeotomaProcessRow[]): string {
   if (rows.length === 0) {
     return "No Neotoma-related processes detected.\n";
   }
   const pidW = Math.max(3, ...rows.map((r) => String(r.pid).length));
   const ppidW = Math.max(4, ...rows.map((r) => String(r.ppid).length));
+  const envW = Math.max(3, "ENV".length, ...rows.map((r) => r.env_hint.length));
+  const catCells = rows.map((r) => formatCategoriesCell(r.categories));
+  const catW = Math.max(4, "CAT".length, ...catCells.map((c) => c.length));
   const labelW = Math.max(5, ...rows.map((r) => r.label.length));
   const portCells = rows.map((r) => formatPortsCell(r.ports));
   const portW = Math.max(5, "PORTS".length, ...portCells.map((c) => c.length));
-  const prefixLen = pidW + 2 + ppidW + 2 + labelW + 2 + portW + 2;
+  const prefixLen = pidW + 2 + ppidW + 2 + envW + 2 + catW + 2 + labelW + 2 + portW + 2;
   const termW = getTerminalWidth(0);
   const commandColW = Math.max(16, termW - prefixLen);
   const lines: string[] = [];
   const hdr =
-    `${"PID".padStart(pidW)}  ${"PPID".padStart(ppidW)}  ${"LABEL".padEnd(labelW)}  ${"PORTS".padEnd(portW)}  COMMAND`;
+    `${"PID".padStart(pidW)}  ${"PPID".padStart(ppidW)}  ${"ENV".padEnd(envW)}  ${"CAT".padEnd(catW)}  ${"LABEL".padEnd(labelW)}  ${"PORTS".padEnd(portW)}  COMMAND`;
   lines.push(hdr);
   lines.push("-".repeat(Math.min(termW, Math.max(hdr.length, prefixLen + commandColW))));
   const contIndent = " ".repeat(prefixLen);
   for (const r of rows) {
     const portsCell = formatPortsCell(r.ports).padEnd(portW);
-    const prefix = `${String(r.pid).padStart(pidW)}  ${String(r.ppid).padStart(ppidW)}  ${r.label.padEnd(labelW)}  ${portsCell}  `;
+    const catCell = formatCategoriesCell(r.categories).padEnd(catW);
+    const prefix = `${String(r.pid).padStart(pidW)}  ${String(r.ppid).padStart(ppidW)}  ${r.env_hint.padEnd(envW)}  ${catCell}  ${r.label.padEnd(labelW)}  ${portsCell}  `;
     const wrapped = wrapCommandForColumn(r.command, commandColW);
     lines.push(prefix + wrapped[0]);
     for (let i = 1; i < wrapped.length; i++) {
@@ -252,6 +404,11 @@ function formatTable(rows: NeotomaProcessRow[]): string {
   }
   lines.push("");
   lines.push(`Total: ${rows.length}`);
+  lines.push(
+    dim(
+      "ENV: dev|prod|mix|? (heuristic from argv + listen ports). CAT: server, mcp, build, orchestrator, tunnel, tooling, other."
+    ) + "\n"
+  );
   return lines.join("\n");
 }
 

@@ -11,6 +11,12 @@ vi.mock("../db.js", () => {
           return { error: null };
         },
         select: (_cols: string) => ({
+          order: (_col: string, _opts: unknown) => {
+            return Promise.resolve({
+              data: observations.filter((o) => o.entity_type === "guest_access_token"),
+              error: null,
+            });
+          },
           eq: (_col: string, _val: unknown) => ({
             order: (_col2: string, _opts: unknown) => {
               return Promise.resolve({

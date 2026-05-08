@@ -34,17 +34,19 @@ test('entity ID generation is deterministic', () => {
 
 **See `integration_test_quality_rules.mdc` for detailed quality standards**
 
+**Markdown run reports (opt-in):** set `WRITE_TEST_RUN_REPORT=1` or use `npm run test:integration:report` / `npm run test:remote:critical:report` to emit `.vitest/reports/*.md` summaries. See [`integration_run_reports.md`](./integration_run_reports.md).
+
 ```typescript
 test('record insert creates entities', async () => {
   const record = await insertRecord({
     type: 'FinancialRecord',
     properties: { vendor_name: 'Acme Corp' },
   });
-  
+
   const entities = await getRecordEntities(record.id);
   expect(entities).toHaveLength(1);
   expect(entities[0].canonical_name).toBe('acme corp');
-  
+
   // Verify database state
   const stored = await db.queryOne("entities", { id: entities[0].id });
   expect(stored).toBeDefined();
@@ -56,6 +58,7 @@ test('record insert creates entities', async () => {
 - Upload file → see record details
 - Search records → click result → view detail
 - Timeline view → filter by date
+- **Inspector** (`/inspector/` on the Neotoma HTTP server): seed via `POST /store`, open `…/inspector/entities/:id` (note detail), `…/inspector/issues` and `…/inspector/issues/:id` (issues list + issue detail), assert headings and snapshot fields (`playwright/tests/inspector/`). Run `npm run test:e2e:inspector` (runs `build:inspector` first) or build once then `npm run test:e2e`. Specs skip when `dist/inspector/index.html` is missing. In `playwright.config.ts`, `inspector/**` is ignored for the `mobile-webkit` project so a second worker does not hit a torn-down Neotoma port (`ECONNREFUSED`); Inspector is exercised under **chromium** only.
 **Requirements:**
 - Use test fixtures
 - Deterministic test data
@@ -65,7 +68,7 @@ test('upload invoice flow', async ({ page }) => {
   await page.goto('/upload');
   await page.setInputFiles('input[type="file"]', 'fixtures/invoice.pdf');
   await page.click('button:has-text("Upload")');
-  
+
   await page.waitForSelector('text=Invoice #INV-001');
   expect(await page.textContent('h1')).toContain('FinancialRecord');
 });

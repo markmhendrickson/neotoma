@@ -16,12 +16,12 @@ v0.6.0 is an agent-runtime hardening release: AAuth-aware attribution and a `/se
 - `neotoma auth session` — calls `GET /session` and prints the resolved trust tier, identity, and `eligible_for_trusted_writes`, merging any local `cli_signer` state.
 - `neotoma auth keygen` — writes a local AAuth keypair under `~/.neotoma/aauth/`; flags: `--alg`, `--sub`, `--iss`, `--force`.
 - `neotoma auth sign-example` — prints a signed `curl` example targeting `/session` so operators can sanity-check signing end-to-end.
-- `neotoma api start --env prod` on source checkouts now defaults to the **built** production runner (`dist/…`) instead of the `dev:prod` watcher. Pass `--watch` to restore the previous tsx-watcher behavior under `NEOTOMA_ENV=production`.
+- `neotoma api start --env prod` on source checkouts now uses the canonical `dev:server:prod` watcher path. Installed-package production starts use `start:server:prod`.
 - `--observation-source <kind>` is threaded through store-oriented flows so operators/agents can label writes as `sensor`, `workflow_state`, `llm_summary`, `human`, or `import` instead of treating every write as equivalent.
-- `neotoma issues config --mode <proactive|consent|off>` — controls whether agents auto-file issues, prompt for consent, or stay silent unless explicitly asked.
+- `neotoma issues config --mode <consent|proactive|off>` — default **`consent`** (explicit user approval before each `submit_issue`); `proactive` auto-files; `off` files only when the user asks.
 - `neotoma issues list|message|sync|create|...` — GitHub-backed issue workflow (replaces removed `neotoma feedback` / `neotoma triage` commands).
 - `neotoma snapshots check|request|export|diff|parsers` — offline-first fleet audit tooling: export canonical snapshots of local state, request snapshots from a remote Neotoma via `POST /health_check_snapshots`, diff against external sources (MEMORY.md, shadow DBs), and report on supported parsers.
-- New npm scripts: `openapi:bc-diff` (release preflight for breaking contract changes), `feedback:seed-schema` (provision the `product_feedback` entity schema), `feedback:mirror-backfill` (replay historical feedback through the mirror).
+- New npm scripts: `openapi:bc-diff` (release preflight for breaking contract changes), `feedback:mirror-backfill` (replay historical feedback through the mirror).
 
 **Runtime / data layer**
 
@@ -73,7 +73,7 @@ Unknown top-level fields are now rejected early (before route handlers) on close
 
 ## Behavior changes
 
-- **`neotoma api start --env prod` on source checkouts runs the built artifact by default.** The old `dev:prod` watcher path is no longer the default production route; pass `--watch` when you explicitly want watcher behavior.
+- **`neotoma api start --env prod` on source checkouts uses the canonical `dev:server:prod` watcher path.** The old `dev:prod` name remains only as a one-release npm alias.
 - **Unknown top-level request fields on closed write/auth endpoints fail fast.** The `unknownFieldsGuard` runs before route handlers, so extra JSON keys that previously slipped through are now rejected with a structured allow-list instead of being silently ignored or stripped downstream.
 - **Session attribution is now inspectable.** Operators and agent builders can query the active trust tier, client identity, and anonymous-write policy via `GET /session` / `get_session_identity` / `neotoma auth session` instead of inferring it from logs or headers.
 - **Stricter browser-side defaults.** The default Helmet CSP allows only `connect-src 'self'`; deployments that relied on permissive outbound browser connections need to set `NEOTOMA_CSP_CONNECT_SRC`.
@@ -117,7 +117,7 @@ The MCP server ships `docs/developer/mcp/instructions.md` to every connected cli
 - **Upgrade guidance** — resolved items can carry `upgrade_guidance` (`install_commands`, `verification_steps`) and `verification_request` (with `verify_by`); `feedback_upgrade_guidance_map.json` catalogs the canonical responses.
 - **Netlify `agent-site`** (`services/agent-site/`) — public `/feedback/submit` + `/feedback/status`, admin `/feedback/pending`, `/feedback/{id}/status`, `/feedback/{id}/mirror_replay`, `/feedback/by_commit/:sha`, `/jwks`, `/healthz`, and a scheduled `push_webhook_worker`. Optionally forwards each item into Neotoma via tunnel + Cloudflare Access + AAuth (see `docs/subsystems/feedback_neotoma_forwarder.md`).
 - **Cron ingestion** — `scripts/cron/ingest_agent_incidents.ts` classifies queued feedback, applies the upgrade-guidance map, and updates status; `scripts/cron/com.neotoma.feedback-ingest.plist.template` provides a launchd template.
-- **Backfill + seeding** — `scripts/feedback_mirror_backfill.ts` replays historical submissions; `scripts/seed_product_feedback_schema.ts` (via `npm run feedback:seed-schema`) provisions the `product_feedback` entity schema in a Neotoma instance.
+- **Backfill + seeding** — `scripts/feedback_mirror_backfill.ts` replays historical submissions; generic `submit_entity` targets rely on operator-seeded `submission_config` rows (not repo-defaulted).
 - **Capability registry** — `config/agent_capabilities.default.json` pins `agent-site@neotoma.io` to `neotoma_feedback` operations only, so the forwarder cannot perform unrelated writes even if its key is used (`docs/subsystems/agent_capabilities.md`).
 
 ## Security hardening
@@ -174,7 +174,8 @@ The MCP server ships `docs/developer/mcp/instructions.md` to every connected cli
 - **`POST /relationships/snapshot` and `components.schemas.GetRelationshipSnapshotRequest` now reject undeclared top-level fields.** Before: extra keys could slip through until the route-level validator ran. After: rejected earlier with HTTP `400` / `ERR_UNKNOWN_FIELD`. Migration: send only `relationship_type`, `source_entity_id`, `target_entity_id`, `user_id` (the last is newly optional).
 - **`POST /mcp/oauth/initiate` and `components.schemas.OAuthInitiateRequest` now reject undeclared top-level fields.** Before: callers could include extra auth-initiation metadata at the request root. After: HTTP `400` / `ERR_UNKNOWN_FIELD`. Migration: restrict requests to `connection_id`, `client_name`, `redirect_uri`.
 - **`POST /correct` now rejects undeclared top-level fields.** Before: extra root-level keys were not contractually forbidden at the HTTP boundary. After: HTTP `400` / `ERR_UNKNOWN_FIELD`. Migration: limit the body to `entity_id`, `entity_type`, `field`, `value`, `idempotency_key`, `user_id`.
-- **`neotoma api start --env prod` on source checkouts now runs the built runner by default.** Contributors or automation that relied on the old `dev:prod` watcher must switch to `neotoma api start --env prod --watch`. The `dev:prod` npm script alias itself is unchanged.
+- **`neotoma api start --env prod` on source checkouts now routes through `dev:server:prod`.** Contributors or automation that referenced the old `dev:prod` npm script should switch to `dev:server:prod`; the old name remains as a one-release alias.
 - **Default Helmet CSP restricts `connect-src` to `'self'`.** Deployments that served browser UI from the API and relied on permissive outbound connections must opt in via `NEOTOMA_CSP_CONNECT_SRC`.
 - **Default write rate limit of 120 writes/minute per user/IP.** Bursty writers receive HTTP `429`; tune via `NEOTOMA_WRITE_RATE_LIMIT_PER_MIN` or batch via `store_structured`.
 - **Loopback classification changed.** Requests routed through tunnels/proxies are no longer treated as local even when they carry a localhost `Host` header; deployments that relied on this behavior for lightweight dev-auth must switch to AAuth or an explicit allow-list.
+- **`/guest/*` issue/entity URLs are removed.** Before: capability-scoped callers used `POST /guest/issues/submit`, `GET /guest/issues/{entity_id}/thread`, `POST /guest/issues/{entity_id}/messages`, and the peer-sync-only `GET /guest/entities/{entity_id}`. After: the same guest-token/AAuth flows are gated through `POST /issues/submit`, `POST /issues/status`, `POST /issues/add_message`, and `GET /entities/{id}?access_token=...`. Removed URLs now return 404. Migration: send the same scoped credential as `Authorization: Bearer <guest_access_token>`, `guest_access_token` in issue bodies, or `access_token` on entity reads.

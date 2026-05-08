@@ -18,6 +18,15 @@ describe("mcp_instruction_doc", () => {
     expect(body).toMatch(/store_structured/);
   });
 
+  it("instructs agents to avoid heuristic conversation title merges", () => {
+    const root = resolveNeotomaPackageRoot();
+    const raw = readMcpInstructionsMarkdown(root);
+    const body = extractFirstFencedCodeBlock(raw!);
+    expect(body).toContain('conversation_id: "<stable conversation id>"');
+    expect(body).toMatch(/target_id.*existing conversation/i);
+    expect(body).toMatch(/heuristic title\/name matching/i);
+  });
+
   it("instructions path is under docs/developer/mcp", () => {
     const p = mcpInstructionsPath(resolveNeotomaPackageRoot());
     expect(p).toMatch(/instructions\.md$/);

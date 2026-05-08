@@ -727,6 +727,7 @@ export function buildCompactReminder(model?: string | null | undefined): string 
     "4. Closing store: assistant conversation_message (sender_kind=assistant, exact reply text) with REFERS_TO to every entity the reply cites or produced; PART_OF same conversation.",
     "5. Display rule: when this turn created/updated/retrieved non-bookkeeping entities, the visible reply ends with a `🧠 Neotoma` section listing them as bullets.",
     "Forbidden: skipping store on greetings, persisting only the user message, ending the turn without the assistant store. Idempotency keys are per-turn unique.",
+    "Forbidden: reusing the user-phase conversation_message `turn_key` for the closing assistant store (must use `{conversation_id}:{turn_id}:assistant`, not the bare `{conversation_id}:{turn_id}`).",
   ];
   if (isSmallModel(model)) {
     lines.push(
@@ -1346,7 +1347,7 @@ export function diagnoseSkippedStore(input: DiagnoseSkippedStoreInput): SkippedS
       proactive_remediation_required: localBuild,
       recommended_repairs: localBuild
         ? [
-            "Verify the local Neotoma server is running (e.g. `npm run watch:prod`) and reachable at NEOTOMA_BASE_URL.",
+            "Verify the local Neotoma server is running (e.g. `npm run dev:server:prod`) and reachable at NEOTOMA_BASE_URL.",
             "Tail server logs to confirm the failing endpoint and reload the MCP client connection after fixes.",
             "Run `npm run eval:tier1` to re-validate hook + transport behavior end-to-end.",
           ]

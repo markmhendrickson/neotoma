@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { isNeotomaEntityId } from "./neotoma_entity_id.js";
+
 export const EntityIdSchema = z.object({
   entity_id: z.string(),
 });
@@ -80,24 +82,45 @@ export const CreateRelationshipsRequestSchema = z.object({
   user_id: z.string().optional(),
 });
 
-const StoreRelationshipByIndexSchema = z.object({
-  relationship_type: z.string(),
-  source_index: z.number().int().min(0),
-  target_index: z.number().int().min(0),
-  metadata: z.record(z.unknown()).optional(),
-});
-
-const StoreRelationshipByEntityIdSchema = z.object({
-  relationship_type: z.string(),
-  source_entity_id: z.string().min(1),
-  target_entity_id: z.string().min(1),
-  metadata: z.record(z.unknown()).optional(),
-});
-
-export const StoreRelationshipInputSchema = z.union([
-  StoreRelationshipByIndexSchema,
-  StoreRelationshipByEntityIdSchema,
+const StoreRelationshipEndpointSchema = z.union([
+  z.object({ source_index: z.number().int().min(0), source_entity_id: z.never().optional() }),
+  z.object({ source_entity_id: z.string().min(1), source_index: z.never().optional() }),
 ]);
+
+const StoreRelationshipTargetEndpointSchema = z.union([
+  z.object({ target_index: z.number().int().min(0), target_entity_id: z.never().optional() }),
+  z.object({ target_entity_id: z.string().min(1), target_index: z.never().optional() }),
+]);
+
+export const StoreRelationshipInputSchema = z
+  .object({
+    relationship_type: z.string(),
+    source_index: z.number().int().min(0).optional(),
+    source_entity_id: z.string().min(1).optional(),
+    target_index: z.number().int().min(0).optional(),
+    target_entity_id: z.string().min(1).optional(),
+    metadata: z.record(z.unknown()).optional(),
+  })
+  .and(StoreRelationshipEndpointSchema)
+  .and(StoreRelationshipTargetEndpointSchema)
+  .superRefine((rel, ctx) => {
+    if (typeof rel.source_entity_id === "string" && !isNeotomaEntityId(rel.source_entity_id)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "source_entity_id must be a Neotoma entity id (ent_ followed by 24 lowercase hex digits, matching generateEntityId)",
+        path: ["source_entity_id"],
+      });
+    }
+    if (typeof rel.target_entity_id === "string" && !isNeotomaEntityId(rel.target_entity_id)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "target_entity_id must be a Neotoma entity id (ent_ followed by 24 lowercase hex digits, matching generateEntityId)",
+        path: ["target_entity_id"],
+      });
+    }
+  });
 
 export const ListRelationshipsRequestSchema = z.object({
   entity_id: z.string(),
@@ -302,6 +325,7 @@ export const OBSERVATION_SOURCE_VALUES = [
   "workflow_state",
   "human",
   "import",
+  "sync",
 ] as const;
 
 export const ObservationSourceSchema = z.enum(OBSERVATION_SOURCE_VALUES);
@@ -335,6 +359,8 @@ export const StoreStructuredRequestSchema = z.object({
   interpretation: StoreInterpretationInputSchema.optional(),
   source_priority: z.number().optional().default(100),
   observation_source: ObservationSourceSchema.optional(),
+  /** Cross-instance sync: stamp observations with this peer id (Phase 5). */
+  source_peer_id: z.string().min(1).optional(),
   idempotency_key: z.string().min(1),
   user_id: z.string().optional(),
   original_filename: z.string().optional(),
@@ -372,6 +398,7 @@ export const StoreRequestSchema = z
     interpretation: StoreInterpretationInputSchema.optional(),
     source_priority: z.number().optional().default(100),
     observation_source: ObservationSourceSchema.optional(),
+    source_peer_id: z.string().min(1).optional(),
     external_actor: ExternalActorInputSchema.optional(),
     idempotency_key: z.string().min(1).optional(),
     file_idempotency_key: z.string().min(1).optional(),
@@ -588,5 +615,65 @@ export const RegisterSchemaRequestSchema = z.object({
 /** Bulk inspector actions on `issue` entities (close on GitHub when linked, then persist / delete). */
 export const IssuesBulkEntityIdsRequestSchema = z.object({
   entity_ids: z.array(z.string().min(1)).min(1).max(100),
+  user_id: z.string().optional(),
+});
+
+/** Append a message to an issue thread (Inspector + HTTP); mirrors MCP add_issue_message. */
+export const IssuesAddMessageRequestSchema = z
+  .object({
+    entity_id: z.string().min(1).optional(),
+    issue_number: z.number().int().positive().optional(),
+    body: z.string().min(1),
+    guest_access_token: z.string().min(1).optional(),
+    user_id: z.string().optional(),
+  })
+  .refine(
+    (v) =>
+      (typeof v.entity_id === "string" && v.entity_id.trim().length > 0) ||
+      (typeof v.issue_number === "number" && v.issue_number > 0),
+    { message: "Provide entity_id or issue_number" },
+  );
+
+/** Create issue (HTTP + CLI parity with MCP submit_issue). */
+export const IssuesSubmitRequestSchema = z.object({
+  title: z.string().min(1),
+  body: z.string().min(1),
+  labels: z.array(z.string()).optional(),
+  visibility: z.enum(["public", "private"]).optional(),
+  reporter_git_sha: z.string().optional(),
+  reporter_git_ref: z.string().optional(),
+  reporter_channel: z.string().optional(),
+  reporter_app_version: z.string().optional(),
+  reporter_ci_run_id: z.string().optional(),
+  reporter_patch_source_id: z.string().optional(),
+  github_url: z.string().optional(),
+  github_number: z.number().int().positive().optional(),
+  author: z.string().optional(),
+  local_issue_id: z.string().optional(),
+  submission_timestamp: z.string().optional(),
+  user_id: z.string().optional(),
+});
+
+/** Issue status read (HTTP + CLI parity with MCP get_issue_status). */
+export const IssuesGetStatusRequestSchema = z
+  .object({
+    entity_id: z.string().min(1).optional(),
+    issue_number: z.number().int().positive().optional(),
+    skip_sync: z.boolean().optional(),
+    guest_access_token: z.string().min(1).optional(),
+    user_id: z.string().optional(),
+  })
+  .refine(
+    (v) =>
+      (typeof v.entity_id === "string" && v.entity_id.trim().length > 0) ||
+      (typeof v.issue_number === "number" && v.issue_number > 0),
+    { message: "Provide entity_id or issue_number" },
+  );
+
+/** GitHub mirror ingest (HTTP + CLI parity with MCP sync_issues). */
+export const IssuesSyncRequestSchema = z.object({
+  since: z.string().optional(),
+  state: z.enum(["open", "closed", "all"]).optional(),
+  labels: z.array(z.string()).optional(),
   user_id: z.string().optional(),
 });

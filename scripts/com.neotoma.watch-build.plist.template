@@ -22,6 +22,10 @@
   <dict>
     <key>PATH</key>
     <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+    <key>TSC_WATCHFILE</key>
+    <string>UseFsEventsWithFallbackDynamicPolling</string>
+    <key>TSC_WATCHDIRECTORY</key>
+    <string>UseFsEventsWithFallbackDynamicPolling</string>
   </dict>
 </dict>
 </plist>

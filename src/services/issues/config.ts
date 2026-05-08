@@ -63,17 +63,34 @@ export async function loadIssuesConfig(): Promise<IssuesConfig> {
       ? parseInt(process.env.NEOTOMA_ISSUES_SYNC_STALENESS_MS, 10)
       : stored.sync_staleness_ms ?? DEFAULT_ISSUES_CONFIG.sync_staleness_ms;
 
-  const envTargetRaw = process.env.NEOTOMA_ISSUES_TARGET_URL?.trim();
-  const envTarget =
-    envTargetRaw && envTargetRaw.length > 0 ? envTargetRaw : undefined;
+  // When the env var is **absent**, fall back to stored config then the product
+  // default operator URL. When it is **present** (including empty string), honor
+  // it so isolated tests and operators can disable remote forwarding without
+  // inheriting DEFAULT_ISSUES_TARGET_URL from this merge order.
+  const rawIssuesTargetEnv = process.env.NEOTOMA_ISSUES_TARGET_URL;
+  const hasIssuesTargetEnv = rawIssuesTargetEnv !== undefined;
+  const envTargetTrimmed =
+    typeof rawIssuesTargetEnv === "string" ? rawIssuesTargetEnv.trim() : rawIssuesTargetEnv;
+  const envTarget = hasIssuesTargetEnv
+    ? typeof envTargetTrimmed === "string" && envTargetTrimmed.length > 0
+      ? envTargetTrimmed
+      : ""
+    : undefined;
   const storedRaw =
     typeof stored.target_url === "string" ? stored.target_url.trim() : stored.target_url;
   const storedTarget =
     typeof storedRaw === "string" && storedRaw.length > 0 ? storedRaw : undefined;
   const targetUrl =
-    envTarget ??
-    storedTarget ??
-    DEFAULT_ISSUES_TARGET_URL;
+    envTarget !== undefined ? envTarget : storedTarget ?? DEFAULT_ISSUES_TARGET_URL;
+  const envAuthorAliasRaw = process.env.NEOTOMA_ISSUES_AUTHOR_ALIAS?.trim();
+  const envAuthorAlias =
+    envAuthorAliasRaw && envAuthorAliasRaw.length > 0 ? envAuthorAliasRaw : undefined;
+  const storedAuthorAliasRaw =
+    typeof stored.author_alias === "string" ? stored.author_alias.trim() : stored.author_alias;
+  const storedAuthorAlias =
+    typeof storedAuthorAliasRaw === "string" && storedAuthorAliasRaw.length > 0
+      ? storedAuthorAliasRaw
+      : null;
 
   return {
     github_auth: githubAuth,
@@ -82,6 +99,7 @@ export async function loadIssuesConfig(): Promise<IssuesConfig> {
     sync_staleness_ms: syncStalenessMs,
     configured_at: stored.configured_at ?? null,
     target_url: targetUrl,
+    author_alias: envAuthorAlias ?? storedAuthorAlias,
   };
 }
 

@@ -140,6 +140,38 @@ export function readInspectorIndexHtml(dir: string): string | null {
  * those updates often touch only `assets/*.js` while the HTML shell stays
  * byte-identical, so the stamp must consider built assets too.
  */
+/**
+ * Normalize the pathname used for Inspector routing checks (SPA vs Vite assets).
+ * Collapses duplicate slashes and strips query/hash fragments; decodes
+ * percent-escapes so `/inspector//assets/x` and encoded variants still match.
+ */
+export function normalizeInspectorUrlPathname(pathname: string): string {
+  let p = pathname.split("?")[0]?.split("#")[0] ?? pathname;
+  try {
+    p = decodeURIComponent(p);
+  } catch {
+    /* keep undecoded fragment */
+  }
+  return p.replace(/\/{2,}/g, "/");
+}
+
+/**
+ * True when the URL is a Vite-emitted static file under the Inspector mount
+ * (`/inspector/assets/...` by default). The SPA shell handler must not respond
+ * with index.html for these paths: missing chunks would be served as
+ * text/html and break strict MIME checks (blank shell + console errors).
+ */
+export function isInspectorViteAssetUrlPath(
+  basePath: string,
+  pathname: string,
+): boolean {
+  const path = normalizeInspectorUrlPathname(pathname);
+  const normalizedBase = normalizeInspectorUrlPathname(
+    basePath.replace(/\/$/, "") || "",
+  );
+  return path.startsWith(`${normalizedBase}/assets/`);
+}
+
 export function computeInspectorBuildOutputStamp(staticDir: string): number {
   let max = 0;
   const indexPath = path.join(staticDir, "index.html");
@@ -238,16 +270,16 @@ export function installInspectorMount(
       res.redirect(308, suffix ? `${basePath}/${suffix}` : `${basePath}/`);
     });
 
-    // Cache the injected HTML per process when not in live-build mode. With
-    // NEOTOMA_INSPECTOR_LIVE_BUILD=1 (e.g. watch:full + vite build --watch), HTML
-    // and assets must be re-read so new hashed chunks and index.html apply
-    // without restarting the API.
-    let cachedHtml: string | null = null;
+    // Live-build mode re-reads index.html on every SPA request and injects a
+    // stamp poller. Without it, we still re-read index.html on each SPA shell
+    // request so `vite build --watch` (new hashed assets) is visible after a
+    // hard refresh; caching the shell in memory would serve stale script hrefs
+    // until the API restarts (broken chunks → HTML MIME errors).
 
     const buildStampPath = `${basePath}/__live/build_stamp`.replace(/\/{2,}/g, "/");
 
     if (inspectorLiveBuild) {
-    app.get(buildStampPath, (_req, res) => {
+      app.get(buildStampPath, (_req, res) => {
         const activeStaticDir = inspectorLiveBuild
           ? resolveLiveInspectorStaticDir(staticDir)
           : staticDir;
@@ -320,7 +352,19 @@ export function installInspectorMount(
       [basePath, `${basePath}/*`],
       (req: express.Request, res: express.Response, next: express.NextFunction) => {
         if (req.method !== "GET") return next();
-        if (req.path.startsWith(`${basePath}/__live`)) return next();
+        const pathnameForChecks = normalizeInspectorUrlPathname(
+          (req.originalUrl || req.url || "").split("?")[0]?.split("#")[0] ||
+            req.path ||
+            "",
+        );
+        if (pathnameForChecks.startsWith(`${basePath.replace(/\/$/, "")}/__live`)) {
+          return next();
+        }
+
+        if (isInspectorViteAssetUrlPath(basePath, pathnameForChecks)) {
+          res.status(404).type("text/plain; charset=utf-8").send("Not found");
+          return;
+        }
 
         const proto = req.protocol;
         const host = req.get("host") || "localhost";
@@ -340,13 +384,13 @@ export function installInspectorMount(
           return;
         }
 
-        if (!cachedHtml) {
-          cachedHtml = injectInspectorApiBaseMeta(rawHtml, origin);
-        }
+        const latestShell = readInspectorIndexHtml(staticDir);
+        if (!latestShell) return next();
+        const html = injectInspectorApiBaseMeta(latestShell, origin);
 
         res.set("Content-Type", "text/html; charset=utf-8");
         res.set("Cache-Control", "no-store");
-        res.send(cachedHtml);
+        res.send(html);
       },
     );
 

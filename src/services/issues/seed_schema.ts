@@ -36,14 +36,18 @@ const ISSUE_FIELDS: FieldSpec = [
   { name: "labels", type: "array", reducer: "merge_array", description: "Issue labels (e.g. bug, doc_gap, enhancement)" },
   { name: "github_number", type: "number", required: true, description: "GitHub issue number" },
   { name: "github_url", type: "string", description: "Full GitHub issue URL" },
+  { name: "local_issue_id", type: "string", description: "Stable local issue id for Neotoma-only issues" },
   { name: "repo", type: "string", required: true, description: "GitHub repo (owner/name)" },
-  { name: "visibility", type: "string", description: "public | advisory" },
+  { name: "visibility", type: "string", description: "public | private" },
   { name: "author", type: "string", description: "GitHub username of issue creator" },
   { name: "github_actor", type: "object", description: "Structured GitHub actor identity: { login, id, type }" },
   { name: "created_at", type: "date", description: "Issue creation timestamp" },
   { name: "closed_at", type: "date", description: "Issue close timestamp (null if open)" },
   { name: "last_synced_at", type: "date", description: "Last time this issue was synced from GitHub" },
   { name: "sync_pending", type: "boolean", description: "True if local changes have not been pushed to GitHub" },
+  { name: "remote_instance_url", type: "string", description: "Operator Neotoma instance URL for submitted issues" },
+  { name: "remote_entity_id", type: "string", description: "Issue entity id on the remote/operator Neotoma instance" },
+  { name: "remote_conversation_id", type: "string", description: "Issue conversation id on the remote/operator Neotoma instance" },
   {
     name: "guest_access_token",
     type: "string",
@@ -51,6 +55,12 @@ const ISSUE_FIELDS: FieldSpec = [
       "Guest-scoped token for this issue row (e.g. from remote /store guest_access_token). Sensitive; optional.",
   },
   { name: "data_source", type: "string", description: "Provenance — e.g. 'github issues api markmhendrickson/neotoma #42 2026-05-06'" },
+  { name: "reporter_git_sha", type: "string", description: "Reporter git HEAD at submission (daemon contract)" },
+  { name: "reporter_git_ref", type: "string", description: "Reporter branch or ref name" },
+  { name: "reporter_channel", type: "string", description: "Reporter channel (e.g. ci, local)" },
+  { name: "reporter_app_version", type: "string", description: "Reporter app or CLI version" },
+  { name: "reporter_ci_run_id", type: "string", description: "CI or workflow run identifier" },
+  { name: "reporter_patch_source_id", type: "string", description: "Source id for reporter patch artifact when applicable" },
 ];
 
 function buildSchemaDefinition(): SchemaDefinition {

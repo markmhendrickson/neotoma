@@ -19,10 +19,10 @@ import {
 import { observationReducer } from "../reducers/observation_reducer.js";
 import { randomUUID } from "crypto";
 import { canonicalizeFields, hashCanonicalFields } from "./field_canonicalization.js";
-import { 
-  generateObservationId, 
-  computeCanonicalHash, 
-  checkObservationExistsByHash 
+import {
+  generateObservationId,
+  computeCanonicalHash,
+  checkObservationExistsByHash
 } from "./observation_identity.js";
 import { validateFieldsWithConverters } from "./field_validation.js";
 import {
@@ -32,6 +32,11 @@ import {
 import { logger } from "../utils/logger.js";
 import { config } from "../config.js";
 import { upsertTimelineEventsForEntitySnapshot } from "./timeline_events.js";
+import {
+  emitEntitySnapshotChange,
+  emitObservationCreated,
+  shallowFieldsChanged,
+} from "../events/substrate_store_emit.js";
 
 
 export interface InterpretationConfig {
@@ -138,6 +143,7 @@ export async function runInterpretation(
     entityType: string;
     observationId: string;
   }> = [];
+  const interpretationInsertedObservationIds = new Set<string>();
   const refinementDebug: Array<{ extracted_keys: string[]; type_before: string; type_after: string }> = [];
 
   try {
@@ -277,7 +283,7 @@ export async function runInterpretation(
         if (value === null || value === undefined) {
           continue;
         }
-        
+
         // Check if fragment already exists (for idempotence)
         const { data: existing } = await db
           .from("raw_fragments")
@@ -390,7 +396,7 @@ export async function runInterpretation(
               schema_version: effectiveSchemaVersion,
             },
           });
-          
+
           // Handle race condition (unique constraint violation)
           if (insertError?.code === "23505") {
             // Another process inserted it, retry as update
@@ -401,7 +407,7 @@ export async function runInterpretation(
               .eq("fragment_key", key)
               .eq("user_id", userId)
               .maybeSingle();
-            
+
             if (retryExisting) {
               const retryFreq = (retryExisting.frequency_count || 1) + 1;
               await db
@@ -540,7 +546,7 @@ export async function runInterpretation(
 
       // If error is about canonical_hash not being in schema cache, retry without it
       if (obsError && (
-        obsError.message?.includes("canonical_hash") || 
+        obsError.message?.includes("canonical_hash") ||
         obsError.code === "PGRST205" ||
         obsError.message?.includes("schema cache")
       )) {
@@ -561,6 +567,7 @@ export async function runInterpretation(
       }
 
       observationsCreated++;
+      interpretationInsertedObservationIds.add(observationId);
       entities.push({
         entityId,
         entityType,
@@ -571,6 +578,15 @@ export async function runInterpretation(
     // Compute snapshots for all entities
     for (const entity of entities) {
       try {
+        const { data: priorSnapRow } = await db
+          .from("entity_snapshots")
+          .select("snapshot")
+          .eq("entity_id", entity.entityId)
+          .eq("user_id", userId)
+          .maybeSingle();
+        const priorSnapshot =
+          (priorSnapRow?.snapshot as Record<string, unknown> | null | undefined) ?? {};
+
         // Get all observations for entity
         const { data: allObservations, error: fetchError } = await db
           .from("observations")
@@ -640,6 +656,35 @@ export async function runInterpretation(
             sameTypeInSourceBatch: sameTypeInBatch,
             schema: timelineSchema,
           });
+
+          const newSnapshot =
+            (snapshot.snapshot as Record<string, unknown> | null | undefined) ?? {};
+          const emitTs = snapshot.computed_at || new Date().toISOString();
+          if (interpretationInsertedObservationIds.has(entity.observationId)) {
+            emitObservationCreated({
+              user_id: userId,
+              entity_id: entity.entityId,
+              entity_type: entity.entityType,
+              observation_id: entity.observationId,
+              timestamp: emitTs,
+              source_id: sourceId,
+              observation_source: "llm_summary",
+            });
+            const isNewEntity = snapshot.observation_count === 1;
+            emitEntitySnapshotChange({
+              user_id: userId,
+              entity_id: entity.entityId,
+              entity_type: entity.entityType,
+              event_type: isNewEntity ? "entity.created" : "entity.updated",
+              timestamp: emitTs,
+              observation_id: entity.observationId,
+              fields_changed: isNewEntity
+                ? undefined
+                : shallowFieldsChanged(priorSnapshot, newSnapshot),
+              source_id: sourceId,
+              observation_source: "llm_summary",
+            });
+          }
         }
       } catch (error) {
         console.error(
@@ -686,7 +731,7 @@ export async function runInterpretation(
 /**
  * Run interpretation with fixed-point guarantee
  * Retries interpretation until canonical hash stabilizes
- * 
+ *
  * Per idempotence directive:
  * - Accept output only when canonical hash stabilizes
  * - hash(n) == hash(n-1) means convergence
@@ -699,14 +744,14 @@ export async function runInterpretationWithFixedPoint(
   let lastHash: string | null = null;
   let iteration = 0;
   let result: InterpretationResult | null = null;
-  
+
   while (iteration < maxIterations) {
     // Run interpretation
     result = await runInterpretation(options);
-    
+
     // Compute hash of all canonical fields from result
     let allCanonicalFields: Record<string, unknown> = {};
-    
+
     for (const entity of result.entities) {
       // Get observation to access canonical fields
       const { data: observation } = await db
@@ -714,14 +759,14 @@ export async function runInterpretationWithFixedPoint(
         .select("fields, canonical_hash")
         .eq("id", entity.observationId)
         .single();
-      
+
       if (observation?.fields) {
         allCanonicalFields = { ...allCanonicalFields, ...observation.fields };
       }
     }
-    
+
     const currentHash = hashCanonicalFields(allCanonicalFields);
-    
+
     // Check for fixed point
     if (lastHash === currentHash) {
       // Fixed point reached - same canonical output as previous iteration
@@ -731,17 +776,17 @@ export async function runInterpretationWithFixedPoint(
         convergenceIterations: iteration + 1,
       };
     }
-    
+
     lastHash = currentHash;
     iteration++;
   }
-  
+
   // Fallback: return last result even if not converged
   // Log warning but don't fail (graceful degradation)
   console.warn(
     `Fixed-point convergence not reached after ${maxIterations} iterations for source ${options.sourceId}`
   );
-  
+
   return {
     ...result!,
     fixedPointReached: false,
@@ -802,13 +847,13 @@ export async function createRelationshipObservations(
   enforceAttributionPolicy("relationships", getCurrentAgentIdentity());
   const { relationshipReducer } = await import("../reducers/relationship_reducer.js");
   const { createHash } = await import("crypto");
-  
+
   // Get relationship schema for canonicalization
   const relationshipSchema = getSchemaDefinition("relationship");
   if (!relationshipSchema) {
     throw new Error("Relationship schema not found");
   }
-  
+
   let relationshipsCreated = 0;
   const uniqueRelationshipKeys = new Set<string>();
 
@@ -816,7 +861,7 @@ export async function createRelationshipObservations(
     try {
       // Generate relationship key
       const relationshipKey = `${rel.relationship_type}:${rel.source_entity_id}:${rel.target_entity_id}`;
-      
+
       // Canonicalize metadata
       const canonicalMetadata = canonicalizeFields(rel.metadata || {}, relationshipSchema.schema_definition);
       const canonicalHash = hashCanonicalFields(canonicalMetadata);
@@ -832,7 +877,7 @@ export async function createRelationshipObservations(
           }),
         )
         .digest("hex");
-      
+
       // Convert hash to UUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
       const observationId = [
         hash.substring(0, 8),
@@ -886,7 +931,7 @@ export async function createRelationshipObservations(
 
       // If error is about canonical_hash not being in schema cache, retry without it
       if (obsError && (
-        obsError.message?.includes("canonical_hash") || 
+        obsError.message?.includes("canonical_hash") ||
         obsError.code === "PGRST205" ||
         obsError.message?.includes("schema cache")
       )) {

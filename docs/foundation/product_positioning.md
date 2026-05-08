@@ -13,6 +13,7 @@ This section maps Neotoma to April Dunford’s five core positioning choices plu
 | **Market category** | Primary external frame: **cross-tool memory for AI agents** (ICP vocabulary). Architecture frame ("deterministic state layer," "DPME") used internally and after the fold. Previously: Named category hypothesis: **Deterministic Personal Memory Engine (DPME)** (§7.2) — a *new category* play with a higher education tax; use when the audience already grasps the stack diagram. |
 | **Relevant trends** | Proliferation of LLM apps that need private data + feedback loops; localhost / private-environment agents; agent evaluation and AEO as a discovery path (§7.1, §7.5). |
 | **Positioning statement (internal)** | For people building an operating system for their AI agents, Neotoma is the deterministic, privacy-first memory layer that gives cross-tool agents shared, verifiable state—not another notes app or provider-locked chat memory. |
+| **Extended positioning (coordination-aware)** | For operators running distributed agent fleets, Neotoma is the state layer that gives agents shared, verifiable state and real-time awareness of state changes — enabling agent-to-agent coordination without centralized orchestration. (Use after the user has adopted Neotoma for memory; coordination is a power-user expansion of state integrity, not a new value theme.) |
 | **Key proof points** | Field evaluator quotes ("State integrity, not retrieval quality — that's the gap nobody else is filling"); open docs and repo checks on append-only/versioned models; memory guarantees table; MCP integration surface. See §7.2 and §7.5. |
 | **Primary message (external)** | "Your agents forget. Neotoma makes them remember." Lead with pain using ICP vocabulary; architecture terms only after the fold. Aligned with §7.3 (“your agents forget what they knew yesterday,” “one memory across AI tools,” “CI/CD for agent state”) before layering architecture terms. |
 | **Sales narrative** | Problem: fragmented tool-specific memory and non-replayable state → old way: files, CRUD DBs, or retrieval-only memory → new way: structured, versioned substrate with provenance → proof: guarantees, cross-tool access, deterministic behavior. |
@@ -171,6 +172,78 @@ Retrieval-augmented memory: vector embeddings, semantic search, probabilistic ma
 
 **What Neotoma provides that they don't:** State integrity, not retrieval quality. Deterministic state evolution (same inputs → same state). Versioned history with temporal queries. Schema constraints with write-time validation. Field-level provenance. Cross-tool access via MCP. Local-first with no cloud dependency.
 
+### The coordination gap (no alternative fills it)
+
+Across the entire homebrew and VC-funded competitive set above, none provide event-driven coordination between agents. Every alternative requires consumers to poll: re-querying on intervals or at session start to discover state changes. SQLite has no notification mechanism. Git+markdown has no change feed beyond commit polling. Flat JSON files have no way to signal a writer. Custom-built memory systems virtually never include subscription/webhook infrastructure (the build-in-house explosion in §7.4 confirms this — each developer reinvents memory primitives but stops short of event delivery). VC-funded memory systems optimize retrieval, not coordination.
+
+Neotoma's substrate-level event emission (`philosophy.md` §5.9) closes this gap: agents subscribe to entity changes and receive webhook/SSE delivery, converting polling-based coordination into event-driven awareness. This is a power-user expansion of state integrity for operators running distributed agent fleets — see §7.6 messaging principles for how to lead with state integrity and layer coordination after adoption.
+
+### Positioning against adjacent categories
+
+Three categories increasingly overlap in market vocabulary with "agent memory." Each serves a distinct purpose and provides different guarantees. Neotoma's positioning depends on drawing clear boundaries without dismissing the value of adjacent approaches.
+
+**Structured memory (Neotoma)** — Canonical truth that must be deterministic and auditable. Schema-first entities with hash-based IDs, versioned observations, field-level provenance, and cross-tool access via MCP. The guarantee: same inputs produce same state, every time. Temporal queries reconstruct what an agent knew at any moment. Every fact traces to its source.
+
+*Best for:* Persistent state across sessions and tools; agent decisions that need to be reconstructed; multi-agent systems that need shared canonical state; workflows where silent corruption or stale data has concrete costs.
+
+**Vector/embedding memory (Mem0, Weaviate, Zep)** — Similarity-based retrieval where approximate is acceptable. Embeddings capture semantic proximity rather than canonical identity. The guarantee: the system finds *relevant* context, not necessarily *correct* or *current* context.
+
+*Best for:* Adaptive personalization; "more like this" retrieval; use cases where recall matters more than precision; contexts where probabilistic matching is a feature (creative work, exploration, recommendation).
+
+*Where it breaks for Neotoma's ICP:* No deterministic state evolution — the same query can return different results as the embedding space shifts. No versioning — you can't reconstruct what the system "knew" at a specific moment. No schema constraints — embeddings capture similarity, not structure. No provenance — you know what was retrieved but not how it got there.
+
+**Agentic search (Claude Code RAG, Cursor codebase search)** — Ephemeral, session-scoped retrieval. The agent searches its environment at query time — codebase files, web pages, conversation history — and pulls relevant context into the current session. No persistent state between sessions.
+
+*Best for:* In-session context assembly; exploration of large codebases or document sets; questions that depend on current file state rather than historical state.
+
+*Where it breaks for Neotoma's ICP:* Ephemeral — context is assembled per session and discarded. No cross-session memory — an agent that found a contact's email yesterday doesn't remember it today. No change history — if the email changed overnight, agentic search returns the current value with no trail of what it was before. No cross-tool portability — Cursor's codebase search is Cursor-only; Claude Code's RAG is Claude-only.
+
+**The complementary relationship:** Neotoma is not a replacement for vector memory or agentic search. Agentic search retrieves from Neotoma's structured state — it's a read surface, not a competing storage layer. Vector memory provides similarity-based recall that complements Neotoma's deterministic queries. The three categories address different guarantees for different needs: canonical truth (Neotoma), semantic similarity (vector memory), and ephemeral in-session context (agentic search).
+
+**Key messaging:** When a prospect asks "how is this different from Mem0?" or "why not just use RAG?": *Neotoma provides the canonical truth your agents verify against. Mem0 provides the fuzzy recall your agents explore with. RAG provides the in-session context your agents work in. Different guarantees for different needs — and Neotoma's structured state is what makes the other two trustworthy.*
+
+### Data-plane / action-plane vocabulary
+
+A competitive vocabulary for explaining Neotoma's architectural position relative to MCP action servers, platform-specific integrations, and tool-specific memory.
+
+**The two planes:**
+
+- **Data plane** — The surface that stores, serves, and signals canonical state. Neotoma occupies this plane. Reads are deterministic, writes are versioned, and every fact traces to its source. The data plane answers: *what is true right now, and what was true at any point in the past?*
+
+- **Action plane** — The surface that performs side effects in external systems. MCP action servers (Gmail send, Slack post, calendar create, code execution) occupy this plane. Actions consume state from the data plane and produce effects in the world. The action plane answers: *what should happen, given what is true?*
+
+**The scaling argument: O(P+W) vs. O(P×W)**
+
+Without a shared data plane, every agent-to-tool integration requires its own state management. A system with P agent pipelines and W external services needs O(P×W) custom state-handling integrations — each pipeline manages its own version of each service's state.
+
+With Neotoma as the shared data plane, the system needs O(P+W) integrations: each pipeline reads/writes canonical state through Neotoma, and each service integration writes its state to Neotoma once. Pipelines don't need to know about each other's state management; services don't need to know about each other's consumers.
+
+```
+Without shared data plane:       With Neotoma as data plane:
+Pipeline A ↔ Gmail state          Pipeline A ↔ Neotoma ← Gmail
+Pipeline A ↔ Slack state          Pipeline B ↔ Neotoma ← Slack
+Pipeline B ↔ Gmail state          Pipeline C ↔ Neotoma ← Calendar
+Pipeline B ↔ Slack state
+Pipeline C ↔ Calendar state       3 + 3 = 6 integrations (O(P+W))
+...
+3 × 3 = 9 integrations (O(P×W))
+```
+
+This is the same architectural argument that made databases valuable: shared canonical state with well-defined access patterns scales better than per-consumer state management.
+
+**When to use this vocabulary:**
+
+- Technical audiences who understand infrastructure scaling arguments
+- Prospects running multi-agent systems who feel the O(P×W) pain
+- Architecture discussions where the substrate/orchestration boundary needs clarity
+- Blog posts, HN threads, and technical positioning where "state layer" needs concrete meaning
+
+**When not to use it:**
+
+- Cold audiences who haven't experienced the pain yet — lead with felt experience first (§7.3, §7.6)
+- Non-technical audiences — the vocabulary assumes familiarity with service architecture
+- First-contact messaging — this is below-the-fold, after-the-pain positioning
+
 ## 7.6 Wedge Assessment
 
 Neotoma's market wedge is a dual entry point, not a single hook.
@@ -236,7 +309,7 @@ The distinction: observability records events, logs, and traces. State integrity
 
 1. **Lead with failure.** Start from wrong decision, stale data, inability to explain — not from system properties.
 2. **Bridge to guarantees via felt experience.** Pair engineering vocabulary with felt-experience translations: "deterministic state" → "same input, same state, every time." Use both; don't replace engineering terms.
-3. **Preserve both value themes.** Every messaging surface should include continuity (tax removal) and state integrity (reconstruction). Dropping either loses half the wedge.
+3. **Preserve both value themes.** Every messaging surface should include continuity (tax removal) and state integrity (reconstruction). Dropping either loses half the wedge. **For power-user audiences running distributed agents, coordination is a sub-pattern within state integrity (real-time awareness of state changes), not a third value theme.** Lead with state integrity, layer coordination after adoption — leading with coordination before the user has adopted memory would overclaim.
 4. **Preserve privacy as standalone differentiator.** "Your data stays on your machine" is a first-order concern for the ICP, not a secondary benefit.
 
 ### Messaging anchors
@@ -287,6 +360,12 @@ Consolidated inventory of short-form phrases. Use for hero copy, subheadlines, C
 | "Memory is a feature. State is an invariant." | Proposed | Category distinction, technical audiences |
 | "Retrieval tells you what an agent found. State proves what it knew." | Proposed | Competitive contrast, below-fold |
 | "Your agents don't have a memory problem. They have a state problem." | Proposed | Reframing opener, blog, HN comments |
+| "The nervous system for your agent fleet." | Simon feedback analysis | Power users running distributed agents; after the fold |
+| "Your agents don't just remember. They sense." | Proposed | Upgrade from passive memory to active coordination; after the fold |
+| "A state layer that signals, not just stores." | Proposed | Technical positioning, architecture discussions; after the fold |
+| "Your strategy is state. Neotoma stores it." | Proposed (state-layer reframe 2026-05-08) | Positioning vs. ad-hoc plan/decision storage; technical audiences who confuse strategy with state-management |
+
+**Note on the "nervous system" metaphor:** It belongs only on marketing/positioning surfaces (this doc, blog content, README hero copy, social). Foundation and architecture docs (`core_identity.md`, `philosophy.md`, `layered_architecture.md`, `architecture.md`, `product_principles.md`, `composability_analysis.md`, `data_models.md`) use precise architectural language — "event emission," "subscription," "webhook delivery," "fire-and-forget signaling" — not biological analogies. This keeps the substrate/marketing boundary defensible and pre-empts metaphor-induced scope creep (learning, adaptation, autonomy implications).
 
 Phrases marked "Proposed" are candidates awaiting field validation. Move to confirmed after use in a messaging surface with positive signal.
 

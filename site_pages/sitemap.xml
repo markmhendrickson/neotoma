@@ -30,12 +30,12 @@
   <url><loc>https://neotoma.io/inspector/timeline</loc></url>
   <url><loc>https://neotoma.io/inspector/conversations</loc></url>
   <url><loc>https://neotoma.io/inspector/agents</loc></url>
+  <url><loc>https://neotoma.io/inspector/peers</loc></url>
   <url><loc>https://neotoma.io/inspector/search</loc></url>
   <url><loc>https://neotoma.io/inspector/settings</loc></url>
   <url><loc>https://neotoma.io/inspector/settings/connection</loc></url>
   <url><loc>https://neotoma.io/inspector/settings/attribution-policy</loc></url>
   <url><loc>https://neotoma.io/inspector/settings/retention</loc></url>
-  <url><loc>https://neotoma.io/inspector/feedback</loc></url>
   <url><loc>https://neotoma.io/aauth/spec</loc></url>
   <url><loc>https://neotoma.io/aauth/attestation</loc></url>
   <url><loc>https://neotoma.io/aauth/cli-keys</loc></url>
@@ -81,6 +81,16 @@
   <url><loc>https://neotoma.io/database-memory</loc></url>
   <url><loc>https://neotoma.io/deterministic-memory</loc></url>
   <url><loc>https://neotoma.io/skills</loc></url>
+  <url><loc>https://neotoma.io/skills/ensure-neotoma</loc></url>
+  <url><loc>https://neotoma.io/skills/remember-email</loc></url>
+  <url><loc>https://neotoma.io/skills/remember-conversations</loc></url>
+  <url><loc>https://neotoma.io/skills/remember-meetings</loc></url>
+  <url><loc>https://neotoma.io/skills/remember-finances</loc></url>
+  <url><loc>https://neotoma.io/skills/remember-contacts</loc></url>
+  <url><loc>https://neotoma.io/skills/remember-calendar</loc></url>
+  <url><loc>https://neotoma.io/skills/remember-codebase</loc></url>
+  <url><loc>https://neotoma.io/skills/store-data</loc></url>
+  <url><loc>https://neotoma.io/skills/query-memory</loc></url>
   <url><loc>https://neotoma.io/build-vs-buy</loc></url>
   <url><loc>https://neotoma.io/multi-agent-state</loc></url>
   <url><loc>https://neotoma.io/troubleshooting</loc></url>
@@ -121,6 +131,7 @@
   <url><loc>https://neotoma.io/memory-models</loc></url>
   <url><loc>https://neotoma.io/memory-guarantees</loc></url>
   <url><loc>https://neotoma.io/foundations</loc></url>
+  <url><loc>https://neotoma.io/foundation/problem-statement</loc></url>
   <url><loc>https://neotoma.io/privacy-first</loc></url>
   <url><loc>https://neotoma.io/cross-platform</loc></url>
   <url><loc>https://neotoma.io/memory-vendors</loc></url>
@@ -154,12 +165,12 @@
   <url><loc>https://neotoma.io/es/inspector/timeline</loc></url>
   <url><loc>https://neotoma.io/es/inspector/conversations</loc></url>
   <url><loc>https://neotoma.io/es/inspector/agents</loc></url>
+  <url><loc>https://neotoma.io/es/inspector/peers</loc></url>
   <url><loc>https://neotoma.io/es/inspector/search</loc></url>
   <url><loc>https://neotoma.io/es/inspector/settings</loc></url>
   <url><loc>https://neotoma.io/es/inspector/settings/connection</loc></url>
   <url><loc>https://neotoma.io/es/inspector/settings/attribution-policy</loc></url>
   <url><loc>https://neotoma.io/es/inspector/settings/retention</loc></url>
-  <url><loc>https://neotoma.io/es/inspector/feedback</loc></url>
   <url><loc>https://neotoma.io/es/aauth/spec</loc></url>
   <url><loc>https://neotoma.io/es/aauth/attestation</loc></url>
   <url><loc>https://neotoma.io/es/aauth/cli-keys</loc></url>
@@ -205,6 +216,16 @@
   <url><loc>https://neotoma.io/es/database-memory</loc></url>
   <url><loc>https://neotoma.io/es/deterministic-memory</loc></url>
   <url><loc>https://neotoma.io/es/skills</loc></url>
+  <url><loc>https://neotoma.io/es/skills/ensure-neotoma</loc></url>
+  <url><loc>https://neotoma.io/es/skills/remember-email</loc></url>
+  <url><loc>https://neotoma.io/es/skills/remember-conversations</loc></url>
+  <url><loc>https://neotoma.io/es/skills/remember-meetings</loc></url>
+  <url><loc>https://neotoma.io/es/skills/remember-finances</loc></url>
+  <url><loc>https://neotoma.io/es/skills/remember-contacts</loc></url>
+  <url><loc>https://neotoma.io/es/skills/remember-calendar</loc></url>
+  <url><loc>https://neotoma.io/es/skills/remember-codebase</loc></url>
+  <url><loc>https://neotoma.io/es/skills/store-data</loc></url>
+  <url><loc>https://neotoma.io/es/skills/query-memory</loc></url>
   <url><loc>https://neotoma.io/es/build-vs-buy</loc></url>
   <url><loc>https://neotoma.io/es/multi-agent-state</loc></url>
   <url><loc>https://neotoma.io/es/troubleshooting</loc></url>
@@ -245,6 +266,7 @@
   <url><loc>https://neotoma.io/es/memory-models</loc></url>
   <url><loc>https://neotoma.io/es/memory-guarantees</loc></url>
   <url><loc>https://neotoma.io/es/foundations</loc></url>
+  <url><loc>https://neotoma.io/es/foundation/problem-statement</loc></url>
   <url><loc>https://neotoma.io/es/privacy-first</loc></url>
   <url><loc>https://neotoma.io/es/cross-platform</loc></url>
   <url><loc>https://neotoma.io/es/memory-vendors</loc></url>
@@ -278,12 +300,12 @@
   <url><loc>https://neotoma.io/ca/inspector/timeline</loc></url>
   <url><loc>https://neotoma.io/ca/inspector/conversations</loc></url>
   <url><loc>https://neotoma.io/ca/inspector/agents</loc></url>
+  <url><loc>https://neotoma.io/ca/inspector/peers</loc></url>
   <url><loc>https://neotoma.io/ca/inspector/search</loc></url>
   <url><loc>https://neotoma.io/ca/inspector/settings</loc></url>
   <url><loc>https://neotoma.io/ca/inspector/settings/connection</loc></url>
   <url><loc>https://neotoma.io/ca/inspector/settings/attribution-policy</loc></url>
   <url><loc>https://neotoma.io/ca/inspector/settings/retention</loc></url>
-  <url><loc>https://neotoma.io/ca/inspector/feedback</loc></url>
   <url><loc>https://neotoma.io/ca/aauth/spec</loc></url>
   <url><loc>https://neotoma.io/ca/aauth/attestation</loc></url>
   <url><loc>https://neotoma.io/ca/aauth/cli-keys</loc></url>
@@ -329,6 +351,16 @@
   <url><loc>https://neotoma.io/ca/database-memory</loc></url>
   <url><loc>https://neotoma.io/ca/deterministic-memory</loc></url>
   <url><loc>https://neotoma.io/ca/skills</loc></url>
+  <url><loc>https://neotoma.io/ca/skills/ensure-neotoma</loc></url>
+  <url><loc>https://neotoma.io/ca/skills/remember-email</loc></url>
+  <url><loc>https://neotoma.io/ca/skills/remember-conversations</loc></url>
+  <url><loc>https://neotoma.io/ca/skills/remember-meetings</loc></url>
+  <url><loc>https://neotoma.io/ca/skills/remember-finances</loc></url>
+  <url><loc>https://neotoma.io/ca/skills/remember-contacts</loc></url>
+  <url><loc>https://neotoma.io/ca/skills/remember-calendar</loc></url>
+  <url><loc>https://neotoma.io/ca/skills/remember-codebase</loc></url>
+  <url><loc>https://neotoma.io/ca/skills/store-data</loc></url>
+  <url><loc>https://neotoma.io/ca/skills/query-memory</loc></url>
   <url><loc>https://neotoma.io/ca/build-vs-buy</loc></url>
   <url><loc>https://neotoma.io/ca/multi-agent-state</loc></url>
   <url><loc>https://neotoma.io/ca/troubleshooting</loc></url>
@@ -369,6 +401,7 @@
   <url><loc>https://neotoma.io/ca/memory-models</loc></url>
   <url><loc>https://neotoma.io/ca/memory-guarantees</loc></url>
   <url><loc>https://neotoma.io/ca/foundations</loc></url>
+  <url><loc>https://neotoma.io/ca/foundation/problem-statement</loc></url>
   <url><loc>https://neotoma.io/ca/privacy-first</loc></url>
   <url><loc>https://neotoma.io/ca/cross-platform</loc></url>
   <url><loc>https://neotoma.io/ca/memory-vendors</loc></url>
@@ -402,12 +435,12 @@
   <url><loc>https://neotoma.io/zh/inspector/timeline</loc></url>
   <url><loc>https://neotoma.io/zh/inspector/conversations</loc></url>
   <url><loc>https://neotoma.io/zh/inspector/agents</loc></url>
+  <url><loc>https://neotoma.io/zh/inspector/peers</loc></url>
   <url><loc>https://neotoma.io/zh/inspector/search</loc></url>
   <url><loc>https://neotoma.io/zh/inspector/settings</loc></url>
   <url><loc>https://neotoma.io/zh/inspector/settings/connection</loc></url>
   <url><loc>https://neotoma.io/zh/inspector/settings/attribution-policy</loc></url>
   <url><loc>https://neotoma.io/zh/inspector/settings/retention</loc></url>
-  <url><loc>https://neotoma.io/zh/inspector/feedback</loc></url>
   <url><loc>https://neotoma.io/zh/aauth/spec</loc></url>
   <url><loc>https://neotoma.io/zh/aauth/attestation</loc></url>
   <url><loc>https://neotoma.io/zh/aauth/cli-keys</loc></url>
@@ -453,6 +486,16 @@
   <url><loc>https://neotoma.io/zh/database-memory</loc></url>
   <url><loc>https://neotoma.io/zh/deterministic-memory</loc></url>
   <url><loc>https://neotoma.io/zh/skills</loc></url>
+  <url><loc>https://neotoma.io/zh/skills/ensure-neotoma</loc></url>
+  <url><loc>https://neotoma.io/zh/skills/remember-email</loc></url>
+  <url><loc>https://neotoma.io/zh/skills/remember-conversations</loc></url>
+  <url><loc>https://neotoma.io/zh/skills/remember-meetings</loc></url>
+  <url><loc>https://neotoma.io/zh/skills/remember-finances</loc></url>
+  <url><loc>https://neotoma.io/zh/skills/remember-contacts</loc></url>
+  <url><loc>https://neotoma.io/zh/skills/remember-calendar</loc></url>
+  <url><loc>https://neotoma.io/zh/skills/remember-codebase</loc></url>
+  <url><loc>https://neotoma.io/zh/skills/store-data</loc></url>
+  <url><loc>https://neotoma.io/zh/skills/query-memory</loc></url>
   <url><loc>https://neotoma.io/zh/build-vs-buy</loc></url>
   <url><loc>https://neotoma.io/zh/multi-agent-state</loc></url>
   <url><loc>https://neotoma.io/zh/troubleshooting</loc></url>
@@ -493,6 +536,7 @@
   <url><loc>https://neotoma.io/zh/memory-models</loc></url>
   <url><loc>https://neotoma.io/zh/memory-guarantees</loc></url>
   <url><loc>https://neotoma.io/zh/foundations</loc></url>
+  <url><loc>https://neotoma.io/zh/foundation/problem-statement</loc></url>
   <url><loc>https://neotoma.io/zh/privacy-first</loc></url>
   <url><loc>https://neotoma.io/zh/cross-platform</loc></url>
   <url><loc>https://neotoma.io/zh/memory-vendors</loc></url>
@@ -526,12 +570,12 @@
   <url><loc>https://neotoma.io/hi/inspector/timeline</loc></url>
   <url><loc>https://neotoma.io/hi/inspector/conversations</loc></url>
   <url><loc>https://neotoma.io/hi/inspector/agents</loc></url>
+  <url><loc>https://neotoma.io/hi/inspector/peers</loc></url>
   <url><loc>https://neotoma.io/hi/inspector/search</loc></url>
   <url><loc>https://neotoma.io/hi/inspector/settings</loc></url>
   <url><loc>https://neotoma.io/hi/inspector/settings/connection</loc></url>
   <url><loc>https://neotoma.io/hi/inspector/settings/attribution-policy</loc></url>
   <url><loc>https://neotoma.io/hi/inspector/settings/retention</loc></url>
-  <url><loc>https://neotoma.io/hi/inspector/feedback</loc></url>
   <url><loc>https://neotoma.io/hi/aauth/spec</loc></url>
   <url><loc>https://neotoma.io/hi/aauth/attestation</loc></url>
   <url><loc>https://neotoma.io/hi/aauth/cli-keys</loc></url>
@@ -577,6 +621,16 @@
   <url><loc>https://neotoma.io/hi/database-memory</loc></url>
   <url><loc>https://neotoma.io/hi/deterministic-memory</loc></url>
   <url><loc>https://neotoma.io/hi/skills</loc></url>
+  <url><loc>https://neotoma.io/hi/skills/ensure-neotoma</loc></url>
+  <url><loc>https://neotoma.io/hi/skills/remember-email</loc></url>
+  <url><loc>https://neotoma.io/hi/skills/remember-conversations</loc></url>
+  <url><loc>https://neotoma.io/hi/skills/remember-meetings</loc></url>
+  <url><loc>https://neotoma.io/hi/skills/remember-finances</loc></url>
+  <url><loc>https://neotoma.io/hi/skills/remember-contacts</loc></url>
+  <url><loc>https://neotoma.io/hi/skills/remember-calendar</loc></url>
+  <url><loc>https://neotoma.io/hi/skills/remember-codebase</loc></url>
+  <url><loc>https://neotoma.io/hi/skills/store-data</loc></url>
+  <url><loc>https://neotoma.io/hi/skills/query-memory</loc></url>
   <url><loc>https://neotoma.io/hi/build-vs-buy</loc></url>
   <url><loc>https://neotoma.io/hi/multi-agent-state</loc></url>
   <url><loc>https://neotoma.io/hi/troubleshooting</loc></url>
@@ -617,6 +671,7 @@
   <url><loc>https://neotoma.io/hi/memory-models</loc></url>
   <url><loc>https://neotoma.io/hi/memory-guarantees</loc></url>
   <url><loc>https://neotoma.io/hi/foundations</loc></url>
+  <url><loc>https://neotoma.io/hi/foundation/problem-statement</loc></url>
   <url><loc>https://neotoma.io/hi/privacy-first</loc></url>
   <url><loc>https://neotoma.io/hi/cross-platform</loc></url>
   <url><loc>https://neotoma.io/hi/memory-vendors</loc></url>
@@ -650,12 +705,12 @@
   <url><loc>https://neotoma.io/ar/inspector/timeline</loc></url>
   <url><loc>https://neotoma.io/ar/inspector/conversations</loc></url>
   <url><loc>https://neotoma.io/ar/inspector/agents</loc></url>
+  <url><loc>https://neotoma.io/ar/inspector/peers</loc></url>
   <url><loc>https://neotoma.io/ar/inspector/search</loc></url>
   <url><loc>https://neotoma.io/ar/inspector/settings</loc></url>
   <url><loc>https://neotoma.io/ar/inspector/settings/connection</loc></url>
   <url><loc>https://neotoma.io/ar/inspector/settings/attribution-policy</loc></url>
   <url><loc>https://neotoma.io/ar/inspector/settings/retention</loc></url>
-  <url><loc>https://neotoma.io/ar/inspector/feedback</loc></url>
   <url><loc>https://neotoma.io/ar/aauth/spec</loc></url>
   <url><loc>https://neotoma.io/ar/aauth/attestation</loc></url>
   <url><loc>https://neotoma.io/ar/aauth/cli-keys</loc></url>
@@ -701,6 +756,16 @@
   <url><loc>https://neotoma.io/ar/database-memory</loc></url>
   <url><loc>https://neotoma.io/ar/deterministic-memory</loc></url>
   <url><loc>https://neotoma.io/ar/skills</loc></url>
+  <url><loc>https://neotoma.io/ar/skills/ensure-neotoma</loc></url>
+  <url><loc>https://neotoma.io/ar/skills/remember-email</loc></url>
+  <url><loc>https://neotoma.io/ar/skills/remember-conversations</loc></url>
+  <url><loc>https://neotoma.io/ar/skills/remember-meetings</loc></url>
+  <url><loc>https://neotoma.io/ar/skills/remember-finances</loc></url>
+  <url><loc>https://neotoma.io/ar/skills/remember-contacts</loc></url>
+  <url><loc>https://neotoma.io/ar/skills/remember-calendar</loc></url>
+  <url><loc>https://neotoma.io/ar/skills/remember-codebase</loc></url>
+  <url><loc>https://neotoma.io/ar/skills/store-data</loc></url>
+  <url><loc>https://neotoma.io/ar/skills/query-memory</loc></url>
   <url><loc>https://neotoma.io/ar/build-vs-buy</loc></url>
   <url><loc>https://neotoma.io/ar/multi-agent-state</loc></url>
   <url><loc>https://neotoma.io/ar/troubleshooting</loc></url>
@@ -741,6 +806,7 @@
   <url><loc>https://neotoma.io/ar/memory-models</loc></url>
   <url><loc>https://neotoma.io/ar/memory-guarantees</loc></url>
   <url><loc>https://neotoma.io/ar/foundations</loc></url>
+  <url><loc>https://neotoma.io/ar/foundation/problem-statement</loc></url>
   <url><loc>https://neotoma.io/ar/privacy-first</loc></url>
   <url><loc>https://neotoma.io/ar/cross-platform</loc></url>
   <url><loc>https://neotoma.io/ar/memory-vendors</loc></url>
@@ -774,12 +840,12 @@
   <url><loc>https://neotoma.io/fr/inspector/timeline</loc></url>
   <url><loc>https://neotoma.io/fr/inspector/conversations</loc></url>
   <url><loc>https://neotoma.io/fr/inspector/agents</loc></url>
+  <url><loc>https://neotoma.io/fr/inspector/peers</loc></url>
   <url><loc>https://neotoma.io/fr/inspector/search</loc></url>
   <url><loc>https://neotoma.io/fr/inspector/settings</loc></url>
   <url><loc>https://neotoma.io/fr/inspector/settings/connection</loc></url>
   <url><loc>https://neotoma.io/fr/inspector/settings/attribution-policy</loc></url>
   <url><loc>https://neotoma.io/fr/inspector/settings/retention</loc></url>
-  <url><loc>https://neotoma.io/fr/inspector/feedback</loc></url>
   <url><loc>https://neotoma.io/fr/aauth/spec</loc></url>
   <url><loc>https://neotoma.io/fr/aauth/attestation</loc></url>
   <url><loc>https://neotoma.io/fr/aauth/cli-keys</loc></url>
@@ -825,6 +891,16 @@
   <url><loc>https://neotoma.io/fr/database-memory</loc></url>
   <url><loc>https://neotoma.io/fr/deterministic-memory</loc></url>
   <url><loc>https://neotoma.io/fr/skills</loc></url>
+  <url><loc>https://neotoma.io/fr/skills/ensure-neotoma</loc></url>
+  <url><loc>https://neotoma.io/fr/skills/remember-email</loc></url>
+  <url><loc>https://neotoma.io/fr/skills/remember-conversations</loc></url>
+  <url><loc>https://neotoma.io/fr/skills/remember-meetings</loc></url>
+  <url><loc>https://neotoma.io/fr/skills/remember-finances</loc></url>
+  <url><loc>https://neotoma.io/fr/skills/remember-contacts</loc></url>
+  <url><loc>https://neotoma.io/fr/skills/remember-calendar</loc></url>
+  <url><loc>https://neotoma.io/fr/skills/remember-codebase</loc></url>
+  <url><loc>https://neotoma.io/fr/skills/store-data</loc></url>
+  <url><loc>https://neotoma.io/fr/skills/query-memory</loc></url>
   <url><loc>https://neotoma.io/fr/build-vs-buy</loc></url>
   <url><loc>https://neotoma.io/fr/multi-agent-state</loc></url>
   <url><loc>https://neotoma.io/fr/troubleshooting</loc></url>
@@ -865,6 +941,7 @@
   <url><loc>https://neotoma.io/fr/memory-models</loc></url>
   <url><loc>https://neotoma.io/fr/memory-guarantees</loc></url>
   <url><loc>https://neotoma.io/fr/foundations</loc></url>
+  <url><loc>https://neotoma.io/fr/foundation/problem-statement</loc></url>
   <url><loc>https://neotoma.io/fr/privacy-first</loc></url>
   <url><loc>https://neotoma.io/fr/cross-platform</loc></url>
   <url><loc>https://neotoma.io/fr/memory-vendors</loc></url>
@@ -898,12 +975,12 @@
   <url><loc>https://neotoma.io/pt/inspector/timeline</loc></url>
   <url><loc>https://neotoma.io/pt/inspector/conversations</loc></url>
   <url><loc>https://neotoma.io/pt/inspector/agents</loc></url>
+  <url><loc>https://neotoma.io/pt/inspector/peers</loc></url>
   <url><loc>https://neotoma.io/pt/inspector/search</loc></url>
   <url><loc>https://neotoma.io/pt/inspector/settings</loc></url>
   <url><loc>https://neotoma.io/pt/inspector/settings/connection</loc></url>
   <url><loc>https://neotoma.io/pt/inspector/settings/attribution-policy</loc></url>
   <url><loc>https://neotoma.io/pt/inspector/settings/retention</loc></url>
-  <url><loc>https://neotoma.io/pt/inspector/feedback</loc></url>
   <url><loc>https://neotoma.io/pt/aauth/spec</loc></url>
   <url><loc>https://neotoma.io/pt/aauth/attestation</loc></url>
   <url><loc>https://neotoma.io/pt/aauth/cli-keys</loc></url>
@@ -949,6 +1026,16 @@
   <url><loc>https://neotoma.io/pt/database-memory</loc></url>
   <url><loc>https://neotoma.io/pt/deterministic-memory</loc></url>
   <url><loc>https://neotoma.io/pt/skills</loc></url>
+  <url><loc>https://neotoma.io/pt/skills/ensure-neotoma</loc></url>
+  <url><loc>https://neotoma.io/pt/skills/remember-email</loc></url>
+  <url><loc>https://neotoma.io/pt/skills/remember-conversations</loc></url>
+  <url><loc>https://neotoma.io/pt/skills/remember-meetings</loc></url>
+  <url><loc>https://neotoma.io/pt/skills/remember-finances</loc></url>
+  <url><loc>https://neotoma.io/pt/skills/remember-contacts</loc></url>
+  <url><loc>https://neotoma.io/pt/skills/remember-calendar</loc></url>
+  <url><loc>https://neotoma.io/pt/skills/remember-codebase</loc></url>
+  <url><loc>https://neotoma.io/pt/skills/store-data</loc></url>
+  <url><loc>https://neotoma.io/pt/skills/query-memory</loc></url>
   <url><loc>https://neotoma.io/pt/build-vs-buy</loc></url>
   <url><loc>https://neotoma.io/pt/multi-agent-state</loc></url>
   <url><loc>https://neotoma.io/pt/troubleshooting</loc></url>
@@ -989,6 +1076,7 @@
   <url><loc>https://neotoma.io/pt/memory-models</loc></url>
   <url><loc>https://neotoma.io/pt/memory-guarantees</loc></url>
   <url><loc>https://neotoma.io/pt/foundations</loc></url>
+  <url><loc>https://neotoma.io/pt/foundation/problem-statement</loc></url>
   <url><loc>https://neotoma.io/pt/privacy-first</loc></url>
   <url><loc>https://neotoma.io/pt/cross-platform</loc></url>
   <url><loc>https://neotoma.io/pt/memory-vendors</loc></url>
@@ -1022,12 +1110,12 @@
   <url><loc>https://neotoma.io/ru/inspector/timeline</loc></url>
   <url><loc>https://neotoma.io/ru/inspector/conversations</loc></url>
   <url><loc>https://neotoma.io/ru/inspector/agents</loc></url>
+  <url><loc>https://neotoma.io/ru/inspector/peers</loc></url>
   <url><loc>https://neotoma.io/ru/inspector/search</loc></url>
   <url><loc>https://neotoma.io/ru/inspector/settings</loc></url>
   <url><loc>https://neotoma.io/ru/inspector/settings/connection</loc></url>
   <url><loc>https://neotoma.io/ru/inspector/settings/attribution-policy</loc></url>
   <url><loc>https://neotoma.io/ru/inspector/settings/retention</loc></url>
-  <url><loc>https://neotoma.io/ru/inspector/feedback</loc></url>
   <url><loc>https://neotoma.io/ru/aauth/spec</loc></url>
   <url><loc>https://neotoma.io/ru/aauth/attestation</loc></url>
   <url><loc>https://neotoma.io/ru/aauth/cli-keys</loc></url>
@@ -1073,6 +1161,16 @@
   <url><loc>https://neotoma.io/ru/database-memory</loc></url>
   <url><loc>https://neotoma.io/ru/deterministic-memory</loc></url>
   <url><loc>https://neotoma.io/ru/skills</loc></url>
+  <url><loc>https://neotoma.io/ru/skills/ensure-neotoma</loc></url>
+  <url><loc>https://neotoma.io/ru/skills/remember-email</loc></url>
+  <url><loc>https://neotoma.io/ru/skills/remember-conversations</loc></url>
+  <url><loc>https://neotoma.io/ru/skills/remember-meetings</loc></url>
+  <url><loc>https://neotoma.io/ru/skills/remember-finances</loc></url>
+  <url><loc>https://neotoma.io/ru/skills/remember-contacts</loc></url>
+  <url><loc>https://neotoma.io/ru/skills/remember-calendar</loc></url>
+  <url><loc>https://neotoma.io/ru/skills/remember-codebase</loc></url>
+  <url><loc>https://neotoma.io/ru/skills/store-data</loc></url>
+  <url><loc>https://neotoma.io/ru/skills/query-memory</loc></url>
   <url><loc>https://neotoma.io/ru/build-vs-buy</loc></url>
   <url><loc>https://neotoma.io/ru/multi-agent-state</loc></url>
   <url><loc>https://neotoma.io/ru/troubleshooting</loc></url>
@@ -1113,6 +1211,7 @@
   <url><loc>https://neotoma.io/ru/memory-models</loc></url>
   <url><loc>https://neotoma.io/ru/memory-guarantees</loc></url>
   <url><loc>https://neotoma.io/ru/foundations</loc></url>
+  <url><loc>https://neotoma.io/ru/foundation/problem-statement</loc></url>
   <url><loc>https://neotoma.io/ru/privacy-first</loc></url>
   <url><loc>https://neotoma.io/ru/cross-platform</loc></url>
   <url><loc>https://neotoma.io/ru/memory-vendors</loc></url>
@@ -1146,12 +1245,12 @@
   <url><loc>https://neotoma.io/bn/inspector/timeline</loc></url>
   <url><loc>https://neotoma.io/bn/inspector/conversations</loc></url>
   <url><loc>https://neotoma.io/bn/inspector/agents</loc></url>
+  <url><loc>https://neotoma.io/bn/inspector/peers</loc></url>
   <url><loc>https://neotoma.io/bn/inspector/search</loc></url>
   <url><loc>https://neotoma.io/bn/inspector/settings</loc></url>
   <url><loc>https://neotoma.io/bn/inspector/settings/connection</loc></url>
   <url><loc>https://neotoma.io/bn/inspector/settings/attribution-policy</loc></url>
   <url><loc>https://neotoma.io/bn/inspector/settings/retention</loc></url>
-  <url><loc>https://neotoma.io/bn/inspector/feedback</loc></url>
   <url><loc>https://neotoma.io/bn/aauth/spec</loc></url>
   <url><loc>https://neotoma.io/bn/aauth/attestation</loc></url>
   <url><loc>https://neotoma.io/bn/aauth/cli-keys</loc></url>
@@ -1197,6 +1296,16 @@
   <url><loc>https://neotoma.io/bn/database-memory</loc></url>
   <url><loc>https://neotoma.io/bn/deterministic-memory</loc></url>
   <url><loc>https://neotoma.io/bn/skills</loc></url>
+  <url><loc>https://neotoma.io/bn/skills/ensure-neotoma</loc></url>
+  <url><loc>https://neotoma.io/bn/skills/remember-email</loc></url>
+  <url><loc>https://neotoma.io/bn/skills/remember-conversations</loc></url>
+  <url><loc>https://neotoma.io/bn/skills/remember-meetings</loc></url>
+  <url><loc>https://neotoma.io/bn/skills/remember-finances</loc></url>
+  <url><loc>https://neotoma.io/bn/skills/remember-contacts</loc></url>
+  <url><loc>https://neotoma.io/bn/skills/remember-calendar</loc></url>
+  <url><loc>https://neotoma.io/bn/skills/remember-codebase</loc></url>
+  <url><loc>https://neotoma.io/bn/skills/store-data</loc></url>
+  <url><loc>https://neotoma.io/bn/skills/query-memory</loc></url>
   <url><loc>https://neotoma.io/bn/build-vs-buy</loc></url>
   <url><loc>https://neotoma.io/bn/multi-agent-state</loc></url>
   <url><loc>https://neotoma.io/bn/troubleshooting</loc></url>
@@ -1237,6 +1346,7 @@
   <url><loc>https://neotoma.io/bn/memory-models</loc></url>
   <url><loc>https://neotoma.io/bn/memory-guarantees</loc></url>
   <url><loc>https://neotoma.io/bn/foundations</loc></url>
+  <url><loc>https://neotoma.io/bn/foundation/problem-statement</loc></url>
   <url><loc>https://neotoma.io/bn/privacy-first</loc></url>
   <url><loc>https://neotoma.io/bn/cross-platform</loc></url>
   <url><loc>https://neotoma.io/bn/memory-vendors</loc></url>
@@ -1270,12 +1380,12 @@
   <url><loc>https://neotoma.io/ur/inspector/timeline</loc></url>
   <url><loc>https://neotoma.io/ur/inspector/conversations</loc></url>
   <url><loc>https://neotoma.io/ur/inspector/agents</loc></url>
+  <url><loc>https://neotoma.io/ur/inspector/peers</loc></url>
   <url><loc>https://neotoma.io/ur/inspector/search</loc></url>
   <url><loc>https://neotoma.io/ur/inspector/settings</loc></url>
   <url><loc>https://neotoma.io/ur/inspector/settings/connection</loc></url>
   <url><loc>https://neotoma.io/ur/inspector/settings/attribution-policy</loc></url>
   <url><loc>https://neotoma.io/ur/inspector/settings/retention</loc></url>
-  <url><loc>https://neotoma.io/ur/inspector/feedback</loc></url>
   <url><loc>https://neotoma.io/ur/aauth/spec</loc></url>
   <url><loc>https://neotoma.io/ur/aauth/attestation</loc></url>
   <url><loc>https://neotoma.io/ur/aauth/cli-keys</loc></url>
@@ -1321,6 +1431,16 @@
   <url><loc>https://neotoma.io/ur/database-memory</loc></url>
   <url><loc>https://neotoma.io/ur/deterministic-memory</loc></url>
   <url><loc>https://neotoma.io/ur/skills</loc></url>
+  <url><loc>https://neotoma.io/ur/skills/ensure-neotoma</loc></url>
+  <url><loc>https://neotoma.io/ur/skills/remember-email</loc></url>
+  <url><loc>https://neotoma.io/ur/skills/remember-conversations</loc></url>
+  <url><loc>https://neotoma.io/ur/skills/remember-meetings</loc></url>
+  <url><loc>https://neotoma.io/ur/skills/remember-finances</loc></url>
+  <url><loc>https://neotoma.io/ur/skills/remember-contacts</loc></url>
+  <url><loc>https://neotoma.io/ur/skills/remember-calendar</loc></url>
+  <url><loc>https://neotoma.io/ur/skills/remember-codebase</loc></url>
+  <url><loc>https://neotoma.io/ur/skills/store-data</loc></url>
+  <url><loc>https://neotoma.io/ur/skills/query-memory</loc></url>
   <url><loc>https://neotoma.io/ur/build-vs-buy</loc></url>
   <url><loc>https://neotoma.io/ur/multi-agent-state</loc></url>
   <url><loc>https://neotoma.io/ur/troubleshooting</loc></url>
@@ -1361,6 +1481,7 @@
   <url><loc>https://neotoma.io/ur/memory-models</loc></url>
   <url><loc>https://neotoma.io/ur/memory-guarantees</loc></url>
   <url><loc>https://neotoma.io/ur/foundations</loc></url>
+  <url><loc>https://neotoma.io/ur/foundation/problem-statement</loc></url>
   <url><loc>https://neotoma.io/ur/privacy-first</loc></url>
   <url><loc>https://neotoma.io/ur/cross-platform</loc></url>
   <url><loc>https://neotoma.io/ur/memory-vendors</loc></url>
@@ -1394,12 +1515,12 @@
   <url><loc>https://neotoma.io/id/inspector/timeline</loc></url>
   <url><loc>https://neotoma.io/id/inspector/conversations</loc></url>
   <url><loc>https://neotoma.io/id/inspector/agents</loc></url>
+  <url><loc>https://neotoma.io/id/inspector/peers</loc></url>
   <url><loc>https://neotoma.io/id/inspector/search</loc></url>
   <url><loc>https://neotoma.io/id/inspector/settings</loc></url>
   <url><loc>https://neotoma.io/id/inspector/settings/connection</loc></url>
   <url><loc>https://neotoma.io/id/inspector/settings/attribution-policy</loc></url>
   <url><loc>https://neotoma.io/id/inspector/settings/retention</loc></url>
-  <url><loc>https://neotoma.io/id/inspector/feedback</loc></url>
   <url><loc>https://neotoma.io/id/aauth/spec</loc></url>
   <url><loc>https://neotoma.io/id/aauth/attestation</loc></url>
   <url><loc>https://neotoma.io/id/aauth/cli-keys</loc></url>
@@ -1445,6 +1566,16 @@
   <url><loc>https://neotoma.io/id/database-memory</loc></url>
   <url><loc>https://neotoma.io/id/deterministic-memory</loc></url>
   <url><loc>https://neotoma.io/id/skills</loc></url>
+  <url><loc>https://neotoma.io/id/skills/ensure-neotoma</loc></url>
+  <url><loc>https://neotoma.io/id/skills/remember-email</loc></url>
+  <url><loc>https://neotoma.io/id/skills/remember-conversations</loc></url>
+  <url><loc>https://neotoma.io/id/skills/remember-meetings</loc></url>
+  <url><loc>https://neotoma.io/id/skills/remember-finances</loc></url>
+  <url><loc>https://neotoma.io/id/skills/remember-contacts</loc></url>
+  <url><loc>https://neotoma.io/id/skills/remember-calendar</loc></url>
+  <url><loc>https://neotoma.io/id/skills/remember-codebase</loc></url>
+  <url><loc>https://neotoma.io/id/skills/store-data</loc></url>
+  <url><loc>https://neotoma.io/id/skills/query-memory</loc></url>
   <url><loc>https://neotoma.io/id/build-vs-buy</loc></url>
   <url><loc>https://neotoma.io/id/multi-agent-state</loc></url>
   <url><loc>https://neotoma.io/id/troubleshooting</loc></url>
@@ -1485,6 +1616,7 @@
   <url><loc>https://neotoma.io/id/memory-models</loc></url>
   <url><loc>https://neotoma.io/id/memory-guarantees</loc></url>
   <url><loc>https://neotoma.io/id/foundations</loc></url>
+  <url><loc>https://neotoma.io/id/foundation/problem-statement</loc></url>
   <url><loc>https://neotoma.io/id/privacy-first</loc></url>
   <url><loc>https://neotoma.io/id/cross-platform</loc></url>
   <url><loc>https://neotoma.io/id/memory-vendors</loc></url>
@@ -1518,12 +1650,12 @@
   <url><loc>https://neotoma.io/de/inspector/timeline</loc></url>
   <url><loc>https://neotoma.io/de/inspector/conversations</loc></url>
   <url><loc>https://neotoma.io/de/inspector/agents</loc></url>
+  <url><loc>https://neotoma.io/de/inspector/peers</loc></url>
   <url><loc>https://neotoma.io/de/inspector/search</loc></url>
   <url><loc>https://neotoma.io/de/inspector/settings</loc></url>
   <url><loc>https://neotoma.io/de/inspector/settings/connection</loc></url>
   <url><loc>https://neotoma.io/de/inspector/settings/attribution-policy</loc></url>
   <url><loc>https://neotoma.io/de/inspector/settings/retention</loc></url>
-  <url><loc>https://neotoma.io/de/inspector/feedback</loc></url>
   <url><loc>https://neotoma.io/de/aauth/spec</loc></url>
   <url><loc>https://neotoma.io/de/aauth/attestation</loc></url>
   <url><loc>https://neotoma.io/de/aauth/cli-keys</loc></url>
@@ -1569,6 +1701,16 @@
   <url><loc>https://neotoma.io/de/database-memory</loc></url>
   <url><loc>https://neotoma.io/de/deterministic-memory</loc></url>
   <url><loc>https://neotoma.io/de/skills</loc></url>
+  <url><loc>https://neotoma.io/de/skills/ensure-neotoma</loc></url>
+  <url><loc>https://neotoma.io/de/skills/remember-email</loc></url>
+  <url><loc>https://neotoma.io/de/skills/remember-conversations</loc></url>
+  <url><loc>https://neotoma.io/de/skills/remember-meetings</loc></url>
+  <url><loc>https://neotoma.io/de/skills/remember-finances</loc></url>
+  <url><loc>https://neotoma.io/de/skills/remember-contacts</loc></url>
+  <url><loc>https://neotoma.io/de/skills/remember-calendar</loc></url>
+  <url><loc>https://neotoma.io/de/skills/remember-codebase</loc></url>
+  <url><loc>https://neotoma.io/de/skills/store-data</loc></url>
+  <url><loc>https://neotoma.io/de/skills/query-memory</loc></url>
   <url><loc>https://neotoma.io/de/build-vs-buy</loc></url>
   <url><loc>https://neotoma.io/de/multi-agent-state</loc></url>
   <url><loc>https://neotoma.io/de/troubleshooting</loc></url>
@@ -1609,6 +1751,7 @@
   <url><loc>https://neotoma.io/de/memory-models</loc></url>
   <url><loc>https://neotoma.io/de/memory-guarantees</loc></url>
   <url><loc>https://neotoma.io/de/foundations</loc></url>
+  <url><loc>https://neotoma.io/de/foundation/problem-statement</loc></url>
   <url><loc>https://neotoma.io/de/privacy-first</loc></url>
   <url><loc>https://neotoma.io/de/cross-platform</loc></url>
   <url><loc>https://neotoma.io/de/memory-vendors</loc></url>

@@ -65,6 +65,12 @@ export default defineConfig({
     },
     {
       name: 'mobile-webkit',
+      // Inspector specs start a worker-scoped Neotoma HTTP server; with multiple
+      // projects Playwright may use a separate worker per project, so the WebKit
+      // run can start after the Chromium worker has torn the server down →
+      // ECONNREFUSED on `fetch(neotomaHttpOrigin/store)`. Validate Inspector on
+      // Chromium only; other suites still run on both projects.
+      testIgnore: ['inspector/**'],
       use: {
         ...devices['Mobile Safari'],
         viewport: {

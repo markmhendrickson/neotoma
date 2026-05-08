@@ -12,7 +12,7 @@ overview: |
   spending, and tells us which model × harness combinations
   statistically fail to follow MCP instructions in the wild. Output
   feeds back into Tier 2 scenario priorities and into the existing
-  product_feedback loop.
+  issue loop.
 todos:
   - id: tier3-compliance-aggregator-service
     content: Implement `src/services/compliance/scorecard.ts` exposing `getComplianceScorecard({ since, until, group_by })` that reads `turn_compliance` observations and `instruction_profile` counters from the local SQLite DB and returns a structured scorecard — total turns, backfilled turns, backfill rate, per-model breakdown, per-harness breakdown, per-profile breakdown, top-N missed_steps. Use streaming reads for large windows.
@@ -33,7 +33,7 @@ todos:
     content: Add a `/inspector/compliance` page that visualizes the scorecard — backfill rate over time, per-model heatmap, top missed_steps. Reuses the existing Inspector React shell. Read-only; deeper triage (reset counters, mute) is out of scope for this plan.
     status: pending
   - id: tier3-alerting-thresholds
-    content: "Add a configurable threshold layer: when any (model × harness) cell exceeds `NEOTOMA_COMPLIANCE_BACKFILL_ALERT_THRESHOLD` (default `0.30`) for a sustained window (default 24h, ≥ 100 turns), emit a `product_feedback` entity with `kind: 'compliance_drift'`, `metadata: { model, harness, rate, window }`. Wire it into the existing agent-feedback pipeline so it shows up alongside other product-level alarms."
+    content: "Add a configurable threshold layer: when any (model × harness) cell exceeds `NEOTOMA_COMPLIANCE_BACKFILL_ALERT_THRESHOLD` (default `0.30`) for a sustained window (default 24h, ≥ 100 turns), emit an `issue` entity with `kind: 'compliance_drift'`, `metadata: { model, harness, rate, window }`. Wire it into the existing agent-feedback pipeline so it shows up alongside other product-level alarms."
     status: pending
   - id: tier3-historical-stats-export
     content: Add `neotoma compliance export --format json|parquet --output <path>` so we can dump historical compliance data into our analytics warehouse without bespoke ETL. Schema documented; intended to be a stable contract.
@@ -73,7 +73,7 @@ flowchart LR
     Agg --> Prom["/admin/compliance/metrics\n(Prometheus)"]
     Agg --> Insp["/inspector/compliance\n(dashboard)"]
     Agg --> Alert["threshold check"]
-    Alert -->|exceeds| Fb["product_feedback{kind: compliance_drift}"]
+    Alert -->|exceeds| Fb["issue{kind: compliance_drift}"]
     Fb --> AgentSite["agent.neotoma.io triage"]
 ```
 
@@ -105,7 +105,7 @@ Ship the historical-data heuristic (`tier3-historical-backfill-import`) so exist
 Prometheus metrics (`tier3-prometheus-metrics`) and the Inspector dashboard (`tier3-inspector-dashboard`). These are opt-in but high-leverage for operators who already run observability stacks.
 
 ### Phase 6 — Alerting
-Wire the threshold-based `product_feedback` emission (`tier3-alerting-thresholds`). When (model × harness) backfill rate exceeds the configured threshold for a sustained window, an entity lands in the existing feedback queue, where it's triaged like any other product alarm. This closes the loop: real-world compliance regression becomes a tracked work item, not just a chart.
+Wire the threshold-based `issue` emission (`tier3-alerting-thresholds`). When (model × harness) backfill rate exceeds the configured threshold for a sustained window, an entity lands in the existing feedback queue, where it's triaged like any other product alarm. This closes the loop: real-world compliance regression becomes a tracked work item, not just a chart.
 
 ### Phase 7 — Export + tests + docs
 Dump format (`tier3-historical-stats-export`), test coverage (`tier3-tests`), and operator docs (`tier3-docs`).
@@ -131,7 +131,7 @@ Alert: composer-2/cursor-hooks exceeded 30 % threshold (sustained 24h, n=3142). 
 - Unit: aggregator with handcrafted observations covering empty / all-backfilled / mixed-profile / multi-harness inputs.
 - Integration: CLI subcommand end-to-end against a tmp DB seeded by the Tier-1 runner; verify table render, JSON shape, and `--min-turns` filter.
 - Snapshot: table render and Markdown render against a deterministic input.
-- Threshold-emission test: feed 200 synthetic turns above threshold and assert one `product_feedback{kind: compliance_drift}` is emitted with the expected metadata.
+- Threshold-emission test: feed 200 synthetic turns above threshold and assert one `issue{kind: compliance_drift}` is emitted with the expected metadata.
 
 ## Risks and non-goals
 

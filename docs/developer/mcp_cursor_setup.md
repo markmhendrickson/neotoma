@@ -19,6 +19,8 @@ For other integrations, see:
 
 For source iteration with an installed local MCP server, use the stable dev shim instead of `tsx watch` as the client-facing stdio command. The shim keeps Cursor connected, restarts a worker behind the stdio stream, and keeps diagnostics on stderr.
 
+**Launcher matrix:** which `scripts/run_neotoma_mcp_*.sh` to use (stdio vs proxy, prod vs dev, reload model) is summarized in **[`mcp/proxy.md` § Repo launcher scripts](mcp/proxy.md#repo-launcher-scripts)**.
+
 ---
 
 ## Option A: Stdio (Local — Recommended)
@@ -66,7 +68,23 @@ Use this only when you want the MCP client connection to survive local source re
 
 **Signed dev shim (HTTP `/mcp` + AAuth + same reload model):** when the dev API is up (`neotoma api start --env dev`, default `:3080`) and you have run `neotoma auth keygen`, point `neotoma-dev` at `scripts/run_neotoma_mcp_signed_stdio_dev_shim.sh`. Cursor still speaks stdio MCP; the shim restarts the identity-proxy worker on source changes; the proxy signs requests to `http://127.0.0.1:3080/mcp` when `MCP_PROXY_DOWNSTREAM_URL` is unset. Set `MCP_PROXY_DOWNSTREAM_URL=http://127.0.0.1:3180/mcp` for a signed prod slot. See `docs/developer/mcp/proxy.md` (Dev: stdio + live reload + AAuth).
 
-**Dynamic local API port (optional):** when `npm run watch:prod` (or `pick-port`) binds a port other than the one in `mcp.json`, set **`NEOTOMA_MCP_USE_LOCAL_PORT_FILE=1`** on the signed shim and **omit `MCP_PROXY_DOWNSTREAM_URL`** (or keep it only as a fallback when the port file is missing). On each successful HTTP bind, Neotoma writes **`.dev-serve/local_http_port_dev`** or **`local_http_port_prod`** from `NEOTOMA_ENV` (dev also mirrors legacy **`local_http_port`**). Set **`NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE`** to **`dev`** or **`prod`** so each MCP entry reads the right file when **dev and prod HTTP APIs run in parallel**; preset **A** sets this automatically on `neotoma-dev` / `neotoma`. The shim TCP-probes before use and falls back to `MCP_PROXY_DOWNSTREAM_URL` or default `:3080` / `:3180` (prod profile). Increase **`NEOTOMA_MCP_PORT_PROBE_MS`** (default 1200, max 5000) if your API is slow to bind.
+**Unsigned stdio dev shim (HTTP `/mcp`, no `mcp_dev_shim.ts` wrapper):** when you want stdio Cursor (or another harness) to talk to the local HTTP `/mcp` API **without** the signed shim’s live-reload worker, point `command` at `scripts/run_neotoma_mcp_unsigned_stdio_dev_shim.sh`. It uses the same **port file** / **TCP probe** resolution as the signed shim, then runs `mcp proxy` directly (set `MCP_PROXY_AAUTH=1` in `env` if you opt into signing on that path). The legacy filename `run_neotoma_mcp_unsigned_stdio_proxy.sh` is a one-line `exec` forwarder to this script.
+
+```json
+{
+  "mcpServers": {
+    "neotoma-dev": {
+      "command": "/absolute/path/to/neotoma/scripts/run_neotoma_mcp_unsigned_stdio_dev_shim.sh",
+      "env": {
+        "NEOTOMA_MCP_USE_LOCAL_PORT_FILE": "1",
+        "NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE": "dev"
+      }
+    }
+  }
+}
+```
+
+**Dynamic local API port (optional):** when `npm run dev:server:prod` (or `pick-port`) binds a port other than the one in `mcp.json`, set **`NEOTOMA_MCP_USE_LOCAL_PORT_FILE=1`** on the signed shim and **omit `MCP_PROXY_DOWNSTREAM_URL`** (or keep it only as a fallback when the port file is missing). On each successful HTTP bind, Neotoma writes **`.dev-serve/local_http_port_dev`** or **`local_http_port_prod`** from `NEOTOMA_ENV` (dev also mirrors legacy **`local_http_port`**). Set **`NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE`** to **`dev`** or **`prod`** so each MCP entry reads the right file when **dev and prod HTTP APIs run in parallel**; preset **A** sets this automatically on `neotoma-dev` / `neotoma`. The shim TCP-probes before use and falls back to `MCP_PROXY_DOWNSTREAM_URL` or default `:3080` / `:3180` (prod profile). Increase **`NEOTOMA_MCP_PORT_PROBE_MS`** (default 1200, max 5000) if your API is slow to bind.
 
 ```json
 {
@@ -138,7 +156,7 @@ Use when Cursor runs on a different machine or you want OAuth/Connect-button flo
 
 ### Prerequisites
 
-1. Neotoma server running with tunnel: `npm run dev:api` (starts API + tunnel)
+1. Neotoma server running with tunnel: `npm run dev:server:tunnel` (starts server + tunnel)
 2. Tunnel URL available: `cat /tmp/ngrok-mcp-url.txt`
 3. Authentication configured (see below)
 
@@ -189,7 +207,7 @@ Use when Cursor runs on a different machine or you want OAuth/Connect-button flo
 See [tunnels.md](tunnels.md) for full tunnel documentation. Quick start:
 
 ```bash
-npm run dev:api          # starts server + tunnel
+npm run dev:server:tunnel # starts server + tunnel
 cat /tmp/ngrok-mcp-url.txt  # get tunnel URL
 ```
 
@@ -217,6 +235,7 @@ cat /tmp/ngrok-mcp-url.txt  # get tunnel URL
 ### MCP tools not appearing
 
 - Reconnect the MCP server or restart Cursor so it re-runs `tools/list`.
+- After upgrading Neotoma, reconnect MCP so the host picks up fresh `listTools` input schemas (for example `add_issue_message` / `get_issue_status` accept **`entity_id`** or **`issue_number`**). Stale cached tool shapes can make the IDE reject `entity_id`-only calls for private issues.
 - Tool definitions should appear before authentication; if they do not, inspect MCP logs for `listTools` errors.
 - Verify authentication succeeded before executing tools that read or write user data (check MCP status in Cursor settings).
 - Restart Cursor completely.

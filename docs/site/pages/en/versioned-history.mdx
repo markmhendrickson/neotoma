@@ -1,0 +1,30 @@
+Every change creates a new version instead of overwriting prior state. Earlier snapshots remain
+queryable, so you can answer what the system believed at any point.
+
+## Before vs after
+
+Before: a row update erases the old value unless you added custom history tables. After: each correction
+is appended as a new observation, so historical state is preserved by default.
+
+```bash
+# Current snapshot
+neotoma entities search --query "Ana Rivera" --entity-type contact
+
+# Historical lineage
+neotoma observations list --entity-id <entity_id>
+```
+
+This aligns with event-sourcing principles: the observation log is authoritative, snapshots are derived
+views. See
+<MdxI18nLink to="/deterministic-state-evolution" className="text-foreground underline hover:text-foreground">
+  deterministic state evolution
+</MdxI18nLink>
+,
+<MdxI18nLink to="/auditable-change-log" className="text-foreground underline hover:text-foreground">
+  auditable change log
+</MdxI18nLink>
+, and
+<MdxI18nLink to="/human-inspectability" className="text-foreground underline hover:text-foreground">
+  human inspectability
+</MdxI18nLink>
+.

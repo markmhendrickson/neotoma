@@ -1,0 +1,42 @@
+All graph inserts &mdash; entities, observations, relationships, and any optional file source &mdash; commit in a
+single transaction. Either everything succeeds, or nothing changes. There is no partial state where one
+half of a write landed and the other half did not.
+
+## Before vs after
+
+Before: a multi-step write succeeds halfway, leaving an entity without its observation, or a relationship
+that points at a row that never committed. After: an error during any part of the batch rolls the entire
+operation back; readers only ever see fully-formed state.
+
+## CLI example
+
+```bash
+# Atomic batch: contact + relationship to existing event
+neotoma store --json='[
+  {"entity_type":"contact","name":"Ana Rivera"},
+  {"entity_type":"event","title":"Intro call","start_time":"2026-05-12T14:00:00Z"}
+]' --relationships='[
+  {"relationship_type":"PART_OF","source_index":0,"target_index":1}
+]'
+```
+
+If any entity in the batch is rejected by schema validation, no rows are written. The same applies to
+relationships, attached file sources, and the substrate event emissions associated with the write.
+
+## Why it matters
+
+Agents fan-out work to Neotoma in batches. Without transactional writes, a half-committed batch creates
+phantom state that downstream readers must defensively detect and reconcile. Treating the batch as
+indivisible removes that class of bug entirely. See
+
+<MdxI18nLink to="/strong-consistency" className="text-foreground underline hover:text-foreground">
+  strong consistency
+</MdxI18nLink>
+
+and
+
+<MdxI18nLink to="/architecture" className="text-foreground underline hover:text-foreground">
+  architecture
+</MdxI18nLink>
+
+for the broader consistency model.

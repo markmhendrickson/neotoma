@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   discoverApiInstances,
@@ -40,10 +40,22 @@ function mockHttpHealth(behavior: HttpBehavior): ReturnType<typeof vi.spyOn> {
 }
 
 describe("CLI API discovery", () => {
+  beforeEach(() => {
+    delete process.env.NEOTOMA_SESSION_DEV_PORT;
+    delete process.env.NEOTOMA_SESSION_PROD_PORT;
+    delete process.env.NEOTOMA_SESSION_API_PORT;
+    delete process.env.NEOTOMA_SESSION_ENV;
+    delete process.env.NEOTOMA_API_PORTS;
+    delete process.env.NEOTOMA_MCP_USE_LOCAL_PORT_FILE;
+    delete process.env.NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE;
+    delete process.env.NEOTOMA_PROJECT_ROOT;
+  });
+
   afterEach(() => {
     delete process.env.NEOTOMA_SESSION_DEV_PORT;
     delete process.env.NEOTOMA_SESSION_PROD_PORT;
     delete process.env.NEOTOMA_SESSION_API_PORT;
+    delete process.env.NEOTOMA_SESSION_ENV;
     delete process.env.NEOTOMA_API_PORTS;
     delete process.env.NEOTOMA_MCP_USE_LOCAL_PORT_FILE;
     delete process.env.NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE;
@@ -82,6 +94,18 @@ describe("CLI API discovery", () => {
     process.env.NEOTOMA_SESSION_API_PORT = "9234";
     const resolved = await resolveBaseUrl(undefined, {});
     expect(resolved).toBe("http://localhost:9234");
+  });
+
+  it("resolveBaseUrl honors preferred prod env before auto-detected dev API", async () => {
+    mockHttpHealth({ 3080: true, 3180: false });
+    const resolved = await resolveBaseUrl(undefined, { preferred_env: "prod" });
+    expect(resolved).toBe("http://localhost:3180");
+  });
+
+  it("resolveBaseUrl honors preferred dev env before auto-detected prod API", async () => {
+    mockHttpHealth({ 3080: false, 3180: true });
+    const resolved = await resolveBaseUrl(undefined, { preferred_env: "dev" });
+    expect(resolved).toBe("http://localhost:3080");
   });
 
   it("resolveBaseUrl session port wins over NEOTOMA_MCP_USE_LOCAL_PORT_FILE", async () => {

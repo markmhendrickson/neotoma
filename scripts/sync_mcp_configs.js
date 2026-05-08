@@ -91,9 +91,16 @@ function main() {
   const markerEnd = "# --- end synced MCP servers ---";
   if (codexBlocks.length) {
     let out = codexText;
-    // Remove all existing synced blocks (global) so we never leave duplicate [mcp_servers.*] keys
-    const blockRegex = new RegExp(marker + "[\\s\\S]*?" + markerEnd, "gm");
-    out = out.replace(blockRegex, "").replace(/\n{3,}/g, "\n\n").trimEnd();
+    // Remove every marker-delimited sync block (index-based; avoids regex edge cases).
+    while (true) {
+      const start = out.indexOf(marker);
+      if (start < 0) break;
+      const end = out.indexOf(markerEnd, start + marker.length);
+      if (end < 0) break;
+      const after = end + markerEnd.length;
+      out = out.slice(0, start) + out.slice(after);
+    }
+    out = out.replace(/\n{3,}/g, "\n\n").trimEnd();
     if (out && !out.endsWith("\n")) out += "\n";
     out += "\n" + marker + "\n" + codexBlocks.join("\n\n") + "\n" + markerEnd + "\n";
     fs.writeFileSync(CODEX_CONFIG, out, "utf-8");

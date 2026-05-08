@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
   classifyNeotomaProcess,
+  deriveProcessCategories,
   extractTcpListenPortFromLsofNameField,
+  inferProcessEnvHint,
   parseLsofPnOutput,
   parsePsSnapshotForNeotoma,
   wrapCommandForColumn,
@@ -27,6 +29,20 @@ describe("neotoma processes classifier", () => {
   it("classifies run-dev-task without repo path in argv", () => {
     expect(
       classifyNeotomaProcess("node scripts/run-dev-task.js tsx watch src/actions.ts")
+    ).toBe("run_dev_task");
+  });
+
+  it("classifies run-dev-task with Node native watch (launchd-friendly)", () => {
+    expect(
+      classifyNeotomaProcess(
+        "node scripts/run-dev-task.js node --watch-path=src --watch-preserve-output --import tsx src/actions.ts"
+      )
+    ).toBe("run_dev_task");
+  });
+
+  it("classifies run-neotoma-api-node-watch shell entry", () => {
+    expect(
+      classifyNeotomaProcess("bash /Users/u/repos/neotoma/scripts/run-neotoma-api-node-watch.sh")
     ).toBe("run_dev_task");
   });
 
@@ -67,6 +83,29 @@ describe("neotoma processes classifier", () => {
     expect(rows.find((r) => r.pid === 222)?.label).toBe("run_dev_task");
     expect(rows.find((r) => r.pid === 333)?.label).toBe("mcp_stdio");
     expect(rows.every((r) => Array.isArray(r.ports) && r.ports.length === 0)).toBe(true);
+    expect(rows.find((r) => r.pid === 111)?.categories).toContain("server");
+    expect(rows.find((r) => r.pid === 333)?.env_hint).toBe("prod");
+  });
+
+  it("inferProcessEnvHint prefers prod argv and dev ports", () => {
+    expect(
+      inferProcessEnvHint(
+        "node scripts/pick-port.js --print-resources 3180 5295 3101 -- cross-env NEOTOMA_ENV=production npx concurrently",
+        []
+      )
+    ).toBe("prod");
+    expect(inferProcessEnvHint("node scripts/run_dev_servers_launchd.sh", [])).toBe("dev");
+    expect(inferProcessEnvHint("node /x/tsx watch src/actions.ts", [3080, 3180])).toBe("mix");
+    expect(inferProcessEnvHint("node /x/tsx watch src/actions.ts", [3080])).toBe("dev");
+    expect(inferProcessEnvHint("node /x/tsx watch src/actions.ts", [])).toBe("?");
+  });
+
+  it("deriveProcessCategories adds tunnel tag when ngrok appears", () => {
+    expect(deriveProcessCategories("api_orchestrator", "npx concurrently setup-https-tunnel")).toEqual([
+      "orchestrator",
+      "tunnel",
+    ]);
+    expect(deriveProcessCategories("mcp_proxy", "tsx src/cli/index.ts mcp proxy")).toEqual(["mcp"]);
   });
 
   it("extractTcpListenPortFromLsofNameField parses common lsof -F n shapes", () => {

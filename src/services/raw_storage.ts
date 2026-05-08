@@ -18,6 +18,7 @@ export interface RawStorageOptions {
   fileBuffer: Buffer;
   mimeType: string;
   originalFilename?: string;
+  sourceType?: string;
   provenance?: Record<string, unknown>;
   idempotencyKey?: string;
 }
@@ -50,7 +51,7 @@ export async function storeRawContent(
   options: RawStorageOptions
 ): Promise<RawStorageResult> {
   enforceAttributionPolicy("sources", getCurrentAgentIdentity());
-  const { userId, fileBuffer, mimeType, originalFilename, provenance = {}, idempotencyKey } = options;
+  const { userId, fileBuffer, mimeType, originalFilename, sourceType, provenance = {}, idempotencyKey } = options;
 
   // Compute content hash
   const contentHash = computeContentHash(fileBuffer);
@@ -127,7 +128,7 @@ export async function storeRawContent(
 
   // Check if we're in test environment
   const isTestEnv = process.env.NODE_ENV === "test" || process.env.VITEST === "true";
-  
+
   if (!isTestEnv) {
     const { error: uploadError } = await db.storage
       .from(bucketName)
@@ -166,23 +167,25 @@ export async function storeRawContent(
 
   // Create source record
   const deterministicSourceId = generateDeterministicSourceId(userId, contentHash);
+  const sourceRow: Record<string, unknown> = {
+    id: deterministicSourceId,
+    user_id: userId,
+    content_hash: contentHash,
+    mime_type: mimeType,
+    storage_url: storagePath,
+    file_size: fileSize,
+    original_filename: originalFilename,
+    idempotency_key: idempotencyKey,
+    provenance: {
+      ...provenance,
+      uploaded_at: new Date().toISOString(),
+      ...getCurrentAttribution(),
+    },
+  };
+  if (sourceType) sourceRow.source_type = sourceType;
   const { data: source, error: insertError } = await db
     .from("sources")
-    .insert({
-      id: deterministicSourceId,
-      user_id: userId,
-      content_hash: contentHash,
-      mime_type: mimeType,
-      storage_url: storagePath,
-      file_size: fileSize,
-      original_filename: originalFilename,
-      idempotency_key: idempotencyKey,
-      provenance: {
-        ...provenance,
-        uploaded_at: new Date().toISOString(),
-        ...getCurrentAttribution(),
-      },
-    })
+    .insert(sourceRow)
     .select()
     .single();
 
@@ -294,4 +297,3 @@ export function resolveLocalSourceFilePath(storageUrl: string | null | undefined
   if (config.storageBackend !== "local") return null;
   return path.resolve(path.join(config.rawStorageDir, u));
 }
-

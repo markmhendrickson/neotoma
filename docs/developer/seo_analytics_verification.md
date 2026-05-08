@@ -5,7 +5,7 @@ Quick checklist for verifying SEO metadata and Umami instrumentation after deplo
 ## Pre-Deploy (CI / Local)
 
 1. **Unit tests pass:** `npx vitest run tests/unit/seo_metadata.test.ts` — validates every indexable route has metadata, sitemap completeness, and structured data.
-2. **Build outputs:** `npm run build:pages:site` then verify:
+2. **Build outputs:** `npm run build:site:pages` then verify:
    - `site_pages/sitemap.xml` contains all expected `<loc>` entries (30+ routes).
    - `site_pages/robots.txt` allows all and references the sitemap URL.
    - `site_pages/index.html` has OG/Twitter meta tags in the `<head>`.
@@ -40,7 +40,7 @@ When adding a new public route:
 1. Add an entry to `ROUTE_METADATA` in `frontend/src/site/seo_metadata.ts` with title, description, robots, and breadcrumb.
 2. The sitemap, JSON-LD, and static pre-rendered HTML are all generated automatically from the registry at build time.
 3. Run `npx vitest run tests/unit/seo_metadata.test.ts` and add the route to the `INDEXABLE_ROUTES` array in the test to keep coverage consistent.
-4. Run `npm run build:pages:site` and verify `site_pages/{slug}/index.html` exists with the correct meta tags.
+4. Run `npm run build:site:pages` and verify `site_pages/{slug}/index.html` exists with the correct meta tags.
 
 ## Files
 

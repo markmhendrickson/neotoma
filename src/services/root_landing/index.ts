@@ -70,6 +70,19 @@ function resolveStdioMcpScriptPath(): string | null {
   }
 }
 
+function resolveUnsignedStdioDevShimMcpScriptPath(): string | null {
+  try {
+    const script = path.join(
+      config.projectRoot,
+      "scripts",
+      "run_neotoma_mcp_unsigned_stdio_dev_shim.sh",
+    );
+    return existsSync(script) ? script : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * True when the request arrived over a loopback socket. Mirrors
  * `src/actions.ts::isLocalRequest`, duplicated here so this module has no
@@ -199,6 +212,7 @@ export function buildLandingContext(
   const publicDocsUrl = defaultPublicDocsUrl(env);
   const inspectorUrl = resolveInspectorLandingUrl(base, env);
   const stdioMcpScriptPath = resolveStdioMcpScriptPath();
+  const proxyMcpScriptPath = resolveUnsignedStdioDevShimMcpScriptPath();
 
   const activeSessionBearer = mode === "sandbox" ? parseCookieBearer(req) : null;
 
@@ -208,6 +222,7 @@ export function buildLandingContext(
     mode,
     publicDocsUrl,
     stdioMcpScriptPath,
+    proxyMcpScriptPath,
     sessionBearer: activeSessionBearer,
   };
 

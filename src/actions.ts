@@ -27,10 +27,7 @@ import {
   getAttributionDecisionFromRequest,
 } from "./middleware/aauth_verify.js";
 import { attributionContext } from "./middleware/attribution_context.js";
-import {
-  aauthAdmission,
-  getAAuthAdmissionFromRequest,
-} from "./middleware/aauth_admission.js";
+import { aauthAdmission, getAAuthAdmissionFromRequest } from "./middleware/aauth_admission.js";
 import { buildSessionInfo } from "./services/session_info.js";
 import { AttributionPolicyError, enforceAttributionPolicy } from "./services/attribution_policy.js";
 import {
@@ -55,6 +52,7 @@ import { assertCanWriteProtectedBatch } from "./services/protected_entity_types.
 import {
   createAgentIdentity as buildAgentIdentity,
   type ExternalActor,
+  type AgentIdentity,
   getAgentIdentityFromRequest,
   normaliseClientName,
 } from "./crypto/agent_identity.js";
@@ -70,6 +68,12 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { NeotomaServer } from "./server.js";
 import { logger } from "./utils/logger.js";
+import { formatRequestLogLine } from "./utils/safe_request_log_format.js";
+import {
+  emitEntitySnapshotChange,
+  emitObservationCreated,
+  shallowFieldsChanged,
+} from "./events/substrate_store_emit.js";
 import { OAuthError } from "./services/mcp_oauth_errors.js";
 import {
   ensureLocalDevUser,
@@ -122,6 +126,10 @@ import {
   DeleteEntityRequestSchema,
   DeleteRelationshipRequestSchema,
   IssuesBulkEntityIdsRequestSchema,
+  IssuesAddMessageRequestSchema,
+  IssuesGetStatusRequestSchema,
+  IssuesSubmitRequestSchema,
+  IssuesSyncRequestSchema,
   EntitiesQueryRequestSchema,
   EntitySnapshotRequestSchema,
   FieldProvenanceRequestSchema,
@@ -149,17 +157,18 @@ import {
   prepareEntitySnapshotWithEmbedding,
   upsertEntitySnapshotWithEmbedding,
 } from "./services/entity_snapshot_embedding.js";
+import { isNeotomaEntityId } from "./shared/neotoma_entity_id.js";
 import { readOpenApiActionsFile, readOpenApiFile } from "./shared/openapi_file.js";
 import { buildSmitheryServerCard } from "./mcp_server_card.js";
 import {
   listRecentRecordActivity,
   parseRecordActivityTypesQuery,
 } from "./services/recent_record_activity.js";
-import { getRecentConversationById, listRecentConversations } from "./services/recent_conversations.js";
 import {
-  listConversationTurns,
-  getConversationTurn,
-} from "./services/conversation_turn.js";
+  getRecentConversationById,
+  listRecentConversations,
+} from "./services/recent_conversations.js";
+import { listConversationTurns, getConversationTurn } from "./services/conversation_turn.js";
 import { buildComplianceScorecard } from "./services/compliance/scorecard.js";
 import { getAgent, listAgentRecords, listAgents } from "./services/agents_directory.js";
 // import { setupDocumentationRoutes } from "./routes/documentation.js";
@@ -237,7 +246,7 @@ app.use(unknownFieldsGuard);
 if (isSandboxMode()) {
   app.use(sandboxHeaderMiddleware);
   logger.info(
-    "[Sandbox] NEOTOMA_SANDBOX_MODE=1 — bearer bypass to SANDBOX_PUBLIC_USER_ID, destructive routes gated, weekly reset expected",
+    "[Sandbox] NEOTOMA_SANDBOX_MODE=1 — bearer bypass to SANDBOX_PUBLIC_USER_ID, destructive routes gated, weekly reset expected"
   );
 }
 
@@ -276,7 +285,9 @@ if (isSandboxMode()) {
       });
     } catch (err) {
       logger.error(`[Sandbox] session/new failed: ${(err as Error).message}`);
-      res.status(500).json({ error_code: "SESSION_CREATE_FAILED", message: (err as Error).message });
+      res
+        .status(500)
+        .json({ error_code: "SESSION_CREATE_FAILED", message: (err as Error).message });
     }
   });
 
@@ -289,7 +300,9 @@ if (isSandboxMode()) {
       }
       const result = redeemOneTimeCode(code);
       if (!result) {
-        res.status(404).json({ error_code: "INVALID_CODE", message: "Code expired or already redeemed" });
+        res
+          .status(404)
+          .json({ error_code: "INVALID_CODE", message: "Code expired or already redeemed" });
         return;
       }
       res.cookie(SESSION_COOKIE_NAME, result.bearerToken, {
@@ -306,7 +319,9 @@ if (isSandboxMode()) {
       });
     } catch (err) {
       logger.error(`[Sandbox] session/redeem failed: ${(err as Error).message}`);
-      res.status(500).json({ error_code: "SESSION_REDEEM_FAILED", message: (err as Error).message });
+      res
+        .status(500)
+        .json({ error_code: "SESSION_REDEEM_FAILED", message: (err as Error).message });
     }
   });
 
@@ -358,12 +373,15 @@ if (isSandboxMode()) {
     res.json({ ok: true });
   });
 
-  setInterval(() => {
-    const purged = sweepExpiredSessions();
-    if (purged > 0) {
-      logger.info(`[Sandbox] Swept ${purged} expired session(s)`);
-    }
-  }, 15 * 60 * 1000);
+  setInterval(
+    () => {
+      const purged = sweepExpiredSessions();
+      if (purged > 0) {
+        logger.info(`[Sandbox] Swept ${purged} expired session(s)`);
+      }
+    },
+    15 * 60 * 1000
+  );
 
   logger.info("[Sandbox] Session endpoints registered");
 }
@@ -418,7 +436,7 @@ const writeRateLimit = rateLimit({
 // tighter per-minute cap tuned for the `sandbox.neotoma.io` demo.
 const SANDBOX_WRITE_RATE_LIMIT_PER_MIN = Math.max(
   1,
-  Number.parseInt(process.env.NEOTOMA_SANDBOX_WRITE_RATE_LIMIT_PER_MIN || "", 10) || 30,
+  Number.parseInt(process.env.NEOTOMA_SANDBOX_WRITE_RATE_LIMIT_PER_MIN || "", 10) || 30
 );
 const sandboxWriteRateLimit = rateLimit({
   windowMs: 60 * 1000,
@@ -436,7 +454,7 @@ const sandboxWriteRateLimit = rateLimit({
 function sandboxWriteGate(
   req: express.Request,
   res: express.Response,
-  next: express.NextFunction,
+  next: express.NextFunction
 ): void {
   if (!isSandboxMode()) return next();
   sandboxDestructiveGuard(req, res, (destructiveErr?: unknown) => {
@@ -500,10 +518,13 @@ app.get("/", (req, res) => {
     return res.type("application/json").json(buildRootLandingJson(ctx));
   } catch (err) {
     logger.error("[RootLanding] Failed to render landing page", { err });
-    return res.status(500).type("application/json").json({
-      error: "root_landing_error",
-      error_description: (err as Error).message,
-    });
+    return res
+      .status(500)
+      .type("application/json")
+      .json({
+        error: "root_landing_error",
+        error_description: (err as Error).message,
+      });
   }
 });
 
@@ -628,9 +649,7 @@ app.get("/.well-known/oauth-protected-resource", async (req, res) => {
 // See docs/proposals/agent-trust-framework.md and src/middleware/aauth_verify.ts.
 app.get("/.well-known/aauth-resource.json", (_req, res) => {
   const authorityHost = canonicalAauthAuthority();
-  const issuer = authorityHost.startsWith("http")
-    ? authorityHost
-    : `https://${authorityHost}`;
+  const issuer = authorityHost.startsWith("http") ? authorityHost : `https://${authorityHost}`;
   res.setHeader("Content-Type", "application/json");
   res.json({
     issuer,
@@ -1086,9 +1105,7 @@ app.all("/mcp", async (req, res) => {
     // to an active `agent_grant` for some user is a valid remote auth
     // path. Bearer / OAuth / X-Connection-Id remain fully supported.
     const aauthAdmissionForRequest = getAAuthAdmissionFromRequest(req);
-    const aauthAdmitted = !!(
-      aauthAdmissionForRequest && aauthAdmissionForRequest.admitted
-    );
+    const aauthAdmitted = !!(aauthAdmissionForRequest && aauthAdmissionForRequest.admitted);
     const hasAuth = !!(authHeader?.startsWith("Bearer ") || connectionIdHeader || aauthAdmitted);
 
     // When encryption is on, only the key-derived token is accepted
@@ -1227,7 +1244,7 @@ app.all("/mcp", async (req, res) => {
       const hadSessionHeader = typeof sessionId === "string" && sessionId.length > 0;
       if (hadSessionHeader) {
         logger.warn(
-          `[MCP HTTP] Unknown or expired Mcp-Session-Id (first 8 chars): ${sessionId!.slice(0, 8)}... often wrong replica behind a load balancer, API restart, or stale client state`,
+          `[MCP HTTP] Unknown or expired Mcp-Session-Id (first 8 chars): ${sessionId!.slice(0, 8)}... often wrong replica behind a load balancer, API restart, or stale client state`
         );
         return res.status(503).json({
           jsonrpc: "2.0",
@@ -1307,6 +1324,10 @@ const SENSITIVE_FIELDS = new Set([
   "token",
   "access_token",
   "accessToken",
+  "refresh_token",
+  "refreshToken",
+  "id_token",
+  "idToken",
   "public_token",
   "publicToken",
   "bearer_token",
@@ -1319,6 +1340,9 @@ const SENSITIVE_FIELDS = new Set([
   "clientSecret",
   "authorization",
   "Authorization",
+  "mnemonic",
+  "private_key",
+  "privateKey",
 ]);
 
 function redactHeaders(headers: Record<string, unknown>): Record<string, unknown> {
@@ -1359,7 +1383,7 @@ function logDebug(event: string, req: express.Request, extra?: Record<string, un
     ...(extra ? (redactSensitiveFields(extra) as Record<string, unknown>) : {}),
   };
   // eslint-disable-next-line no-console
-  console.debug(`[DEBUG] ${event}`, safe);
+  console.debug(formatRequestLogLine("DEBUG", event, safe));
 }
 
 function logWarn(event: string, req: express.Request, extra?: Record<string, unknown>): void {
@@ -1372,7 +1396,7 @@ function logWarn(event: string, req: express.Request, extra?: Record<string, unk
     ...(extra ? (redactSensitiveFields(extra) as Record<string, unknown>) : {}),
   };
   // eslint-disable-next-line no-console
-  console.warn(`[WARN] ${event}`, safe);
+  console.warn(formatRequestLogLine("WARN", event, safe));
 }
 
 function sanitizeRedirectUriForLog(value: string | undefined): string | undefined {
@@ -1416,7 +1440,7 @@ function logError(
     ...(extra ? (redactSensitiveFields(extra) as Record<string, unknown>) : {}),
   };
   // eslint-disable-next-line no-console
-  console.error(`[ERROR] ${event}`, payload);
+  console.error(formatRequestLogLine("ERROR", event, payload));
 }
 
 function buildErrorEnvelope(
@@ -1454,7 +1478,15 @@ function sendValidationError(res: express.Response, issues: unknown): express.Re
 
 // Public health endpoint (no auth)
 app.get("/health", (_req, res) => {
-  return res.json({ ok: true });
+  let version = "0.0.0";
+  try {
+    const pkgPath = path.join(config.projectRoot || process.cwd(), "package.json");
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8")) as { version?: string };
+    version = pkg.version || "0.0.0";
+  } catch {
+    // fallback
+  }
+  return res.json({ ok: true, version });
 });
 
 // ============================================================================
@@ -1473,8 +1505,7 @@ app.get("/sandbox/terms", (_req, res) => {
 // Tight per-IP limiter for /sandbox/report so bots can't flood the forwarder.
 const SANDBOX_REPORT_RATE_LIMIT_PER_MIN = Math.max(
   1,
-  Number.parseInt(process.env.NEOTOMA_SANDBOX_REPORT_RATE_LIMIT_PER_MIN || "", 10) ||
-    5,
+  Number.parseInt(process.env.NEOTOMA_SANDBOX_REPORT_RATE_LIMIT_PER_MIN || "", 10) || 5
 );
 const sandboxReportRateLimit = rateLimit({
   windowMs: 60 * 1000,
@@ -1511,7 +1542,7 @@ app.post("/sandbox/report", sandboxReportRateLimit, async (req, res) => {
         res,
         400,
         "VALIDATION_INVALID_FIELD",
-        `reason must be one of: ${VALID_REPORT_REASONS.join(", ")}`,
+        `reason must be one of: ${VALID_REPORT_REASONS.join(", ")}`
       );
     }
     const description = (body.description ?? "").toString().trim();
@@ -1530,7 +1561,7 @@ app.post("/sandbox/report", sandboxReportRateLimit, async (req, res) => {
         reporter_contact: body.reporter_contact,
         metadata: body.metadata,
       },
-      submitterIp,
+      submitterIp
     );
     return res.json(result);
   } catch (err) {
@@ -1543,12 +1574,7 @@ app.get("/sandbox/report/status", async (req, res) => {
   try {
     const accessToken = (req.query.access_token || "").toString().trim();
     if (!accessToken) {
-      return sendError(
-        res,
-        400,
-        "VALIDATION_MISSING_FIELD",
-        "access_token is required",
-      );
+      return sendError(res, 400, "VALIDATION_MISSING_FIELD", "access_token is required");
     }
     const transport = resolveSandboxReportTransport();
     const result = await transport.status(accessToken);
@@ -2319,6 +2345,219 @@ app.post("/auth/dev-signin", async (req, res) => {
   return sendError(res, 403, "FORBIDDEN", "Dev signin endpoint is disabled in local-only mode");
 });
 
+type UserPrincipal = {
+  kind: "user";
+  userId: string;
+};
+
+type GuestPrincipal = {
+  kind: "guest";
+  guestId: GuestIdentity;
+  agentIdentity?: AgentIdentity | null;
+  accessToken?: string;
+};
+
+type RoutePrincipal = UserPrincipal | GuestPrincipal;
+
+function requestPrincipal(req: express.Request): RoutePrincipal | undefined {
+  return (req as express.Request & { principal?: RoutePrincipal }).principal;
+}
+
+function stampUserPrincipal(req: express.Request, userId: string): void {
+  (req as any).authenticatedUserId = userId;
+  (req as express.Request & { principal?: RoutePrincipal }).principal = {
+    kind: "user",
+    userId,
+  };
+}
+
+function stampGuestPrincipal(req: express.Request, principal: GuestPrincipal): void {
+  (req as express.Request & { principal?: RoutePrincipal }).principal = principal;
+}
+
+function guestAccessTokenFromRequest(req: express.Request): string | undefined {
+  const headerAuth = (req.headers.authorization || req.headers.Authorization || "") as string;
+  if (headerAuth.startsWith("Bearer ")) {
+    const token = headerAuth.slice("Bearer ".length).trim();
+    if (token) return token;
+  }
+  const queryToken = req.query.access_token;
+  if (typeof queryToken === "string" && queryToken.trim()) return queryToken.trim();
+  const body = req.body as { access_token?: unknown; guest_access_token?: unknown } | undefined;
+  if (typeof body?.guest_access_token === "string" && body.guest_access_token.trim()) {
+    return body.guest_access_token.trim();
+  }
+  if (typeof body?.access_token === "string" && body.access_token.trim()) {
+    return body.access_token.trim();
+  }
+  return undefined;
+}
+
+/** Exported for unit tests: routes where guest (AAuth / guest token) may be stamped before handlers run. */
+export function routeAcceptsGuestPrincipal(req: Pick<express.Request, "method" | "path">): boolean {
+  const path = req.path;
+  if (
+    (req.method === "POST" &&
+      (path === "/issues/submit" ||
+        path === "/api/issues/submit" ||
+        path === "/issues/status" ||
+        path === "/api/issues/status" ||
+        path === "/issues/add_message" ||
+        path === "/api/issues/add_message" ||
+        path === "/subscribe" ||
+        path === "/unsubscribe" ||
+        path === "/list_subscriptions" ||
+        path === "/get_subscription_status")) ||
+    (req.method === "GET" &&
+      (/^\/entities\/[^/]+(?:\/(?:observations|relationships))?$/.test(path) ||
+        path === "/events/stream"))
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function buildGuestPrincipalFromRequest(req: express.Request): GuestPrincipal | null {
+  const agentIdentity = getCurrentAgentIdentity();
+  const accessToken = guestAccessTokenFromRequest(req);
+  const guestId: GuestIdentity = {
+    thumbprint: agentIdentity?.thumbprint,
+    sub: agentIdentity?.sub,
+    iss: agentIdentity?.iss,
+    accessToken,
+  };
+  if (!guestId.thumbprint && !guestId.accessToken) {
+    return null;
+  }
+  return {
+    kind: "guest",
+    guestId,
+    agentIdentity,
+    accessToken,
+  };
+}
+
+function maybeStampGuestPrincipal(req: express.Request): boolean {
+  if (!routeAcceptsGuestPrincipal(req)) return false;
+  const guestPrincipal = buildGuestPrincipalFromRequest(req);
+  if (!guestPrincipal) return false;
+  stampGuestPrincipal(req, guestPrincipal);
+  return true;
+}
+
+async function resolveRoutePrincipal(
+  req: express.Request,
+  accept: ReadonlyArray<RoutePrincipal["kind"]>,
+): Promise<RoutePrincipal> {
+  const existing = requestPrincipal(req);
+  if (existing && accept.includes(existing.kind)) return existing;
+
+  if (accept.includes("guest")) {
+    const guestPrincipal = buildGuestPrincipalFromRequest(req);
+    if (guestPrincipal) {
+      stampGuestPrincipal(req, guestPrincipal);
+      return guestPrincipal;
+    }
+  }
+
+  if (accept.includes("user")) {
+    const userId = await getAuthenticatedUserId(
+      req,
+      ((req.body as { user_id?: string } | undefined)?.user_id ??
+        (req.query.user_id as string | undefined)) as string | undefined,
+    );
+    return { kind: "user", userId };
+  }
+
+  throw new Error("Not authenticated - route does not accept the resolved principal");
+}
+
+async function resolveGuestScopedEntityAccess(
+  principal: GuestPrincipal,
+  entityId: string,
+  expectedEntityType?: string,
+): Promise<{ userId: string; entityType: string }> {
+  const { data: entity, error: entityError } = await db
+    .from("entities")
+    .select("id, entity_type, user_id")
+    .eq("id", entityId)
+    .single();
+
+  if (entityError || !entity || (expectedEntityType && entity.entity_type !== expectedEntityType)) {
+    throw new Error(expectedEntityType === "issue" ? "Issue entity not found." : "Entity not found.");
+  }
+
+  const { resolveGuestReadAccess } = await import("./services/access_policy.js");
+  const decision = await resolveGuestReadAccess(entity.entity_type, principal.guestId);
+  if (!decision.allowed) {
+    throw new AccessPolicyError({
+      op: "retrieve",
+      entityType: entity.entity_type,
+      mode: decision.mode,
+      reason: decision.reason,
+    });
+  }
+
+  if (decision.scopeFilter === "submitter_only") {
+    if (principal.guestId.accessToken) {
+      const { tokenGrantsAccessTo, hashGuestAccessToken } = await import("./services/guest_access_token.js");
+      if (await tokenGrantsAccessTo(principal.guestId.accessToken, entityId)) {
+        return { userId: entity.user_id, entityType: entity.entity_type };
+      }
+      if (entity.entity_type === "issue") {
+        const tokenHash = hashGuestAccessToken(principal.guestId.accessToken);
+        const { data: issueObservations } = await db
+          .from("observations")
+          .select("fields, payload")
+          .eq("entity_id", entityId);
+        for (const observation of issueObservations ?? []) {
+          const rawFields = (observation as { fields?: unknown; payload?: unknown }).fields;
+          const fields =
+            typeof rawFields === "string"
+              ? JSON.parse(rawFields)
+              : rawFields && typeof rawFields === "object"
+                ? rawFields
+                : undefined;
+          if ((fields as { guest_access_token_hash?: string } | undefined)?.guest_access_token_hash === tokenHash) {
+            return { userId: entity.user_id, entityType: entity.entity_type };
+          }
+        }
+        const { data: issueRelationships } = await db
+          .from("relationship_snapshots")
+          .select("target_entity_id")
+          .eq("source_entity_id", entityId)
+          .eq("relationship_type", "REFERS_TO");
+        for (const relationship of issueRelationships ?? []) {
+          const conversationId = (relationship as { target_entity_id?: string }).target_entity_id;
+          if (conversationId && (await tokenGrantsAccessTo(principal.guestId.accessToken, conversationId))) {
+            return { userId: entity.user_id, entityType: entity.entity_type };
+          }
+        }
+        if (
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+            principal.guestId.accessToken,
+          )
+        ) {
+          return { userId: entity.user_id, entityType: entity.entity_type };
+        }
+      }
+    }
+
+    const { data: observations } = await db
+      .from("observations")
+      .select("id, agent_thumbprint")
+      .eq("entity_id", entityId);
+    const hasMatch = observations?.some((obs: { agent_thumbprint?: string }) => {
+      return Boolean(principal.guestId.thumbprint && obs.agent_thumbprint === principal.guestId.thumbprint);
+    });
+    if (!hasMatch) {
+      throw new Error("Submitter-scoped access: you can only read entities you submitted.");
+    }
+  }
+
+  return { userId: entity.user_id, entityType: entity.entity_type };
+}
+
 // Public key-based authentication middleware
 // MCP-style auth (same patterns as /mcp): encryption off = no auth or dev token; encryption on = key-derived token
 app.use(async (req, res, next) => {
@@ -2342,8 +2581,12 @@ app.use(async (req, res, next) => {
     isLocalRequest(req) &&
     !headerAuth.startsWith("Bearer ")
   ) {
+    if (maybeStampGuestPrincipal(req)) {
+      logger.info(`[Auth] ${req.method} ${req.path} auth_method=guest_capability`);
+      return next();
+    }
     const devUser = ensureLocalDevUser();
-    (req as any).authenticatedUserId = devUser.id;
+    stampUserPrincipal(req, devUser.id);
     logger.info(
       `[Auth] ${req.method} ${req.path} auth_method=local_no_bearer user_id=${devUser.id}`
     );
@@ -2355,9 +2598,9 @@ app.use(async (req, res, next) => {
   if (isSandboxMode()) {
     const sessionInfo = resolveSessionFromRequest(req);
     if (sessionInfo) {
-      (req as any).authenticatedUserId = sessionInfo.userId;
+      stampUserPrincipal(req, sessionInfo.userId);
       logger.info(
-        `[Auth] ${req.method} ${req.path} auth_method=sandbox_session user_id=${sessionInfo.userId}`,
+        `[Auth] ${req.method} ${req.path} auth_method=sandbox_session user_id=${sessionInfo.userId}`
       );
       return next();
     }
@@ -2376,19 +2619,21 @@ app.use(async (req, res, next) => {
     // user_ids. Unsigned requests keep the public-user fallback unchanged.
     // Read partitioning falls out automatically because every read path scopes
     // queries by req.authenticatedUserId.
-    const aauthCtx = (req as express.Request & { aauth?: { verified?: boolean; thumbprint?: string } }).aauth;
+    const aauthCtx = (
+      req as express.Request & { aauth?: { verified?: boolean; thumbprint?: string } }
+    ).aauth;
     if (aauthCtx?.verified === true && typeof aauthCtx.thumbprint === "string") {
       const aauthUser = ensureSandboxAauthUser(aauthCtx.thumbprint);
-      (req as any).authenticatedUserId = aauthUser.id;
+      stampUserPrincipal(req, aauthUser.id);
       logger.info(
-        `[Auth] ${req.method} ${req.path} auth_method=sandbox_aauth user_id=${aauthUser.id} thumbprint=${aauthCtx.thumbprint}`,
+        `[Auth] ${req.method} ${req.path} auth_method=sandbox_aauth user_id=${aauthUser.id} thumbprint=${aauthCtx.thumbprint}`
       );
       return next();
     }
     const sandboxUser = ensureSandboxPublicUser();
-    (req as any).authenticatedUserId = sandboxUser.id;
+    stampUserPrincipal(req, sandboxUser.id);
     logger.info(
-      `[Auth] ${req.method} ${req.path} auth_method=sandbox_public user_id=${sandboxUser.id}`,
+      `[Auth] ${req.method} ${req.path} auth_method=sandbox_public user_id=${sandboxUser.id}`
     );
     return next();
   }
@@ -2400,7 +2645,7 @@ app.use(async (req, res, next) => {
       const token = headerAuth.slice(7).trim();
       if (safeCompareTokens(token, expectedToken)) {
         const devUser = ensureLocalDevUser();
-        (req as any).authenticatedUserId = devUser.id;
+        stampUserPrincipal(req, devUser.id);
         logger.info(
           `[Auth] ${req.method} ${req.path} auth_method=bearer_mcp_token user_id=${devUser.id}`
         );
@@ -2409,9 +2654,13 @@ app.use(async (req, res, next) => {
     }
   } else {
     if (!headerAuth.startsWith("Bearer ")) {
+      if (maybeStampGuestPrincipal(req)) {
+        logger.info(`[Auth] ${req.method} ${req.path} auth_method=guest_capability`);
+        return next();
+      }
       if (isLocalRequest(req)) {
         const devUser = ensureLocalDevUser();
-        (req as any).authenticatedUserId = devUser.id;
+        stampUserPrincipal(req, devUser.id);
         logger.info(
           `[Auth] ${req.method} ${req.path} auth_method=local_no_bearer user_id=${devUser.id}`
         );
@@ -2422,7 +2671,7 @@ app.use(async (req, res, next) => {
       const token = headerAuth.slice(7).trim();
       if (safeCompareTokens(token, process.env.NEOTOMA_BEARER_TOKEN)) {
         const devUser = ensureLocalDevUser();
-        (req as any).authenticatedUserId = devUser.id;
+        stampUserPrincipal(req, devUser.id);
         logger.info(
           `[Auth] ${req.method} ${req.path} auth_method=bearer_env user_id=${devUser.id}`
         );
@@ -2444,14 +2693,19 @@ app.use(async (req, res, next) => {
     admissionForRequest.user_id &&
     (req as any).authenticatedUserId === admissionForRequest.user_id
   ) {
+    stampUserPrincipal(req, admissionForRequest.user_id);
     logger.info(
-      `[Auth] ${req.method} ${req.path} auth_method=aauth_admitted user_id=${admissionForRequest.user_id} grant_id=${admissionForRequest.grant_id ?? "?"}`,
+      `[Auth] ${req.method} ${req.path} auth_method=aauth_admitted user_id=${admissionForRequest.user_id} grant_id=${admissionForRequest.grant_id ?? "?"}`
     );
     return next();
   }
 
   // Bearer required for remaining paths (Ed25519, OAuth)
   if (!headerAuth.startsWith("Bearer ")) {
+    if (maybeStampGuestPrincipal(req)) {
+      logger.info(`[Auth] ${req.method} ${req.path} auth_method=guest_capability`);
+      return next();
+    }
     logWarn("AuthMissingBearer", req);
     return sendError(res, 401, "AUTH_REQUIRED", "Missing Bearer token", {
       hint:
@@ -2483,7 +2737,7 @@ app.use(async (req, res, next) => {
     // If this token was registered with a userId, set it so getAuthenticatedUserId works without query param
     const registeredUserId = getUserIdFromBearerToken(bearerToken);
     if (registeredUserId) {
-      (req as any).authenticatedUserId = registeredUserId;
+      stampUserPrincipal(req, registeredUserId);
     }
     logger.info(
       `[Auth] ${req.method} ${req.path} auth_method=ed25519_bearer user_id=${(req as any).authenticatedUserId ?? "(from token)"}`
@@ -2494,13 +2748,17 @@ app.use(async (req, res, next) => {
       const { validateSessionToken } = await import("./services/mcp_auth.js");
       const validated = await validateSessionToken(bearerToken);
       // Attach user_id and email to request for user-scoped queries and /me
-      (req as any).authenticatedUserId = validated.userId;
+      stampUserPrincipal(req, validated.userId);
       (req as any).authenticatedUserEmail = validated.email;
       (req as any).bearerToken = bearerToken;
       logger.info(
         `[Auth] ${req.method} ${req.path} auth_method=session_bearer user_id=${validated.userId}`
       );
     } catch (authError) {
+      if (maybeStampGuestPrincipal(req)) {
+        logger.info(`[Auth] ${req.method} ${req.path} auth_method=guest_capability`);
+        return next();
+      }
       // Not a valid token
       logWarn("AuthInvalidToken", req, {
         error: authError instanceof Error ? authError.message : String(authError),
@@ -2568,6 +2826,10 @@ async function getAuthenticatedUserId(
   req: express.Request,
   providedUserId?: string
 ): Promise<string> {
+  const principal = requestPrincipal(req);
+  if (principal?.kind === "guest") {
+    throw new Error("Not authenticated - guest principal cannot resolve a user_id");
+  }
   const authenticatedUserId = (req as any).authenticatedUserId;
   const aauthAdmissionForRequest = getAAuthAdmissionFromRequest(req);
   if (authenticatedUserId) {
@@ -2744,20 +3006,22 @@ app.post("/entities/query", async (req, res) => {
 app.get("/entities/:id", async (req, res) => {
   try {
     const entityId = req.params.id;
+    const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
 
-    // Get authenticated user_id (REQUIRED)
-    const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+    if (principal.kind === "guest") {
+      await resolveGuestScopedEntityAccess(principal, entityId);
+    } else {
+      const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+      const { data: entity, error: entityError } = await db
+        .from("entities")
+        .select("id, user_id")
+        .eq("id", entityId)
+        .eq("user_id", userId) // SECURITY: Only return if belongs to authenticated user
+        .single();
 
-    // Verify entity exists and belongs to authenticated user
-    const { data: entity, error: entityError } = await db
-      .from("entities")
-      .select("id, user_id")
-      .eq("id", entityId)
-      .eq("user_id", userId) // SECURITY: Only return if belongs to authenticated user
-      .single();
-
-    if (entityError || !entity) {
-      return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
+      if (entityError || !entity) {
+        return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
+      }
     }
 
     const { getEntityWithProvenance } = await import("./services/entity_queries.js");
@@ -2770,84 +3034,7 @@ app.get("/entities/:id", async (req, res) => {
     // OpenAPI + clients expect `EntitySnapshot` at the root (not `{ entity: ... }`).
     return res.json(entityWithProvenance);
   } catch (error) {
-    if (error instanceof Error && error.message.includes("Not authenticated")) {
-      return sendError(res, 401, "AUTH_REQUIRED", error.message);
-    }
-    logError("APIError:entity_detail", req, error);
-    const message = error instanceof Error ? error.message : "Failed to get entity";
-    return sendError(res, 500, "DB_QUERY_FAILED", message);
-  }
-});
-
-// GET /api/guest/entities/:id - Guest-accessible entity retrieval with access policy enforcement.
-// Requires AAuth signature or access token. Returns entity data filtered by the
-// entity_type's access policy (read_only/submitter_scoped/open).
-app.get("/guest/entities/:id", async (req, res) => {
-  try {
-    const entityId = req.params.id;
-    const agentIdentity = getCurrentAgentIdentity();
-    const accessToken = (req.headers.authorization?.startsWith("Bearer ")
-      ? req.headers.authorization.slice(7)
-      : req.query.access_token as string | undefined) ?? undefined;
-
-    const guestId: GuestIdentity = {
-      thumbprint: agentIdentity?.thumbprint,
-      sub: agentIdentity?.sub,
-      iss: agentIdentity?.iss,
-      accessToken,
-    };
-
-    if (!guestId.thumbprint && !guestId.accessToken) {
-      return sendError(res, 401, "AUTH_REQUIRED", "Guest access requires AAuth signature or access token.");
-    }
-
-    const { data: entity, error: entityError } = await db
-      .from("entities")
-      .select("id, entity_type, user_id")
-      .eq("id", entityId)
-      .single();
-
-    if (entityError || !entity) {
-      return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
-    }
-
-    const { resolveGuestReadAccess } = await import("./services/access_policy.js");
-    const decision = await resolveGuestReadAccess(entity.entity_type, guestId);
-
-    if (!decision.allowed) {
-      return sendError(res, 403, "ACCESS_POLICY_DENIED",
-        `Access policy "${decision.mode}" for entity_type "${entity.entity_type}" denies guest reads.`);
-    }
-
-    if (decision.scopeFilter === "submitter_only") {
-      const { data: observations } = await db
-        .from("observations")
-        .select("id, agent_thumbprint")
-        .eq("entity_id", entityId);
-
-      const hasMatch = observations?.some((obs: { agent_thumbprint?: string }) => {
-        if (guestId.thumbprint && obs.agent_thumbprint === guestId.thumbprint) return true;
-        return false;
-      });
-
-      if (!hasMatch) {
-        return sendError(res, 403, "ACCESS_POLICY_DENIED",
-          "Submitter-scoped access: you can only read entities you submitted.");
-      }
-    }
-
-    const { getEntityWithProvenance } = await import("./services/entity_queries.js");
-    const entityWithProvenance = await getEntityWithProvenance(entityId);
-
-    if (!entityWithProvenance) {
-      return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
-    }
-
-    return res.json(entityWithProvenance);
-  } catch (error) {
-    logError("APIError:guest_entity_detail", req, error);
-    const message = error instanceof Error ? error.message : "Failed to get entity";
-    return sendError(res, 500, "DB_QUERY_FAILED", message);
+    return handleApiError(req, res, error, "Failed to get entity", "DB_QUERY_FAILED", "APIError:entity_detail");
   }
 });
 
@@ -2984,20 +3171,23 @@ app.post("/entities/:id/batch_correct", async (req, res) => {
 app.get("/entities/:id/observations", async (req, res) => {
   try {
     const entityId = req.params.id;
+    const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
+    let userId: string;
 
-    // Get authenticated user_id (REQUIRED)
-    const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+    if (principal.kind === "guest") {
+      userId = (await resolveGuestScopedEntityAccess(principal, entityId)).userId;
+    } else {
+      userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+      const { data: entity, error: entityError } = await db
+        .from("entities")
+        .select("id")
+        .eq("id", entityId)
+        .eq("user_id", userId) // SECURITY: Only return if belongs to authenticated user
+        .single();
 
-    // Verify entity exists and belongs to authenticated user
-    const { data: entity, error: entityError } = await db
-      .from("entities")
-      .select("id")
-      .eq("id", entityId)
-      .eq("user_id", userId) // SECURITY: Only return if belongs to authenticated user
-      .single();
-
-    if (entityError || !entity) {
-      return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
+      if (entityError || !entity) {
+        return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
+      }
     }
 
     const limit = parseInt(req.query.limit as string) || 100;
@@ -3024,12 +3214,14 @@ app.get("/entities/:id/observations", async (req, res) => {
       offset,
     });
   } catch (error) {
-    if (error instanceof Error && error.message.includes("Not authenticated")) {
-      return sendError(res, 401, "AUTH_REQUIRED", error.message);
-    }
-    logError("APIError:entity_observations", req, error);
-    const message = error instanceof Error ? error.message : "Failed to get observations";
-    return sendError(res, 500, "DB_QUERY_FAILED", message);
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to get observations",
+      "DB_QUERY_FAILED",
+      "APIError:entity_observations",
+    );
   }
 });
 
@@ -3038,20 +3230,23 @@ app.get("/entities/:id/observations", async (req, res) => {
 app.get("/entities/:id/relationships", async (req, res) => {
   try {
     const entityId = req.params.id;
+    const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
+    let userId: string;
 
-    // Get authenticated user_id (REQUIRED)
-    const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+    if (principal.kind === "guest") {
+      userId = (await resolveGuestScopedEntityAccess(principal, entityId)).userId;
+    } else {
+      userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+      const { data: entity, error: entityError } = await db
+        .from("entities")
+        .select("id")
+        .eq("id", entityId)
+        .eq("user_id", userId) // SECURITY: Only return if belongs to authenticated user
+        .single();
 
-    // Verify entity exists and belongs to authenticated user
-    const { data: entity, error: entityError } = await db
-      .from("entities")
-      .select("id")
-      .eq("id", entityId)
-      .eq("user_id", userId) // SECURITY: Only return if belongs to authenticated user
-      .single();
-
-    if (entityError || !entity) {
-      return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
+      if (entityError || !entity) {
+        return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
+      }
     }
 
     // Get relationships where this entity is the source - filter by user_id
@@ -3200,9 +3395,14 @@ app.get("/entities/:id/relationships", async (req, res) => {
 
     return res.json(responseBody);
   } catch (error) {
-    logError("APIError:entity_relationships", req, error);
-    const message = error instanceof Error ? error.message : "Failed to get relationships";
-    return sendError(res, 500, "DB_QUERY_FAILED", message);
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to get relationships",
+      "DB_QUERY_FAILED",
+      "APIError:entity_relationships",
+    );
   }
 });
 
@@ -3925,7 +4125,12 @@ app.get("/agents", async (req, res) => {
 const grantsCommonHandlers = {
   errorEnvelopeFromGrantError: (err: unknown) => {
     const e = err as { code?: string; statusCode?: number; message?: string };
-    if (e && typeof e === "object" && typeof e.code === "string" && typeof e.statusCode === "number") {
+    if (
+      e &&
+      typeof e === "object" &&
+      typeof e.code === "string" &&
+      typeof e.statusCode === "number"
+    ) {
       return {
         statusCode: e.statusCode,
         envelope: buildErrorEnvelope(e.code.toUpperCase(), e.message ?? "Grant error", {
@@ -3955,7 +4160,7 @@ app.get("/agents/grants", async (req, res) => {
       error,
       "Failed to list agent grants",
       "DB_QUERY_FAILED",
-      "APIError:agents_grants_list",
+      "APIError:agents_grants_list"
     );
   }
 });
@@ -3976,14 +4181,17 @@ app.get("/agents/grants/:id", async (req, res) => {
       error,
       "Failed to fetch agent grant",
       "DB_QUERY_FAILED",
-      "APIError:agents_grants_detail",
+      "APIError:agents_grants_detail"
     );
   }
 });
 
 app.post("/agents/grants", async (req, res) => {
   try {
-    const userId = await getAuthenticatedUserId(req, (req.body?.user_id as string | undefined) ?? undefined);
+    const userId = await getAuthenticatedUserId(
+      req,
+      (req.body?.user_id as string | undefined) ?? undefined
+    );
     const body = (req.body ?? {}) as Record<string, unknown>;
     const { createGrant } = await import("./services/agent_grants.js");
     const grant = await createGrant(userId, {
@@ -4007,22 +4215,27 @@ app.post("/agents/grants", async (req, res) => {
       error,
       "Failed to create agent grant",
       "DB_QUERY_FAILED",
-      "APIError:agents_grants_create",
+      "APIError:agents_grants_create"
     );
   }
 });
 
 app.patch("/agents/grants/:id", async (req, res) => {
   try {
-    const userId = await getAuthenticatedUserId(req, (req.body?.user_id as string | undefined) ?? undefined);
+    const userId = await getAuthenticatedUserId(
+      req,
+      (req.body?.user_id as string | undefined) ?? undefined
+    );
     const body = (req.body ?? {}) as Record<string, unknown>;
     const { updateGrantFields } = await import("./services/agent_grants.js");
     const updates: Record<string, unknown> = {};
     if (typeof body.label === "string") updates.label = body.label;
     if (Array.isArray(body.capabilities)) updates.capabilities = body.capabilities;
     if (body.notes === null || typeof body.notes === "string") updates.notes = body.notes;
-    if (body.match_sub === null || typeof body.match_sub === "string") updates.match_sub = body.match_sub;
-    if (body.match_iss === null || typeof body.match_iss === "string") updates.match_iss = body.match_iss;
+    if (body.match_sub === null || typeof body.match_sub === "string")
+      updates.match_sub = body.match_sub;
+    if (body.match_iss === null || typeof body.match_iss === "string")
+      updates.match_iss = body.match_iss;
     if (body.match_thumbprint === null || typeof body.match_thumbprint === "string") {
       updates.match_thumbprint = body.match_thumbprint;
     }
@@ -4039,7 +4252,7 @@ app.patch("/agents/grants/:id", async (req, res) => {
       error,
       "Failed to update agent grant",
       "DB_QUERY_FAILED",
-      "APIError:agents_grants_update",
+      "APIError:agents_grants_update"
     );
   }
 });
@@ -4047,10 +4260,13 @@ app.patch("/agents/grants/:id", async (req, res) => {
 async function setGrantStatusRoute(
   req: express.Request,
   res: express.Response,
-  next: "active" | "suspended" | "revoked",
+  next: "active" | "suspended" | "revoked"
 ) {
   try {
-    const userId = await getAuthenticatedUserId(req, (req.body?.user_id as string | undefined) ?? undefined);
+    const userId = await getAuthenticatedUserId(
+      req,
+      (req.body?.user_id as string | undefined) ?? undefined
+    );
     const { setStatus } = await import("./services/agent_grants.js");
     const grant = await setStatus(userId, req.params.id, next);
     return res.json({ grant });
@@ -4065,7 +4281,7 @@ async function setGrantStatusRoute(
       error,
       `Failed to ${next === "active" ? "restore" : next} agent grant`,
       "DB_QUERY_FAILED",
-      `APIError:agents_grants_${next}`,
+      `APIError:agents_grants_${next}`
     );
   }
 }
@@ -4152,9 +4368,10 @@ app.get("/recent_conversations", async (req, res) => {
     const activity_after =
       typeof req.query.activity_after === "string" ? req.query.activity_after.trim() || null : null;
     const activity_before =
-      typeof req.query.activity_before === "string" ? req.query.activity_before.trim() || null : null;
-    const agentKeyRaw =
-      typeof req.query.agent_key === "string" ? req.query.agent_key.trim() : "";
+      typeof req.query.activity_before === "string"
+        ? req.query.activity_before.trim() || null
+        : null;
+    const agentKeyRaw = typeof req.query.agent_key === "string" ? req.query.agent_key.trim() : "";
     // UI and bookmarks may send agent_key=all; never treat that as a real deriveAgentKey value.
     const agent_key =
       agentKeyRaw.length > 0 && agentKeyRaw.toLowerCase() !== "all" ? agentKeyRaw : null;
@@ -4184,8 +4401,12 @@ app.get("/turns", async (req, res) => {
     const offset = parseInt(String(req.query.offset ?? "0"), 10) || 0;
     const harness = typeof req.query.harness === "string" ? req.query.harness.trim() || null : null;
     const status = typeof req.query.status === "string" ? req.query.status.trim() || null : null;
-    const activity_after = typeof req.query.activity_after === "string" ? req.query.activity_after.trim() || null : null;
-    const activity_before = typeof req.query.activity_before === "string" ? req.query.activity_before.trim() || null : null;
+    const activity_after =
+      typeof req.query.activity_after === "string" ? req.query.activity_after.trim() || null : null;
+    const activity_before =
+      typeof req.query.activity_before === "string"
+        ? req.query.activity_before.trim() || null
+        : null;
     const result = listConversationTurns(userId, limit, offset, {
       harness,
       status,
@@ -4194,7 +4415,14 @@ app.get("/turns", async (req, res) => {
     });
     return res.json(result);
   } catch (error) {
-    return handleApiError(req, res, error, "Failed to list turns", "DB_QUERY_FAILED", "APIError:turns");
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to list turns",
+      "DB_QUERY_FAILED",
+      "APIError:turns"
+    );
   }
 });
 
@@ -4209,7 +4437,14 @@ app.get("/turns/:turn_key", async (req, res) => {
     }
     return res.json(result);
   } catch (error) {
-    return handleApiError(req, res, error, "Failed to get turn", "DB_QUERY_FAILED", "APIError:turn_detail");
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to get turn",
+      "DB_QUERY_FAILED",
+      "APIError:turn_detail"
+    );
   }
 });
 
@@ -4224,7 +4459,8 @@ app.get("/admin/compliance/scorecard", async (req, res) => {
     const min_backfill_rate = parseFloat(String(req.query.min_backfill_rate ?? ""));
     const top_missed_steps = parseInt(String(req.query.top_missed_steps ?? ""), 10);
     const include_synthetic =
-      req.query.include_synthetic === "1" || String(req.query.include_synthetic).toLowerCase() === "true";
+      req.query.include_synthetic === "1" ||
+      String(req.query.include_synthetic).toLowerCase() === "true";
 
     const result = buildComplianceScorecard(userId, {
       since,
@@ -4243,7 +4479,7 @@ app.get("/admin/compliance/scorecard", async (req, res) => {
       error,
       "Failed to build compliance scorecard",
       "DB_QUERY_FAILED",
-      "APIError:compliance_scorecard",
+      "APIError:compliance_scorecard"
     );
   }
 });
@@ -4782,6 +5018,20 @@ app.post("/interpretations/create", async (req, res) => {
               ? interpretationResult.entities[rel.target_index]?.entityId
               : undefined;
         if (!sourceEntityId || !targetEntityId) continue;
+        if (typeof rel.source_entity_id === "string" && !isNeotomaEntityId(sourceEntityId)) {
+          logger.warn(
+            `[interpretations/create] Skipping relationship: invalid source_entity_id ` +
+              `(expected ent_ + 24 hex): ${String(rel.source_entity_id)}`
+          );
+          continue;
+        }
+        if (typeof rel.target_entity_id === "string" && !isNeotomaEntityId(targetEntityId)) {
+          logger.warn(
+            `[interpretations/create] Skipping relationship: invalid target_entity_id ` +
+              `(expected ent_ + 24 hex): ${String(rel.target_entity_id)}`
+          );
+          continue;
+        }
         await relationshipsService.createRelationship({
           source_entity_id: sourceEntityId,
           target_entity_id: targetEntityId,
@@ -4898,9 +5148,7 @@ app.get("/access_policies", async (req, res) => {
   try {
     await getAuthenticatedUserId(req);
 
-    const { loadAccessPolicies, DEFAULT_MODE } = await import(
-      "./services/access_policy.js"
-    );
+    const { loadAccessPolicies, DEFAULT_MODE } = await import("./services/access_policy.js");
     const policies = await loadAccessPolicies();
 
     return res.json({ policies, default_mode: DEFAULT_MODE });
@@ -4911,7 +5159,7 @@ app.get("/access_policies", async (req, res) => {
       error,
       "Failed to load access policies",
       "DB_QUERY_FAILED",
-      "APIError:access_policies",
+      "APIError:access_policies"
     );
   }
 });
@@ -4925,8 +5173,9 @@ app.post("/observations/create", async (req, res) => {
     fields: z.record(z.unknown()),
     source_priority: z.number().optional().default(100),
     observation_source: z
-      .enum(["sensor", "llm_summary", "workflow_state", "human", "import"])
+      .enum(["sensor", "llm_summary", "workflow_state", "human", "import", "sync"])
       .optional(),
+    source_peer_id: z.string().min(1).optional(),
     user_id: z.string().uuid(),
   });
 
@@ -4948,6 +5197,7 @@ app.post("/observations/create", async (req, res) => {
       fields,
       source_priority,
       observation_source,
+      source_peer_id,
       user_id,
     } = parsed.data;
 
@@ -4978,6 +5228,7 @@ app.post("/observations/create", async (req, res) => {
       specificity_score: 1.0,
       source_priority,
       observation_source,
+      source_peer_id,
       fields,
       user_id,
     });
@@ -5064,6 +5315,8 @@ export async function storeStructuredForApi(params: {
   entities: Record<string, unknown>[];
   sourcePriority: number;
   observationSource?: import("./shared/action_schemas.js").ObservationSource;
+  /** When set, written observations carry this peer id for sync loop prevention. */
+  sourcePeerId?: string | null;
   idempotencyKey: string;
   originalFilename?: string;
   relationships?: StoreRelationshipRef[];
@@ -5077,6 +5330,7 @@ export async function storeStructuredForApi(params: {
     entities,
     sourcePriority,
     observationSource,
+    sourcePeerId,
     idempotencyKey,
     originalFilename,
     relationships,
@@ -5270,7 +5524,10 @@ export async function storeStructuredForApi(params: {
   interface ResolutionIssue {
     observation_index: number;
     entity_type: string;
-    code: "ERR_CANONICAL_NAME_UNRESOLVED" | "ERR_MERGE_REFUSED";
+    code:
+      | "ERR_CANONICAL_NAME_UNRESOLVED"
+      | "ERR_MERGE_REFUSED"
+      | "ERR_CONVERSATION_MESSAGE_ROLE_CONFLICT";
     message: string;
     details: Record<string, unknown>;
     /**
@@ -5416,15 +5673,20 @@ export async function storeStructuredForApi(params: {
         if (err.reason === "schema_policy") {
           try {
             const required = await deriveRequiredIdentityFields(entity_type, userId);
-            if (required && (required.anyOfFields.length > 0 || required.compositeFields.length > 0)) {
-              const anyLabel = required.anyOfFields.length > 0
-                ? required.anyOfFields.map((f) => `\`${f}\``).join(" or ")
-                : "";
-              const compositeLabel = required.compositeFields.length > 0
-                ? required.compositeFields
-                    .map((group) => `all of [${group.map((f) => `\`${f}\``).join(", ")}]`)
-                    .join(" or ")
-                : "";
+            if (
+              required &&
+              (required.anyOfFields.length > 0 || required.compositeFields.length > 0)
+            ) {
+              const anyLabel =
+                required.anyOfFields.length > 0
+                  ? required.anyOfFields.map((f) => `\`${f}\``).join(" or ")
+                  : "";
+              const compositeLabel =
+                required.compositeFields.length > 0
+                  ? required.compositeFields
+                      .map((group) => `all of [${group.map((f) => `\`${f}\``).join(", ")}]`)
+                      .join(" or ")
+                  : "";
               const combined = [anyLabel, compositeLabel].filter(Boolean).join(" or ");
               hint = {
                 text:
@@ -5455,6 +5717,96 @@ export async function storeStructuredForApi(params: {
         throw err;
       }
     }
+  }
+
+  function isConversationMessageEntityType(entityType: string): boolean {
+    const t = entityType.toLowerCase();
+    return t === "conversation_message" || t === "agent_message";
+  }
+
+  function senderKindFromSnapshotOrFields(
+    snap: Record<string, unknown>,
+  ): string | undefined {
+    const raw = snap.sender_kind ?? snap.role;
+    if (typeof raw === "string") return raw.toLowerCase().trim();
+    return undefined;
+  }
+
+  function turnKeyFromSnapshotOrFields(snap: Record<string, unknown>): string {
+    const tk = snap.turn_key;
+    return typeof tk === "string" ? tk.trim() : "";
+  }
+
+  function overlayConversationMessageFields(
+    base: Record<string, unknown>,
+    incoming: Record<string, unknown>,
+  ): Record<string, unknown> {
+    const out: Record<string, unknown> = { ...base };
+    for (const k of ["sender_kind", "role", "content", "turn_key"] as const) {
+      if (k in incoming) {
+        out[k] = incoming[k];
+      }
+    }
+    return out;
+  }
+
+  const orderedResolved = [...resolved].sort((a, b) => a.observation_index - b.observation_index);
+  const snapshotCache = new Map<string, Record<string, unknown>>();
+  const rolledConversationMessage = new Map<string, Record<string, unknown>>();
+
+  for (const r of orderedResolved) {
+    if (!isConversationMessageEntityType(r.entity_type)) continue;
+
+    const incomingSender = senderKindFromSnapshotOrFields(r.fields);
+    const incomingTurnKey = turnKeyFromSnapshotOrFields(r.fields);
+    if (!incomingTurnKey) continue;
+
+    let priorDb = snapshotCache.get(r.entity_id);
+    if (priorDb === undefined) {
+      const { data: priorSnapRow } = await db
+        .from("entity_snapshots")
+        .select("snapshot")
+        .eq("entity_id", r.entity_id)
+        .eq("user_id", userId)
+        .maybeSingle();
+      priorDb =
+        (priorSnapRow?.snapshot as Record<string, unknown> | null | undefined) ?? {};
+      snapshotCache.set(r.entity_id, priorDb);
+    }
+
+    const rolled =
+      rolledConversationMessage.get(r.entity_id) ??
+      (Object.keys(priorDb).length > 0 ? { ...priorDb } : {});
+
+    const priorSender = senderKindFromSnapshotOrFields(rolled);
+    const priorTurnKey = turnKeyFromSnapshotOrFields(rolled);
+
+    if (
+      incomingSender === "assistant" &&
+      priorSender === "user" &&
+      priorTurnKey === incomingTurnKey
+    ) {
+      issues.push({
+        observation_index: r.observation_index,
+        entity_type: r.entity_type,
+        code: "ERR_CONVERSATION_MESSAGE_ROLE_CONFLICT",
+        message:
+          "conversation_message would merge assistant payload into the existing user message row because `turn_key` matches the user-phase key. Use `{conversation_id}:{turn_id}:assistant` for the closing message.",
+        details: {
+          entity_id: r.entity_id,
+          turn_key: incomingTurnKey,
+          prior_sender_kind: priorSender,
+          incoming_sender_kind: incomingSender,
+        },
+        hint:
+          'Set turn_key to "{conversation_id}:{turn_id}:assistant" for the assistant closing store; never reuse the user-phase turn_key without that suffix.',
+      });
+    }
+
+    rolledConversationMessage.set(
+      r.entity_id,
+      overlayConversationMessageFields(rolled, r.fields),
+    );
   }
 
   if (issues.length > 0) {
@@ -5488,6 +5840,15 @@ export async function storeStructuredForApi(params: {
     let snapshotAfter: Record<string, unknown> | null = null;
 
     if (commit) {
+      const { data: priorSnapRow } = await db
+        .from("entity_snapshots")
+        .select("snapshot")
+        .eq("entity_id", r.entity_id)
+        .eq("user_id", userId)
+        .maybeSingle();
+      const priorSnapshot =
+        (priorSnapRow?.snapshot as Record<string, unknown> | null | undefined) ?? {};
+
       const obsData = await createObservation({
         entity_id: r.entity_id,
         entity_type: r.entity_type,
@@ -5498,6 +5859,7 @@ export async function storeStructuredForApi(params: {
         specificity_score: 1.0,
         source_priority: sourcePriority,
         observation_source: observationSource,
+        source_peer_id: sourcePeerId ?? undefined,
         fields: r.fields,
         user_id: userId,
         identity_basis: r.trace.identity_basis,
@@ -5512,6 +5874,42 @@ export async function storeStructuredForApi(params: {
           (snap as { snapshot?: Record<string, unknown> } | null | undefined)?.snapshot ?? null;
       } catch (snapshotErr) {
         logger.warn(`Snapshot recompute failed for ${r.entity_id}: ${snapshotErr}`);
+      }
+
+      const obsRow = obsData as { observed_at?: string; id: string };
+      const emitTs = obsRow.observed_at ?? new Date().toISOString();
+      const obsSourceLabel =
+        observationSource === undefined || observationSource === null
+          ? "llm_summary"
+          : String(observationSource);
+      emitObservationCreated({
+        user_id: userId,
+        entity_id: r.entity_id,
+        entity_type: r.entity_type,
+        observation_id: obsRow.id,
+        timestamp: emitTs,
+        source_id: observationSourceId,
+        idempotency_key: idempotencyKey,
+        observation_source: obsSourceLabel,
+        source_peer_id: sourcePeerId ?? undefined,
+      });
+      if (snapshotAfter) {
+        const isNewEntity = r.trace.action === "created";
+        emitEntitySnapshotChange({
+          user_id: userId,
+          entity_id: r.entity_id,
+          entity_type: r.entity_type,
+          event_type: isNewEntity ? "entity.created" : "entity.updated",
+          timestamp: emitTs,
+          observation_id: obsRow.id,
+          fields_changed: isNewEntity
+            ? undefined
+            : shallowFieldsChanged(priorSnapshot, snapshotAfter),
+          source_id: observationSourceId,
+          idempotency_key: idempotencyKey,
+          observation_source: obsSourceLabel,
+          source_peer_id: sourcePeerId ?? undefined,
+        });
       }
 
       // Schema-driven auto-linking: if the entity's active schema declares
@@ -5552,9 +5950,7 @@ export async function storeStructuredForApi(params: {
       resolver_path: r.trace.resolver_path,
       identity_basis: r.trace.identity_basis,
       identity_rule: r.trace.identity_rule,
-      ...(r.trace.warnings && r.trace.warnings.length > 0
-        ? { warnings: r.trace.warnings }
-        : {}),
+      ...(r.trace.warnings && r.trace.warnings.length > 0 ? { warnings: r.trace.warnings } : {}),
       entity_snapshot_after: snapshotAfter,
     });
   }
@@ -5587,6 +5983,20 @@ export async function storeStructuredForApi(params: {
             `(source_index=${rel.source_index}, source_entity_id=${rel.source_entity_id}) ` +
             `or target reference (target_index=${rel.target_index}, ` +
             `target_entity_id=${rel.target_entity_id}); have ${resolved.length} entities.`
+        );
+        continue;
+      }
+      if (typeof rel.source_entity_id === "string" && !isNeotomaEntityId(sourceEntityId)) {
+        logger.warn(
+          `[STORE] Skipping relationship: source_entity_id is not a valid Neotoma id ` +
+            `(expected ent_ + 24 hex): ${String(rel.source_entity_id)}`
+        );
+        continue;
+      }
+      if (typeof rel.target_entity_id === "string" && !isNeotomaEntityId(targetEntityId)) {
+        logger.warn(
+          `[STORE] Skipping relationship: target_entity_id is not a valid Neotoma id ` +
+            `(expected ent_ + 24 hex): ${String(rel.target_entity_id)}`
         );
         continue;
       }
@@ -5675,8 +6085,17 @@ async function storeUnstructuredForApi(params: {
   mimeType: string;
   idempotencyKey?: string;
   originalFilename?: string;
+  sourceType?: string;
 }) {
-  const { fileContent, fileBuffer, mimeType, idempotencyKey, originalFilename, userId } = params;
+  const {
+    fileContent,
+    fileBuffer,
+    mimeType,
+    idempotencyKey,
+    originalFilename,
+    sourceType,
+    userId,
+  } = params;
   const resolvedFileBuffer =
     fileBuffer ?? (fileContent !== undefined ? Buffer.from(fileContent, "base64") : undefined);
   if (!resolvedFileBuffer) {
@@ -5691,6 +6110,7 @@ async function storeUnstructuredForApi(params: {
     fileBuffer: resolvedFileBuffer,
     mimeType,
     originalFilename: originalFilename?.trim() || undefined,
+    sourceType,
     idempotencyKey: resolvedIdempotencyKey,
     provenance: { upload_method: "api_store_unstructured", client: "api" },
   });
@@ -5713,7 +6133,7 @@ async function storeUnstructuredForApi(params: {
 // in the sandbox bypass above.
 async function handleStorePost(
   req: express.Request,
-  res: express.Response,
+  res: express.Response
 ): Promise<express.Response | void> {
   const parsed = StoreRequestSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -5770,6 +6190,7 @@ async function handleStorePost(
           parsed.data.file_idempotency_key ??
           (!hasEntities ? parsed.data.idempotency_key : undefined),
         originalFilename,
+        sourceType: (parsed.data as Record<string, unknown>).source_type as string | undefined,
       });
     };
 
@@ -5796,11 +6217,10 @@ async function handleStorePost(
           entities: parsed.data.entities as Record<string, unknown>[],
           sourcePriority: parsed.data.source_priority ?? 100,
           observationSource: parsed.data.observation_source,
+          sourcePeerId: parsed.data.source_peer_id,
           idempotencyKey: parsed.data.idempotency_key!,
           originalFilename: parsed.data.original_filename,
-          relationships: parsed.data.relationships as
-            | StoreRelationshipRef[]
-            | undefined,
+          relationships: parsed.data.relationships as StoreRelationshipRef[] | undefined,
           interpretation: parsed.data.interpretation,
           interpretationSourceId:
             parsed.data.interpretation?.source_ref === "unstructured" &&
@@ -5815,7 +6235,10 @@ async function handleStorePost(
       const bodyActor = parsed.data.external_actor as ExternalActor | undefined;
       const existingActor = getCurrentExternalActor();
       if (bodyActor && !existingActor) {
-        structuredResult = await runWithExternalActor(bodyActor, doStore) as Record<string, unknown>;
+        structuredResult = (await runWithExternalActor(bodyActor, doStore)) as Record<
+          string,
+          unknown
+        >;
       } else {
         structuredResult = await doStore();
       }
@@ -5962,7 +6385,7 @@ app.post(
           observationSource: storePayload.observation_source,
           idempotencyKey: storePayload.idempotency_key,
           relationships: storePayload.relationships as StoreRelationshipRef[],
-        }),
+        })
       );
       return res.status(200).json({ status: "processed", delivery_id: deliveryId, result });
     } catch (error) {
@@ -5970,8 +6393,214 @@ app.post(
       const message = error instanceof Error ? error.message : "Webhook processing failed";
       return sendError(res, 500, "WEBHOOK_PROCESSING_FAILED", message);
     }
-  },
+  }
 );
+
+// POST /sync/webhook — inbound cross-instance sync notifications (Phase 5).
+// Verified with the shared secret stored on the matching `peer_config` row.
+app.post(
+  "/sync/webhook",
+  express.raw({ type: "application/json", limit: "2mb" }),
+  async (req, res) => {
+    const rawBody = Buffer.isBuffer(req.body)
+      ? req.body.toString("utf8")
+      : String((req as express.Request).body ?? "");
+    const signatureHeader =
+      (req.headers["x-neotoma-sync-signature-256"] as string | undefined) ??
+      (req.headers["X-Neotoma-Sync-Signature-256"] as string | undefined);
+    const aauthContext = getAAuthContextFromRequest(req);
+    try {
+      const { applyInboundSyncWebhook } = await import("./services/sync/sync_webhook_inbound.js");
+      const result = await applyInboundSyncWebhook({
+        rawBody,
+        signatureHeader,
+        verifiedAauthThumbprint: aauthContext?.thumbprint,
+      });
+      return res.status(200).json(result);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg === "SIGNATURE_INVALID" || msg === "PEER_UNKNOWN_OR_INACTIVE") {
+        return sendError(res, 401, "SYNC_WEBHOOK_UNAUTHORIZED", msg);
+      }
+      if (msg === "INVALID_JSON" || msg.startsWith("VALIDATION_ERROR")) {
+        return sendError(res, 400, "VALIDATION_ERROR", msg);
+      }
+      logError("APIError:sync_webhook", req, err);
+      return sendError(res, 500, "SYNC_WEBHOOK_FAILED", msg);
+    }
+  }
+);
+
+// POST /sync/entities — authenticated peer listing for bilateral sync pulls.
+app.post(
+  "/sync/entities",
+  express.raw({ type: "application/json", limit: "2mb" }),
+  async (req, res) => {
+    const rawBody = Buffer.isBuffer(req.body)
+      ? req.body.toString("utf8")
+      : String((req as express.Request).body ?? "");
+    const signatureHeader =
+      (req.headers["x-neotoma-sync-signature-256"] as string | undefined) ??
+      (req.headers["X-Neotoma-Sync-Signature-256"] as string | undefined);
+    const aauthContext = getAAuthContextFromRequest(req);
+    try {
+      const { applyInboundSyncEntitiesRequest } =
+        await import("./services/sync/sync_webhook_inbound.js");
+      const result = await applyInboundSyncEntitiesRequest({
+        rawBody,
+        signatureHeader,
+        verifiedAauthThumbprint: aauthContext?.thumbprint,
+      });
+      return res.status(200).json(result);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg === "SIGNATURE_INVALID" || msg === "PEER_UNKNOWN_OR_INACTIVE") {
+        return sendError(res, 401, "SYNC_WEBHOOK_UNAUTHORIZED", msg);
+      }
+      if (msg === "INVALID_JSON" || msg.startsWith("VALIDATION_ERROR")) {
+        return sendError(res, 400, "VALIDATION_ERROR", msg);
+      }
+      logError("APIError:sync_entities", req, err);
+      return sendError(res, 500, "SYNC_ENTITIES_FAILED", msg);
+    }
+  }
+);
+
+// GET /peers — list configured Neotoma peers (authenticated user).
+app.get("/peers", async (req, res) => {
+  try {
+    const userId = await getAuthenticatedUserId(req);
+    const { listPeersForUser } = await import("./services/sync/peer_ops.js");
+    const peers = await listPeersForUser(userId);
+    return res.json({ peers });
+  } catch (error) {
+    logError("APIError:peers_list", req, error);
+    const message = error instanceof Error ? error.message : "Failed to list peers";
+    return sendError(res, 500, "DB_QUERY_FAILED", message);
+  }
+});
+
+// POST /peers — add a peer configuration.
+app.post("/peers", express.json(), async (req, res) => {
+  const schema = z.object({
+    peer_id: z.string().min(1),
+    peer_name: z.string().min(1),
+    peer_url: z.string().min(1),
+    direction: z.enum(["push", "pull", "bidirectional"]),
+    entity_types: z.array(z.string()).min(1),
+    sync_scope: z.enum(["all", "tagged"]),
+    auth_method: z.enum(["aauth", "shared_secret"]),
+    conflict_strategy: z.enum(["last_write_wins", "source_priority", "manual"]),
+    shared_secret: z.string().optional(),
+    peer_public_key_thumbprint: z.string().optional(),
+    sync_target_user_id: z.string().uuid().optional(),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return sendValidationError(res, parsed.error.issues);
+  }
+  try {
+    const userId = await getAuthenticatedUserId(req);
+    const { addPeerForUser } = await import("./services/sync/peer_ops.js");
+    const out = await addPeerForUser({ userId, ...parsed.data });
+    return res.status(201).json(out);
+  } catch (error) {
+    logError("APIError:peers_add", req, error);
+    const message = error instanceof Error ? error.message : "Failed to add peer";
+    if (message.includes("Maximum peers")) {
+      return sendError(res, 400, "PEER_LIMIT", message);
+    }
+    return sendError(res, 500, "PEER_ADD_FAILED", message);
+  }
+});
+
+// POST /peers/resolve_sync_conflict — stub (use `correct` today). Registered
+// before `/peers/:peer_id` so `resolve_sync_conflict` is not captured as a peer_id.
+app.post("/peers/resolve_sync_conflict", express.json(), async (req, res) => {
+  const schema = z.object({
+    entity_id: z.string().min(1),
+    strategy: z.enum([
+      "prefer_local",
+      "prefer_remote",
+      "last_write_wins",
+      "source_priority",
+      "manual",
+    ]),
+    sender_peer_url: z.string().min(1).optional(),
+    guest_access_token: z.string().optional(),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return sendValidationError(res, parsed.error.issues);
+  }
+  try {
+    const userId = await getAuthenticatedUserId(req);
+    const { resolveSyncConflict } = await import("./services/sync/conflict_resolver.js");
+    const result = await resolveSyncConflict({
+      userId,
+      entity_id: parsed.data.entity_id,
+      strategy: parsed.data.strategy,
+      sender_peer_url: parsed.data.sender_peer_url,
+      guest_access_token: parsed.data.guest_access_token,
+    });
+    return res.json(result);
+  } catch (error) {
+    logError("APIError:peers_resolve", req, error);
+    const message = error instanceof Error ? error.message : "resolve failed";
+    return sendError(res, 500, "PEER_RESOLVE_FAILED", message);
+  }
+});
+
+// GET /peers/:peer_id — peer status snapshot (secret redacted).
+app.get("/peers/:peer_id", async (req, res) => {
+  try {
+    const userId = await getAuthenticatedUserId(req);
+    const { getPeerStatusForUser } = await import("./services/sync/peer_ops.js");
+    const payload = await getPeerStatusForUser({ userId, peer_id: req.params.peer_id });
+    if (!payload) {
+      return sendError(res, 404, "NOT_FOUND", "peer not found");
+    }
+    return res.json(payload);
+  } catch (error) {
+    logError("APIError:peers_status", req, error);
+    const message = error instanceof Error ? error.message : "Failed to load peer";
+    return sendError(res, 500, "DB_QUERY_FAILED", message);
+  }
+});
+
+// DELETE /peers/:peer_id — deactivate peer.
+app.delete("/peers/:peer_id", async (req, res) => {
+  try {
+    const userId = await getAuthenticatedUserId(req);
+    const { removePeerForUser } = await import("./services/sync/peer_ops.js");
+    await removePeerForUser({ userId, peer_id: req.params.peer_id });
+    return res.json({ success: true });
+  } catch (error) {
+    logError("APIError:peers_remove", req, error);
+    const message = error instanceof Error ? error.message : "Failed to remove peer";
+    if (message.includes("not found")) {
+      return sendError(res, 404, "NOT_FOUND", message);
+    }
+    return sendError(res, 500, "PEER_REMOVE_FAILED", message);
+  }
+});
+
+// POST /peers/:peer_id/sync — bounded outbound sync webhooks (see full_sync.ts).
+app.post("/peers/:peer_id/sync", express.json(), async (req, res) => {
+  try {
+    const userId = await getAuthenticatedUserId(req);
+    const bodySchema = z.object({ limit: z.number().int().positive().max(500).optional() });
+    const bodyParsed = bodySchema.safeParse(req.body ?? {});
+    const limit = bodyParsed.success ? bodyParsed.data.limit : undefined;
+    const { syncPeerFull } = await import("./services/sync/full_sync.js");
+    const result = await syncPeerFull({ userId, peer_id: req.params.peer_id, limit });
+    return res.json(result);
+  } catch (error) {
+    logError("APIError:peers_sync", req, error);
+    const message = error instanceof Error ? error.message : "sync_peer failed";
+    return sendError(res, 500, "PEER_SYNC_FAILED", message);
+  }
+});
 
 // γ-write: sandbox-only route that EXPLICITLY requires a verified AAuth
 // signature before delegating to the same handleStorePost handler. Unlike the
@@ -5984,7 +6613,9 @@ app.post(
 // /entities/query, /entities/:id, and /stats scoped to that same identity.
 if (isSandboxMode()) {
   const aauthRequired: express.RequestHandler = (req, res, next) => {
-    const aauthCtx = (req as express.Request & { aauth?: { verified?: boolean; thumbprint?: string } }).aauth;
+    const aauthCtx = (
+      req as express.Request & { aauth?: { verified?: boolean; thumbprint?: string } }
+    ).aauth;
     if (aauthCtx?.verified === true && typeof aauthCtx.thumbprint === "string") {
       return next();
     }
@@ -5992,18 +6623,11 @@ if (isSandboxMode()) {
       res,
       401,
       "AAUTH_REQUIRED",
-      "POST /sandbox/aauth-only/store requires a verified AAuth signature (RFC 9421 + aa-agent+jwt).",
+      "POST /sandbox/aauth-only/store requires a verified AAuth signature (RFC 9421 + aa-agent+jwt)."
     );
   };
-  app.post(
-    "/sandbox/aauth-only/store",
-    writeRateLimit,
-    aauthRequired,
-    handleStorePost,
-  );
-  logger.info(
-    "[Sandbox] AAuth-required write route enabled at POST /sandbox/aauth-only/store",
-  );
+  app.post("/sandbox/aauth-only/store", writeRateLimit, aauthRequired, handleStorePost);
+  logger.info("[Sandbox] AAuth-required write route enabled at POST /sandbox/aauth-only/store");
 }
 
 // POST /api/observations/query - Query observations
@@ -6203,10 +6827,7 @@ app.post("/entities/split", async (req, res) => {
   }
 
   try {
-    const authenticatedUserId = await getAuthenticatedUserId(
-      req,
-      parsed.data.user_id,
-    );
+    const authenticatedUserId = await getAuthenticatedUserId(req, parsed.data.user_id);
     const providedUserId = parsed.data.user_id;
     if (providedUserId && providedUserId !== authenticatedUserId) {
       return sendError(res, 403, "FORBIDDEN", "user_id does not match authenticated user.");
@@ -6941,6 +7562,243 @@ app.post("/issues/bulk_remove", async (req, res) => {
   }
 });
 
+// POST /issues/add_message — Append thread message (MCP add_issue_message parity)
+// Alias under /api for same-origin Inspector when operators proxy only /api/* to Node.
+const handleIssuesAddMessageHttp: express.RequestHandler = async (req, res) => {
+  const parsed = IssuesAddMessageRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn("ValidationError:issues_add_message", req, { issues: parsed.error.issues });
+    return sendValidationError(res, parsed.error.issues);
+  }
+  try {
+    const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
+    const userId =
+      principal.kind === "guest"
+        ? (await resolveGuestScopedEntityAccess(principal, parsed.data.entity_id?.trim() || "", "issue")).userId
+        : await getAuthenticatedUserId(req, parsed.data.user_id);
+    const { createOperations } = await import("./core/operations.js");
+    const { NeotomaServer } = await import("./server.js");
+    const { addIssueMessage, appendGuestIssueMessage } = await import("./services/issues/issue_operations.js");
+    const server = new NeotomaServer();
+    const ops = createOperations({ server, userId });
+    try {
+      const result =
+        principal.kind === "guest"
+          ? {
+              github_comment_id: null,
+              ...(await appendGuestIssueMessage(ops, {
+                issue_entity_id: parsed.data.entity_id?.trim() || "",
+                body: parsed.data.body,
+              })),
+              pushed_to_github: false,
+              submitted_to_neotoma: true,
+            }
+          : await addIssueMessage(ops, {
+              entity_id: parsed.data.entity_id?.trim() || undefined,
+              issue_number: parsed.data.issue_number,
+              body: parsed.data.body,
+              ...(parsed.data.guest_access_token
+                ? { guest_access_token: parsed.data.guest_access_token.trim() }
+                : {}),
+            });
+      logDebug("Success:issues_add_message", req, { message_entity_id: result.message_entity_id });
+      return res.json(result);
+    } finally {
+      await ops.dispose();
+    }
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to add issue message",
+      "ISSUE_MESSAGE_FAILED",
+      "APIError:issues_add_message"
+    );
+  }
+};
+app.post("/issues/add_message", handleIssuesAddMessageHttp);
+app.post("/api/issues/add_message", handleIssuesAddMessageHttp);
+
+// POST /issues/submit — Create issue (MCP submit_issue parity)
+const handleIssuesSubmitHttp: express.RequestHandler = async (req, res) => {
+  const parsed = IssuesSubmitRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn("ValidationError:issues_submit", req, { issues: parsed.error.issues });
+    return sendValidationError(res, parsed.error.issues);
+  }
+  try {
+    const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
+    const guestSubmitPayload = Boolean(
+      parsed.data.github_url ||
+        parsed.data.github_number ||
+        parsed.data.author ||
+        parsed.data.local_issue_id ||
+        parsed.data.submission_timestamp,
+    );
+    const userId =
+      principal.kind === "guest" || guestSubmitPayload
+        ? ((req as any).authenticatedUserId ?? ensureLocalDevUser().id)
+        : await getAuthenticatedUserId(req, parsed.data.user_id);
+    const { createOperations } = await import("./core/operations.js");
+    const { NeotomaServer } = await import("./server.js");
+    const { submitIssue, submitGuestIssue } = await import("./services/issues/issue_operations.js");
+    const server = new NeotomaServer();
+    const ops = createOperations({ server, userId });
+    try {
+      const result = await (async () => {
+        if (principal.kind === "guest" || guestSubmitPayload) {
+          const guestResult = await submitGuestIssue(ops, {
+            userId,
+            title: parsed.data.title,
+            body: parsed.data.body,
+            labels: parsed.data.labels,
+            visibility: parsed.data.visibility,
+            githubUrl: parsed.data.github_url,
+            githubNumber: parsed.data.github_number,
+            author: parsed.data.author,
+            local_issue_id: parsed.data.local_issue_id,
+            submission_timestamp: parsed.data.submission_timestamp,
+          });
+          return {
+            issue_number: 0,
+            github_url: "",
+            entity_id: guestResult.issue_entity_id,
+            issue_entity_id: guestResult.issue_entity_id,
+            conversation_id: guestResult.conversation_id,
+            remote_entity_id: guestResult.issue_entity_id,
+            pushed_to_github: false,
+            submitted_to_neotoma: true,
+            guest_access_token: guestResult.guest_access_token,
+            entity_ids: guestResult.entity_ids,
+            github_mirror_guidance: null,
+          };
+        }
+        return submitIssue(ops, {
+          title: parsed.data.title,
+          body: parsed.data.body,
+          labels: parsed.data.labels,
+          visibility: parsed.data.visibility,
+          reporter_git_sha: parsed.data.reporter_git_sha,
+          reporter_git_ref: parsed.data.reporter_git_ref,
+          reporter_channel: parsed.data.reporter_channel,
+          reporter_app_version: parsed.data.reporter_app_version,
+          reporter_ci_run_id: parsed.data.reporter_ci_run_id,
+          reporter_patch_source_id: parsed.data.reporter_patch_source_id,
+        });
+      })();
+      logDebug("Success:issues_submit", req, { entity_id: result.entity_id });
+      return res.json(result);
+    } finally {
+      await ops.dispose();
+    }
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to submit issue",
+      "ISSUE_SUBMIT_FAILED",
+      "APIError:issues_submit",
+    );
+  }
+};
+app.post("/issues/submit", handleIssuesSubmitHttp);
+app.post("/api/issues/submit", handleIssuesSubmitHttp);
+
+// POST /issues/status — Issue status + thread (MCP get_issue_status parity)
+const handleIssuesGetStatusHttp: express.RequestHandler = async (req, res) => {
+  const parsed = IssuesGetStatusRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn("ValidationError:issues_status", req, { issues: parsed.error.issues });
+    return sendValidationError(res, parsed.error.issues);
+  }
+  try {
+    const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
+    const issueEntityId = parsed.data.entity_id?.trim() || "";
+    const userId =
+      principal.kind === "guest"
+        ? (await resolveGuestScopedEntityAccess(principal, issueEntityId, "issue")).userId
+        : await getAuthenticatedUserId(req, parsed.data.user_id);
+    const { createOperations } = await import("./core/operations.js");
+    const { NeotomaServer } = await import("./server.js");
+    const { getIssueStatus, loadIssueStatusFromGraph } = await import("./services/issues/issue_operations.js");
+    const { loadIssuesConfig } = await import("./services/issues/config.js");
+    const server = new NeotomaServer();
+    const ops = createOperations({ server, userId });
+    try {
+      const result =
+        principal.kind === "guest"
+          ? await loadIssueStatusFromGraph(ops, issueEntityId, await loadIssuesConfig())
+          : await getIssueStatus(ops, {
+              entity_id: parsed.data.entity_id?.trim() || undefined,
+              issue_number: parsed.data.issue_number,
+              skip_sync: parsed.data.skip_sync,
+              ...(parsed.data.guest_access_token
+                ? { guest_access_token: parsed.data.guest_access_token.trim() }
+                : {}),
+            });
+      logDebug("Success:issues_status", req, { issue_entity_id: result.issue_entity_id });
+      return res.json(result);
+    } finally {
+      await ops.dispose();
+    }
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to get issue status",
+      "ISSUE_STATUS_FAILED",
+      "APIError:issues_status",
+    );
+  }
+};
+app.post("/issues/status", handleIssuesGetStatusHttp);
+app.post("/api/issues/status", handleIssuesGetStatusHttp);
+
+// POST /issues/sync — GitHub mirror ingest (MCP sync_issues parity)
+const handleIssuesSyncHttp: express.RequestHandler = async (req, res) => {
+  const parsed = IssuesSyncRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn("ValidationError:issues_sync", req, { issues: parsed.error.issues });
+    return sendValidationError(res, parsed.error.issues);
+  }
+  try {
+    const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+    const { createOperations } = await import("./core/operations.js");
+    const { NeotomaServer } = await import("./server.js");
+    const { syncIssuesFromGitHub } = await import("./services/issues/syncIssuesFromGitHub.js");
+    const server = new NeotomaServer();
+    const ops = createOperations({ server, userId });
+    try {
+      const result = await syncIssuesFromGitHub(ops, {
+        since: parsed.data.since,
+        state: parsed.data.state,
+        labels: parsed.data.labels,
+      });
+      logDebug("Success:issues_sync", req, {
+        issues_synced: result.issues_synced,
+        messages_synced: result.messages_synced,
+      });
+      return res.json(result);
+    } finally {
+      await ops.dispose();
+    }
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to sync issues",
+      "ISSUE_SYNC_FAILED",
+      "APIError:issues_sync",
+    );
+  }
+};
+app.post("/issues/sync", handleIssuesSyncHttp);
+app.post("/api/issues/sync", handleIssuesSyncHttp);
+
 // POST /restore_entity - Restore soft-deleted entity
 app.post("/restore_entity", async (req, res) => {
   const parsed = RestoreEntityRequestSchema.safeParse(req.body);
@@ -7516,6 +8374,357 @@ app.get("/session", async (req, res) => {
   }
 });
 
+// POST /subscribe — Create substrate event subscription (webhook or SSE)
+app.post("/subscribe", async (req, res) => {
+  const schema = z.object({
+    user_id: z.string().optional(),
+    entity_types: z.array(z.string()).optional(),
+    entity_ids: z.array(z.string()).optional(),
+    event_types: z.array(z.string()).optional(),
+    delivery_method: z.enum(["webhook", "sse"]),
+    webhook_url: z.string().optional(),
+    webhook_secret: z.string().optional(),
+    max_failures: z.number().int().min(1).max(100).optional(),
+    sync_peer_id: z.string().min(1).optional(),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return sendValidationError(res, parsed.error.issues);
+  }
+  try {
+    const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
+    const userId =
+      principal.kind === "guest"
+        ? ((req as any).authenticatedUserId ?? ensureLocalDevUser().id)
+        : await getAuthenticatedUserId(req, parsed.data.user_id);
+    const { subscribeUser } = await import("./services/subscriptions/subscription_actions.js");
+    const result = await subscribeUser({
+      userId,
+      input: {
+        entity_types: parsed.data.entity_types,
+        entity_ids: parsed.data.entity_ids,
+        event_types: parsed.data.event_types,
+        delivery_method: parsed.data.delivery_method,
+        webhook_url: parsed.data.webhook_url,
+        webhook_secret: parsed.data.webhook_secret,
+        max_failures: parsed.data.max_failures,
+        sync_peer_id: parsed.data.sync_peer_id,
+      },
+    });
+    return res.json(result);
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to create subscription",
+      "SUBSCRIPTION_ERROR",
+      "APIError:subscribe"
+    );
+  }
+});
+
+// POST /unsubscribe — Deactivate subscription
+app.post("/unsubscribe", async (req, res) => {
+  const schema = z.object({
+    user_id: z.string().optional(),
+    subscription_id: z.string().min(1),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return sendValidationError(res, parsed.error.issues);
+  }
+  try {
+    const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
+    const userId =
+      principal.kind === "guest"
+        ? ((req as any).authenticatedUserId ?? ensureLocalDevUser().id)
+        : await getAuthenticatedUserId(req, parsed.data.user_id);
+    const { unsubscribeUser } = await import("./services/subscriptions/subscription_actions.js");
+    await unsubscribeUser({ userId, subscription_id: parsed.data.subscription_id });
+    return res.json({ success: true });
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to unsubscribe",
+      "SUBSCRIPTION_ERROR",
+      "APIError:unsubscribe"
+    );
+  }
+});
+
+// POST /list_subscriptions — List subscriptions (secrets redacted)
+app.post("/list_subscriptions", async (req, res) => {
+  const schema = z.object({ user_id: z.string().optional() });
+  const parsed = schema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return sendValidationError(res, parsed.error.issues);
+  }
+  try {
+    const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
+    const userId =
+      principal.kind === "guest"
+        ? ((req as any).authenticatedUserId ?? ensureLocalDevUser().id)
+        : await getAuthenticatedUserId(req, parsed.data.user_id);
+    const { listSubscriptionsForUser, redactSubscriptionForClient } =
+      await import("./services/subscriptions/subscription_actions.js");
+    const rows = await listSubscriptionsForUser(userId);
+    return res.json({ subscriptions: rows.map(redactSubscriptionForClient) });
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to list subscriptions",
+      "SUBSCRIPTION_ERROR",
+      "APIError:list_subscriptions"
+    );
+  }
+});
+
+// POST /get_subscription_status — One subscription snapshot (secret redacted)
+app.post("/get_subscription_status", async (req, res) => {
+  const schema = z.object({
+    user_id: z.string().optional(),
+    subscription_id: z.string().min(1),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return sendValidationError(res, parsed.error.issues);
+  }
+  try {
+    const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
+    const userId =
+      principal.kind === "guest"
+        ? ((req as any).authenticatedUserId ?? ensureLocalDevUser().id)
+        : await getAuthenticatedUserId(req, parsed.data.user_id);
+    const { getSubscriptionStatus, redactSubscriptionForClient } =
+      await import("./services/subscriptions/subscription_actions.js");
+    const row = await getSubscriptionStatus({
+      userId,
+      subscription_id: parsed.data.subscription_id,
+    });
+    if (!row) {
+      return res.json({ subscription: null });
+    }
+    return res.json({ subscription: redactSubscriptionForClient(row) });
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to get subscription status",
+      "SUBSCRIPTION_ERROR",
+      "APIError:get_subscription_status"
+    );
+  }
+});
+
+// POST /submit/:entity_type — Generic submission (config-driven)
+app.post("/submit/:entity_type", express.json(), async (req, res) => {
+  const entity_type = req.params.entity_type;
+  if (!entity_type || entity_type.includes("..")) {
+    return sendError(res, 400, "VALIDATION_ERROR", "Invalid entity_type");
+  }
+  try {
+    const body = (req.body && typeof req.body === "object" ? req.body : {}) as Record<
+      string,
+      unknown
+    >;
+    const user_id = typeof body.user_id === "string" ? body.user_id : undefined;
+    const initial_message =
+      typeof body.initial_message === "string" ? body.initial_message : undefined;
+    const fields =
+      body.fields && typeof body.fields === "object" && !Array.isArray(body.fields)
+        ? (body.fields as Record<string, unknown>)
+        : Object.fromEntries(
+            Object.entries(body).filter(([k]) => k !== "user_id" && k !== "initial_message")
+          );
+    const userId = await getAuthenticatedUserId(req, user_id);
+    const { createOperations } = await import("./core/operations.js");
+    const { NeotomaServer } = await import("./server.js");
+    const server = new NeotomaServer();
+    const ops = createOperations({ server, userId });
+    const { submitEntity } = await import("./services/entity_submission/submission_service.js");
+    const result = await submitEntity(ops, {
+      userId,
+      entity_type,
+      fields,
+      initial_message,
+    });
+    await ops.dispose();
+    return res.json(result);
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to submit entity",
+      "SUBMISSION_ERROR",
+      "APIError:submit_entity"
+    );
+  }
+});
+
+// POST /submit/:entity_type/:entity_id/message — Follow-up message on a submitted root entity
+app.post("/submit/:entity_type/:entity_id/message", express.json(), async (req, res) => {
+  const entity_id = req.params.entity_id;
+  try {
+    const body = (req.body && typeof req.body === "object" ? req.body : {}) as Record<
+      string,
+      unknown
+    >;
+    const message =
+      typeof body.message === "string"
+        ? body.message
+        : typeof body.body === "string"
+          ? body.body
+          : "";
+    if (!message.trim()) {
+      return sendError(res, 400, "VALIDATION_ERROR", "message or body is required");
+    }
+    const userId = await getAuthenticatedUserId(
+      req,
+      typeof body.user_id === "string" ? body.user_id : undefined
+    );
+    const { createOperations } = await import("./core/operations.js");
+    const { NeotomaServer } = await import("./server.js");
+    const server = new NeotomaServer();
+    const ops = createOperations({ server, userId });
+    const { addEntityMessage } = await import("./services/entity_submission/submission_service.js");
+    const result = await addEntityMessage(ops, { userId, entity_id, message });
+    await ops.dispose();
+    return res.json(result);
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to add entity message",
+      "SUBMISSION_ERROR",
+      "APIError:add_entity_message"
+    );
+  }
+});
+
+// GET /submit/:entity_type/:entity_id — Submission status (JSON snapshot); optional guest_access_token query
+app.get("/submit/:entity_type/:entity_id", async (req, res) => {
+  const entity_id = req.params.entity_id;
+  const guest_access_token =
+    typeof req.query.guest_access_token === "string" ? req.query.guest_access_token : undefined;
+  try {
+    const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+    const { createOperations } = await import("./core/operations.js");
+    const { NeotomaServer } = await import("./server.js");
+    const server = new NeotomaServer();
+    const ops = createOperations({ server, userId });
+    const { getEntitySubmissionStatus } =
+      await import("./services/entity_submission/submission_service.js");
+    const result = await getEntitySubmissionStatus({ ops, entity_id, guest_access_token });
+    await ops.dispose();
+    return res.json(result);
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to get submission status",
+      "SUBMISSION_ERROR",
+      "APIError:get_entity_submission_status"
+    );
+  }
+});
+
+// GET /events/stream — SSE for an SSE-mode subscription
+app.get("/events/stream", async (req, res) => {
+  const subscription_id =
+    typeof req.query.subscription_id === "string" ? req.query.subscription_id : "";
+  if (!subscription_id) {
+    return sendError(res, 400, "VALIDATION_ERROR", "subscription_id query parameter is required");
+  }
+  try {
+    const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
+    const userId =
+      principal.kind === "guest"
+        ? ((req as any).authenticatedUserId ?? ensureLocalDevUser().id)
+        : await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+    const { getSubscriptionStatus } =
+      await import("./services/subscriptions/subscription_actions.js");
+    const { registerSseClient, getRingEntriesAfter } =
+      await import("./services/subscriptions/sse_hub.js");
+    const { subscriptionMatchesEvent } =
+      await import("./services/subscriptions/subscription_types.js");
+
+    const sub = await getSubscriptionStatus({ userId, subscription_id });
+    if (!sub) {
+      return sendError(res, 404, "NOT_FOUND", "subscription not found");
+    }
+    if (!sub.active) {
+      return sendError(res, 410, "SUBSCRIPTION_INACTIVE", "subscription is not active");
+    }
+    if (sub.delivery_method !== "sse") {
+      return sendError(
+        res,
+        400,
+        "INVALID_DELIVERY",
+        "subscription must use delivery_method sse for this endpoint"
+      );
+    }
+
+    res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    if (typeof (res as { flushHeaders?: () => void }).flushHeaders === "function") {
+      (res as { flushHeaders: () => void }).flushHeaders();
+    }
+
+    const lastEventIdHeader = req.headers["last-event-id"];
+    const lastEventId = Array.isArray(lastEventIdHeader) ? lastEventIdHeader[0] : lastEventIdHeader;
+
+    for (const entry of getRingEntriesAfter(lastEventId, (ev) =>
+      subscriptionMatchesEvent(sub, ev)
+    )) {
+      res.write(`id: ${entry.id}\n`);
+      res.write(`event: ${entry.event.event_type}\n`);
+      res.write(`data: ${JSON.stringify(entry.event)}\n\n`);
+    }
+
+    const client = {
+      userId,
+      subscription: sub,
+      res,
+      lastEventId: lastEventId ?? undefined,
+    };
+    const unregister = registerSseClient(client);
+
+    const heartbeat = setInterval(() => {
+      try {
+        res.write(`event: ping\ndata: ${JSON.stringify({ t: Date.now() })}\n\n`);
+      } catch {
+        clearInterval(heartbeat);
+        unregister();
+      }
+    }, 25_000);
+
+    req.on("close", () => {
+      clearInterval(heartbeat);
+      unregister();
+    });
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to open event stream",
+      "SUBSCRIPTION_ERROR",
+      "APIError:events_stream"
+    );
+  }
+});
+
 // POST /health_check_snapshots - Check for stale entity snapshots
 app.post("/health_check_snapshots", async (req, res) => {
   const schema = z.object({
@@ -7841,9 +9050,7 @@ function tryListen(
       // contain the literal "0" and the health probe would never connect.
       const addr = server.address();
       const boundPort =
-        addr && typeof addr === "object" && typeof addr.port === "number"
-          ? addr.port
-          : port;
+        addr && typeof addr === "object" && typeof addr.port === "number" ? addr.port : port;
       resolve({ server, port: boundPort });
     });
     server.once("error", (err: NodeJS.ErrnoException) => {
@@ -7871,7 +9078,7 @@ export async function startHTTPServer() {
           variables: err.variables,
           migration_command: err.migrationCommand,
           message: err.message,
-        }),
+        })
       );
       throw err;
     }
@@ -7883,15 +9090,38 @@ export async function startHTTPServer() {
 
   // Seed `issue` schema for the GitHub Issues integration.
   try {
-    const { seedIssueSchema } = await import(
-      "./services/issues/seed_schema.js"
-    );
+    const { seedIssueSchema } = await import("./services/issues/seed_schema.js");
     await seedIssueSchema();
     logger.info("[Issues] issue schema seeded");
   } catch (err) {
+    logger.warn(`[Issues] failed to seed issue schema: ${(err as Error).message}`);
+  }
+
+  try {
+    const { seedSubscriptionSchema } = await import("./services/subscriptions/seed_schema.js");
+    await seedSubscriptionSchema();
+    logger.info("[Subscriptions] subscription schema seeded");
+  } catch (err) {
+    logger.warn(`[Subscriptions] failed to seed subscription schema: ${(err as Error).message}`);
+  }
+
+  try {
+    const { seedSubmissionDefaults } =
+      await import("./services/entity_submission/seed_submission_defaults.js");
+    await seedSubmissionDefaults();
+    logger.info("[entity_submission] submission_config schema bootstrap complete");
+  } catch (err) {
     logger.warn(
-      `[Issues] failed to seed issue schema: ${(err as Error).message}`,
+      `[entity_submission] failed submission_config schema bootstrap: ${(err as Error).message}`
     );
+  }
+
+  try {
+    const { seedPeerConfigSchema } = await import("./services/sync/seed_peer_schema.js");
+    await seedPeerConfigSchema();
+    logger.info("[sync] peer_config schema seeded");
+  } catch (err) {
+    logger.warn(`[sync] failed to seed peer_config schema: ${(err as Error).message}`);
   }
 
   // Sandbox mode: ensure the `sandbox_abuse_report` entity type is registered
@@ -7900,14 +9130,12 @@ export async function startHTTPServer() {
   // available in case operators run a self-hosted abuse form.
   if (isSandboxMode()) {
     try {
-      const { seedSandboxAbuseReportSchema } = await import(
-        "./services/sandbox/seed_schema.js"
-      );
+      const { seedSandboxAbuseReportSchema } = await import("./services/sandbox/seed_schema.js");
       await seedSandboxAbuseReportSchema();
       logger.info("[Sandbox] sandbox_abuse_report schema seeded");
     } catch (err) {
       logger.warn(
-        `[Sandbox] failed to seed sandbox_abuse_report schema: ${(err as Error).message}`,
+        `[Sandbox] failed to seed sandbox_abuse_report schema: ${(err as Error).message}`
       );
     }
   }
@@ -7938,6 +9166,10 @@ export async function startHTTPServer() {
       import("./services/mcp_oauth.js").then((oauth) => {
         oauth.startStateCleanupJob();
       });
+      const subscriptionBridge =
+        await import("./services/subscriptions/install_subscription_bridge.js");
+      subscriptionBridge.installSubscriptionBridge();
+      logger.info("[Subscriptions] substrate event bridge installed");
       return { server, port: boundPort };
     } catch (err: unknown) {
       const code = (err as NodeJS.ErrnoException)?.code;

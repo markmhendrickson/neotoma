@@ -360,6 +360,10 @@ function ensureSchema(db: SqliteDatabase): void {
     // `provenance` attribution blob. Soft migration keeps pre-existing
     // rows at NULL so historical data round-trips intact.
     addColumnIfMissing(db, "observations", "observation_source", "TEXT");
+    // Cross-instance sync (Phase 5): originating peer id stamped on
+    // observations created from peer webhook replay; drives subscription
+    // loop prevention on the event bus.
+    addColumnIfMissing(db, "observations", "source_peer_id", "TEXT");
     addColumnIfMissing(db, "timeline_events", "provenance", "TEXT");
     addColumnIfMissing(db, "interpretations", "provenance", "TEXT");
     addColumnIfMissing(db, "relationship_observations", "provenance", "TEXT");

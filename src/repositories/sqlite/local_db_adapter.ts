@@ -500,6 +500,13 @@ class LocalQueryBuilder {
     return this;
   }
 
+  gt(column: string, value: unknown): this {
+    const col = normalizeColumnName(this.table, column);
+    this.filters.push(`${col} > ?`);
+    this.filterValues.push(value);
+    return this;
+  }
+
   lte(column: string, value: unknown): this {
     const col = normalizeColumnName(this.table, column);
     this.filters.push(`${col} <= ?`);

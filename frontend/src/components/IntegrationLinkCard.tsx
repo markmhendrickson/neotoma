@@ -1,5 +1,5 @@
 import { ChevronRight } from "lucide-react";
-import { Link } from "react-router-dom";
+import { MdxI18nLink } from "@/components/mdx/mdx_i18n_link";
 
 type IntegrationLinkCardProps = {
   title: string;
@@ -12,7 +12,7 @@ type IntegrationLinkCardProps = {
 export function IntegrationLinkCard({ title, preview, to }: IntegrationLinkCardProps) {
   return (
     <section className="mb-4 overflow-hidden rounded-xl border border-border/70 bg-card transition-colors">
-      <Link
+      <MdxI18nLink
         to={to}
         className="group flex w-full items-start justify-between gap-3 px-4 py-3.5 text-left text-foreground no-underline hover:no-underline transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
       >
@@ -26,7 +26,7 @@ export function IntegrationLinkCard({ title, preview, to }: IntegrationLinkCardP
           className="mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground"
           aria-hidden
         />
-      </Link>
+      </MdxI18nLink>
     </section>
   );
 }

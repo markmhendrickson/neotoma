@@ -37,7 +37,7 @@ public/
 !frontend/public/android-chrome-192x192.png
 !frontend/public/android-chrome-512x512.png
 !frontend/public/site.webmanifest
-# Build output from build:pages:site (CI regenerates on deploy)
+# Build output from build:site:pages (CI regenerates on deploy)
 site_pages/assets/
 site_pages/neotoma-hero.png
 site_pages/neotoma-og-1200x630.png

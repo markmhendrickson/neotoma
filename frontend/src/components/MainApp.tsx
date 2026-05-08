@@ -9,9 +9,6 @@ import {
 } from "react-router-dom";
 import { Layout } from "@/components/Layout";
 import { NotFound } from "@/components/NotFound";
-import { SitePage } from "@/components/SitePage";
-import { SitePageAlt } from "@/components/SitePageAlt";
-import { SitePageHome2 } from "@/components/SitePageHome2";
 import { TerminologyPage } from "@/components/subpages/TerminologyPage";
 import { AgentInstructionsPage } from "@/components/subpages/AgentInstructionsPage";
 import { AgentInstructionsStoreRecipesPage } from "@/components/subpages/AgentInstructionsStoreRecipesPage";
@@ -23,9 +20,6 @@ import { AauthAttestationPage } from "@/components/subpages/AauthAttestationPage
 import { AauthCliKeysPage } from "@/components/subpages/AauthCliKeysPage";
 import { AauthIntegrationPage } from "@/components/subpages/AauthIntegrationPage";
 import { AauthCapabilitiesPage } from "@/components/subpages/AauthCapabilitiesPage";
-import { ApiReferencePage } from "@/components/subpages/ApiReferencePage";
-import { McpReferencePage } from "@/components/subpages/McpReferencePage";
-import { CliReferencePage } from "@/components/subpages/CliReferencePage";
 import { InspectorReferencePage } from "@/components/subpages/InspectorReferencePage";
 import { InspectorDashboardPage } from "@/components/subpages/InspectorDashboardPage";
 import { InspectorEntitiesPage } from "@/components/subpages/InspectorEntitiesPage";
@@ -35,12 +29,12 @@ import { InspectorSchemasPage } from "@/components/subpages/InspectorSchemasPage
 import { InspectorTimelinePage } from "@/components/subpages/InspectorTimelinePage";
 import { InspectorConversationsPage } from "@/components/subpages/InspectorConversationsPage";
 import { InspectorAgentsPage } from "@/components/subpages/InspectorAgentsPage";
+import { InspectorPeersPage } from "@/components/subpages/InspectorPeersPage";
 import { InspectorSearchPage } from "@/components/subpages/InspectorSearchPage";
 import { InspectorSettingsPage } from "@/components/subpages/InspectorSettingsPage";
 import { InspectorSettingsConnectionPage } from "@/components/subpages/InspectorSettingsConnectionPage";
 import { InspectorSettingsAttributionPolicyPage } from "@/components/subpages/InspectorSettingsAttributionPolicyPage";
 import { InspectorSettingsRetentionPage } from "@/components/subpages/InspectorSettingsRetentionPage";
-import { InspectorSettingsFeedbackPage } from "@/components/subpages/InspectorSettingsFeedbackPage";
 import { InstallPage } from "@/components/subpages/InstallPage";
 import { InstallManualPage } from "@/components/subpages/InstallManualPage";
 import { InstallDockerPage } from "@/components/subpages/InstallDockerPage";
@@ -79,6 +73,8 @@ import { DeterministicStateEvolutionPage } from "@/components/subpages/Determini
 import { VersionedHistoryPage } from "@/components/subpages/VersionedHistoryPage";
 import { ReplayableTimelinePage } from "@/components/subpages/ReplayableTimelinePage";
 import { AuditableChangeLogPage } from "@/components/subpages/AuditableChangeLogPage";
+import { StrongConsistencyPage } from "@/components/subpages/StrongConsistencyPage";
+import { TransactionalWritesPage } from "@/components/subpages/TransactionalWritesPage";
 import { SchemaConstraintsPage } from "@/components/subpages/SchemaConstraintsPage";
 import { SilentMutationRiskPage } from "@/components/subpages/SilentMutationRiskPage";
 import { ConflictingFactsRiskPage } from "@/components/subpages/ConflictingFactsRiskPage";
@@ -95,9 +91,7 @@ import { DatabaseMemoryPage } from "@/components/subpages/DatabaseMemoryPage";
 import { DeterministicMemoryPage } from "@/components/subpages/DeterministicMemoryPage";
 import { MemoryVendorsPage } from "@/components/subpages/MemoryVendorsPage";
 import { FoundationsPage } from "@/components/subpages/FoundationsPage";
-import { SchemaManagementPage } from "@/components/subpages/SchemaManagementPage";
-import { TroubleshootingPage } from "@/components/subpages/TroubleshootingPage";
-import { ChangelogPage } from "@/components/subpages/ChangelogPage";
+import { MdxSitePage } from "@/components/subpages/MdxSitePage";
 import { CrmLandingPage } from "@/components/subpages/CrmLandingPage";
 import { ComplianceLandingPage } from "@/components/subpages/ComplianceLandingPage";
 import { ContractsLandingPage } from "@/components/subpages/ContractsLandingPage";
@@ -163,17 +157,15 @@ type AppRoute = {
 };
 
 const APP_ROUTES: readonly AppRoute[] = [
-  { path: "/", element: <SitePage /> },
-  { path: "/home-2", element: <SitePageHome2 /> },
-  { path: "/home/x7k9m2vp", element: <SitePageAlt /> },
+  { path: "/", element: <MdxSitePage canonicalPath="/" shell="bare" /> },
   { path: "/terminology", element: <TerminologyPage /> },
   { path: "/agent-instructions", element: <AgentInstructionsPage /> },
   { path: "/agent-instructions/store-recipes", element: <AgentInstructionsStoreRecipesPage /> },
   { path: "/agent-instructions/retrieval-provenance", element: <AgentInstructionsRetrievalPage /> },
   { path: "/agent-instructions/display-conventions", element: <AgentInstructionsDisplayPage /> },
-  { path: "/api", element: <ApiReferencePage /> },
-  { path: "/mcp", element: <McpReferencePage /> },
-  { path: "/cli", element: <CliReferencePage /> },
+  { path: "/api", element: <MdxSitePage canonicalPath="/api" /> },
+  { path: "/mcp", element: <MdxSitePage canonicalPath="/mcp" /> },
+  { path: "/cli", element: <MdxSitePage canonicalPath="/cli" /> },
   { path: "/aauth", element: <AauthReferencePage /> },
   { path: "/aauth/spec", element: <AauthSpecPage /> },
   { path: "/aauth/attestation", element: <AauthAttestationPage /> },
@@ -195,12 +187,12 @@ const APP_ROUTES: readonly AppRoute[] = [
   { path: "/inspector/timeline", element: <InspectorTimelinePage /> },
   { path: "/inspector/conversations", element: <InspectorConversationsPage /> },
   { path: "/inspector/agents", element: <InspectorAgentsPage /> },
+  { path: "/inspector/peers", element: <InspectorPeersPage /> },
   { path: "/inspector/search", element: <InspectorSearchPage /> },
   {
     path: "/inspector/search-and-settings",
     element: <Navigate to="/inspector/settings" replace />,
   },
-  { path: "/inspector/feedback", element: <InspectorSettingsFeedbackPage /> },
   { path: "/inspector/settings", element: <InspectorSettingsPage /> },
   {
     path: "/inspector/settings/connection",
@@ -213,10 +205,6 @@ const APP_ROUTES: readonly AppRoute[] = [
   {
     path: "/inspector/settings/retention",
     element: <InspectorSettingsRetentionPage />,
-  },
-  {
-    path: "/inspector/settings/feedback",
-    element: <Navigate to="/inspector/feedback" replace />,
   },
   { path: "/install", element: <InstallPage /> },
   { path: "/install/manual", element: <InstallManualPage /> },
@@ -232,9 +220,13 @@ const APP_ROUTES: readonly AppRoute[] = [
   { path: "/developer-walkthrough", element: <Navigate to="/walkthrough" replace /> },
   { path: "/data-model", element: <Navigate to="/walkthrough" replace /> },
   { path: "/architecture", element: <ArchitecturePage /> },
-  { path: "/schema-management", element: <SchemaManagementPage /> },
-  { path: "/troubleshooting", element: <TroubleshootingPage /> },
-  { path: "/changelog", element: <ChangelogPage /> },
+  { path: "/schema-management", element: <MdxSitePage canonicalPath="/schema-management" /> },
+  { path: "/troubleshooting", element: <MdxSitePage canonicalPath="/troubleshooting" /> },
+  { path: "/changelog", element: <MdxSitePage canonicalPath="/changelog" /> },
+  {
+    path: "/foundation/problem-statement",
+    element: <MdxSitePage canonicalPath="/foundation/problem-statement" />,
+  },
   { path: "/operating", element: <AiNativeOperatorsPage /> },
   { path: "/building-pipelines", element: <AgenticSystemsBuildersPage /> },
   { path: "/debugging-infrastructure", element: <AiInfrastructureEngineersPage /> },
@@ -264,6 +256,8 @@ const APP_ROUTES: readonly AppRoute[] = [
   { path: "/versioned-history", element: <VersionedHistoryPage /> },
   { path: "/replayable-timeline", element: <ReplayableTimelinePage /> },
   { path: "/auditable-change-log", element: <AuditableChangeLogPage /> },
+  { path: "/strong-consistency", element: <StrongConsistencyPage /> },
+  { path: "/transactional-writes", element: <TransactionalWritesPage /> },
   { path: "/schema-constraints", element: <SchemaConstraintsPage /> },
   { path: "/silent-mutation-risk", element: <SilentMutationRiskPage /> },
   { path: "/conflicting-facts-risk", element: <ConflictingFactsRiskPage /> },
@@ -344,10 +338,12 @@ const BASENAME_TO_ROOT_PAGE: Record<string, JSX.Element> = {
 };
 
 function getRootElement(): JSX.Element {
-  if (typeof window === "undefined") return <SitePage staticMode />;
+  if (typeof window === "undefined") {
+    return <MdxSitePage canonicalPath="/" shell="bare" />;
+  }
   const segment = window.location.pathname.replace(/^\//, "").split("/")[0] ?? "";
   const basename = segment ? `/${segment}` : "";
-  return BASENAME_TO_ROOT_PAGE[basename] ?? <SitePage />;
+  return BASENAME_TO_ROOT_PAGE[basename] ?? <MdxSitePage canonicalPath="/" shell="bare" />;
 }
 
 /**

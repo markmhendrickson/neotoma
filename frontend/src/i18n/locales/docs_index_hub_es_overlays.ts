@@ -86,6 +86,10 @@ export const DOC_INDEX_HUB_ES_ITEM: Record<string, Partial<Pick<DocHubCard, "lab
     label: "Fundamentos",
     desc: "Arquitectura privacy-first y dise\u00f1o multiplataforma",
   },
+  "/foundation/problem-statement": {
+    label: "Planteamiento del problema",
+    desc: "Por qu\u00e9 existe Neotoma: datos fragmentados, l\u00edmites de la memoria en IA y la brecha del sustrato",
+  },
   "/agent-instructions": {
     label: "Instrucciones para agentes",
     desc: "Reglas de comportamiento obligatorias para agentes que usan Neotoma",

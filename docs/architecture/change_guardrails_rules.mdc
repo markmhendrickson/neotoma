@@ -144,7 +144,7 @@ Load the canonical doc for the surface your change touches, not this rule, for s
 **Foundation & architecture**
 
 - `docs/NEOTOMA_MANIFEST.md` — root invariants: State Layer, determinism, immutability, schema-first, no PII, no synthetic data.
-- `docs/foundation/layered_architecture.md` — State / Strategy / Execution Layer boundaries.
+- `docs/foundation/layered_architecture.md` — State Layer / Operational Layer boundaries.
 - `docs/architecture/architectural_decisions.md` — three-layer truth model and registry evolution.
 - `docs/architecture/determinism.md` — deterministic data layer vs bounded-convergence agents.
 - `docs/architecture/idempotence_pattern.md` — LLM stochasticity bounded by post-hoc canonicalization / hashing.

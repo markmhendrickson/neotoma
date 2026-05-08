@@ -135,6 +135,7 @@ export interface HomeBodyPack {
     titleLine1: string;
     titleLine2: string;
     subtitle: string;
+    operatorConnector: string;
     calloutHeading: string;
     calloutBodyBeforeLink: string;
     calloutLink: string;
@@ -172,7 +173,6 @@ export interface HomeBodyPack {
     title: string;
     subtitle: string;
     promptHint: string;
-    evaluateIllustrationAlt: string;
     /** Snippet copied from the homepage / integration evaluate cards (keep `neotoma doctor` token). */
     homeEvaluatePrompt: string;
     evaluatePromptPill: string;

@@ -25,7 +25,7 @@ export type HarnessFlow = "agent" | "human";
 export const PLACEHOLDER_STDIO_MCP_SCRIPT =
   "/absolute/path/to/neotoma/scripts/run_neotoma_mcp_stdio.sh";
 export const PLACEHOLDER_PROXY_MCP_SCRIPT =
-  "/absolute/path/to/neotoma/scripts/run_neotoma_mcp_proxy.sh";
+  "/absolute/path/to/neotoma/scripts/run_neotoma_mcp_unsigned_stdio_dev_shim.sh";
 
 export interface HarnessSnippetContext {
   /** Absolute MCP URL for this instance, e.g. `https://sandbox.neotoma.io/mcp`. */
@@ -42,7 +42,7 @@ export interface HarnessSnippetContext {
    */
   stdioMcpScriptPath?: string | null;
   /**
-   * Absolute path to `scripts/run_neotoma_mcp_proxy.sh` when known.
+   * Absolute path to `scripts/run_neotoma_mcp_unsigned_stdio_dev_shim.sh` when known.
    * Used in the proxy tip for HTTP mode with AAuth attribution.
    */
   proxyMcpScriptPath?: string | null;
@@ -178,24 +178,30 @@ It is a public, shared sandbox — treat everything as publicly visible and expe
   const installNote = `If Neotoma is already installed, confirm with \`neotoma doctor --json\`. Apply MCP + agent instruction defaults with \`neotoma setup\`, or update one layer with \`neotoma mcp config\` or \`neotoma cli config\`. For read-only paths and flags, use \`neotoma mcp guide\` or \`neotoma cli guide\`. Otherwise follow ${publicDocsUrl}/install.`;
 
   const harnessHint: Record<HarnessId, string> = {
-    "claude-code": mode === "local"
-      ? `Register with: \`claude mcp add neotoma -- ${JSON.stringify(stdio)}\`.`
-      : `Register with: \`claude mcp add neotoma --transport http --url ${mcpUrl}\`.`,
-    "claude-desktop": mode === "local"
-      ? `Edit \`claude_desktop_config.json\` and add a \`mcpServers.neotoma\` stdio entry pointing at \`${stdio}\`.`
-      : `Edit \`claude_desktop_config.json\` and add \`mcpServers.neotoma\` with the remote URL \`${mcpUrl}\`.`,
-    chatgpt: mode === "local"
-      ? "ChatGPT cannot connect over stdio — expose this Neotoma via a tunnel (ngrok/Cloudflare) and register the HTTPS URL as a remote MCP server in ChatGPT developer mode."
-      : `Register as a remote MCP server in ChatGPT developer mode, pointed at \`${mcpUrl}\`.`,
-    codex: mode === "local"
-      ? `Append an \`[mcp_servers.neotoma]\` stdio block to \`~/.codex/config.toml\` using \`${stdio}\`.`
-      : `Append an \`[mcp_servers.neotoma]\` block to \`~/.codex/config.toml\` with \`url = "${mcpUrl}"\`.`,
-    cursor: mode === "local"
-      ? `Edit \`.cursor/mcp.json\` and add a \`mcpServers.neotoma\` entry with a \`command\` pointing at \`${stdio}\`.`
-      : `Edit \`.cursor/mcp.json\` and add \`mcpServers.neotoma\` with \`"url": "${mcpUrl}"\`.`,
-    openclaw: mode === "local"
-      ? "Run `openclaw plugins install clawhub:neotoma` — the local plugin wires up the stdio transport."
-      : `Run \`openclaw plugins install clawhub:neotoma --url ${mcpUrl}\`, or add a manual remote MCP entry pointed at \`${mcpUrl}\`.`,
+    "claude-code":
+      mode === "local"
+        ? `Register with: \`claude mcp add neotoma -- ${JSON.stringify(stdio)}\`.`
+        : `Register with: \`claude mcp add neotoma --transport http --url ${mcpUrl}\`.`,
+    "claude-desktop":
+      mode === "local"
+        ? `Edit \`claude_desktop_config.json\` and add a \`mcpServers.neotoma\` stdio entry pointing at \`${stdio}\`.`
+        : `Edit \`claude_desktop_config.json\` and add \`mcpServers.neotoma\` with the remote URL \`${mcpUrl}\`.`,
+    chatgpt:
+      mode === "local"
+        ? "ChatGPT cannot connect over stdio — expose this Neotoma via a tunnel (ngrok/Cloudflare) and register the HTTPS URL as a remote MCP server in ChatGPT developer mode."
+        : `Register as a remote MCP server in ChatGPT developer mode, pointed at \`${mcpUrl}\`.`,
+    codex:
+      mode === "local"
+        ? `Append an \`[mcp_servers.neotoma]\` stdio block to \`~/.codex/config.toml\` using \`${stdio}\`.`
+        : `Append an \`[mcp_servers.neotoma]\` block to \`~/.codex/config.toml\` with \`url = "${mcpUrl}"\`.`,
+    cursor:
+      mode === "local"
+        ? `Edit \`.cursor/mcp.json\` and add a \`mcpServers.neotoma\` entry with a \`command\` pointing at \`${stdio}\`.`
+        : `Edit \`.cursor/mcp.json\` and add \`mcpServers.neotoma\` with \`"url": "${mcpUrl}"\`.`,
+    openclaw:
+      mode === "local"
+        ? "Run `openclaw plugins install clawhub:neotoma` — the local plugin wires up the stdio transport."
+        : `Run \`openclaw plugins install clawhub:neotoma --url ${mcpUrl}\`, or add a manual remote MCP entry pointed at \`${mcpUrl}\`.`,
   };
 
   return [preamble, "", harnessHint[id], "", installNote].join("\n");
@@ -345,10 +351,7 @@ function preflightFor(id: HarnessId): HarnessDescriptor["preflight"] | undefined
   }
 }
 
-function proxyTipFor(
-  id: HarnessId,
-  ctx: HarnessSnippetContext,
-): HarnessSnippetResult["proxyTip"] {
+function proxyTipFor(id: HarnessId, ctx: HarnessSnippetContext): HarnessSnippetResult["proxyTip"] {
   if (id === "chatgpt") return undefined;
   if (ctx.mode !== "local") return undefined;
   const proxyScript = JSON.stringify(resolvedProxyScript(ctx));
@@ -392,7 +395,7 @@ command = ${proxyScript}`,
 
 export function buildHarnessSnippet(
   id: HarnessId,
-  ctx: HarnessSnippetContext,
+  ctx: HarnessSnippetContext
 ): HarnessSnippetResult {
   const meta = HARNESS_META[id];
   const docsUrl = `${ctx.publicDocsUrl.replace(/\/+$/, "")}${meta.docsPath}`;

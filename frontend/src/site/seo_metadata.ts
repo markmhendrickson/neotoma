@@ -143,18 +143,6 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       "#common-questions p",
     ],
   },
-  "/home/x7k9m2vp": {
-    title: "Neotoma \u2014 structured state for AI agents",
-    description: "Alternative homepage variant (not indexed).",
-    robots: "noindex,nofollow",
-    ogType: "website",
-  },
-  "/home-2": {
-    title: "Neotoma \u2014 structured state for AI agents",
-    description: "Homepage preview variant (not indexed).",
-    robots: "noindex,nofollow",
-    ogType: "website",
-  },
   "/install": {
     title: "Install | Neotoma",
     description:
@@ -363,7 +351,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/agent-instructions/display-conventions": {
     title: "Display, Attribution, and Conventions | Neotoma Agent Instructions",
     description:
-      "Display rules, agent attribution, transport conventions, feedback reporting, error recovery, and onboarding instructions.",
+      "Display rules, agent attribution, transport conventions, issue reporting, error recovery, and onboarding instructions.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -552,6 +540,19 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       },
     ],
   },
+  "/inspector/peers": {
+    title: "Inspector, Peers & cross-instance sync | Neotoma",
+    description:
+      "Register remote Neotoma instances for structured replication: sync direction, entity types, AAuth or shared-secret auth, conflict rules, and peer status.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Inspector", path: "/inspector" },
+      { name: "Peers & cross-instance sync", path: "/inspector/peers" },
+    ],
+  },
   "/inspector/search": {
     title: "Inspector, Search | Neotoma",
     description:
@@ -568,14 +569,14 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/inspector/search-and-settings": {
     title: "Inspector, Settings | Neotoma",
     description:
-      "Inspector settings overview: connection, attribution policy, retention, and feedback, the operator-side configuration surfaced in the Inspector app.",
+      "Inspector settings overview: connection, attribution policy, and retention: the operator-side configuration surfaced in the Inspector app.",
     robots: "noindex,follow",
     jsonLdType: "WebPage",
   },
   "/inspector/settings": {
     title: "Inspector, Settings | Neotoma",
     description:
-      "Inspector settings overview: connection, attribution policy, retention, and feedback, the operator-side configuration surfaced in the Inspector app.",
+      "Inspector settings overview: connection, attribution policy, and retention: the operator-side configuration surfaced in the Inspector app.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -629,26 +630,6 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Settings", path: "/inspector/settings" },
       { name: "Retention", path: "/inspector/settings/retention" },
     ],
-  },
-  "/inspector/feedback": {
-    title: "Inspector, Feedback | Neotoma",
-    description:
-      "Neotoma Inspector feedback route (/feedback): submission mode, PII redaction, status feed, and fix-verification round-trips, top-level in the app, not under Settings.",
-    robots: "index,follow",
-    jsonLdType: "WebPage",
-    breadcrumb: [
-      { name: "Home", path: "/" },
-      { name: "Docs", path: "/docs" },
-      { name: "Inspector", path: "/inspector" },
-      { name: "Feedback", path: "/inspector/feedback" },
-    ],
-  },
-  "/inspector/settings/feedback": {
-    title: "Inspector, Feedback | Neotoma",
-    description:
-      "Neotoma Inspector feedback route (/feedback): submission mode, PII redaction, status feed, and fix-verification round-trips, top-level in the app, not under Settings.",
-    robots: "noindex,follow",
-    jsonLdType: "WebPage",
   },
   "/aauth/spec": {
     title: "AAuth wire format and verification | Neotoma",
@@ -1108,6 +1089,30 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Auditable Change Log", path: "/auditable-change-log" },
     ],
   },
+  "/strong-consistency": {
+    title: "Strong Consistency | Neotoma",
+    description:
+      "Core records, entities, and events are immediately visible after write. No eventual-consistency lag between write and read.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Guarantees", path: "/#memory-guarantees" },
+      { name: "Strong Consistency", path: "/strong-consistency" },
+    ],
+  },
+  "/transactional-writes": {
+    title: "Transactional Writes | Neotoma",
+    description:
+      "All graph inserts commit in a single transaction. Either everything succeeds or nothing changes. No partial state.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Guarantees", path: "/#memory-guarantees" },
+      { name: "Transactional Writes", path: "/transactional-writes" },
+    ],
+  },
   "/schema-constraints": {
     title: "Schema Constraints | Neotoma",
     description:
@@ -1460,6 +1465,116 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       "conversation import",
     ],
   },
+  "/skills/ensure-neotoma": {
+    title: "Ensure Neotoma Skill | Neotoma",
+    description: "Guided install and initialization workflow for Neotoma.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Skills", path: "/skills" },
+      { name: "Ensure Neotoma", path: "/skills/ensure-neotoma" },
+    ],
+  },
+  "/skills/remember-email": {
+    title: "Remember Email Skill | Neotoma",
+    description: "Import email and extract contacts, tasks, and events into Neotoma memory.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Skills", path: "/skills" },
+      { name: "Remember Email", path: "/skills/remember-email" },
+    ],
+  },
+  "/skills/remember-conversations": {
+    title: "Remember Conversations Skill | Neotoma",
+    description: "Import conversation history into structured Neotoma memory.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Skills", path: "/skills" },
+      { name: "Remember Conversations", path: "/skills/remember-conversations" },
+    ],
+  },
+  "/skills/remember-meetings": {
+    title: "Remember Meetings Skill | Neotoma",
+    description: "Capture meetings and decisions into Neotoma memory.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Skills", path: "/skills" },
+      { name: "Remember Meetings", path: "/skills/remember-meetings" },
+    ],
+  },
+  "/skills/remember-finances": {
+    title: "Remember Finances Skill | Neotoma",
+    description: "Import financial records and receipts into Neotoma memory.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Skills", path: "/skills" },
+      { name: "Remember Finances", path: "/skills/remember-finances" },
+    ],
+  },
+  "/skills/remember-contacts": {
+    title: "Remember Contacts Skill | Neotoma",
+    description: "Import and reconcile contacts into Neotoma memory.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Skills", path: "/skills" },
+      { name: "Remember Contacts", path: "/skills/remember-contacts" },
+    ],
+  },
+  "/skills/remember-calendar": {
+    title: "Remember Calendar Skill | Neotoma",
+    description: "Import calendar events into Neotoma memory.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Skills", path: "/skills" },
+      { name: "Remember Calendar", path: "/skills/remember-calendar" },
+    ],
+  },
+  "/skills/remember-codebase": {
+    title: "Remember Codebase Skill | Neotoma",
+    description: "Capture codebase context and decisions into Neotoma memory.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Skills", path: "/skills" },
+      { name: "Remember Codebase", path: "/skills/remember-codebase" },
+    ],
+  },
+  "/skills/store-data": {
+    title: "Store Data Skill | Neotoma",
+    description: "Structured store workflow for agent-created data.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Skills", path: "/skills" },
+      { name: "Store Data", path: "/skills/store-data" },
+    ],
+  },
+  "/skills/query-memory": {
+    title: "Query Memory Skill | Neotoma",
+    description: "Retrieval and provenance workflow for Neotoma memory.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Skills", path: "/skills" },
+      { name: "Query Memory", path: "/skills/query-memory" },
+    ],
+  },
   "/use-cases": {
     title: "Use Cases | State Integrity for AI-Driven Workflows | Neotoma",
     description:
@@ -1630,7 +1745,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/privacy": {
     title: "Privacy Notice | Neotoma",
     description:
-      "What data neotoma.io collects on the marketing site, the public sandbox, and the agent feedback pipeline. Pre-incorporation notice published by Mark Hendrickson as an individual publisher.",
+      "What data neotoma.io collects on the marketing site, the public sandbox, and GitHub-backed issue reporting. Pre-incorporation notice published by Mark Hendrickson as an individual publisher.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -2244,6 +2359,18 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     breadcrumb: [
       { name: "Home", path: "/" },
       { name: "Foundations", path: "/foundations" },
+    ],
+  },
+  "/foundation/problem-statement": {
+    title: "Why Neotoma Exists | Neotoma",
+    description:
+      "Problem framing for Neotoma: fragmented personal data, conversation-only AI memory limits, and why a deterministic state layer matters for agent workflows.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Problem statement", path: "/foundation/problem-statement" },
     ],
   },
   "/privacy-first": {

@@ -27,7 +27,22 @@ async function applyBuiltInSchemaIdentityDefaults(
   const { ENTITY_SCHEMAS } = await import("./schema_definitions.js");
   const builtIn = ENTITY_SCHEMAS[entry.entity_type];
   const builtInDefinition = builtIn?.schema_definition;
-  if (!builtInDefinition) return entry;
+
+  /** Code-defined default; DB row wins when it already sets guest_access_policy. */
+  function mergeGuestAccessFromCode(base: SchemaRegistryEntry): SchemaRegistryEntry {
+    const guestFromCode = builtIn?.metadata?.guest_access_policy;
+    if (!guestFromCode || base.metadata?.guest_access_policy) {
+      return base;
+    }
+    return {
+      ...base,
+      metadata: { ...(base.metadata ?? {}), guest_access_policy: guestFromCode },
+    };
+  }
+
+  if (!builtInDefinition) {
+    return mergeGuestAccessFromCode(entry);
+  }
 
   const schemaDefinition = { ...entry.schema_definition };
   let changed = false;
@@ -50,7 +65,8 @@ async function applyBuiltInSchemaIdentityDefaults(
     changed = true;
   }
 
-  return changed ? { ...entry, schema_definition: schemaDefinition } : entry;
+  const withDef = changed ? { ...entry, schema_definition: schemaDefinition } : entry;
+  return mergeGuestAccessFromCode(withDef);
 }
 
 export interface ConverterDefinition {
@@ -222,6 +238,7 @@ export const OBSERVATION_SOURCE_RANK_VALUES = [
   "workflow_state",
   "human",
   "import",
+  "sync",
 ] as const;
 
 export type ObservationSourceRankValue =
@@ -237,7 +254,7 @@ export type ObservationSourceRankValue =
  * overrides), which outrank batch imports.
  */
 export const DEFAULT_OBSERVATION_SOURCE_PRIORITY: readonly ObservationSourceRankValue[] =
-  ["sensor", "workflow_state", "llm_summary", "human", "import"] as const;
+  ["sensor", "workflow_state", "llm_summary", "human", "import", "sync"] as const;
 
 export interface ReducerConfig {
   merge_policies: Record<
@@ -568,7 +585,9 @@ export class SchemaRegistryService {
     if (error) {
       throw new Error(`Failed to list active schemas: ${error.message}`);
     }
-    return (data ?? []) as SchemaRegistryEntry[];
+    const rows = (data ?? []) as SchemaRegistryEntry[];
+    const applied = await Promise.all(rows.map((row) => applyBuiltInSchemaIdentityDefaults(row)));
+    return applied.filter((e): e is SchemaRegistryEntry => e != null);
   }
 
   /**
@@ -664,7 +683,7 @@ export class SchemaRegistryService {
       throw new Error(`Failed to load global schema: ${error.message}`);
     }
 
-    return data as SchemaRegistryEntry;
+    return applyBuiltInSchemaIdentityDefaults(data as SchemaRegistryEntry);
   }
 
   /**
@@ -853,8 +872,8 @@ export class SchemaRegistryService {
 
     // Handle default user ID: convert to undefined for optional parameter
     const defaultUserId = "00000000-0000-0000-0000-000000000000";
-    const userId = options.user_id && options.user_id !== defaultUserId 
-      ? options.user_id 
+    const userId = options.user_id && options.user_id !== defaultUserId
+      ? options.user_id
       : undefined;
 
     // Preserve schema-level declarations that aren't field-maps (canonical_name_fields,
@@ -929,7 +948,7 @@ export class SchemaRegistryService {
         ...(options.fields_to_add?.map((f) => f.field_name) || []),
         ...(options.converters_to_add?.map((c) => c.field_name) || []),
       ];
-      
+
       if (fieldNamesToMigrate.length > 0) {
         await this.migrateRawFragmentsToObservations({
           entity_type: options.entity_type,
@@ -1189,18 +1208,18 @@ export class SchemaRegistryService {
 
   /**
    * Determine change type for schema update
-   * 
+   *
    * Breaking changes (major):
    * - Removing fields
    * - Changing field types (not just adding converters)
    * - Changing field from optional to required
    * - Removing converters
-   * 
+   *
    * Minor changes (minor):
    * - Adding new optional fields
    * - Adding converters to existing fields
    * - Changing reducer strategies
-   * 
+   *
    * Patch changes (patch):
    * - Documentation updates
    * - Non-functional changes
@@ -1262,11 +1281,11 @@ export class SchemaRegistryService {
 
   /**
    * Increment schema version using semantic versioning (major.minor.patch)
-   * 
+   *
    * - Major: Breaking changes (removing fields, changing types, making fields required)
    * - Minor: Additive changes (new fields, new converters) - backward compatible
    * - Patch: Non-functional changes (documentation, formatting)
-   * 
+   *
    * Examples:
    * - 1.0.0 -> 1.1.0 (add new optional field)
    * - 1.1.0 -> 1.1.1 (patch change)
@@ -1389,11 +1408,11 @@ export class SchemaRegistryService {
    */
   private generateSearchableText(schema: SchemaRegistryEntry): string {
     const parts: string[] = [schema.entity_type];
-    
+
     // Add field names
     const fieldNames = Object.keys(schema.schema_definition.fields || {});
     parts.push(...fieldNames);
-    
+
     // Add field types for context (e.g., "date", "amount", "name")
     for (const [fieldName, fieldDef] of Object.entries(schema.schema_definition.fields || {})) {
       if (fieldDef.type === "date" && fieldName.includes("date")) {
@@ -1406,7 +1425,7 @@ export class SchemaRegistryService {
         parts.push("name", "title", "label");
       }
     }
-    
+
     return parts.join(" ");
   }
 
@@ -1415,17 +1434,17 @@ export class SchemaRegistryService {
    */
   private cosineSimilarity(a: number[], b: number[]): number {
     if (a.length !== b.length) return 0;
-    
+
     let dotProduct = 0;
     let normA = 0;
     let normB = 0;
-    
+
     for (let i = 0; i < a.length; i++) {
       dotProduct += a[i] * b[i];
       normA += a[i] * a[i];
       normB += b[i] * b[i];
     }
-    
+
     if (normA === 0 || normB === 0) return 0;
     return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
   }
@@ -1496,7 +1515,7 @@ export class SchemaRegistryService {
     }
 
     const keywordLower = keyword.toLowerCase();
-    
+
     // Step 1: Try keyword matching first (deterministic, strong consistency)
     const keywordMatches: Array<{
       schema: SchemaRegistryEntry;
@@ -1505,7 +1524,7 @@ export class SchemaRegistryService {
 
     for (const schema of allSchemasArray) {
       let score = 0;
-      
+
       // Exact entity type match (highest score)
       if (schema.entity_type.toLowerCase() === keywordLower) {
         score = 10;
@@ -1514,7 +1533,7 @@ export class SchemaRegistryService {
       else if (schema.entity_type.toLowerCase().includes(keywordLower)) {
         score = 5;
       }
-      
+
       // Field name matches
       const fieldNames = Object.keys(schema.schema_definition.fields || {});
       for (const fieldName of fieldNames) {
@@ -1524,7 +1543,7 @@ export class SchemaRegistryService {
           score += 1;
         }
       }
-      
+
       if (score > 0) {
         keywordMatches.push({ schema, score });
       }
@@ -1559,7 +1578,7 @@ export class SchemaRegistryService {
     // Step 2: Fallback to vector search (semantic matching, bounded eventual consistency)
     const { generateEmbedding } = await import("../embeddings.js");
     const queryEmbedding = await generateEmbedding(keyword);
-    
+
     if (!queryEmbedding) {
       // If embeddings not available, return keyword matches even if low score
       return keywordMatches
@@ -1595,7 +1614,7 @@ export class SchemaRegistryService {
     for (const schema of allSchemasArray) {
       const searchableText = this.generateSearchableText(schema);
       const schemaEmbedding = await generateEmbedding(searchableText);
-      
+
       if (schemaEmbedding) {
         const similarity = this.cosineSimilarity(queryEmbedding, schemaEmbedding);
         schemaEmbeddings.push({ schema, embedding: schemaEmbedding, similarity });
@@ -1952,23 +1971,23 @@ export class SchemaRegistryService {
   ): Promise<void> {
     // Find the active schema for this entity type
     const schema = await this.loadActiveSchema(entityType, userId);
-    
+
     if (!schema) {
       console.warn(`[SCHEMA_REGISTRY] No active schema found for ${entityType}, cannot update icon`);
       return;
     }
-    
+
     // Update metadata with icon
     const updatedMetadata = {
       ...(schema.metadata || {}),
       icon: iconMetadata,
     };
-    
+
     const { error } = await db
       .from("schema_registry")
       .update({ metadata: updatedMetadata })
       .eq("id", schema.id);
-    
+
     if (error) {
       console.error(`[SCHEMA_REGISTRY] Failed to update icon metadata for ${entityType}:`, error);
     }
@@ -2018,14 +2037,14 @@ export class SchemaRegistryService {
     if (metadata?.icon) {
       return;
     }
-    
+
     try {
       // Import icon service dynamically to avoid circular dependencies
       const { generateIconForEntityType } = await import("./schema_icon_service.js");
-      
+
       // Generate icon
       const iconMetadata = await generateIconForEntityType(entityType, metadata);
-      
+
       // Update schema with icon
       await this.updateIconMetadata(entityType, iconMetadata);
     } catch (error) {

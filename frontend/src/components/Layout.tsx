@@ -94,7 +94,10 @@ function LayoutShell({
       >
         {isHomeShell ? (
           <>
-            <div data-site-markdown-root className="post-prose contents">
+            {/* No `post-prose` here: home and full-bleed marketing landings use explicit component
+                typography (SitePage, ICP landings). Doc link underlines / `text-foreground` on anchors
+                would fight hero CTAs (e.g. emerald evaluate button). */}
+            <div data-site-markdown-root className="contents">
               {children}
             </div>
             {!omitHomeShellSeoDevMeta ? <SeoDevMetaFooter /> : null}

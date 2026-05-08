@@ -25,4 +25,4 @@ The feedback pipeline has been replaced by the Issues/Conversations system which
 3. **Auto-push on write** — creating an issue or adding a message automatically pushes to GitHub
 4. **Sync-if-stale on read** — reading issue status triggers a sync when local data is older than 5 minutes
 5. **GitHub CLI authentication** — uses `gh auth token` for credential resolution instead of stored PATs
-6. **Security advisories** — sensitive reports use GitHub Security Advisories (`visibility: "advisory"`)
+6. **Private product issues** — sensitive Neotoma bug or doc-gap reports that must not hit GitHub Issues use `submit_issue` with `visibility: "private"` (Neotoma-only store; separate from vulnerability reporting in `SECURITY.md`)

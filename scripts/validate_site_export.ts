@@ -4,7 +4,7 @@
  * Checks that all expected files exist and contain meaningful content
  * so crawlers (Claude, ChatGPT, Googlebot, etc.) see real HTML.
  *
- * Run after `npm run build:pages:site`:
+ * Run after `npm run build:site:pages`:
  *   tsx scripts/validate_site_export.ts
  *
  * Exits 0 when all checks pass, 1 on failure.
@@ -53,7 +53,7 @@ function extractIndexablePaths(): string[] {
 }
 
 if (!fs.existsSync(siteDir)) {
-  fail("site_pages/ directory does not exist — run `npm run build:pages:site` first");
+  fail("site_pages/ directory does not exist — run `npm run build:site:pages` first");
   process.exit(1);
 }
 

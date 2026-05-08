@@ -23,6 +23,10 @@ type RunningServers = {
   frontend: ChildProcessWithoutNullStreams;
   apiUrl: string;
   uiUrl: string;
+  /** Neotoma HTTP API origin (no `/api` suffix) — same host the Inspector meta tag uses. */
+  neotomaHttpOrigin: string;
+  /** Built Inspector SPA served by Neotoma under `/inspector/` (trailing slash). */
+  inspectorSpaUrl: string;
   bearerToken: string;
   keyExports: KeyExportBundle;
   mockApi?: MockApiServer;
@@ -85,12 +89,16 @@ async function startServers(): Promise<RunningServers> {
 
   const apiUrl = `http://127.0.0.1:${ports.httpPort}/api`;
   const uiUrl = `http://127.0.0.1:${uiPort}`;
+  const neotomaHttpOrigin = `http://127.0.0.1:${ports.httpPort}`;
+  const inspectorSpaUrl = `${neotomaHttpOrigin}/inspector/`;
 
   return {
     backend,
     frontend,
     apiUrl,
     uiUrl,
+    neotomaHttpOrigin,
+    inspectorSpaUrl,
     bearerToken: credentials.bearerToken,
     keyExports: credentials.keyExports,
     mockApi,
@@ -115,6 +123,8 @@ function terminate(child?: ChildProcessWithoutNullStreams | null) {
 type ServersFixture = {
   apiBaseUrl: string;
   uiBaseUrl: string;
+  neotomaHttpOrigin: string;
+  inspectorSpaUrl: string;
   mcpBaseUrl: string;
   bearerToken: string;
   keyExports: KeyExportBundle;
@@ -158,6 +168,18 @@ export const test = base.extend<
     },
     { scope: 'worker' },
   ],
+  neotomaHttpOrigin: [
+    async ({ servers }, use) => {
+      await use(servers.neotomaHttpOrigin);
+    },
+    { scope: 'worker' },
+  ],
+  inspectorSpaUrl: [
+    async ({ servers }, use) => {
+      await use(servers.inspectorSpaUrl);
+    },
+    { scope: 'worker' },
+  ],
   bearerToken: [
     async ({ servers }, use) => {
       await use(servers.bearerToken);
@@ -178,9 +200,8 @@ export const test = base.extend<
   ],
   mcpBaseUrl: [
     async ({ servers }, use) => {
-      // MCP actions are exposed via HTTP API endpoints
-      // Use the same base URL as apiBaseUrl
-      await use(servers.apiUrl);
+      // Direct MCP-style action routes are mounted at the Neotoma HTTP origin.
+      await use(servers.neotomaHttpOrigin);
     },
     { scope: 'worker' },
   ],

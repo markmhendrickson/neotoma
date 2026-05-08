@@ -288,9 +288,11 @@ describe("CLI MCP and instruction commands", () => {
       expect("command" in entries["neotoma-dev"]).toBe(true);
       if (!("command" in entries["neotoma-dev"])) return;
       expect(entries["neotoma-dev"].command).toContain("run_neotoma_mcp_signed_stdio_dev_shim.sh");
+      expect(entries["neotoma-dev"].env?.NEOTOMA_MCP_USE_LOCAL_PORT_FILE).toBe("1");
       expect(entries["neotoma-dev"].env?.NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE).toBe("dev");
       expect("command" in entries.neotoma).toBe(true);
       if (!("command" in entries.neotoma)) return;
+      expect(entries.neotoma.env?.NEOTOMA_MCP_USE_LOCAL_PORT_FILE).toBe("1");
       expect(entries.neotoma.env?.MCP_PROXY_DOWNSTREAM_URL).toBe("http://127.0.0.1:3180/mcp");
       expect(entries.neotoma.env?.NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE).toBe("prod");
     });
@@ -299,7 +301,9 @@ describe("CLI MCP and instruction commands", () => {
       const entries = neotomaServerEntriesForTransport(process.cwd(), undefined, "d");
       expect("command" in entries["neotoma-dev"]).toBe(true);
       if (!("command" in entries["neotoma-dev"])) return;
+      expect(entries["neotoma-dev"].env?.NEOTOMA_MCP_USE_LOCAL_PORT_FILE).toBe("1");
       expect(entries["neotoma-dev"].env?.MCP_PROXY_DOWNSTREAM_URL).toBe("http://127.0.0.1:3180/mcp");
+      expect(entries.neotoma.env?.NEOTOMA_MCP_USE_LOCAL_PORT_FILE).toBe("1");
       expect(entries.neotoma.env?.MCP_PROXY_DOWNSTREAM_URL).toBe("http://127.0.0.1:3180/mcp");
     });
   });

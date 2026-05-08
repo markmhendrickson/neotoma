@@ -11,7 +11,7 @@
 
 If you discover a security vulnerability in Neotoma, please report it privately. **Do not open a public issue.**
 
-- **Preferred:** Open a [GitHub Security Advisory](https://github.com/markmhendrickson/neotoma/security/advisories/new) (draft) or contact the maintainers via the repository.
+- **Preferred:** Use the repository [Security](https://github.com/markmhendrickson/neotoma/security) page to send a **private vulnerability report** to maintainers, or use the contact options listed there. Do not use the public Issues product for undisclosed defects.
 - **Response time:** We aim to respond within 48 hours.
 - **Include:** Description of the vulnerability, steps to reproduce, potential impact, and suggested fix (if any).
 

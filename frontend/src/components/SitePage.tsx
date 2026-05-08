@@ -23,7 +23,15 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { SiClaude, SiOpenai } from "react-icons/si";
 import { OpenCodeIcon } from "@/components/icons/OpenCodeIcon";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MutableRefObject,
+} from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   REPO_RELEASES_COUNT,
@@ -59,7 +67,6 @@ import guaranteeAuditableChangeLogIllus from "@/assets/images/guarantees/guarant
 import guaranteeSilentMutationPreventionIllus from "@/assets/images/guarantees/guarantee_sym_silent_square.png";
 import guaranteeSchemaConstraintsIllus from "@/assets/images/guarantees/guarantee_sym_schema_square.png";
 import guaranteeReproducibleReconstructionIllus from "@/assets/images/guarantees/guarantee_sym_rebuild_square.png";
-import heroEvaluateIllus from "@/assets/images/hero/hero_illus_evaluate_agent_page.png";
 import founderPhoto from "@/assets/images/people/mark_hendrickson.jpg";
 
 import { useLocale } from "@/i18n/LocaleContext";
@@ -70,15 +77,17 @@ import { useSiteHomeEvaluateScrollBannerVisibleSetter } from "@/context/SiteAppN
 import { sendCtaClick } from "@/utils/analytics";
 interface SitePageProps {
   staticMode?: boolean;
+  /** When true, skip `<SeoHead />` (e.g. wrapped by `MdxSitePage` `shell="bare"`). */
+  omitSeoHead?: boolean;
 }
 
 /** Full home scroll order (edge indicators, sidebar hash targets). FAQ block is not a dot-nav stop. */
 const SECTION_ORDER: readonly string[] = [
   "intro",
-  "who",
   "outcomes",
-  "demo",
   "memory-guarantees",
+  "who",
+  "demo",
   "proof",
   "record-types",
   "evaluate",
@@ -100,10 +109,10 @@ function getHomeInitialNavSectionId(): string | null {
 function getLocalizedDotNavSections(pack: ReturnType<typeof useLocale>["pack"]) {
   return [
     { id: "intro", label: pack.siteSections.intro },
-    { id: "who", label: pack.siteSections.who ?? "Who" },
     { id: "outcomes", label: pack.siteSections.beforeAfter },
-    { id: "demo", label: pack.siteSections.demo ?? "Demo" },
     { id: "memory-guarantees", label: pack.siteSections.guarantees },
+    { id: "who", label: pack.siteSections.who ?? "Who" },
+    { id: "demo", label: pack.siteSections.demo ?? "Demo" },
     { id: "proof", label: pack.siteSections.personalOs },
     { id: "record-types", label: pack.siteSections.recordTypes ?? "Record types" },
     { id: "evaluate", label: pack.siteSections.evaluate ?? "Evaluate" },
@@ -244,9 +253,12 @@ function buildSceneMessages(
 function ForgetfulAgentIllustration({
   className = "",
   onStateChange,
+  seekControlsRef,
 }: {
   className?: string;
   onStateChange?: (state: { scenarioIndex: number; failMode: boolean }) => void;
+  /** When set, receives `seekToScenario` so sibling UI (e.g. outcome segment scrubber) can jump the timeline. */
+  seekControlsRef?: MutableRefObject<{ seekToScenario: (index: number) => void } | null>;
 }) {
   const { pack } = useLocale();
   const animScenarios = useMemo(
@@ -423,6 +435,26 @@ function ForgetfulAgentIllustration({
     prevElapsedWithinRunRef.current = next;
     setElapsed(next);
   }, []);
+
+  const seekToScenarioIndex = useCallback(
+    (index: number) => {
+      const maxIdx = Math.max(0, animScenarios.length - 1);
+      const clamped = Math.max(0, Math.min(maxIdx, index));
+      const target = clamped * FULL_SCENARIO_MS;
+      prevElapsedWithinRunRef.current = target;
+      setElapsed(target);
+      setPlaying(true);
+    },
+    [animScenarios.length]
+  );
+
+  useLayoutEffect(() => {
+    if (!seekControlsRef) return;
+    seekControlsRef.current = { seekToScenario: seekToScenarioIndex };
+    return () => {
+      seekControlsRef.current = null;
+    };
+  }, [seekControlsRef, seekToScenarioIndex]);
 
   const onBarPointerDown = useCallback(
     (e: React.PointerEvent) => {
@@ -674,12 +706,7 @@ function ForgetfulAgentIllustration({
                 <button
                   key={i}
                   type="button"
-                  onClick={() => {
-                    const target = i * FULL_SCENARIO_MS;
-                    prevElapsedWithinRunRef.current = target;
-                    setElapsed(target);
-                    setPlaying(true);
-                  }}
+                  onClick={() => seekToScenarioIndex(i)}
                   className={`cursor-pointer rounded px-1 py-0.5 hover:bg-slate-200/60 dark:hover:bg-slate-700/50 ${
                     activeScenarioIndex === i
                       ? failMode
@@ -703,9 +730,12 @@ function ForgetfulAgentIllustration({
 function OutcomeContextPanel({
   activeScenarioIndex,
   failMode,
+  onSegmentClick,
 }: {
   activeScenarioIndex: number;
   failMode: boolean;
+  /** Jump the paired illustration to this simulation segment (start of scenario). */
+  onSegmentClick?: (segmentIndex: number) => void;
 }) {
   const { pack } = useLocale();
   const outcomeCards = pack.homeBody.outcomeCards;
@@ -727,19 +757,41 @@ function OutcomeContextPanel({
           : "border-emerald-200/60 bg-gradient-to-br from-emerald-50/80 via-white to-slate-50 dark:border-emerald-500/20 dark:from-emerald-950/30 dark:via-slate-950 dark:to-slate-950"
       }`}
     >
-      <div className="flex items-center gap-1.5 mb-6">
-        {outcomeCards.map((_, i) => (
-          <div
-            key={i}
-            className={`h-1.5 rounded-full transition-all duration-300 ${
-              i === activeScenarioIndex
-                ? `w-6 ${failMode ? "bg-rose-500 dark:bg-rose-400" : "bg-emerald-500 dark:bg-emerald-400"}`
-                : i < activeScenarioIndex
-                  ? `w-1.5 ${failMode ? "bg-rose-300 dark:bg-rose-600" : "bg-emerald-300 dark:bg-emerald-600"}`
-                  : "w-1.5 bg-slate-200 dark:bg-slate-700"
-            }`}
-          />
-        ))}
+      <div
+        className="mb-6 flex items-center gap-1.5"
+        role={onSegmentClick ? "group" : undefined}
+        aria-label={onSegmentClick ? "Simulation segments" : undefined}
+      >
+        {outcomeCards.map((c, i) => {
+          const active = i === activeScenarioIndex;
+          const past = i < activeScenarioIndex;
+          const segmentClass = `h-2.5 rounded-full transition-all duration-300 ${
+            active
+              ? `w-8 ${failMode ? "bg-rose-500 dark:bg-rose-400" : "bg-emerald-500 dark:bg-emerald-400"}`
+              : past
+                ? `w-2.5 ${failMode ? "bg-rose-300 dark:bg-rose-600" : "bg-emerald-300 dark:bg-emerald-600"}`
+                : "w-2.5 bg-slate-200 dark:bg-slate-700"
+          }`;
+          if (!onSegmentClick) {
+            return <div key={i} className={segmentClass} />;
+          }
+          return (
+            <button
+              key={i}
+              type="button"
+              aria-current={active ? "step" : undefined}
+              aria-label={`${c.category}: go to segment ${i + 1}`}
+              onClick={() => onSegmentClick(i)}
+              className={`inline-flex shrink-0 cursor-pointer items-center justify-center border-0 bg-transparent px-1 py-2 shadow-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 motion-reduce:transition-none touch-manipulation ${
+                failMode
+                  ? "focus-visible:ring-rose-500/70 focus-visible:ring-offset-white dark:focus-visible:ring-rose-400/60 dark:focus-visible:ring-offset-slate-950"
+                  : "focus-visible:ring-emerald-500/70 focus-visible:ring-offset-white dark:focus-visible:ring-emerald-400/60 dark:focus-visible:ring-offset-slate-950"
+              }`}
+            >
+              <span className={`block ${segmentClass}`} />
+            </button>
+          );
+        })}
       </div>
 
       <div key={contentKey} className="animate-[outcome-card-in_0.4s_ease-out]">
@@ -799,6 +851,7 @@ function OutcomesSlide({
   const { pack } = useLocale();
   const outcomesCopy = pack.homeBody.outcomes;
   const [animState, setAnimState] = useState({ scenarioIndex: 0, failMode: true });
+  const outcomeSeekRef = useRef<{ seekToScenario: (index: number) => void } | null>(null);
 
   return (
     <section id="outcomes" className={SLIDE_CLASS}>
@@ -820,12 +873,14 @@ function OutcomesSlide({
                 <OutcomeContextPanel
                   activeScenarioIndex={animState.scenarioIndex}
                   failMode={animState.failMode}
+                  onSegmentClick={(i) => outcomeSeekRef.current?.seekToScenario(i)}
                 />
               </div>
               <div className="w-full lg:w-[58%] shrink-0">
                 <ForgetfulAgentIllustration
                   className="w-full h-[360px] sm:h-[400px] lg:h-full lg:min-h-[460px]"
                   onStateChange={setAnimState}
+                  seekControlsRef={outcomeSeekRef}
                 />
               </div>
             </div>
@@ -1225,7 +1280,7 @@ function HeroQuotesCarousel() {
   );
 }
 
-export function SitePage({ staticMode = false }: SitePageProps) {
+export function SitePage({ staticMode = false, omitSeoHead = false }: SitePageProps) {
   const { pack, locale } = useLocale();
   const body = pack.homeBody;
   const navigate = useNavigate();
@@ -1343,7 +1398,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
 
   return (
     <>
-      {!staticMode ? <SeoHead /> : null}
+      {!staticMode && !omitSeoHead ? <SeoHead /> : null}
 
       <div
         ref={scrollContainerRef}
@@ -1451,127 +1506,10 @@ export function SitePage({ staticMode = false }: SitePageProps) {
             </div>
           </section>
 
-          {/* Slide 2: Who -- identity anchoring */}
-          <section id="who" className={SLIDE_CLASS}>
-            <FadeSection scrollContainerRef={scrollContainerRef} staticMode={staticMode}>
-              <div className={SLIDE_INNER}>
-                <div className="space-y-6 md:space-y-8 max-w-5xl mx-auto">
-                  <div className="space-y-2 text-center">
-                    <p className="text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
-                      {body.who.kicker}
-                    </p>
-                    <h2 className={HOME_SECTION_H2_CLASS}>
-                      {body.who.titleLine1}
-                      <span className="mt-1.5 block text-muted-foreground sm:mt-2">
-                        {body.who.titleLine2}
-                      </span>
-                    </h2>
-                    <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl mx-auto">
-                      {body.who.subtitle}
-                    </p>
-                  </div>
-
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    {body.who.icpCards.map((profile, index) => {
-                      const Icon = ICP_SLUG_TO_ICON[profile.slug] ?? Server;
-                      return (
-                        <Link
-                          key={profile.slug}
-                          to={`/${profile.slug}`}
-                          className="group flex flex-col rounded-xl border border-border bg-card/50 p-4 no-underline transition-colors hover:bg-muted/60 hover:border-border/80 sm:p-5"
-                        >
-                          <ScrollRevealOnce
-                            scrollContainerRef={scrollContainerRef}
-                            staticMode={staticMode}
-                            staggerMs={index * ILLUS_REVEAL_STAGGER_MS}
-                          >
-                            <WhoProfileCardVisual
-                              profileSlug={profile.slug}
-                              modeLabel={profile.modeLabel}
-                              Icon={Icon}
-                            />
-                          </ScrollRevealOnce>
-                          <div className="flex min-h-0 flex-1 flex-col px-1 pt-4">
-                            <p className="text-[15px] font-medium text-foreground">{profile.name}</p>
-                            <p className="mt-2 text-[13px] leading-6 text-muted-foreground">
-                              {profile.tagline}
-                            </p>
-                            {profile.homepageTransition ? (
-                              <p className="mt-2 text-[13px] leading-6 text-muted-foreground">
-                                {profile.homepageTransition}
-                              </p>
-                            ) : null}
-                          </div>
-                        </Link>
-                      );
-                    })}
-                  </div>
-                  <div className="mx-auto max-w-xl rounded-lg border border-emerald-500/20 bg-emerald-50/50 dark:bg-emerald-950/20 px-4 py-3 text-left">
-                    <div className="flex items-start gap-2">
-                      <Wrench
-                        className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/75"
-                        aria-hidden
-                      />
-                      <p className="text-[13px] leading-5 text-muted-foreground">
-                        <span className="font-medium text-foreground">{body.who.calloutHeading}</span>{" "}
-                        {body.who.calloutBodyBeforeLink}
-                        <Link
-                          to={`/faq#${FAQ_DEEP_LINK_SECTION_IDS.buildingYourOwnMemorySystem}`}
-                          className={WHO_CALLOUT_FAQ_LINK_CLASS}
-                        >
-                          {body.who.calloutLink}
-                        </Link>
-                        {body.who.calloutBodyAfterLink}
-                      </p>
-                    </div>
-                    <div className="mt-2 flex items-start gap-2 border-t border-emerald-500/15 pt-2 text-[12px] leading-5 text-muted-foreground">
-                      <CircleOff
-                        className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/75"
-                        aria-hidden
-                      />
-                      <p>
-                        {body.who.calloutNotForLead}
-                        <Link
-                          to={`/faq#${FAQ_DEEP_LINK_SECTION_IDS.notForThoughtPartner}`}
-                          className={WHO_CALLOUT_FAQ_LINK_CLASS}
-                        >
-                          {body.who.calloutNotForLink}
-                        </Link>
-                        {body.who.calloutNotForTrail}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <SectionEdgeIndicators sectionId="who" />
-            </FadeSection>
-          </section>
-
-          {/* Slide 3: Before / After */}
+          {/* Slide 2: Before / After (chronic-tax frame surfaced early) */}
           <OutcomesSlide scrollContainerRef={scrollContainerRef} staticMode={staticMode} />
 
-          {/* Slide 4: Product demo */}
-          <section id="demo" className={SLIDE_CLASS}>
-            <FadeSection scrollContainerRef={scrollContainerRef} staticMode={staticMode}>
-              <div className={SLIDE_INNER}>
-                <div className="space-y-6 md:space-y-8 max-w-5xl mx-auto">
-                  <div className="space-y-2 text-center">
-                    <p className="text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
-                      {body.demo.kicker}
-                    </p>
-                    <h2 className={HOME_SECTION_H2_CLASS}>{body.demo.title}</h2>
-                    <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl mx-auto">
-                      {body.demo.subtitle}
-                    </p>
-                  </div>
-                  <CliDemoInteractive />
-                </div>
-              </div>
-              <SectionEdgeIndicators sectionId="demo" />
-            </FadeSection>
-          </section>
-
-          {/* Slide 5: Memory Guarantees + compressed proof strip */}
+          {/* Slide 3: Memory Guarantees (acute wedge surfaced before ICP "who") */}
           <section id="memory-guarantees" className={SLIDE_CLASS}>
             <FadeSection scrollContainerRef={scrollContainerRef} staticMode={staticMode}>
               <div className={SLIDE_INNER}>
@@ -1645,6 +1583,127 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                 </div>
               </div>
               <SectionEdgeIndicators sectionId="memory-guarantees" />
+            </FadeSection>
+          </section>
+
+          {/* Slide 4: Who -- identity anchoring */}
+          <section id="who" className={SLIDE_CLASS}>
+            <FadeSection scrollContainerRef={scrollContainerRef} staticMode={staticMode}>
+              <div className={SLIDE_INNER}>
+                <div className="space-y-6 md:space-y-8 max-w-5xl mx-auto">
+                  <div className="space-y-2 text-center">
+                    <p className="text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
+                      {body.who.kicker}
+                    </p>
+                    <h2 className={HOME_SECTION_H2_CLASS}>
+                      {body.who.titleLine1}
+                      <span className="mt-1.5 block text-muted-foreground sm:mt-2">
+                        {body.who.titleLine2}
+                      </span>
+                    </h2>
+                    <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl mx-auto">
+                      {body.who.subtitle}
+                    </p>
+                    <p className="text-[14px] leading-6 text-foreground/85 max-w-2xl mx-auto pt-2 italic">
+                      {body.who.operatorConnector}
+                    </p>
+                  </div>
+
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {body.who.icpCards.map((profile, index) => {
+                      const Icon = ICP_SLUG_TO_ICON[profile.slug] ?? Server;
+                      return (
+                        <Link
+                          key={profile.slug}
+                          to={`/${profile.slug}`}
+                          className="group flex flex-col rounded-xl border border-border bg-card/50 p-4 no-underline transition-colors hover:bg-muted/60 hover:border-border/80 sm:p-5"
+                        >
+                          <ScrollRevealOnce
+                            scrollContainerRef={scrollContainerRef}
+                            staticMode={staticMode}
+                            staggerMs={index * ILLUS_REVEAL_STAGGER_MS}
+                          >
+                            <WhoProfileCardVisual
+                              profileSlug={profile.slug}
+                              modeLabel={profile.modeLabel}
+                              Icon={Icon}
+                            />
+                          </ScrollRevealOnce>
+                          <div className="flex min-h-0 flex-1 flex-col px-1 pt-4">
+                            <p className="text-[15px] font-medium text-foreground">{profile.name}</p>
+                            <p className="mt-2 text-[13px] leading-6 text-muted-foreground">
+                              {profile.tagline}
+                            </p>
+                            {profile.homepageTransition ? (
+                              <p className="mt-2 text-[13px] leading-6 text-muted-foreground">
+                                {profile.homepageTransition}
+                              </p>
+                            ) : null}
+                          </div>
+                        </Link>
+                      );
+                    })}
+                  </div>
+
+                  <div className="mx-auto max-w-xl rounded-lg border border-emerald-500/20 bg-emerald-50/50 dark:bg-emerald-950/20 px-4 py-3 text-left">
+                    <div className="flex items-start gap-2">
+                      <Wrench
+                        className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/75"
+                        aria-hidden
+                      />
+                      <p className="text-[13px] leading-5 text-muted-foreground">
+                        <span className="font-medium text-foreground">{body.who.calloutHeading}</span>{" "}
+                        {body.who.calloutBodyBeforeLink}
+                        <Link
+                          to={`/faq#${FAQ_DEEP_LINK_SECTION_IDS.buildingYourOwnMemorySystem}`}
+                          className={WHO_CALLOUT_FAQ_LINK_CLASS}
+                        >
+                          {body.who.calloutLink}
+                        </Link>
+                        {body.who.calloutBodyAfterLink}
+                      </p>
+                    </div>
+                    <div className="mt-2 flex items-start gap-2 border-t border-emerald-500/15 pt-2 text-[12px] leading-5 text-muted-foreground">
+                      <CircleOff
+                        className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/75"
+                        aria-hidden
+                      />
+                      <p>
+                        {body.who.calloutNotForLead}
+                        <Link
+                          to={`/faq#${FAQ_DEEP_LINK_SECTION_IDS.notForThoughtPartner}`}
+                          className={WHO_CALLOUT_FAQ_LINK_CLASS}
+                        >
+                          {body.who.calloutNotForLink}
+                        </Link>
+                        {body.who.calloutNotForTrail}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <SectionEdgeIndicators sectionId="who" />
+            </FadeSection>
+          </section>
+
+          {/* Slide 5: Product demo */}
+          <section id="demo" className={SLIDE_CLASS}>
+            <FadeSection scrollContainerRef={scrollContainerRef} staticMode={staticMode}>
+              <div className={SLIDE_INNER}>
+                <div className="space-y-6 md:space-y-8 max-w-5xl mx-auto">
+                  <div className="space-y-2 text-center">
+                    <p className="text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
+                      {body.demo.kicker}
+                    </p>
+                    <h2 className={HOME_SECTION_H2_CLASS}>{body.demo.title}</h2>
+                    <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl mx-auto">
+                      {body.demo.subtitle}
+                    </p>
+                  </div>
+                  <CliDemoInteractive />
+                </div>
+              </div>
+              <SectionEdgeIndicators sectionId="demo" />
             </FadeSection>
           </section>
 
@@ -1831,15 +1890,6 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                 <div className="max-w-5xl mx-auto">
                   <div className="flex flex-col lg:flex-row lg:items-center lg:gap-12 xl:gap-16 space-y-6 lg:space-y-0">
                     <div className="space-y-3 text-center lg:text-left flex flex-col items-center lg:items-start lg:flex-1 lg:min-w-0">
-                      <img
-                        src={heroEvaluateIllus}
-                        alt={body.evaluate.evaluateIllustrationAlt}
-                        width={1536}
-                        height={1024}
-                        className="w-full max-w-[200px] sm:max-w-[240px] rounded-lg h-auto object-contain"
-                        loading="lazy"
-                        decoding="async"
-                      />
                       <p className="text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
                         {body.evaluate.kicker}
                       </p>
