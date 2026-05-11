@@ -1,0 +1,70 @@
+release:
+  id: v0.11.1
+  name: Inspector Auth Bypass Hotfix
+  type: not_marketed
+  priority: P0
+  status: in_progress
+  target_ship_date: ASAP
+  owner: Mark Hendrickson
+  marketing_required: false
+  guiding_principle: "Ship the minimal production auth-bypass fix without importing unrelated branch work."
+  branch: hotfix/v0.11.1-inspector-auth-bypass
+  base_tag: v0.11.0
+
+scope:
+  included:
+    - HS-001 Production-safe local-request classification in src/actions.ts
+    - HS-002 Matching root-landing classification in src/services/root_landing/index.ts
+    - HS-003 Focused auth and landing-mode regression tests
+    - HS-004 Hotfix release notes and security-advisory alignment
+  excluded:
+    - Unrelated changes from test/current-branch-build
+    - Broader auth refactors or developer-experience work
+    - Frontend/site/docs churn not required for the hotfix itself
+
+acceptance_criteria:
+  product:
+    - Public reverse-proxy traffic without bearer auth is not treated as local production traffic
+    - Inspector/API auth bypass is closed for the affected deployment shape
+    - Local development behavior remains intact in development mode
+  technical:
+    - Targeted regression tests pass for auth and landing-mode classification
+    - Hotfix diff remains limited to the intended code/test files plus release artifacts
+    - No lint errors exist in touched hotfix files
+  business:
+    - Operators get a patch release with clear upgrade and rollback guidance
+    - Security advisory can be updated to list v0.11.1 as the patched version
+
+test_commands:
+  - npm run build:server
+  - npx vitest run tests/integration/tunnel_auth.test.ts tests/integration/root_landing.test.ts tests/unit/security_hardening.test.ts
+  - node -e "const { isLocalRequest } = require('./dist/actions.js'); console.log(typeof isLocalRequest)"
+  - curl -i https://neotoma.markmhendrickson.com/me
+  - curl -i https://neotoma.markmhendrickson.com/inspector/
+
+deployment:
+  strategy: staging_first
+  rollback: redeploy_v0_11_0_or_revert_hotfix_commit
+  post_release_checks:
+    - unauthorized_requests_to_me_return_401
+    - unauthorized_requests_to_inspector_return_401
+    - no_local_dev_regression_reports
+    - advisory_metadata_updated_with_patched_version
+
+parallelization:
+  max_parallel_workstreams: 1
+  max_high_risk_in_parallel: 1
+
+pre_mortem:
+  - failure_mode: auth_bypass_still_open_for_forwarded_public_clients
+    early_signal: deployed unauthenticated requests still return 200 on protected routes
+    mitigation: targeted reverse_proxy tests and live curl probes before release closeout
+    rollback: revert hotfix commit and redeploy v0.11.0 while continuing advisory-only mitigation
+  - failure_mode: hotfix_blocks_expected_local_development_flows
+    early_signal: local loopback workflows fail in development after upgrade
+    mitigation: explicit development-mode regression checks and env-specific logic review
+    rollback: revert hotfix commit, document local-dev workaround, and re-cut patch
+  - failure_mode: unrelated_branch_changes_leak_into_hotfix_release
+    early_signal: git diff against v0.11.0 includes non-hotfix paths before tag
+    mitigation: isolated worktree, path-level review, and pre-release diff gate
+    rollback: reset release candidate to isolated hotfix branch scope before tagging

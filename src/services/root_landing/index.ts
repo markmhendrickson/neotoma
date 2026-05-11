@@ -70,19 +70,42 @@ function resolveStdioMcpScriptPath(): string | null {
   }
 }
 
-/**
- * True when the request arrived over a loopback socket. Mirrors
- * `src/actions.ts::isLocalRequest`, duplicated here so this module has no
- * upward dependency on that file. SECURITY: uses `req.socket.remoteAddress`,
- * never `req.headers.host` or `req.ip`.
- */
-function isLoopbackRequest(req: express.Request): boolean {
-  const remote = (req.socket?.remoteAddress || "").toLowerCase();
+function isLoopbackAddress(value: string | undefined): boolean {
+  const remote = (value || "").trim().toLowerCase();
   if (!remote) return false;
   if (remote === "127.0.0.1" || remote === "::1") return true;
   if (remote.startsWith("127.")) return true;
   if (remote.startsWith("::ffff:127.")) return true;
   return false;
+}
+
+function forwardedForValues(req: express.Request): string[] {
+  const headers = req.headers || {};
+  const raw = headers["x-forwarded-for"] || headers["X-Forwarded-For"];
+  const values = Array.isArray(raw) ? raw : raw ? [raw] : [];
+  return values
+    .flatMap((value) => String(value).split(","))
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+function isProductionEnvironment(env: NodeJS.ProcessEnv = process.env): boolean {
+  const value = (env.NEOTOMA_ENV || "development").trim().toLowerCase();
+  return value === "production" || value === "prod";
+}
+
+/**
+ * True when the request is genuinely local to this process. Mirrors
+ * `src/actions.ts::isLocalRequest`, duplicated here so this module has no
+ * upward dependency on that file. In production, loopback from a reverse proxy
+ * is not local unless explicitly trusted.
+ */
+function isLoopbackRequest(req: express.Request, env: NodeJS.ProcessEnv = process.env): boolean {
+  if (!isLoopbackAddress(req.socket?.remoteAddress)) return false;
+  const forwardedFor = forwardedForValues(req);
+  if (forwardedFor.length > 0) return forwardedFor.every(isLoopbackAddress);
+  if (isProductionEnvironment(env) && env.NEOTOMA_TRUST_PROD_LOOPBACK === "1") return true;
+  return !isProductionEnvironment(env);
 }
 
 function readEnvMode(env: NodeJS.ProcessEnv = process.env): LandingMode | null {
@@ -115,7 +138,7 @@ export function resolveLandingMode(
   const explicit = readEnvMode(env);
   if (explicit) return explicit;
   if (isSandboxMode(env)) return "sandbox";
-  if (isLoopbackRequest(req)) return "local";
+  if (isLoopbackRequest(req, env)) return "local";
   return "personal";
 }
 

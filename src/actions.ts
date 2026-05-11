@@ -685,29 +685,50 @@ const mcpTransports = new Map<string, StreamableHTTPServerTransport>();
 // Store server instances by session ID to preserve authentication state
 const mcpServerInstances = new Map<string, NeotomaServer>();
 
-/**
- * True when the request arrived over a loopback socket.
- *
- * SECURITY: derived from the TCP socket's remote address, NOT the `Host`
- * header. `req.headers.host` is attacker-controlled; using it to gate
- * authentication / auto-approval produces a trivial bypass when the server is
- * bound to a non-loopback interface. We check `req.socket.remoteAddress`
- * directly so spoofed `Host: localhost` headers do not promote a remote
- * caller into the local-dev trust zone.
- *
- * Express's `req.ip` is also unsafe here because `trust proxy` honours the
- * X-Forwarded-For header — any caller can claim to be loopback.
- */
-export function isLocalRequest(req: express.Request): boolean {
-  const remote = (req.socket?.remoteAddress || "").toLowerCase();
+function isLoopbackAddress(value: string | undefined): boolean {
+  const remote = (value || "").trim().toLowerCase();
   if (!remote) return false;
-  // Unix-domain socket requests have no remote address; treat as non-local.
   if (remote === "127.0.0.1" || remote === "::1") return true;
-  // IPv4 loopback range (127.0.0.0/8)
   if (remote.startsWith("127.")) return true;
-  // IPv4-mapped IPv6 loopback (e.g. ::ffff:127.0.0.1)
   if (remote.startsWith("::ffff:127.")) return true;
   return false;
+}
+
+function forwardedForValues(req: express.Request): string[] {
+  const headers = req.headers || {};
+  const raw = headers["x-forwarded-for"] || headers["X-Forwarded-For"];
+  const values = Array.isArray(raw) ? raw : raw ? [raw] : [];
+  return values
+    .flatMap((value) => String(value).split(","))
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+function isProductionEnvironment(env: NodeJS.ProcessEnv = process.env): boolean {
+  const value = (env.NEOTOMA_ENV || "development").trim().toLowerCase();
+  return value === "production" || value === "prod";
+}
+
+/**
+ * True when the request is genuinely local to this process.
+ *
+ * SECURITY: a same-host reverse proxy (Caddy, nginx, Cloudflare tunnel, etc.)
+ * connects to Node over loopback even for public internet callers. In
+ * production, loopback alone is therefore not enough to grant local-dev auth.
+ */
+export function isLocalRequest(req: express.Request): boolean {
+  if (!isLoopbackAddress(req.socket?.remoteAddress)) return false;
+
+  const forwardedFor = forwardedForValues(req);
+  if (forwardedFor.length > 0) {
+    return forwardedFor.every(isLoopbackAddress);
+  }
+
+  if (isProductionEnvironment() && process.env.NEOTOMA_TRUST_PROD_LOOPBACK === "1") {
+    return true;
+  }
+
+  return !isProductionEnvironment();
 }
 
 const OAUTH_KEY_SESSION_COOKIE = "neotoma_oauth_key_session";
