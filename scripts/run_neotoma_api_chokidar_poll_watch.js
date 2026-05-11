@@ -48,11 +48,17 @@ let intentionalRestart = false;
 /** Serializes kill+spawn so overlapping saves still produce one stable restart chain. */
 let restartChain = Promise.resolve();
 
+// Spawn the dev API as a process-group leader (detached:true) so that on restart
+// we can SIGTERM the entire group (run-dev-task.js + with_branch_ports.js + the
+// `node --import tsx src/actions.ts` server). Without this, killing only the
+// immediate child orphans grandchildren under PPID=1 and they keep holding
+// their bound port forever (see docs/developer/launchd_dev_servers.md).
 function spawnApi() {
   const args = [runDevTaskJs, "node", "--import", "tsx", entryAbs];
   const c = spawn(process.execPath, args, {
     stdio: "inherit",
     env: process.env,
+    detached: true,
   });
   c.on("exit", (code, signal) => {
     if (stopping) {
@@ -71,6 +77,23 @@ function spawnApi() {
   return c;
 }
 
+function killProcessGroup(pid, signal) {
+  if (!pid) return;
+  try {
+    process.kill(-pid, signal);
+  } catch (err) {
+    if (err && err.code !== "ESRCH") {
+      try {
+        process.kill(pid, signal);
+      } catch (innerErr) {
+        if (innerErr && innerErr.code !== "ESRCH") {
+          throw innerErr;
+        }
+      }
+    }
+  }
+}
+
 async function hardRestart(reason) {
   if (stopping || !child) {
     return;
@@ -81,19 +104,16 @@ async function hardRestart(reason) {
       process.stderr.write(`[api-watch-poll] restart (${reason})\n`);
     }
     const prev = child;
+    const prevPid = prev.pid;
     prev.removeAllListeners("exit");
-    prev.kill("SIGTERM");
+    killProcessGroup(prevPid, "SIGTERM");
     await Promise.race([
       once(prev, "exit"),
       new Promise((r) => {
         setTimeout(r, 8000).unref();
       }),
     ]);
-    try {
-      prev.kill("SIGKILL");
-    } catch {
-      /* ignore */
-    }
+    killProcessGroup(prevPid, "SIGKILL");
     if (stopping) {
       return;
     }
@@ -146,7 +166,7 @@ async function main() {
     }
     void watcher.close();
     if (child && !child.killed) {
-      child.kill(signal);
+      killProcessGroup(child.pid, signal);
     }
   };
   process.on("SIGINT", () => shutdown("SIGINT"));

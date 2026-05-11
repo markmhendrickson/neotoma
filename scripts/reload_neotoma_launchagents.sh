@@ -75,23 +75,92 @@ for legacy in \
   fi
 done
 
-# Optional: clean up `node dist/index.js` zombies from this repo (PPID=1) before
-# reloading. Stale dev/prod API processes can hold 3080/3180 and cause the new
-# LaunchAgent to bounce on EADDRINUSE.
+# Optional: clean up Neotoma server zombies before reloading. Without this,
+# stale processes can hold 3080/3180 (or branch-allocated ports 3081-3179, or
+# test ports 18080-18099) and cause the new LaunchAgent to bounce on
+# EADDRINUSE or quietly drift to a non-canonical port.
+#
+# Patterns matched (all rooted at this repo's src/actions.ts or dist/index.js):
+#   1) `node dist/index.js` with PPID=1                       (legacy zombies)
+#   2) `with_branch_ports.js node --import tsx .../src/actions.ts` with PPID=1
+#      and their immediate `node --import tsx .../src/actions.ts` server child
+#      (orphaned by chokidar reload chains that did not propagate SIGTERM)
+#   3) `tsx watch .../src/actions.ts` chains and their server workers
+#      (left behind by `npm test` / `vitest` integration suites)
+#   4) `npm exec tsx .../src/actions.ts` invocations from manual debug runs
 if [[ "$KILL_ZOMBIES" == "1" ]]; then
-  echo "Killing stale Neotoma node dist/index.js zombies (PPID=1) from ${REPO_ROOT}..."
+  echo "Killing stale Neotoma server zombies from ${REPO_ROOT}..."
   zombie_count=0
+  killed_pids=()
+
+  # Pattern 1: legacy `node dist/index.js` PPID=1 zombies (this repo only).
   for pid in $(ps -eo pid,ppid,command | awk '$2==1 && /node dist\/index\.js$/{print $1}'); do
     cwd="$(lsof -p "$pid" 2>/dev/null | awk '$4=="cwd"{print $NF; exit}')"
     case "$cwd" in
       "$REPO_ROOT"|"$REPO_ROOT"/*|/private/tmp/neotoma-*)
-        kill -KILL "$pid" 2>/dev/null && echo "  killed PID=$pid (cwd=$cwd)"
+        kill -TERM "$pid" 2>/dev/null && echo "  TERMed PID=$pid (dist/index.js zombie, cwd=$cwd)"
+        killed_pids+=("$pid")
         zombie_count=$((zombie_count + 1))
         ;;
     esac
   done
+
+  # Pattern 2: with_branch_ports.js + tsx actions.ts orphans pointing at this repo.
+  pattern2_re="${REPO_ROOT}/scripts/with_branch_ports.js .*${REPO_ROOT}/src/actions.ts"
+  for pid in $(pgrep -f "$pattern2_re" 2>/dev/null); do
+    kill -TERM "$pid" 2>/dev/null && echo "  TERMed PID=$pid (with_branch_ports.js orphan)"
+    killed_pids+=("$pid")
+    zombie_count=$((zombie_count + 1))
+  done
+  # Their immediate server children (`node --import tsx .../src/actions.ts`).
+  pattern3_re="--import tsx ${REPO_ROOT}/src/actions.ts"
+  for pid in $(pgrep -f "$pattern3_re" 2>/dev/null); do
+    # Skip the live LaunchAgent chain (descendant of com.neotoma.dev-server pid).
+    parent="$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')"
+    case " ${killed_pids[*]} " in
+      *" ${parent} "*)
+        kill -TERM "$pid" 2>/dev/null && echo "  TERMed PID=$pid (orphaned actions.ts server, parent=$parent)"
+        killed_pids+=("$pid")
+        zombie_count=$((zombie_count + 1))
+        ;;
+    esac
+  done
+
+  # Pattern 3: `tsx watch ... src/actions.ts` watcher chains in this repo.
+  pattern4_re="tsx (watch )?(--include src )?${REPO_ROOT}/src/actions.ts"
+  for pid in $(pgrep -f "$pattern4_re" 2>/dev/null); do
+    cwd="$(lsof -p "$pid" 2>/dev/null | awk '$4=="cwd"{print $NF; exit}')"
+    case "$cwd" in
+      "$REPO_ROOT"|"$REPO_ROOT"/*)
+        kill -TERM "$pid" 2>/dev/null && echo "  TERMed PID=$pid (tsx watch actions.ts)"
+        killed_pids+=("$pid")
+        zombie_count=$((zombie_count + 1))
+        ;;
+    esac
+  done
+
+  # Pattern 4: npm exec tsx .../src/actions.ts (manual debug or lingering test run).
+  pattern5_re="npm exec tsx ${REPO_ROOT}/src/actions.ts"
+  for pid in $(pgrep -f "$pattern5_re" 2>/dev/null); do
+    kill -TERM "$pid" 2>/dev/null && echo "  TERMed PID=$pid (npm exec tsx actions.ts)"
+    killed_pids+=("$pid")
+    zombie_count=$((zombie_count + 1))
+  done
+
+  # Give SIGTERM a moment, then SIGKILL anything still alive.
+  if [[ "${#killed_pids[@]}" -gt 0 ]]; then
+    sleep 1
+    for pid in "${killed_pids[@]}"; do
+      if kill -0 "$pid" 2>/dev/null; then
+        kill -KILL "$pid" 2>/dev/null && echo "  SIGKILLed PID=$pid (still alive after SIGTERM)"
+      fi
+    done
+  fi
+
   if [[ "$zombie_count" == "0" ]]; then
     echo "  none found."
+  else
+    echo "  Total reaped: ${zombie_count}"
   fi
 fi
 
