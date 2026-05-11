@@ -65,11 +65,11 @@ v0.11.1 is a minimal security hotfix that closes the hosted Inspector/API auth b
 - `npx vitest run tests/integration/root_landing.test.ts`
 - `npx vitest run tests/unit/security_hardening.test.ts`
 - `npm run build:server`
-- deployed `curl` probes against `/me` and `/inspector/`
+- Post-deploy `curl` probes against `/me` and `/inspector/` are required before marking the rollout complete.
 
 ## Execute note
 
-- This preview assumes the current hotfix patch and release-prep docs are committed on `hotfix/v0.11.1-inspector-auth-bypass` before tagging. Until then, the rendered body is accurate for the narrative sections, but the commit list remains empty because there are no commits above `v0.11.0` yet.
+- This preview is rendered from `hotfix/v0.11.1-inspector-auth-bypass` after the hotfix commit `ff80d0ea1`. Release execution still needs the version bump commit, final tag, GitHub Release, npm publish, deployment, and post-deploy protected-route probes.
 
 ## Breaking changes
 
