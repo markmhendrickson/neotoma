@@ -18,11 +18,14 @@ Security-relevant surfaces touched:
 
 ### G1 — `security:classify-diff`
 
-`npm run -s security:classify-diff` → `sensitive=false`.
+`npm run -s security:classify-diff -- --base v0.12.0 --head HEAD` → `sensitive=true`.
 
-Interpretation: the classifier did not flag any of the changed paths in its sensitive-path map. The auth-path change in `src/actions.ts` is in middleware that the classifier does not currently track (it tracks route-registration adds and removals). This is a **known classifier gap**, not a license to skip review. The change is treated as security-relevant for this review and is covered by negative tests in `tests/integration/guest_invalid_bearer_routes.test.ts` and the `tests/security/auth_topology_matrix.test.ts` lane.
+Flagged sensitive paths:
 
-Recommended follow-up (not blocking v0.12.1): extend `scripts/security/classify_diff.js` to flag changes in the `maybeStampGuestPrincipal` / `resolveRoutePrincipal` / `resolveGuestUserId` neighborhood as sensitive on future diffs.
+- `auth-middleware: src/actions.ts`
+- `root-landing: src/services/root_landing/site_nav.ts`
+
+Interpretation: the auth-path change in `src/actions.ts` is the primary security-relevant code change. It is covered by negative tests in `tests/integration/guest_invalid_bearer_routes.test.ts` and by the `tests/security/auth_topology_matrix.test.ts` lane. The root-landing nav mirror change is flagged because root landing is a public surface, but the diff only mirrors four already-public docs links from the frontend docs nav into the server-side landing-nav snapshot.
 
 ### G2 — `security:lint`
 
