@@ -265,7 +265,8 @@ describe("Legacy-payload corpus", () => {
             const actualCode =
               resolution.error?.code ??
               standard.error?.error_code ??
-              standard.error?.code;
+              standard.error?.code ??
+              (responseBody as { error_code?: string }).error_code;
             expect(actualCode).toBe(scenario.outcome.error_code);
           }
           if (scenario.outcome.issue_code) {
@@ -276,6 +277,8 @@ describe("Legacy-payload corpus", () => {
             const hints: unknown[] = [
               ...(resolution.error?.issues ?? []).map((i) => i?.hint),
               standard.error?.hint,
+              (standard.error as { details?: { hint?: unknown } } | undefined)?.details?.hint,
+              (responseBody as { details?: { hint?: unknown } }).details?.hint,
             ].filter((h) => h !== undefined && h !== null);
             const matched = hints.some((h) =>
               matchesHint(h, scenario.outcome.hint_match!),

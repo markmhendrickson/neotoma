@@ -49,7 +49,12 @@ Key fields:
 - `sync_pending` — true between local store and successful GitHub roundtrip.
 - Reporter provenance (issue snapshot): `reporter_git_sha`, `reporter_git_ref`, `reporter_channel`, `reporter_app_version`, `reporter_ci_run_id`, `reporter_patch_source_id`.
 
-**Reporter provenance: issue vs messages.** Today these fields are written **once on the `issue`** at submission time (who / what environment filed the report). That keeps the model small and matches “initial report context.” If the same human or agent later validates from a **different** checkout or version, that history is **not** automatically split into per-message columns: either (a) rely on **message-level attribution** (`external_actor`, AAuth, GitHub comment author) plus timestamps, (b) add a **follow-up `conversation_message`** whose body includes the new SHA / version in prose, or (c) use **`correct`** on the `issue` to append a higher-priority observation when you explicitly want the snapshot to record a new reporter context (audit trail preserved). Duplicating every reporter field onto each message is possible schema-wise but not required for most flows — prefer (a)+(b) unless you need machine-queryable per-comment reporter tuples.
+**Reporter provenance: issue vs messages (v0.12+).** Reporter env is now captured at **two** layers:
+
+1. **Issue snapshot** — populated at submit time. Fields: `reporter_git_sha`, `reporter_git_ref`, `reporter_channel`, `reporter_app_version`, `reporter_ci_run_id`, `reporter_patch_source_id`. **Required**: `submit_issue` rejects submissions that omit both `reporter_git_sha` and `reporter_app_version` with `error_code: ERR_REPORTER_ENVIRONMENT_REQUIRED`. The rejection envelope returns `details.acceptable_field_groups: [["reporter_git_sha"], ["reporter_app_version"]]` so callers can retry with the right alternative. See `tests/contract/legacy_payloads/v0.12.x/issues_submit_without_reporter_env` for the contract fixture.
+2. **`conversation_message`** — optional but **soft-required on public threads**. Schema v1.3 adds `reporter_git_sha`, `reporter_git_ref`, `reporter_channel`, `reporter_app_version` on the message row. `add_issue_message` accepts the same fields; on public threads, missing both `reporter_git_sha` and `reporter_app_version` emits a server-side warning (the message still persists). Agents (and the `process-issues` skill) MUST populate these on every message they author so each debugging step records the build it was authored against.
+
+When a follow-up validates from a different checkout, prefer populating the message-level reporter env over `correct`-ing the issue snapshot. `correct` on the issue is still appropriate when the originating environment changes (e.g. the reporter switched to a newer release).
 
 The companion `conversation` uses `thread_kind: "multi_party"` (operators, reporters, and agents may all participate; see `submitIssue` / `syncIssuesFromGitHub` / `neotoma_client` writers) and `title` mirroring the issue title; `conversation_message` rows hold issue body and comments.
 
@@ -66,7 +71,7 @@ The companion `conversation` uses `thread_kind: "multi_party"` (operators, repor
 - `attribution_backfill.ts` — operator script entry point that walks existing `issue` / `conversation_message` rows and populates `external_actor` rows for legacy data that pre-dates attribution.
 - `inspector_bulk.ts` — bulk reads used by the Inspector list / detail pages.
 - `neotoma_client.ts` — outbound HTTP client for cross-instance issue submission (`target_url`); see [`peer_sync.md`](peer_sync.md) for the broader peer surface.
-- `syncIssuesFromGitHub.ts` — `syncIssuesFromGitHub` (GitHub → Neotoma, full or `since`-bounded), `syncIssueIfStale` (single-issue cache check), `isSyncStale`. File name matches the primary export to avoid confusion with **peer** / cross-instance `sync` flows (`docs/subsystems/peer_sync.md`).
+- `sync_issues_from_github.ts` — `syncIssuesFromGitHub` (GitHub → Neotoma, full or `since`-bounded), `syncIssueIfStale` (single-issue cache check), `isSyncStale`. Lives under `src/services/issues/` alongside peer / cross-instance sync docs (`docs/subsystems/peer_sync.md`) but is GitHub mirror-specific.
 - `issue_operations.ts` — high-level orchestrators: `submitIssue`, `addIssueMessage`, `getIssueStatus`, `resolveIssueRow`. These are what MCP, HTTP (`src/actions.ts`), and the CLI (via the API client) call.
 
 ## Submission flow (public)
@@ -138,7 +143,7 @@ Service entrypoint: `syncIssuesFromGitHub({ since?, state?, labels? })`:
 
 `syncIssueIfStale({ entity_id })` performs the same flow scoped to a single issue and is invoked transparently by `getIssueStatus` / `addIssueMessage` whenever the cache is older than `sync_staleness_ms`.
 
-**MCP vs CLI vs HTTP:** `sync_issues` (MCP), `POST /issues/sync`, and `neotoma issues sync` all call `syncIssuesFromGitHub` in `src/services/issues/syncIssuesFromGitHub.ts` via the HTTP handlers in `src/actions.ts` (CLI uses the typed API client).
+**MCP vs CLI vs HTTP:** `sync_issues` (MCP), `POST /issues/sync`, and `neotoma issues sync` all call `syncIssuesFromGitHub` in `src/services/issues/sync_issues_from_github.ts` via the HTTP handlers in `src/actions.ts` (CLI uses the typed API client).
 
 ## Mirror credentials
 

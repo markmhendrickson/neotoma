@@ -1,0 +1,25 @@
+---
+description: "Keep the automated test catalog and testing docs in sync with test-file, test-command, and CI-lane changes."
+globs:
+  - "tests/**/*.ts"
+  - "tests/**/*.tsx"
+  - "src/**/*.test.ts"
+  - "src/**/*.test.tsx"
+  - "src/**/__tests__/**/*.ts"
+  - "src/**/__tests__/**/*.tsx"
+  - "frontend/src/**/*.test.ts"
+  - "frontend/src/**/*.test.tsx"
+  - "playwright/tests/**/*.spec.ts"
+  - "package.json"
+  - ".github/workflows/ci_test_lanes.yml"
+  - "docs/testing/**"
+alwaysApply: false
+---
+
+# Test Catalog Maintenance
+
+- `docs/testing/automated_test_catalog.md` is the canonical automated-test inventory.
+- When automated test files are added, removed, moved, or renamed, run `npm run generate:test-catalog` in the same change.
+- When test commands, CI lanes, or default-vs-optional test modes change, update `docs/testing/automated_test_catalog.md` and `docs/testing/testing_standard.md` in the same change.
+- Before finishing, run `npm run validate:test-catalog`.
+- Do not hand-edit generated inventory entries in the catalog; update the generator or regenerate the file instead.

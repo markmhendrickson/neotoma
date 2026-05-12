@@ -35,6 +35,12 @@ neotoma access reset <entity_type>
 neotoma access list
 ```
 
+`access reset` clears any deprecated config-file fallback for the entity type
+and, when a schema exists, writes an explicit `closed` policy to
+SchemaMetadata. If a higher-precedence environment variable still applies, the
+CLI reports that remaining effective source instead of claiming the entity type
+is closed.
+
 Shortcut for issue submission types:
 
 ```bash
@@ -61,11 +67,20 @@ The following entity types are seeded with `guest_access_policy: "submitter_scop
 
 These defaults enable the GitHub Issues submission pipeline for external agents out of the box.
 
+On startup, issue schema seeding also repairs active `issue` schema rows from
+older installs that are missing `metadata.guest_access_policy`, including
+user-scoped rows. The repair preserves any valid explicit operator policy (for
+example `closed`) and only fills a missing or invalid value with
+`submitter_scoped`.
+
 ## API
 
 ### GET /access_policies
 
 Returns the effective resolved policy for every entity type that has a non-default (non-`closed`) policy.
+Resolution follows the same precedence as runtime authorization: env var,
+SchemaMetadata, deprecated config fallback, then default. Effective `closed`
+policies are omitted from the map because they match `default_mode`.
 
 **Response:**
 
@@ -86,7 +101,7 @@ Requires authentication.
 
 Guest access policies are visible in two places in the Inspector:
 
-1. **Schema detail page** — a "Guest Access Policy" card shows the effective mode for that entity type, read from `schema.metadata.guest_access_policy`.
+1. **Schema detail page** — a "Guest Access Policy" card shows the schema metadata policy for that entity type; callers should use the effective policy API when env/config precedence matters.
 2. **Access Policies page** (`/access-policies`) — a global table listing all entity types with non-default policies. Linked from the sidebar.
 
 ## Deprecation: Config File

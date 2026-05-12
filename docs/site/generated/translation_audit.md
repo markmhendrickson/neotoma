@@ -58,6 +58,7 @@
 | `/neotoma-with-openclaw-connect-local-stdio` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/neotoma-with-openclaw-connect-remote-http` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/neotoma-with-opencode` | en, es | 2026-05-07 | canonical, machine_draft |
+| `/non-destructive-testing` | en, es | 2026-05-08 | canonical |
 | `/operating` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/personal-data` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/portfolio` | en, es | 2026-05-07 | canonical, machine_draft |

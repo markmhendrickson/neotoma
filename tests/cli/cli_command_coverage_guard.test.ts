@@ -46,6 +46,7 @@ describe("CLI command coverage guard", () => {
       "discover",
       "ingest-transcript",
       "issues",
+      "plans",
       "upload",
     ]);
 

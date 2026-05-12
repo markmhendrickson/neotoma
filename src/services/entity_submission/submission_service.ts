@@ -18,7 +18,7 @@ import {
   resolveConversationForRoot,
   storeRootWithThread,
 } from "../submitted_thread/submitted_thread.js";
-import { syncIssuesFromGitHub } from "../issues/syncIssuesFromGitHub.js";
+import { syncIssuesFromGitHub } from "../issues/sync_issues_from_github.js";
 import { postEntityToWebhookMirror } from "./mirrors/webhook_mirror.js";
 import { getSubmissionConfigForTargetType } from "./submission_config_loader.js";
 import type { SubmitEntityParams, SubmitEntityResult } from "./types.js";

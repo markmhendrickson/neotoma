@@ -33,6 +33,7 @@ Install or run macOS LaunchAgents that keep dev / build / sync tasks alive acros
 - `com.neotoma.issues-sync.plist.template`, `install_launchd_issues_sync.js`, `run_issues_sync_launchd.sh`, `launchd-issues-sync.env.example` — runs `neotoma issues sync` on a 5-minute cadence.
 - `install_launchd_watch_build.js`, `install_launchd_watch_stacks.js` — installers consumed by the `setup:launchd-*` npm scripts. The latter is a compatibility wrapper around the maintained dev-server and watch-build installers.
 - `reload_neotoma_launchagents.sh` — developer helper: `launchctl unload` + `load` for each installed Neotoma LaunchAgent plist (`npm run reload:launchd-neotoma`). Does not reload unrelated system jobs.
+- `shutdown_neotoma_launchagents.sh` — developer helper: unloads Neotoma LaunchAgents, stops dev/prod APIs, and reaps leftover launchd-owned repo processes (`npm run shutdown:launchd-neotoma`).
 - `kill_stale_neotoma_dev_stacks.sh` — clears orphan dev stacks before re-installing the LaunchAgents.
 
 ## MDX site validators

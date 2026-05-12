@@ -46,6 +46,21 @@ export interface AccessPolicyMap {
   [entityType: string]: AccessPolicyMode;
 }
 
+export type AccessPolicySource =
+  | "env"
+  | "schema_metadata"
+  | "config_file"
+  | "default";
+
+export interface AccessPolicyResolution {
+  mode: AccessPolicyMode;
+  source: AccessPolicySource;
+}
+
+export interface AccessPolicyEntry extends AccessPolicyResolution {
+  entity_type: string;
+}
+
 function configFilePath(): string {
   const home = process.env.HOME || process.env.USERPROFILE || os.homedir();
   return path.join(home, ".config", "neotoma", "config.json");
@@ -78,16 +93,37 @@ function parseMode(raw: string | undefined): AccessPolicyMode | null {
   return VALID_MODES.has(normalized) ? normalized : null;
 }
 
+function setIfNonDefault(
+  entries: Record<string, AccessPolicyEntry>,
+  entityType: string,
+  mode: AccessPolicyMode,
+  source: AccessPolicySource,
+): void {
+  if (mode === DEFAULT_MODE) {
+    delete entries[entityType];
+    return;
+  }
+  entries[entityType] = { entity_type: entityType, mode, source };
+}
+
 /**
- * Load all configured access policies, merging schema metadata, config
- * file (deprecated), and env overrides.
+ * Load all effective non-default access policies with their winning source.
  *
  * Precedence per key: env var > schema metadata > config file.
  */
-export async function loadAccessPolicies(): Promise<AccessPolicyMap> {
-  const merged: AccessPolicyMap = {};
+export async function loadAccessPolicyEntries(): Promise<Record<string, AccessPolicyEntry>> {
+  const entries: Record<string, AccessPolicyEntry> = {};
 
-  // 1. Schema metadata (lowest priority of the three explicit sources)
+  // 1. Config file (deprecated fallback; lowest explicit priority)
+  const cfg = await readConfig();
+  const stored = cfg.access_policies ?? {};
+  for (const [entityType, mode] of Object.entries(stored)) {
+    if (VALID_MODES.has(mode)) {
+      setIfNonDefault(entries, entityType, mode, "config_file");
+    }
+  }
+
+  // 2. Schema metadata (canonical source; overrides deprecated config)
   try {
     const { SchemaRegistryService } = await import("./schema_registry.js");
     const registry = new SchemaRegistryService();
@@ -95,20 +131,16 @@ export async function loadAccessPolicies(): Promise<AccessPolicyMap> {
     for (const schema of allSchemas) {
       const policy = schema.metadata?.guest_access_policy;
       if (policy && VALID_MODES.has(policy as AccessPolicyMode)) {
-        merged[schema.entity_type] = policy as AccessPolicyMode;
+        setIfNonDefault(
+          entries,
+          schema.entity_type,
+          policy as AccessPolicyMode,
+          "schema_metadata",
+        );
       }
     }
   } catch {
     // Schema registry unavailable; continue with other sources
-  }
-
-  // 2. Config file (deprecated; overrides schema metadata)
-  const cfg = await readConfig();
-  const stored = cfg.access_policies ?? {};
-  for (const [entityType, mode] of Object.entries(stored)) {
-    if (VALID_MODES.has(mode)) {
-      merged[entityType] = mode;
-    }
   }
 
   // 3. Env vars (highest priority)
@@ -118,12 +150,24 @@ export async function loadAccessPolicies(): Promise<AccessPolicyMap> {
       const entityType = key.slice(envPrefix.length).toLowerCase();
       const mode = parseMode(value);
       if (mode) {
-        merged[entityType] = mode;
+        setIfNonDefault(entries, entityType, mode, "env");
       }
     }
   }
 
-  return merged;
+  return entries;
+}
+
+/**
+ * Load all effective non-default access policies.
+ *
+ * Precedence per key: env var > schema metadata > config file.
+ */
+export async function loadAccessPolicies(): Promise<AccessPolicyMap> {
+  const entries = await loadAccessPolicyEntries();
+  return Object.fromEntries(
+    Object.entries(entries).map(([entityType, entry]) => [entityType, entry.mode]),
+  );
 }
 
 /**
@@ -131,11 +175,13 @@ export async function loadAccessPolicies(): Promise<AccessPolicyMap> {
  *
  * Precedence: env var > schema metadata > config file (deprecated) > default.
  */
-export async function resolveAccessPolicy(entityType: string): Promise<AccessPolicyMode> {
+export async function resolveAccessPolicyWithSource(
+  entityType: string,
+): Promise<AccessPolicyResolution> {
   // 1. Env var override (highest priority — operator escape hatch)
   const envKey = `NEOTOMA_ACCESS_POLICY_${entityType.toUpperCase()}`;
   const envMode = parseMode(process.env[envKey]);
-  if (envMode) return envMode;
+  if (envMode) return { mode: envMode, source: "env" };
 
   // 2. SchemaMetadata.guest_access_policy on the active schema row
   try {
@@ -144,7 +190,7 @@ export async function resolveAccessPolicy(entityType: string): Promise<AccessPol
     const schema = await registry.loadGlobalSchema(entityType);
     const metaPolicy = schema?.metadata?.guest_access_policy;
     if (metaPolicy && VALID_MODES.has(metaPolicy as AccessPolicyMode)) {
-      return metaPolicy as AccessPolicyMode;
+      return { mode: metaPolicy as AccessPolicyMode, source: "schema_metadata" };
     }
   } catch {
     // Schema registry unavailable (e.g. tests, early bootstrap); fall through
@@ -162,10 +208,15 @@ export async function resolveAccessPolicy(entityType: string): Promise<AccessPol
         hint: "Move guest_access_policy to SchemaMetadata via: neotoma access set " + entityType + " " + stored,
       }),
     );
-    return stored;
+    return { mode: stored, source: "config_file" };
   }
 
-  return DEFAULT_MODE;
+  return { mode: DEFAULT_MODE, source: "default" };
+}
+
+export async function resolveAccessPolicy(entityType: string): Promise<AccessPolicyMode> {
+  const resolution = await resolveAccessPolicyWithSource(entityType);
+  return resolution.mode;
 }
 
 /**

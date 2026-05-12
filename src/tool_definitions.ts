@@ -989,7 +989,8 @@ export function buildToolDefinitions(
           "Submits to the operator Neotoma instance (default base URL when unset: https://neotoma.markmhendrickson.com). Override with NEOTOMA_ISSUES_TARGET_URL or issues.target_url in config. " +
           "When a non-empty target URL is configured, the tool fails (MCP error) if that remote store is unreachable or rejects the request; a local row with sync_pending may still be written first. " +
           "When the operator accepts the issue, the response includes guest_access_token for token-scoped get_issue_status / add_issue_message read-back when the local snapshot does not already carry the token. " +
-          "When `pushed_to_github` is false for a public issue, read `github_mirror_guidance` for recommended auth + manual GitHub create + entity update steps.",
+          "When `pushed_to_github` is false for a public issue, read `github_mirror_guidance` for recommended auth + manual GitHub create + entity update steps. " +
+          "Reporter environment is REQUIRED: callers MUST provide at least one of `reporter_git_sha` or `reporter_app_version` (the SHA you reproduced against and/or the CLI/app version). Submissions missing both are rejected with `error_code: ERR_REPORTER_ENVIRONMENT_REQUIRED`.",
       ),
       inputSchema: {
         type: "object",
@@ -1006,14 +1007,24 @@ export function buildToolDefinitions(
             enum: ["public", "private"],
             description: "Use 'private' for PII-sensitive issues (Neotoma only, no GitHub mirror). Default: 'public'.",
           },
-          reporter_git_sha: { type: "string", description: "Optional reporter git SHA (Phase 4 daemon)." },
+          reporter_git_sha: {
+            type: "string",
+            description: "Required (this OR reporter_app_version). Reporter git SHA (`git rev-parse HEAD`).",
+          },
           reporter_git_ref: { type: "string", description: "Optional reporter git ref / branch name." },
           reporter_channel: { type: "string", description: "Optional reporter channel (e.g. ci, local)." },
-          reporter_app_version: { type: "string", description: "Optional reporter app or CLI version." },
+          reporter_app_version: {
+            type: "string",
+            description: "Required (this OR reporter_git_sha). Reporter app / CLI version (semver).",
+          },
           reporter_ci_run_id: { type: "string", description: "Optional CI or workflow run id." },
           reporter_patch_source_id: { type: "string", description: "Optional source id for reporter patch artifact." },
         },
         required: ["title", "body"],
+        anyOf: [
+          { required: ["reporter_git_sha"] },
+          { required: ["reporter_app_version"] },
+        ],
       },
     },
     {
@@ -1022,7 +1033,8 @@ export function buildToolDefinitions(
         "add_issue_message",
         "Add a message to an existing issue thread. Pass Neotoma `issue` entity_id (from submit_issue, get_issue_status, or Inspector). Submits to the configured operator Neotoma instance first, creates a conversation_message locally, and may push a GitHub comment when the issue has a GitHub mirror. " +
           "When the local row mirrors a remote operator issue, pass guest_access_token if the token is not already stored on the issue snapshot (same semantics as get_issue_status). " +
-          "Fails with an MCP error if the remote Neotoma store is required (non-empty target URL) but unreachable or rejects the request.",
+          "Fails with an MCP error if the remote Neotoma store is required (non-empty target URL) but unreachable or rejects the request. " +
+          "On public issue threads, pass at least one of `reporter_git_sha` / `reporter_app_version` so each message records the environment it was authored against. Missing both emits a server-side warning; the message still persists.",
       ),
       inputSchema: {
         type: "object",
@@ -1042,6 +1054,18 @@ export function buildToolDefinitions(
             type: "string",
             description:
               "Optional guest-scoped token for operator Neotoma read-through / remote append when mirroring a remote issue. If omitted, the issue entity's stored guest_access_token is used when present.",
+          },
+          reporter_git_sha: {
+            type: "string",
+            description:
+              "Reporter git SHA (`git rev-parse HEAD`) the message author is testing against. Soft requirement on public issue threads.",
+          },
+          reporter_git_ref: { type: "string", description: "Optional reporter git ref / branch name." },
+          reporter_channel: { type: "string", description: "Optional reporter channel (e.g. ci, local)." },
+          reporter_app_version: {
+            type: "string",
+            description:
+              "Reporter app / CLI version (semver) the message author is testing. Soft requirement on public issue threads.",
           },
         },
         required: ["body"],

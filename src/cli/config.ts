@@ -371,9 +371,9 @@ function defaultPortForEnv(env: "dev" | "prod"): number {
  * matching **`NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE`** / **`NEOTOMA_ENV`** (same rules as
  * the MCP signed shim), TCP-probes, and returns `http://localhost:<port>` when
  * listening — after session env and before `config.base_url` / auto-detect.
- * When no session port is set, a session/config preferred env selects the matching
- * default port even if a different env's API happens to be running, keeping API
- * clients and local transport on the same SQLite profile.
+ * When no session port is set, a session/config preferred env probes the matching
+ * default port first. If it is not listening, resolution falls back to multi-instance
+ * discovery so commands do not pin themselves to a dead API.
  */
 export async function resolveBaseUrl(option?: string, _config?: Config): Promise<string> {
   // Precedence: explicit --base-url flag > NEOTOMA_BASE_URL env var > session
@@ -417,15 +417,18 @@ export async function resolveBaseUrl(option?: string, _config?: Config): Promise
     return configBaseUrl.replace(/\/$/, "");
   }
 
-  const instances = await discoverApiInstances({ config: _config });
-  const ports = instances.map((instance) => instance.port);
   const sessionEnv = normalizePreferredEnv(process.env.NEOTOMA_SESSION_ENV);
   const configPreferredEnv = normalizePreferredEnv(_config?.preferred_env);
   const preferredEnv = sessionEnv ?? configPreferredEnv;
   if (preferredEnv) {
     const preferredPort = defaultPortForEnv(preferredEnv);
-    return `http://${RESOLVED_API_LOOPBACK_HOST}:${preferredPort}`;
+    if (await probeHealth(preferredPort)) {
+      return `http://${RESOLVED_API_LOOPBACK_HOST}:${preferredPort}`;
+    }
   }
+
+  const instances = await discoverApiInstances({ config: _config });
+  const ports = instances.map((instance) => instance.port);
   if (ports.length === 0) return FALLBACK_BASE_URL;
   if (ports.length === 1) return `http://${RESOLVED_API_LOOPBACK_HOST}:${ports[0]}`;
   // Multiple ports and no session/config preference: default to development.

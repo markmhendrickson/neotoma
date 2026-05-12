@@ -36,10 +36,12 @@ kill_port "$PROD_HTTP_PORT"
 
 rm -f "$REPO_ROOT/.dev-serve/local_http_port_prod" 2>/dev/null || true
 
-if [ -f ".env" ]; then
-  set -a
-  # shellcheck source=/dev/null
-  source ".env"
-  set +a
-fi
+for env_file in ".env" ".env.production"; do
+  if [ -f "$env_file" ]; then
+    set -a
+    # shellcheck source=/dev/null
+    source "$env_file"
+    set +a
+  fi
+done
 exec npm run start:server:prod

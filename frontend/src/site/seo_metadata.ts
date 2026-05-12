@@ -164,15 +164,15 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       },
       {
         name: "Initialize configuration",
-        text: "Run 'neotoma init', choose your AI client (Cursor, Claude Code, Codex, etc.), and restart your tool.",
+        text: "Run 'neotoma setup --tool cursor --yes' to initialize Neotoma and configure the default local MCP path. Replace 'cursor' with your tool if needed.",
       },
       {
         name: "Start the API server",
-        text: "Run 'neotoma api start' to launch the local API server.",
+        text: "If you need the local HTTP API, Inspector, or OAuth flows, run 'neotoma api start'.",
       },
       {
         name: "Connect via MCP",
-        text: "Configure your AI tool's MCP settings to connect to the Neotoma server. The init step handles this automatically for supported clients.",
+        text: "Restart your tool or session so it picks up the MCP configuration written by setup.",
       },
     ],
   },
@@ -1708,7 +1708,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/evaluate": {
     title: "Ask Your Agent to Evaluate Neotoma for You | Neotoma",
     description:
-      "Ask your AI agent to read this page and assess whether Neotoma fits your workflow. Structured for both human and agent evaluation of deterministic agent memory.",
+      "Ask your AI agent to read this page, assess whether Neotoma fits your workflow, and offer a non-destructive test before any full implementation rollout.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     ogImageUrl: "https://neotoma.io/og/neotoma-og-evaluate-1200x630.png",
@@ -1722,7 +1722,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/evaluate/agent-instructions": {
     title: "Agent Evaluation Instructions | Neotoma",
     description:
-      "Step-by-step evaluation workflow for AI agents: context sweep, install trial, fit assessment, resource map, and qualification scorecard.",
+      "Step-by-step evaluation workflow for AI agents: context sweep, fit assessment, non-destructive test offer, implementation guidance, resource map, and qualification scorecard.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -2312,6 +2312,19 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Docs", path: "/docs" },
       { name: "Schema Management", path: "/schema-management" },
     ],
+  },
+  "/non-destructive-testing": {
+    title: "Test safely | Neotoma",
+    description:
+      "Evaluate Neotoma alongside your current setup: shadow install, ingest a slice of history, compare side-by-side, and remove it cleanly if it is not a fit.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Test safely", path: "/non-destructive-testing" },
+    ],
+    keywords: ["shadow install", "test safely", "non-destructive testing", "evaluation", "migration-free trial"],
   },
   "/changelog": {
     title: "Changelog and Release Notes | Neotoma",

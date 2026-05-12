@@ -1,4 +1,10 @@
-Schema constraints are a core invariant: malformed writes should fail at store time, not silently degrade state quality. This page covers practical schema workflows for unfamiliar users.
+Schema constraints are a core invariant: malformed writes should fail at store time, not silently degrade state quality. This page covers the practical CLI workflows.
+
+## You don't have to define a schema first
+
+Neotoma infers schemas from your first write. Store any entity with a descriptive `entity_type` and whatever fields the data implies — Neotoma registers a schema from that observation, and every subsequent field addition bumps a minor version (1.0.0 → 1.1.0) automatically. Fields the active schema doesn't recognize land in a `raw_fragments` layer so nothing is silently dropped, and breaking changes (removing or retyping a field) require an explicit major version bump (1.x → 2.0) that keeps every historical observation readable.
+
+If you're evaluating Neotoma and don't want to commit, the [Test safely guide](/non-destructive-testing) walks through how to install in shadow mode, let your agent populate schemas from your real data, and walk away without affecting anything in your current stack.
 
 ## List and inspect schema types
 
@@ -68,12 +74,20 @@ neotoma schemas register --file ./contact_schema.json
 
 <p className="text-[14px] leading-6 text-muted-foreground">
   See{" "}
+  <MdxI18nLink to="/schemas" className="text-foreground underline underline-offset-2 hover:no-underline">
+    schemas overview
+  </MdxI18nLink>
+  ,{" "}
+  <MdxI18nLink to="/schemas/versioning" className="text-foreground underline underline-offset-2 hover:no-underline">
+    versioning & evolution
+  </MdxI18nLink>
+  ,{" "}
   <MdxI18nLink to="/memory-guarantees#schema-constraints" className="text-foreground underline underline-offset-2 hover:no-underline">
     schema constraints
   </MdxI18nLink>
   ,{" "}
-  <MdxI18nLink to="/walkthrough" className="text-foreground underline underline-offset-2 hover:no-underline">
-    data model walkthrough
+  <MdxI18nLink to="/non-destructive-testing" className="text-foreground underline underline-offset-2 hover:no-underline">
+    Test safely
   </MdxI18nLink>
   , and{" "}
   <MdxI18nLink to="/architecture" className="text-foreground underline underline-offset-2 hover:no-underline">

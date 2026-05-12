@@ -221,6 +221,7 @@ const APP_ROUTES: readonly AppRoute[] = [
   { path: "/data-model", element: <Navigate to="/walkthrough" replace /> },
   { path: "/architecture", element: <ArchitecturePage /> },
   { path: "/schema-management", element: <MdxSitePage canonicalPath="/schema-management" /> },
+  { path: "/non-destructive-testing", element: <MdxSitePage canonicalPath="/non-destructive-testing" /> },
   { path: "/troubleshooting", element: <MdxSitePage canonicalPath="/troubleshooting" /> },
   { path: "/changelog", element: <MdxSitePage canonicalPath="/changelog" /> },
   {

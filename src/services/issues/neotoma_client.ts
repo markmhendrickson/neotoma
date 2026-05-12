@@ -8,14 +8,15 @@
  * This is the primary submission transport for all issues (public and private).
  * GitHub is an optional pre-step for discoverability (public issues only).
  *
- * Outbound issue calls POST to `/issues/submit` (the OpenAPI-canonical path).
- * `src/actions.ts` also mounts `/api/issues/submit` as an alias on the same handler,
- * but the client uses the canonical path only. Entity read-backs use
+ * Outbound issue submission and message calls use the canonical `/issues/*`
+ * paths. Thread status read-through uses `/api/issues/status` for hosted
+ * deployments that route public API traffic under `/api`. Entity read-backs use
  * `GET /entities/{id}` (guest `access_token` query).
  */
 
 import { createApiClient, type NeotomaApiClient } from "../../shared/api_client.js";
 import { loadIssuesConfig } from "./config.js";
+import { IssueTransportError } from "./errors.js";
 import {
   githubIssueThreadConversationId,
   localIssueThreadConversationId,
@@ -32,6 +33,17 @@ export interface RemoteSubmitResult {
 
 export interface RemoteMessageResult {
   message_entity_id: string;
+}
+
+function formatRemoteIssueError(error: unknown): string {
+  if (error instanceof Error && error.message.trim().length > 0) return error.message.trim();
+  if (typeof error === "string" && error.trim().length > 0) return error.trim();
+  if (error === null || error === undefined) return "unknown remote error";
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
 }
 
 function createRemoteClient(targetUrl: string): NeotomaApiClient {
@@ -306,7 +318,7 @@ export async function getRemoteIssueStatus(params: {
 }
 
 /**
- * Fetch issue status + thread messages from the remote operator (`POST /issues/status`).
+ * Fetch issue status + thread messages from the remote operator (`POST /api/issues/status`).
  */
 export async function fetchRemoteIssueThread(params: {
   issueEntityId: string;
@@ -315,9 +327,10 @@ export async function fetchRemoteIssueThread(params: {
   const config = await loadIssuesConfig();
   if (!config.target_url?.trim()) return null;
 
-  const client = createRemoteClient(config.target_url.trim());
+  const targetUrl = config.target_url.trim();
+  const client = createRemoteClient(targetUrl);
   const token = params.accessToken?.trim();
-  const { data, error } = (await client.POST("/issues/status" as any, {
+  const { data, error } = (await client.POST("/api/issues/status" as any, {
     body: {
       entity_id: params.issueEntityId,
       ...(token ? { guest_access_token: token } : {}),
@@ -328,7 +341,35 @@ export async function fetchRemoteIssueThread(params: {
     error?: unknown;
   };
 
-  if (error) return null;
-  if (!data || typeof data !== "object") return null;
+  if (error) {
+    throw new IssueTransportError({
+      code: "ERR_REMOTE_ISSUE_READ_FAILED",
+      status: 502,
+      message:
+        `Remote issue read-through failed for ${params.issueEntityId} at ${targetUrl}; ` +
+        "refusing incomplete local fallback for an operator-backed issue thread.",
+      hint:
+        "Check operator availability, guest_access_token validity, and issues.target_url configuration.",
+      extra: {
+        target_url: targetUrl,
+        issue_entity_id: params.issueEntityId,
+        remote_error: formatRemoteIssueError(error),
+      },
+    });
+  }
+  if (!data || typeof data !== "object") {
+    throw new IssueTransportError({
+      code: "ERR_REMOTE_ISSUE_READ_INVALID",
+      status: 502,
+      message:
+        `Remote issue read-through returned an invalid payload for ${params.issueEntityId} at ${targetUrl}; ` +
+        "refusing incomplete local fallback for an operator-backed issue thread.",
+      hint: "Check the operator /issues/status response and ensure it returns a valid issue thread payload.",
+      extra: {
+        target_url: targetUrl,
+        issue_entity_id: params.issueEntityId,
+      },
+    });
+  }
   return data;
 }

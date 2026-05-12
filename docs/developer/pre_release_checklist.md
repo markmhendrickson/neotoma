@@ -110,6 +110,52 @@ npm run dev:server:tunnel
 
 - **Required:** Compiles without errors; watch mode detects file changes as expected.
 
+### 1.11 Security gates (pre-release)
+
+These gates implement the v0.11.1 lessons (`docs/security/advisories/2026-05-11-inspector-auth-bypass.md`). They are Track 1 of the pre-release security plan (`.cursor/plans/pre-release_security_gates_44e01d74.plan.md`).
+
+```bash
+# G1: Classify the release diff
+npm run security:classify-diff -- --base <last-tag> --head HEAD --json
+
+# G2: Static rules for the v0.11.1 bug class
+npm run security:lint
+
+# G3: Topology auth matrix + protected-routes manifest sync
+npm run security:manifest:check
+npm run test:security:auth-matrix
+
+# G4: AI adversarial review scaffold
+npm run security:ai-review -- --tag vX.Y.Z --base <last-tag> --head HEAD
+```
+
+- **Required:**
+  - `security:lint` returns 0 errors. Warnings must be triaged and acknowledged in the review file (G4).
+  - `security:manifest:check` reports the manifest is in sync with `openapi.yaml`.
+  - `npm run test:security:auth-matrix` passes with no skipped assertions.
+  - `docs/releases/in_progress/vX.Y.Z/security_review.md` exists, lists findings (or "none"), and carries a `yes` or `with-caveats` sign-off verdict.
+  - The supplement at `docs/releases/in_progress/vX.Y.Z/github_release_supplement.md` has a `Security hardening` section that links the review file and any advisory under `docs/security/advisories/` opened or referenced by this release. When `classify-diff` reported `sensitive=false`, the section may simply state `No security-sensitive surfaces touched.`.
+- **Common failures:**
+  - `loopback-trust-in-production` static rule firing on a fresh proxy-trust read (use `forwardedForValues(req)`).
+  - Manifest drift after adding a new `security: []` operation in `openapi.yaml` (run `npm run security:manifest:write`).
+  - `local-dev-user-widening` warning landing in `src/services/**` outside `local_auth.ts` (route the dev shortcut through CLI bootstrap or `assertExplicitlyTrusted`).
+
+### 1.12 Deployed probes (post-deploy)
+
+After `flyctl deploy`, but before declaring the release complete, run the live protected-route probes from a CI runner or any host outside the Fly machine:
+
+```bash
+NEOTOMA_PROBE_HOSTS="https://sandbox.neotoma.io
+https://neotoma.markmhendrickson.com" \
+  bash scripts/security/deployed_probes.sh --tag vX.Y.Z
+```
+
+- **Required:** The probe writes `docs/releases/in_progress/vX.Y.Z/post_deploy_security_probes.md` and exits 0. Any `fail` row blocks release completion. Open or update an entry under `docs/security/advisories/` and either roll back or hotfix.
+- **Common failures:**
+  - A protected route returns `200` without bearer (the v0.11.1 shape) — high-severity regression.
+  - A route returns `404` because the deploy did not pick up a new path; reconcile against the current build before signing off.
+  - Network flake — the probe retries internally, but persistent `000` responses indicate transport or DNS issues, not a security regression. Document and re-run.
+
 ---
 
 ## 2. Report and sign-off

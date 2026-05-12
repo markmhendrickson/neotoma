@@ -26,17 +26,28 @@ export interface ApiClientOptions {
 function buildMaybeSignedFetch(enabled: boolean): typeof fetch {
   if (!enabled) return fetch;
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = typeof input === "string" ? input : (input as URL | Request).toString();
+    const request = input instanceof Request ? input : null;
+    const url = request ? request.url : typeof input === "string" ? input : input.toString();
     const { cliSignedFetch } = await import("../cli/aauth_signer.js");
-    const method = (init?.method ?? "GET").toUpperCase();
+    const method = (init?.method ?? request?.method ?? "GET").toUpperCase();
     const headers: Record<string, string> = {};
+    const sourceHeaders = new Headers(request?.headers);
     if (init?.headers) {
-      const h = new Headers(init.headers);
+      const overrides = new Headers(init.headers);
+      overrides.forEach((value, key) => {
+        sourceHeaders.set(key, value);
+      });
+    }
+    if (sourceHeaders) {
+      const h = new Headers(sourceHeaders);
       h.forEach((value, key) => {
         headers[key] = value;
       });
     }
-    const body = typeof init?.body === "string" ? init.body : undefined;
+    let body = typeof init?.body === "string" ? init.body : undefined;
+    if (body === undefined && request && method !== "GET" && method !== "HEAD") {
+      body = await request.clone().text();
+    }
     try {
       return await cliSignedFetch(url, {
         method,

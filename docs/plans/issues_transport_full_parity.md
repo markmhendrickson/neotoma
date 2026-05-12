@@ -4,7 +4,7 @@
 
 ## Goal
 
-Align **submit**, **thread append**, **status**, and **mirror sync** so MCP, first-class HTTP routes, and `neotoma issues …` all call the same orchestration in [`src/services/issues/issue_operations.ts`](../../src/services/issues/issue_operations.ts) and [`syncIssuesFromGitHub.ts`](../../src/services/issues/syncIssuesFromGitHub.ts), with traceability via [`src/shared/contract_mappings.ts`](../../src/shared/contract_mappings.ts) and OpenAPI.
+Align **submit**, **thread append**, **status**, and **mirror sync** so MCP, first-class HTTP routes, and `neotoma issues …` all call the same orchestration in [`src/services/issues/issue_operations.ts`](../../src/services/issues/issue_operations.ts) and [`sync_issues_from_github.ts`](../../src/services/issues/sync_issues_from_github.ts), with traceability via [`src/shared/contract_mappings.ts`](../../src/shared/contract_mappings.ts) and OpenAPI.
 
 ## Phases (execution order)
 

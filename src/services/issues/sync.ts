@@ -2,5 +2,5 @@ export {
   isSyncStale,
   syncIssueIfStale,
   syncIssuesFromGitHub,
-} from "./syncIssuesFromGitHub.js";
-export type { SyncResult } from "./syncIssuesFromGitHub.js";
+} from "./sync_issues_from_github.js";
+export type { SyncResult } from "./sync_issues_from_github.js";

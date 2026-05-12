@@ -8,20 +8,16 @@
  * don't have to assemble it by hand.
  *
  * Groups:
- *   - `Conversation` — mandatory. Always rendered, containing the turn's
- *     stored `conversation`, user `conversation_message`, and (after reply is
- *     composed) assistant `conversation_message` entities (or legacy
- *     `agent_message` for pre-v0.6 data). Surfacing this bookkeeping
- *     is an explicit requirement — agents must show the conversational data
- *     persisted this turn.
- *   - `Reads` / `Created` / `Updated` — optional non-bookkeeping groups.
+ *   - Linked conversation heading — optional. When a conversation entity is
+ *     present, the heading links to `/inspector/conversations/<entity_id>`.
+ *   - `Retrieved` / `Created` / `Updated` — optional non-bookkeeping groups.
  *   - `Issues` — populated from diagnoses with non-`ok` severity.
  *   - `Repairs` — applied auto-repairs from `applyRepairs`.
  *
- * Every entity bullet includes a markdown link to the Neotoma Inspector
- * detail page for that entity (`<base>/entities/<entity_id>`). Callers can
- * override the base via `inspectorBaseUrl`; the default is
- * `http://localhost:5175` (the Inspector SPA's dev port; see `inspector/vite.config.ts`).
+ * Every entity bullet ends with a markdown link on the entity-type text to the
+ * Neotoma Inspector entity page (`<base>/inspector/entities/<entity_id>`).
+ * Callers can override the base via `inspectorBaseUrl`; the default follows
+ * the local Neotoma HTTP API origin (`http://localhost:3080` for dev).
  */
 
 import type { Diagnosis } from "./diagnose.js";
@@ -54,9 +50,7 @@ export interface TurnReportRepairEntry {
 
 export interface TurnReportInput {
   /**
-   * Mandatory conversation bookkeeping group. Agents always surface the
-   * stored conversation/message entities so the user can inspect exactly
-   * what was persisted this turn.
+   * Optional conversation metadata for the linked heading.
    */
   conversation?: TurnReportConversationGroup;
   created?: TurnReportEntity[];
@@ -70,8 +64,9 @@ export interface TurnReportInput {
 
 /**
  * Resolve the Inspector base URL. Prefers explicit argument, then
- * `NEOTOMA_INSPECTOR_URL`, then `NEOTOMA_FRONTEND_URL`, then the default
- * dev port `http://localhost:5175`.
+ * `NEOTOMA_INSPECTOR_URL`, then `NEOTOMA_BASE_URL`, then
+ * `NEOTOMA_FRONTEND_URL`, then the default dev API origin
+ * `http://localhost:3080`.
  */
 export function resolveInspectorBaseUrl(explicit?: string): string {
   if (explicit && explicit.length > 0) return stripTrailingSlash(explicit);
@@ -80,8 +75,9 @@ export function resolveInspectorBaseUrl(explicit?: string): string {
     ({} as NodeJS.ProcessEnv);
   const fromEnv =
     env.NEOTOMA_INSPECTOR_URL ||
+    env.NEOTOMA_BASE_URL ||
     env.NEOTOMA_FRONTEND_URL ||
-    "http://localhost:5175";
+    "http://localhost:3080";
   return stripTrailingSlash(fromEnv);
 }
 
@@ -95,23 +91,8 @@ export function renderTurnReport(input: TurnReportInput): string {
   const lines: string[] = [];
   lines.push("---");
   lines.push("");
-  lines.push("🧠 Neotoma");
+  lines.push(formatHeading(input.conversation?.conversation, baseUrl));
   lines.push("");
-
-  const conversation = input.conversation ?? {};
-  const convoEntities: TurnReportEntity[] = [
-    conversation.userMessage,
-    conversation.assistantMessage,
-    conversation.conversation,
-  ].filter((e): e is TurnReportEntity => Boolean(e));
-
-  if (convoEntities.length > 0) {
-    lines.push(`Conversation (${convoEntities.length})`);
-    for (const e of convoEntities) {
-      lines.push(`- ${formatEntityBullet(e, baseUrl)}`);
-    }
-    lines.push("");
-  }
 
   const created = input.created ?? [];
   const updated = input.updated ?? [];
@@ -122,7 +103,7 @@ export function renderTurnReport(input: TurnReportInput): string {
 
   if (anySubstantive) {
     if (retrieved.length > 0) {
-      lines.push(`Reads (${retrieved.length})`);
+      lines.push(`Retrieved (${retrieved.length})`);
       for (const e of retrieved) lines.push(`- ${formatEntityBullet(e, baseUrl)}`);
       lines.push("");
     }
@@ -136,9 +117,6 @@ export function renderTurnReport(input: TurnReportInput): string {
       for (const e of updated) lines.push(`- ${formatEntityBullet(e, baseUrl)}`);
       lines.push("");
     }
-  } else if (convoEntities.length > 0) {
-    lines.push("No other durable facts read or written this turn.");
-    lines.push("");
   } else {
     lines.push("No durable facts read or written this turn.");
     lines.push("");
@@ -159,9 +137,9 @@ export function renderTurnReport(input: TurnReportInput): string {
     for (const r of repairs) {
       const prefix = r.severity === "error" ? "🔴" : r.severity === "warning" ? "🟡" : "🛠️";
       const link = r.repairEntityId
-        ? ` ([inspect](${baseUrl}/entities/${r.repairEntityId}))`
+        ? ` ([neotoma_repair](${baseUrl}/inspector/entities/${r.repairEntityId}))`
         : "";
-      lines.push(`- ${prefix} ${r.label}${link} (\`neotoma_repair\`)`);
+      lines.push(`- ${prefix} ${r.label}${link}`);
     }
     lines.push("");
   }
@@ -169,12 +147,18 @@ export function renderTurnReport(input: TurnReportInput): string {
   return lines.join("\n").replace(/\n+$/, "\n");
 }
 
+function formatHeading(conversation: TurnReportEntity | undefined, baseUrl: string): string {
+  if (conversation?.entityId && conversation.label) {
+    return `## 🧠 Neotoma — [${conversation.label}](${baseUrl}/inspector/conversations/${conversation.entityId})`;
+  }
+  if (conversation?.label) return `## 🧠 Neotoma — ${conversation.label}`;
+  return "## 🧠 Neotoma";
+}
+
 function formatEntityBullet(entity: TurnReportEntity, baseUrl: string): string {
   const emoji = entity.emoji ?? pickDefaultEmoji(entity.entityType);
-  const link = entity.entityId
-    ? ` ([inspect](${baseUrl}/entities/${entity.entityId}))`
-    : " (no id — see Issues)";
-  return `${emoji} ${entity.label}${link} (\`${entity.entityType}\`)`;
+  if (!entity.entityId) return `${emoji} ${entity.label} (no id — see Issues)`;
+  return `${emoji} ${entity.label} ([${entity.entityType}](${baseUrl}/inspector/entities/${entity.entityId}))`;
 }
 
 function formatIssueBullet(diagnosis: Diagnosis): string {
@@ -215,6 +199,7 @@ function pickDefaultEmoji(entityType: string): string {
     legal_research: "🔍",
     technical_research: "🔍",
     report: "🔍",
+    product_feedback: "💬",
     neotoma_repair: "🛠️",
     conversation: "🧵",
     conversation_message: "💬",

@@ -323,6 +323,57 @@ function tryComposite(
   );
 }
 
+function deriveCanonicalNameFromSchemaRules(
+  entityType: string,
+  fields: Record<string, unknown>,
+  schema?: Pick<SchemaDefinition, "canonical_name_fields"> | null,
+): CanonicalNameDerivation | null {
+  const rules = schema?.canonical_name_fields;
+  if (!rules || rules.length === 0) return null;
+  if (isLegacyCompositeDeclaration(rules)) {
+    // Legacy single-composite semantics: all fields required.
+    const canonical = tryComposite(entityType, fields, rules);
+    if (canonical !== null) {
+      const ruleLabel = compositeFieldsForLabel(rules);
+      return {
+        canonicalName: canonical,
+        path: [`schema:canonical_name_fields:${rules.join(",")}`],
+        identityBasis: "schema_rule",
+        identityRule: ruleLabel,
+      };
+    }
+    return null;
+  }
+  // Ordered precedence: first rule whose fields are all present wins.
+  for (const rule of rules) {
+    if (typeof rule === "string") {
+      const v = fields[rule];
+      if (v == null || String(v).trim() === "") continue;
+      const canonical = formatCanonicalNameForStorage(
+        entityType,
+        `${entityType}:${String(v).trim()}`,
+      );
+      return {
+        canonicalName: canonical,
+        path: [`schema:canonical_name_fields:${rule}`],
+        identityBasis: "schema_rule",
+        identityRule: rule,
+      };
+    }
+    const canonical = tryComposite(entityType, fields, rule.composite);
+    if (canonical !== null) {
+      const ruleLabel = compositeFieldsForLabel(rule.composite);
+      return {
+        canonicalName: canonical,
+        path: [`schema:canonical_name_fields:${ruleLabel}`],
+        identityBasis: "schema_rule",
+        identityRule: ruleLabel,
+      };
+    }
+  }
+  return null;
+}
+
 /**
  * Derive a canonical_name for an entity from its fields.
  *
@@ -345,50 +396,8 @@ export function deriveCanonicalNameFromFieldsWithTrace(
   fields: Record<string, unknown>,
   schema?: Pick<SchemaDefinition, "canonical_name_fields"> | null,
 ): CanonicalNameDerivation {
-  const rules = schema?.canonical_name_fields;
-  if (rules && rules.length > 0) {
-    if (isLegacyCompositeDeclaration(rules)) {
-      // Legacy single-composite semantics: all fields required.
-      const canonical = tryComposite(entityType, fields, rules);
-      if (canonical !== null) {
-        const ruleLabel = compositeFieldsForLabel(rules);
-        return {
-          canonicalName: canonical,
-          path: [`schema:canonical_name_fields:${rules.join(",")}`],
-          identityBasis: "schema_rule",
-          identityRule: ruleLabel,
-        };
-      }
-    } else {
-      // Ordered precedence: first rule whose fields are all present wins.
-      for (const rule of rules) {
-        if (typeof rule === "string") {
-          const v = fields[rule];
-          if (v == null || String(v).trim() === "") continue;
-          const canonical = formatCanonicalNameForStorage(
-            entityType,
-            `${entityType}:${String(v).trim()}`,
-          );
-          return {
-            canonicalName: canonical,
-            path: [`schema:canonical_name_fields:${rule}`],
-            identityBasis: "schema_rule",
-            identityRule: rule,
-          };
-        }
-        const canonical = tryComposite(entityType, fields, rule.composite);
-        if (canonical !== null) {
-          const ruleLabel = compositeFieldsForLabel(rule.composite);
-          return {
-            canonicalName: canonical,
-            path: [`schema:canonical_name_fields:${ruleLabel}`],
-            identityBasis: "schema_rule",
-            identityRule: ruleLabel,
-          };
-        }
-      }
-    }
-  }
+  const schemaDerivation = deriveCanonicalNameFromSchemaRules(entityType, fields, schema);
+  if (schemaDerivation) return schemaDerivation;
 
   const preferredNameKeys = [
     "canonical_name",
@@ -569,11 +578,14 @@ export interface ResolveEntityResult {
  * `target_id` or a schema `canonical_name_fields` match, and the caller or
  * schema asked for that heuristic merge to be refused.
  *
- * Two trigger paths, distinguished by `reason`:
+ * Trigger paths, distinguished by `reason`:
  * - `"strict"` — per-call `strict: true` (used by `store --strict` and
  *   `intent: "create_new"`).
  * - `"schema_policy"` — schema-declared `name_collision_policy: "reject"`
  *   (R2). Applies to every write against that schema regardless of strict.
+ * - `"identity_conflict"` — caller supplied `target_id`, but the same payload
+ *   also declares schema identity fields that already belong to a different
+ *   entity.
  *
  * Both paths surface through the structured-store pipeline as
  * `ERR_STORE_RESOLUTION_FAILED` / `ERR_MERGE_REFUSED` so callers get a
@@ -586,15 +598,19 @@ export class MergeRefusedError extends Error {
   public readonly canonicalName: string;
   public readonly resolverPath: ResolverPathStep[];
   /** Discriminator describing why the merge was refused. */
-  public readonly reason: "strict" | "schema_policy";
+  public readonly reason: "strict" | "schema_policy" | "identity_conflict";
   /** Schema policy value when `reason === "schema_policy"`. */
   public readonly policy?: "reject";
+  /** Explicit extend target when `reason === "identity_conflict"`. */
+  public readonly targetEntityId?: string;
 
   constructor(params: {
     entityType: string;
     entityId: string;
     canonicalName: string;
     resolverPath: ResolverPathStep[];
+    reason?: "identity_conflict";
+    targetEntityId?: string;
     /**
      * When set to `"reject"`, the refusal came from the schema's
      * `name_collision_policy` and error messaging explains that path instead
@@ -602,10 +618,19 @@ export class MergeRefusedError extends Error {
      */
     policy?: "reject";
   }) {
-    const reason: "strict" | "schema_policy" = params.policy === "reject"
-      ? "schema_policy"
-      : "strict";
-    const message = reason === "schema_policy"
+    const reason: "strict" | "schema_policy" | "identity_conflict" =
+      params.reason === "identity_conflict"
+        ? "identity_conflict"
+        : params.policy === "reject"
+          ? "schema_policy"
+          : "strict";
+    const message = reason === "identity_conflict"
+      ? `Identity conflict: target_id ${params.targetEntityId ?? "(unknown)"} for ` +
+          `"${params.entityType}" also declares schema identity fields that resolve ` +
+          `to existing entity ${params.entityId} (canonical_name "${params.canonicalName}"). ` +
+          `Write to the existing entity, merge the duplicate first, or remove the conflicting ` +
+          `identity fields from the target_id update.`
+      : reason === "schema_policy"
       ? `Schema policy "name_collision_policy: reject": resolution for ` +
           `"${params.entityType}" landed on existing entity ${params.entityId} ` +
           `(canonical_name "${params.canonicalName}") via a heuristic path. ` +
@@ -625,6 +650,7 @@ export class MergeRefusedError extends Error {
     this.resolverPath = params.resolverPath;
     this.reason = reason;
     this.policy = params.policy;
+    this.targetEntityId = params.targetEntityId;
   }
 }
 
@@ -642,23 +668,6 @@ export async function resolveEntityWithTrace(
   options: ResolveEntityOptions,
 ): Promise<ResolveEntityResult> {
   const { entityType, userId, fields, commit = true, targetId, strict } = options;
-
-  // Extend path: caller asserts the target entity_id. Skip derivation and the
-  // existence check so repeated observations land on the same row regardless
-  // of canonical_name evolution.
-  if (targetId) {
-    return {
-      entityId: targetId,
-      trace: {
-        entityType,
-        canonicalName: "",
-        path: [`target_id:${targetId}`],
-        identityBasis: "target_id",
-        identityRule: "",
-        action: commit ? "extended" : "extended",
-      },
-    };
-  }
 
   let schema = options.schema;
   if (schema === undefined) {
@@ -697,6 +706,53 @@ export async function resolveEntityWithTrace(
         // Defensive — module load failure should not prevent resolution.
       }
     }
+  }
+
+  if (targetId) {
+    // Extend path: caller asserts the target entity_id. Before bypassing normal
+    // derivation, check whether the payload includes schema identity fields
+    // that already resolve to a different entity. This keeps target_id useful
+    // for appending observations without allowing a row to acquire an identity
+    // already owned by another deterministic entity.
+    if (schema?.canonical_name_fields && schema.canonical_name_fields.length > 0) {
+      const derivation = deriveCanonicalNameFromSchemaRules(
+        entityType,
+        fields,
+        schema,
+      );
+      if (derivation) {
+        const canonicalEntityId = generateEntityId(entityType, derivation.canonicalName);
+        if (canonicalEntityId !== targetId) {
+          const { data: existingBySchemaIdentity } = await db
+            .from("entities")
+            .select("id")
+            .eq("id", canonicalEntityId)
+            .maybeSingle();
+          if (existingBySchemaIdentity) {
+            throw new MergeRefusedError({
+              entityType,
+              entityId: canonicalEntityId,
+              canonicalName: derivation.canonicalName,
+              resolverPath: derivation.path,
+              reason: "identity_conflict",
+              targetEntityId: targetId,
+            });
+          }
+        }
+      }
+    }
+
+    return {
+      entityId: targetId,
+      trace: {
+        entityType,
+        canonicalName: "",
+        path: [`target_id:${targetId}`],
+        identityBasis: "target_id",
+        identityRule: "",
+        action: commit ? "extended" : "extended",
+      },
+    };
   }
 
   const derivation = deriveCanonicalNameFromFieldsWithTrace(

@@ -16,3 +16,8 @@ Format: one bullet per flip, keyed by the Neotoma version that introduced the ne
 
 - `v0.6.x/store_conversation_without_id` seeded as `rejected`. The `conversation` schema bumps to v1.2 declaring `canonical_name_fields: ["conversation_id"]` and `name_collision_policy: "reject"` (R1 + R2 of the conversation-collision plan). Two conversations in one payload with identical `title` and no `conversation_id` used to silently collapse into one entity via heuristic `name_key:title`; the second turn now returns `ERR_STORE_RESOLUTION_FAILED` / `ERR_MERGE_REFUSED` with a structured `hint.text` matching `/declare.+conversation_id/i` and `hint.required_identity_fields` carrying the schema-derived identity key list (R4). Release supplement: `docs/releases/in_progress/v0.6.0/github_release_supplement.md` § Breaking changes.
 - `v0.6.x/guest_issues_submit_removed`, `guest_issues_thread_removed`, `guest_issues_messages_removed`, and `guest_entities_removed` seeded as `rejected`. The `/guest/*` URL prefix was removed; callers must use `POST /issues/submit`, `POST /issues/status`, `POST /issues/add_message`, and `GET /entities/{id}` with AAuth or scoped guest-token credentials.
+
+## v0.12.0
+
+- `v0.12.x/store_relationship_non_ent_entity_id` flipped from valid to rejected: store relationship ids now require ent_ prefix.
+- `v0.12.x/issues_submit_without_reporter_env` seeded as `rejected`. `submit_issue` now requires at least one of `reporter_git_sha` or `reporter_app_version`; submissions missing both fail with `error_code: ERR_REPORTER_ENVIRONMENT_REQUIRED` and a structured `details.acceptable_field_groups` envelope listing the alternatives. Release supplement: `docs/releases/in_progress/v0.12.0/github_release_supplement.md` § Breaking changes.

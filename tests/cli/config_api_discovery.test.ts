@@ -96,16 +96,27 @@ describe("CLI API discovery", () => {
     expect(resolved).toBe("http://localhost:9234");
   });
 
-  it("resolveBaseUrl honors preferred prod env before auto-detected dev API", async () => {
-    mockHttpHealth({ 3080: true, 3180: false });
+  it("resolveBaseUrl uses preferred prod env when reachable", async () => {
+    mockHttpHealth({ 3080: true, 3180: true });
     const resolved = await resolveBaseUrl(undefined, { preferred_env: "prod" });
     expect(resolved).toBe("http://localhost:3180");
   });
 
-  it("resolveBaseUrl honors preferred dev env before auto-detected prod API", async () => {
-    mockHttpHealth({ 3080: false, 3180: true });
+  it("resolveBaseUrl uses preferred dev env when reachable", async () => {
+    mockHttpHealth({ 3080: true, 3180: true });
     const resolved = await resolveBaseUrl(undefined, { preferred_env: "dev" });
     expect(resolved).toBe("http://localhost:3080");
+  });
+
+  it("resolveBaseUrl probes preferred prod port first then falls back when unreachable", async () => {
+    const spy = mockHttpHealth({ 3080: true, 3180: false });
+    const resolved = await resolveBaseUrl(undefined, { preferred_env: "prod" });
+    expect(resolved).toBe("http://localhost:3080");
+    expect(spy.mock.calls.map(([input]) => new URL(String(input)).port)).toEqual([
+      "3180",
+      "3080",
+      "3180",
+    ]);
   });
 
   it("resolveBaseUrl session port wins over NEOTOMA_MCP_USE_LOCAL_PORT_FILE", async () => {

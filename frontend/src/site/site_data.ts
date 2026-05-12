@@ -398,6 +398,7 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
       { label: "Meet the creator", href: "/meet", icon: "CalendarClock" },
       { label: "What to store first", href: "/what-to-store", icon: "BookOpen" },
       { label: "Install", href: "/install", icon: "Download" },
+      { label: "Test safely", href: "/non-destructive-testing", icon: "FlaskConical" },
       { label: "Backup and restore", href: "/backup", icon: "Database" },
       { label: "Connect remotely", href: "/connect", icon: "Plug" },
       { label: "Expose tunnel", href: "/tunnel", icon: "SatelliteDish" },
@@ -680,8 +681,8 @@ docker build -t neotoma .`,
   }
 }`,
   /** Short prompt — home evaluate section + integration “Getting started” blocks. */
-  homeEvaluatePrompt: `Read https://neotoma.io/evaluate. Use any tool, workspace, and chat context already available in this session to assess my real workflow. Avoid ad-hoc shell introspection just to profile me; if Neotoma is already installed, use \`neotoma doctor --json\` for status instead. Then tell me whether Neotoma fits my workflow, what data would be highest value to persist first, and what I should do next.`,
-  agentEvaluationPrompt: `Read https://neotoma.io/evaluate. Use any tool, workspace, and chat context already available in this session to assess my real workflow. Avoid ad-hoc shell introspection just to profile me; if Neotoma is already installed, use \`neotoma doctor --json\` for status instead. Then tell me whether Neotoma is a real fit for my workflow, what data would be highest value to persist first, and what I should do next.`,
+  homeEvaluatePrompt: `Read https://neotoma.io/evaluate. Use any tool, workspace, and chat context already available in this session to assess my real workflow. Avoid ad-hoc shell introspection just to profile me; if Neotoma is already installed, use \`neotoma doctor --json\` for status instead. Then tell me whether Neotoma fits my workflow, what data would be highest value to persist first, and whether you recommend a non-destructive test at https://neotoma.io/non-destructive-testing before any full implementation rollout.`,
+  agentEvaluationPrompt: `Read https://neotoma.io/evaluate. Use any tool, workspace, and chat context already available in this session to assess my real workflow. Avoid ad-hoc shell introspection just to profile me; if Neotoma is already installed, use \`neotoma doctor --json\` for status instead. Then tell me whether Neotoma is a real fit for my workflow, what data would be highest value to persist first, and whether you recommend offering a non-destructive test at https://neotoma.io/non-destructive-testing before any full implementation rollout.`,
   agentEvaluationShareEmail: "contact@neotoma.io",
   agentEvaluationShareSubject: "Agent evaluation of Neotoma",
   dockerCliExample: `# Store an entity

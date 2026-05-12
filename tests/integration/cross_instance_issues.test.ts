@@ -9,44 +9,17 @@ import {
   TEST_REPO,
   type CrossInstanceIssuesFixture,
 } from "../helpers/two_server_fixture.js";
+import {
+  addIssueMessage,
+  expectMessageBodiesOnce,
+  getIssueStatus,
+  messageBodies,
+  submitIssue,
+  type AddIssueMessageResult,
+  type IssueStatusResult,
+  type SubmitIssueResult,
+} from "../helpers/issue_tooling_scenarios.js";
 import { reportCase } from "../helpers/test_report_buffer.js";
-
-type SubmitIssueResult = {
-  issue_number: number;
-  github_url: string;
-  entity_id: string;
-  conversation_id: string;
-  remote_entity_id: string;
-  pushed_to_github: boolean;
-  submitted_to_neotoma: boolean;
-  guest_access_token?: string;
-  github_mirror_guidance: string | null;
-};
-
-type AddIssueMessageResult = {
-  github_comment_id: string | null;
-  message_entity_id: string;
-  pushed_to_github: boolean;
-  submitted_to_neotoma: boolean;
-};
-
-type IssueStatusResult = {
-  issue_entity_id: string;
-  issue_number: number;
-  title: string;
-  status: string;
-  labels: string[];
-  github_url: string;
-  author: string;
-  created_at: string;
-  closed_at: string | null;
-  messages: Array<{
-    author: string;
-    body: string;
-    created_at: string;
-  }>;
-  synced: boolean;
-};
 
 type SubscribeResult = {
   subscription_id: string;
@@ -68,10 +41,6 @@ type WebhookDelivery = {
   };
   rawBody: string;
 };
-
-function messageBodies(status: IssueStatusResult): string[] {
-  return status.messages.map((message) => message.body);
-}
 
 async function readRequestBody(req: import("node:http").IncomingMessage): Promise<string> {
   const chunks: Buffer[] = [];
@@ -229,6 +198,36 @@ describe("cross-instance issues integration (unsigned remote HTTP)", () => {
       }),
     });
     expect(deniedThread.ok).toBe(false);
+    const deniedThreadWithUserBearer = await fetch(`${fixture.maintainer.baseUrl}/issues/status`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${fixture.maintainer.token}`,
+      },
+      body: JSON.stringify({
+        entity_id: submitted.remote_entity_id,
+        guest_access_token: "wrong-token",
+        skip_sync: true,
+      }),
+    });
+    expect(deniedThreadWithUserBearer.ok).toBe(false);
+    const guestThreadWithUserBearer = await fetch(`${fixture.maintainer.baseUrl}/issues/status`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${fixture.maintainer.token}`,
+      },
+      body: JSON.stringify({
+        entity_id: submitted.remote_entity_id,
+        guest_access_token: submitted.guest_access_token,
+        skip_sync: true,
+      }),
+    });
+    expect(guestThreadWithUserBearer.ok).toBe(true);
+    expect((await guestThreadWithUserBearer.json()) as IssueStatusResult).toMatchObject({
+      title,
+      status: "open",
+    });
     const deniedMessage = await fetch(`${fixture.maintainer.baseUrl}/issues/add_message`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -285,6 +284,7 @@ describe("cross-instance issues integration (unsigned remote HTTP)", () => {
       entities: [
         {
           entity_type: "issue",
+          target_id: submitted.remote_entity_id,
           title,
           body,
           status: "closed",
@@ -310,6 +310,16 @@ describe("cross-instance issues integration (unsigned remote HTTP)", () => {
     });
     expect(maintainerClosedStatus.status).toBe("closed");
     expect(maintainerClosedStatus.closed_at).toBeTruthy();
+
+    const submitterReadThroughStatus = await fixture.submitterMcp.callTool<IssueStatusResult>("get_issue_status", {
+      entity_id: submitted.entity_id,
+      guest_access_token: submitted.guest_access_token,
+      skip_sync: true,
+    });
+    expect(submitterReadThroughStatus.status).toBe("closed");
+    expect(messageBodies(submitterReadThroughStatus)).toEqual(
+      expect.arrayContaining([body, submitterFollowUp, maintainerReply]),
+    );
 
     if (fixture.github) {
       const githubMatch = await fixture.github.findOpenIssueByTitle(title);
@@ -382,6 +392,7 @@ describe("cross-instance issues integration (unsigned remote HTTP)", () => {
           entities: [
             {
               entity_type: "issue",
+              target_id: submitted.remote_entity_id,
               title,
               body,
               status: "closed",
@@ -615,6 +626,7 @@ describe("cross-instance issues integration (unsigned remote HTTP)", () => {
 
 describe("cross-instance issues integration (signed remote HTTP)", () => {
   let fixtureSigned: CrossInstanceIssuesFixture;
+  const signedGithubIssuesToCleanup = new Set<number>();
 
   beforeAll(async () => {
     fixtureSigned = await startCrossInstanceIssuesFixture({ remoteHttpAuth: "signed" });
@@ -633,6 +645,20 @@ describe("cross-instance issues integration (signed remote HTTP)", () => {
   }, 90_000);
 
   afterAll(async () => {
+    if (fixtureSigned?.github) {
+      for (const issueNumber of signedGithubIssuesToCleanup) {
+        try {
+          await fixtureSigned.github.addLabels(issueNumber, ["test-cleanup"]);
+        } catch {
+          // Best-effort cleanup label.
+        }
+        try {
+          await fixtureSigned.github.closeIssue(issueNumber);
+        } catch {
+          // Best-effort cleanup; test assertions above carry the signal.
+        }
+      }
+    }
     await fixtureSigned?.stop();
   }, 60_000);
 
@@ -663,4 +689,124 @@ describe("cross-instance issues integration (signed remote HTTP)", () => {
     expect(maintainerStatus.title).toBe(title);
     expect(messageBodies(maintainerStatus)).toContain(body);
   }, 120_000);
+
+  it("private issue: signed submitter and maintainer can exchange a deduplicated thread", async () => {
+    reportCase({
+      suite: "cross_instance_issues",
+      title: "private_issue_signed_remote_thread",
+      data: { visibility: "private", remote_http: "signed", collaboration: true },
+    });
+    const title = uniqueIssueTitle("Signed collaborative private issue");
+    const body = "Signed collaborative issue body";
+    const submitterFollowUp = "Signed submitter follow-up";
+    const maintainerReply = "Signed maintainer reply";
+
+    const submitted = await submitIssue(fixtureSigned.submitterMcp, {
+      title,
+      body,
+      visibility: "private",
+      labels: ["cross-instance-test", "signed-thread-test"],
+    });
+
+    expect(submitted.submitted_to_neotoma).toBe(true);
+    expect(submitted.pushed_to_github).toBe(false);
+    expect(submitted.guest_access_token).toBeTruthy();
+
+    const submitterMessage = await addIssueMessage(fixtureSigned.submitterMcp, {
+      entity_id: submitted.entity_id,
+      body: submitterFollowUp,
+      guest_access_token: submitted.guest_access_token,
+    });
+    expect(submitterMessage).toMatchObject({
+      submitted_to_neotoma: true,
+      pushed_to_github: false,
+    });
+
+    const maintainerMessage = await addIssueMessage(fixtureSigned.maintainerMcp, {
+      entity_id: submitted.remote_entity_id,
+      body: maintainerReply,
+    });
+    expect(maintainerMessage).toMatchObject({
+      submitted_to_neotoma: true,
+      pushed_to_github: false,
+    });
+
+    const maintainerStatus = await getIssueStatus(fixtureSigned.maintainerMcp, {
+      entity_id: submitted.remote_entity_id,
+      skip_sync: true,
+    });
+    expect(maintainerStatus.title).toBe(title);
+    expectMessageBodiesOnce(maintainerStatus, [body, submitterFollowUp, maintainerReply]);
+
+    const submitterReadThroughStatus = await getIssueStatus(fixtureSigned.submitterMcp, {
+      entity_id: submitted.entity_id,
+      guest_access_token: submitted.guest_access_token,
+      skip_sync: true,
+    });
+    expect(submitterReadThroughStatus.title).toBe(title);
+    expectMessageBodiesOnce(submitterReadThroughStatus, [body, submitterFollowUp, maintainerReply]);
+  }, 120_000);
+
+  it("public issue: signed submitter mirrors to GitHub and both sides see the thread", async () => {
+    if (!fixtureSigned.github) {
+      return;
+    }
+
+    reportCase({
+      suite: "cross_instance_issues",
+      title: "public_issue_signed_remote_thread",
+      data: { visibility: "public", remote_http: "signed", github_repo: TEST_REPO },
+    });
+    const title = uniqueIssueTitle("Signed public cross-instance issue");
+    const body = "Signed public issue body";
+    const submitterFollowUp = "Signed public submitter follow-up";
+    const maintainerReply = "Signed public maintainer reply";
+
+    const submitted = await submitIssue(fixtureSigned.submitterMcp, {
+      title,
+      body,
+      visibility: "public",
+      labels: ["cross-instance-test", "signed-public-test"],
+    });
+
+    expect(submitted.submitted_to_neotoma).toBe(true);
+    expect(submitted.pushed_to_github).toBe(true);
+    expect(submitted.issue_number).toBeGreaterThan(0);
+    signedGithubIssuesToCleanup.add(submitted.issue_number);
+
+    const githubIssue = await fixtureSigned.github.getIssue(submitted.issue_number);
+    expect(githubIssue.title).toBe(title);
+    expect(githubIssue.labels.map((label) => label.name)).toContain("neotoma");
+
+    const submitterMessage = await addIssueMessage(fixtureSigned.submitterMcp, {
+      entity_id: submitted.entity_id,
+      body: submitterFollowUp,
+      guest_access_token: submitted.guest_access_token,
+    });
+    expect(submitterMessage.pushed_to_github).toBe(true);
+
+    const maintainerMessage = await addIssueMessage(fixtureSigned.maintainerMcp, {
+      entity_id: submitted.remote_entity_id,
+      body: maintainerReply,
+    });
+    expect(maintainerMessage.pushed_to_github).toBe(true);
+
+    const comments = await fixtureSigned.github.listIssueComments(submitted.issue_number);
+    expect(comments.map((comment) => comment.body)).toEqual(
+      expect.arrayContaining([submitterFollowUp, maintainerReply]),
+    );
+
+    const submitterStatus = await getIssueStatus(fixtureSigned.submitterMcp, {
+      entity_id: submitted.entity_id,
+      guest_access_token: submitted.guest_access_token,
+      skip_sync: true,
+    });
+    const maintainerStatus = await getIssueStatus(fixtureSigned.maintainerMcp, {
+      entity_id: submitted.remote_entity_id,
+      skip_sync: true,
+    });
+
+    expectMessageBodiesOnce(submitterStatus, [body, submitterFollowUp, maintainerReply]);
+    expectMessageBodiesOnce(maintainerStatus, [body, submitterFollowUp, maintainerReply]);
+  }, 180_000);
 });

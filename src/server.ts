@@ -56,6 +56,7 @@ import {
   extractTextFromBuffer,
   getPdfFirstPageImageDataUrl,
   getMimeTypeFromExtension,
+  sniffMimeTypeFromBuffer,
 } from "./services/file_text_extraction.js";
 import {
   softDeleteEntity as softDeleteEntityService,
@@ -98,7 +99,7 @@ import {
   getIssueStatus,
   submitIssue,
 } from "./services/issues/issue_operations.js";
-import { syncIssuesFromGitHub } from "./services/issues/syncIssuesFromGitHub.js";
+import { syncIssuesFromGitHub } from "./services/issues/sync_issues_from_github.js";
 
 type StoreRelationshipRef = {
   relationship_type: string;
@@ -111,6 +112,8 @@ type StoreRelationshipRef = {
 
 const MCP_DOCS_SUBDIR = ["docs", "developer", "mcp"] as const;
 const TIMELINE_WIDGET_RESOURCE_URI = "ui://neotoma/timeline_widget";
+const ADVISORY_VISIBILITY_DEPRECATION =
+  "visibility 'advisory' is deprecated; use 'private' instead.";
 
 /**
  * Compact fallback delivered when `docs/developer/mcp/instructions.md` is
@@ -136,7 +139,7 @@ const MCP_INTERACTION_INSTRUCTIONS_COMPACT_BODY_LINES = [
   "",
   "FORBIDDEN: skipping Neotoma for an entire rapid-fire session; persisting only the user message; ending the turn without the closing assistant store.",
   "",
-  "Display rule: when a turn creates, updates, or retrieves Neotoma entities other than chat bookkeeping (conversation, conversation_message), the reply MUST render a section headed `🧠 Neotoma — <full conversation canonical_name> (<conversation entity_id>)` with bullet points. Use the full, untruncated conversation canonical_name returned by the user-phase store (or conversation title if unavailable) and the conversation entity_id. Each bullet: emoji + label + (`entity_type`). Groups: Created (N), Updated (N), Retrieved (N).",
+  "Display rule: when a turn creates, updates, or retrieves Neotoma entities other than chat bookkeeping (conversation, conversation_message), the reply MUST render a section headed `🧠 Neotoma — [<conversation name>](<active Neotoma origin>/inspector/conversations/<conversation entity_id>)` with bullet points. Use the active Neotoma origin for the current session (local defaults: 3080 dev, 3180 prod). Each bullet: emoji + label + linked entity_type text pointing to `<origin>/inspector/entities/<entity_id>`. Groups: Created (N), Updated (N), Retrieved (N).",
   "",
   "Per-turn QA: before finalizing, self-audit for missing user/assistant stores, missing PART_OF/REFERS_TO/EMBEDS relationships, orphaned entities, missing provenance, ignored ErrorEnvelope, and source extraction mistakes. Repair safe gaps in-turn; otherwise list Issues with immediate meaning, risk if unresolved, and recommended resolution.",
   "",
@@ -566,9 +569,9 @@ export class NeotomaServer {
         version: "1.0.0",
         ...(updateNotice
           ? {
-              title: "Update available",
-              description: updateNotice,
-            }
+            title: "Update available",
+            description: updateNotice,
+          }
           : {}),
       },
       instructions,
@@ -720,10 +723,10 @@ export class NeotomaServer {
     const storage =
       config.storageBackend === "local"
         ? {
-            storage_backend: "local" as const,
-            data_dir: config.dataDir,
-            sqlite_db: config.sqlitePath,
-          }
+          storage_backend: "local" as const,
+          data_dir: config.dataDir,
+          sqlite_db: config.sqlitePath,
+        }
         : undefined;
 
     return this.buildTextResponse({
@@ -968,7 +971,7 @@ export class NeotomaServer {
       title: z.string().min(1),
       body: z.string().min(1),
       labels: z.array(z.string()).optional(),
-      visibility: z.enum(["public", "private"]).optional(),
+      visibility: z.enum(["public", "private", "advisory"]).optional(),
       reporter_git_sha: z.string().optional(),
       reporter_git_ref: z.string().optional(),
       reporter_channel: z.string().optional(),
@@ -978,7 +981,9 @@ export class NeotomaServer {
     });
     const parsed = schema.parse(args ?? {});
 
-    const visibility = parsed.visibility ?? "public";
+    const usedAdvisoryAlias = parsed.visibility === "advisory";
+    const visibility: "public" | "private" =
+      usedAdvisoryAlias || parsed.visibility === "private" ? "private" : "public";
 
     const { createOperations } = await import("./core/operations.js");
     const ops = createOperations({ server: this, userId });
@@ -997,8 +1002,19 @@ export class NeotomaServer {
         reporter_patch_source_id: parsed.reporter_patch_source_id,
       });
 
-      return this.buildTextResponse({ ...result });
+      return this.buildTextResponse({
+        ...result,
+        ...(usedAdvisoryAlias ? { _deprecation: ADVISORY_VISIBILITY_DEPRECATION } : {}),
+      });
     } catch (err: any) {
+      const { isIssueValidationError } = await import("./services/issues/errors.js");
+      if (isIssueValidationError(err)) {
+        throw new McpError(
+          ErrorCode.InvalidParams,
+          `submit_issue failed: ${err.message}`,
+          err.toErrorEnvelopeDetails(),
+        );
+      }
       throw new McpError(
         ErrorCode.InternalError,
         `submit_issue failed: ${err?.message ?? err}`,
@@ -1147,6 +1163,10 @@ export class NeotomaServer {
         issue_number: z.number().int().positive().optional(),
         body: z.string().min(1),
         guest_access_token: z.string().min(1).optional(),
+        reporter_git_sha: z.string().optional(),
+        reporter_git_ref: z.string().optional(),
+        reporter_channel: z.string().optional(),
+        reporter_app_version: z.string().optional(),
       })
       .refine(
         (v) =>
@@ -1167,6 +1187,10 @@ export class NeotomaServer {
         ...(parsed.guest_access_token
           ? { guest_access_token: parsed.guest_access_token.trim() }
           : {}),
+        ...(parsed.reporter_git_sha ? { reporter_git_sha: parsed.reporter_git_sha } : {}),
+        ...(parsed.reporter_git_ref ? { reporter_git_ref: parsed.reporter_git_ref } : {}),
+        ...(parsed.reporter_channel ? { reporter_channel: parsed.reporter_channel } : {}),
+        ...(parsed.reporter_app_version ? { reporter_app_version: parsed.reporter_app_version } : {}),
       });
       return this.buildTextResponse(result);
     } catch (err: any) {
@@ -2115,7 +2139,11 @@ export class NeotomaServer {
       const ext = path.extname(input.file_path).toLowerCase();
       return {
         fileBuffer,
-        mimeType: input.mime_type || getMimeTypeFromExtension(ext) || "application/octet-stream",
+        mimeType:
+          input.mime_type ||
+          sniffMimeTypeFromBuffer(fileBuffer) ||
+          getMimeTypeFromExtension(ext) ||
+          "application/octet-stream",
         filename: input.original_filename || path.basename(input.file_path),
       };
     }
@@ -3326,29 +3354,29 @@ export class NeotomaServer {
 
       const responseData = useSummary
         ? {
-            entity_types: entityTypes.map((et) => ({
-              entity_type: et.entity_type,
-              schema_version: et.schema_version,
-              field_count: et.field_names?.length || 0,
-            })),
-            total: entityTypes.length,
-            keyword: parsed.keyword || null,
-            search_method: parsed.keyword
-              ? entityTypes[0]?.match_type === "vector"
-                ? "vector_semantic"
-                : "keyword_exact"
-              : "all",
-          }
+          entity_types: entityTypes.map((et) => ({
+            entity_type: et.entity_type,
+            schema_version: et.schema_version,
+            field_count: et.field_names?.length || 0,
+          })),
+          total: entityTypes.length,
+          keyword: parsed.keyword || null,
+          search_method: parsed.keyword
+            ? entityTypes[0]?.match_type === "vector"
+              ? "vector_semantic"
+              : "keyword_exact"
+            : "all",
+        }
         : {
-            entity_types: entityTypes,
-            total: entityTypes.length,
-            keyword: parsed.keyword || null,
-            search_method: parsed.keyword
-              ? entityTypes[0]?.match_type === "vector"
-                ? "vector_semantic"
-                : "keyword_exact"
-              : "all",
-          };
+          entity_types: entityTypes,
+          total: entityTypes.length,
+          keyword: parsed.keyword || null,
+          search_method: parsed.keyword
+            ? entityTypes[0]?.match_type === "vector"
+              ? "vector_semantic"
+              : "keyword_exact"
+            : "all",
+        };
 
       return this.buildTextResponse(responseData);
     } catch (error: any) {
@@ -3717,7 +3745,7 @@ export class NeotomaServer {
           interpretation: parsed.interpretation,
           interpretationSourceId:
             parsed.interpretation?.source_ref === "unstructured" &&
-            typeof preloadedUnstructuredPayload?.source_id === "string"
+              typeof preloadedUnstructuredPayload?.source_id === "string"
               ? preloadedUnstructuredPayload.source_id
               : undefined,
         }
@@ -4138,7 +4166,7 @@ export class NeotomaServer {
         throw new McpError(
           ErrorCode.InvalidParams,
           `store_structured plan: ${issues.length} entity issue(s). ` +
-            issues.map((iss) => `[${iss.observation_index}] ${iss.message}`).join(" | ")
+          issues.map((iss) => `[${iss.observation_index}] ${iss.message}`).join(" | ")
         );
       }
       return this.buildTextResponse({
@@ -4258,17 +4286,17 @@ export class NeotomaServer {
         const { relationshipsService } = await import("./services/relationships.js");
         for (const rel of relationships) {
           const sourceEntityId =
-          typeof rel.source_entity_id === "string"
+            typeof rel.source_entity_id === "string"
               ? rel.source_entity_id
-            : typeof rel.source_index === "number"
-              ? result.entities[rel.source_index]?.entityId
-              : undefined;
+              : typeof rel.source_index === "number"
+                ? result.entities[rel.source_index]?.entityId
+                : undefined;
           const targetEntityId =
-          typeof rel.target_entity_id === "string"
+            typeof rel.target_entity_id === "string"
               ? rel.target_entity_id
-            : typeof rel.target_index === "number"
-              ? result.entities[rel.target_index]?.entityId
-              : undefined;
+              : typeof rel.target_index === "number"
+                ? result.entities[rel.target_index]?.entityId
+                : undefined;
           if (!sourceEntityId || !targetEntityId) continue;
           await relationshipsService.createRelationship({
             relationship_type: rel.relationship_type as RelationshipType,
@@ -4355,8 +4383,8 @@ export class NeotomaServer {
         if (match) {
           logger.warn(
             `[STORE] Collapsing new entity_type "${entityType}" -> existing ` +
-              `"${match.canonical_entity_type}" (reason: ${match.reason}). ` +
-              `Set schema.aliases explicitly if this is wrong.`
+            `"${match.canonical_entity_type}" (reason: ${match.reason}). ` +
+            `Set schema.aliases explicitly if this is wrong.`
           );
           entityType = match.canonical_entity_type;
           schema = await schemaRegistry.loadActiveSchema(entityType, userId);
@@ -4423,7 +4451,7 @@ export class NeotomaServer {
 
         logger.error(
           `[STORE] Auto-created ${isDefaultUser ? "global" : "user-specific"} schema for "${entityType}" ` +
-            `(version 1.0, ${Object.keys(inferredSchema.schemaDefinition.fields).length} fields)`
+          `(version 1.0, ${Object.keys(inferredSchema.schemaDefinition.fields).length} fields)`
         );
       }
 
@@ -4751,8 +4779,8 @@ export class NeotomaServer {
             } catch (linkErr) {
               logger.warn(
                 `[STORE] Auto-link reference fields failed for ` +
-                  `${snapshot.entity_type}/${snapshot.entity_id}: ` +
-                  (linkErr instanceof Error ? linkErr.message : String(linkErr))
+                `${snapshot.entity_type}/${snapshot.entity_id}: ` +
+                (linkErr instanceof Error ? linkErr.message : String(linkErr))
               );
             }
           }
@@ -4785,9 +4813,9 @@ export class NeotomaServer {
         if (!sourceEntityId || !targetEntityId) {
           logger.warn(
             `store_structured: relationship reference out of range or missing ` +
-              `(source=${"source_index" in rel ? rel.source_index : rel.source_entity_id}, ` +
-              `target=${"target_index" in rel ? rel.target_index : rel.target_entity_id}, ` +
-              `entities.length=${entityIds.length}); skipping`
+            `(source=${"source_index" in rel ? rel.source_index : rel.source_entity_id}, ` +
+            `target=${"target_index" in rel ? rel.target_index : rel.target_entity_id}, ` +
+            `entities.length=${entityIds.length}); skipping`
           );
           continue;
         }
@@ -5209,14 +5237,14 @@ export class NeotomaServer {
     // Parse query parameters if present
     let queryParams:
       | {
-          limit?: number;
-          offset?: number;
-          sort?: string;
-          order?: "asc" | "desc";
-          entity_type?: string;
-          relationship_type?: string;
-          user_id?: string;
-        }
+        limit?: number;
+        offset?: number;
+        sort?: string;
+        order?: "asc" | "desc";
+        entity_type?: string;
+        relationship_type?: string;
+        user_id?: string;
+      }
       | undefined;
 
     if (queryString) {

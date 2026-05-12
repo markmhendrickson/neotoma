@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-05-08T09:51:42.710Z",
-  "total_files": 404,
+  "generated_at": "2026-05-12T11:46:50.088Z",
+  "total_files": 409,
   "by_top_level_folder": {
     "api": 1,
     "architecture": 19,
@@ -24,13 +24,14 @@
     "prototypes": 2,
     "reference": 1,
     "reports": 48,
+    "security": 3,
     "site": 5,
     "skills": 1,
     "specs": 12,
-    "subsystems": 43,
+    "subsystems": 44,
     "templates": 2,
     "testing-instructions-init-env-fix.md": 1,
-    "testing": 9,
+    "testing": 10,
     "ui": 40,
     "use_cases": 17,
     "vocabulary": 1
@@ -1129,6 +1130,18 @@
       "top": "reports"
     },
     {
+      "rel": "docs/security/advisories/2026-05-11-inspector-auth-bypass.md",
+      "top": "security"
+    },
+    {
+      "rel": "docs/security/advisories/README.md",
+      "top": "security"
+    },
+    {
+      "rel": "docs/security/threat_model.md",
+      "top": "security"
+    },
+    {
       "rel": "docs/site/generated/DOCS_MARKDOWN_AUDIT.md",
       "top": "site"
     },
@@ -1309,6 +1322,10 @@
       "top": "subsystems"
     },
     {
+      "rel": "docs/subsystems/plans.md",
+      "top": "subsystems"
+    },
+    {
       "rel": "docs/subsystems/privacy.md",
       "top": "subsystems"
     },
@@ -1406,6 +1423,10 @@
     },
     {
       "rel": "docs/testing/ROUTE_COVERAGE_MATRIX.md",
+      "top": "testing"
+    },
+    {
+      "rel": "docs/testing/test_catalog_maintenance_rules.mdc",
       "top": "testing"
     },
     {

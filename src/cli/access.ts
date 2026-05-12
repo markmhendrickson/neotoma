@@ -10,12 +10,14 @@
  */
 
 import {
-  loadAccessPolicies,
+  loadAccessPolicyEntries,
+  resolveAccessPolicyWithSource,
   setAccessPolicy,
   resetAccessPolicy,
   ISSUE_SUBMISSION_ENTITY_TYPES,
   VALID_MODES,
   DEFAULT_MODE,
+  type AccessPolicyResolution,
   type AccessPolicyMode,
 } from "../services/access_policy.js";
 
@@ -64,21 +66,19 @@ async function setViaMetadata(entityType: string, mode: AccessPolicyMode): Promi
   }
 }
 
-async function resetViaMetadata(entityType: string): Promise<void> {
+async function resetViaMetadata(entityType: string): Promise<AccessPolicyResolution> {
+  await resetAccessPolicy(entityType);
   try {
     const { SchemaRegistryService } = await import("../services/schema_registry.js");
     const registry = new SchemaRegistryService();
     const schema = await registry.loadGlobalSchema(entityType);
     if (schema) {
-      const updated = { ...(schema.metadata || {}) };
-      delete updated.guest_access_policy;
-      await registry.updateMetadata(entityType, updated);
-      return;
+      await registry.updateMetadata(entityType, { guest_access_policy: DEFAULT_MODE });
     }
   } catch {
-    // fall through
+    // Config fallback has already been removed; unresolved schemas now use the default.
   }
-  await resetAccessPolicy(entityType);
+  return await resolveAccessPolicyWithSource(entityType);
 }
 
 export async function accessSet(
@@ -107,7 +107,10 @@ export async function accessSet(
 }
 
 export async function accessList(opts: AccessListOpts): Promise<void> {
-  const policies = await loadAccessPolicies();
+  const entriesByType = await loadAccessPolicyEntries();
+  const policies = Object.fromEntries(
+    Object.entries(entriesByType).map(([entityType, entry]) => [entityType, entry.mode]),
+  );
 
   if (opts.json) {
     output({ policies, default_mode: DEFAULT_MODE }, true);
@@ -124,7 +127,9 @@ export async function accessList(opts: AccessListOpts): Promise<void> {
 
   process.stdout.write("Configured access policies:\n");
   for (const [entityType, policyMode] of entries.sort((a, b) => a[0].localeCompare(b[0]))) {
-    process.stdout.write(`  ${entityType}: ${policyMode}\n`);
+    const source = entriesByType[entityType]?.source;
+    const suffix = source ? ` (${source})` : "";
+    process.stdout.write(`  ${entityType}: ${policyMode}${suffix}\n`);
   }
   process.stdout.write(`\nUnconfigured types default to "${DEFAULT_MODE}".\n`);
 }
@@ -133,14 +138,27 @@ export async function accessReset(
   entityType: string,
   opts: AccessResetOpts,
 ): Promise<void> {
-  await resetViaMetadata(entityType);
+  const effective = await resetViaMetadata(entityType);
 
   if (opts.json) {
-    output({ entity_type: entityType, mode: DEFAULT_MODE, status: "reset" }, true);
+    output({
+      entity_type: entityType,
+      mode: DEFAULT_MODE,
+      status: "reset",
+      effective_mode: effective.mode,
+      effective_source: effective.source,
+    }, true);
   } else {
-    process.stdout.write(
-      `Access policy for "${entityType}" reset to default ("${DEFAULT_MODE}").\n`,
-    );
+    if (effective.mode === DEFAULT_MODE) {
+      process.stdout.write(
+        `Access policy for "${entityType}" reset to default ("${DEFAULT_MODE}").\n`,
+      );
+    } else {
+      process.stdout.write(
+        `Access policy for "${entityType}" reset, but effective policy remains ` +
+          `"${effective.mode}" from ${effective.source}.\n`,
+      );
+    }
   }
 }
 

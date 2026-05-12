@@ -401,6 +401,7 @@ schemaRegistry.updateSchemaIncremental({
       { label: "Schema management workflows", href: "/schema-management", desc: "CLI walkthrough: list, validate, evolve, register" },
       { label: "Storage layers", href: "/schemas/storage-layers", desc: "Why removed fields stay queryable as raw_fragments" },
       { label: "Schema registry", href: "/schemas/registry", desc: "The table that holds every version" },
+      { label: "Test safely", href: "/non-destructive-testing", desc: "Let an agent populate schemas from your real data without touching your current setup" },
     ],
   },
 ];

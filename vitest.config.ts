@@ -1,6 +1,7 @@
 import { defineConfig, configDefaults } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import mdx from "@mdx-js/rollup";
+import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -17,6 +18,21 @@ const writeTestRunReport = process.env.WRITE_TEST_RUN_REPORT === "1";
 
 export default defineConfig({
   plugins: [
+    {
+      name: "prefer-ts-source-for-js-specifiers",
+      enforce: "pre",
+      resolveId(source, importer) {
+        if (!importer || !source.endsWith(".js") || !source.startsWith(".")) {
+          return null;
+        }
+        const sourcePath = path.resolve(path.dirname(importer), source);
+        const tsPath = sourcePath.replace(/\.js$/, ".ts");
+        if (fs.existsSync(tsPath)) {
+          return tsPath;
+        }
+        return null;
+      },
+    },
     { ...mdx({ providerImportSource: "@mdx-js/react" }), enforce: "pre" },
     react(),
   ],

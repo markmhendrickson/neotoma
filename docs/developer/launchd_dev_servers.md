@@ -37,6 +37,8 @@ Re-install the plist after template changes: `npm run setup:launchd-dev`.
 
 To **reload** an already-installed Neotoma agent without re-running the full installer (after local plist edits or to bounce the process): `npm run reload:launchd-neotoma` from any directory on macOS. That script only touches Neotoma-owned labels under `~/Library/LaunchAgents` (see `scripts/reload_neotoma_launchagents.sh`).
 
+To **fully stop** the Neotoma launchd stack (dev/prod/watch-build/issues-sync plus leftover launchd-owned server/watch processes): `npm run shutdown:launchd-neotoma`.
+
 ## Commands
 
 | Action        | Command |

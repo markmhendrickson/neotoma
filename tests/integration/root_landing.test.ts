@@ -19,6 +19,7 @@ import {
   buildRootLandingMarkdown,
   buildRobotsTxt,
   readNeotomaConfigEnvironment,
+  resolveLandingMode,
   wantsHtml,
   wantsMarkdown,
 } from "../../src/services/root_landing/index.js";
@@ -99,6 +100,24 @@ describe("buildRobotsTxt", () => {
   it("allows crawling in prod mode and references the sitemap", () => {
     const txt = buildRobotsTxt("prod", "https://neotoma.io");
     expect(txt).toContain("Allow: /");
+  });
+});
+
+describe("resolveLandingMode", () => {
+  it("does not classify production loopback reverse-proxy traffic as local by default", () => {
+    const req = {
+      headers: {},
+      socket: { remoteAddress: "127.0.0.1" },
+    } as unknown as express.Request;
+    expect(resolveLandingMode(req, { NEOTOMA_ENV: "production" })).toBe("personal");
+  });
+
+  it("classifies loopback reverse-proxy traffic with public X-Forwarded-For as personal", () => {
+    const req = {
+      headers: { "x-forwarded-for": "203.0.113.10" },
+      socket: { remoteAddress: "127.0.0.1" },
+    } as unknown as express.Request;
+    expect(resolveLandingMode(req, { NEOTOMA_ENV: "development" })).toBe("personal");
   });
 });
 

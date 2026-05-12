@@ -13,7 +13,7 @@ Canonical reference for how Neotoma treats agent skills — naming, publishing, 
 | Tree | Location | Published in npm tarball | Audience | Examples |
 |------|----------|--------------------------|----------|----------|
 | **User-facing** | `skills/` (repo root) | Yes (`"files": ["skills"]` in `package.json`) | End users, SkillHub visitors | `remember-email`, `store-data`, `ensure-neotoma` |
-| **Developer/maintainer** | `.cursor/skills/`, `.claude/skills/` | No | Repo contributors, release managers | `release`, `commit`, `debug`, `process-feedback` |
+| **Developer/maintainer** | `.cursor/skills/`, `.claude/skills/` | No | Repo contributors, release managers | `release`, `commit`, `debug`, `process-issues` |
 
 Developer skills are synced from the foundation submodule via `scripts/setup_cursor_from_foundation.sh` and are never included in the npm tarball. User-facing skills ship with the package and are installed into harnesses by `neotoma setup --skills`.
 

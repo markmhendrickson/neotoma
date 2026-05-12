@@ -91,11 +91,12 @@ Keep these aliases for one minor release, update docs and automation to the cano
 |------------|----------|
 | `setup:launchd-dev` / `setup:launchd-dev-server` | `com.neotoma.dev-server` → `npm run dev:server` ([`launchd_dev_servers.md`](launchd_dev_servers.md)) |
 | `setup:launchd-prod-server` | `com.neotoma.prod-server` → `npm run start:server:prod` ([`launchd_prod_server.md`](launchd_prod_server.md)) |
-| `setup:launchd-cli-sync` | `com.neotoma.watch-build` → `dev:types` after one `build:server` (keeps linked global `neotoma` aligned with `dist/`) |
+| `setup:launchd-cli-sync` | `com.neotoma.watch-build` → `npm link`, one `build:server`, then `dev:types` using the captured setup-time Node/npm toolchain (keeps global `neotoma` pointed at the checkout and aligned with `dist/`) |
 | `setup:launchd-watch-build` | Alias → `setup:launchd-cli-sync` |
 | `setup:launchd-watch-stacks` | Dev server agent + `setup:launchd-cli-sync` (compatibility wrapper) |
 | `setup:launchd-issues-sync` | `com.neotoma.issues-sync` |
 | `reload:launchd-neotoma` | Unloads then loads each installed Neotoma plist (dev-server, prod-server, watch-build, issues-sync); macOS only |
+| `shutdown:launchd-neotoma` | Unloads Neotoma launchagents, stops dev/prod APIs, and reaps leftover launchd-owned repo processes; macOS only |
 
 ## Validation
 

@@ -446,8 +446,8 @@ See [`docs/subsystems/interpretations.md`](../subsystems/interpretations.md).
 
 | Action             | Purpose                                                                                                                                                                              | Consistency | Deterministic | Status    |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------- | ------------- | --------- |
-| `submit_issue`     | Create a local `issue` entity and optional GitHub/public mirror per visibility; targets configured operator instance when `issues.target_url` / env is set                           | Strong      | Partial       | Available |
-| `add_issue_message`| Append thread message on an `issue` entity; may mirror to GitHub / operator per configuration                                                                                        | Strong      | Partial       | Available |
+| `submit_issue`     | Create a local `issue` entity and optional GitHub/public mirror per visibility; targets configured operator instance when `issues.target_url` / env is set. Requires at least one of `reporter_git_sha` or `reporter_app_version` (v0.12+).                           | Strong      | Partial       | Available |
+| `add_issue_message`| Append thread message on an `issue` entity; may mirror to GitHub / operator per configuration. Soft-requires reporter env on public threads (v0.12+).                                                                                        | Strong      | Partial       | Available |
 | `get_issue_status` | Snapshot + messages for an `issue`; operator read-through and GitHub refresh when mirrored                                                                                           | Strong      | Yes           | Available |
 | `sync_issues`      | Bulk pull issues (and messages) from configured GitHub into local Neotoma                                                                                                           | Strong      | Partial       | Available |
 
@@ -2120,8 +2120,8 @@ The following tools are first-class MCP actions (listed in §2 catalog tables an
 | `get_entity_submission_status` | No | `entity_id`, optional `guest_access_token`. |
 | `list_entity_submissions` | No | `entity_type`, optional `limit` / `offset`. |
 | `sync_entity_submissions` | Yes | Optional `entity_type` (defaults toward `issue` sync behavior). |
-| `submit_issue` | Yes | `title`, `body`, optional `labels`, `visibility`, reporter metadata fields. |
-| `add_issue_message` | Yes | `entity_id`, `body`, optional `guest_access_token`. |
+| `submit_issue` | Yes | `title`, `body`, optional `labels`, `visibility`. **Required (v0.12+):** at least one of `reporter_git_sha` or `reporter_app_version`. Optional `reporter_git_ref`, `reporter_channel`, `reporter_ci_run_id`, `reporter_patch_source_id`. |
+| `add_issue_message` | Yes | `entity_id`, `body`, optional `guest_access_token`. Soft-required on public threads (v0.12+): `reporter_git_sha`, `reporter_app_version` (`reporter_git_ref`, `reporter_channel` also accepted). |
 | `get_issue_status` | No | `entity_id`, optional `skip_sync`, `guest_access_token`. |
 | `sync_issues` | Yes | Optional `state`, `labels`, `since`. |
 | `subscribe` | Yes | Requires `delivery_method` plus at least one of `entity_types`, `entity_ids`, `event_types`; webhook URL rules per OpenAPI. |

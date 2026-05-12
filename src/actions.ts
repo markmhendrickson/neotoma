@@ -40,11 +40,14 @@ import {
   AccessPolicyError,
   type GuestIdentity,
 } from "./services/access_policy.js";
+import { hashGuestAccessToken } from "./services/guest_access_token.js";
+import { IssueTransportError, IssueValidationError } from "./services/issues/errors.js";
 import {
   getCurrentAAuthAdmission,
   getCurrentAgentIdentity,
   getCurrentAttribution,
   getCurrentExternalActor,
+  getRequestContext,
   runWithExternalActor,
   runWithRequestContext,
 } from "./services/request_context.js";
@@ -146,6 +149,8 @@ import {
   RetrieveEntityByIdentifierSchema,
   RetrieveGraphNeighborhoodSchema,
   RetrieveRelatedEntitiesSchema,
+  RELATIONSHIP_ENTITY_ID_FORMAT_HINT,
+  RELATIONSHIP_ENTITY_ID_FORMAT_ISSUE_CODE,
   StoreRequestSchema,
   type StoreInterpretationInput,
   UpdateSchemaIncrementalRequestSchema,
@@ -430,6 +435,14 @@ const writeRateLimit = rateLimit({
   ...rateLimitOptions,
 });
 
+// SECURITY: guest-capable write routes (issue submission / thread append,
+// subscribe / unsubscribe) should not share the broader `/store` bucket.
+// Key by cryptographic guest identity first, then scoped guest token, then IP.
+const GUEST_WRITE_RATE_LIMIT_PER_MIN = Math.max(
+  1,
+  Number.parseInt(process.env.NEOTOMA_GUEST_WRITE_RATE_LIMIT_PER_MIN || "", 10) || 30
+);
+
 // SECURITY: sandbox write paths share a single user_id, so keying only by
 // user starves legitimate callers when one IP abuses the endpoint. Sandbox
 // rate limiter keys by IP so each visitor gets their own bucket, and uses a
@@ -712,29 +725,49 @@ const mcpTransports = new Map<string, StreamableHTTPServerTransport>();
 // Store server instances by session ID to preserve authentication state
 const mcpServerInstances = new Map<string, NeotomaServer>();
 
-/**
- * True when the request arrived over a loopback socket.
- *
- * SECURITY: derived from the TCP socket's remote address, NOT the `Host`
- * header. `req.headers.host` is attacker-controlled; using it to gate
- * authentication / auto-approval produces a trivial bypass when the server is
- * bound to a non-loopback interface. We check `req.socket.remoteAddress`
- * directly so spoofed `Host: localhost` headers do not promote a remote
- * caller into the local-dev trust zone.
- *
- * Express's `req.ip` is also unsafe here because `trust proxy` honours the
- * X-Forwarded-For header — any caller can claim to be loopback.
- */
-export function isLocalRequest(req: express.Request): boolean {
-  const remote = (req.socket?.remoteAddress || "").toLowerCase();
+function isLoopbackAddress(value: string | undefined): boolean {
+  const remote = (value || "").trim().toLowerCase();
   if (!remote) return false;
-  // Unix-domain socket requests have no remote address; treat as non-local.
   if (remote === "127.0.0.1" || remote === "::1") return true;
-  // IPv4 loopback range (127.0.0.0/8)
   if (remote.startsWith("127.")) return true;
-  // IPv4-mapped IPv6 loopback (e.g. ::ffff:127.0.0.1)
   if (remote.startsWith("::ffff:127.")) return true;
   return false;
+}
+
+function forwardedForValues(req: express.Request): string[] {
+  const raw = req.headers["x-forwarded-for"] || req.headers["X-Forwarded-For"];
+  const values = Array.isArray(raw) ? raw : raw ? [raw] : [];
+  return values
+    .flatMap((value) => String(value).split(","))
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+function isProductionEnvironment(env: NodeJS.ProcessEnv = process.env): boolean {
+  const value = (env.NEOTOMA_ENV || "development").trim().toLowerCase();
+  return value === "production" || value === "prod";
+}
+
+/**
+ * True when the request is genuinely local to this process.
+ *
+ * SECURITY: a same-host reverse proxy (Caddy, nginx, Cloudflare tunnel, etc.)
+ * connects to Node over loopback even for public internet callers. In
+ * production, loopback alone is therefore not enough to grant local-dev auth.
+ */
+export function isLocalRequest(req: express.Request): boolean {
+  if (!isLoopbackAddress(req.socket?.remoteAddress)) return false;
+
+  const forwardedFor = forwardedForValues(req);
+  if (forwardedFor.length > 0) {
+    return forwardedFor.every(isLoopbackAddress);
+  }
+
+  if (isProductionEnvironment() && process.env.NEOTOMA_TRUST_PROD_LOOPBACK === "1") {
+    return true;
+  }
+
+  return !isProductionEnvironment();
 }
 
 const OAUTH_KEY_SESSION_COOKIE = "neotoma_oauth_key_session";
@@ -1007,6 +1040,14 @@ export function canonicalAauthAuthority(): string {
     }
     return explicit;
   }
+  const publicBase = process.env.NEOTOMA_PUBLIC_BASE_URL?.trim();
+  if (publicBase) {
+    try {
+      return new URL(publicBase).host;
+    } catch {
+      // Keep falling through to apiBase; malformed env should not break boot.
+    }
+  }
   try {
     const url = new URL(config.apiBase);
     return url.host;
@@ -1067,6 +1108,7 @@ app.all("/mcp", async (req, res) => {
     let connectionIdHeader = (req.headers["x-connection-id"] || req.headers["X-Connection-Id"]) as
       | string
       | undefined;
+    let bearerValidated = false;
 
     if (config.encryption.enabled) {
       // Encryption on: require static token derived from user's private key
@@ -1076,6 +1118,7 @@ app.all("/mcp", async (req, res) => {
         if (safeCompareTokens(token, expectedToken)) {
           req.headers["x-connection-id"] = "dev-local";
           connectionIdHeader = "dev-local";
+          bearerValidated = true;
         }
       }
     } else {
@@ -1097,6 +1140,37 @@ app.all("/mcp", async (req, res) => {
         if (safeCompareTokens(token, process.env.NEOTOMA_BEARER_TOKEN)) {
           req.headers["x-connection-id"] = "dev-local";
           connectionIdHeader = "dev-local";
+          bearerValidated = true;
+        }
+      }
+      if (authHeader?.startsWith("Bearer ") && !bearerValidated && !connectionIdHeader) {
+        try {
+          const token = authHeader.slice(7).trim();
+          const { validateTokenAndGetConnectionId } = await import("./services/mcp_oauth.js");
+          const { connectionId } = await validateTokenAndGetConnectionId(token);
+          req.headers["x-connection-id"] = connectionId;
+          connectionIdHeader = connectionId;
+          bearerValidated = true;
+        } catch {
+          logger.info("[MCP HTTP] Invalid or expired Bearer token. Returning 401 invalid_token.");
+          const desc =
+            "Invalid or expired Bearer token. Remove Authorization from mcp.json and click Connect to re-authenticate.";
+          const wwwAuthHeader = `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource", error="invalid_token", error_description="${desc}"`;
+          res.setHeader("WWW-Authenticate", wwwAuthHeader);
+          if (req.method === "POST" && req.body && typeof req.body === "object") {
+            return res.status(401).json({
+              jsonrpc: "2.0",
+              error: {
+                code: -32001,
+                message: desc,
+              },
+              id: req.body?.id ?? null,
+            });
+          }
+          return res.status(401).json({
+            error: "invalid_token",
+            error_description: desc,
+          });
         }
       }
     }
@@ -1106,7 +1180,7 @@ app.all("/mcp", async (req, res) => {
     // path. Bearer / OAuth / X-Connection-Id remain fully supported.
     const aauthAdmissionForRequest = getAAuthAdmissionFromRequest(req);
     const aauthAdmitted = !!(aauthAdmissionForRequest && aauthAdmissionForRequest.admitted);
-    const hasAuth = !!(authHeader?.startsWith("Bearer ") || connectionIdHeader || aauthAdmitted);
+    const hasAuth = !!(bearerValidated || connectionIdHeader || aauthAdmitted);
 
     // When encryption is on, only the key-derived token is accepted
     if (config.encryption.enabled && connectionIdHeader !== "dev-local") {
@@ -1466,6 +1540,53 @@ function sendError(
   details?: Record<string, unknown>
 ): express.Response {
   return res.status(status).json(buildErrorEnvelope(errorCode, message, details));
+}
+
+type ZodValidationIssueLike = {
+  code?: string;
+  message?: string;
+  path?: Array<string | number>;
+  params?: {
+    code?: string;
+    hint?: string;
+  };
+};
+
+function getRelationshipEntityIdFormatIssues(issues: unknown): ZodValidationIssueLike[] {
+  if (!Array.isArray(issues)) {
+    return [];
+  }
+  return issues.filter((issue): issue is ZodValidationIssueLike => {
+    if (!issue || typeof issue !== "object") {
+      return false;
+    }
+    const params = (issue as ZodValidationIssueLike).params;
+    return (
+      params?.code === RELATIONSHIP_ENTITY_ID_FORMAT_ISSUE_CODE &&
+      params?.hint === RELATIONSHIP_ENTITY_ID_FORMAT_HINT
+    );
+  });
+}
+
+function sendStoreValidationError(res: express.Response, issues: unknown): express.Response {
+  const relationshipIdFormatIssues = getRelationshipEntityIdFormatIssues(issues);
+  if (relationshipIdFormatIssues.length > 0) {
+    return res.status(400).json({
+      error: {
+        code: "ERR_STORE_RESOLUTION_FAILED",
+        message: "Structured store relationship validation failed.",
+        issues: relationshipIdFormatIssues.map((issue) => ({
+          code: RELATIONSHIP_ENTITY_ID_FORMAT_ISSUE_CODE,
+          message: issue.message ?? "Relationship entity id format is invalid.",
+          details: {
+            path: issue.path ?? [],
+          },
+          hint: issue.params?.hint ?? RELATIONSHIP_ENTITY_ID_FORMAT_HINT,
+        })),
+      },
+    });
+  }
+  return sendValidationError(res, issues);
 }
 
 function sendValidationError(res: express.Response, issues: unknown): express.Response {
@@ -2376,11 +2497,18 @@ function stampGuestPrincipal(req: express.Request, principal: GuestPrincipal): v
 }
 
 function guestAccessTokenFromRequest(req: express.Request): string | undefined {
+  const explicitToken = explicitGuestAccessTokenFromRequest(req);
+  if (explicitToken) return explicitToken;
+
   const headerAuth = (req.headers.authorization || req.headers.Authorization || "") as string;
   if (headerAuth.startsWith("Bearer ")) {
     const token = headerAuth.slice("Bearer ".length).trim();
     if (token) return token;
   }
+  return undefined;
+}
+
+function explicitGuestAccessTokenFromRequest(req: express.Request): string | undefined {
   const queryToken = req.query.access_token;
   if (typeof queryToken === "string" && queryToken.trim()) return queryToken.trim();
   const body = req.body as { access_token?: unknown; guest_access_token?: unknown } | undefined;
@@ -2417,6 +2545,56 @@ export function routeAcceptsGuestPrincipal(req: Pick<express.Request, "method" |
   return false;
 }
 
+/** Exported for unit tests: guest-capable routes that mutate state and should consume a guest write-rate budget. */
+export function routeConsumesGuestWriteBudget(
+  req: Pick<express.Request, "method" | "path">
+): boolean {
+  const path = req.path;
+  return (
+    req.method === "POST" &&
+    (path === "/issues/submit" ||
+      path === "/api/issues/submit" ||
+      path === "/issues/add_message" ||
+      path === "/api/issues/add_message" ||
+      path === "/subscribe" ||
+      path === "/unsubscribe")
+  );
+}
+
+/** Exported for unit tests: guest-rate-limit key precedence is thumbprint -> guest token -> IP. */
+export function guestWriteRateLimitKey(req: express.Request): string {
+  const principal = requestPrincipal(req);
+  if (principal?.kind === "guest") {
+    const thumbprint = principal.guestId.thumbprint?.trim();
+    if (thumbprint) {
+      return `guest-thumbprint:${thumbprint}`;
+    }
+    const accessToken = principal.accessToken ?? principal.guestId.accessToken;
+    if (typeof accessToken === "string" && accessToken.trim()) {
+      return `guest-token:${hashGuestAccessToken(accessToken.trim()).slice(0, 16)}`;
+    }
+  }
+  return `ip:${ipKeyGenerator(req.ip || "")}`;
+}
+
+const guestWriteRateLimitMiddleware = rateLimit({
+  windowMs: 60 * 1000,
+  max: GUEST_WRITE_RATE_LIMIT_PER_MIN,
+  keyGenerator: guestWriteRateLimitKey,
+  message: "Guest write rate limit exceeded, please slow down",
+  ...rateLimitOptions,
+});
+
+function guestWriteRateLimit(
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction
+): void {
+  if (!routeConsumesGuestWriteBudget(req)) return next();
+  if (requestPrincipal(req)?.kind !== "guest") return next();
+  void guestWriteRateLimitMiddleware(req, res, next);
+}
+
 function buildGuestPrincipalFromRequest(req: express.Request): GuestPrincipal | null {
   const agentIdentity = getCurrentAgentIdentity();
   const accessToken = guestAccessTokenFromRequest(req);
@@ -2449,6 +2627,14 @@ async function resolveRoutePrincipal(
   req: express.Request,
   accept: ReadonlyArray<RoutePrincipal["kind"]>,
 ): Promise<RoutePrincipal> {
+  if (accept.includes("guest") && explicitGuestAccessTokenFromRequest(req)) {
+    const guestPrincipal = buildGuestPrincipalFromRequest(req);
+    if (guestPrincipal) {
+      stampGuestPrincipal(req, guestPrincipal);
+      return guestPrincipal;
+    }
+  }
+
   const existing = requestPrincipal(req);
   if (existing && accept.includes(existing.kind)) return existing;
 
@@ -2470,6 +2656,56 @@ async function resolveRoutePrincipal(
   }
 
   throw new Error("Not authenticated - route does not accept the resolved principal");
+}
+
+/**
+ * Derive a userId for a guest principal from the validated token grant.
+ *
+ * Resolution order:
+ *   1. `(req as any).authenticatedUserId` — set by earlier auth middleware
+ *      (covers the rare case where user-level auth was stamped before the
+ *      guest branch).
+ *   2. The `user_id` stored on the `guest_access_token` entity that matches
+ *      the guest's access token. This is the owner who generated the token.
+ *   3. Local-only fallback: when the request originates from localhost and
+ *      does not carry a Bearer token, use the local dev user. This keeps
+ *      local-only developer flows working without a real token grant.
+ *
+ * Returns `null` for non-guest principals so callers can fall through to
+ * `getAuthenticatedUserId`. Throws for remote/hosted guests that cannot
+ * be resolved — prevents silent mis-attribution.
+ */
+export async function resolveGuestUserId(
+  req: express.Request,
+  principal: RoutePrincipal,
+): Promise<string | null> {
+  if (principal.kind !== "guest") return null;
+
+  const authenticatedUserId = (req as any).authenticatedUserId;
+  if (authenticatedUserId) return authenticatedUserId;
+
+  if (principal.guestId.accessToken) {
+    const { hashGuestAccessToken } = await import("./services/guest_access_token.js");
+    const tokenHash = hashGuestAccessToken(principal.guestId.accessToken);
+    const tokenEntityId = `guest_token_${tokenHash.slice(0, 16)}`;
+    const { data: tokenEntity } = await db
+      .from("entities")
+      .select("user_id")
+      .eq("id", tokenEntityId)
+      .single();
+    if (tokenEntity?.user_id) {
+      return tokenEntity.user_id;
+    }
+  }
+
+  const headerAuth = (req.headers.authorization || "") as string;
+  if (isLocalRequest(req) && !headerAuth.startsWith("Bearer ")) {
+    return ensureLocalDevUser().id;
+  }
+
+  throw new Error(
+    "Guest principal cannot resolve a user_id: no valid token grant and not a local request",
+  );
 }
 
 async function resolveGuestScopedEntityAccess(
@@ -2508,7 +2744,7 @@ async function resolveGuestScopedEntityAccess(
         const tokenHash = hashGuestAccessToken(principal.guestId.accessToken);
         const { data: issueObservations } = await db
           .from("observations")
-          .select("fields, payload")
+          .select("fields")
           .eq("entity_id", entityId);
         for (const observation of issueObservations ?? []) {
           const rawFields = (observation as { fields?: unknown; payload?: unknown }).fields;
@@ -2533,13 +2769,6 @@ async function resolveGuestScopedEntityAccess(
             return { userId: entity.user_id, entityType: entity.entity_type };
           }
         }
-        if (
-          /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-            principal.guestId.accessToken,
-          )
-        ) {
-          return { userId: entity.user_id, entityType: entity.entity_type };
-        }
       }
     }
 
@@ -2551,7 +2780,12 @@ async function resolveGuestScopedEntityAccess(
       return Boolean(principal.guestId.thumbprint && obs.agent_thumbprint === principal.guestId.thumbprint);
     });
     if (!hasMatch) {
-      throw new Error("Submitter-scoped access: you can only read entities you submitted.");
+      throw new AccessPolicyError({
+        op: "retrieve",
+        entityType: entity.entity_type,
+        mode: decision.mode,
+        reason: "submitter_scoped_no_matching_token_or_thumbprint",
+      });
     }
   }
 
@@ -2914,6 +3148,24 @@ function handleApiError(
     return res
       .status(403)
       .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelope()));
+  }
+  if (error instanceof IssueValidationError) {
+    logWarn(logContext || "IssueValidationError", req, {
+      code: error.code,
+      details: error.toErrorEnvelopeDetails(),
+    });
+    return res
+      .status(400)
+      .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelopeDetails()));
+  }
+  if (error instanceof IssueTransportError) {
+    logWarn(logContext || "IssueTransportError", req, {
+      code: error.code,
+      details: error.toErrorEnvelopeDetails(),
+    });
+    return res
+      .status(error.status)
+      .json(buildErrorEnvelope(error.code, error.message, error.toErrorEnvelopeDetails()));
   }
   logError(logContext || "APIError", req, error);
   // SECURITY: do not echo raw Error.message to clients in production; SQLite /
@@ -5345,12 +5597,13 @@ export async function storeStructuredForApi(params: {
   // Access policy: when the caller is a guest (AAuth-verified but not admitted
   // via a grant), check per-entity-type access policies. If the policy allows
   // guest writes, the request proceeds without requiring an agent_grant.
+  const requestContext = getRequestContext();
   const agentIdentity = getCurrentAgentIdentity();
   const admission = getCurrentAAuthAdmission();
   const isAAuthVerified = agentIdentity?.thumbprint != null;
   const isGuest = isAAuthVerified && (!admission || !admission.admitted);
 
-  if (isGuest) {
+  if (isGuest && !requestContext?.bypassGuestStoreAccessPolicy) {
     const entityTypes = entities
       .map((entity) => entity?.entity_type)
       .filter((t): t is string => typeof t === "string" && t.length > 0);
@@ -6140,7 +6393,7 @@ async function handleStorePost(
     logWarn("ValidationError:store", req, {
       issues: parsed.error.issues,
     });
-    return sendValidationError(res, parsed.error.issues);
+    return sendStoreValidationError(res, parsed.error.issues);
   }
 
   try {
@@ -6402,9 +6655,12 @@ app.post(
   "/sync/webhook",
   express.raw({ type: "application/json", limit: "2mb" }),
   async (req, res) => {
-    const rawBody = Buffer.isBuffer(req.body)
-      ? req.body.toString("utf8")
-      : String((req as express.Request).body ?? "");
+    const rawReq = req as express.Request & { rawBody?: Buffer };
+    const rawBody = rawReq.rawBody
+      ? rawReq.rawBody.toString("utf8")
+      : Buffer.isBuffer(req.body)
+        ? req.body.toString("utf8")
+        : String((req as express.Request).body ?? "");
     const signatureHeader =
       (req.headers["x-neotoma-sync-signature-256"] as string | undefined) ??
       (req.headers["X-Neotoma-Sync-Signature-256"] as string | undefined);
@@ -6436,9 +6692,12 @@ app.post(
   "/sync/entities",
   express.raw({ type: "application/json", limit: "2mb" }),
   async (req, res) => {
-    const rawBody = Buffer.isBuffer(req.body)
-      ? req.body.toString("utf8")
-      : String((req as express.Request).body ?? "");
+    const rawReq = req as express.Request & { rawBody?: Buffer };
+    const rawBody = rawReq.rawBody
+      ? rawReq.rawBody.toString("utf8")
+      : Buffer.isBuffer(req.body)
+        ? req.body.toString("utf8")
+        : String((req as express.Request).body ?? "");
     const signatureHeader =
       (req.headers["x-neotoma-sync-signature-256"] as string | undefined) ??
       (req.headers["X-Neotoma-Sync-Signature-256"] as string | undefined);
@@ -7600,6 +7859,10 @@ const handleIssuesAddMessageHttp: express.RequestHandler = async (req, res) => {
               ...(parsed.data.guest_access_token
                 ? { guest_access_token: parsed.data.guest_access_token.trim() }
                 : {}),
+              ...(parsed.data.reporter_git_sha ? { reporter_git_sha: parsed.data.reporter_git_sha } : {}),
+              ...(parsed.data.reporter_git_ref ? { reporter_git_ref: parsed.data.reporter_git_ref } : {}),
+              ...(parsed.data.reporter_channel ? { reporter_channel: parsed.data.reporter_channel } : {}),
+              ...(parsed.data.reporter_app_version ? { reporter_app_version: parsed.data.reporter_app_version } : {}),
             });
       logDebug("Success:issues_add_message", req, { message_entity_id: result.message_entity_id });
       return res.json(result);
@@ -7617,8 +7880,8 @@ const handleIssuesAddMessageHttp: express.RequestHandler = async (req, res) => {
     );
   }
 };
-app.post("/issues/add_message", handleIssuesAddMessageHttp);
-app.post("/api/issues/add_message", handleIssuesAddMessageHttp);
+app.post("/issues/add_message", guestWriteRateLimit, handleIssuesAddMessageHttp);
+app.post("/api/issues/add_message", guestWriteRateLimit, handleIssuesAddMessageHttp);
 
 // POST /issues/submit — Create issue (MCP submit_issue parity)
 const handleIssuesSubmitHttp: express.RequestHandler = async (req, res) => {
@@ -7637,8 +7900,10 @@ const handleIssuesSubmitHttp: express.RequestHandler = async (req, res) => {
         parsed.data.submission_timestamp,
     );
     const userId =
-      principal.kind === "guest" || guestSubmitPayload
-        ? ((req as any).authenticatedUserId ?? ensureLocalDevUser().id)
+      principal.kind === "guest" && !principal.accessToken
+        ? ensureLocalDevUser().id
+        : principal.kind === "guest" || guestSubmitPayload
+        ? (await resolveGuestUserId(req, principal)) ?? await getAuthenticatedUserId(req, parsed.data.user_id)
         : await getAuthenticatedUserId(req, parsed.data.user_id);
     const { createOperations } = await import("./core/operations.js");
     const { NeotomaServer } = await import("./server.js");
@@ -7703,8 +7968,8 @@ const handleIssuesSubmitHttp: express.RequestHandler = async (req, res) => {
     );
   }
 };
-app.post("/issues/submit", handleIssuesSubmitHttp);
-app.post("/api/issues/submit", handleIssuesSubmitHttp);
+app.post("/issues/submit", guestWriteRateLimit, handleIssuesSubmitHttp);
+app.post("/api/issues/submit", guestWriteRateLimit, handleIssuesSubmitHttp);
 
 // POST /issues/status — Issue status + thread (MCP get_issue_status parity)
 const handleIssuesGetStatusHttp: express.RequestHandler = async (req, res) => {
@@ -7768,7 +8033,7 @@ const handleIssuesSyncHttp: express.RequestHandler = async (req, res) => {
     const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
     const { createOperations } = await import("./core/operations.js");
     const { NeotomaServer } = await import("./server.js");
-    const { syncIssuesFromGitHub } = await import("./services/issues/syncIssuesFromGitHub.js");
+    const { syncIssuesFromGitHub } = await import("./services/issues/sync_issues_from_github.js");
     const server = new NeotomaServer();
     const ops = createOperations({ server, userId });
     try {
@@ -8375,7 +8640,7 @@ app.get("/session", async (req, res) => {
 });
 
 // POST /subscribe — Create substrate event subscription (webhook or SSE)
-app.post("/subscribe", async (req, res) => {
+app.post("/subscribe", guestWriteRateLimit, async (req, res) => {
   const schema = z.object({
     user_id: z.string().optional(),
     entity_types: z.array(z.string()).optional(),
@@ -8394,9 +8659,8 @@ app.post("/subscribe", async (req, res) => {
   try {
     const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
     const userId =
-      principal.kind === "guest"
-        ? ((req as any).authenticatedUserId ?? ensureLocalDevUser().id)
-        : await getAuthenticatedUserId(req, parsed.data.user_id);
+      (await resolveGuestUserId(req, principal)) ??
+        await getAuthenticatedUserId(req, parsed.data.user_id);
     const { subscribeUser } = await import("./services/subscriptions/subscription_actions.js");
     const result = await subscribeUser({
       userId,
@@ -8425,7 +8689,7 @@ app.post("/subscribe", async (req, res) => {
 });
 
 // POST /unsubscribe — Deactivate subscription
-app.post("/unsubscribe", async (req, res) => {
+app.post("/unsubscribe", guestWriteRateLimit, async (req, res) => {
   const schema = z.object({
     user_id: z.string().optional(),
     subscription_id: z.string().min(1),
@@ -8437,9 +8701,8 @@ app.post("/unsubscribe", async (req, res) => {
   try {
     const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
     const userId =
-      principal.kind === "guest"
-        ? ((req as any).authenticatedUserId ?? ensureLocalDevUser().id)
-        : await getAuthenticatedUserId(req, parsed.data.user_id);
+      (await resolveGuestUserId(req, principal)) ??
+        await getAuthenticatedUserId(req, parsed.data.user_id);
     const { unsubscribeUser } = await import("./services/subscriptions/subscription_actions.js");
     await unsubscribeUser({ userId, subscription_id: parsed.data.subscription_id });
     return res.json({ success: true });
@@ -8465,9 +8728,8 @@ app.post("/list_subscriptions", async (req, res) => {
   try {
     const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
     const userId =
-      principal.kind === "guest"
-        ? ((req as any).authenticatedUserId ?? ensureLocalDevUser().id)
-        : await getAuthenticatedUserId(req, parsed.data.user_id);
+      (await resolveGuestUserId(req, principal)) ??
+        await getAuthenticatedUserId(req, parsed.data.user_id);
     const { listSubscriptionsForUser, redactSubscriptionForClient } =
       await import("./services/subscriptions/subscription_actions.js");
     const rows = await listSubscriptionsForUser(userId);
@@ -8497,9 +8759,8 @@ app.post("/get_subscription_status", async (req, res) => {
   try {
     const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
     const userId =
-      principal.kind === "guest"
-        ? ((req as any).authenticatedUserId ?? ensureLocalDevUser().id)
-        : await getAuthenticatedUserId(req, parsed.data.user_id);
+      (await resolveGuestUserId(req, principal)) ??
+        await getAuthenticatedUserId(req, parsed.data.user_id);
     const { getSubscriptionStatus, redactSubscriptionForClient } =
       await import("./services/subscriptions/subscription_actions.js");
     const row = await getSubscriptionStatus({
@@ -8647,9 +8908,8 @@ app.get("/events/stream", async (req, res) => {
   try {
     const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
     const userId =
-      principal.kind === "guest"
-        ? ((req as any).authenticatedUserId ?? ensureLocalDevUser().id)
-        : await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+      (await resolveGuestUserId(req, principal)) ??
+        await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
     const { getSubscriptionStatus } =
       await import("./services/subscriptions/subscription_actions.js");
     const { registerSseClient, getRingEntriesAfter } =
@@ -9095,6 +9355,15 @@ export async function startHTTPServer() {
     logger.info("[Issues] issue schema seeded");
   } catch (err) {
     logger.warn(`[Issues] failed to seed issue schema: ${(err as Error).message}`);
+  }
+
+  // Seed generic `plan` schema (harness-authored plans, issue-resolution plans, ad-hoc agent plans).
+  try {
+    const { seedPlanSchema } = await import("./services/plans/seed_schema.js");
+    await seedPlanSchema();
+    logger.info("[Plans] plan schema seeded");
+  } catch (err) {
+    logger.warn(`[Plans] failed to seed plan schema: ${(err as Error).message}`);
   }
 
   try {

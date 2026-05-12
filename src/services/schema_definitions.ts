@@ -960,7 +960,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
 
   conversation_message: {
     entity_type: "conversation_message",
-    schema_version: "1.2",
+    schema_version: "1.3",
     metadata: {
       label: "Chat Message",
       description:
@@ -987,6 +987,16 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         sender_agent_id: { type: "string", required: false },
         // Phase 1: stable identifier of the recipient agent for A2A traffic.
         recipient_agent_id: { type: "string", required: false },
+        // v1.3: optional reporter environment for messages on issue threads.
+        // Soft requirement (server warns rather than rejects); agent
+        // instructions require populating these when the message is
+        // authored by a user/assistant on an `issue`'s conversation so
+        // operators can correlate debugging steps with the build the
+        // reporter is testing against.
+        reporter_git_sha: { type: "string", required: false },
+        reporter_git_ref: { type: "string", required: false },
+        reporter_channel: { type: "string", required: false },
+        reporter_app_version: { type: "string", required: false },
       },
       // v1.2: turn-scoped identity via caller-supplied `turn_key`. Falls
       // through to heuristic when missing; R2 `name_collision_policy: reject`
@@ -1003,6 +1013,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         sender_kind: { strategy: "last_write" },
         sender_agent_id: { strategy: "last_write" },
         recipient_agent_id: { strategy: "last_write" },
+        reporter_git_sha: { strategy: "last_write" },
+        reporter_git_ref: { strategy: "last_write" },
+        reporter_channel: { strategy: "last_write" },
+        reporter_app_version: { strategy: "last_write" },
       },
     },
   },

@@ -34,6 +34,7 @@ export const ROOT_LANDING_SITE_NAV: RootLandingNavCategory[] = [
       { label: "Meet the creator", href: "/meet", icon: "CalendarClock" },
       { label: "What to store first", href: "/what-to-store", icon: "BookOpen" },
       { label: "Install", href: "/install", icon: "Download" },
+      { label: "Test safely", href: "/non-destructive-testing", icon: "FlaskConical" },
       { label: "Backup and restore", href: "/backup", icon: "Database" },
       { label: "Connect remotely", href: "/connect", icon: "Plug" },
       { label: "Expose tunnel", href: "/tunnel", icon: "SatelliteDish" },

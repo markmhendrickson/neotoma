@@ -232,6 +232,13 @@ export const HOME_BODY_EN: HomeBodyPack = {
         description: "Choices, rationale, and the audit trail that proves why an agent acted.",
       },
     ],
+    schemaEvolutionCalloutHeading: "Don't see your shape? Store it anyway.",
+    schemaEvolutionCalloutBodyBeforeLink:
+      "You don't pre-define a schema. Your agent stores any entity with a descriptive type and the fields the data implies; Neotoma infers and evolves the schema as you go, with additive minor versions for new fields and explicit major versions for breaking changes. ",
+    schemaEvolutionCalloutLink: "How schemas evolve",
+    schemaEvolutionCalloutBodyAfterLink: ".",
+    schemaEvolutionCalloutSecondLine:
+      "Nothing is silently dropped. Unfamiliar fields land in a raw_fragments layer and get promoted into the validated schema as patterns mature.",
   },
   who: {
     kicker: "Who this is for",
@@ -310,7 +317,7 @@ export const HOME_BODY_EN: HomeBodyPack = {
       "Your agent can read the docs, inspect the evaluation criteria, and tell you whether Neotoma fits your actual workflow before you install anything.",
     promptHint:
       "Copy this prompt into any AI agent. It reads the evaluation page, inspects your context, and judges whether Neotoma fits.",
-    homeEvaluatePrompt: `Read https://neotoma.io/evaluate. Use any tool, workspace, and chat context already available in this session to assess my real workflow. Avoid ad-hoc shell introspection just to profile me; if Neotoma is already installed, use \`neotoma doctor --json\` for status instead. Then tell me whether Neotoma fits my workflow, what data would be highest value to persist first, and what I should do next.`,
+    homeEvaluatePrompt: `Read https://neotoma.io/evaluate. Use any tool, workspace, and chat context already available in this session to assess my real workflow. Avoid ad-hoc shell introspection just to profile me; if Neotoma is already installed, use \`neotoma doctor --json\` for status instead. Then tell me whether Neotoma fits my workflow, what data would be highest value to persist first, and whether you recommend a non-destructive test at https://neotoma.io/non-destructive-testing before any full implementation rollout.`,
     evaluatePromptPill: "Evaluation prompt",
     evaluatePromptCardSubtitle:
       "Reads the page, then evaluates fit against your real workflow.",

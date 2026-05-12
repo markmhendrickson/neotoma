@@ -44,6 +44,18 @@ export interface IssueMessageParams {
    * row mirrors a remote instance. When omitted, `guest_access_token` on the issue snapshot is used.
    */
   guest_access_token?: string;
+  /**
+   * Optional reporter environment for this thread message. Soft requirement
+   * (server emits a warning when both `reporter_git_sha` and
+   * `reporter_app_version` are missing); the underlying
+   * `conversation_message` row carries them so subsequent debugging steps
+   * stay correlated with the build the reporter is testing against. See
+   * docs/subsystems/issues.md and docs/developer/mcp/instructions.md.
+   */
+  reporter_git_sha?: string;
+  reporter_git_ref?: string;
+  reporter_channel?: string;
+  reporter_app_version?: string;
 }
 
 export interface IssueSyncParams {

@@ -7,12 +7,19 @@ export const FAQ_QUESTION_BUILDING_YOUR_OWN_MEMORY_SYSTEM =
   "I'm already building my own memory system. Why would I use Neotoma?";
 export const FAQ_QUESTION_NOT_FOR_THOUGHT_PARTNER =
   "Is Neotoma a note-taking app or thought-partner tool?";
+export const FAQ_QUESTION_SCHEMA_FLEXIBILITY =
+  "What happens to information that doesn't fit a schema?";
+export const FAQ_QUESTION_NON_DESTRUCTIVE_TESTING =
+  "Can I try Neotoma without replacing my current memory system?";
 
 /** Stable `/faq#...` targets for deep links (must match `sectionId` on the corresponding row). */
 export const FAQ_DEEP_LINK_SECTION_IDS = {
   buildingYourOwnMemorySystem:
     "i-m-already-building-my-own-memory-system-why-would-i-use-neotoma",
   notForThoughtPartner: "is-neotoma-a-note-taking-app-or-thought-partner-tool",
+  schemaFlexibility: "what-happens-to-information-that-doesn-t-fit-a-schema",
+  nonDestructiveTesting:
+    "can-i-try-neotoma-without-replacing-my-current-memory-system",
 } as const;
 
 export const FAQ_ITEMS_EN: FaqItem[] = [
@@ -110,6 +117,24 @@ export const FAQ_ITEMS_EN: FaqItem[] = [
     link: { href: "/architecture", label: "Architecture" },
   },
   {
+    sectionId: "what-happens-to-information-that-doesn-t-fit-a-schema",
+    question: FAQ_QUESTION_SCHEMA_FLEXIBILITY,
+    answer:
+      "Nothing is silently dropped. You do not need to define a schema before storing. Your agent can store any entity with a descriptive type and whatever fields the data implies; Neotoma infers and evolves schemas automatically. Fields that the active schema does not yet recognize land in a raw_fragments layer so the raw value is preserved alongside the validated snapshot.",
+    detail:
+      "Schemas are versioned and additive by default. The first time your agent stores a `workout` or a `lease_payment` or anything else, Neotoma registers a schema from the data and bumps a minor version. Adding fields later triggers another minor version (e.g. 1.0.0 → 1.1.0); breaking changes like removing or retyping a field require a major version bump (1.x → 2.0). Old observations keep their original version and remain readable. As patterns mature, raw_fragments are promoted into the validated schema automatically. See the schemas overview and versioning guides for the mechanics.",
+    link: { href: "/schemas/versioning", label: "Schema versioning & evolution" },
+  },
+  {
+    sectionId: "can-i-try-neotoma-without-replacing-my-current-memory-system",
+    question: FAQ_QUESTION_NON_DESTRUCTIVE_TESTING,
+    answer:
+      "Yes. Neotoma installs alongside whatever you already use (MEMORY.md, claw.md, a custom MCP server, platform memory). Nothing in your current stack is moved, modified, or replaced. You can ingest historical session logs, conversations, or notes into a fresh Neotoma database, run an agent with Neotoma enabled on the side, and compare its answers to an agent without it — then commit or walk away.",
+    detail:
+      'The "Test safely" guide walks through the recommended shadow-install path: install, ingest history, A/B compare, then decide. Your existing memory system stays intact the whole time. If you decide Neotoma is not for you, uninstalling leaves your prior setup exactly as it was.',
+    link: { href: "/non-destructive-testing", label: "Test safely" },
+  },
+  {
     sectionId: "what-should-my-agent-remember-how-do-i-get-started",
     question: "What should my agent remember? How do I get started?",
     answer:
@@ -131,7 +156,7 @@ export const FAQ_ITEMS_EN: FaqItem[] = [
     sectionId: "how-do-i-install-neotoma",
     question: "How do I install Neotoma?",
     answer:
-      "Run 'npm install -g neotoma', then 'neotoma init' to choose your AI client and configure MCP. Start the API server with 'neotoma api start'. The full process takes under 5 minutes.",
+      "Run `npm install -g neotoma`, then `neotoma setup --tool cursor --yes` to initialize Neotoma and configure the default local MCP path. Swap `cursor` for your tool if needed. Start the API server only if you need Inspector, OAuth, or the local HTTP API. The full process takes under 5 minutes.",
     link: { href: "/install", label: "Install guide" },
   },
   {

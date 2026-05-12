@@ -54,6 +54,13 @@ export interface RequestContext {
    * alongside — but distinct from — the AAuth agent identity.
    */
   externalActor?: ExternalActor | null;
+  /**
+   * Domain-specific HTTP routes may validate a guest-facing submission and then
+   * perform internal bookkeeping writes (for example, an issue conversation
+   * thread). Those internal writes keep attribution but should not require the
+   * guest to have direct generic `/store` access to every bookkeeping type.
+   */
+  bypassGuestStoreAccessPolicy?: boolean;
 }
 
 const storage = new AsyncLocalStorage<RequestContext>();
@@ -134,6 +141,7 @@ export function runWithExternalActor<T>(
     attributionDecision: existing?.attributionDecision ?? null,
     aauthAdmission: existing?.aauthAdmission ?? null,
     externalActor: actor,
+    bypassGuestStoreAccessPolicy: existing?.bypassGuestStoreAccessPolicy ?? false,
   };
   return storage.run(merged, fn);
 }

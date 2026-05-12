@@ -73,7 +73,7 @@ export interface EvaluatePageStrings {
 
 export const EVALUATE_SUBPAGE_EN: EvaluatePageStrings = {
   title: "Evaluate Neotoma",
-  agentEvaluationPrompt: `Read https://neotoma.io/evaluate. Use any tool, workspace, and chat context already available in this session to assess my real workflow. Avoid ad-hoc shell introspection just to profile me; if Neotoma is already installed, use \`neotoma doctor --json\` for status instead. Then tell me whether Neotoma is a real fit for my workflow, what data would be highest value to persist first, and what I should do next.`,
+  agentEvaluationPrompt: `Read https://neotoma.io/evaluate. Use any tool, workspace, and chat context already available in this session to assess my real workflow. Avoid ad-hoc shell introspection just to profile me; if Neotoma is already installed, use \`neotoma doctor --json\` for status instead. Then tell me whether Neotoma is a real fit for my workflow, what data would be highest value to persist first, and whether you recommend offering a non-destructive test at https://neotoma.io/non-destructive-testing before any full implementation rollout.`,
   onboardingSequenceLiteral: "evaluation -> installation -> activation -> tooling config",
   activationSequenceLiteral:
     "detect context -> discover -> propose -> preview -> ingest -> reconstruct -> query -> correct",
@@ -161,13 +161,13 @@ export const EVALUATE_SUBPAGE_EN: EvaluatePageStrings = {
   nextStepsActivationLink: "detect context -> discover -> propose -> preview -> ingest -> reconstruct -> query -> correct",
   nextStepsP1After: ".",
   nextStepsOlEvaluation:
-    "Evaluation: Assess fit, identify tool constraints, determine what data should be stored first, and decide whether the user is already installed.",
+    "Evaluation: Assess fit, identify tool constraints, determine what data should be stored first, and decide whether to offer a non-destructive test before any full implementation rollout.",
   nextStepsInstallationBeforeNpm: "Installation: If needed, run ",
   nextStepsInstallationBetweenCommands: " then ",
   nextStepsInstallationAfterInit:
     " If already installed, verify the setup and move on.",
   nextStepsOlActivation:
-    "Activation: Run the discovery flow, get explicit confirmation, ingest confirmed data, reconstruct the strongest timeline with provenance, and offer a follow-up query plus correction.",
+    "Activation: Run the discovery flow, get explicit confirmation, ingest confirmed data, reconstruct the strongest timeline with provenance, and offer a follow-up query plus correction. If the user started with a non-destructive test, treat full rollout as a later step only after the shadow trial proves value.",
   nextStepsOlTooling:
     "Tooling config: After activation, configure the tool the user is in for the most robust ongoing Neotoma workflow.",
   nextStepsP2BeforeInstallGuide: "See the full ",
@@ -200,7 +200,7 @@ Next step:       install / learn more / revisit later`,
 
 export const EVALUATE_SUBPAGE_ES: EvaluatePageStrings = {
   title: "Evaluar Neotoma",
-  agentEvaluationPrompt: `Lee https://neotoma.io/evaluate. Usa cualquier herramienta, espacio de trabajo y contexto de chat ya disponibles en esta sesión para evaluar mi flujo real. Evita introspección ad hoc en la shell solo para perfilarme; si Neotoma ya está instalado, usa \`neotoma doctor --json\` para el estado. Luego dime si Neotoma encaja de verdad en mi flujo, qué datos conviene persistir primero por valor y qué debería hacer a continuación.`,
+  agentEvaluationPrompt: `Lee https://neotoma.io/evaluate. Usa cualquier herramienta, espacio de trabajo y contexto de chat ya disponibles en esta sesión para evaluar mi flujo real. Evita introspección ad hoc en la shell solo para perfilarme; si Neotoma ya está instalado, usa \`neotoma doctor --json\` para el estado. Luego dime si Neotoma encaja de verdad en mi flujo, qué datos conviene persistir primero por valor y si recomiendas ofrecer una prueba no destructiva en https://neotoma.io/non-destructive-testing antes de cualquier despliegue completo.`,
   onboardingSequenceLiteral: EVALUATE_SUBPAGE_EN.onboardingSequenceLiteral,
   activationSequenceLiteral: EVALUATE_SUBPAGE_EN.activationSequenceLiteral,
   introP1:
@@ -288,12 +288,12 @@ export const EVALUATE_SUBPAGE_ES: EvaluatePageStrings = {
   nextStepsActivationLink: EVALUATE_SUBPAGE_EN.nextStepsActivationLink,
   nextStepsP1After: ".",
   nextStepsOlEvaluation:
-    "Evaluación: Valorar encaje, restricciones de herramienta, qué datos guardar primero y si el usuario ya está instalado.",
+    "Evaluación: Valorar encaje, restricciones de herramienta, qué datos guardar primero y decidir si conviene ofrecer una prueba no destructiva antes de cualquier despliegue completo.",
   nextStepsInstallationBeforeNpm: "Instalación: Si hace falta, ejecuta ",
   nextStepsInstallationBetweenCommands: " y luego ",
   nextStepsInstallationAfterInit: ". Si ya está instalado, verifica la configuración y continúa.",
   nextStepsOlActivation:
-    "Activación: Flujo de descubrimiento, confirmación explícita, ingesta de lo confirmado, reconstrucción de la línea temporal con procedencia, y ofrecer seguimiento más corrección.",
+    "Activación: Flujo de descubrimiento, confirmación explícita, ingesta de lo confirmado, reconstrucción de la línea temporal con procedencia, y ofrecer seguimiento más corrección. Si el usuario empieza con una prueba no destructiva, deja el despliegue completo para después de que el modo sombra demuestre valor.",
   nextStepsOlTooling:
     "Configuración de herramientas: Tras la activación, configura la herramienta activa para el flujo Neotoma más robusto.",
   nextStepsP2BeforeInstallGuide: "Consulta la ",

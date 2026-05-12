@@ -2,6 +2,9 @@ import { z } from "zod";
 
 import { isNeotomaEntityId } from "./neotoma_entity_id.js";
 
+export const RELATIONSHIP_ENTITY_ID_FORMAT_HINT = "relationship_entity_id_format";
+export const RELATIONSHIP_ENTITY_ID_FORMAT_ISSUE_CODE = "ERR_RELATIONSHIP_ENTITY_ID_FORMAT";
+
 export const EntityIdSchema = z.object({
   entity_id: z.string(),
 });
@@ -108,16 +111,24 @@ export const StoreRelationshipInputSchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message:
-          "source_entity_id must be a Neotoma entity id (ent_ followed by 24 lowercase hex digits, matching generateEntityId)",
+          `${RELATIONSHIP_ENTITY_ID_FORMAT_HINT}: source_entity_id must be a Neotoma entity id (ent_ followed by 24 lowercase hex digits, matching generateEntityId)`,
         path: ["source_entity_id"],
+        params: {
+          code: RELATIONSHIP_ENTITY_ID_FORMAT_ISSUE_CODE,
+          hint: RELATIONSHIP_ENTITY_ID_FORMAT_HINT,
+        },
       });
     }
     if (typeof rel.target_entity_id === "string" && !isNeotomaEntityId(rel.target_entity_id)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message:
-          "target_entity_id must be a Neotoma entity id (ent_ followed by 24 lowercase hex digits, matching generateEntityId)",
+          `${RELATIONSHIP_ENTITY_ID_FORMAT_HINT}: target_entity_id must be a Neotoma entity id (ent_ followed by 24 lowercase hex digits, matching generateEntityId)`,
         path: ["target_entity_id"],
+        params: {
+          code: RELATIONSHIP_ENTITY_ID_FORMAT_ISSUE_CODE,
+          hint: RELATIONSHIP_ENTITY_ID_FORMAT_HINT,
+        },
       });
     }
   });
@@ -625,6 +636,15 @@ export const IssuesAddMessageRequestSchema = z
     issue_number: z.number().int().positive().optional(),
     body: z.string().min(1),
     guest_access_token: z.string().min(1).optional(),
+    /**
+     * Soft requirement on public issue threads: when both `reporter_git_sha`
+     * and `reporter_app_version` are missing the server emits a warning but
+     * still persists the message. See docs/subsystems/issues.md.
+     */
+    reporter_git_sha: z.string().optional(),
+    reporter_git_ref: z.string().optional(),
+    reporter_channel: z.string().optional(),
+    reporter_app_version: z.string().optional(),
     user_id: z.string().optional(),
   })
   .refine(

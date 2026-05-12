@@ -170,12 +170,18 @@ function mapSqliteErrorToPostgres(error: { errno?: number; code?: string; messag
   return undefined;
 }
 
-function isRecoverableSqliteIoError(error: unknown): boolean {
+export function isRecoverableSqliteConnectionError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   const e = error as { code?: string; message?: string };
   const code = (e.code || "").toUpperCase();
   const message = (e.message || "").toLowerCase();
-  return code.startsWith("SQLITE_IOERR") || message.includes("disk i/o error");
+  return (
+    code.startsWith("SQLITE_IOERR") ||
+    code === "SQLITE_CORRUPT" ||
+    message.includes("disk i/o error") ||
+    message.includes("database disk image is malformed") ||
+    message.includes("btreeinitpage")
+  );
 }
 
 function fromDbRow(table: string, row: Record<string, unknown>): Record<string, unknown> {
@@ -829,7 +835,7 @@ class LocalQueryBuilder {
 
         return { data: null, error: { message: "Unsupported operation" } };
       } catch (error: any) {
-        if (attempt === 0 && isRecoverableSqliteIoError(error)) {
+        if (attempt === 0 && isRecoverableSqliteConnectionError(error)) {
           clearSqliteCache();
           continue;
         }

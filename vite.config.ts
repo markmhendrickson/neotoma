@@ -25,6 +25,16 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./frontend/src"),
       "@shared": path.resolve(__dirname, "./src/shared"),
     },
+    // Prefer source TS/TSX files over stale transpiled JS siblings in frontend/src.
+    extensions: [".mjs", ".ts", ".tsx", ".js", ".jsx", ".json"],
+  },
+  esbuild: {
+    // We keep checked-in JS mirrors beside TS/TSX source files in frontend/src.
+    // Vite still needs to transpile the actual TS/TSX entry graph before
+    // import-analysis, so cover all JS/TS variants instead of only `.js`.
+    loader: "tsx",
+    include: /frontend\/src\/.*\.[jt]sx?$/,
+    exclude: [],
   },
   build: {
     outDir: "../public",
@@ -278,6 +288,11 @@ export default defineConfig({
   cacheDir: ".vite", // Use project-local cache instead of node_modules/.vite
   optimizeDeps: {
     exclude: ["@sqlite.org/sqlite-wasm"],
+    esbuildOptions: {
+      loader: {
+        ".js": "jsx",
+      },
+    },
     // Force re-optimization when dependencies change
     force: process.env.VITE_FORCE_OPTIMIZE === "true",
   },

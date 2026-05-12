@@ -1,7 +1,9 @@
 import type { Request } from "express";
-import { describe, expect, it } from "vitest";
+import { randomUUID } from "node:crypto";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { routeAcceptsGuestPrincipal } from "../../src/actions.js";
+import { db } from "../../src/db.js";
 
 /**
  * Routes where `routeAcceptsGuestPrincipal` must return true so auth middleware
@@ -89,5 +91,60 @@ describe("routeAcceptsGuestPrincipal — subscription parity with issues", () =>
         "POST /unsubscribe",
       ].sort(),
     );
+  });
+});
+
+describe("UUID bypass regression (defect 1.1)", () => {
+  const TEST_USER_ID = `test-uuid-bypass-${Date.now()}`;
+  let issueEntityId: string;
+  let serverPort: number;
+
+  beforeAll(async () => {
+    issueEntityId = `ent_uuid_bypass_${Date.now().toString(16)}`;
+    const now = new Date().toISOString();
+    await db.from("entities").insert({
+      id: issueEntityId,
+      entity_type: "issue",
+      canonical_name: `uuid-bypass-test-${Date.now()}`,
+      user_id: TEST_USER_ID,
+      created_at: now,
+      updated_at: now,
+    });
+    await db.from("observations").insert({
+      id: randomUUID(),
+      entity_id: issueEntityId,
+      entity_type: "issue",
+      user_id: TEST_USER_ID,
+      fields: { title: "UUID bypass regression target", status: "open" },
+      observed_at: now,
+      source_priority: 100,
+    });
+    const portMatch = /listening on :(\d+)/.exec("");
+    serverPort = parseInt(process.env.HTTP_PORT || process.env.NEOTOMA_HTTP_PORT || "18081");
+  });
+
+  afterAll(async () => {
+    await db.from("observations").delete().eq("entity_id", issueEntityId);
+    await db.from("entities").delete().eq("id", issueEntityId);
+  });
+
+  it("rejects an unrelated UUID used as access_token for GET /entities/:id", async () => {
+    const fakeToken = randomUUID();
+    const res = await fetch(
+      `http://127.0.0.1:${serverPort}/entities/${issueEntityId}?access_token=${fakeToken}`,
+      { method: "GET" },
+    );
+    expect(res.ok).toBe(false);
+    expect(res.status).toBeGreaterThanOrEqual(400);
+  });
+
+  it("rejects a random UUID used as Bearer token for GET /entities/:id", async () => {
+    const fakeToken = randomUUID();
+    const res = await fetch(`http://127.0.0.1:${serverPort}/entities/${issueEntityId}`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${fakeToken}` },
+    });
+    expect(res.ok).toBe(false);
+    expect(res.status).toBeGreaterThanOrEqual(400);
   });
 });

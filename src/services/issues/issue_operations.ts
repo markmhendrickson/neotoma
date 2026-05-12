@@ -19,7 +19,12 @@
 
 import type { Operations, StoreEntityInput, StoreInput, StoreResult } from "../../core/operations.js";
 import { assertGuestWriteAllowed } from "../access_policy.js";
-import { getCurrentAgentIdentity } from "../request_context.js";
+import {
+  getCurrentAgentIdentity,
+  getRequestContext,
+  runWithExternalActor,
+  runWithRequestContext,
+} from "../request_context.js";
 import {
   appendMessageToConversation,
   entitySnapshotPayload,
@@ -30,8 +35,9 @@ import {
   structuredEntities,
   structuredEntityIdAt,
 } from "../submitted_thread/submitted_thread.js";
-import { runWithExternalActor } from "../request_context.js";
 import { loadIssuesConfig } from "./config.js";
+import { IssueTransportError, IssueValidationError } from "./errors.js";
+import { runRedactionGuard } from "./redaction_guard.js";
 import { buildExternalActorFromGithubComment, buildExternalActorFromGithubIssue } from "./external_actor_builder.js";
 import * as github from "./github_client.js";
 import { githubIssueThreadConversationId, localIssueThreadConversationId } from "./github_issue_thread.js";
@@ -43,7 +49,7 @@ import {
   localIssueId,
 } from "./github_thread_keys.js";
 import * as neotomaClient from "./neotoma_client.js";
-import { syncIssueIfStale } from "./syncIssuesFromGitHub.js";
+import { syncIssueIfStale } from "./sync_issues_from_github.js";
 import type {
   GitHubComment,
   GitHubIssue,
@@ -54,6 +60,12 @@ import type {
 } from "./types.js";
 
 const GITHUB_MIRROR_GUIDANCE_MAX_CAUSE = 240;
+
+function entityPrimaryId(entity: { entity_id?: string; id?: string }): string {
+  if (typeof entity.entity_id === "string" && entity.entity_id.trim()) return entity.entity_id.trim();
+  if (typeof entity.id === "string" && entity.id.trim()) return entity.id.trim();
+  return "";
+}
 
 function reporterProvenanceFields(params: IssueCreateParams): Record<string, unknown> {
   const out: Record<string, unknown> = {};
@@ -275,6 +287,50 @@ export interface GetIssueStatusResult {
   synced: boolean;
 }
 
+function mergeIssueStatusMessages(
+  remoteMessages: GetIssueStatusResult["messages"],
+  localMessages: GetIssueStatusResult["messages"],
+): GetIssueStatusResult["messages"] {
+  const byKey = new Map<string, GetIssueStatusResult["messages"][number]>();
+
+  for (const message of [...remoteMessages, ...localMessages]) {
+    const key = issueStatusMessageMergeKey(message);
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, message);
+    } else if (shouldPreferIssueStatusMessage(message, existing)) {
+      byKey.set(key, message);
+    }
+  }
+
+  return Array.from(byKey.values()).sort((a, b) => {
+    const createdAtCmp = a.created_at.localeCompare(b.created_at);
+    if (createdAtCmp !== 0) return createdAtCmp;
+    const authorCmp = a.author.localeCompare(b.author);
+    if (authorCmp !== 0) return authorCmp;
+    return a.body.localeCompare(b.body);
+  });
+}
+
+function issueStatusMessageMergeKey(message: GetIssueStatusResult["messages"][number]): string {
+  const body = message.body.trim().replace(/\s+/g, " ");
+  const timestampMs = Date.parse(message.created_at);
+  if (!Number.isFinite(timestampMs)) {
+    return `${message.created_at}\0${body}`;
+  }
+  return `${Math.floor(timestampMs / 1000)}\0${body}`;
+}
+
+function shouldPreferIssueStatusMessage(
+  candidate: GetIssueStatusResult["messages"][number],
+  existing: GetIssueStatusResult["messages"][number],
+): boolean {
+  if (existing.author === "guest" && candidate.author !== "guest") {
+    return true;
+  }
+  return false;
+}
+
 function coerceRemoteIssueThreadPayload(
   raw: Record<string, unknown>,
   issueEntityIdForResponse: string,
@@ -355,31 +411,58 @@ export async function loadIssueThreadMessages(
     }>;
   };
 
-  const conversationEntity = related?.entities?.find((e) => e.entity_type === "conversation");
-  if (!conversationEntity) return [];
+  const conversationEntityIds = Array.from(
+    new Set(
+      (related?.entities ?? [])
+        .filter((e) => e.entity_type === "conversation")
+        .map((e) => entityPrimaryId(e))
+        .filter(Boolean),
+    ),
+  ).sort();
+  if (conversationEntityIds.length === 0) return [];
 
-  const conversationEntityId = conversationEntity.entity_id ?? conversationEntity.id;
-  if (!conversationEntityId) {
-    throw new Error("Issue conversation relationship is missing an entity id.");
-  }
+  const messagesByKey = new Map<string, GetIssueStatusResult["messages"][number]>();
 
-  const parts = (await ops.retrieveRelatedEntities({
-    entity_id: conversationEntityId,
-    relationship_types: ["PART_OF"],
-    direction: "inbound",
-  })) as { entities?: Array<{ entity_type: string; snapshot?: Record<string, unknown> }> };
+  for (const conversationEntityId of conversationEntityIds) {
+    const parts = (await ops.retrieveRelatedEntities({
+      entity_id: conversationEntityId,
+      relationship_types: ["PART_OF"],
+      direction: "inbound",
+    })) as {
+      entities?: Array<{
+        id?: string;
+        entity_id?: string;
+        entity_type: string;
+        snapshot?: Record<string, unknown>;
+      }>;
+    };
 
-  return (parts?.entities ?? [])
-    .filter((e) => e.entity_type === "conversation_message")
-    .map((e) => {
-      const snap = entitySnapshotPayload(e);
-      return {
+    for (const entity of parts?.entities ?? []) {
+      if (entity.entity_type !== "conversation_message") continue;
+      const snap = entitySnapshotPayload(entity);
+      const message = {
         author: (snap.author as string) ?? "unknown",
         body: (snap.content as string) ?? "",
         created_at: (snap.created_at as string) ?? "",
       };
-    })
-    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+      const messageKey =
+        (typeof snap.turn_key === "string" && snap.turn_key.trim()) ||
+        (typeof snap.github_comment_id === "string" && snap.github_comment_id.trim()) ||
+        entityPrimaryId(entity) ||
+        `${message.created_at}|${message.author}|${message.body}`;
+      if (!messagesByKey.has(messageKey)) {
+        messagesByKey.set(messageKey, message);
+      }
+    }
+  }
+
+  return Array.from(messagesByKey.values()).sort((a, b) => {
+    const createdAtCmp = a.created_at.localeCompare(b.created_at);
+    if (createdAtCmp !== 0) return createdAtCmp;
+    const authorCmp = a.author.localeCompare(b.author);
+    if (authorCmp !== 0) return authorCmp;
+    return a.body.localeCompare(b.body);
+  });
 }
 
 /**
@@ -427,7 +510,7 @@ export async function submitGuestIssue(
   ops: Operations,
   params: GuestIssueSubmitParams,
 ): Promise<GuestIssueSubmitResult> {
-  await assertGuestWriteAllowed(["issue", "conversation", "conversation_message"], {});
+  await assertGuestWriteAllowed(["issue"], {});
 
   const config = await loadIssuesConfig();
   const now =
@@ -496,11 +579,28 @@ export async function submitGuestIssue(
     { relationship_type: "PART_OF", source_index: 2, target_index: 1 },
   ];
 
-  const storeResult = await storeRootWithThread(ops, {
-    entities,
-    relationships,
-    idempotency_key: `issue-guest-submit-${config.repo}-${ghNum || localId}`,
-  });
+  const currentContext = getRequestContext();
+  const storeResult = await storeRootWithThread(
+    ops,
+    {
+      entities,
+      relationships,
+      idempotency_key: `issue-guest-submit-${config.repo}-${ghNum || localId}`,
+    },
+    {
+      runStore: (input) =>
+        runWithRequestContext(
+          {
+            agentIdentity: currentContext?.agentIdentity ?? null,
+            attributionDecision: currentContext?.attributionDecision ?? null,
+            aauthAdmission: currentContext?.aauthAdmission ?? null,
+            externalActor: currentContext?.externalActor ?? null,
+            bypassGuestStoreAccessPolicy: true,
+          },
+          () => ops.store(input),
+        ),
+    },
+  );
   const structured = structuredEntities(storeResult);
   const entityIds = structured.map((e) => e.entity_id ?? "").filter(Boolean);
   const issueEntityId = entityIds[0] ?? "";
@@ -553,7 +653,7 @@ export async function appendGuestIssueMessage(
       ? snapshot.title.trim()
       : "Issue";
 
-  return appendMessageToConversation(ops, {
+  const appendResult = await appendMessageToConversation(ops, {
     strategy: "conversation_extend_batch",
     conversationExtend: {
       entity_type: "conversation",
@@ -575,6 +675,75 @@ export async function appendGuestIssueMessage(
     } as StoreEntityInput,
     idempotency_key: `issue-guest-message-${params.issue_entity_id}-${now}`,
   });
+
+  await touchIssueThreadActivity(ops, {
+    issueEntityId: params.issue_entity_id,
+    messageAt: now,
+    author: "guest",
+    idempotencyKey: `issue-guest-message-activity-${params.issue_entity_id}-${now}`,
+  });
+
+  return appendResult;
+}
+
+function reporterProvenanceFieldsForMessage(
+  params: Pick<IssueMessageParams, "reporter_git_sha" | "reporter_git_ref" | "reporter_channel" | "reporter_app_version">,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  const keys = [
+    "reporter_git_sha",
+    "reporter_git_ref",
+    "reporter_channel",
+    "reporter_app_version",
+  ] as const;
+  for (const k of keys) {
+    const v = params[k];
+    if (typeof v === "string" && v.trim()) out[k] = v.trim();
+  }
+  return out;
+}
+
+async function touchIssueThreadActivity(
+  ops: Operations,
+  params: {
+    issueEntityId: string;
+    messageAt: string;
+    author?: string;
+    idempotencyKey: string;
+  },
+): Promise<void> {
+  const entity: StoreEntityInput = {
+    entity_type: "issue",
+    target_id: params.issueEntityId,
+    last_message_at: params.messageAt,
+  } as StoreEntityInput;
+
+  if (typeof params.author === "string" && params.author.trim().length > 0) {
+    entity.last_message_author = params.author.trim();
+  }
+
+  await ops.store({
+    entities: [entity],
+    idempotency_key: params.idempotencyKey,
+  });
+}
+
+function assertSubmitIssueReporterEnvironment(params: IssueCreateParams): void {
+  const sha = typeof params.reporter_git_sha === "string" ? params.reporter_git_sha.trim() : "";
+  const version = typeof params.reporter_app_version === "string" ? params.reporter_app_version.trim() : "";
+  if (sha.length === 0 && version.length === 0) {
+    throw new IssueValidationError({
+      code: "ERR_REPORTER_ENVIRONMENT_REQUIRED",
+      message:
+        "submit_issue requires reporter environment: provide at least one of `reporter_git_sha` or `reporter_app_version`.",
+      required_fields: [],
+      acceptable_field_groups: [["reporter_git_sha"], ["reporter_app_version"]],
+      hint:
+        "Set `reporter_git_sha` to the SHA you reproduced against (`git rev-parse HEAD`) and/or `reporter_app_version` to the npm/CLI version. " +
+        "Daemons / CI may also pass `reporter_git_ref`, `reporter_channel`, `reporter_ci_run_id`. " +
+        "See docs/subsystems/issues.md `Reporter provenance` for the full set.",
+    });
+  }
 }
 
 /**
@@ -584,10 +753,22 @@ export async function submitIssue(
   ops: Operations,
   params: IssueCreateParams,
 ): Promise<SubmitIssueResult> {
+  assertSubmitIssueReporterEnvironment(params);
   const config = await loadIssuesConfig();
   const now = new Date().toISOString();
   const visibility = params.visibility ?? "public";
   const toolingLabels = github.mergeNeotomaToolingIssueLabels(params.labels);
+
+  // Public issues additionally pass through the redaction backstop. Even though
+  // client agents are required to redact (see the REDACTION MUST clause in
+  // docs/developer/mcp/instructions.md), we scan here so a submitter-side bug
+  // cannot leak PII into the public GitHub mirror or the operator instance.
+  // Private issues do not get scanned: operators may legitimately need raw
+  // identifiers in private threads.
+  if (visibility === "public") {
+    const guarded = runRedactionGuard({ title: params.title, body: params.body, mode: "scan" });
+    params = { ...params, title: guarded.title, body: guarded.body };
+  }
 
   let githubIssue: GitHubIssue | null = null;
   let pushedToGithub = false;
@@ -761,6 +942,12 @@ export async function submitIssue(
 
 /**
  * Add a message to an existing issue: submit to remote Neotoma + optionally GitHub.
+ *
+ * Reporter environment is a soft requirement here: when the issue thread is
+ * public and neither `reporter_git_sha` nor `reporter_app_version` is
+ * provided, a single warning is emitted to stderr describing the gap. The
+ * message still persists. Agents are expected to pass these on every
+ * issue-thread message (see docs/developer/mcp/instructions.md).
  */
 export async function addIssueMessage(
   ops: Operations,
@@ -770,9 +957,24 @@ export async function addIssueMessage(
   const resolved = await resolveIssueRow(ops, params);
   const { issue_entity_id: issueEntityId, snapshot, githubNumber, localIssueId } = resolved;
 
+  const visibilitySnapshot = typeof snapshot.visibility === "string" ? snapshot.visibility.trim() : "";
+  const isPublicThread = visibilitySnapshot === "public" || githubNumber > 0;
+  const messageEnv = reporterProvenanceFieldsForMessage(params);
+  if (Object.keys(messageEnv).length === 0 && isPublicThread) {
+    process.stderr.write(
+      "[issues] add_issue_message: reporter environment missing on public thread message — set `reporter_git_sha` and/or `reporter_app_version` so debugging steps stay correlated with the build under test.\n",
+    );
+  }
+
+  if (isPublicThread) {
+    const guarded = runRedactionGuard({ title: "", body: params.body, mode: "scan" });
+    params = { ...params, body: guarded.body };
+  }
+
   let githubComment: GitHubComment | null = null;
   let pushedToGithub = false;
   let submittedToNeotoma = false;
+  let remoteMessageEntityId = "";
   const issuesTargetUrl = config.target_url?.trim() ?? "";
   let remoteSubmissionAttempted = false;
   let remoteSubmissionError: Error | null = null;
@@ -807,7 +1009,7 @@ export async function addIssueMessage(
   if (issuesTargetUrl) {
     remoteSubmissionAttempted = true;
     try {
-      await neotomaClient.addMessageToRemote({
+      const remoteResult = await neotomaClient.addMessageToRemote({
         body: params.body,
         githubIssueNumber: githubNumber > 0 ? githubNumber : undefined,
         issue_entity_id: remoteIssueEntityIdForTarget(snapshot, issueEntityId),
@@ -820,6 +1022,7 @@ export async function addIssueMessage(
         guest_access_token: guestForRemote,
       });
       submittedToNeotoma = true;
+      remoteMessageEntityId = remoteResult.message_entity_id;
     } catch (err) {
       remoteSubmissionError = err instanceof Error ? err : new Error(String(err));
     }
@@ -833,6 +1036,27 @@ export async function addIssueMessage(
     } catch {
       // GitHub push failed — local-only
     }
+  }
+
+  // For operator-backed threads, a successful canonical append is already durable.
+  // Avoid creating a second local shadow message when there is no GitHub comment
+  // carrying distinct metadata to preserve.
+  if (submittedToNeotoma && !pushedToGithub) {
+    const now = new Date().toISOString();
+    // Keep the local shadow issue warm so requester-side local subscriptions
+    // observe thread activity even when the canonical append happened remotely.
+    await touchIssueThreadActivity(ops, {
+      issueEntityId,
+      messageAt: now,
+      author: "remote",
+      idempotencyKey: `issue-shadow-message-activity-${issueEntityId}-${remoteMessageEntityId || now}`,
+    });
+    return {
+      github_comment_id: null,
+      message_entity_id: remoteMessageEntityId,
+      pushed_to_github: false,
+      submitted_to_neotoma: true,
+    };
   }
 
   const now = new Date().toISOString();
@@ -863,6 +1087,7 @@ export async function addIssueMessage(
       github_comment_id: commentKey,
       turn_key: turnKey,
       created_at: githubComment?.created_at ?? now,
+      ...messageEnv,
     } as StoreEntityInput,
   ];
 
@@ -879,6 +1104,15 @@ export async function addIssueMessage(
   ) as StoreResult;
 
   const messageEntityId = structuredEntityIdAt(storeResult, 1);
+
+  await runWithExternalActor(commentActor, () =>
+    touchIssueThreadActivity(ops, {
+      issueEntityId,
+      messageAt: githubComment?.created_at ?? now,
+      author,
+      idempotencyKey: `issue-message-activity-${issueEntityId}-${commentKey}`,
+    }),
+  );
 
   if (remoteSubmissionAttempted && !submittedToNeotoma) {
     const cause = remoteSubmissionError?.message ?? "unknown error";
@@ -911,7 +1145,7 @@ async function fetchOperatorIssueMirrorIfApplicable(
   const target = typeof config.target_url === "string" ? config.target_url.trim() : "";
   const remoteIdRaw = snapshot.remote_entity_id;
   const remoteId = typeof remoteIdRaw === "string" && remoteIdRaw.trim() ? remoteIdRaw.trim() : "";
-  if (!target || !remoteId || remoteId === localIssueEntityId) {
+  if (!target || !remoteId) {
     return null;
   }
   const tokenRaw =
@@ -925,7 +1159,21 @@ async function fetchOperatorIssueMirrorIfApplicable(
     accessToken: token,
   });
   if (!raw) return null;
-  return coerceRemoteIssueThreadPayload(raw, localIssueEntityId, config, synced);
+  const coerced = coerceRemoteIssueThreadPayload(raw, localIssueEntityId, config, synced);
+  if (coerced) return coerced;
+  throw new IssueTransportError({
+    code: "ERR_REMOTE_ISSUE_READ_INVALID",
+    status: 502,
+    message:
+      `Remote issue read-through returned an invalid thread payload for ${remoteId}; ` +
+      "refusing incomplete local fallback for an operator-backed issue thread.",
+    hint: "Check the operator /issues/status response and ensure it includes a valid messages array.",
+    extra: {
+      local_issue_entity_id: localIssueEntityId,
+      remote_issue_entity_id: remoteId,
+      target_url: target,
+    },
+  });
 }
 
 /**
@@ -965,7 +1213,11 @@ export async function getIssueStatus(
     params.guest_access_token,
   );
   if (remoteFirst) {
-    return remoteFirst;
+    const local = await loadIssueStatusFromGraph(ops, resolved.issue_entity_id, config);
+    return {
+      ...remoteFirst,
+      messages: mergeIssueStatusMessages(remoteFirst.messages, local.messages),
+    };
   }
 
   const local = await loadIssueStatusFromGraph(ops, resolved.issue_entity_id, config);

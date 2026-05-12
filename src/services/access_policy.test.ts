@@ -1,6 +1,33 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+
+const schemaRegistryMockState = vi.hoisted(() => ({
+  activeSchemas: [] as Array<{
+    entity_type: string;
+    metadata?: { guest_access_policy?: string };
+  }>,
+  globalSchemas: new Map<string, {
+    entity_type: string;
+    metadata?: { guest_access_policy?: string };
+  }>(),
+}));
+
+vi.mock("../services/schema_registry.js", () => ({
+  SchemaRegistryService: class {
+    async listActiveSchemas() {
+      return schemaRegistryMockState.activeSchemas;
+    }
+
+    async loadGlobalSchema(entityType: string) {
+      return schemaRegistryMockState.globalSchemas.get(entityType) ?? null;
+    }
+  },
+}));
+
 import {
+  loadAccessPolicies,
+  loadAccessPolicyEntries,
   resolveAccessPolicy,
+  resolveAccessPolicyWithSource,
   setAccessPolicy,
   enforceGuestAccess,
   assertGuestWriteAllowed,
@@ -15,8 +42,8 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
-const TEST_CONFIG_DIR = path.join(os.tmpdir(), "neotoma-test-access-policy-" + Date.now());
-const TEST_CONFIG_PATH = path.join(TEST_CONFIG_DIR, "config.json");
+const TEST_HOME_DIR = path.join(os.tmpdir(), "neotoma-test-access-policy-" + Date.now());
+const TEST_CONFIG_PATH = path.join(TEST_HOME_DIR, ".config", "neotoma", "config.json");
 
 vi.mock("node:fs", async () => {
   const actual = await vi.importActual<typeof import("node:fs")>("node:fs");
@@ -33,14 +60,19 @@ describe("Access Policy Service", () => {
 
   beforeEach(async () => {
     process.env = { ...originalEnv };
-    await fs.mkdir(TEST_CONFIG_DIR, { recursive: true });
+    process.env.HOME = TEST_HOME_DIR;
+    delete process.env.NEOTOMA_ACCESS_POLICY_ISSUE;
+    delete process.env.NEOTOMA_ACCESS_POLICY_LEGACY_TYPE;
+    schemaRegistryMockState.activeSchemas = [];
+    schemaRegistryMockState.globalSchemas.clear();
+    await fs.mkdir(path.dirname(TEST_CONFIG_PATH), { recursive: true });
     await fs.writeFile(TEST_CONFIG_PATH, JSON.stringify({}), "utf8");
   });
 
   afterEach(async () => {
     process.env = originalEnv;
     try {
-      await fs.rm(TEST_CONFIG_DIR, { recursive: true });
+      await fs.rm(TEST_HOME_DIR, { recursive: true });
     } catch {
       // Ignore cleanup races in temp directories.
     }
@@ -66,18 +98,75 @@ describe("Access Policy Service", () => {
     });
 
     it("env var takes precedence over schema metadata", async () => {
-      // Schema metadata sets submitter_scoped for issue at seed, but
-      // if the schema registry import fails (as in unit tests without DB)
-      // the test still validates env > fallthrough
+      schemaRegistryMockState.globalSchemas.set("issue", {
+        entity_type: "issue",
+        metadata: { guest_access_policy: "submitter_scoped" },
+      });
       process.env.NEOTOMA_ACCESS_POLICY_ISSUE = "open";
       const mode = await resolveAccessPolicy("issue");
       expect(mode).toBe("open");
+    });
+
+    it("schema metadata takes precedence over deprecated config", async () => {
+      await setAccessPolicy("issue", "submitter_scoped");
+      schemaRegistryMockState.globalSchemas.set("issue", {
+        entity_type: "issue",
+        metadata: { guest_access_policy: "closed" },
+      });
+
+      await expect(resolveAccessPolicy("issue")).resolves.toBe("closed");
+      await expect(resolveAccessPolicyWithSource("issue")).resolves.toEqual({
+        mode: "closed",
+        source: "schema_metadata",
+      });
     });
 
     it("config file is used as deprecated fallback", async () => {
       await setAccessPolicy("legacy_type", "read_only");
       const mode = await resolveAccessPolicy("legacy_type");
       expect(mode).toBe("read_only");
+    });
+  });
+
+  describe("loadAccessPolicies", () => {
+    it("lists only effective non-default policies using env > schema > config precedence", async () => {
+      await setAccessPolicy("issue", "submitter_scoped");
+      await setAccessPolicy("legacy_type", "read_only");
+      schemaRegistryMockState.activeSchemas = [
+        {
+          entity_type: "issue",
+          metadata: { guest_access_policy: "closed" },
+        },
+        {
+          entity_type: "conversation",
+          metadata: { guest_access_policy: "submitter_scoped" },
+        },
+      ];
+      process.env.NEOTOMA_ACCESS_POLICY_LEGACY_TYPE = "open";
+
+      await expect(loadAccessPolicies()).resolves.toEqual({
+        conversation: "submitter_scoped",
+        legacy_type: "open",
+      });
+      await expect(loadAccessPolicyEntries()).resolves.toEqual({
+        conversation: {
+          entity_type: "conversation",
+          mode: "submitter_scoped",
+          source: "schema_metadata",
+        },
+        legacy_type: {
+          entity_type: "legacy_type",
+          mode: "open",
+          source: "env",
+        },
+      });
+    });
+
+    it("omits explicit closed env overrides from the non-default list", async () => {
+      await setAccessPolicy("issue", "submitter_scoped");
+      process.env.NEOTOMA_ACCESS_POLICY_ISSUE = "closed";
+
+      await expect(loadAccessPolicies()).resolves.toEqual({});
     });
   });
 

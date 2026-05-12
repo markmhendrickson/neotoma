@@ -66,6 +66,23 @@ Minimum supplement requirements for a release that contains any tightening:
 
 Version bump: a release containing any tightening MUST bump the **minor** segment at minimum (or **major** during 1.x+); patch-only rollouts are not allowed to ship tightenings. This rule is enforced in the release-skill preflight (`.cursor/skills/release/SKILL.md` Step 1) via the OpenAPI breaking-change diff gate.
 
+### Security hardening section
+
+Every release supplement MUST contain an explicit `Security hardening` section, in addition to the explicit `Breaking changes` section. This is the artifact the pre-release security gates (`.cursor/plans/pre-release_security_gates_44e01d74.plan.md`) link to and that downstream operators read to decide whether to upgrade urgently.
+
+A release counts as **security-sensitive** when `npm run security:classify-diff` reports `sensitive=true` — i.e., the diff touches `src/actions.ts`, `src/services/{root_landing,subscriptions,sync,issues,entity_submission,access_policy}/**`, `src/middleware/**`, the OpenAPI security blocks, the protected-routes manifest, or adds a new env var matching `LOCAL_DEV_USER_ID|TRUST_PROD_LOOPBACK|*_AUTH_*`.
+
+Minimum supplement requirements for a security-sensitive release:
+
+- The `Security hardening` section MUST link `docs/releases/in_progress/<TAG>/security_review.md` (the AI/human review file produced by `/release` Step 3.5) and `docs/releases/in_progress/<TAG>/post_deploy_security_probes.md` (the deployed-probe report from Step 5).
+- Any advisory under `docs/security/advisories/` opened or referenced by this release MUST be linked from the section by its dated filename and (when assigned) its GHSA / CVE.
+- Each material change describes (1) the surface affected, (2) the exposure shape if a regression had landed, (3) the gate that catches the regression class going forward (G1/G2/G3/G4/G5), and (4) the operator action — typically "upgrade to vX.Y.Z" or "rotate bearer tokens, then upgrade".
+- Patch-only rollouts ARE allowed for security-sensitive releases (see `docs/security/advisories/2026-05-11-inspector-auth-bypass.md` for the v0.11.1 hotfix shape).
+
+For a release that is NOT security-sensitive, the section is still required; write `No security-sensitive surfaces touched.` so the trail is explicit. This mirrors the `Breaking changes` rule and keeps the supplement structure scannable.
+
+The release-skill preflight (`.cursor/skills/release/SKILL.md` Step 3.5) refuses to advance past Security review lane until the supplement contains a non-empty `Security hardening` block.
+
 ## Render release notes
 
 Use **silent** npm output when redirecting to a file (otherwise npm prints script headers into the file):

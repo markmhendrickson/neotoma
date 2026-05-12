@@ -19,6 +19,13 @@ export interface IssuesCreateOpts {
   labels?: string;
   /** `public` creates a GitHub issue when possible; `private` stores Neotoma-only (no GitHub create). */
   visibility?: "public" | "private";
+  /** Deprecated alias for `visibility: "private"`; retained for one minor release. */
+  advisory?: boolean;
+  reporter_git_sha?: string;
+  reporter_app_version?: string;
+  reporter_git_ref?: string;
+  reporter_channel?: string;
+  reporter_ci_run_id?: string;
   json?: boolean;
 }
 
@@ -31,14 +38,23 @@ export interface IssuesMessageOpts {
   issue_number?: number;
   /** Guest token for operator remote append when the local snapshot does not carry it. */
   guest_access_token?: string;
+  reporter_git_sha?: string;
+  reporter_app_version?: string;
+  reporter_git_ref?: string;
+  reporter_channel?: string;
+  reporter_ci_run_id?: string;
 }
 
 export interface IssuesStatusOpts {
-  entity_id: string;
+  entity_id?: string;
+  issue_number?: number;
   skip_sync?: boolean;
   guest_access_token?: string;
   json?: boolean;
 }
+
+export const ADVISORY_VISIBILITY_DEPRECATION =
+  "visibility 'advisory' is deprecated; use 'private' instead.";
 
 export interface IssuesListOpts {
   status?: "open" | "closed" | "all";
@@ -77,7 +93,11 @@ export async function issuesCreate(opts: IssuesCreateOpts, api: NeotomaApiClient
   const { mergeNeotomaToolingIssueLabels } = await import("../services/issues/github_client.js");
   const parsedLabels = opts.labels ? opts.labels.split(",").map((l) => l.trim()).filter(Boolean) : undefined;
   const labels = mergeNeotomaToolingIssueLabels(parsedLabels);
-  const visibility = opts.visibility ?? "public";
+  const visibility = opts.advisory === true ? "private" : (opts.visibility ?? "public");
+
+  if (opts.advisory === true && !opts.json) {
+    process.stderr.write(`${ADVISORY_VISIBILITY_DEPRECATION}\n`);
+  }
 
   const { data, error } = await api.POST("/issues/submit", {
     body: {
@@ -85,6 +105,11 @@ export async function issuesCreate(opts: IssuesCreateOpts, api: NeotomaApiClient
       body: opts.body,
       labels: labels.length > 0 ? labels : undefined,
       visibility,
+      reporter_git_sha: opts.reporter_git_sha?.trim() || undefined,
+      reporter_app_version: opts.reporter_app_version?.trim() || undefined,
+      reporter_git_ref: opts.reporter_git_ref?.trim() || undefined,
+      reporter_channel: opts.reporter_channel?.trim() || undefined,
+      reporter_ci_run_id: opts.reporter_ci_run_id?.trim() || undefined,
     },
   });
 
@@ -156,6 +181,11 @@ export async function issuesMessage(opts: IssuesMessageOpts, api: NeotomaApiClie
       ...(opts.guest_access_token?.trim()
         ? { guest_access_token: opts.guest_access_token.trim() }
         : {}),
+      reporter_git_sha: opts.reporter_git_sha?.trim() || undefined,
+      reporter_app_version: opts.reporter_app_version?.trim() || undefined,
+      reporter_git_ref: opts.reporter_git_ref?.trim() || undefined,
+      reporter_channel: opts.reporter_channel?.trim() || undefined,
+      reporter_ci_run_id: opts.reporter_ci_run_id?.trim() || undefined,
     },
   });
 
@@ -194,9 +224,20 @@ export async function issuesMessage(opts: IssuesMessageOpts, api: NeotomaApiClie
 }
 
 export async function issuesStatus(opts: IssuesStatusOpts, api: NeotomaApiClient): Promise<void> {
+  const entityId = opts.entity_id?.trim();
+  const issueNumber = opts.issue_number;
+  const hasEntity = typeof entityId === "string" && entityId.length > 0;
+  const hasNumber = typeof issueNumber === "number" && Number.isFinite(issueNumber) && issueNumber > 0;
+  if (!hasEntity && !hasNumber) {
+    process.stderr.write("Error: provide --entity-id or --issue-number\n");
+    process.exitCode = 1;
+    return;
+  }
+
   const { data, error } = await api.POST("/issues/status", {
     body: {
-      entity_id: opts.entity_id.trim(),
+      ...(hasEntity ? { entity_id: entityId } : {}),
+      ...(hasNumber ? { issue_number: issueNumber } : {}),
       skip_sync: opts.skip_sync === true,
       ...(opts.guest_access_token?.trim()
         ? { guest_access_token: opts.guest_access_token.trim() }

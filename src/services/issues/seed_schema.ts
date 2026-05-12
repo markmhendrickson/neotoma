@@ -13,13 +13,32 @@
 
 import type {
   FieldDefinition,
+  GuestAccessPolicyMode,
   ReducerConfig,
   SchemaDefinition,
+  SchemaMetadata,
   SchemaRegistryEntry,
 } from "../schema_registry.js";
 import { SchemaRegistryService } from "../schema_registry.js";
+import { db } from "../../db.js";
 
 export const ISSUE_ENTITY_TYPE = "issue";
+const ISSUE_GUEST_ACCESS_POLICY: GuestAccessPolicyMode = "submitter_scoped";
+const VALID_GUEST_ACCESS_POLICIES = new Set<GuestAccessPolicyMode>([
+  "closed",
+  "read_only",
+  "submit_only",
+  "submitter_scoped",
+  "open",
+]);
+
+const ISSUE_METADATA_DEFAULTS: SchemaMetadata = {
+  label: "Issue",
+  description:
+    "Collaborative issue thread backed by GitHub Issues. Each issue has an associated conversation entity with conversation_message entities for the thread.",
+  category: "productivity",
+  guest_access_policy: ISSUE_GUEST_ACCESS_POLICY,
+};
 
 type FieldSpec = Array<{
   name: string;
@@ -44,6 +63,8 @@ const ISSUE_FIELDS: FieldSpec = [
   { name: "created_at", type: "date", description: "Issue creation timestamp" },
   { name: "closed_at", type: "date", description: "Issue close timestamp (null if open)" },
   { name: "last_synced_at", type: "date", description: "Last time this issue was synced from GitHub" },
+  { name: "last_message_at", type: "date", description: "Most recent thread-message timestamp" },
+  { name: "last_message_author", type: "string", description: "Author of the most recent thread message" },
   { name: "sync_pending", type: "boolean", description: "True if local changes have not been pushed to GitHub" },
   { name: "remote_instance_url", type: "string", description: "Operator Neotoma instance URL for submitted issues" },
   { name: "remote_entity_id", type: "string", description: "Issue entity id on the remote/operator Neotoma instance" },
@@ -76,7 +97,7 @@ function buildSchemaDefinition(): SchemaDefinition {
   }
   return {
     fields,
-    canonical_name_fields: [{ composite: ["github_number", "repo"] }, "title"],
+    canonical_name_fields: [{ composite: ["github_number", "repo"] }, "local_issue_id", "title"],
     temporal_fields: [
       { field: "created_at", event_type: "issue_created" },
       { field: "closed_at", event_type: "issue_closed" },
@@ -115,9 +136,61 @@ function needsSchemaDefinitionR2Repair(def: SchemaDefinition): boolean {
   return !Array.isArray(rules) || rules.length === 0;
 }
 
+function issueMetadataWithGuestAccessDefault(
+  metadata?: SchemaMetadata | null,
+): SchemaMetadata {
+  const existingPolicy = metadata?.guest_access_policy;
+  return {
+    ...ISSUE_METADATA_DEFAULTS,
+    ...(metadata ?? {}),
+    guest_access_policy: VALID_GUEST_ACCESS_POLICIES.has(
+      existingPolicy as GuestAccessPolicyMode,
+    )
+      ? existingPolicy
+      : ISSUE_GUEST_ACCESS_POLICY,
+  };
+}
+
+async function backfillIssueGuestAccessPolicyMetadata(): Promise<void> {
+  const { data: schemas, error } = await db
+    .from("schema_registry")
+    .select("id, metadata")
+    .eq("entity_type", ISSUE_ENTITY_TYPE)
+    .eq("active", true);
+
+  if (error) {
+    throw new Error(
+      `[Issues] failed to inspect active issue schemas for access policy repair: ${error.message}`,
+    );
+  }
+
+  for (const schema of schemas ?? []) {
+    const metadata = (schema.metadata ?? {}) as SchemaMetadata;
+    const policy = metadata.guest_access_policy;
+    if (VALID_GUEST_ACCESS_POLICIES.has(policy as GuestAccessPolicyMode)) {
+      continue;
+    }
+
+    const repaired = issueMetadataWithGuestAccessDefault(metadata);
+    const { error: updateError } = await db
+      .from("schema_registry")
+      .update({ metadata: repaired })
+      .eq("id", schema.id);
+
+    if (updateError) {
+      throw new Error(
+        `[Issues] failed to repair issue schema access policy metadata for ${schema.id}: ${updateError.message}`,
+      );
+    }
+  }
+}
+
 /**
  * Ensure the global `issue` schema exists and has every field required
- * by the issues subsystem. Safe to call multiple times.
+ * by the issues subsystem. Also backfills the seeded guest access policy on
+ * every active issue schema row, including user-scoped rows from older
+ * installs, without overriding an explicitly configured valid policy.
+ * Safe to call multiple times.
  */
 export async function seedIssueSchema(options?: {
   registry?: SchemaRegistryService;
@@ -128,6 +201,11 @@ export async function seedIssueSchema(options?: {
   const definition = buildSchemaDefinition();
   const reducerConfig = buildReducerConfig();
 
+  await backfillIssueGuestAccessPolicyMetadata();
+  if (existing) {
+    existing = (await registry.loadGlobalSchema(ISSUE_ENTITY_TYPE)) ?? existing;
+  }
+
   if (!existing) {
     return await registry.register({
       entity_type: ISSUE_ENTITY_TYPE,
@@ -136,13 +214,7 @@ export async function seedIssueSchema(options?: {
       reducer_config: reducerConfig,
       user_specific: false,
       activate: true,
-      metadata: {
-        label: "Issue",
-        description:
-          "Collaborative issue thread backed by GitHub Issues. Each issue has an associated conversation entity with conversation_message entities for the thread.",
-        category: "productivity",
-        guest_access_policy: "submitter_scoped",
-      },
+      metadata: issueMetadataWithGuestAccessDefault(),
     });
   }
 
@@ -174,12 +246,7 @@ export async function seedIssueSchema(options?: {
       reducer_config: mergedReducer,
       user_specific: false,
       activate: false,
-      metadata: existing.metadata ?? {
-        label: "Issue",
-        description:
-          "Collaborative issue thread backed by GitHub Issues. Each issue has an associated conversation entity with conversation_message entities for the thread.",
-        category: "productivity",
-      },
+      metadata: issueMetadataWithGuestAccessDefault(existing.metadata),
     });
     await registry.activate(ISSUE_ENTITY_TYPE, newVersion);
     existing = await registry.loadGlobalSchema(ISSUE_ENTITY_TYPE);

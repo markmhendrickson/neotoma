@@ -129,6 +129,13 @@ export interface HomeBodyPack {
     viewFullGuideCta: string;
     seeAllGuaranteesCta: string;
     cards: HomeRecordTypeCard[];
+    /** Callout below the record-type cards: schema is inferred and evolves with your data. */
+    schemaEvolutionCalloutHeading: string;
+    schemaEvolutionCalloutBodyBeforeLink: string;
+    schemaEvolutionCalloutLink: string;
+    schemaEvolutionCalloutBodyAfterLink: string;
+    /** Secondary line: nothing is dropped — unfamiliar fields land in raw_fragments. */
+    schemaEvolutionCalloutSecondLine: string;
   };
   who: {
     kicker: string;

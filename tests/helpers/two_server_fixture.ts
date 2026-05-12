@@ -156,6 +156,16 @@ async function createMcpHttpClient(server: IsolatedServer): Promise<McpHttpClien
       name: string,
       args: Record<string, unknown> = {},
     ): Promise<T> {
+      const toolArgs =
+        (name === "submit_issue" || name === "add_issue_message") &&
+        !args.reporter_git_sha &&
+        !args.reporter_app_version
+          ? {
+              reporter_git_sha: "cross-instance-issues-test",
+              reporter_channel: "vitest-cross-instance",
+              ...args,
+            }
+          : args;
       const response = await fetch(server.mcpUrl, {
         method: "POST",
         headers: {
@@ -168,7 +178,7 @@ async function createMcpHttpClient(server: IsolatedServer): Promise<McpHttpClien
           method: "tools/call",
           params: {
             name,
-            arguments: args,
+            arguments: toolArgs,
           },
         }),
       });
@@ -360,7 +370,132 @@ export async function startCrossInstanceIssuesFixture(options?: {
 }
 
 export function uniqueIssueTitle(prefix: string): string {
-  return `${prefix} ${new Date().toISOString()} ${randomUUID()}`;
+  return `${prefix} ${new Date().toISOString()} ${randomUUID().replaceAll("-", "").slice(0, 12)}`;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Peer-sync fixture                                                  */
+/* ------------------------------------------------------------------ */
+
+export interface PeerSyncFixture {
+  serverA: IsolatedServer;
+  serverB: IsolatedServer;
+  /** Stable peer id that server A uses when sending outbound sync webhooks. */
+  peerIdA: string;
+  /** Stable peer id that server B uses when sending outbound sync webhooks. */
+  peerIdB: string;
+  /** Shared HMAC secret used to sign /sync/webhook payloads in both directions. */
+  sharedSecret: string;
+  /** Authenticated HTTP fetch against a specific server. */
+  httpFetch(server: IsolatedServer, path: string, init?: RequestInit): Promise<Response>;
+  stop(): Promise<void>;
+}
+
+/**
+ * Spin up two isolated Neotoma servers pre-configured for bidirectional peer sync.
+ *
+ * Each server has `NEOTOMA_PUBLIC_BASE_URL` and `NEOTOMA_LOCAL_PEER_ID` set.
+ * After both are healthy the function registers a peer_config on each side so
+ * `POST /peers/:peer_id/sync` and inbound `/sync/webhook` work out of the box.
+ */
+export async function startPeerSyncFixture(): Promise<PeerSyncFixture> {
+  const portA = await reservePort();
+  const portB = await reservePort();
+
+  const peerIdA = `test-peer-a-${randomUUID().slice(0, 8)}`;
+  const peerIdB = `test-peer-b-${randomUUID().slice(0, 8)}`;
+  const sharedSecret = randomUUID() + randomUUID();
+
+  const dataDirA = mkdtempSync(join(tmpdir(), "neotoma-peer-a-"));
+  const dataDirB = mkdtempSync(join(tmpdir(), "neotoma-peer-b-"));
+
+  const baseUrlA = `http://127.0.0.1:${portA}`;
+  const baseUrlB = `http://127.0.0.1:${portB}`;
+
+  const serverA = await startIsolatedNeotomaServer({
+    port: portA,
+    dataDir: dataDirA,
+    env: {
+      HOME: join(dataDirA, "home"),
+      NEOTOMA_PUBLIC_BASE_URL: baseUrlA,
+      NEOTOMA_LOCAL_PEER_ID: peerIdA,
+    },
+  });
+
+  const serverB = await startIsolatedNeotomaServer({
+    port: portB,
+    dataDir: dataDirB,
+    env: {
+      HOME: join(dataDirB, "home"),
+      NEOTOMA_PUBLIC_BASE_URL: baseUrlB,
+      NEOTOMA_LOCAL_PEER_ID: peerIdB,
+    },
+  });
+
+  const LOCAL_DEV = "00000000-0000-0000-0000-000000000000";
+
+  function httpFetch(server: IsolatedServer, path: string, init?: RequestInit): Promise<Response> {
+    return fetch(`${server.baseUrl}${path}`, {
+      ...init,
+      headers: {
+        Authorization: `Bearer ${server.token}`,
+        "Content-Type": "application/json",
+        ...(init?.headers as Record<string, string> | undefined),
+      },
+    });
+  }
+
+  const peerBodyOnA = {
+    peer_id: peerIdB,
+    peer_name: "server-b",
+    peer_url: serverB.baseUrl,
+    direction: "bidirectional",
+    entity_types: ["note", "task", "contact", "person", "peer_config"],
+    sync_scope: "all",
+    auth_method: "shared_secret",
+    conflict_strategy: "last_write_wins",
+    shared_secret: sharedSecret,
+    sync_target_user_id: LOCAL_DEV,
+  };
+
+  const peerBodyOnB = {
+    peer_id: peerIdA,
+    peer_name: "server-a",
+    peer_url: serverA.baseUrl,
+    direction: "bidirectional",
+    entity_types: ["note", "task", "contact", "person", "peer_config"],
+    sync_scope: "all",
+    auth_method: "shared_secret",
+    conflict_strategy: "last_write_wins",
+    shared_secret: sharedSecret,
+    sync_target_user_id: LOCAL_DEV,
+  };
+
+  const [resA, resB] = await Promise.all([
+    httpFetch(serverA, "/peers", { method: "POST", body: JSON.stringify(peerBodyOnA) }),
+    httpFetch(serverB, "/peers", { method: "POST", body: JSON.stringify(peerBodyOnB) }),
+  ]);
+
+  if (!resA.ok) {
+    const text = await resA.text();
+    throw new Error(`Failed to register peer on server A: ${resA.status} ${text}`);
+  }
+  if (!resB.ok) {
+    const text = await resB.text();
+    throw new Error(`Failed to register peer on server B: ${resB.status} ${text}`);
+  }
+
+  return {
+    serverA,
+    serverB,
+    peerIdA,
+    peerIdB,
+    sharedSecret,
+    httpFetch,
+    async stop(): Promise<void> {
+      await Promise.allSettled([serverA.stop(), serverB.stop()]);
+    },
+  };
 }
 
 export { TEST_REPO };

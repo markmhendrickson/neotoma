@@ -184,6 +184,10 @@
     "classification": "static_mdx"
   },
   {
+    "path": "/non-destructive-testing",
+    "classification": "static_mdx"
+  },
+  {
     "path": "/troubleshooting",
     "classification": "static_mdx"
   },

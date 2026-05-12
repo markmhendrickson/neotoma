@@ -173,6 +173,30 @@ describe("OpenClaw plugin packaging", () => {
         expect(registeredTools, `Tool not registered: ${name}`).toContain(name);
       }
     });
+
+    it("register() wires OpenClaw lifecycle hooks", async () => {
+      const mod = await import("../../src/openclaw_entry.js");
+      const plugin = mod.default;
+      const hookNames: string[] = [];
+      const mockApi = {
+        config: {},
+        registerTool() {},
+        on(name: string) {
+          hookNames.push(name);
+        },
+      };
+
+      plugin.register(mockApi);
+      expect(hookNames).toEqual(
+        expect.arrayContaining([
+          "session_start",
+          "session_end",
+          "message_received",
+          "message_sent",
+          "after_tool_call",
+        ]),
+      );
+    });
   });
 
   describe("npm pack includes openclaw files", () => {

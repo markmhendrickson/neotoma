@@ -1947,7 +1947,7 @@ export interface components {
             observation_index?: number;
             entity_type?: string;
             /** @enum {string} */
-            code?: "ERR_CANONICAL_NAME_UNRESOLVED" | "ERR_MERGE_REFUSED" | "ERR_CONVERSATION_MESSAGE_ROLE_CONFLICT";
+            code?: "ERR_CANONICAL_NAME_UNRESOLVED" | "ERR_MERGE_REFUSED" | "ERR_CONVERSATION_MESSAGE_ROLE_CONFLICT" | "ERR_RELATIONSHIP_ENTITY_ID_FORMAT";
             message?: string;
             /**
              * @description Code-specific context (e.g. `seen_fields`, `attempted_value`,

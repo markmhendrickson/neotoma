@@ -18,6 +18,7 @@ import {
   ensureInitialCommit,
   initMirrorRepo,
 } from "./canonical_mirror_git.js";
+import type { MirrorConfig } from "./canonical_mirror.js";
 
 function gitAvailable(): boolean {
   try {
@@ -33,15 +34,38 @@ describe("canonical_mirror_git", () => {
   let originalEnabled: string | undefined;
   let originalPath: string | undefined;
   let originalGit: string | undefined;
+  let originalGitDir: string | undefined;
+  let originalGitWorkTree: string | undefined;
+  let originalGitIndexFile: string | undefined;
+
+  function mirrorConfig(gitEnabled = true): MirrorConfig {
+    return {
+      enabled: true,
+      path: tmpRoot,
+      kinds: ["entities", "relationships", "sources", "timeline"],
+      git_enabled: gitEnabled,
+      memory_export: {
+        enabled: false,
+        path: "MEMORY.md",
+        limit_lines: 200,
+      },
+    };
+  }
 
   beforeEach(() => {
     tmpRoot = mkdtempSync(path.join(tmpdir(), "neotoma-mirror-git-test-"));
     originalEnabled = process.env.NEOTOMA_MIRROR_ENABLED;
     originalPath = process.env.NEOTOMA_MIRROR_PATH;
     originalGit = process.env.NEOTOMA_MIRROR_GIT_ENABLED;
+    originalGitDir = process.env.GIT_DIR;
+    originalGitWorkTree = process.env.GIT_WORK_TREE;
+    originalGitIndexFile = process.env.GIT_INDEX_FILE;
     process.env.NEOTOMA_MIRROR_ENABLED = "true";
     process.env.NEOTOMA_MIRROR_PATH = tmpRoot;
     process.env.NEOTOMA_MIRROR_GIT_ENABLED = "true";
+    delete process.env.GIT_DIR;
+    delete process.env.GIT_WORK_TREE;
+    delete process.env.GIT_INDEX_FILE;
   });
 
   afterEach(() => {
@@ -51,6 +75,12 @@ describe("canonical_mirror_git", () => {
     else process.env.NEOTOMA_MIRROR_PATH = originalPath;
     if (originalGit === undefined) delete process.env.NEOTOMA_MIRROR_GIT_ENABLED;
     else process.env.NEOTOMA_MIRROR_GIT_ENABLED = originalGit;
+    if (originalGitDir === undefined) delete process.env.GIT_DIR;
+    else process.env.GIT_DIR = originalGitDir;
+    if (originalGitWorkTree === undefined) delete process.env.GIT_WORK_TREE;
+    else process.env.GIT_WORK_TREE = originalGitWorkTree;
+    if (originalGitIndexFile === undefined) delete process.env.GIT_INDEX_FILE;
+    else process.env.GIT_INDEX_FILE = originalGitIndexFile;
     try {
       rmSync(tmpRoot, { recursive: true, force: true });
     } catch {
@@ -120,7 +150,7 @@ describe("canonical_mirror_git", () => {
   describe("initMirrorRepo", () => {
     it("is a no-op when git is disabled", async () => {
       process.env.NEOTOMA_MIRROR_GIT_ENABLED = "false";
-      const res = await initMirrorRepo();
+      const res = await initMirrorRepo(mirrorConfig(false));
       expect(res.initialized).toBe(false);
       const gitDir = path.join(tmpRoot, ".git");
       let exists = true;
@@ -135,7 +165,7 @@ describe("canonical_mirror_git", () => {
     it.skipIf(!gitAvailable())(
       "initializes a git repo in the mirror root and is idempotent",
       async () => {
-        const first = await initMirrorRepo();
+        const first = await initMirrorRepo(mirrorConfig());
         expect(first.initialized).toBe(true);
         const gitDirStat = await fsp.stat(path.join(tmpRoot, ".git"));
         expect(gitDirStat.isDirectory()).toBe(true);
@@ -145,7 +175,7 @@ describe("canonical_mirror_git", () => {
         );
         expect(gitignore).toContain(".DS_Store");
 
-        const second = await initMirrorRepo();
+        const second = await initMirrorRepo(mirrorConfig());
         expect(second.initialized).toBe(false);
       }
     );
@@ -155,24 +185,27 @@ describe("canonical_mirror_git", () => {
     it.skipIf(!gitAvailable())(
       "creates initial commit via ensureInitialCommit, then batch commit on second write",
       async () => {
-        await initMirrorRepo();
+        await initMirrorRepo(mirrorConfig());
         // Seed a file so there is something to commit.
         await fsp.writeFile(path.join(tmpRoot, "hello.md"), "hello\n", "utf8");
-        const first = await ensureInitialCommit();
+        const first = await ensureInitialCommit(mirrorConfig());
         expect(first.committed).toBe(true);
         expect(first.commit_hash).toBeTruthy();
 
         // Second call: no new diff → no commit.
-        const second = await ensureInitialCommit();
+        const second = await ensureInitialCommit(mirrorConfig());
         expect(second.committed).toBe(false);
 
         // Add another file and use batch commit.
         await fsp.writeFile(path.join(tmpRoot, "world.md"), "world\n", "utf8");
-        const batch = await commitMirrorBatch({
-          trigger: "store",
-          entities: [{ entity_type: "contact", slug: "world-123", field_count: 1 }],
-          observations: [{ observation_id: "obs_world" }],
-        });
+        const batch = await commitMirrorBatch(
+          {
+            trigger: "store",
+            entities: [{ entity_type: "contact", slug: "world-123", field_count: 1 }],
+            observations: [{ observation_id: "obs_world" }],
+          },
+          mirrorConfig(),
+        );
         expect(batch.committed).toBe(true);
         expect(batch.file_count).toBeGreaterThanOrEqual(1);
 
@@ -189,11 +222,11 @@ describe("canonical_mirror_git", () => {
     it.skipIf(!gitAvailable())(
       "skips the batch commit when there is no diff",
       async () => {
-        await initMirrorRepo();
+        await initMirrorRepo(mirrorConfig());
         await fsp.writeFile(path.join(tmpRoot, "a.md"), "x\n", "utf8");
-        await ensureInitialCommit();
+        await ensureInitialCommit(mirrorConfig());
 
-        const res = await commitMirrorBatch({ trigger: "store" });
+        const res = await commitMirrorBatch({ trigger: "store" }, mirrorConfig());
         expect(res.committed).toBe(false);
         expect(res.reason).toBe("empty_diff");
       }

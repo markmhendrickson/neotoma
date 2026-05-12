@@ -28,8 +28,14 @@ vi.mock("./config.js", () => ({
   }),
 }));
 
-import { submitIssueToRemote, addMessageToRemote, getRemoteIssueStatus } from "./neotoma_client.js";
+import {
+  submitIssueToRemote,
+  addMessageToRemote,
+  getRemoteIssueStatus,
+  fetchRemoteIssueThread,
+} from "./neotoma_client.js";
 import { createApiClient } from "../../shared/api_client.js";
+import { IssueTransportError } from "./errors.js";
 
 type MockIssueApiClient = {
   POST: {
@@ -179,6 +185,55 @@ describe("Neotoma Issue Client", () => {
       });
 
       expect(result).toBeDefined();
+    });
+  });
+
+  describe("fetchRemoteIssueThread", () => {
+    it("uses the API-prefixed issue status endpoint for hosted operators", async () => {
+      const post = vi.fn().mockResolvedValueOnce({
+        data: {
+          issue_entity_id: "issue-entity-1",
+          title: "Remote issue",
+          status: "open",
+          messages: [],
+        },
+      });
+      vi.mocked(createApiClient).mockReturnValueOnce({
+        POST: post,
+        GET: vi.fn(),
+      } as unknown as ReturnType<typeof createApiClient>);
+
+      await fetchRemoteIssueThread({
+        issueEntityId: "issue-entity-1",
+        accessToken: "test-token",
+      });
+
+      expect(post.mock.calls[0][0]).toBe("/api/issues/status");
+      expect(post.mock.calls[0][1].body).toMatchObject({
+        entity_id: "issue-entity-1",
+        guest_access_token: "test-token",
+        skip_sync: true,
+      });
+    });
+
+    it("throws a transport error when the operator read-through fails", async () => {
+      const post = vi.fn().mockResolvedValueOnce({
+        error: { error_code: "AUTH_REQUIRED", message: "guest token invalid" },
+      });
+      vi.mocked(createApiClient).mockReturnValueOnce({
+        POST: post,
+        GET: vi.fn(),
+      } as unknown as ReturnType<typeof createApiClient>);
+
+      const request = fetchRemoteIssueThread({
+        issueEntityId: "issue-entity-1",
+        accessToken: "test-token",
+      });
+
+      await expect(request).rejects.toBeInstanceOf(IssueTransportError);
+      await expect(request).rejects.toMatchObject({
+        code: "ERR_REMOTE_ISSUE_READ_FAILED",
+      });
     });
   });
 });

@@ -231,7 +231,7 @@ export function SchemasIndexPageBody() {
         types, they are the configuration that gives the primitives their
         shape.
       </p>
-      <p className="text-[15px] leading-7 text-muted-foreground mb-8">
+      <p className="text-[15px] leading-7 text-muted-foreground mb-4">
         Every schema is a row in the{" "}
         <MdxI18nLink
           to="/schemas/registry"
@@ -245,6 +245,44 @@ export function SchemasIndexPageBody() {
         minor versions and explicit major-version breaking changes; every
         version is exported as a public JSON snapshot for reference.
       </p>
+      <div className="mb-8 rounded-lg border border-emerald-500/20 bg-emerald-50/40 dark:bg-emerald-950/20 p-4">
+        <p className="text-[14px] font-medium text-foreground mb-1.5">
+          You don&rsquo;t define schemas upfront.
+        </p>
+        <p className="text-[14px] leading-6 text-muted-foreground mb-1.5">
+          Store any entity with a descriptive{" "}
+          <code className="text-[13px] bg-muted px-1.5 py-0.5 rounded">entity_type</code>{" "}
+          and whatever fields the data implies. Neotoma infers a schema from the
+          first write, then evolves it additively as new fields appear (minor
+          version bumps that never break existing data).
+        </p>
+        <p className="text-[14px] leading-6 text-muted-foreground">
+          Unknown fields are preserved in a{" "}
+          <MdxI18nLink
+            to="/schemas/storage-layers"
+            className="text-foreground underline underline-offset-2 hover:no-underline"
+          >
+            raw_fragments
+          </MdxI18nLink>{" "}
+          layer so nothing is silently dropped, and breaking changes (removed or
+          retyped fields) require an explicit major version bump that keeps
+          historical observations readable. See{" "}
+          <MdxI18nLink
+            to="/schemas/versioning"
+            className="text-foreground underline underline-offset-2 hover:no-underline"
+          >
+            versioning &amp; evolution
+          </MdxI18nLink>
+          {" "}for the mechanics, or{" "}
+          <MdxI18nLink
+            to="/non-destructive-testing"
+            className="text-foreground underline underline-offset-2 hover:no-underline"
+          >
+            Test safely
+          </MdxI18nLink>
+          {" "}to try it without touching your current setup.
+        </p>
+      </div>
 
       <ul className="list-none pl-0 grid grid-cols-1 sm:grid-cols-2 auto-rows-fr gap-3 mb-12">
         {SCHEMA_CONCEPT_GUIDES.map((guide) => {

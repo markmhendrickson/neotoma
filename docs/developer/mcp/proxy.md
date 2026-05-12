@@ -30,6 +30,8 @@ Stable **`mcp.json` `command` paths** stay at the repo-root `scripts/` filenames
 | `MCP_PROXY_SESSION_PREFLIGHT`, `MCP_PROXY_SESSION_PREFLIGHT_BASE`, `MCP_PROXY_FAIL_CLOSED` | Trust / preflight behavior. See `src/cli/mcp_proxy.ts` and `src/proxy/mcp_stdio_proxy.ts`. |
 | `NEOTOMA_AAUTH_AUTHORITY_OVERRIDE` | Canonical host for signing when downstream uses `127.0.0.1` (often `localhost:<port>`). The signed **stdio shim** script can derive this from `MCP_PROXY_DOWNSTREAM_URL` when unset. |
 
+> **Operator security note:** Hosted and operator-managed deployments should set **`MCP_PROXY_FAIL_CLOSED=1`** (or the equivalent `failClosed: true` proxy option) whenever AAuth signing is required. This prevents the proxy from forwarding unsigned downstream requests if signing or session preflight fails.
+
 ## Signed stdio shim (`scripts/run_neotoma_mcp_signed_stdio_dev_shim.sh`)
 
 Cursor’s `command` usually points at this script instead of invoking `neotoma mcp proxy` directly. The script:

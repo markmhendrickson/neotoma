@@ -8,6 +8,7 @@ import {
   CircleOff,
   ExternalLink,
   Eye,
+  FlaskConical,
   ListChecks,
   Download,
   Quote,
@@ -15,6 +16,7 @@ import {
   Scale,
   Server,
   MessageSquare,
+  Sparkles,
   Users,
   Waypoints,
   Wrench,
@@ -1866,6 +1868,35 @@ export function SitePage({ staticMode = false, omitSeoHead = false }: SitePagePr
                         </Link>
                       );
                     })}
+                  </div>
+
+                  <div className="mx-auto max-w-2xl rounded-lg border border-emerald-500/20 bg-emerald-50/50 dark:bg-emerald-950/20 px-4 py-3 text-left">
+                    <div className="flex items-start gap-2">
+                      <Sparkles
+                        className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500/80 dark:text-emerald-400/80"
+                        aria-hidden
+                      />
+                      <p className="text-[13px] leading-5 text-muted-foreground">
+                        <span className="font-medium text-foreground">
+                          {body.recordTypes.schemaEvolutionCalloutHeading}
+                        </span>{" "}
+                        {body.recordTypes.schemaEvolutionCalloutBodyBeforeLink}
+                        <Link
+                          to="/schemas/versioning"
+                          className={WHO_CALLOUT_FAQ_LINK_CLASS}
+                        >
+                          {body.recordTypes.schemaEvolutionCalloutLink}
+                        </Link>
+                        {body.recordTypes.schemaEvolutionCalloutBodyAfterLink}
+                      </p>
+                    </div>
+                    <div className="mt-2 flex items-start gap-2 border-t border-emerald-500/15 pt-2 text-[12px] leading-5 text-muted-foreground">
+                      <FlaskConical
+                        className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/75"
+                        aria-hidden
+                      />
+                      <p>{body.recordTypes.schemaEvolutionCalloutSecondLine}</p>
+                    </div>
                   </div>
 
                   <div className="flex justify-center pt-2">

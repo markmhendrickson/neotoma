@@ -98,8 +98,10 @@ function gitLogMarkdown(prev: string, rangeEnd: string): string {
   return out
     .split("\n")
     .map((line) => {
-      const hash = line.slice(0, 7);
-      const rest = line.slice(8).trim();
+      const match = line.match(/^([0-9a-f]+)\s+(.*)$/i);
+      if (!match) return `- ${line}`;
+      const hash = match[1]!.slice(0, 7);
+      const rest = match[2]!.trim();
       return `- \`${hash}\` ${rest}`;
     })
     .join("\n");

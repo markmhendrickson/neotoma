@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { Command } from "commander";
+import { Command, Option } from "commander";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { exec, execFileSync, execSync, spawn } from "node:child_process";
 import fs from "node:fs/promises";
@@ -8686,6 +8686,17 @@ issuesCommand
   .requiredOption("--title <title>", "Issue title")
   .requiredOption("--body <body>", "Issue body (markdown)")
   .option("--labels <labels>", "Comma-separated labels (e.g. bug,doc_gap)")
+  .option("--reporter-git-sha <sha>", "Reporter git SHA for issue provenance")
+  .option("--reporter-app-version <version>", "Reporter app/CLI version for issue provenance")
+  .option("--reporter-git-ref <ref>", "Reporter git ref for issue provenance")
+  .option("--reporter-channel <channel>", "Reporter channel (e.g. cli, cursor, ci)")
+  .option("--reporter-ci-run-id <id>", "Reporter CI run id for issue provenance")
+  .addOption(
+    new Option(
+      "--advisory",
+      "Deprecated alias for --visibility private",
+    ).hideHelp(),
+  )
   .option(
     "--visibility <vis>",
     "public (default; creates GitHub issue when possible) or private (Neotoma-only, skips GitHub)",
@@ -8704,8 +8715,16 @@ issuesCommand
     const api = createApiClient({ baseUrl: await resolveBaseUrl(program.opts().baseUrl, config), token });
     await issuesCreate(
       {
-        ...opts,
+        title: opts.title,
+        body: opts.body,
+        labels: opts.labels,
         visibility: vis as "public" | "private",
+        advisory: Boolean(opts.advisory),
+        reporter_git_sha: opts.reporterGitSha,
+        reporter_app_version: opts.reporterAppVersion,
+        reporter_git_ref: opts.reporterGitRef,
+        reporter_channel: opts.reporterChannel,
+        reporter_ci_run_id: opts.reporterCiRunId,
         json: Boolean((program.opts() as { json?: boolean }).json),
       },
       api,
@@ -8717,6 +8736,11 @@ issuesCommand
   .description("Add a message to an existing issue (GitHub number or --entity-id)")
   .option("--entity-id <id>", "Neotoma issue entity_id (preferred when known)")
   .option("--guest-access-token <token>", "Guest token for operator remote append")
+  .option("--reporter-git-sha <sha>", "Reporter git SHA for message provenance")
+  .option("--reporter-app-version <version>", "Reporter app/CLI version for message provenance")
+  .option("--reporter-git-ref <ref>", "Reporter git ref for message provenance")
+  .option("--reporter-channel <channel>", "Reporter channel (e.g. cli, cursor, ci)")
+  .option("--reporter-ci-run-id <id>", "Reporter CI run id for message provenance")
   .requiredOption("--body <body>", "Message body (markdown)")
   .action(async (number, opts) => {
     const { issuesMessage } = await import("./issues.js");
@@ -8742,6 +8766,11 @@ issuesCommand
         issue_number: issueNum,
         entity_id: entityId || undefined,
         guest_access_token: opts.guestAccessToken,
+        reporter_git_sha: opts.reporterGitSha,
+        reporter_app_version: opts.reporterAppVersion,
+        reporter_git_ref: opts.reporterGitRef,
+        reporter_channel: opts.reporterChannel,
+        reporter_ci_run_id: opts.reporterCiRunId,
         json: Boolean((program.opts() as { json?: boolean }).json),
       },
       api,
@@ -8751,7 +8780,8 @@ issuesCommand
 issuesCommand
   .command("status")
   .description("Print issue metadata and thread (same flow as MCP get_issue_status)")
-  .requiredOption("--entity-id <id>", "Neotoma issue entity_id")
+  .option("--entity-id <id>", "Neotoma issue entity_id")
+  .option("--issue-number <n>", "GitHub issue number in the configured repo")
   .option("--skip-sync", "Skip GitHub stale refresh when issue has github_number")
   .option("--guest-access-token <token>", "Guest token for operator read-through")
   .action(async (opts) => {
@@ -8759,9 +8789,16 @@ issuesCommand
     const config = await readConfig();
     const token = await getCliToken();
     const api = createApiClient({ baseUrl: await resolveBaseUrl(program.opts().baseUrl, config), token });
+    const parsedIssueNumber =
+      opts.issueNumber !== undefined && String(opts.issueNumber).length > 0
+        ? parseInt(String(opts.issueNumber), 10)
+        : NaN;
+    const issueNumber =
+      Number.isFinite(parsedIssueNumber) && parsedIssueNumber > 0 ? parsedIssueNumber : undefined;
     await issuesStatus(
       {
         entity_id: opts.entityId,
+        issue_number: issueNumber,
         skip_sync: Boolean(opts.skipSync),
         guest_access_token: opts.guestAccessToken,
         json: Boolean((program.opts() as { json?: boolean }).json),
@@ -8815,6 +8852,63 @@ issuesCommand
   .action(async () => {
     const { issuesAuth } = await import("./issues.js");
     await issuesAuth({ json: Boolean((program.opts() as { json?: boolean }).json) });
+  });
+
+// ─── Plans commands ────────────────────────────────────────────────────────
+const plansCommand = program
+  .command("plans")
+  .description("Persist harness-authored plan files (.plan.md) and list stored plans.");
+
+plansCommand
+  .command("capture [file]")
+  .description("Capture a harness `.plan.md` file (raw markdown + structured plan row + EMBEDS) into Neotoma")
+  .option("--all", "Walk known harness plan dirs (.cursor/plans, .claude/plans, .codex/plans, .openclaw/plans) and capture each .plan.md")
+  .option("--source-message-entity-id <id>", "Prompting conversation_message entity_id (REFERS_TO source)")
+  .option("--source-entity-id <id>", "Source entity this plan resolves (e.g. an issue entity_id)")
+  .option("--source-entity-type <type>", "Source entity_type (e.g. issue, feature_unit)")
+  .option("--repository-root <path>", "Repository root used for --all directory scanning; defaults to cwd")
+  .action(async (file, opts) => {
+    const { plansCapture } = await import("./plans.js");
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({ baseUrl: await resolveBaseUrl(program.opts().baseUrl, config), token });
+    await plansCapture(
+      {
+        file: typeof file === "string" && file.length > 0 ? file : undefined,
+        all: Boolean(opts.all),
+        source_message_entity_id: opts.sourceMessageEntityId,
+        source_entity_id: opts.sourceEntityId,
+        source_entity_type: opts.sourceEntityType,
+        repository_root: opts.repositoryRoot,
+        json: Boolean((program.opts() as { json?: boolean }).json),
+      },
+      api,
+    );
+  });
+
+plansCommand
+  .command("list")
+  .description("List `plan` entities stored in Neotoma (filterable by source/status/harness)")
+  .option("--source-entity-id <id>", "Only list plans linked to this source entity (e.g. an issue)")
+  .option("--status <status>", "Filter by plan status (draft, awaiting_input, approved, executing, executed, abandoned, superseded)")
+  .option("--harness <name>", "Filter by authoring harness (cursor, claude_code, codex, openclaw, cli, agent, human, other)")
+  .option("--limit <n>", "Max rows to fetch from the server before client-side filtering", "50")
+  .action(async (opts) => {
+    const { plansList } = await import("./plans.js");
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({ baseUrl: await resolveBaseUrl(program.opts().baseUrl, config), token });
+    const limit = opts.limit !== undefined ? parseInt(String(opts.limit), 10) : 50;
+    await plansList(
+      {
+        source_entity_id: opts.sourceEntityId,
+        status: opts.status,
+        harness: opts.harness,
+        limit: Number.isFinite(limit) && limit > 0 ? limit : 50,
+        json: Boolean((program.opts() as { json?: boolean }).json),
+      },
+      api,
+    );
   });
 
 const inspectorCommand = program.command("inspector").description("Inspector helper commands");
@@ -15452,7 +15546,7 @@ function getIntroDataPath(summaryLinesOrStats: string[] | DualEnvIntroStats): st
 
 export function buildGetStartedBoxLines(): string[] {
   return [
-    "After installing Neotoma, run neotoma init and choose your client.",
+    "After installing Neotoma, run neotoma setup --tool cursor --yes (or swap cursor for your tool).",
     "1. Restart your tool/session so it picks up MCP configuration.",
     '2. Tell the agent: "Remind me to review my subscription Friday."',
     "3. In the same conversation, ask it to list your open tasks.",

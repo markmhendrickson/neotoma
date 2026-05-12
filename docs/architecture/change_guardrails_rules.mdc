@@ -43,6 +43,7 @@ For each change type, follow the linked canonical doc. The matrix lists only the
 | New CLI runtime override (env var + flag) | `docs/developer/cli_reference.md` § Runtime overrides | `src/cli/index.ts` `preAction` hook, env-var precedence table in cli_reference |
 | Error response / envelope change | `docs/subsystems/errors.md` | `openapi.yaml` schema, server builders, contract / unit tests |
 | User-scoped endpoint / user-id handling | `docs/subsystems/auth.md` § User-ID Resolution | `getAuthenticatedUserId` usage; `openapi.yaml` query params; never parallel resolution paths |
+| Auth middleware / proxy trust / local-dev shortcuts (the v0.11.1 class) | `docs/security/threat_model.md` + `.cursor/plans/pre-release_security_gates_44e01d74.plan.md` | `src/actions.ts` (`isLocalRequest`, `forwardedForValues`, `isProductionEnvironment`); `src/services/root_landing/**` mirrors; `protected_routes_manifest.json` regenerated via `npm run security:manifest:write`; `npm run security:lint` clean; `tests/security/auth_topology_matrix.test.ts` updated when the topology surface changes; supplement `Security hardening` section + `docs/security/advisories/` entry on regression |
 | MCP ↔ CLI agent-instruction parity | `docs/developer/agent_instructions_sync_rules.mdc` | Mirrored edits in both instruction files + anchor-table row |
 
 **Data model & core semantics**
@@ -86,6 +87,9 @@ These rules sit between subsystems. Each canonical doc covers its own surface; o
 13. A PR that causes previously-accepted input to start returning an `ERR_*` MUST populate a structured `hint` at the validation seam in the same change (`docs/subsystems/errors.md` § Tightening-change hint obligation) and update an entry in `tests/contract/legacy_payloads/` (flip `outcome` to `rejected`, populate `hint_match`, add a line to `CHANGES.md`).
 14. Tightening request-shape validation — closing an `additionalProperties`, adding a required field, narrowing a type, removing an enum value — is a breaking change and MUST be named in the release supplement's "Breaking changes" section (`docs/developer/github_release_process.md` § Validation tightening is breaking), regardless of whether the tightened shape was previously declared in `openapi.yaml`.
 15. Every release supplement MUST contain an explicit "Breaking changes" section. Use the literal line `No breaking changes.` when none exist; never omit the section (`.cursor/skills/release/SKILL.md` § Step 3).
+16. Authority over loopback / proxy / `X-Forwarded-For` trust lives in `src/actions.ts` (`isLocalRequest`, `forwardedForValues`, `isProductionEnvironment`) and the matching helpers in `src/services/root_landing/**`. Any new code that needs to know "is this request local?" MUST consume those exports — not a bare `req.socket.remoteAddress` check, not a `Host` header read, not an inlined fork (`docs/security/threat_model.md`). Treat the v0.11.1 advisory shape as a regression class, not a one-off.
+17. Every new Express route MUST land in `scripts/security/protected_routes_manifest.json` (auth-required) or in the runtime allow-list with a stated `reason`. Run `npm run security:manifest:write` in the same change; CI's `security_gates` job runs `--check` and rejects drift.
+18. Every release that the diff classifier (`scripts/security/classify_diff.js`) labels `sensitive=true` MUST land with a filled `docs/releases/in_progress/<TAG>/security_review.md` and a supplement `Security hardening` section linking it. `none` provider mode is acceptable, manual fill is mandatory.
 
 ### MUST NOT
 
@@ -103,6 +107,9 @@ These rules sit between subsystems. Each canonical doc covers its own surface; o
 12. Create untyped relationships or cycles in hierarchical relationship types (`docs/subsystems/relationships.md`).
 13. Tighten validation of a previously-tolerated request shape without (a) a structured `hint`, (b) a legacy-payload fixture flipped to `rejected`, and (c) a line in the release supplement's "Breaking changes" section. Silent tightenings are the specific regression mode the legacy-payload corpus and the OpenAPI breaking-change diff gate exist to catch.
 14. Omit the "Breaking changes" section from a release supplement, even for patch releases with no breaking changes. Write `No breaking changes.` explicitly.
+15. Read `req.socket.remoteAddress`, `req.headers["x-forwarded-for"]`, `req.headers["host"]`, or `req.header("host")` directly outside `src/actions.ts` and `src/services/root_landing/**`. Use the canonical helpers; the static rule `forwarded-for-trust` (gate G2) is gating, not advisory.
+16. Reference `LOCAL_DEV_USER_ID` outside `src/cli/**`, `src/services/local_auth.ts`, and `tests/**`. Widening the local-dev surface is the same class as the v0.11.1 Inspector auth-bypass; gate any exception behind `assertExplicitlyTrusted("…")` and a written rationale in `docs/security/threat_model.md`.
+17. Register a new public Express route without either `auth.requireUser()` / `assertGuestWriteAllowed()` middleware OR an entry in the runtime unauth allow-list of `protected_routes_manifest.json` with a stated `reason`. Silent additions are the exact regression mode the manifest sync gate exists to catch.
 
 ### SHOULD
 
@@ -136,6 +143,9 @@ Before opening a PR that touches any surface in the Touchpoint Matrix, confirm:
 - [ ] Mutating ops honor `idempotency_key`; ingestion writes are transactional.
 - [ ] No new PII in logs, metric labels, event payloads, or error messages.
 - [ ] Renamed files are `snake_case` and `foundation_config.yaml` + `.cursor/rules/` symlinks are updated.
+- [ ] `npm run security:classify-diff` recorded; if `sensitive=true`, `npm run security:lint` is clean, `npm run security:manifest:check` passes, `npm run test:security:auth-matrix` passes, and `docs/releases/in_progress/<TAG>/security_review.md` exists with a sign-off verdict.
+- [ ] New Express routes registered in `protected_routes_manifest.json` (or runtime unauth allow-list with a `reason`); manifest regenerated via `npm run security:manifest:write` when needed.
+- [ ] No bare `req.socket.remoteAddress`, `X-Forwarded-For`, or `Host` reads outside `src/actions.ts` / `src/services/root_landing/**`; auth-local fallbacks (`!auth && isLocalRequest`) gated through `assertExplicitlyTrusted`.
 
 ## Canonical doc index
 
@@ -149,6 +159,9 @@ Load the canonical doc for the surface your change touches, not this rule, for s
 - `docs/architecture/determinism.md` — deterministic data layer vs bounded-convergence agents.
 - `docs/architecture/idempotence_pattern.md` — LLM stochasticity bounded by post-hoc canonicalization / hashing.
 - `docs/foundation/schema_agnostic_design_rules.md` — schema-driven behavior, no per-type branches.
+- `docs/security/threat_model.md` — channels the pre-release security gates cover (alternate-path auth, proxy trust, local-dev shortcuts, unauth public route, guest-access widening).
+- `docs/security/advisories/` — disclosed advisories, indexed by `README.md`; the seed entry `2026-05-11-inspector-auth-bypass.md` documents the v0.11.1 regression class the gates were designed against.
+- `.cursor/plans/pre-release_security_gates_44e01d74.plan.md` — Track 1 (this) plan; Track 2 (advisory + rollout via subscriptions / peer / guest) follows.
 
 **API & contract**
 
