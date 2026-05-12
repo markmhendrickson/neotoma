@@ -1,0 +1,77 @@
+import { MdxI18nLink } from "@/components/mdx/mdx_i18n_link";
+
+Substrate subscriptions deliver Neotoma write-path events to external consumers without polling. Available since v0.12.0. Each subscription is a first-class `subscription` entity, so its filters, history, and provenance live in the same SQLite + reducer model as any other Neotoma record.
+
+Use subscriptions when:
+
+- An external workflow needs to react when a new `task` or `issue` lands.
+- A peer Neotoma instance should mirror a subset of entity types (the <MdxI18nLink to="/peer-sync">peer sync</MdxI18nLink> bridge runs on top of subscriptions).
+- A live UI or third-party dashboard wants a streaming activity feed.
+
+Subscriptions are bounded by design: per-user caps, webhook circuit breakers, and a process-wide SSE ring buffer keep deliveries from overwhelming receivers.
+
+## MCP tools
+
+- `subscribe({ entity_types?, entity_ids?, event_types?, delivery_method, webhook_url?, webhook_secret?, sync_peer_id? })` — at least one of `entity_types`, `entity_ids`, or `event_types` must be non-empty (there is no firehose mode). `delivery_method` is `webhook` or `sse`.
+- `unsubscribe({ subscription_id })` — removes a subscription.
+- `list_subscriptions({ active_only? })` — enumerates subscriptions owned by the caller.
+- `get_subscription_status({ subscription_id })` — returns the current `subscription` snapshot, including `consecutive_failures`, `max_failures`, and the `active` flag (flipped to `false` by the circuit breaker after `max_failures` consecutive errors).
+
+## HTTP / SSE surface
+
+- `POST /subscribe` — same shape as the MCP tool.
+- `POST /unsubscribe` — `{ subscription_id }`.
+- `GET /events/stream?subscription_id=<id>` — Server-Sent Events stream for an SSE-mode subscription. Frame format: `id: <ring_id>\nevent: <event_type>\ndata: <json>\n\n`. Clients reconnect with `Last-Event-ID: <ring_id>` to replay buffered events.
+
+## Webhook contract
+
+| Aspect | Detail |
+|--------|--------|
+| Method | `POST` to `webhook_url`. |
+| Headers | `Content-Type: application/json`, `X-Neotoma-Signature-256: sha256=<hex>`, `User-Agent: neotoma-webhook/<version>`. |
+| Body | Canonical JSON of the `SubstrateEvent` payload via `stableStringify` (sorted keys, deterministic). |
+| Retries | `[1s, 5s, 30s, 5m]` for non-2xx and timeouts; failures roll the `consecutive_failures` counter. |
+| Allow-list | `https://*` always; `http://localhost` / `http://127.0.0.1` only outside production. Other `http://` URLs refused at registration and delivery. |
+| Circuit breaker | Reaching `max_failures` flips `active = false` via a `correct` write. |
+
+## Environment
+
+- `NEOTOMA_MAX_SUBSCRIPTIONS_PER_USER` — soft cap on active subscriptions per user (default 50).
+- `NEOTOMA_SSE_EVENT_BUFFER` — ring buffer capacity for the SSE hub (clamped 100–10000, default 1000).
+- `NEOTOMA_DEBUG_SUBSTRATE_EVENTS` — debug logging on the underlying event bus.
+
+## Example
+
+Subscribe to webhook delivery for new `issue` and `task` writes:
+
+```bash
+curl -X POST http://localhost:3080/subscribe \
+  -H "Authorization: Bearer $NEOTOMA_BEARER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "entity_types": ["issue", "task"],
+    "delivery_method": "webhook",
+    "webhook_url": "https://hooks.example.com/neotoma"
+  }'
+```
+
+Stream the same filter as Server-Sent Events:
+
+```bash
+curl -N \
+  -H "Authorization: Bearer $NEOTOMA_BEARER_TOKEN" \
+  "http://localhost:3080/events/stream?subscription_id=<id>"
+```
+
+## Loop prevention with peer sync
+
+When a subscription is configured with `sync_peer_id = "<peer_id>"`, the bridge:
+
+- Skips events whose `source_peer_id` equals the subscription's `sync_peer_id` (those came from that peer; sending them back would loop).
+- Routes matching deliveries through the peer-sync envelope, not the generic webhook queue, so they are signed and verified per the peer's `auth_method`.
+
+See the <MdxI18nLink to="/peer-sync">peer sync reference</MdxI18nLink> for full peer wiring.
+
+## Full reference
+
+[`docs/subsystems/subscriptions.md`](https://github.com/markmhendrickson/neotoma/blob/main/docs/subsystems/subscriptions.md) covers the `subscription` schema, the matcher (`subscriptionMatchesEvent`), the bridge (`subscription_bridge.ts`), the SSE hub (`sse_hub.ts`), the webhook delivery worker (`webhook_delivery.ts`), and the boot wiring in `install_subscription_bridge.ts`.

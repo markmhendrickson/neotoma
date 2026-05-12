@@ -125,6 +125,16 @@ Run after preview is approved by the user, before Step 4. Sources: `.cursor/plan
 
 6. **Add a `Security hardening` section to the supplement** at `docs/releases/in_progress/vX.Y.Z/github_release_supplement.md` that links the security review file and any advisory under `docs/security/advisories/` opened or referenced by this release. When `classify-diff` was sensitive this section is mandatory; when not sensitive, write `No security-sensitive surfaces touched.` so the trail is explicit.
 
+**Hard gate before Step 4:** Do not merge, tag, push, create a GitHub Release, publish to npm, or deploy sandbox until Step 3.5 has run against the exact commit that will be released. Before advancing, explicitly verify and report:
+
+- G1 `security:classify-diff` completed and whether `sensitive` is true or false.
+- G2 `security:lint` completed with zero errors; warnings are summarized in `security_review.md`.
+- G3 `security:manifest:check` and `test:security:auth-matrix` completed successfully.
+- G4 `security:ai-review` created `docs/releases/in_progress/vX.Y.Z/security_review.md`, and the file is filled with findings, suggested negative tests, residual risks, and a non-placeholder sign-off verdict (`yes` or `with-caveats`; never `block`).
+- The supplement has a `Security hardening` section that links the review artifact.
+
+If any pre-release commit is added after Step 3.5 runs, rerun Step 3.5 before any merge/tag/push action. If a required branch-protection check is missing or bypassed, the local Step 3.5 evidence must already exist and be called out; never use bypass as a substitute for the lane.
+
 Re-render the GitHub Release preview (`npm run -s release-notes:render`) so the supplement diff is reflected; STOP and re-confirm if the supplement changed materially.
 
 ### Step 4: Execute
@@ -137,7 +147,7 @@ After user confirms, run **every** step below in order through **npm publish and
    ```bash
    git commit -m "Pre-release: include pending changes for vX.Y.Z"
    ```
-   Skip this step if the working tree was clean at confirm time.
+   Skip this step if the working tree was clean at confirm time. If this step creates or changes any commit included in the release, rerun Step 3.5 before continuing to version bump, merge, tag, or push.
 
 2. **Bump version** in `package.json` (and workspaces if monorepo):
    ```bash

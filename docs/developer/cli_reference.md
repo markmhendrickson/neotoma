@@ -710,6 +710,92 @@ The CLI and the Inspector share one `applyBatchCorrection` backend (`src/service
     - After a successful recover, manually archive the live `.db` / `-wal` / `-shm` and then copy the recovered file into place.
     - If corruption recurs, run `neotoma doctor --json`; the `data.risks` block flags cloud-synced data directories and prior repair artifacts.
 
+### Doctor
+
+- `neotoma doctor`: Project health check. Verifies that the global CLI is on `PATH`, that `NEOTOMA_DATA_DIR` and the SQLite db are usable, whether a local API process is running, which MCP server entries the configured harnesses expose, and whether the data directory is on a high-risk filesystem.
+  - `--json`: Emit a structured report instead of the human summary. Designed for agent-led installs (`neotoma setup --output json` consumes it) and for CI/operator scripts.
+  - `--tool <claude-code|cursor|codex|openclaw|claude-desktop>`: Override the current-tool hint that `doctor` ships in the report and that `neotoma setup` reads.
+
+  **`--json` shape (v0.12+):**
+
+  ```jsonc
+  {
+    "version": "0.12.0",                  // installed neotoma version
+    "cwd": "/Users/.../repos/neotoma",
+    "global_cli": {
+      "node_on_path": true,
+      "resolved_via": "global-bin" | "fallback" | "missing",
+      "which_neotoma": "/usr/local/bin/neotoma" | null,
+      "global_bin": "/usr/local/bin",
+      "global_package_dir": "/usr/local/lib/node_modules/neotoma",
+      "npm_global_root": "/usr/local/lib/node_modules",
+      "path_fix_hint": null | "Add /usr/local/bin to your PATH"
+    },
+    "data": {
+      "config_dir": "/Users/.../.neotoma",
+      "data_dir": "/Users/.../Library/Application Support/neotoma/data",
+      "db_exists": true,
+      "initialized": true,
+      "risks": [
+        // 0..N entries — see "data.risks codes" below
+      ],
+      "suggested_safe_data_dir":
+        "/Users/.../Library/Application Support/neotoma/data" | null
+    },
+    "api": {
+      "running": true,
+      "env": "dev" | "prod" | null,
+      "port": 3080,
+      "pid": 12345,
+      "base_url": "http://127.0.0.1:3080"
+    },
+    "mcp_servers_detected": {
+      "cursor": { "path": "~/.cursor/mcp.json", "has_neotoma": true, "has_neotoma_dev": false }
+      // …one entry per harness probed (cursor, claude_code, codex, claude_desktop, openclaw)
+    },
+    "cli_instructions": {
+      "project": { "cursor": true, "claude": false, "codex": false },
+      "user":    { "cursor": true, "claude": false, "codex": false }
+    },
+    "permission_files": { /* per-harness file existence + allow-list match */ },
+    "current_tool_hint": "cursor" | null,
+    "hooks": { /* HooksReport — installed hooks by harness */ },
+    "mirror": { /* MirrorReport — mirror clone state */ },
+    "suggested_next_step":
+      "install" | "init" | "configure-mcp" | "configure-cli-instructions" |
+      "configure-permissions" | "activate" | "offer-hooks" | "offer-mirror" | "ready"
+  }
+  ```
+
+  **`data.risks[]` entry shape:**
+
+  ```jsonc
+  {
+    "code": "icloud_drive"
+          | "macos_synced_desktop_or_documents"
+          | "prior_sqlite_repair_artifacts",
+    "severity": "warn",
+    "message": "<human-readable description>",
+    "suggested_action": "<single concrete next command>"
+  }
+  ```
+
+  The risk detector (`detectDataDirRisks` in `src/cli/doctor.ts`) covers three classes:
+
+  - **`icloud_drive`** — `NEOTOMA_DATA_DIR` resolves inside `~/Library/Mobile Documents/`. iCloud Drive can re-upload `neotoma.db`, `neotoma.db-wal`, and `neotoma.db-shm` while Neotoma is writing, which is the corruption shape behind the SQLite `recover-db` flow. `suggested_action` points at the suggested local-only path returned by `suggested_safe_data_dir`.
+  - **`macos_synced_desktop_or_documents`** — data dir sits under `~/Documents` or `~/Desktop`, both of which macOS enables for iCloud Drive sync by default. `suggested_action` is the matching `neotoma storage set-data-dir "<safe path>" --move-db-files` invocation.
+  - **`prior_sqlite_repair_artifacts`** — the data directory contains marker files (`repair_backups/`, `repair_swaps/`, `recover-errors.log`, or `db_corrupt_before_swap_*`) left behind by a previous `neotoma storage recover-db` run. A recurrence is a signal to move the data dir to local-only storage.
+
+  **`suggested_safe_data_dir`** is computed by `suggestSafeDataDir(os.homedir())`. On macOS it is `~/Library/Application Support/neotoma/data`; on other platforms it returns `null` and the report only contains `risks` without a generated suggestion. The field is `null` whenever `data.risks` is empty.
+
+  **Migration command**: when `data.risks` is non-empty, an operator (or `neotoma setup` acting on their behalf) can move the data dir with:
+
+  ```bash
+  neotoma storage set-data-dir "<suggested_safe_data_dir>" --move-db-files
+  ```
+
+  Cross-references: [`docs/foundation/local_install.md`](../foundation/local_install.md) §§ data-dir hygiene, [`docs/security/threat_model.md`](../security/threat_model.md) `## Operator hardening knobs`, and the `recover:db` script in `### Database and schema` above.
+
 ### Snapshots
 
 Fleet-general write-integrity tooling built on the canonical snapshot layer. `snapshots check` / `snapshots request` operate on the runtime snapshot tables; `snapshots export`, `snapshots diff`, and `snapshots parsers` power the fleet-neutral drift workflow described in `docs/releases/in_progress/v0.6.0/` (item 3: snapshot export + drift comparison).

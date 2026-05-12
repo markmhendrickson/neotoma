@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-05-12T11:46:50.088Z",
-  "total_files": 409,
+  "generated_at": "2026-05-12T14:17:19.220Z",
+  "total_files": 410,
   "by_top_level_folder": {
     "api": 1,
     "architecture": 19,
@@ -13,7 +13,7 @@
     "icp": 8,
     "implementation": 2,
     "infrastructure": 1,
-    "integrations": 10,
+    "integrations": 11,
     "legal": 8,
     "migration": 2,
     "NEOTOMA_MANIFEST.md": 1,
@@ -775,6 +775,10 @@
     },
     {
       "rel": "docs/integrations/hooks/README.md",
+      "top": "integrations"
+    },
+    {
+      "rel": "docs/integrations/openclaw.md",
       "top": "integrations"
     },
     {

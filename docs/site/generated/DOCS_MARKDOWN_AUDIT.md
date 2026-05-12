@@ -2,7 +2,7 @@
 
 Excludes `docs/private` and paths containing `archived`, `releases`, or `in_progress` directory names.
 
-Total files: **409**
+Total files: **410**
 
 ## By top-level folder under docs/
 
@@ -17,7 +17,7 @@ Total files: **409**
 - **proposals**: 13
 - **conventions**: 12
 - **specs**: 12
-- **integrations**: 10
+- **integrations**: 11
 - **testing**: 10
 - **icp**: 8
 - **legal**: 8

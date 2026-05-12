@@ -1021,10 +1021,9 @@ export function buildToolDefinitions(
           reporter_patch_source_id: { type: "string", description: "Optional source id for reporter patch artifact." },
         },
         required: ["title", "body"],
-        anyOf: [
-          { required: ["reporter_git_sha"] },
-          { required: ["reporter_app_version"] },
-        ],
+        // Keep the top-level schema to a plain object for Codex/OpenAI
+        // function-tool compatibility. The server still enforces that callers
+        // provide at least one of reporter_git_sha or reporter_app_version.
       },
     },
     {
@@ -1069,7 +1068,9 @@ export function buildToolDefinitions(
           },
         },
         required: ["body"],
-        anyOf: [{ required: ["entity_id"] }, { required: ["issue_number"] }],
+        // Keep the top-level schema to a plain object for Codex/OpenAI
+        // function-tool compatibility. The server still enforces that callers
+        // provide entity_id or issue_number.
       },
     },
     {
@@ -1106,7 +1107,9 @@ export function buildToolDefinitions(
           },
         },
         required: [],
-        anyOf: [{ required: ["entity_id"] }, { required: ["issue_number"] }],
+        // Keep the top-level schema to a plain object for Codex/OpenAI
+        // function-tool compatibility. The server still enforces that callers
+        // provide entity_id or issue_number.
       },
       annotations: { readOnlyHint: true },
     },

@@ -369,3 +369,54 @@ entries:
     status: canonical_site_page
     canonical_site_path: /
     notes: "Primary marketing landing; rendered at site root."
+
+  - repo_path: docs/site/pages/en/peer-sync.mdx
+    status: canonical_site_page
+    canonical_site_path: /peer-sync
+
+  - repo_path: docs/subsystems/peer_sync.md
+    status: supporting_source
+    canonical_site_path: /peer-sync
+    notes: "Repo subsystem doc with full inbound/outbound paths, semver compat, and conflict resolution. Linked from the site page as 'Full reference'."
+
+  - repo_path: docs/site/pages/en/subscriptions.mdx
+    status: canonical_site_page
+    canonical_site_path: /subscriptions
+
+  - repo_path: docs/subsystems/subscriptions.md
+    status: supporting_source
+    canonical_site_path: /subscriptions
+    notes: "Repo subsystem doc covering the subscription schema, matcher, bridge, SSE hub, webhook worker, and boot wiring."
+
+  - repo_path: docs/site/pages/en/issue-reporting.mdx
+    status: canonical_site_page
+    canonical_site_path: /issue-reporting
+
+  - repo_path: docs/subsystems/issues.md
+    status: supporting_source
+    canonical_site_path: /issue-reporting
+    notes: "Repo subsystem doc covering reporter-provenance contract, GitHub mirror flow, redaction backstop, bulk tools, and the process-issues operator skill."
+
+  - repo_path: docs/site/pages/en/security-hardening.mdx
+    status: canonical_site_page
+    canonical_site_path: /security-hardening
+
+  - repo_path: SECURITY.md
+    status: supporting_source
+    canonical_site_path: /security-hardening
+    notes: "Operator-facing security landing page (top-level repo doc); the site page surfaces the v0.12 operator hardening knobs."
+
+  - repo_path: docs/security/threat_model.md
+    status: supporting_source
+    canonical_site_path: /security-hardening
+    notes: "Threat model end-to-end; the site page surfaces the operator hardening knobs subsection."
+
+  - repo_path: docs/developer/mcp/proxy.md
+    status: supporting_source
+    canonical_site_path: /security-hardening
+    notes: "AAuth MCP proxy + MCP_PROXY_FAIL_CLOSED reference linked from the site security-hardening page."
+
+  - repo_path: docs/integrations/openclaw.md
+    status: supporting_source
+    canonical_site_path: /neotoma-with-openclaw
+    notes: "Native plugin entry reference: src/openclaw_entry.ts, kind: memory, plugins.slots.memory wiring, session lifecycle hooks. The site /neotoma-with-openclaw page covers end-user setup; this doc covers the plugin contract."

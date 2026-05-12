@@ -1,0 +1,72 @@
+import { MdxI18nLink } from "@/components/mdx/mdx_i18n_link";
+
+Operator-tunable hardening knobs introduced or sharpened in v0.12.0. These are the *runtime* security surface that static gates cannot exhaustively cover from source diffs alone — they are owned by the operator running the instance, not by code review.
+
+Use this reference when:
+
+- Standing up a hosted / multi-tenant Neotoma deployment.
+- Auditing whether a self-hosted instance is in a defensible default state.
+- Investigating an alert that touches loopback trust, OAuth bearers, guest tokens, or peer-sync envelopes.
+
+## Loopback rewrite and trust
+
+Neotoma classifies inbound requests as `loopback` only when the underlying TCP socket is on `127.0.0.1` / `::1`. `isLocalRequest` (in `src/utils/local_request.ts`) is the single source of truth — it walks the socket peer address, not the `Host` header, and is used by both the HTTP API and the Inspector to gate developer-only surfaces.
+
+- `NEOTOMA_TRUST_PROD_LOOPBACK=1` — opt-in escape hatch for production instances that need to expose loopback-only routes to a same-host reverse proxy. Defaults off. When unset, prod runs refuse loopback-tagged surfaces from any caller.
+
+## Gate stack (G1–G5)
+
+The five operator-visible gates wrap every write path:
+
+| Gate | Purpose |
+|------|---------|
+| **G1 — Bearer scope** | Validates the `Authorization` bearer token (or AAuth signature) against the requested action's scope. |
+| **G2 — Subject** | Resolves the user, agent, and (when present) `external_actor` triple from the bearer or AAuth thumbprint. |
+| **G3 — Loopback** | Applies `isLocalRequest` + `NEOTOMA_TRUST_PROD_LOOPBACK` for surfaces marked `loopback-only`. |
+| **G4 — Rate limit** | Per-key throttle keyed by AAuth thumbprint > hashed guest token > IP. |
+| **G5 — Schema / payload** | Schema validation and `ERR_STORE_RESOLUTION_FAILED` repair hints for malformed payloads. |
+
+## OAuth Bearer enforcement on `/mcp`
+
+Pre-v0.12, an unrecognized OAuth `Bearer` token on `/mcp` could fall through to anonymous attribution if the token was syntactically a UUID. v0.12 closes that gap:
+
+- Unknown / expired bearers return **HTTP 401** with a JSON-RPC envelope (`code: -32001`, `data.error: "invalid_token"`) and a `WWW-Authenticate: Bearer realm="neotoma", resource_metadata="<url>"` header pointing at the OAuth protected-resource metadata.
+- UUID-shaped tokens passed as `access_token=` query params or `Authorization: Bearer …` no longer downgrade to anonymous on validation failure.
+- Regression coverage: `tests/subscriptions/subscription_guest_auth.test.ts` and `tests/unit/security_hardening.test.ts`.
+
+## MCP proxy: fail-closed mode
+
+`neotoma mcp proxy --aauth` (and operator-deployed AAuth-signed proxies) accept an opt-in flag that refuses unsigned downstream requests when AAuth signing or session preflight fails:
+
+- `MCP_PROXY_FAIL_CLOSED=1` (env) or `failClosed: true` (proxy options).
+- Default is fail-open (legacy behavior); set fail-closed in any hosted deployment so a misconfigured upstream cannot silently downgrade to anonymous writes.
+
+See [`docs/developer/mcp/proxy.md`](https://github.com/markmhendrickson/neotoma/blob/main/docs/developer/mcp/proxy.md) for the proxy options reference.
+
+## Guest write rate limit & token TTL
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `NEOTOMA_GUEST_WRITE_RATE_LIMIT_PER_MIN` | `30` | Per-key throttle on `/issues/submit`, `/issues/add_message`, `/subscribe`, `/unsubscribe`. Key precedence is **AAuth thumbprint > hashed guest token > IP**, so a shared NAT cannot starve another operator. Lower this in hosted multi-tenant environments. |
+| `NEOTOMA_GUEST_TOKEN_TTL_SECONDS` | `2592000` (30 days) | Lifetime of guest access tokens issued by `generateGuestAccessToken`. Tokens carry a `revoked_at` column and become invalid the moment that column is set, regardless of TTL. Generation errors surface (not swallowed) so operators see when persistence fails. |
+
+These knobs do **not** affect authenticated abuse: a `software` / `hardware` AAuth tier write is rate-limited under its own attribution row, not the guest bucket. They exist so a leaked guest token cannot DoS the issue / subscription surfaces.
+
+## Peer-sync hostname enforcement
+
+`NEOTOMA_HOSTED_MODE=1` enables an inbound check on `POST /sync/webhook`: any `sender_peer_url` whose hostname resolves to a private, loopback, or link-local address (RFC 1918, `127.0.0.0/8`, `169.254.0.0/16`, IPv6 `fc00::/7`, `fe80::/10`, the `localhost` family) is rejected. Single-tenant self-hosted operators normally leave it unset; hosted control planes MUST set it. See <MdxI18nLink to="/peer-sync">peer sync</MdxI18nLink> for the full inbound flow.
+
+## Inspector auth bypass advisory
+
+For the May 2026 Inspector auth-bypass that motivated the loopback rewrite, see [`docs/security/advisories/2026-05-11-inspector-auth-bypass.md`](https://github.com/markmhendrickson/neotoma/blob/main/docs/security/advisories/2026-05-11-inspector-auth-bypass.md). The advisory documents the trust model the v0.12 changes restored.
+
+## Operator checklist
+
+- Set `NEOTOMA_HOSTED_MODE=1` on hosted / multi-tenant instances.
+- Set `MCP_PROXY_FAIL_CLOSED=1` on AAuth-signed hosted MCP proxies.
+- Lower `NEOTOMA_GUEST_WRITE_RATE_LIMIT_PER_MIN` and `NEOTOMA_GUEST_TOKEN_TTL_SECONDS` from the single-tenant defaults if guests can reach you.
+- Audit any `NEOTOMA_TRUST_PROD_LOOPBACK=1` opt-in — it should only exist where a trusted same-host reverse proxy actually fronts the API.
+
+## Full reference
+
+[`SECURITY.md`](https://github.com/markmhendrickson/neotoma/blob/main/SECURITY.md) is the operator landing page. [`docs/security/threat_model.md`](https://github.com/markmhendrickson/neotoma/blob/main/docs/security/threat_model.md) covers the threat surface end to end, including the v0.12 operator hardening knobs section. [`docs/developer/mcp/proxy.md`](https://github.com/markmhendrickson/neotoma/blob/main/docs/developer/mcp/proxy.md) documents the AAuth proxy + fail-closed semantics.

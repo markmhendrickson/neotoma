@@ -10818,6 +10818,10 @@ apiCommand
     "--watch",
     "Run the tsx watcher on a source checkout instead of the built runner. Currently the watcher is the default for --env prod on a source checkout; v0.6.0 will flip the default to the built runner and this flag will preserve the watcher behavior for contributors."
   )
+  .addHelpText(
+    "after",
+    "\nEnvironment:\n  Pass the global --env flag as --env dev or --env prod.\n  Both `neotoma --env prod api start` and `neotoma api start --env prod` are accepted.\n"
+  )
   .action(async (opts: {
     background?: boolean;
     tunnel?: boolean;

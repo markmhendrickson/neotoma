@@ -75,7 +75,7 @@ test.describe("Inspector entity detail", () => {
       waitUntil: "domcontentloaded",
     });
 
-    const heading = page.getByRole("heading", { level: 1 });
+    const heading = page.getByRole("heading", { level: 1, name: new RegExp(title) }).first();
     await expect(heading).toBeVisible({ timeout: 45_000 });
     await expect(heading).toContainText(title, { timeout: 15_000 });
 

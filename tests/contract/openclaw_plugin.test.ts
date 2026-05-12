@@ -127,17 +127,38 @@ describe("OpenClaw plugin packaging", () => {
       expect(storeTool!.description).toBe("Custom store description");
     });
 
-    it("issue tools expose entity_id OR issue_number in JSON Schema (MCP client parity)", async () => {
+    it("issue tools avoid top-level anyOf so Codex/OpenAI accept the schemas", async () => {
       const { buildToolDefinitions } = await import("../../src/tool_definitions.js");
       const tools = buildToolDefinitions();
+      const submitIssue = tools.find((t: { name: string }) => t.name === "submit_issue");
       const addMsg = tools.find((t: { name: string }) => t.name === "add_issue_message");
       const getStatus = tools.find((t: { name: string }) => t.name === "get_issue_status");
+
+      for (const tool of [submitIssue, addMsg, getStatus]) {
+        expect(tool?.inputSchema).toBeDefined();
+        expect((tool?.inputSchema as Record<string, unknown>)?.type).toBe("object");
+        expect((tool?.inputSchema as Record<string, unknown>)?.anyOf).toBeUndefined();
+      }
+
       expect(addMsg?.inputSchema).toMatchObject({
         required: ["body"],
-        anyOf: [{ required: ["entity_id"] }, { required: ["issue_number"] }],
+        properties: {
+          entity_id: { type: "string" },
+          issue_number: { type: "integer" },
+        },
       });
       expect(getStatus?.inputSchema).toMatchObject({
-        anyOf: [{ required: ["entity_id"] }, { required: ["issue_number"] }],
+        properties: {
+          entity_id: { type: "string" },
+          issue_number: { type: "integer" },
+        },
+      });
+      expect(submitIssue?.inputSchema).toMatchObject({
+        required: ["title", "body"],
+        properties: {
+          reporter_git_sha: { type: "string" },
+          reporter_app_version: { type: "string" },
+        },
       });
     });
   });

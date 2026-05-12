@@ -60,6 +60,22 @@
     "classification": "other"
   },
   {
+    "path": "/peer-sync",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/subscriptions",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/issue-reporting",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/security-hardening",
+    "classification": "static_mdx"
+  },
+  {
     "path": "/inspector",
     "classification": "other"
   },

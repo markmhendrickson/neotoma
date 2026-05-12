@@ -409,6 +409,54 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "AAuth", path: "/aauth" },
     ],
   },
+  "/peer-sync": {
+    title: "Peer sync | Neotoma",
+    description:
+      "Sign and exchange selected Neotoma entity state between explicit peer instances. Covers add_peer / sync_peer / resolve_sync_conflict, POST /sync/webhook with HMAC X-Neotoma-Sync-Signature-256, env vars, and loop prevention via substrate subscriptions.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Peer sync", path: "/peer-sync" },
+    ],
+  },
+  "/subscriptions": {
+    title: "Substrate subscriptions | Neotoma",
+    description:
+      "Webhook and SSE delivery for Neotoma write-path events. Covers subscribe / unsubscribe / list_subscriptions / get_subscription_status, HMAC-signed webhooks, GET /events/stream, retry policy, circuit breaker, and loop prevention with peer sync.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Subscriptions", path: "/subscriptions" },
+    ],
+  },
+  "/issue-reporting": {
+    title: "Issue reporting | Neotoma",
+    description:
+      "File, sync, and triage Neotoma issues from agents and operators. Covers submit_issue / add_issue_message / sync_issues / bulk_close_issues / bulk_remove_issues, the v0.12 reporter-provenance contract, reporting modes, and GitHub mirror with guest token.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Issue reporting", path: "/issue-reporting" },
+    ],
+  },
+  "/security-hardening": {
+    title: "Security hardening | Neotoma",
+    description:
+      "Operator-tunable hardening knobs for Neotoma: loopback rewrite, OAuth Bearer enforcement on /mcp, MCP proxy fail-closed mode, guest write rate limit, guest token TTL and revocation, and peer-sync hostname enforcement via NEOTOMA_HOSTED_MODE.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Security hardening", path: "/security-hardening" },
+    ],
+  },
   "/inspector": {
     title: "Inspector | Neotoma",
     description:

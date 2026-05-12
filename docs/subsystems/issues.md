@@ -170,6 +170,8 @@ Canonical programmatic surface for full issue lifecycle (see [`docs/specs/MCP_SP
 - `add_issue_message({ entity_id, body, guest_access_token? })` — optional `guest_access_token` when the local row mirrors a remote operator issue and the token is not stored on the issue snapshot.
 - `get_issue_status({ entity_id, skip_sync?, guest_access_token? })` — optional `guest_access_token` for the same read-through case.
 - `sync_issues({ since?, state?, labels? })`.
+- `bulk_close_issues({ entity_ids: string[], reason?: string })` — closes multiple `issue` entities in one call, mirrors `POST /issues/bulk_close`, and is what the Inspector bulk-close action drives.
+- `bulk_remove_issues({ entity_ids: string[], reason?: string })` — soft-deletes multiple `issue` entities (via `deleteEntity` observations), mirrors `POST /issues/bulk_remove`. Use this for triage clean-up; restoration goes through `restore_entity`, not a bulk-restore tool.
 
 ### CLI
 
@@ -191,7 +193,8 @@ First-class HTTP routes (see `openapi.yaml` / `contract_mappings.ts`); each `/is
 - `POST /issues/status` — `getIssueStatus` (MCP `get_issue_status` parity).
 - `POST /issues/sync` — `syncIssuesFromGitHub` (MCP `sync_issues` parity).
 - `POST /issues/add_message` — `addIssueMessage` (MCP `add_issue_message` parity).
-- `POST /issues/bulk_close`, `POST /issues/bulk_remove` — Inspector bulk operations.
+- `POST /issues/bulk_close` — `bulkCloseIssues` (MCP `bulk_close_issues` parity). Accepts `{ entity_ids: string[], reason?: string }`.
+- `POST /issues/bulk_remove` — `bulkRemoveIssues` (MCP `bulk_remove_issues` parity). Soft-delete via `deleteEntity` observations; restoration goes through `restore_entity`.
 
 ## Operations
 

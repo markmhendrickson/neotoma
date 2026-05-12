@@ -2615,10 +2615,19 @@ function buildGuestPrincipalFromRequest(req: express.Request): GuestPrincipal | 
   };
 }
 
-function maybeStampGuestPrincipal(req: express.Request): boolean {
+async function maybeStampGuestPrincipal(req: express.Request): Promise<boolean> {
   if (!routeAcceptsGuestPrincipal(req)) return false;
   const guestPrincipal = buildGuestPrincipalFromRequest(req);
   if (!guestPrincipal) return false;
+
+  const headerAuth = (req.headers.authorization || req.headers.Authorization || "") as string;
+  if (headerAuth.startsWith("Bearer ") && guestPrincipal.accessToken) {
+    const { validateGuestAccessToken } = await import("./services/guest_access_token.js");
+    if (!(await validateGuestAccessToken(guestPrincipal.accessToken))) {
+      return false;
+    }
+  }
+
   stampGuestPrincipal(req, guestPrincipal);
   return true;
 }
@@ -2640,9 +2649,8 @@ async function resolveRoutePrincipal(
 
   if (accept.includes("guest")) {
     const guestPrincipal = buildGuestPrincipalFromRequest(req);
-    if (guestPrincipal) {
-      stampGuestPrincipal(req, guestPrincipal);
-      return guestPrincipal;
+    if (guestPrincipal && (await maybeStampGuestPrincipal(req))) {
+      return requestPrincipal(req) as GuestPrincipal;
     }
   }
 
@@ -2704,8 +2712,19 @@ export async function resolveGuestUserId(
   }
 
   throw new Error(
-    "Guest principal cannot resolve a user_id: no valid token grant and not a local request",
+    "Not authenticated - guest principal cannot resolve a user_id: no valid token grant and not a local request",
   );
+}
+
+async function assertValidGuestAccessToken(principal: GuestPrincipal): Promise<void> {
+  const accessToken = principal.guestId.accessToken;
+  if (!accessToken) return;
+
+  const { validateGuestAccessToken } = await import("./services/guest_access_token.js");
+  const tokenGrant = await validateGuestAccessToken(accessToken);
+  if (!tokenGrant) {
+    throw new Error("Not authenticated - invalid guest access token");
+  }
 }
 
 async function resolveGuestScopedEntityAccess(
@@ -2713,6 +2732,8 @@ async function resolveGuestScopedEntityAccess(
   entityId: string,
   expectedEntityType?: string,
 ): Promise<{ userId: string; entityType: string }> {
+  await assertValidGuestAccessToken(principal);
+
   const { data: entity, error: entityError } = await db
     .from("entities")
     .select("id, entity_type, user_id")
@@ -2815,7 +2836,7 @@ app.use(async (req, res, next) => {
     isLocalRequest(req) &&
     !headerAuth.startsWith("Bearer ")
   ) {
-    if (maybeStampGuestPrincipal(req)) {
+    if (await maybeStampGuestPrincipal(req)) {
       logger.info(`[Auth] ${req.method} ${req.path} auth_method=guest_capability`);
       return next();
     }
@@ -2888,7 +2909,7 @@ app.use(async (req, res, next) => {
     }
   } else {
     if (!headerAuth.startsWith("Bearer ")) {
-      if (maybeStampGuestPrincipal(req)) {
+      if (await maybeStampGuestPrincipal(req)) {
         logger.info(`[Auth] ${req.method} ${req.path} auth_method=guest_capability`);
         return next();
       }
@@ -2936,7 +2957,7 @@ app.use(async (req, res, next) => {
 
   // Bearer required for remaining paths (Ed25519, OAuth)
   if (!headerAuth.startsWith("Bearer ")) {
-    if (maybeStampGuestPrincipal(req)) {
+    if (await maybeStampGuestPrincipal(req)) {
       logger.info(`[Auth] ${req.method} ${req.path} auth_method=guest_capability`);
       return next();
     }
@@ -2989,7 +3010,7 @@ app.use(async (req, res, next) => {
         `[Auth] ${req.method} ${req.path} auth_method=session_bearer user_id=${validated.userId}`
       );
     } catch (authError) {
-      if (maybeStampGuestPrincipal(req)) {
+      if (await maybeStampGuestPrincipal(req)) {
         logger.info(`[Auth] ${req.method} ${req.path} auth_method=guest_capability`);
         return next();
       }

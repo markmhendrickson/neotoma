@@ -216,6 +216,12 @@ describe("CLI infrastructure command smoke tests", () => {
       const out = await getHelp("api status");
       expect(out).toMatch(/status|Usage|Options/i);
     });
+
+    it("api start --help mentions the required env flag", async () => {
+      const out = await getHelp("api start");
+      expect(out).toMatch(/--env dev or --env prod/i);
+      expect(out).toMatch(/api start --env prod/i);
+    });
   });
 
   describe("top-level infrastructure commands", () => {

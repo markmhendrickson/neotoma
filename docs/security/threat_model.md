@@ -84,6 +84,33 @@ The attribution contract (`docs/subsystems/agent_attribution_integration.md`) tr
 - **`// neotoma:security-allow:<rule-id> <reason>`** on the previous line suppresses a single Semgrep finding. The suppression is recorded in the run report and reviewed in `security_review.md`.
 - **`NEOTOMA_TRUST_PROD_LOOPBACK=1`** is the only sanctioned production opt-out for the loopback-trust check; operators using single-host deployments document this in their runbook.
 
+## Operator hardening knobs (v0.12+)
+
+These environment variables shape the *runtime* threat surface that the gates cannot exhaustively check from source diffs. They are owned by the operator, not by code review.
+
+### Guest write rate limit & token TTL
+
+| Variable | Default | What it controls |
+|----------|---------|------------------|
+| `NEOTOMA_GUEST_WRITE_RATE_LIMIT_PER_MIN` | `30` | Per-key write throttle for `/issues/submit`, `/issues/add_message`, `/subscribe`, and `/unsubscribe`. The key precedence is **AAuth thumbprint > hashed guest token > IP** so a shared NAT cannot starve another operator on the same egress. Set lower in hosted multi-tenant environments. |
+| `NEOTOMA_GUEST_TOKEN_TTL_SECONDS` | `2592000` (30 days) | Lifetime of guest access tokens issued by `generateGuestAccessToken`. Tokens persist a `revoked_at` column and become invalid the moment that column is set, regardless of TTL. Generation errors are surfaced (not swallowed) so operators see when persistence fails. |
+
+These knobs do **not** protect against authenticated abuse (a `software`/`hardware` AAuth tier write is rate-limited under its own attribution row, not the guest bucket). They exist so a hostile guest token, or a guest token leaked to an automated scraper, cannot DoS the issue / subscription surfaces.
+
+### OAuth Bearer enforcement on `/mcp` (v0.12+)
+
+Pre-v0.12, an unrecognized OAuth `Bearer` token on `/mcp` could fall through to anonymous attribution if the token was syntactically a UUID. v0.12 closes that gap:
+
+- Unknown / expired `Bearer` tokens now return **`401`** with a JSON-RPC error envelope (`code: -32001`, `data.error: "invalid_token"`) and a `WWW-Authenticate: Bearer realm="neotoma", resource_metadata="<url>"` header pointing at the OAuth protected-resource metadata.
+- UUID-shaped tokens passed as `access_token=` query params or `Authorization: Bearer …` no longer downgrade to anonymous on validation failure.
+- Regression coverage: `tests/subscriptions/subscription_guest_auth.test.ts` and `tests/unit/security_hardening.test.ts`.
+
+Operators running hosted / tunnelled MCP proxies should also set **`MCP_PROXY_FAIL_CLOSED=1`** (or `failClosed: true` on the proxy options) so unsigned downstream requests are refused when AAuth signing is required; see [`docs/developer/mcp/proxy.md`](../developer/mcp/proxy.md).
+
+### Inbound peer-sync hostname enforcement
+
+When `NEOTOMA_HOSTED_MODE=1`, `sync_webhook_inbound` rejects any `sender_peer_url` whose hostname is private, loopback, or link-local. See [`docs/subsystems/peer_sync.md`](../subsystems/peer_sync.md) `## Concepts`. This blocks a hostile peer from naming `http://127.0.0.1` to coerce snapshot fetches against the host's loopback interface.
+
 ## Index of evidence
 
 - `scripts/security/classify_diff.js` — G1 path map.

@@ -1,0 +1,85 @@
+import { MdxI18nLink } from "@/components/mdx/mdx_i18n_link";
+
+The issues subsystem is the primary feedback channel for iterative Neotoma improvement based on agentic usage. v0.12.0 hardens the reporter provenance contract, formalizes operator-mirror flows, and adds bulk operator tools for triage.
+
+Use the issues surface when:
+
+- An agent hits friction during a Neotoma operation (failing tool call, opaque error, missing surface, doc gap) and the harness `issues.reporting_mode` allows filing.
+- A per-turn self-audit produces a file-worthy finding (schema-projection drift, ambiguous identity rule, recurring product weakness) and the agent should file or escalate.
+- A human operator wants to triage many issues at once (close, soft-remove) from the Inspector or scripts.
+
+## MCP tools
+
+- `submit_issue({ title, body, labels?, visibility?, reporter_git_sha?, reporter_git_ref?, reporter_channel?, reporter_app_version?, reporter_ci_run_id?, reporter_patch_source_id? })` — creates a local `issue` entity and optional GitHub / operator mirror per `visibility`. **Required (v0.12+):** at least one of `reporter_git_sha` or `reporter_app_version`. Rejection envelope returns `error_code: "ERR_REPORTER_ENVIRONMENT_REQUIRED"` plus `details.acceptable_field_groups: [["reporter_git_sha"], ["reporter_app_version"]]` so callers can retry with the right alternative.
+- `add_issue_message({ entity_id, body, guest_access_token? })` — appends a thread message. On public threads, missing both `reporter_git_sha` and `reporter_app_version` emits a server-side warning (the message still persists).
+- `get_issue_status({ entity_id, skip_sync?, guest_access_token? })` — snapshot + messages, with operator read-through and GitHub refresh when mirrored.
+- `sync_issues({ since?, state?, labels? })` — bulk pull from GitHub into the local instance.
+- `bulk_close_issues({ entity_ids: string[], reason? })` — closes multiple `issue` entities in one call.
+- `bulk_remove_issues({ entity_ids: string[], reason? })` — soft-deletes multiple `issue` entities via `deleteEntity` observations; restore through `restore_entity`.
+
+## HTTP routes
+
+- `POST /issues/submit` — `submitIssue` (MCP `submit_issue` parity).
+- `POST /issues/add_message` — `addIssueMessage` (MCP `add_issue_message` parity).
+- `POST /issues/status` — `getIssueStatus`.
+- `POST /issues/sync` — `syncIssuesFromGitHub`.
+- `POST /issues/bulk_close` — `bulkCloseIssues`.
+- `POST /issues/bulk_remove` — `bulkRemoveIssues`.
+
+Each `/issues/*` route is also mounted under `/api/issues/*` for same-origin proxies.
+
+## Reporter provenance contract
+
+`submit_issue` (and the `add_issue_message` soft-warn path) require enough environment to reconstruct what an agent saw at filing time. The required fields:
+
+| Field | Meaning |
+|-------|---------|
+| `reporter_git_sha` | Commit SHA of the Neotoma source the agent was running. Required when `reporter_app_version` is absent. |
+| `reporter_app_version` | Published `neotoma` package version. Required when `reporter_git_sha` is absent. |
+| `reporter_git_ref` | Optional branch / tag the agent was on. |
+| `reporter_channel` | Optional channel (`stable`, `next`, etc.). |
+| `reporter_ci_run_id` | Optional CI run id for automated reproduction. |
+| `reporter_patch_source_id` | Optional pointer at a local patch source the agent was running. |
+
+> **Breaking change in v0.12.0:** Pre-v0.12 `submit_issue` calls without any of `reporter_git_sha` / `reporter_app_version` were accepted. They now reject with `ERR_REPORTER_ENVIRONMENT_REQUIRED`. See the contract fixture at `tests/contract/legacy_payloads/v0.12.x/issues_submit_without_reporter_env`.
+
+## Reporting modes
+
+`issues.reporting_mode` (overridable via `NEOTOMA_ISSUES_REPORTING_MODE`) gates whether an agent files autonomously:
+
+- **`consent` (default)** — obtain explicit user approval before each `submit_issue`.
+- **`proactive`** — file immediately without asking.
+- **`off`** — only file when the user explicitly requests it.
+
+Persisted via `neotoma issues config --mode <choice>`.
+
+## GitHub mirror + guest token flow
+
+When `visibility: "public"` and an `issues.target_url` is configured, `submit_issue` writes the local row first and then mirrors to the configured operator instance. The response may include a `guest_access_token` scoped to the issue thread so subsequent `add_issue_message` / `get_issue_status` calls can read through to the operator copy without re-authenticating. The token persists on the local issue snapshot and is treated as a credential.
+
+Sensitive content is redacted client-side before mirroring: emails, phone numbers, API tokens, UUIDs, and home-directory path fragments are replaced with `<LABEL:hash>` placeholders so the public GitHub mirror stays safe.
+
+## Example
+
+File a public issue from an agent run:
+
+```bash
+neotoma issues create \
+  --title "store rejects flat conversation rows" \
+  --body "Repro: store with entity_type: conversation, no target_id…" \
+  --visibility public \
+  --labels mcp,store
+```
+
+Triage a batch of duplicates via the Inspector or scripts:
+
+```bash
+curl -X POST http://localhost:3080/issues/bulk_close \
+  -H "Authorization: Bearer $NEOTOMA_BEARER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"entity_ids":["ent_…1","ent_…2","ent_…3"],"reason":"duplicate of #42"}'
+```
+
+## Full reference
+
+[`docs/subsystems/issues.md`](https://github.com/markmhendrickson/neotoma/blob/main/docs/subsystems/issues.md) covers the reporter-provenance contract end to end, the `sync_issues_from_github.ts` and `submit_issue.ts` services, the redaction backstop in the entity-submission flow, and the recommended `process-issues` operator skill.

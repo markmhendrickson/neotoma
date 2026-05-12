@@ -1,6 +1,6 @@
 # Subscriptions
 
-Substrate event subscriptions deliver write-path notifications to external consumers via webhook (`POST` with HMAC signature) or Server-Sent Events (long-lived `GET /subscriptions/sse`). Subscriptions are first-class `subscription` entities so their config, history, and provenance live in the same SQLite + reducer model as any other Neotoma record.
+Substrate event subscriptions deliver write-path notifications to external consumers via webhook (`POST` with HMAC signature) or Server-Sent Events (long-lived `GET /events/stream?subscription_id=<id>`). Subscriptions are first-class `subscription` entities so their config, history, and provenance live in the same SQLite + reducer model as any other Neotoma record.
 
 ## Scope
 
@@ -10,7 +10,7 @@ This document covers:
 - The matcher (`subscriptionMatchesEvent`) and the bridge that fans events out (`subscription_bridge.ts`).
 - Webhook delivery (signing, retries, rate limit, allow-list).
 - SSE hub (ring buffer, `Last-Event-ID` resume).
-- The action surface (`subscribe`, `unsubscribe`, `list_subscriptions`).
+- The action surface (`subscribe`, `unsubscribe`, `list_subscriptions`, `get_subscription_status`).
 - Loop prevention for cross-instance peer sync (`sync_peer_id`).
 
 It does NOT cover:
@@ -98,7 +98,7 @@ The bridge is wired once at server startup by `installSubscriptionBridge`. The i
 
 ## SSE delivery contract
 
-- Endpoint: `GET /subscriptions/sse?subscription_id=<id>` (auth required; subscription must be owned by the caller).
+- Endpoint: `GET /events/stream?subscription_id=<id>` (auth required; subscription must be owned by the caller). This is the canonical path (registered in `src/actions.ts` and exposed in `openapi.yaml`); the legacy `GET /subscriptions/sse` shorthand was dropped before v0.12.0 — update any older clients.
 - Frame format: `id: <ring_id>\nevent: <event_type>\ndata: <json>\n\n`.
 - Resume: clients should send `Last-Event-ID: <ring_id>` so the hub replays buffered events newer than that id (subject to the ring cap).
 - Buffer eviction: when the ring exceeds `NEOTOMA_SSE_EVENT_BUFFER`, the oldest entries are dropped; reconnects past that watermark resume from the live tail.
@@ -136,4 +136,4 @@ Operator playbook:
 - [`substrate_events.md`](substrate_events.md) — the upstream event source.
 - [`peer_sync.md`](peer_sync.md) — cross-instance replication that piggy-backs on subscriptions when `sync_peer_id` is set.
 - [`agent_attribution_integration.md`](agent_attribution_integration.md) — `agent_thumbprint` propagation into events.
-- [`docs/specs/MCP_SPEC.md`](../specs/MCP_SPEC.md) — `subscribe` / `unsubscribe` / `list_subscriptions` action contracts.
+- [`docs/specs/MCP_SPEC.md`](../specs/MCP_SPEC.md) — `subscribe` / `unsubscribe` / `list_subscriptions` / `get_subscription_status` action contracts.

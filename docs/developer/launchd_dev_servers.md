@@ -37,6 +37,15 @@ Re-install the plist after template changes: `npm run setup:launchd-dev`.
 
 To **reload** an already-installed Neotoma agent without re-running the full installer (after local plist edits or to bounce the process): `npm run reload:launchd-neotoma` from any directory on macOS. That script only touches Neotoma-owned labels under `~/Library/LaunchAgents` (see `scripts/reload_neotoma_launchagents.sh`).
 
+To **clear orphan dev/prod API processes that survived a crashed reload** (the failure mode that accumulated 50+ stale dev API instances on ports `3145`–`3179` prior to v0.12.0): `bash scripts/reload_neotoma_launchagents.sh --kill-zombies`. The flag SIGTERMs four orphan patterns rooted in the current repo before re-loading the LaunchAgents:
+
+1. `node dist/index.js` with `PPID=1` — legacy zombies adopted by launchd after a crash.
+2. `scripts/with_branch_ports.js node --import tsx … src/actions.ts` chains plus their immediate `tsx` server child — left over from chokidar reload chains that did not propagate `SIGTERM` to the API server group.
+3. `tsx watch … src/actions.ts` chains rooted in this repo — left behind by `npm test` / `vitest` integration suites.
+4. `npm exec tsx … src/actions.ts` invocations from manual debug runs.
+
+The v0.12.0 dev-server watcher now spawns the API as a process-group leader and SIGTERMs the whole group on reload, so the steady-state orphan rate is near zero. `--kill-zombies` remains the recovery path when an earlier (pre-v0.12.0) install left zombies on disk, or when an integration test forced-killed a parent without cleaning up its server worker.
+
 To **fully stop** the Neotoma launchd stack (dev/prod/watch-build/issues-sync plus leftover launchd-owned server/watch processes): `npm run shutdown:launchd-neotoma`.
 
 ## Commands

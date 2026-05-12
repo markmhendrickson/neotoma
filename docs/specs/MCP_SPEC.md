@@ -450,6 +450,8 @@ See [`docs/subsystems/interpretations.md`](../subsystems/interpretations.md).
 | `add_issue_message`| Append thread message on an `issue` entity; may mirror to GitHub / operator per configuration. Soft-requires reporter env on public threads (v0.12+).                                                                                        | Strong      | Partial       | Available |
 | `get_issue_status` | Snapshot + messages for an `issue`; operator read-through and GitHub refresh when mirrored                                                                                           | Strong      | Yes           | Available |
 | `sync_issues`      | Bulk pull issues (and messages) from configured GitHub into local Neotoma                                                                                                           | Strong      | Partial       | Available |
+| `bulk_close_issues`| Close multiple `issue` entities in one call (operator/Inspector triage). HTTP twin: `POST /issues/bulk_close`.                                                                          | Strong      | Yes           | Available |
+| `bulk_remove_issues`| Soft-delete multiple `issue` entities (operator/Inspector triage clean-up) via `deleteEntity` observations; restore through `restore_entity`. HTTP twin: `POST /issues/bulk_remove`.   | Strong      | Yes           | Available |
 
 Canonical behavior: [`docs/subsystems/issues.md`](../subsystems/issues.md).
 
@@ -685,6 +687,9 @@ Clients can subscribe to resource updates:
   entities?: Array<Record<string, unknown>>;
   relationships?: Array<{ relationship_type: string; source_index: number; target_index: number }>;
   source_priority?: number;
+  observation_source?: "sensor" | "workflow_state" | "llm_summary" | "human" | "import" | "sync";
+  source_peer_id?: string;
+  external_actor?: { kind: "github_user"; login: string; html_url?: string };
   file_content?: string;
   file_path?: string;
   mime_type?: string;
@@ -694,6 +699,14 @@ Clients can subscribe to resource updates:
 ```
 
 Validation: at least one of `entities`, `file_path`, or (`file_content` + `mime_type`) is required. Both structured and unstructured inputs may be present together.
+
+**Write-classification, sync, and external attribution (v0.12+):**
+
+- `observation_source` classifies the *kind* of write. The reducer uses this as a deterministic tie-break **after** numeric `source_priority` so classified writes beat unclassified legacy rows. Set this only when the writer is **not** an LLM summary — for sensor / state-machine / human / import / sync writes. Plain agent extraction omits the field and defaults to `llm_summary`.
+- `source_peer_id` stamps observations with the peer that produced them. Used for loop prevention on subscriptions whose `sync_peer_id` matches, and for the `Inspector → peers` audit view. Always pairs with `observation_source: "sync"`.
+- `external_actor` carries the upstream human/account behind a guest write (e.g. the GitHub user attached to an issue mirror). It is **orthogonal to AAuth attribution**: AAuth identifies the *signing agent*, `external_actor` identifies the *human or account on whose behalf* the agent wrote. Both surface in the Inspector. Reducer priority for the `external_actor` field on the entity follows `source_priority` rules; for an issue the GitHub user from `sync_issues` outranks chat-only inferred authors via `source_priority: 1000`.
+
+See [`docs/subsystems/peer_sync.md`](../subsystems/peer_sync.md) for `source_peer_id` / `observation_source: "sync"` semantics, and [`docs/subsystems/issues.md`](../subsystems/issues.md) `## Reporter provenance` for the `external_actor` usage on issue mirrors.
 
 **Combined Response Schema:**
 
@@ -769,6 +782,19 @@ The server handles all interpretation automatically. Agents should only pass the
     target_index: number;             // 0-based index into entities
   }>;                                 // One-call chat: [conversation, agent_message] + [{ PART_OF, source_index: 1, target_index: 0 }]
   source_priority?: number;           // Optional: Source priority (default: 100)
+  observation_source?:                 // Optional: classifies the KIND of write (v0.12+)
+    | "sensor"                         //   deterministic tool / telemetry emission
+    | "workflow_state"                 //   state machine transitions
+    | "llm_summary"                    //   LLM-authored content (default; omit for plain extraction)
+    | "human"                          //   direct human edit or acceptance
+    | "import"                         //   batch / ETL ingestion
+    | "sync";                          //   cross-instance peer replication (always pairs with source_peer_id)
+  source_peer_id?: string;             // Optional (v0.12+): peer_id of the producing instance for sync replays
+  external_actor?: {                   // Optional (v0.12+): upstream human / account behind a guest write
+    kind: "github_user";
+    login: string;
+    html_url?: string;
+  };
   provenance?: {
     source_refs?: string[];           // Optional: Immediate source IDs
     extracted_at: string;             // Required: ISO 8601 timestamp
@@ -2124,6 +2150,8 @@ The following tools are first-class MCP actions (listed in §2 catalog tables an
 | `add_issue_message` | Yes | `entity_id`, `body`, optional `guest_access_token`. Soft-required on public threads (v0.12+): `reporter_git_sha`, `reporter_app_version` (`reporter_git_ref`, `reporter_channel` also accepted). |
 | `get_issue_status` | No | `entity_id`, optional `skip_sync`, `guest_access_token`. |
 | `sync_issues` | Yes | Optional `state`, `labels`, `since`. |
+| `bulk_close_issues` | Yes | `entity_ids: string[]` (required, non-empty), optional `reason`. |
+| `bulk_remove_issues` | Yes | `entity_ids: string[]` (required, non-empty), optional `reason`. |
 | `subscribe` | Yes | Requires `delivery_method` plus at least one of `entity_types`, `entity_ids`, `event_types`; webhook URL rules per OpenAPI. |
 | `unsubscribe` | Yes | `subscription_id`. |
 | `list_subscriptions` | No | Lists active rows (secrets omitted). |

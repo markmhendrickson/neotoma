@@ -72,6 +72,9 @@ When deploying or developing Neotoma:
 6. **Keep storage paths and data directories private**; do not symlink them into a web-served directory.
 7. **Rotate bearer tokens** periodically and after any advisory in `docs/security/advisories/` whose affected range includes your deployment.
 8. **Never commit `.env` or credentials** — see [`docs/conventions/code_conventions.md`](docs/conventions/code_conventions.md).
+9. **Tune the guest-write and token-TTL knobs** for hosted / multi-tenant deployments. The defaults (`NEOTOMA_GUEST_WRITE_RATE_LIMIT_PER_MIN=30`, `NEOTOMA_GUEST_TOKEN_TTL_SECONDS=2592000`) suit single-tenant self-hosted instances; lower them in hosted contexts. See [`docs/security/threat_model.md`](docs/security/threat_model.md#operator-hardening-knobs-v012) `## Operator hardening knobs`.
+10. **Set `NEOTOMA_HOSTED_MODE=1`** on hosted / multi-tenant deployments so inbound peer-sync rejects private / loopback `sender_peer_url` values; see [`docs/subsystems/peer_sync.md`](docs/subsystems/peer_sync.md) `## Concepts`.
+11. **Set `MCP_PROXY_FAIL_CLOSED=1`** on AAuth-signed hosted MCP proxies so unsigned downstream requests are refused when signing or session preflight fails; see [`docs/developer/mcp/proxy.md`](docs/developer/mcp/proxy.md).
 
 ## Index
 

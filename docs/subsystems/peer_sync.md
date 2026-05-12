@@ -67,6 +67,7 @@ Neotoma can register **peers** (`peer_config` entities) and exchange incremental
 - **`NEOTOMA_LOCAL_PEER_ID`**: Stable identifier **this** instance uses as `sender_peer_id` when **you** POST to a peer’s `/sync/webhook`. It must match the value your peer configured as their `peer_id` for you.
 - **`sync_target_user_id`**: Optional field on `peer_config` — the **receiver’s** Neotoma `user_id` on the peer instance. Required for outbound webhooks so the peer can look up the shared secret via `getPeerSecretForVerification(target_user_id, sender_peer_id)`.
 - **`NEOTOMA_PUBLIC_BASE_URL`**: Public base URL of **this** API (no trailing slash), used as `sender_peer_url` on outbound sync so the peer can `GET …/entities/{entity_id}`.
+- **`NEOTOMA_HOSTED_MODE`**: Operator opt-in for hosted / multi-tenant deployments. When set to `1`, `sync_webhook_inbound` rejects any `sender_peer_url` whose hostname resolves to a private, loopback, or link-local address (RFC 1918, `127.0.0.0/8`, `169.254.0.0/16`, IPv6 `fc00::/7`, `fe80::/10`, and the `localhost` family). Self-hosted single-tenant operators normally leave it unset; hosted control planes (for example the sandbox or any operator-run multi-user instance) MUST set it to prevent a malicious peer from naming `http://127.0.0.1` as its `sender_peer_url` and tricking the server into fetching snapshots from the host's loopback interface. Mirrors the threat-model guidance at [`docs/security/threat_model.md`](../security/threat_model.md).
 
 ## HTTP surface
 
@@ -123,9 +124,10 @@ Inbound handler for `POST /sync/webhook`. Steps:
 
 1. Resolve the receiver `user_id` and look up the matching `peer_config` row.
 2. Verify the signature (`shared_secret` HMAC or AAuth, depending on `auth_method`).
-3. Fetch the source entity snapshot from the sender (`GET {sender_peer_url}/entities/{entity_id}` for `prefer_remote`, or accept the inline payload for `last_write_wins`).
-4. Store an observation with `observation_source: "sync"` and `source_peer_id`.
-5. Update `last_sync_at` on the local `peer_config`.
+3. Validate `sender_peer_url` against the configured `peer_url` after normalization; mismatched values are rejected before any outbound fetch is attempted. When `NEOTOMA_HOSTED_MODE=1`, reject any `sender_peer_url` whose hostname is private, loopback, or link-local — this stops a hostile peer from naming `http://127.0.0.1` and forcing the server to fetch snapshots from its own loopback.
+4. Fetch the source entity snapshot from the sender (`GET {sender_peer_url}/entities/{entity_id}` for `prefer_remote`, or accept the inline payload for `last_write_wins`).
+5. Store an observation with `observation_source: "sync"` and `source_peer_id`.
+6. Update `last_sync_at` on the local `peer_config`.
 
 The handler is idempotent — replaying the same signed payload produces no new observation because the inbound store carries a deterministic idempotency key.
 

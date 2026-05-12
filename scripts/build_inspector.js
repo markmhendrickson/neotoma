@@ -3,9 +3,12 @@
 /**
  * Build the Inspector submodule and copy its dist into dist/inspector/.
  *
- * Idempotent: skips when the submodule is absent or SKIP_INSPECTOR_BUILD=1.
  * Intended for prepublishOnly and pack:local — not called during normal
  * development (use `cd inspector && npm run dev` instead).
+ *
+ * Publishing must fail closed: shipping without `dist/inspector/` breaks the
+ * packaged Inspector because npm installs do not include the `inspector/`
+ * source checkout fallback.
  */
 
 import { existsSync, mkdirSync, rmSync, cpSync, statSync } from "node:fs";
@@ -29,10 +32,10 @@ if (process.env.SKIP_INSPECTOR_BUILD === "1") {
 
 if (!existsSync(join(INSPECTOR_DIR, "package.json"))) {
   log(
-    "inspector/ submodule not initialised (no package.json). Skipping. " +
-      "Run `git submodule update --init inspector` to enable.",
+    "ERROR: inspector/ submodule not initialised (no package.json). " +
+      "Run `git submodule update --init inspector` before packaging or publishing.",
   );
-  process.exit(0);
+  process.exit(1);
 }
 
 // Install dependencies only when node_modules is missing or package-lock

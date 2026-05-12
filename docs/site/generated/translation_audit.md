@@ -32,6 +32,7 @@
 | `/install` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/install/docker` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/install/manual` | en, es | 2026-05-07 | canonical, machine_draft |
+| `/issue-reporting` | en | 2026-05-12 | canonical |
 | `/logistics` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/mcp` | en | 2026-05-07 | canonical |
 | `/memory-guarantees` | en, es | 2026-05-07 | canonical, machine_draft |
@@ -60,6 +61,7 @@
 | `/neotoma-with-opencode` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/non-destructive-testing` | en, es | 2026-05-08 | canonical |
 | `/operating` | en, es | 2026-05-07 | canonical, machine_draft |
+| `/peer-sync` | en | 2026-05-12 | canonical |
 | `/personal-data` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/portfolio` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/primitives` | en, es | 2026-05-07 | canonical, machine_draft |
@@ -82,9 +84,11 @@
 | `/schemas/registry` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/schemas/storage-layers` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/schemas/versioning` | en, es | 2026-05-07 | canonical, machine_draft |
+| `/security-hardening` | en | 2026-05-12 | canonical |
 | `/semantic-similarity-search` | en | 2026-05-07 | canonical |
 | `/silent-mutation-risk` | en | 2026-05-07 | canonical |
 | `/strong-consistency` | en | 2026-05-08 | canonical |
+| `/subscriptions` | en | 2026-05-12 | canonical |
 | `/terms` | en | 2026-05-07 | canonical |
 | `/trading` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/transactional-writes` | en | 2026-05-08 | canonical |
