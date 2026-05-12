@@ -9,6 +9,11 @@
 import { db } from "../db.js";
 import { createHash } from "node:crypto";
 
+import {
+  emitEntityLifecycle,
+  emitRelationshipLifecycle,
+} from "../events/substrate_store_emit.js";
+
 export interface DeletionObservation extends Record<string, unknown> {
   id: string;
   entity_id: string;
@@ -129,6 +134,14 @@ export async function softDeleteEntity(
       };
     }
 
+    emitEntityLifecycle({
+      user_id: userId,
+      entity_id: entityId,
+      entity_type: entityType,
+      event_type: "entity.deleted",
+      timestamp: deletedAt,
+      observation_id: data.id as string,
+    });
     return {
       success: true,
       observation_id: data.id,
@@ -215,6 +228,16 @@ export async function softDeleteRelationship(
       };
     }
 
+    emitRelationshipLifecycle({
+      user_id: userId,
+      relationship_key: relationshipKey,
+      relationship_type: relationshipType,
+      source_entity_id: sourceEntityId,
+      target_entity_id: targetEntityId,
+      event_type: "relationship.deleted",
+      timestamp: deletedAt,
+      observation_id: data.id as string,
+    });
     return {
       success: true,
       observation_id: data.id,
@@ -285,6 +308,14 @@ export async function restoreEntity(
       };
     }
 
+    emitEntityLifecycle({
+      user_id: userId,
+      entity_id: entityId,
+      entity_type: entityType,
+      event_type: "entity.restored",
+      timestamp: restoredAt,
+      observation_id: data.id as string,
+    });
     return {
       success: true,
       observation_id: data.id,
@@ -371,6 +402,16 @@ export async function restoreRelationship(
       };
     }
 
+    emitRelationshipLifecycle({
+      user_id: userId,
+      relationship_key: relationshipKey,
+      relationship_type: relationshipType,
+      source_entity_id: sourceEntityId,
+      target_entity_id: targetEntityId,
+      event_type: "relationship.restored",
+      timestamp: restoredAt,
+      observation_id: data.id as string,
+    });
     return {
       success: true,
       observation_id: data.id,

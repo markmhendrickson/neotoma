@@ -36,6 +36,7 @@ export interface EntitySchemaMetadata {
     | "agent_runtime";
   aliases?: string[];
   primaryProperties?: string[]; // Optional: can derive from required fields
+  guest_access_policy?: "closed" | "read_only" | "submit_only" | "submitter_scoped" | "open";
 }
 
 export interface EntitySchema {
@@ -906,6 +907,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       description: "Chat conversation container entity.",
       category: "knowledge",
       aliases: ["chat_conversation", "thread"],
+      guest_access_policy: "submitter_scoped",
     },
     schema_definition: {
       fields: {
@@ -958,13 +960,14 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
 
   conversation_message: {
     entity_type: "conversation_message",
-    schema_version: "1.2",
+    schema_version: "1.3",
     metadata: {
       label: "Chat Message",
       description:
         "One turn in a conversation. Sender may be a human user, an assistant, another agent, a system, or a tool; see sender_kind. Phase 2 (2026-04) renamed the canonical entity_type from `agent_message`; `agent_message` remains an alias for backward compatibility.",
       category: "knowledge",
       aliases: ["agent_message", "chat_message"],
+      guest_access_policy: "submitter_scoped",
     },
     schema_definition: {
       fields: {
@@ -984,6 +987,16 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         sender_agent_id: { type: "string", required: false },
         // Phase 1: stable identifier of the recipient agent for A2A traffic.
         recipient_agent_id: { type: "string", required: false },
+        // v1.3: optional reporter environment for messages on issue threads.
+        // Soft requirement (server warns rather than rejects); agent
+        // instructions require populating these when the message is
+        // authored by a user/assistant on an `issue`'s conversation so
+        // operators can correlate debugging steps with the build the
+        // reporter is testing against.
+        reporter_git_sha: { type: "string", required: false },
+        reporter_git_ref: { type: "string", required: false },
+        reporter_channel: { type: "string", required: false },
+        reporter_app_version: { type: "string", required: false },
       },
       // v1.2: turn-scoped identity via caller-supplied `turn_key`. Falls
       // through to heuristic when missing; R2 `name_collision_policy: reject`
@@ -1000,6 +1013,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         sender_kind: { strategy: "last_write" },
         sender_agent_id: { strategy: "last_write" },
         recipient_agent_id: { strategy: "last_write" },
+        reporter_git_sha: { strategy: "last_write" },
+        reporter_git_ref: { strategy: "last_write" },
+        reporter_channel: { strategy: "last_write" },
+        reporter_app_version: { strategy: "last_write" },
       },
     },
   },
@@ -2506,6 +2523,9 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         notes: { type: "string", required: false },
         last_used_at: { type: "date", required: false },
         import_source: { type: "string", required: false },
+        linked_github_login: { type: "string", required: false },
+        linked_github_user_id: { type: "number", required: false },
+        linked_github_verified_at: { type: "date", required: false },
       },
       // Identity rules: thumbprint pin wins (rotated JWT issuer cannot
       // quietly replace the grant); otherwise a (sub, iss) composite; else
@@ -2529,6 +2549,9 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         match_iss: { strategy: "last_write" },
         match_thumbprint: { strategy: "last_write" },
         import_source: { strategy: "last_write" },
+        linked_github_login: { strategy: "last_write" },
+        linked_github_user_id: { strategy: "last_write" },
+        linked_github_verified_at: { strategy: "last_write" },
       },
     },
   },

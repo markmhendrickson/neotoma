@@ -1,9 +1,10 @@
 # agent.neotoma.io
 
-Netlify Functions + Netlify Blobs that form the agent-facing feedback intake
-surface. The Neotoma MCP server `submit_feedback` / `get_feedback_status`
-tools forward to these routes; the local cron (`scripts/cron/ingest_agent_incidents.ts`)
-pulls pending items and writes status back.
+Netlify Functions + Netlify Blobs that form the legacy HTTP feedback intake
+surface (`/feedback/*`). Neotoma agents file product issues via MCP
+`submit_issue` / `get_issue_status` (GitHub Issues — see
+`src/services/issues/`). HTTP clients may still POST here when configured;
+the optional local cron path pulls pending items and writes status back.
 
 See `docs/subsystems/agent_feedback_pipeline.md` for the full architecture.
 

@@ -41,3 +41,11 @@ Neotoma gives AI structured personal data memory built on three defensible archi
 - Explicit provenance (trust and auditability)
 **Strategic Positioning:** Provider memory (ChatGPT, Claude, Gemini) and startups (Supermemory.ai) are developing similar feature capabilities (structured memory, entity resolution, timelines), but cannot pursue Neotoma's defensible architectural choices due to structural constraints. See [`docs/private/competitive/defensible_differentiation_framework.md`](../private/competitive/defensible_differentiation_framework.md).
 **Neotoma is the "RAM + HDD" for AI-native personal computing.**
+
+## 6.4 Agent Coordination Is Still Polling-Based
+
+Even when agents share a memory layer, they discover state changes by polling — re-querying on intervals or at session start. This creates latency (minutes to hours between state change and agent awareness), wasted compute (most polls return no changes), and a ceiling on collaborative agent behavior.
+
+The build-in-house explosion (§6.2) confirms this: no homebrew memory system includes event-driven notification. Agents that need to coordinate (e.g., an issue-processing agent that reacts to new submissions, or a daemon that maintains derived state across multiple instances) must implement their own polling loops, timers, or manual triggers. The same gap exists in the VC-funded competitor set (Mem0, Zep, Letta) — they optimize retrieval, not coordination.
+
+**Neotoma closes this gap** by signaling state changes to registered consumers — converting polling-based coordination into event-driven awareness. See `philosophy.md` §5.9 (Signal Without Strategy) for the substrate-level invariant and `scope_decisions.md` SD-002 for the boundary against strategy-layer notifications.

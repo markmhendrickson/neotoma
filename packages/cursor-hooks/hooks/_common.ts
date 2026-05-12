@@ -727,6 +727,7 @@ export function buildCompactReminder(model?: string | null | undefined): string 
     "4. Closing store: assistant conversation_message (sender_kind=assistant, exact reply text) with REFERS_TO to every entity the reply cites or produced; PART_OF same conversation.",
     "5. Display rule: when this turn created/updated/retrieved non-bookkeeping entities, the visible reply ends with a `🧠 Neotoma` section listing them as bullets.",
     "Forbidden: skipping store on greetings, persisting only the user message, ending the turn without the assistant store. Idempotency keys are per-turn unique.",
+    "Forbidden: reusing the user-phase conversation_message `turn_key` for the closing assistant store (must use `{conversation_id}:{turn_id}:assistant`, not the bare `{conversation_id}:{turn_id}`).",
   ];
   if (isSmallModel(model)) {
     lines.push(
@@ -901,8 +902,8 @@ export function isNeotomaRelevantTool(toolName: unknown, toolInput: unknown): bo
       lower.includes("neotoma") ||
       lower.startsWith("mcp_neotoma") ||
       lower.startsWith("mcp_user-neotoma") ||
-      lower === "submit_feedback" ||
-      lower === "get_feedback_status" ||
+      lower === "submit_issue" ||
+      lower === "get_issue_status" ||
       lower === "store" ||
       lower === "store_structured" ||
       lower === "store_unstructured" ||
@@ -997,7 +998,7 @@ function homeDirPattern(): RegExp | null {
  * Light PII scrub suitable for passing a short error message through the
  * hook layer into a structured entity. The agent is still expected to
  * apply the full PII redaction contract when it decides to call
- * `submit_feedback` — this is a defence in depth only.
+ * `submit_issue` — this is a defence in depth only.
  */
 export function scrubErrorMessage(raw: unknown): string {
   if (raw == null) return "";
@@ -1178,8 +1179,8 @@ export function formatFailureHint(hint: FailureHint): string {
   return [
     `Neotoma hook note: ${hint.count} recent failures this session for`,
     `tool \`${hint.tool_name}\` with error class \`${hint.error_class}\`.`,
-    `If this is blocking your task, consider calling \`submit_feedback\``,
-    `with kind=incident, PII-redacted title/body, and metadata.environment`,
+    `If this is blocking your task, consider calling \`submit_issue\``,
+    `with a PII-redacted title/body describing the friction.`,
     `per docs/developer/mcp/instructions.md. This is informational —`,
     `do not auto-submit.`,
   ].join(" ");
@@ -1346,13 +1347,13 @@ export function diagnoseSkippedStore(input: DiagnoseSkippedStoreInput): SkippedS
       proactive_remediation_required: localBuild,
       recommended_repairs: localBuild
         ? [
-            "Verify the local Neotoma server is running (e.g. `npm run watch:prod`) and reachable at NEOTOMA_BASE_URL.",
+            "Verify the local Neotoma server is running (e.g. `npm run dev:server:prod`) and reachable at NEOTOMA_BASE_URL.",
             "Tail server logs to confirm the failing endpoint and reload the MCP client connection after fixes.",
             "Run `npm run eval:tier1` to re-validate hook + transport behavior end-to-end.",
           ]
         : [
             "Confirm the Neotoma host is reachable from this machine and that the MCP client is authenticated.",
-            "If failures persist, capture an `incident` via `submit_feedback` with PII-redacted error details.",
+            "If failures persist, file an issue via `submit_issue` with PII-redacted error details.",
           ],
     };
   }

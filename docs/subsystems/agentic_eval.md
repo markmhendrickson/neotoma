@@ -389,7 +389,7 @@ hooks already emit a `turn_compliance` observation per turn whenever
 they had to backfill a missed Neotoma write; Tier 3 aggregates those
 observations into a per-(model × harness × profile) backfill rate and
 surfaces the result through a CLI, an admin HTTP endpoint, an Inspector
-dashboard, an optional Prometheus exporter, and a `product_feedback`
+dashboard, an optional Prometheus exporter, and an `issue`
 alerting layer. There is **no LLM cost** — Tier 3 reads what the fleet
 already wrote.
 
@@ -413,7 +413,7 @@ turn_compliance entities (written by stop hooks)                    │
             │
             ├──▶ services/compliance/routes.ts        → GET /admin/compliance/scorecard
             │                                         → GET /admin/compliance/metrics (Prometheus)
-            ├──▶ services/compliance/alerting.ts      → product_feedback{kind:"compliance_drift"}
+            ├──▶ services/compliance/alerting.ts      → issue{labels:["compliance_drift"]}
             ├──▶ services/compliance/historical_backfill.ts (estimates from old conversation_message data)
             └──▶ inspector/src/pages/compliance.tsx   → /inspector/compliance dashboard
 ```
@@ -443,7 +443,7 @@ neotoma compliance export --since 30d --format jsonl --output compliance_30d.jso
 neotoma compliance backfill --since 90d --dry-run
 neotoma compliance backfill --since 90d
 
-# Evaluate alert thresholds without emitting product_feedback
+# Evaluate alert thresholds without emitting issues
 neotoma compliance alert-check --threshold 0.30 --window 24h --min-turns 100 --dry-run
 ```
 
@@ -470,12 +470,14 @@ top missed steps for the window. Filtering by `--since` and
 When any (model × harness) cell with `≥ NEOTOMA_COMPLIANCE_BACKFILL_ALERT_MIN_TURNS`
 turns has a backfill rate above `NEOTOMA_COMPLIANCE_BACKFILL_ALERT_THRESHOLD`
 sustained over `NEOTOMA_COMPLIANCE_BACKFILL_ALERT_WINDOW`, the
-`runComplianceAlertCheck()` function emits a `product_feedback` entity:
+`runComplianceAlertCheck()` function emits an `issue` entity (or equivalent operator-chosen type) for triage:
 
 ```json
 {
-  "entity_type": "product_feedback",
-  "kind": "compliance_drift",
+  "entity_type": "issue",
+  "title": "Compliance drift: composer-2 × cursor-hooks",
+  "body": "Backfill rate exceeded threshold; see metadata.",
+  "labels": ["compliance_drift", "neotoma-issue"],
   "metadata": {
     "model": "composer-2",
     "harness": "cursor-hooks",

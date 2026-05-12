@@ -3,6 +3,7 @@ import type { DocHubCard, DocHubCategory } from "@/i18n/locales/docs_index_hub_e
 /** Spanish overlays for `/docs` hub; merge onto `DOC_INDEX_HUB_EN` for `es`. */
 export const DOC_INDEX_HUB_ES_CATEGORY_TITLE: Record<string, string> = {
   getting_started: "Primeros pasos",
+  skills: "Habilidades",
   integrations: "Integraciones",
   reference: "Referencia",
   primitive_record_types: "Tipos de registro primitivos",
@@ -84,6 +85,10 @@ export const DOC_INDEX_HUB_ES_ITEM: Record<string, Partial<Pick<DocHubCard, "lab
   "/foundations": {
     label: "Fundamentos",
     desc: "Arquitectura privacy-first y dise\u00f1o multiplataforma",
+  },
+  "/foundation/problem-statement": {
+    label: "Planteamiento del problema",
+    desc: "Por qu\u00e9 existe Neotoma: datos fragmentados, l\u00edmites de la memoria en IA y la brecha del sustrato",
   },
   "/agent-instructions": {
     label: "Instrucciones para agentes",

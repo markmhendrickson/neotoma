@@ -21,12 +21,17 @@ const FOUNDATIONS = [
   {
     name: "Privacy-first",
     detail:
-      "User-controlled memory, end-to-end encryption and row-level security, never used for training. Your data remains yours.",
+      "User-controlled memory, end-to-end encryption and row-level security, never used for training. Nothing is stored unless you approve it; no background scanning or implicit captures. Your data remains yours.",
   },
   {
     name: "Deterministic",
     detail:
       "Same input always produces same output. Schema-first extraction, hash-based entity IDs, full provenance. No hallucinations or probabilistic behavior.",
+  },
+  {
+    name: "Immutable and verifiable",
+    detail:
+      "Every observation is append-only; history cannot be rewritten. Hash-based entity IDs ensure tamper-evident records and a full provenance chain from any state to its source.",
   },
   {
     name: "Cross-platform",
@@ -192,6 +197,74 @@ export function ArchitecturePage() {
 
       <SectionDivider />
 
+      {/* State Layer + Operational Layer(s) */}
+      <SectionHeading id="state-vs-operational">State Layer + Operational Layer(s)</SectionHeading>
+      <p className="text-[15px] leading-7 mb-4">
+        Neotoma is the <strong>state layer</strong>: a deterministic, event-sourced, reducer-driven
+        world model. Anything sitting above Neotoma is an <strong>operational layer</strong>:
+        agents, pipelines, orchestration systems, custom applications. The boundary is a single,
+        simple invariant.
+      </p>
+      <ul className="list-none pl-0 space-y-2 mb-4 text-[15px] leading-7">
+        <li className="flex items-start gap-2">
+          <span className="text-emerald-500 mt-0.5 shrink-0 font-medium" aria-hidden="true">
+            &rarr;
+          </span>
+          <span>
+            <strong>State layer (Neotoma).</strong> Stores state, signals state changes, enforces
+            determinism and immutability. Never decides, infers, or acts.
+          </span>
+        </li>
+        <li className="flex items-start gap-2">
+          <span className="text-emerald-500 mt-0.5 shrink-0 font-medium" aria-hidden="true">
+            &rarr;
+          </span>
+          <span>
+            <strong>Operational layer(s).</strong> Read truth and write back via observations. May
+            reason, plan, decide, and execute side effects. The artifacts of those activities, including
+            plans, decisions, constraints, preferences, and rules, are themselves state and live
+            in Neotoma.
+          </span>
+        </li>
+      </ul>
+      <div className={`mb-6 w-full max-w-none text-left ${CODE_BLOCK_CARD_SHELL_CLASS}`}>
+        <div className="mb-3 flex flex-col gap-3">
+          <div className={CODE_BLOCK_CHROME_STACK_CLASS}>
+            <div className={EVALUATE_PROMPT_PILL_CLASS}>
+              <span className="h-2 w-2 rounded-full bg-emerald-500/80 dark:bg-emerald-400/80" aria-hidden />
+              Two-tier diagram
+            </div>
+            <div className={CODE_BLOCK_CHROME_SUBTITLE_CLASS}>
+              Operational systems (agents, pipelines, custom code) sit above one shared state layer.
+            </div>
+          </div>
+        </div>
+        <div
+          className={`${CODE_BLOCK_CARD_INNER_CLASS} p-4 md:p-5 font-mono text-[13px] leading-6 overflow-x-auto`}
+        >
+          <p className="mb-1">Operational Layer(s)</p>
+          <p className="mb-1 pl-4 text-muted-foreground">
+            agents (Claude, Cursor, ChatGPT, ...) &middot; pipelines / orchestrators &middot; custom
+            apps
+          </p>
+          <p className="mb-1 text-muted-foreground pl-4">&darr; reads truth via retrieval</p>
+          <p className="mb-1 text-muted-foreground pl-4">&darr; writes via observations</p>
+          <p className="mb-1">Neotoma: State Layer</p>
+          <p className="mb-1 pl-4 text-muted-foreground">
+            observations &rarr; reducers &rarr; entity snapshots &rarr; memory graph
+          </p>
+          <p className="mb-1 text-muted-foreground pl-4">&uarr; emits substrate signals</p>
+          <p className="text-muted-foreground pl-4">(webhook / SSE; report-only, never strategy)</p>
+        </div>
+      </div>
+      <p className="text-[14px] leading-6 text-muted-foreground mb-4">
+        Strategy artifacts, including plans, decisions, constraints, preferences, and rules, are
+        entities in the state layer. The act of strategizing happens in operational layers; the
+        outputs are inert state.
+      </p>
+
+      <SectionDivider />
+
       {/* State flow */}
       <SectionHeading id="state-flow">How state flows</SectionHeading>
       <div className="mb-6 max-w-md">
@@ -251,6 +324,68 @@ export function ArchitecturePage() {
       <p className="text-[14px] leading-6 text-muted-foreground mb-2">
         The agent decides what to store; Neotoma ensures it is schema-valid, deduplicated, and
         provenance-tracked. There is no hidden LLM between the caller and the data layer.
+      </p>
+
+      <SectionDivider />
+
+      {/* How retrieval works */}
+      <SectionHeading id="how-retrieval-works">How retrieval works in Neotoma</SectionHeading>
+      <p className="text-[15px] leading-7 mb-4">
+        Retrieval is not one thing. Neotoma supports three co-available retrieval modes; pick the
+        one whose shape matches the question, and combine them when needed. The structured store
+        is the source of truth; semantic search and graph traversal are layered indices over it.
+      </p>
+      <ul className="list-none pl-0 space-y-3 mb-4">
+        <li className="text-[15px] leading-7 flex items-start gap-2">
+          <span className="text-emerald-500 mt-0.5 shrink-0 font-medium" aria-hidden="true">
+            &rarr;
+          </span>
+          <span>
+            <strong>Structured queries (primary).</strong> Look up entities by canonical identity,
+            type, or schema field via{" "}
+            <code className="bg-muted px-1 py-0.5 rounded text-[13px]">
+              retrieve_entity_by_identifier
+            </code>{" "}
+            and{" "}
+            <code className="bg-muted px-1 py-0.5 rounded text-[13px]">retrieve_entities</code>.
+            Strongly consistent, schema-aware, deterministic.
+          </span>
+        </li>
+        <li className="text-[15px] leading-7 flex items-start gap-2">
+          <span className="text-emerald-500 mt-0.5 shrink-0 font-medium" aria-hidden="true">
+            &rarr;
+          </span>
+          <span>
+            <strong>Entity semantic search.</strong> Vector search runs over <em>structured entity
+            snapshots</em>, scoped by entity type and structural filters. Bounded-eventual (~10s
+            embed lag), but unlike retrieval-only memory it is grounded in versioned, deduplicated
+            entities rather than free text fragments.
+          </span>
+        </li>
+        <li className="text-[15px] leading-7 flex items-start gap-2">
+          <span className="text-emerald-500 mt-0.5 shrink-0 font-medium" aria-hidden="true">
+            &rarr;
+          </span>
+          <span>
+            <strong>Graph traversal.</strong>{" "}
+            <code className="bg-muted px-1 py-0.5 rounded text-[13px]">
+              retrieve_related_entities
+            </code>{" "}
+            and{" "}
+            <code className="bg-muted px-1 py-0.5 rounded text-[13px]">
+              retrieve_graph_neighborhood
+            </code>{" "}
+            walk typed relationships across entities (n-hop). Use when the question is about
+            connections (&ldquo;what tasks are tied to this contract?&rdquo;) rather than text
+            similarity.
+          </span>
+        </li>
+      </ul>
+      <p className="text-[14px] leading-6 text-muted-foreground mb-2">
+        Retrieval-only memory systems search free-text chunks and return whatever embeds nearest.
+        Neotoma searches over the same structured rows you wrote, with full provenance back to
+        source. The result of any retrieval is a real entity you can inspect, diff, and replay,
+        not a snippet you have to trust.
       </p>
 
       <SectionDivider />

@@ -1,0 +1,371 @@
+# Maps in-repo docs to how they surface on the public site (MDX pilot + reconciliation).
+# Status values: canonical_site_page | supporting_source | internal_only | archive | redirect
+version: 1
+entries:
+  - repo_path: docs/foundation/problem_statement.md
+    status: supporting_source
+    canonical_site_path: /foundation/problem-statement
+    notes: "Public MDX page summarizes this doc; deep links to private strategy docs are omitted on the site."
+
+  - repo_path: docs/site/pages/en/foundation-problem-statement.mdx
+    status: canonical_site_page
+    canonical_site_path: /foundation/problem-statement
+
+  - repo_path: docs/site/pages/en/changelog.mdx
+    status: canonical_site_page
+    canonical_site_path: /changelog
+
+  - repo_path: docs/site/pages/es/changelog.mdx
+    status: canonical_site_page
+    canonical_site_path: /changelog
+
+  - repo_path: docs/site/pages/en/schema-management.mdx
+    status: canonical_site_page
+    canonical_site_path: /schema-management
+
+  - repo_path: docs/site/pages/en/troubleshooting.mdx
+    status: canonical_site_page
+    canonical_site_path: /troubleshooting
+
+  - repo_path: docs/site/pages/en/mcp.mdx
+    status: canonical_site_page
+    canonical_site_path: /mcp
+
+  - repo_path: docs/site/pages/en/cli.mdx
+    status: canonical_site_page
+    canonical_site_path: /cli
+
+  - repo_path: docs/site/pages/en/api.mdx
+    status: canonical_site_page
+    canonical_site_path: /api
+
+  - repo_path: docs/site/pages/en/install.mdx
+    status: canonical_site_page
+    canonical_site_path: /install
+
+  - repo_path: docs/site/pages/en/install-manual.mdx
+    status: canonical_site_page
+    canonical_site_path: /install/manual
+
+  - repo_path: docs/site/pages/en/install-docker.mdx
+    status: canonical_site_page
+    canonical_site_path: /install/docker
+
+  - repo_path: docs/site/pages/en/neotoma-with-codex-connect-local-stdio.mdx
+    status: canonical_site_page
+    canonical_site_path: /neotoma-with-codex-connect-local-stdio
+
+  - repo_path: docs/site/pages/en/neotoma-with-codex-connect-remote-http-oauth.mdx
+    status: canonical_site_page
+    canonical_site_path: /neotoma-with-codex-connect-remote-http-oauth
+
+  - repo_path: docs/site/pages/en/neotoma-with-claude-connect-desktop.mdx
+    status: canonical_site_page
+    canonical_site_path: /neotoma-with-claude-connect-desktop
+
+  - repo_path: docs/site/pages/en/neotoma-with-claude-connect-remote-mcp.mdx
+    status: canonical_site_page
+    canonical_site_path: /neotoma-with-claude-connect-remote-mcp
+
+  - repo_path: docs/site/pages/en/neotoma-with-openclaw-connect-local-stdio.mdx
+    status: canonical_site_page
+    canonical_site_path: /neotoma-with-openclaw-connect-local-stdio
+
+  - repo_path: docs/site/pages/en/neotoma-with-openclaw-connect-remote-http.mdx
+    status: canonical_site_page
+    canonical_site_path: /neotoma-with-openclaw-connect-remote-http
+
+  - repo_path: docs/site/pages/en/neotoma-with-chatgpt-connect-remote-mcp.mdx
+    status: canonical_site_page
+    canonical_site_path: /neotoma-with-chatgpt-connect-remote-mcp
+
+  - repo_path: docs/site/pages/en/neotoma-with-chatgpt-connect-custom-gpt.mdx
+    status: canonical_site_page
+    canonical_site_path: /neotoma-with-chatgpt-connect-custom-gpt
+
+  - repo_path: docs/site/pages/en/neotoma-with-chatgpt.mdx
+    status: canonical_site_page
+    canonical_site_path: /neotoma-with-chatgpt
+
+  - repo_path: docs/site/pages/en/neotoma-with-ironclaw.mdx
+    status: canonical_site_page
+    canonical_site_path: /neotoma-with-ironclaw
+
+  - repo_path: docs/site/pages/en/neotoma-with-codex.mdx
+    status: canonical_site_page
+    canonical_site_path: /neotoma-with-codex
+
+  - repo_path: docs/site/pages/en/neotoma-with-opencode.mdx
+    status: canonical_site_page
+    canonical_site_path: /neotoma-with-opencode
+
+  - repo_path: docs/site/pages/en/neotoma-with-cursor.mdx
+    status: canonical_site_page
+    canonical_site_path: /neotoma-with-cursor
+
+  - repo_path: docs/site/pages/en/neotoma-with-claude.mdx
+    status: canonical_site_page
+    canonical_site_path: /neotoma-with-claude
+
+  - repo_path: docs/site/pages/en/neotoma-with-claude-code.mdx
+    status: canonical_site_page
+    canonical_site_path: /neotoma-with-claude-code
+
+  - repo_path: docs/site/pages/en/neotoma-with-claude-agent-sdk.mdx
+    status: canonical_site_page
+    canonical_site_path: /neotoma-with-claude-agent-sdk
+
+  - repo_path: docs/site/pages/en/neotoma-with-openclaw.mdx
+    status: canonical_site_page
+    canonical_site_path: /neotoma-with-openclaw
+
+  - repo_path: docs/site/pages/en/memory-guarantees.mdx
+    status: canonical_site_page
+    canonical_site_path: /memory-guarantees
+
+  - repo_path: docs/site/pages/en/deterministic-state-evolution.mdx
+    status: canonical_site_page
+    canonical_site_path: /deterministic-state-evolution
+
+  - repo_path: docs/site/pages/en/versioned-history.mdx
+    status: canonical_site_page
+    canonical_site_path: /versioned-history
+
+  - repo_path: docs/site/pages/en/replayable-timeline.mdx
+    status: canonical_site_page
+    canonical_site_path: /replayable-timeline
+
+  - repo_path: docs/site/pages/en/auditable-change-log.mdx
+    status: canonical_site_page
+    canonical_site_path: /auditable-change-log
+
+  - repo_path: docs/site/pages/en/schema-constraints.mdx
+    status: canonical_site_page
+    canonical_site_path: /schema-constraints
+
+  - repo_path: docs/site/pages/en/silent-mutation-risk.mdx
+    status: canonical_site_page
+    canonical_site_path: /silent-mutation-risk
+
+  - repo_path: docs/site/pages/en/conflicting-facts-risk.mdx
+    status: canonical_site_page
+    canonical_site_path: /conflicting-facts-risk
+
+  - repo_path: docs/site/pages/en/false-closure-risk.mdx
+    status: canonical_site_page
+    canonical_site_path: /false-closure-risk
+
+  - repo_path: docs/site/pages/en/reproducible-state-reconstruction.mdx
+    status: canonical_site_page
+    canonical_site_path: /reproducible-state-reconstruction
+
+  - repo_path: docs/site/pages/en/human-inspectability.mdx
+    status: canonical_site_page
+    canonical_site_path: /human-inspectability
+
+  - repo_path: docs/site/pages/en/zero-setup-onboarding.mdx
+    status: canonical_site_page
+    canonical_site_path: /zero-setup-onboarding
+
+  - repo_path: docs/site/pages/en/semantic-similarity-search.mdx
+    status: canonical_site_page
+    canonical_site_path: /semantic-similarity-search
+
+  - repo_path: docs/site/pages/en/direct-human-editability.mdx
+    status: canonical_site_page
+    canonical_site_path: /direct-human-editability
+
+  - repo_path: docs/site/pages/en/primitives.mdx
+    status: canonical_site_page
+    canonical_site_path: /primitives
+
+  - repo_path: docs/site/pages/en/primitives/entities.mdx
+    status: canonical_site_page
+    canonical_site_path: /primitives/entities
+
+  - repo_path: docs/site/pages/en/primitives/entity-snapshots.mdx
+    status: canonical_site_page
+    canonical_site_path: /primitives/entity-snapshots
+
+  - repo_path: docs/site/pages/en/primitives/sources.mdx
+    status: canonical_site_page
+    canonical_site_path: /primitives/sources
+
+  - repo_path: docs/site/pages/en/primitives/interpretations.mdx
+    status: canonical_site_page
+    canonical_site_path: /primitives/interpretations
+
+  - repo_path: docs/site/pages/en/primitives/observations.mdx
+    status: canonical_site_page
+    canonical_site_path: /primitives/observations
+
+  - repo_path: docs/site/pages/en/primitives/relationships.mdx
+    status: canonical_site_page
+    canonical_site_path: /primitives/relationships
+
+  - repo_path: docs/site/pages/en/primitives/timeline-events.mdx
+    status: canonical_site_page
+    canonical_site_path: /primitives/timeline-events
+
+  - repo_path: docs/site/pages/en/schemas.mdx
+    status: canonical_site_page
+    canonical_site_path: /schemas
+
+  - repo_path: docs/site/pages/en/schemas/registry.mdx
+    status: canonical_site_page
+    canonical_site_path: /schemas/registry
+
+  - repo_path: docs/site/pages/en/schemas/merge-policies.mdx
+    status: canonical_site_page
+    canonical_site_path: /schemas/merge-policies
+
+  - repo_path: docs/site/pages/en/schemas/storage-layers.mdx
+    status: canonical_site_page
+    canonical_site_path: /schemas/storage-layers
+
+  - repo_path: docs/site/pages/en/schemas/versioning.mdx
+    status: canonical_site_page
+    canonical_site_path: /schemas/versioning
+
+  - repo_path: docs/site/pages/en/operating.mdx
+    status: canonical_site_page
+    canonical_site_path: /operating
+
+  - repo_path: docs/site/pages/en/building-pipelines.mdx
+    status: canonical_site_page
+    canonical_site_path: /building-pipelines
+
+  - repo_path: docs/site/pages/en/debugging-infrastructure.mdx
+    status: canonical_site_page
+    canonical_site_path: /debugging-infrastructure
+
+  - repo_path: docs/site/pages/en/neotoma-vs-mem0.mdx
+    status: canonical_site_page
+    canonical_site_path: /neotoma-vs-mem0
+
+  - repo_path: docs/site/pages/en/neotoma-vs-zep.mdx
+    status: canonical_site_page
+    canonical_site_path: /neotoma-vs-zep
+
+  - repo_path: docs/site/pages/en/neotoma-vs-rag.mdx
+    status: canonical_site_page
+    canonical_site_path: /neotoma-vs-rag
+
+  - repo_path: docs/site/pages/en/neotoma-vs-platform-memory.mdx
+    status: canonical_site_page
+    canonical_site_path: /neotoma-vs-platform-memory
+
+  - repo_path: docs/site/pages/en/neotoma-vs-files.mdx
+    status: canonical_site_page
+    canonical_site_path: /neotoma-vs-files
+
+  - repo_path: docs/site/pages/en/neotoma-vs-database.mdx
+    status: canonical_site_page
+    canonical_site_path: /neotoma-vs-database
+
+  - repo_path: docs/site/pages/en/build-vs-buy.mdx
+    status: canonical_site_page
+    canonical_site_path: /build-vs-buy
+
+  - repo_path: docs/site/pages/en/healthcare.mdx
+    status: canonical_site_page
+    canonical_site_path: /healthcare
+
+  - repo_path: docs/site/pages/en/government.mdx
+    status: canonical_site_page
+    canonical_site_path: /government
+
+  - repo_path: docs/site/pages/en/personal-data.mdx
+    status: canonical_site_page
+    canonical_site_path: /personal-data
+
+  - repo_path: docs/site/pages/en/cases.mdx
+    status: canonical_site_page
+    canonical_site_path: /cases
+
+  - repo_path: docs/site/pages/en/logistics.mdx
+    status: canonical_site_page
+    canonical_site_path: /logistics
+
+  - repo_path: docs/site/pages/en/procurement.mdx
+    status: canonical_site_page
+    canonical_site_path: /procurement
+
+  - repo_path: docs/site/pages/en/contracts.mdx
+    status: canonical_site_page
+    canonical_site_path: /contracts
+
+  - repo_path: docs/site/pages/en/customer-ops.mdx
+    status: canonical_site_page
+    canonical_site_path: /customer-ops
+
+  - repo_path: docs/site/pages/en/crypto-engineering.mdx
+    status: canonical_site_page
+    canonical_site_path: /crypto-engineering
+
+  - repo_path: docs/site/pages/en/trading.mdx
+    status: canonical_site_page
+    canonical_site_path: /trading
+
+  - repo_path: docs/site/pages/en/agent-auth.mdx
+    status: canonical_site_page
+    canonical_site_path: /agent-auth
+
+  - repo_path: docs/site/pages/en/portfolio.mdx
+    status: canonical_site_page
+    canonical_site_path: /portfolio
+
+  - repo_path: docs/site/pages/en/diligence.mdx
+    status: canonical_site_page
+    canonical_site_path: /diligence
+
+  - repo_path: docs/site/pages/en/financial-ops.mdx
+    status: canonical_site_page
+    canonical_site_path: /financial-ops
+
+  - repo_path: docs/site/pages/en/crm.mdx
+    status: canonical_site_page
+    canonical_site_path: /crm
+
+  - repo_path: docs/site/pages/en/compliance.mdx
+    status: canonical_site_page
+    canonical_site_path: /compliance
+
+  - repo_path: docs/site/pages/en/sandbox.mdx
+    status: canonical_site_page
+    canonical_site_path: /sandbox
+
+  - repo_path: docs/site/pages/en/hosted.mdx
+    status: canonical_site_page
+    canonical_site_path: /hosted
+
+  - repo_path: docs/legal/site_privacy_notice.md
+    status: supporting_source
+    canonical_site_path: /privacy
+    notes: "Public Privacy page (React body + MDX shell) should stay in sync with this notice."
+
+  - repo_path: docs/legal/site_terms_of_use.md
+    status: supporting_source
+    canonical_site_path: /terms
+    notes: "Public Terms page (React body + MDX shell) should stay in sync with this document."
+
+  - repo_path: docs/site/pages/en/faq.mdx
+    status: canonical_site_page
+    canonical_site_path: /faq
+
+  - repo_path: docs/site/pages/es/faq.mdx
+    status: canonical_site_page
+    canonical_site_path: /faq
+
+  - repo_path: docs/site/pages/en/privacy.mdx
+    status: canonical_site_page
+    canonical_site_path: /privacy
+
+  - repo_path: docs/site/pages/en/terms.mdx
+    status: canonical_site_page
+    canonical_site_path: /terms
+
+  - repo_path: docs/site/pages/en/home.mdx
+    status: canonical_site_page
+    canonical_site_path: /
+    notes: "Primary marketing landing; rendered at site root."

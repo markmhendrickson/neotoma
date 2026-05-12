@@ -11,6 +11,7 @@ import {
   buildAllHarnessSnippets,
   buildHarnessSnippet,
   HARNESS_IDS,
+  PLACEHOLDER_PROXY_MCP_SCRIPT,
   PLACEHOLDER_STDIO_MCP_SCRIPT,
   type HarnessSnippetContext,
   type HarnessId,
@@ -105,6 +106,23 @@ describe("harness_snippets: local mode uses stdio", () => {
     const claude = buildHarnessSnippet("claude-code", ctxWithPath);
     expect(claude.human.code).toContain(JSON.stringify(resolved).slice(1, -1));
     expect(claude.agentPrompt).toContain(resolved);
+  });
+
+  it("local mode proxyTip uses unsigned stdio dev shim placeholder when proxy path unset", () => {
+    const out = buildHarnessSnippet("cursor", ctxFor("local", "http://localhost:3080"));
+    expect(out.proxyTip?.code).toContain("run_neotoma_mcp_unsigned_stdio_dev_shim.sh");
+    expect(out.proxyTip?.code).toContain(PLACEHOLDER_PROXY_MCP_SCRIPT);
+  });
+
+  it("local mode proxyTip embeds resolved unsigned dev shim path when provided", () => {
+    const resolved = "/opt/neotoma/scripts/run_neotoma_mcp_unsigned_stdio_dev_shim.sh";
+    const ctx = {
+      ...ctxFor("local", "http://localhost:3080"),
+      proxyMcpScriptPath: resolved,
+    };
+    const out = buildHarnessSnippet("cursor", ctx);
+    expect(out.proxyTip?.code).toContain(resolved);
+    expect(out.proxyTip?.code).not.toContain(PLACEHOLDER_PROXY_MCP_SCRIPT);
   });
 });
 

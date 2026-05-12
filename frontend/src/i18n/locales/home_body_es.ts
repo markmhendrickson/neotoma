@@ -235,6 +235,13 @@ export const HOME_BODY_ES: HomeBodyPack = {
         description: "Elecciones, razonamiento y la pista de auditoría que prueba por qué actuó un agente.",
       },
     ],
+    schemaEvolutionCalloutHeading: "¿No ves tu forma? Guárdala igual.",
+    schemaEvolutionCalloutBodyBeforeLink:
+      "No defines un esquema por adelantado. Tu agente guarda cualquier entidad con un tipo descriptivo y los campos que los datos impliquen; Neotoma infiere y evoluciona el esquema sobre la marcha, con versiones menores aditivas para campos nuevos y versiones mayores explícitas para cambios disruptivos. ",
+    schemaEvolutionCalloutLink: "Cómo evolucionan los esquemas",
+    schemaEvolutionCalloutBodyAfterLink: ".",
+    schemaEvolutionCalloutSecondLine:
+      "Nada se descarta en silencio. Los campos desconocidos aterrizan en una capa raw_fragments y se promueven al esquema validado a medida que los patrones maduran.",
   },
   who: {
     kicker: "Para quién es",
@@ -242,6 +249,8 @@ export const HOME_BODY_ES: HomeBodyPack = {
     titleLine2: "...y pagas el coste de no tener memoria",
     subtitle:
       "Volver a indicar contexto malgasta tiempo y tokens. El riesgo mayor es cuando tu agente actúa con seguridad sobre hechos erróneos y no te enteras hasta que el daño está hecho.",
+    operatorConnector:
+      "Un operador, tres modos. Distinto dolor, misma capa de estado.",
     calloutHeading: "¿Ya construyes tu propio sistema de memoria?",
     calloutBodyBeforeLink: "Muchos desarrolladores empiezan con SQLite, JSON, Markdown o un servidor MCP propio. Neotoma aporta ",
     calloutLink: "las garantías que de otro modo construirías y mantendrías tú",
@@ -311,8 +320,7 @@ export const HOME_BODY_ES: HomeBodyPack = {
       "Tu agente puede leer la documentación, revisar los criterios de evaluación y decirte si Neotoma encaja en tu flujo real antes de instalar nada.",
     promptHint:
       "Copia este prompt en cualquier agente de IA. Lee la página de evaluación, inspecciona tu contexto y juzga si Neotoma encaja.",
-    evaluateIllustrationAlt: "Vista previa de la página de evaluación de Neotoma",
-    homeEvaluatePrompt: `Lee https://neotoma.io/evaluate. Usa cualquier herramienta, espacio de trabajo y contexto de chat ya disponibles en esta sesión para evaluar mi flujo real. Evita introspección ad hoc en la shell solo para perfilarme; si Neotoma ya está instalado, usa \`neotoma doctor --json\` para el estado. Luego dime si Neotoma encaja en mi flujo, qué datos conviene persistir primero por valor y qué debería hacer a continuación.`,
+    homeEvaluatePrompt: `Lee https://neotoma.io/evaluate. Usa cualquier herramienta, espacio de trabajo y contexto de chat ya disponibles en esta sesión para evaluar mi flujo real. Evita introspección ad hoc en la shell solo para perfilarme; si Neotoma ya está instalado, usa \`neotoma doctor --json\` para el estado. Luego dime si Neotoma encaja en mi flujo, qué datos conviene persistir primero por valor y si recomiendas una prueba no destructiva en https://neotoma.io/non-destructive-testing antes de cualquier despliegue completo.`,
     evaluatePromptPill: "Prompt de evaluación",
     evaluatePromptCardSubtitle:
       "Lee la página y evalúa el encaje frente a tu flujo real.",

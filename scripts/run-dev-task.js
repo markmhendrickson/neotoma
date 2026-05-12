@@ -148,6 +148,28 @@ const child = spawn(resolvedCommand, commandArgs, {
   env,
 });
 
+// Defense-in-depth: forward terminating signals to the child so that callers
+// (e.g. scripts/run_neotoma_api_chokidar_poll_watch.js's hot-reload loop) can
+// rely on a single SIGTERM cleanly tearing down the entire dev API chain
+// instead of orphaning the with_branch_ports.js / actions.ts grandchildren.
+let forwardingSignal = false;
+const forwardSignal = (signal) => {
+  if (forwardingSignal) return;
+  forwardingSignal = true;
+  if (child && !child.killed) {
+    try {
+      child.kill(signal);
+    } catch (err) {
+      if (err && err.code !== 'ESRCH') {
+        throw err;
+      }
+    }
+  }
+};
+process.on('SIGINT', () => forwardSignal('SIGINT'));
+process.on('SIGTERM', () => forwardSignal('SIGTERM'));
+process.on('SIGHUP', () => forwardSignal('SIGHUP'));
+
 child.on('exit', (code, signal) => {
   if (typeof code === 'number') {
     process.exit(code);

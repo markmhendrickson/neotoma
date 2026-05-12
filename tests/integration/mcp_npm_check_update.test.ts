@@ -34,6 +34,14 @@ describe("MCP npm_check_update tool", () => {
     expect(data.packageName).toBe("neotoma");
     expect(data.currentVersion).toBe("0.0.1");
     expect(data.distTag).toBe("latest");
+    expect(data.release_url === null || typeof data.release_url === "string").toBe(true);
+    expect(data.release_notes_excerpt === null || typeof data.release_notes_excerpt === "string").toBe(
+      true,
+    );
+    expect(data.breaking_changes_excerpt === null || typeof data.breaking_changes_excerpt === "string").toBe(
+      true,
+    );
+    expect(data.enrichment_error === null || typeof data.enrichment_error === "string").toBe(true);
 
     if (data.updateAvailable) {
       expect(data.latestVersion).toBeTruthy();

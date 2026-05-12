@@ -275,7 +275,7 @@ docs/developer/tunnels.md:
   downstream:
     - path: docs/developer/getting_started.md
       type: explicit
-      reason: Getting started references tunnels for watch:prod:tunnel and env
+      reason: Getting started references tunnels for dev:server:prod:tunnel and env
     - path: docs/developer/mcp_https_tunnel_status.md
       type: explicit
       reason: Tunnel status doc links to tunnels.md for full reference
@@ -293,7 +293,7 @@ docs/developer/tunnels.md:
       reason: OAuth troubleshooting references tunnels for NEOTOMA_HOST_URL when using tunnel
     - path: README.md
       type: explicit
-      reason: README links to tunnels for watch:prod:tunnel
+      reason: README links to tunnels for dev:server:prod:tunnel
 
 # Standards Layer
 docs/testing/testing_standard.md:
@@ -556,6 +556,3 @@ docs/conventions/native_browser_debugging_rules.mdc:
 # README dependencies (all docs → README)
 # Note: README is downstream of all major doc categories
 # This is handled by readme_maintenance.md rule, but listed here for completeness
-
-
-

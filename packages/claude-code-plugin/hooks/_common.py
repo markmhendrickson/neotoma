@@ -187,8 +187,8 @@ def record_conversation_turn(
 # ---------------------------------------------------------------------------
 
 _NEOTOMA_TOOL_NAMES = {
-    "submit_feedback",
-    "get_feedback_status",
+    "submit_issue",
+    "get_issue_status",
     "store",
     "store_structured",
     "store_unstructured",
@@ -481,7 +481,6 @@ def format_failure_hint(hint: dict[str, Any] | None) -> str:
         f"Neotoma hook note: {hint.get('count', 0)} recent failures this session "
         f"for tool `{hint.get('tool_name')}` with error class "
         f"`{hint.get('error_class')}`. If this is blocking your task, consider "
-        "calling `submit_feedback` with kind=incident, PII-redacted title/body, "
-        "and metadata.environment per docs/developer/mcp/instructions.md. This "
+        "calling `submit_issue` with a PII-redacted title/body describing the friction. This "
         "is informational — do not auto-submit."
     )

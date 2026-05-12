@@ -1,0 +1,45 @@
+Direct human editability means a person can open the memory store in a standard editor (VS Code,
+Notepad, vim) and modify it directly. File-based memory systems use plain text formats like Markdown
+or JSON that any tool can read and write without a runtime or API layer.
+
+## Trade-offs
+
+Editable files are maximally accessible but lack structural guarantees. A typo, a malformed JSON key,
+or an accidental deletion can silently corrupt state. There is no built-in
+<MdxI18nLink to="/versioned-history" className="text-foreground underline hover:text-foreground">
+  versioned history
+</MdxI18nLink>
+unless the user maintains it (e.g. via git), and no
+<MdxI18nLink to="/schema-constraints" className="text-foreground underline hover:text-foreground">
+  schema constraints
+</MdxI18nLink>
+to reject invalid edits.
+
+## How Neotoma compares
+
+Neotoma stores data in a structured, schema-validated format. While the underlying storage is not a
+plain text file you open directly, entities are fully accessible and modifiable through the CLI and
+MCP actions. Every modification goes through the observation pipeline, preserving
+<MdxI18nLink to="/auditable-change-log" className="text-foreground underline hover:text-foreground">
+  auditable change logs
+</MdxI18nLink>
+and
+<MdxI18nLink to="/deterministic-state-evolution" className="text-foreground underline hover:text-foreground">
+  deterministic state evolution
+</MdxI18nLink>
+.
+
+```bash
+# Read current state
+neotoma entities get <entity_id>
+
+# Update via a new observation (preserves history)
+neotoma store --json='[{"entity_type":"contact","name":"Ana Rivera","city":"Barcelona"}]'
+```
+
+Platform memory (ChatGPT, Claude) may offer in-app UIs to view or edit memories, but the underlying
+store is not exposed as an editable file. See
+<MdxI18nLink to="/memory-models" className="text-foreground underline hover:text-foreground">
+  memory models
+</MdxI18nLink>
+for the full comparison.

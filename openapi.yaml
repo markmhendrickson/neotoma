@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://spec.openapis.org/oas/3.1/schema/2022-10-07
 openapi: 3.1.0
 info:
   title: Neotoma API
@@ -150,6 +151,8 @@ components:
           enum:
             - ERR_CANONICAL_NAME_UNRESOLVED
             - ERR_MERGE_REFUSED
+            - ERR_CONVERSATION_MESSAGE_ROLE_CONFLICT
+            - ERR_RELATIONSHIP_ENTITY_ID_FORMAT
         message:
           type: string
         details:
@@ -653,6 +656,17 @@ components:
             Per record-type count (`observation`, `source`,
             `interpretation`, `timeline_event`, `relationship`).
             Missing buckets mean zero.
+        observation_entity_type_counts:
+          type: object
+          additionalProperties:
+            type: integer
+          description: |
+            For each distinct agent, counts of **observation** rows grouped
+            by the target entity's `entity_type` (join `entities` on
+            `observations.entity_id`). Surfaces who submitted
+            `issue` reports, who touched protected `agent_grant` rows,
+            `issue` sync traffic, etc. Omitted when no typed observations
+            exist for that agent.
     AgentCapabilityEntry:
       type: object
       required:
@@ -920,7 +934,7 @@ components:
         observation_source:
           type: string
           nullable: true
-          enum: [sensor, llm_summary, workflow_state, human, import]
+          enum: [sensor, llm_summary, workflow_state, human, import, sync]
           description: |
             Classifies the *kind* of write that produced this observation,
             orthogonal to `source_priority` (numeric ranking) and to
@@ -936,6 +950,7 @@ components:
             - `human` — direct human write (acceptance of a suggestion,
               Inspector edit, `entities correct`, manual annotation).
             - `import` — batch ingestion / ETL / scheduled imports.
+            - `sync` — cross-instance replication from a configured Neotoma peer.
 
             Null / missing for legacy rows written before the field
             existed; writes default to `llm_summary` when unspecified
@@ -1256,6 +1271,40 @@ components:
               type: object
               additionalProperties: true
         - type: object
+          required: [relationship_type, source_index, target_entity_id]
+          additionalProperties: false
+          properties:
+            relationship_type:
+              type: string
+              enum: [PART_OF, CORRECTS, REFERS_TO, SETTLES, DUPLICATE_OF, DEPENDS_ON, SUPERSEDES, EMBEDS, works_at, owns, manages, part_of, related_to, depends_on, references, transacted_with, member_of, reports_to, located_at, created_by, funded_by, acquired_by, subsidiary_of, partner_of, competitor_of, supplies_to, contracted_with, invested_in]
+            source_index:
+              type: integer
+              minimum: 0
+              description: Index into the entities array for the source entity.
+            target_entity_id:
+              type: string
+              description: Existing target entity ID.
+            metadata:
+              type: object
+              additionalProperties: true
+        - type: object
+          required: [relationship_type, source_entity_id, target_index]
+          additionalProperties: false
+          properties:
+            relationship_type:
+              type: string
+              enum: [PART_OF, CORRECTS, REFERS_TO, SETTLES, DUPLICATE_OF, DEPENDS_ON, SUPERSEDES, EMBEDS, works_at, owns, manages, part_of, related_to, depends_on, references, transacted_with, member_of, reports_to, located_at, created_by, funded_by, acquired_by, subsidiary_of, partner_of, competitor_of, supplies_to, contracted_with, invested_in]
+            source_entity_id:
+              type: string
+              description: Existing source entity ID.
+            target_index:
+              type: integer
+              minimum: 0
+              description: Index into the entities array for the target entity.
+            metadata:
+              type: object
+              additionalProperties: true
+        - type: object
           required: [relationship_type, source_entity_id, target_entity_id]
           additionalProperties: false
           properties:
@@ -1271,6 +1320,43 @@ components:
             metadata:
               type: object
               additionalProperties: true
+    ExternalActorInput:
+      type: object
+      additionalProperties: false
+      description: |
+        Upstream artifact author (e.g. GitHub user) stamped into observation
+        provenance alongside AAuth agent attribution. Matches
+        `ExternalActorInputSchema` in `action_schemas.ts`.
+      required:
+        - provider
+        - login
+        - id
+      properties:
+        provider:
+          type: string
+          enum: [github]
+        login:
+          type: string
+        id:
+          type: number
+        type:
+          type: string
+          enum: [User, Bot, Organization]
+          default: User
+        verified_via:
+          type: string
+          enum: [claim, linked_attestation, oauth_link, webhook_signature]
+          default: claim
+        delivery_id:
+          type: string
+        event_type:
+          type: string
+        repository:
+          type: string
+        event_id:
+          type: number
+        comment_id:
+          type: number
     StoreRequest:
       type: object
       additionalProperties: false
@@ -1297,8 +1383,9 @@ components:
           type: array
           description: |
             Optional. Create relationships between entities in this request.
-            Use `source_index`/`target_index` for entities in the request, or
-            `source_entity_id`/`target_entity_id` for existing entities.
+            Use `source_index` or `target_index` for entities in this request,
+            and `source_entity_id` or `target_entity_id` for existing entities.
+            Index and id endpoints may be mixed in one relationship.
           items:
             $ref: '#/components/schemas/StoreRelationshipInput'
         interpretation:
@@ -1307,13 +1394,19 @@ components:
           type: integer
         observation_source:
           type: string
-          enum: [sensor, llm_summary, workflow_state, human, import]
+          enum: [sensor, llm_summary, workflow_state, human, import, sync]
           description: |
             Classifies the *kind* of write being performed, orthogonal to
             `source_priority`. See `Observation.observation_source` for
             the full semantic contract. Defaults to `llm_summary` when
             unspecified. Applies to every observation created by this
             request.
+        external_actor:
+          $ref: '#/components/schemas/ExternalActorInput'
+          description: |
+            Optional upstream author (e.g. GitHub user for issue submission).
+            Stamped into observation provenance; must align with
+            `ExternalActorInputSchema` (strict — no extra keys).
         idempotency_key:
           type: string
           description: Required for structured path, optional for unstructured-only path.
@@ -1349,6 +1442,11 @@ components:
             the entity's schema declares canonical_name_fields that the request
             matches, or when target_id is supplied. Prevents accidental
             coalescing into a pre-existing record.
+        source_peer_id:
+          type: string
+          description: |
+            Optional Neotoma peer id to stamp on observations for cross-instance
+            sync loop prevention (Phase 5). Requires `observation_source: sync` in practice.
     StoreResponse:
       type: object
       properties:
@@ -1380,8 +1478,9 @@ components:
           type: array
           description: |
             Optional. Create relationships between entities in this request.
-            Use `source_index`/`target_index` for entities in the request, or
-            `source_entity_id`/`target_entity_id` for existing entities.
+            Use `source_index` or `target_index` for entities in this request,
+            and `source_entity_id` or `target_entity_id` for existing entities.
+            Index and id endpoints may be mixed in one relationship.
             Enables one-call chat persistence: store [conversation, conversation_message] with relationships [{ relationship_type: "PART_OF", source_index: 1, target_index: 0 }]. (`agent_message` remains accepted as a legacy alias for pre-v0.6 clients.)
           items:
             $ref: '#/components/schemas/StoreRelationshipInput'
@@ -1391,7 +1490,7 @@ components:
           type: integer
         observation_source:
           type: string
-          enum: [sensor, llm_summary, workflow_state, human, import]
+          enum: [sensor, llm_summary, workflow_state, human, import, sync]
           description: |
             Classifies the *kind* of write being performed, orthogonal to
             `source_priority`. See `Observation.observation_source` for
@@ -1423,6 +1522,9 @@ components:
             the entity's schema declares canonical_name_fields that the request
             matches, or when target_id is supplied. Prevents accidental
             coalescing into a pre-existing record.
+        source_peer_id:
+          type: string
+          description: Optional peer id stamped on observations for sync loop prevention.
     StoreStructuredResponse:
       type: object
       properties:
@@ -2075,7 +2177,10 @@ paths:
                   - canonical_name
                   - observation_count
                   - last_observation_at
-                  description: "Non-default values cannot be combined with `search`."
+                  - submitted_at
+                  description: |
+                    Non-default values cannot be combined with `search`.
+                    `submitted_at` orders by `snapshot.created_at` (ISO string), e.g. GitHub issue opened time.
                 sort_order:
                   type: string
                   enum:
@@ -2144,6 +2249,11 @@ paths:
   /entities/{id}:
     get:
       summary: Get entity by ID
+      description: >
+        Returns an entity snapshot for the authenticated user. Also accepts a
+        scoped guest capability (`access_token` query parameter or AAuth
+        submitter identity) for entity types whose guest access policy permits
+        reads.
       operationId: getEntityById
       parameters:
         - in: path
@@ -2154,6 +2264,11 @@ paths:
           name: user_id
           required: false
           description: Optional user scope. When omitted the authenticated user is used.
+          schema: { type: string }
+        - in: query
+          name: access_token
+          required: false
+          description: Optional guest read-back token scoped to this entity.
           schema: { type: string }
       responses:
         '200':
@@ -3500,6 +3615,36 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Stats' }
 
+  /access_policies:
+    get:
+      summary: List effective guest access policies for all entity types
+      operationId: getAccessPolicies
+      description: |
+        Returns the effective resolved guest access policy for every entity type
+        that has a non-default (non-closed) policy, plus the default mode.
+        Resolution precedence per type: env var > SchemaMetadata > config file > closed.
+      responses:
+        '200':
+          description: Map of entity types to their effective guest access policy mode
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  policies:
+                    type: object
+                    additionalProperties:
+                      type: string
+                      enum: [closed, read_only, submit_only, submitter_scoped, open]
+                    description: Entity type to effective policy mode
+                  default_mode:
+                    type: string
+                    enum: [closed, read_only, submit_only, submitter_scoped, open]
+                    description: Default mode for entity types not in the policies map
+                required:
+                  - policies
+                  - default_mode
+
   /store:
     post:
       summary: Store structured entities, unstructured files, or both
@@ -3891,6 +4036,391 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+
+  /issues/bulk_close:
+    post:
+      summary: Bulk close issues
+      description: >
+        For each `issue` entity id owned by the caller, closes the GitHub issue when
+        `github_number` is linked, then records `status: closed` in Neotoma.
+      operationId: bulkCloseIssues
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - entity_ids
+              properties:
+                entity_ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items:
+                    type: string
+                user_id:
+                  type: string
+      responses:
+        '200':
+          description: Per-entity outcomes
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                  - results
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+
+  /issues/bulk_remove:
+    post:
+      summary: Bulk remove issues from Neotoma
+      description: >
+        Soft-deletes each `issue` entity. When the issue is still open and linked to
+        GitHub (`github_number` > 0), closes the GitHub issue first.
+      operationId: bulkRemoveIssues
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - entity_ids
+              properties:
+                entity_ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items:
+                    type: string
+                user_id:
+                  type: string
+      responses:
+        '200':
+          description: Per-entity outcomes
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                  - results
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+
+  /issues/add_message:
+    post:
+      summary: Add message to issue thread
+      description: >
+        Appends a conversation_message to the issue thread (same flow as MCP add_issue_message).
+        May submit to the configured operator Neotoma instance and post a GitHub comment when the issue is linked.
+        Authenticated users can append to their scoped issues; scoped guest
+        callers can append with `guest_access_token` or submitter AAuth identity.
+      operationId: issuesAddMessage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - body
+              properties:
+                entity_id:
+                  type: string
+                  minLength: 1
+                  description: Neotoma issue entity id (preferred for Inspector deep links).
+                issue_number:
+                  type: integer
+                  minimum: 1
+                  description: GitHub issue number in the configured repo (MCP parity).
+                body:
+                  type: string
+                  minLength: 1
+                  description: Markdown message body.
+                guest_access_token:
+                  type: string
+                  minLength: 1
+                  description: >
+                    Optional guest token for operator Neotoma read-through / remote append when the local
+                    issue mirrors a remote instance. If omitted, guest_access_token on the issue snapshot is used.
+                reporter_git_sha:
+                  type: string
+                  description: |
+                    Soft requirement on public issue threads (server emits a warning when both
+                    `reporter_git_sha` and `reporter_app_version` are missing). Persisted on the
+                    `conversation_message` row so debugging steps stay correlated with the build under test.
+                reporter_git_ref:
+                  type: string
+                reporter_channel:
+                  type: string
+                reporter_app_version:
+                  type: string
+                  description: |
+                    Soft requirement on public issue threads (server emits a warning when both
+                    `reporter_git_sha` and `reporter_app_version` are missing).
+                user_id:
+                  type: string
+              description: |
+                Provide `entity_id` and/or `issue_number` (at least one required); same rule as MCP add_issue_message.
+                On public issue threads, supply at least one of `reporter_git_sha` / `reporter_app_version` so each
+                message records the environment it was authored against. Missing both emits a server-side warning;
+                the message still persists.
+      responses:
+        '200':
+          description: Message stored; flags indicate GitHub / remote submission outcomes.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                  - github_comment_id
+                  - message_entity_id
+                  - pushed_to_github
+                  - submitted_to_neotoma
+                properties:
+                  github_comment_id:
+                    type: string
+                    nullable: true
+                  message_entity_id:
+                    type: string
+                  pushed_to_github:
+                    type: boolean
+                  submitted_to_neotoma:
+                    type: boolean
+
+  /issues/submit:
+    post:
+      summary: Submit issue
+      description: |
+        Creates a local `issue` row, optional GitHub mirror for public visibility, and optional forward
+        to the configured operator instance (same flow as MCP submit_issue).
+        Authenticated users use the normal user scope. AAuth-signed guest
+        submitters may create operator-side issues when the `issue`,
+        `conversation`, and `conversation_message` guest access policies allow
+        writes; the response includes a guest read-back token.
+
+        **Reporter environment is required.** Callers MUST supply at least
+        one of `reporter_git_sha` or `reporter_app_version`. Submissions
+        missing both are rejected with `error_code: ERR_REPORTER_ENVIRONMENT_REQUIRED`.
+        See `docs/subsystems/issues.md` § Reporter provenance.
+      operationId: issuesSubmit
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - title
+                - body
+              properties:
+                title:
+                  type: string
+                  minLength: 1
+                body:
+                  type: string
+                  minLength: 1
+                labels:
+                  type: array
+                  items:
+                    type: string
+                visibility:
+                  type: string
+                  enum: [public, private]
+                reporter_git_sha:
+                  type: string
+                  description: |
+                    Required (this OR `reporter_app_version`). Git SHA the reporter is reproducing against
+                    (`git rev-parse HEAD`).
+                reporter_git_ref:
+                  type: string
+                reporter_channel:
+                  type: string
+                reporter_app_version:
+                  type: string
+                  description: |
+                    Required (this OR `reporter_git_sha`). App / CLI version (semver) the reporter is using.
+                reporter_ci_run_id:
+                  type: string
+                reporter_patch_source_id:
+                  type: string
+                github_url:
+                  type: string
+                  description: Guest submitter compatibility field for an already-created GitHub issue URL.
+                github_number:
+                  type: integer
+                  minimum: 1
+                  description: Guest submitter compatibility field for an already-created GitHub issue number.
+                author:
+                  type: string
+                  description: Guest submitter display author stored on the issue and first thread message.
+                local_issue_id:
+                  type: string
+                  description: Guest submitter deterministic local issue id for non-GitHub-backed threads.
+                submission_timestamp:
+                  type: string
+                  description: Guest submitter timestamp used for deterministic local thread identity.
+                user_id:
+                  type: string
+      responses:
+        '200':
+          description: Issue created
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                  - issue_number
+                  - github_url
+                  - entity_id
+                  - conversation_id
+                  - remote_entity_id
+                  - pushed_to_github
+                  - submitted_to_neotoma
+                  - github_mirror_guidance
+                properties:
+                  issue_number:
+                    type: integer
+                  github_url:
+                    type: string
+                  entity_id:
+                    type: string
+                  issue_entity_id:
+                    type: string
+                    description: Alias for `entity_id` returned for guest submitter compatibility.
+                  conversation_id:
+                    type: string
+                  remote_entity_id:
+                    type: string
+                  pushed_to_github:
+                    type: boolean
+                  submitted_to_neotoma:
+                    type: boolean
+                  guest_access_token:
+                    type: string
+                    description: Guest token returned by the operator instance for remote read-back and append.
+                  entity_ids:
+                    type: array
+                    items:
+                      type: string
+                    description: Entity ids written by the guest submitter flow.
+                  github_mirror_guidance:
+                    type: string
+                    nullable: true
+        '400':
+          description: |
+            Validation error. `error_code: ERR_REPORTER_ENVIRONMENT_REQUIRED`
+            is returned when neither `reporter_git_sha` nor
+            `reporter_app_version` is provided. `details.acceptable_field_groups`
+            lists the alternatives the caller can supply.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /issues/status:
+    post:
+      summary: Get issue status
+      description: >
+        Returns issue snapshot and thread messages; may sync from GitHub when stale and read through
+        to the operator instance when the local row mirrors remote (MCP get_issue_status parity).
+        Authenticated users read within their user scope. Scoped guest callers
+        can read with `guest_access_token` or submitter AAuth identity.
+      operationId: issuesGetStatus
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                entity_id:
+                  type: string
+                  minLength: 1
+                issue_number:
+                  type: integer
+                  minimum: 1
+                skip_sync:
+                  type: boolean
+                guest_access_token:
+                  type: string
+                  minLength: 1
+                user_id:
+                  type: string
+              description: Provide `entity_id` and/or `issue_number` (at least one required).
+      responses:
+        '200':
+          description: Issue status payload
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /issues/sync:
+    post:
+      summary: Sync issues from GitHub
+      description: >
+        Pulls issues and comments from the configured GitHub repo into local Neotoma (MCP sync_issues parity).
+      operationId: issuesSync
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                since:
+                  type: string
+                state:
+                  type: string
+                  enum: [open, closed, all]
+                labels:
+                  type: array
+                  items:
+                    type: string
+                user_id:
+                  type: string
+      responses:
+        '200':
+          description: Sync counts and errors
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                  - issues_synced
+                  - messages_synced
+                  - errors
+                properties:
+                  issues_synced:
+                    type: integer
+                  messages_synced:
+                    type: integer
+                  errors:
+                    type: array
+                    items:
+                      type: string
 
   /delete_entity:
     post:
@@ -4328,3 +4858,438 @@ paths:
                 type: object
                 additionalProperties: true
 
+  /subscribe:
+    post:
+      summary: Create a substrate event subscription (webhook or SSE)
+      operationId: subscribe
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - delivery_method
+              properties:
+                entity_types:
+                  type: array
+                  items:
+                    type: string
+                entity_ids:
+                  type: array
+                  items:
+                    type: string
+                event_types:
+                  type: array
+                  items:
+                    type: string
+                delivery_method:
+                  type: string
+                  enum: [webhook, sse]
+                webhook_url:
+                  type: string
+                webhook_secret:
+                  type: string
+                max_failures:
+                  type: integer
+                  minimum: 1
+                  maximum: 100
+                sync_peer_id:
+                  type: string
+                  description: |
+                    When set, webhook deliveries skip substrate events whose
+                    `source_peer_id` equals this value (prevents notifying a peer
+                    about changes that originated from that peer).
+      responses:
+        '200':
+          description: Subscription created
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                properties:
+                  subscription_id:
+                    type: string
+                  entity_id:
+                    type: string
+                  webhook_secret:
+                    type: string
+
+  /unsubscribe:
+    post:
+      summary: Deactivate a subscription
+      operationId: unsubscribe
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - subscription_id
+              properties:
+                subscription_id:
+                  type: string
+      responses:
+        '200':
+          description: Subscription deactivated
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /list_subscriptions:
+    post:
+      summary: List active subscriptions for the current user
+      operationId: listSubscriptions
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+      responses:
+        '200':
+          description: Active subscriptions
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /get_subscription_status:
+    post:
+      summary: Get subscription delivery status
+      operationId: getSubscriptionStatus
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - subscription_id
+              properties:
+                subscription_id:
+                  type: string
+      responses:
+        '200':
+          description: Subscription status
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /events/stream:
+    get:
+      summary: Server-sent events stream for a subscription
+      operationId: eventsStream
+      parameters:
+        - in: query
+          name: subscription_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: text/event-stream
+
+  /peers:
+    get:
+      summary: List configured Neotoma peers for the authenticated user
+      operationId: listPeers
+      responses:
+        '200':
+          description: Peer rows (shared_secret omitted)
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+    post:
+      summary: Add a Neotoma peer configuration
+      operationId: addPeer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - peer_id
+                - peer_name
+                - peer_url
+                - direction
+                - entity_types
+                - sync_scope
+                - auth_method
+                - conflict_strategy
+              properties:
+                peer_id:
+                  type: string
+                peer_name:
+                  type: string
+                peer_url:
+                  type: string
+                direction:
+                  type: string
+                  enum: [push, pull, bidirectional]
+                entity_types:
+                  type: array
+                  items:
+                    type: string
+                sync_scope:
+                  type: string
+                  enum: [all, tagged]
+                auth_method:
+                  type: string
+                  enum: [aauth, shared_secret]
+                conflict_strategy:
+                  type: string
+                  enum: [last_write_wins, source_priority, manual]
+                shared_secret:
+                  type: string
+                  description: Optional; generated when auth_method is shared_secret and omitted.
+                peer_public_key_thumbprint:
+                  type: string
+                  description: Optional AAuth public-key thumbprint expected from this peer when auth_method is aauth.
+                sync_target_user_id:
+                  type: string
+                  format: uuid
+                  description: Optional. Authenticated user_id on the peer instance for outbound POST /sync/webhook target_user_id.
+      responses:
+        '201':
+          description: Peer created
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /peers/{peer_id}:
+    get:
+      summary: Get one peer configuration (secret redacted) plus remote /health probe and semver compat vs this server
+      operationId: getPeerStatus
+      parameters:
+        - in: path
+          name: peer_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Peer snapshot with remote health and local API version
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                  - peer
+                  - local_api_version
+                  - remote_health
+                properties:
+                  local_api_version:
+                    type: string
+                    description: This Neotoma instance package version (same source as GET /health)
+                  peer:
+                    type: object
+                    additionalProperties: true
+                  remote_health:
+                    type: object
+                    additionalProperties: false
+                    required:
+                      - reachable
+                      - version
+                      - compatible
+                    properties:
+                      reachable:
+                        type: boolean
+                      ok:
+                        type: boolean
+                        description: Present when reachable; true when /health returned ok true
+                      version:
+                        type: string
+                        description: Peer /health version string or unknown
+                      compatible:
+                        type: boolean
+                        description: Semver compat vs local_api_version (same rules as neotoma compat); false when unreachable or /health not ok
+                      warning:
+                        type: string
+                        nullable: true
+                      error:
+                        type: string
+                        nullable: true
+    delete:
+      summary: Deactivate a peer configuration
+      operationId: removePeer
+      parameters:
+        - in: path
+          name: peer_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Peer deactivated
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /peers/{peer_id}/sync:
+    post:
+      summary: Bounded outbound peer sync (POST signed /sync/webhook per observation)
+      operationId: syncPeer
+      parameters:
+        - in: path
+          name: peer_id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                limit:
+                  type: integer
+                  minimum: 1
+                  maximum: 500
+                  description: Max observations to consider this run (default 200)
+      responses:
+        '200':
+          description: Sync acknowledgement
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /peers/resolve_sync_conflict:
+    post:
+      summary: Resolve a sync conflict (prefer_remote re-fetches remote guest snapshot; prefer_local is a no-op with guidance)
+      operationId: resolveSyncConflict
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - entity_id
+                - strategy
+              properties:
+                entity_id:
+                  type: string
+                strategy:
+                  type: string
+                  enum: [prefer_local, prefer_remote, last_write_wins, source_priority, manual]
+                sender_peer_url:
+                  type: string
+                  description: Required for prefer_remote — remote Neotoma base URL (GET /entities/{entity_id})
+                guest_access_token:
+                  type: string
+                  description: Optional query access_token for guest read on the remote instance
+      responses:
+        '200':
+          description: Resolution result
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /sync/webhook:
+    post:
+      summary: Apply one inbound cross-instance sync notification
+      operationId: applySyncWebhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - sender_peer_id
+                - sender_peer_url
+                - target_user_id
+                - entity_id
+                - source_observation_id
+              properties:
+                sender_peer_id:
+                  type: string
+                sender_peer_url:
+                  type: string
+                target_user_id:
+                  type: string
+                  format: uuid
+                entity_id:
+                  type: string
+                source_observation_id:
+                  type: string
+                guest_access_token:
+                  type: string
+      responses:
+        '200':
+          description: Sync notification applied
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /sync/entities:
+    post:
+      summary: List local entity snapshots for an authenticated peer sync pull
+      operationId: listSyncEntities
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - sender_peer_id
+                - target_user_id
+                - entity_types
+              properties:
+                sender_peer_id:
+                  type: string
+                target_user_id:
+                  type: string
+                  format: uuid
+                entity_types:
+                  type: array
+                  items:
+                    type: string
+                observed_after:
+                  type: string
+                  format: date-time
+                limit:
+                  type: integer
+                  minimum: 1
+                  maximum: 500
+      responses:
+        '200':
+          description: Entity snapshots available to the peer
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true

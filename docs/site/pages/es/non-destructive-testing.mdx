@@ -1,0 +1,222 @@
+import { MdxI18nLink } from "@/components/mdx/mdx_i18n_link";
+
+No necesitas comprometerte con Neotoma para saber si te encaja. Instálalo junto a lo que ya uses, ingiere una porción de tu historial, ejecuta tu agente con y sin Neotoma y compara. Nada de tu configuración actual se mueve, modifica ni reemplaza.
+
+Esta guía recorre la ruta recomendada de instalación en sombra: instalar → ingerir historial → comparar A/B → decidir. Tu sistema de memoria existente (`MEMORY.md`, `claw.md`, un servidor MCP propio, memoria de plataforma como Claude o ChatGPT) queda intacto en todo momento.
+
+## Qué significa "probar con seguridad" aquí
+
+Neotoma escribe en una base SQLite local dentro de su propio directorio de datos. No toca tus otros archivos, la configuración del editor, las plantillas de prompts de tu agente ni cualquier otro almacén de memoria que ya uses. Si desinstalas, el único artefacto es el directorio de datos de Neotoma; todo lo demás sigue exactamente donde estaba.
+
+<ul className="list-none pl-0 space-y-2 mb-6">
+  <li className="text-[15px] leading-7 flex items-start gap-2 [&>p]:m-0">
+    <span className="text-emerald-500 mt-0.5 shrink-0 [&>p]:m-0 [&>p]:leading-none" aria-hidden>
+      &rarr;
+    </span>
+    Tus archivos de memoria existentes no se leen, bloquean ni reescriben.
+  </li>
+  <li className="text-[15px] leading-7 flex items-start gap-2 [&>p]:m-0">
+    <span className="text-emerald-500 mt-0.5 shrink-0 [&>p]:m-0 [&>p]:leading-none" aria-hidden>
+      &rarr;
+    </span>
+    Los datos de Neotoma viven en su propio directorio que puedes borrar, respaldar o apartar cuando quieras.
+  </li>
+  <li className="text-[15px] leading-7 flex items-start gap-2 [&>p]:m-0">
+    <span className="text-emerald-500 mt-0.5 shrink-0 [&>p]:m-0 [&>p]:leading-none" aria-hidden>
+      &rarr;
+    </span>
+    Tu agente decide cuándo leer o escribir en Neotoma; nada se intercepta en segundo plano.
+  </li>
+  <li className="text-[15px] leading-7 flex items-start gap-2 [&>p]:m-0">
+    <span className="text-emerald-500 mt-0.5 shrink-0 [&>p]:m-0 [&>p]:leading-none" aria-hidden>
+      &rarr;
+    </span>
+    Los esquemas se infieren a partir de tus datos, así que la prueba no requiere modelar nada por adelantado.
+  </li>
+</ul>
+
+## Paso 1 — Instala en modo sombra
+
+```bash
+npm install -g neotoma
+NEOTOMA_DATA_DIR=~/.neotoma-shadow neotoma setup --tool cursor --yes
+```
+
+`neotoma setup --tool <tool> --yes` es la ruta más rápida cuando ya sabes con qué cliente quieres probar primero. Ejecuta el paso idempotente de `init`, configura MCP y aplica la guía local del agente correspondiente. Sustituye `cursor` por `claude-code`, `codex` u otra herramienta compatible. Si prefieres el flujo paso a paso, usa `neotoma init --interactive` y luego `neotoma mcp config`.
+
+Si ejecutas `setup` con `NEOTOMA_DATA_DIR`, el paso de `init` dentro de `setup` escribe esa ruta en la configuración de entorno de Neotoma para que los siguientes comandos reutilicen el mismo directorio en sombra:
+
+```bash
+neotoma storage info
+```
+
+Todo lo guardado durante la prueba aterriza en `~/.neotoma-shadow`.
+
+## Paso 2 — Inicia opcionalmente la API local
+
+Solo lo necesitas si quieres la API HTTP local, el Inspector, flujos OAuth o una vía de transporte que dependa del servidor API. La ruta MCP local por defecto que configura `setup` no lo requiere.
+
+```bash
+neotoma api start
+```
+
+## Paso 3 — Ingiere una porción de tu historial
+
+Neotoma puede absorber los artefactos que tu agente ya produjo (transcripciones de chat, notas, exportaciones). Eso es lo que te permite hacer preguntas comparativas de inmediato, sin esperar semanas a que se acumule historial nuevo.
+
+```bash
+# Descubre archivos candidatos (escaneo solo-lectura)
+neotoma discover ~/Documents ~/Desktop --limit 50
+
+# Previsualiza una transcripción antes de la ingesta
+neotoma ingest-transcript ~/Downloads/chatgpt_export.json
+
+# Ingiere un archivo con clave de idempotencia explícita
+neotoma ingest --file ~/Notas/reunion_2026_03_14.md
+```
+
+`neotoma discover` es un pase de ranking solo-lectura. No modifica ningún archivo origen. `ingest-transcript` previsualiza la estructura antes de cualquier escritura. `ingest` es el paso de escritura real y sella cada fila con procedencia para que puedas rastrear cualquier hecho almacenado al archivo origen.
+
+Si prefieres empezar vacío y dejar que tu agente pueble Neotoma sesión a sesión, omite este paso. El paso 4 igual funciona; solo mide comportamiento hacia adelante en lugar de reconstrucción histórica.
+
+## Paso 4 — Ejecuta en paralelo
+
+Abre dos ventanas, sesiones o espacios de trabajo. Configura uno para exponer el servidor MCP de Neotoma; configura el otro sin él. Haz las mismas preguntas en ambos.
+
+Buenas preguntas de comparación:
+
+<ul className="list-none pl-0 space-y-2 mb-6">
+  <li className="text-[15px] leading-7 flex items-start gap-2 [&>p]:m-0">
+    <span className="text-emerald-500 mt-0.5 shrink-0 [&>p]:m-0 [&>p]:leading-none" aria-hidden>
+      &rarr;
+    </span>
+    «¿Con quién hablé por última vez sobre &lt;proyecto&gt;? ¿Qué acordamos?»
+  </li>
+  <li className="text-[15px] leading-7 flex items-start gap-2 [&>p]:m-0">
+    <span className="text-emerald-500 mt-0.5 shrink-0 [&>p]:m-0 [&>p]:leading-none" aria-hidden>
+      &rarr;
+    </span>
+    «¿Cuál es el estado actual de cada tarea que comprometí este mes?»
+  </li>
+  <li className="text-[15px] leading-7 flex items-start gap-2 [&>p]:m-0">
+    <span className="text-emerald-500 mt-0.5 shrink-0 [&>p]:m-0 [&>p]:leading-none" aria-hidden>
+      &rarr;
+    </span>
+    «Muéstrame la línea de tiempo de cambios de &lt;entidad&gt;, con fuentes.»
+  </li>
+  <li className="text-[15px] leading-7 flex items-start gap-2 [&>p]:m-0">
+    <span className="text-emerald-500 mt-0.5 shrink-0 [&>p]:m-0 [&>p]:leading-none" aria-hidden>
+      &rarr;
+    </span>
+    «¿Por qué decidimos &lt;decisión&gt;? ¿Qué entradas teníamos delante?»
+  </li>
+</ul>
+
+El agente sin Neotoma improvisará o se negará. El agente con Neotoma debería poder citar entidades, observaciones y archivos origen concretos para cada respuesta.
+
+## Paso 5 — Decide
+
+Cualquiera de los dos desenlaces está bien:
+
+<ul className="list-none pl-0 space-y-2 mb-6">
+  <li className="text-[15px] leading-7 flex items-start gap-2 [&>p]:m-0">
+    <span className="text-emerald-500 mt-0.5 shrink-0 [&>p]:m-0 [&>p]:leading-none" aria-hidden>
+      &rarr;
+    </span>
+    <span>
+      <strong>Te quedas:</strong> apunta el resto de tus clientes al servidor MCP de Neotoma y deja que tu archivo de memoria existente pase a archivo. Puedes seguir ingiriendo hacia atrás (transcripciones más antiguas, exportaciones) a tu ritmo.
+    </span>
+  </li>
+  <li className="text-[15px] leading-7 flex items-start gap-2 [&>p]:m-0">
+    <span className="text-emerald-500 mt-0.5 shrink-0 [&>p]:m-0 [&>p]:leading-none" aria-hidden>
+      &rarr;
+    </span>
+    <span>
+      <strong>Te marchas:</strong> detén el servidor de Neotoma, quita su entrada MCP de cada cliente y borra el directorio de datos. Tu configuración previa queda exactamente como estaba: no hay nada que revertir en tu otro almacén de memoria.
+    </span>
+  </li>
+</ul>
+
+```bash
+# Detén la API local (si la iniciaste)
+neotoma api stop
+
+# (Opcional) borra los datos de la prueba
+rm -rf ~/.neotoma-shadow
+```
+
+## Lo que esto no requiere
+
+<ul className="list-none pl-0 space-y-2 mb-6">
+  <li className="text-[15px] leading-7 flex items-start gap-2 [&>p]:m-0">
+    <span className="text-emerald-500 mt-0.5 shrink-0 [&>p]:m-0 [&>p]:leading-none" aria-hidden>
+      &rarr;
+    </span>
+    <span>
+      <MdxI18nLink to="/schema-management" className="text-foreground underline underline-offset-2 hover:no-underline">
+        Un esquema, registro de tipos o conjunto de datos pre-modelado
+      </MdxI18nLink>
+      . Neotoma infiere los esquemas a medida que el agente almacena.
+    </span>
+  </li>
+  <li className="text-[15px] leading-7 flex items-start gap-2 [&>p]:m-0">
+    <span className="text-emerald-500 mt-0.5 shrink-0 [&>p]:m-0 [&>p]:leading-none" aria-hidden>
+      &rarr;
+    </span>
+    <span>
+      <MdxI18nLink to="/hosted" className="text-foreground underline underline-offset-2 hover:no-underline">
+        Sincronización ni hosting en la nube
+      </MdxI18nLink>
+      . Todo en esta guía corre en tu máquina.
+    </span>
+  </li>
+  <li className="text-[15px] leading-7 flex items-start gap-2 [&>p]:m-0">
+    <span className="text-emerald-500 mt-0.5 shrink-0 [&>p]:m-0 [&>p]:leading-none" aria-hidden>
+      &rarr;
+    </span>
+    <span>
+      <MdxI18nLink to="/neotoma-vs-files" className="text-foreground underline underline-offset-2 hover:no-underline">
+        Migrar datos fuera de tu sistema actual
+      </MdxI18nLink>
+      . La base de datos en sombra es un arranque limpio; tus archivos existentes se quedan donde están.
+    </span>
+  </li>
+  <li className="text-[15px] leading-7 flex items-start gap-2 [&>p]:m-0">
+    <span className="text-emerald-500 mt-0.5 shrink-0 [&>p]:m-0 [&>p]:leading-none" aria-hidden>
+      &rarr;
+    </span>
+    <span>
+      Comprometerse a una sola herramienta. Neotoma es{" "}
+      <MdxI18nLink to="/mcp" className="text-foreground underline underline-offset-2 hover:no-underline">
+        compatible con MCP
+      </MdxI18nLink>
+      , así que puede convivir con{" "}
+      <MdxI18nLink to="/neotoma-vs-platform-memory" className="text-foreground underline underline-offset-2 hover:no-underline">
+        memoria de plataforma
+      </MdxI18nLink>{" "}
+      (Claude, ChatGPT) sin conflicto.
+    </span>
+  </li>
+</ul>
+
+<div className="text-[14px] leading-6 text-muted-foreground">
+  <p className="m-0">
+    Relacionado:{" "}
+    <MdxI18nLink to="/install" className="text-foreground underline underline-offset-2 hover:no-underline">
+      guía de instalación
+    </MdxI18nLink>
+    ,{" "}
+    <MdxI18nLink to="/walkthrough" className="text-foreground underline underline-offset-2 hover:no-underline">
+      walkthrough
+    </MdxI18nLink>
+    ,{" "}
+    <MdxI18nLink to="/schemas/versioning" className="text-foreground underline underline-offset-2 hover:no-underline">
+      versionado y evolución de esquemas
+    </MdxI18nLink>
+    , y{" "}
+    <MdxI18nLink to="/backup" className="text-foreground underline underline-offset-2 hover:no-underline">
+      backup y restauración
+    </MdxI18nLink>
+    .
+  </p>
+</div>

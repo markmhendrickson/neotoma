@@ -19,6 +19,13 @@ const CLI_PATH = "node dist/cli/index.js";
 const TEST_USER_ID = "test-user-entity-subcmds";
 const FAKE_ENTITY_ID = "ent_test_subcmd_abc123";
 
+function stripConfigBootstrapStderr(stderr: string): string {
+  return stderr
+    .replace(/Saved repo path[^\n]*\n?/g, "")
+    .replace(/Saved Neotoma path to config:[^\n]*\n?/g, "")
+    .trim();
+}
+
 // ─── In-process helpers (mock-fetch pattern) ──────────────────────────────────
 
 type CliModule = { runCli: (argv: string[]) => Promise<void> };
@@ -417,7 +424,7 @@ describe("CLI entity subcommands", () => {
       const { stdout, stderr } = await execAsync(
         `${CLI_PATH} entities delete "${deleteId}" task --user-id "${TEST_USER_ID}" --json`
       );
-      expect(stderr).toBe("");
+      expect(stripConfigBootstrapStderr(stderr)).toBe("");
       const result = JSON.parse(stdout);
       expect(result).toBeDefined();
     });
@@ -455,7 +462,7 @@ describe("CLI entity subcommands", () => {
       const { stdout, stderr } = await execAsync(
         `${CLI_PATH} entities restore "${restoreId}" task --user-id "${TEST_USER_ID}" --json`
       );
-      expect(stderr).toBe("");
+      expect(stripConfigBootstrapStderr(stderr)).toBe("");
       const result = JSON.parse(stdout);
       expect(result).toBeDefined();
     });

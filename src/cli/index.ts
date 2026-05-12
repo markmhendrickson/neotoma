@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { Command } from "commander";
+import { Command, Option } from "commander";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { exec, execFileSync, execSync, spawn } from "node:child_process";
 import fs from "node:fs/promises";
@@ -8,7 +8,15 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { createWriteStream, readdirSync, readFileSync, realpathSync, type Dirent, type Stats } from "node:fs";
+import {
+  createWriteStream,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  statSync,
+  type Dirent,
+  type Stats,
+} from "node:fs";
 import * as readline from "node:readline";
 import Database, { type SqliteDatabase } from "../repositories/sqlite/sqlite_driver.js";
 
@@ -16,6 +24,7 @@ import { config as appConfig } from "../config.js";
 import { getMcpAuthToken } from "../crypto/mcp_auth_token.js";
 import { LOCAL_DEV_USER_ID } from "../services/local_auth.js";
 import { createApiClient } from "../shared/api_client.js";
+import { parseCliCorrectedValue } from "./parse_cli_corrected_value.js";
 import { getOpenApiOperationMapping } from "../shared/contract_mappings.js";
 import { getEntityDisplayName } from "../shared/entity_display_name.js";
 import { getRecordDisplaySummary } from "../shared/record_display_summary.js";
@@ -43,6 +52,7 @@ import {
   isUpdateAvailable,
   formatUpgradeCommand,
 } from "../version_check.js";
+import { compareCliApiCompat } from "../semver_compat.js";
 import { shutdownLocalTransport } from "../shared/local_transport.js";
 import { registerMcpProxyCommand } from "./mcp_proxy.js";
 import {
@@ -52,6 +62,7 @@ import {
   resolveNeotomaPackageRoot,
 } from "../mcp_instruction_doc.js";
 import { registerProcessesCommands } from "./commands/processes.js";
+import { registerPeersCommand } from "./peers.js";
 import { buildInspectorFeedbackAdminUnlockPageUrl } from "./inspector_admin_unlock_url.js";
 import {
   accent,
@@ -76,7 +87,7 @@ import {
   warn,
 } from "./format.js";
 const CLI_BANNER = `
- ███╗   ██╗███████╗ ██████╗ ████████╗ ██████╗ ███╗   ███╗ █████╗ 
+ ███╗   ██╗███████╗ ██████╗ ████████╗ ██████╗ ███╗   ███╗ █████╗
  ████╗  ██║██╔════╝██╔═══██╗╚══██╔══╝██╔═══██╗████╗ ████║██╔══██╗
  ██╔██╗ ██║█████╗  ██║   ██║   ██║   ██║   ██║██╔████╔██║███████║
  ██║╚██╗██║██╔══╝  ██║   ██║   ██║   ██║   ██║██║╚██╔╝██║██╔══██║
@@ -1257,7 +1268,7 @@ function humanReadableApiError(err: unknown, sessionContext?: boolean): string {
         "Retry with `neotoma --env prod` if the server crashed."
       );
     }
-    return "Server not reachable. Is the API running? Try `neotoma api start --env dev`. If the API is on port 3180 (e.g. npm run dev:prod), use --base-url http://localhost:3180 or --env prod";
+    return "Server not reachable. Is the API running? Try `neotoma api start --env dev`. If the API is on port 3180 (e.g. npm run dev:server:prod), use --base-url http://localhost:3180 or --env prod";
   }
   if (code === "ENOTFOUND") {
     return "Host not found. Check --base-url or --env.";
@@ -1705,7 +1716,7 @@ const WATCH_CONCURRENTLY_ARGS = [
   "--timestamp=HH:mm:ss",
   "--prefix={time} [{name}]",
   "--names=api   ,build",
-  "tsx watch src/actions.ts",
+  "bash scripts/run-neotoma-api-node-watch.sh",
   "tsc --watch --preserveWatchOutput",
 ];
 
@@ -8610,38 +8621,294 @@ grantsCommand
     }
   });
 
-const feedbackCommand = program
+program
   .command("feedback")
-  .description("Agent-feedback pipeline preferences (reporting mode, activation state)");
+  .description("[DEPRECATED: Use `neotoma issues config` instead]")
+  .allowUnknownOption(true)
+  .action(async () => {
+    console.error("Error: `neotoma feedback` has been removed. Use `neotoma issues config --mode <value>` instead.");
+    process.exit(1);
+  });
 
-feedbackCommand
-  .command("mode [value]")
-  .description(
-    "Show or set the feedback reporting mode (proactive | consent | off). Default is proactive.",
+// ─── Access policy commands ───────────────────────────────────────────────
+const accessCommand = program
+  .command("access")
+  .description("Configure per-entity-type access policies for guest agents.");
+
+accessCommand
+  .command("set <entity_type> <mode>")
+  .description("Set access policy for an entity type (closed, read_only, submit_only, submitter_scoped, open)")
+  .action(async (entityType, mode) => {
+    const { accessSet } = await import("./access.js");
+    await accessSet(entityType, mode, { json: Boolean((program.opts() as { json?: boolean }).json) });
+  });
+
+accessCommand
+  .command("list")
+  .description("Show all configured access policies")
+  .action(async () => {
+    const { accessList } = await import("./access.js");
+    await accessList({ json: Boolean((program.opts() as { json?: boolean }).json) });
+  });
+
+accessCommand
+  .command("reset <entity_type>")
+  .description("Reset an entity type's access policy to default (closed)")
+  .action(async (entityType) => {
+    const { accessReset } = await import("./access.js");
+    await accessReset(entityType, { json: Boolean((program.opts() as { json?: boolean }).json) });
+  });
+
+accessCommand
+  .command("enable-issues")
+  .description("Set issue, conversation, conversation_message to submitter_scoped")
+  .action(async () => {
+    const { accessEnableIssues } = await import("./access.js");
+    await accessEnableIssues({ json: Boolean((program.opts() as { json?: boolean }).json) });
+  });
+
+accessCommand
+  .command("disable-issues")
+  .description("Reset issue, conversation, conversation_message to closed")
+  .action(async () => {
+    const { accessDisableIssues } = await import("./access.js");
+    await accessDisableIssues({ json: Boolean((program.opts() as { json?: boolean }).json) });
+  });
+
+// ─── Issues commands ───────────────────────────────────────────────────────
+const issuesCommand = program
+  .command("issues")
+  .description("GitHub Issues integration: create, message, list, sync, and configure.");
+
+issuesCommand
+  .command("create")
+  .description("Create a new GitHub issue")
+  .requiredOption("--title <title>", "Issue title")
+  .requiredOption("--body <body>", "Issue body (markdown)")
+  .option("--labels <labels>", "Comma-separated labels (e.g. bug,doc_gap)")
+  .option("--reporter-git-sha <sha>", "Reporter git SHA for issue provenance")
+  .option("--reporter-app-version <version>", "Reporter app/CLI version for issue provenance")
+  .option("--reporter-git-ref <ref>", "Reporter git ref for issue provenance")
+  .option("--reporter-channel <channel>", "Reporter channel (e.g. cli, cursor, ci)")
+  .option("--reporter-ci-run-id <id>", "Reporter CI run id for issue provenance")
+  .addOption(
+    new Option(
+      "--advisory",
+      "Deprecated alias for --visibility private",
+    ).hideHelp(),
   )
-  .action(async (value) => {
-    const outputMode = resolveOutputMode();
-    const {
-      loadFeedbackReportingMode,
-      setFeedbackReportingMode,
-      describeModes,
-      DEFAULT_FEEDBACK_REPORTING_MODE,
-    } = await import("../services/feedback/activation.js");
-    if (!value) {
-      const current = await loadFeedbackReportingMode();
-      if (outputMode === "json") {
-        writeOutput({ mode: current, default: DEFAULT_FEEDBACK_REPORTING_MODE }, outputMode);
-      } else {
-        process.stdout.write(`Current feedback reporting mode: ${current}\n\n${describeModes()}\n`);
-      }
+  .option(
+    "--visibility <vis>",
+    "public (default; creates GitHub issue when possible) or private (Neotoma-only, skips GitHub)",
+    "public",
+  )
+  .action(async (opts) => {
+    const vis = String(opts.visibility ?? "public").toLowerCase();
+    if (vis !== "public" && vis !== "private") {
+      process.stderr.write("Error: --visibility must be public or private\n");
+      process.exitCode = 1;
       return;
     }
-    await setFeedbackReportingMode(value as "proactive" | "consent" | "off");
-    if (outputMode === "json") {
-      writeOutput({ ok: true, mode: value }, outputMode);
-    } else {
-      process.stdout.write(`Feedback reporting mode set to: ${value}\n`);
+    const { issuesCreate } = await import("./issues.js");
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({ baseUrl: await resolveBaseUrl(program.opts().baseUrl, config), token });
+    await issuesCreate(
+      {
+        title: opts.title,
+        body: opts.body,
+        labels: opts.labels,
+        visibility: vis as "public" | "private",
+        advisory: Boolean(opts.advisory),
+        reporter_git_sha: opts.reporterGitSha,
+        reporter_app_version: opts.reporterAppVersion,
+        reporter_git_ref: opts.reporterGitRef,
+        reporter_channel: opts.reporterChannel,
+        reporter_ci_run_id: opts.reporterCiRunId,
+        json: Boolean((program.opts() as { json?: boolean }).json),
+      },
+      api,
+    );
+  });
+
+issuesCommand
+  .command("message [number]")
+  .description("Add a message to an existing issue (GitHub number or --entity-id)")
+  .option("--entity-id <id>", "Neotoma issue entity_id (preferred when known)")
+  .option("--guest-access-token <token>", "Guest token for operator remote append")
+  .option("--reporter-git-sha <sha>", "Reporter git SHA for message provenance")
+  .option("--reporter-app-version <version>", "Reporter app/CLI version for message provenance")
+  .option("--reporter-git-ref <ref>", "Reporter git ref for message provenance")
+  .option("--reporter-channel <channel>", "Reporter channel (e.g. cli, cursor, ci)")
+  .option("--reporter-ci-run-id <id>", "Reporter CI run id for message provenance")
+  .requiredOption("--body <body>", "Message body (markdown)")
+  .action(async (number, opts) => {
+    const { issuesMessage } = await import("./issues.js");
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({ baseUrl: await resolveBaseUrl(program.opts().baseUrl, config), token });
+    const n = number !== undefined && String(number).length > 0 ? parseInt(String(number), 10) : NaN;
+    const issueNum = Number.isFinite(n) && n > 0 ? n : undefined;
+    const entityId = typeof opts.entityId === "string" ? opts.entityId.trim() : "";
+    if (entityId && issueNum !== undefined) {
+      process.stderr.write("Error: pass either a GitHub issue number or --entity-id, not both\n");
+      process.exitCode = 1;
+      return;
     }
+    if (!entityId && issueNum === undefined) {
+      process.stderr.write("Error: provide GitHub issue number as argument or --entity-id\n");
+      process.exitCode = 1;
+      return;
+    }
+    await issuesMessage(
+      {
+        body: opts.body,
+        issue_number: issueNum,
+        entity_id: entityId || undefined,
+        guest_access_token: opts.guestAccessToken,
+        reporter_git_sha: opts.reporterGitSha,
+        reporter_app_version: opts.reporterAppVersion,
+        reporter_git_ref: opts.reporterGitRef,
+        reporter_channel: opts.reporterChannel,
+        reporter_ci_run_id: opts.reporterCiRunId,
+        json: Boolean((program.opts() as { json?: boolean }).json),
+      },
+      api,
+    );
+  });
+
+issuesCommand
+  .command("status")
+  .description("Print issue metadata and thread (same flow as MCP get_issue_status)")
+  .option("--entity-id <id>", "Neotoma issue entity_id")
+  .option("--issue-number <n>", "GitHub issue number in the configured repo")
+  .option("--skip-sync", "Skip GitHub stale refresh when issue has github_number")
+  .option("--guest-access-token <token>", "Guest token for operator read-through")
+  .action(async (opts) => {
+    const { issuesStatus } = await import("./issues.js");
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({ baseUrl: await resolveBaseUrl(program.opts().baseUrl, config), token });
+    const parsedIssueNumber =
+      opts.issueNumber !== undefined && String(opts.issueNumber).length > 0
+        ? parseInt(String(opts.issueNumber), 10)
+        : NaN;
+    const issueNumber =
+      Number.isFinite(parsedIssueNumber) && parsedIssueNumber > 0 ? parsedIssueNumber : undefined;
+    await issuesStatus(
+      {
+        entity_id: opts.entityId,
+        issue_number: issueNumber,
+        skip_sync: Boolean(opts.skipSync),
+        guest_access_token: opts.guestAccessToken,
+        json: Boolean((program.opts() as { json?: boolean }).json),
+      },
+      api,
+    );
+  });
+
+issuesCommand
+  .command("list")
+  .description("List issues from the configured GitHub repo")
+  .option("--status <status>", "Filter by status: open, closed, all", "open")
+  .option("--labels <labels>", "Filter by comma-separated labels")
+  .option("--since <date>", "Only show issues updated after this ISO date")
+  .option("--no-sync", "Skip implicit sync from GitHub")
+  .action(async (opts) => {
+    const { issuesList } = await import("./issues.js");
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({ baseUrl: await resolveBaseUrl(program.opts().baseUrl, config), token });
+    await issuesList({ ...opts, json: Boolean((program.opts() as { json?: boolean }).json) }, api);
+  });
+
+issuesCommand
+  .command("sync")
+  .description("Full sync of issues from GitHub into local Neotoma")
+  .option("--since <date>", "Only sync issues updated after this ISO date")
+  .option("--state <state>", "Filter by state: open, closed, all", "all")
+  .option("--labels <labels>", "Comma-separated label filter (passed to GitHub list)")
+  .action(async (opts) => {
+    const { issuesSync } = await import("./issues.js");
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({ baseUrl: await resolveBaseUrl(program.opts().baseUrl, config), token });
+    await issuesSync({ ...opts, json: Boolean((program.opts() as { json?: boolean }).json) }, api);
+  });
+
+issuesCommand
+  .command("config")
+  .description("View or update issues configuration")
+  .option("--repo <owner/repo>", "Set the target GitHub repo")
+  .option("--mode <mode>", "Set reporting mode: consent (default), proactive, off")
+  .action(async (opts) => {
+    const { issuesConfig } = await import("./issues.js");
+    await issuesConfig({ ...opts, json: Boolean((program.opts() as { json?: boolean }).json) });
+  });
+
+issuesCommand
+  .command("auth")
+  .description("Set up GitHub authentication via gh CLI")
+  .action(async () => {
+    const { issuesAuth } = await import("./issues.js");
+    await issuesAuth({ json: Boolean((program.opts() as { json?: boolean }).json) });
+  });
+
+// ─── Plans commands ────────────────────────────────────────────────────────
+const plansCommand = program
+  .command("plans")
+  .description("Persist harness-authored plan files (.plan.md) and list stored plans.");
+
+plansCommand
+  .command("capture [file]")
+  .description("Capture a harness `.plan.md` file (raw markdown + structured plan row + EMBEDS) into Neotoma")
+  .option("--all", "Walk known harness plan dirs (.cursor/plans, .claude/plans, .codex/plans, .openclaw/plans) and capture each .plan.md")
+  .option("--source-message-entity-id <id>", "Prompting conversation_message entity_id (REFERS_TO source)")
+  .option("--source-entity-id <id>", "Source entity this plan resolves (e.g. an issue entity_id)")
+  .option("--source-entity-type <type>", "Source entity_type (e.g. issue, feature_unit)")
+  .option("--repository-root <path>", "Repository root used for --all directory scanning; defaults to cwd")
+  .action(async (file, opts) => {
+    const { plansCapture } = await import("./plans.js");
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({ baseUrl: await resolveBaseUrl(program.opts().baseUrl, config), token });
+    await plansCapture(
+      {
+        file: typeof file === "string" && file.length > 0 ? file : undefined,
+        all: Boolean(opts.all),
+        source_message_entity_id: opts.sourceMessageEntityId,
+        source_entity_id: opts.sourceEntityId,
+        source_entity_type: opts.sourceEntityType,
+        repository_root: opts.repositoryRoot,
+        json: Boolean((program.opts() as { json?: boolean }).json),
+      },
+      api,
+    );
+  });
+
+plansCommand
+  .command("list")
+  .description("List `plan` entities stored in Neotoma (filterable by source/status/harness)")
+  .option("--source-entity-id <id>", "Only list plans linked to this source entity (e.g. an issue)")
+  .option("--status <status>", "Filter by plan status (draft, awaiting_input, approved, executing, executed, abandoned, superseded)")
+  .option("--harness <name>", "Filter by authoring harness (cursor, claude_code, codex, openclaw, cli, agent, human, other)")
+  .option("--limit <n>", "Max rows to fetch from the server before client-side filtering", "50")
+  .action(async (opts) => {
+    const { plansList } = await import("./plans.js");
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({ baseUrl: await resolveBaseUrl(program.opts().baseUrl, config), token });
+    const limit = opts.limit !== undefined ? parseInt(String(opts.limit), 10) : 50;
+    await plansList(
+      {
+        source_entity_id: opts.sourceEntityId,
+        status: opts.status,
+        harness: opts.harness,
+        limit: Number.isFinite(limit) && limit > 0 ? limit : 50,
+        json: Boolean((program.opts() as { json?: boolean }).json),
+      },
+      api,
+    );
   });
 
 const inspectorCommand = program.command("inspector").description("Inspector helper commands");
@@ -8772,44 +9039,12 @@ inspectorAdminCommand
 program
   .command("triage")
   .description(
-    "Triage the agent-feedback pipeline: run the ingest pass, list pending items, update status, or mark resolved. Respects NEOTOMA_FEEDBACK_TRANSPORT / AGENT_SITE_BASE_URL."
+    "[DEPRECATED: Use `neotoma issues list` and GitHub issue management instead]"
   )
-  .option("--watch", "Continuously run the ingest pass every 15 minutes")
-  .option("--remote", "Force HTTP transport even if AGENT_SITE_BASE_URL is unset (requires env)")
-  .option("--list-pending", "List pending feedback items (use --json for machine-readable output)")
-  .option("--health", "Print classification rate and status counts")
-  .option("--set-status <status>", "Set the status of a feedback item (requires --feedback-id)")
-  .option("--feedback-id <id>", "Feedback id to update")
-  .option("--classification <label>", "Classification label to set alongside --set-status")
-  .option("--triage-notes <text>", "Notes recorded on the feedback")
-  .option("--issue-url <url>", "Append a GitHub issue URL to resolution_links")
-  .option("--pr-url <url>", "Append a pull-request URL to resolution_links")
-  .option("--commit-sha <sha>", "Append a commit SHA to resolution_links")
-  .option("--resolve <feedback-id>", "Mark a feedback item as resolved")
-  .option("--dry-run", "When combined with the default ingest pass, print decisions only")
-  .option(
-    "--mirror-replay <feedback-id>",
-    "Force an immediate Neotoma mirror replay (agent.neotoma.io admin endpoint). Requires AGENT_SITE_BASE_URL + AGENT_SITE_ADMIN_BEARER.",
-  )
-  .action(async (opts) => {
-    const { runTriage } = await import("./triage.js");
-    await runTriage({
-      watch: Boolean(opts.watch),
-      remote: Boolean(opts.remote),
-      listPending: Boolean(opts.listPending),
-      json: Boolean((program.opts() as { json?: boolean }).json),
-      health: Boolean(opts.health),
-      setStatus: opts.setStatus,
-      feedbackId: opts.feedbackId,
-      classification: opts.classification,
-      triageNotes: opts.triageNotes,
-      issueUrl: opts.issueUrl,
-      prUrl: opts.prUrl,
-      commitSha: opts.commitSha,
-      resolve: opts.resolve,
-      dryRun: Boolean(opts.dryRun),
-      mirrorReplay: opts.mirrorReplay,
-    });
+  .allowUnknownOption(true)
+  .action(async () => {
+    console.error("Error: `neotoma triage` has been removed. Use `neotoma issues list` instead.");
+    process.exit(1);
   });
 
 program
@@ -8846,6 +9081,8 @@ program
   .option("--dry-run", "Plan the setup without writing files", false)
   .option("--yes", "Assume yes for prompts", false)
   .option("--skip-permissions", "Skip permission-file writes", false)
+  .option("--skip-skills", "Skip skills installation into the harness", false)
+  .option("--skills-scope <scope>", "Install skills at project or user level (default: user)", "user")
   .action(async (opts) => {
     const outputMode = resolveOutputMode();
     const mcpTransport = normalizeInitMcpTransport(opts.mcpTransport);
@@ -8869,6 +9106,8 @@ program
       yes: Boolean(opts.yes),
       skipPermissions: Boolean(opts.skipPermissions),
       skipHooks: Boolean(opts.skipHooks),
+      skipSkills: Boolean(opts.skipSkills),
+      skillsScope: opts.skillsScope === "project" ? "project" : "user",
       scope: opts.scope ?? "project",
       cwd,
       runners: createDefaultSetupRunners({
@@ -9550,6 +9789,70 @@ storageCommand
 
 // ── Backup & Restore ──────────────────────────────────────────────────────
 
+function formatHumanBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return "0 B";
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb < 10 ? kb.toFixed(1) : Math.round(kb)} KB`;
+  const mb = kb / 1024;
+  if (mb < 1024) return `${mb.toFixed(1)} MB`;
+  return `${(mb / 1024).toFixed(2)} GB`;
+}
+
+/** Create `<basename(backupDir)>.tar.gz` in the parent of `backupDir` using the system `tar` command. */
+function createBackupTarGz(backupDirAbs: string): { archive_path: string; archive_bytes: number } {
+  const parent = path.dirname(path.resolve(backupDirAbs));
+  const base = path.basename(backupDirAbs);
+  const archivePath = path.join(parent, `${base}.tar.gz`);
+  try {
+    execFileSync("tar", ["-czf", archivePath, "-C", parent, base], { stdio: "pipe" });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `Failed to create tar.gz archive (is 'tar' available on PATH?). ${msg}`
+    );
+  }
+  let st: Stats;
+  try {
+    st = statSync(archivePath);
+  } catch {
+    throw new Error("tar.gz archive was not created or is not readable.");
+  }
+  if (st.size < 1) {
+    throw new Error("tar.gz archive is empty.");
+  }
+  return { archive_path: archivePath, archive_bytes: st.size };
+}
+
+async function directorySizeAndFileCount(absPath: string): Promise<{ bytes: number; files: number }> {
+  let bytes = 0;
+  let files = 0;
+  async function walk(p: string): Promise<void> {
+    let entries: Dirent[];
+    try {
+      entries = await fs.readdir(p, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      const full = path.join(p, e.name);
+      if (e.isSymbolicLink()) continue;
+      if (e.isDirectory()) await walk(full);
+      else if (e.isFile()) {
+        try {
+          const st = await fs.stat(full);
+          bytes += st.size;
+          files += 1;
+        } catch {
+          // ignore
+        }
+      }
+    }
+  }
+  await walk(absPath);
+  return { bytes, files };
+}
+
 const backupCommand = program
   .command("backup")
   .description("Backup encrypted neotoma.db and data files");
@@ -9558,7 +9861,11 @@ backupCommand
   .command("create")
   .description("Create a backup of the local database, sources, and event logs")
   .option("--output <dir>", "Output directory for the backup", "./backups")
-  .action(async (opts: { output: string }) => {
+  .option(
+    "--tar",
+    "After a successful verified directory backup, also write <backup-dir-name>.tar.gz next to the backup folder (requires system tar)"
+  )
+  .action(async (opts: { output: string; tar?: boolean }) => {
     const outputMode = resolveOutputMode();
     let projectRoot: string | undefined = process.env.NEOTOMA_PROJECT_ROOT;
     if (!projectRoot) {
@@ -9600,11 +9907,25 @@ backupCommand
     const checksums = manifest.checksums as Record<string, string>;
 
     // Copy SQLite DB using file copy (better-sqlite3 backup API requires the DB instance)
+    let dbCopied = false;
     try {
       await fs.access(sqlitePath);
       const destDb = path.join(backupDir, path.basename(sqlitePath));
       await fs.copyFile(sqlitePath, destDb);
+
+      // Verify the copy: file must exist and be > 1KB (minimum viable SQLite)
+      const destStat = await fs.stat(destDb);
+      if (destStat.size < 1024) {
+        writeCliError(
+          `Backup verification failed: copied DB is only ${destStat.size} bytes (expected > 1024). ` +
+            "The source DB may be locked or empty."
+        );
+        process.exitCode = 1;
+        return;
+      }
+
       contents.neotoma_db = path.basename(sqlitePath);
+      dbCopied = true;
 
       // Compute checksum
       const dbBuf = await fs.readFile(destDb);
@@ -9618,10 +9939,14 @@ backupCommand
         await fs.copyFile(walPath, path.join(backupDir, path.basename(walPath)));
         contents.wal = path.basename(walPath);
       } catch {
-        // No WAL file
+        // No WAL file — acceptable
       }
     } catch {
-      writeCliError("SQLite database not found at " + sqlitePath);
+      if (!dbCopied) {
+        writeCliError("SQLite database not found or not readable at " + sqlitePath);
+        process.exitCode = 1;
+        return;
+      }
     }
 
     // Copy sources directory
@@ -9631,7 +9956,7 @@ backupCommand
       await fs.cp(rawStorageDir, destSources, { recursive: true });
       contents.sources = "sources/";
     } catch {
-      // No sources directory
+      // No sources directory — acceptable for minimal installs
     }
 
     // Copy logs directory (includes events.log and other log files)
@@ -9641,31 +9966,191 @@ backupCommand
       await fs.cp(logsDir, path.join(backupDir, dirName), { recursive: true });
       contents[dirName] = dirName + "/";
     } catch {
-      // Directory does not exist
+      // Directory does not exist — acceptable
     }
 
     // Write manifest
     await fs.writeFile(path.join(backupDir, "manifest.json"), JSON.stringify(manifest, null, 2));
 
-    const result = {
+    // Final verification: ensure the DB file is present in the backup directory
+    const finalDbPath = path.join(backupDir, contents.neotoma_db || "");
+    try {
+      const finalStat = await fs.stat(finalDbPath);
+      if (finalStat.size < 1024) {
+        writeCliError(
+          `Backup verification failed: final DB in backup dir is ${finalStat.size} bytes. Backup is not usable.`
+        );
+        process.exitCode = 1;
+        return;
+      }
+    } catch {
+      writeCliError("Backup verification failed: DB file missing from backup directory after write.");
+      process.exitCode = 1;
+      return;
+    }
+
+    const finalStat = await fs.stat(finalDbPath);
+    const walBytes =
+      contents.wal !== undefined
+        ? (await fs.stat(path.join(backupDir, contents.wal)).catch(() => null))?.size ?? null
+        : null;
+
+    const componentSizes: Record<
+      string,
+      { path: string; bytes: number; files: number; kind: "file" | "directory" }
+    > = {};
+    componentSizes.database = {
+      path: finalDbPath,
+      bytes: finalStat.size,
+      files: 1,
+      kind: "file",
+    };
+    if (contents.wal && walBytes !== null) {
+      componentSizes.wal = {
+        path: path.join(backupDir, contents.wal),
+        bytes: walBytes,
+        files: 1,
+        kind: "file",
+      };
+    }
+    for (const [key, val] of Object.entries(contents)) {
+      if (typeof val !== "string" || !val.endsWith("/")) continue;
+      const sub = path.join(backupDir, val);
+      const { bytes, files } = await directorySizeAndFileCount(sub);
+      componentSizes[key] = { path: sub, bytes, files, kind: "directory" };
+    }
+
+    const totalWalk = await directorySizeAndFileCount(backupDir);
+    const manifestPath = path.join(backupDir, "manifest.json");
+    let manifestBytes = 0;
+    try {
+      manifestBytes = (await fs.stat(manifestPath)).size;
+    } catch {
+      // ignore
+    }
+
+    const result: Record<string, unknown> = {
       status: "complete",
       backup_dir: backupDir,
+      manifest_path: manifestPath,
       contents,
+      checksums,
       encrypted: manifest.encrypted,
+      verified: true,
+      backed_up_from: {
+        sqlite_path: sqlitePath,
+        raw_storage_dir: rawStorageDir,
+        logs_dir: logsDir,
+        env: isProd ? "production" : "development",
+      },
+      sizes: {
+        database_bytes: finalStat.size,
+        wal_bytes: walBytes,
+        components: Object.fromEntries(
+          Object.entries(componentSizes).map(([k, v]) => [
+            k,
+            { bytes: v.bytes, files: v.files, kind: v.kind },
+          ])
+        ),
+        total_backup_bytes: totalWalk.bytes,
+        total_backup_files: totalWalk.files,
+        manifest_bytes: manifestBytes,
+      },
     };
+
+    if (opts.tar) {
+      try {
+        const { archive_path, archive_bytes } = createBackupTarGz(backupDir);
+        result.archive_path = archive_path;
+        result.archive_bytes = archive_bytes;
+        (result.sizes as Record<string, unknown>).archive_bytes = archive_bytes;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        writeCliError(msg);
+        process.exitCode = 1;
+        return;
+      }
+    }
+
+    const backupSizeHuman = `${formatHumanBytes(totalWalk.bytes)} (${totalWalk.bytes} bytes) · ${totalWalk.files.toLocaleString()} files`;
+    const backupSize: Record<string, unknown> = {
+      bytes: totalWalk.bytes,
+      files: totalWalk.files,
+      human: backupSizeHuman,
+    };
+    if (typeof result.archive_bytes === "number") {
+      backupSize.archive_bytes = result.archive_bytes;
+      backupSize.human = `${backupSizeHuman}; tar.gz ${formatHumanBytes(result.archive_bytes)} (${result.archive_bytes} bytes)`;
+    }
+    result.backup_size = backupSize;
 
     if (outputMode === "json") {
       writeOutput(result, outputMode);
     } else {
       process.stdout.write(heading("Backup complete") + " " + pathStyle(backupDir) + nl());
+      process.stdout.write(
+        keyValue("backup size", String((result.backup_size as { human: string }).human), true) + "\n"
+      );
+      process.stdout.write(subHeading("Backed up from") + "\n");
+      process.stdout.write(keyValue("sqlite", sqlitePath, true) + "\n");
+      process.stdout.write(keyValue("raw_storage", rawStorageDir, true) + "\n");
+      process.stdout.write(keyValue("logs", logsDir, true) + "\n");
+      process.stdout.write(keyValue("env", isProd ? "production" : "development", true) + "\n");
+      process.stdout.write(subHeading("Contents") + "\n");
       for (const [key, val] of Object.entries(contents)) {
-        process.stdout.write(keyValue(key, val, true) + "\n");
+        const label = key + (typeof val === "string" && val.endsWith("/") ? " (dir)" : "");
+        process.stdout.write(keyValue(label, val, true) + "\n");
+      }
+      process.stdout.write(subHeading("Sizes") + "\n");
+      process.stdout.write(
+        keyValue("database", `${formatHumanBytes(finalStat.size)} (${finalStat.size} bytes)`, true) +
+          "\n"
+      );
+      if (walBytes !== null) {
+        process.stdout.write(
+          keyValue("wal", `${formatHumanBytes(walBytes)} (${walBytes} bytes)`, true) + "\n"
+        );
+      }
+      for (const [key, val] of Object.entries(contents)) {
+        if (typeof val !== "string" || !val.endsWith("/")) continue;
+        const c = componentSizes[key];
+        if (c) {
+          process.stdout.write(
+            keyValue(
+              key,
+              `${formatHumanBytes(c.bytes)} · ${c.files.toLocaleString()} files`,
+              true
+            ) + "\n"
+          );
+        }
+      }
+      process.stdout.write(
+        keyValue(
+          "total (directory)",
+          `${formatHumanBytes(totalWalk.bytes)} (${totalWalk.bytes} bytes) · ${totalWalk.files.toLocaleString()} files`,
+          true
+        ) + "\n"
+      );
+      if (checksums[contents.neotoma_db || ""]) {
+        process.stdout.write(
+          keyValue("db_checksum", checksums[contents.neotoma_db || ""] || "", true) + "\n"
+        );
       }
       if (manifest.encrypted) {
         process.stdout.write(
           nl() +
             warn("Data is encrypted. Preserve your key file or mnemonic phrase for restore.") +
             nl()
+        );
+      }
+      if (opts.tar && typeof result.archive_path === "string" && typeof result.archive_bytes === "number") {
+        process.stdout.write(subHeading("Archive") + "\n");
+        process.stdout.write(
+          keyValue(
+            "tar.gz",
+            `${pathStyle(result.archive_path)} · ${formatHumanBytes(result.archive_bytes)} (${result.archive_bytes} bytes)`,
+            true
+          ) + "\n"
         );
       }
     }
@@ -9754,6 +10239,102 @@ backupCommand
             warn("Data is encrypted. You need the original key file or mnemonic to access it.") +
             nl()
         );
+      }
+    }
+  });
+
+backupCommand
+  .command("verify")
+  .description("Verify integrity of a backup directory")
+  .argument("<dir>", "Backup directory to verify")
+  .action(async (dir: string) => {
+    const outputMode = resolveOutputMode();
+    const issues: string[] = [];
+
+    // Check manifest exists
+    const manifestPath = path.join(dir, "manifest.json");
+    let manifest: Record<string, unknown>;
+    try {
+      manifest = JSON.parse(await fs.readFile(manifestPath, "utf-8"));
+    } catch {
+      writeCliError("No manifest.json found in backup directory: " + dir);
+      process.exitCode = 1;
+      return;
+    }
+
+    const contents = (manifest.contents || {}) as Record<string, string>;
+    const checksums = (manifest.checksums || {}) as Record<string, string>;
+
+    // Verify DB file exists and has reasonable size
+    if (!contents.neotoma_db) {
+      issues.push("manifest does not reference a database file");
+    } else {
+      const dbPath = path.join(dir, contents.neotoma_db);
+      try {
+        const stat = await fs.stat(dbPath);
+        if (stat.size < 1024) {
+          issues.push(`database file is only ${stat.size} bytes (expected > 1024)`);
+        }
+
+        // Verify checksum if available
+        if (checksums[contents.neotoma_db]) {
+          const dbBuf = await fs.readFile(dbPath);
+          const computed = "sha256:" + createHash("sha256").update(dbBuf).digest("hex");
+          if (computed !== checksums[contents.neotoma_db]) {
+            issues.push(
+              `checksum mismatch: expected ${checksums[contents.neotoma_db]}, got ${computed}`
+            );
+          }
+        }
+      } catch {
+        issues.push("database file missing from backup directory: " + contents.neotoma_db);
+      }
+    }
+
+    // Verify referenced directories exist
+    for (const [key, val] of Object.entries(contents)) {
+      if (typeof val === "string" && val.endsWith("/")) {
+        try {
+          await fs.access(path.join(dir, val));
+        } catch {
+          issues.push(`referenced directory missing: ${key} (${val})`);
+        }
+      }
+    }
+
+    const valid = issues.length === 0;
+    const walk = await directorySizeAndFileCount(dir);
+    const backup_size = {
+      bytes: walk.bytes,
+      files: walk.files,
+      human: `${formatHumanBytes(walk.bytes)} (${walk.bytes} bytes) · ${walk.files.toLocaleString()} files`,
+    };
+    const result = {
+      status: valid ? "valid" : "invalid",
+      backup_dir: dir,
+      created_at: manifest.created_at,
+      contents,
+      backup_size,
+      issues: issues.length > 0 ? issues : undefined,
+    };
+
+    if (!valid) process.exitCode = 1;
+
+    if (outputMode === "json") {
+      writeOutput(result, outputMode);
+    } else {
+      if (valid) {
+        process.stdout.write(heading("Backup valid") + " " + pathStyle(dir) + nl());
+        process.stdout.write(keyValue("backup size", backup_size.human, true) + "\n");
+        for (const [key, val] of Object.entries(contents)) {
+          process.stdout.write(keyValue(key, val, true) + "\n");
+        }
+      } else {
+        process.stdout.write(heading("Backup INVALID") + " " + pathStyle(dir) + nl());
+        process.stdout.write(keyValue("backup size", backup_size.human, true) + "\n");
+        for (const issue of issues) {
+          process.stdout.write(bullet(issue) + nl());
+        }
       }
     }
   });
@@ -10319,46 +10900,17 @@ apiCommand
         process.stderr.write(`neotoma api start: ${error}\n`);
         return;
       }
-      // v0.5.2: `--watch` is observable but does NOT change routing yet — the
-      // default stays `dev:prod` for one release so contributors who rely on
-      // the watcher under `--env prod` have a deprecation window. v0.6.0
-      // flips the default to `start:api:prod` and routes `--watch` to
-      // `watch:prod` (the `dev:prod` alias is dropped in v0.6.0 as well).
       const childScript = opts.tunnel
         ? envOpt === "prod"
-          ? "watch:prod:tunnel"
-          : "dev:api"
+          ? "dev:server:prod:tunnel"
+          : "dev:server:tunnel"
         : envOpt === "prod"
           ? hasSourceWatchScripts
-            ? "dev:prod"
-            : "start:api"
+            ? "dev:server:prod"
+            : "start:server:prod"
           : hasSourceWatchScripts
             ? "dev:server"
-            : "start:api";
-      // v0.5.2 deprecation line: when `--env prod` on a source checkout
-      // selects the tsx watcher without an explicit `--watch`, warn that
-      // v0.6.0 will flip the default to the built runner and point
-      // operators at the supervised systemd recipe. Suppressed under
-      // --output json to preserve machine-readable output. Contributors
-      // who want to keep the watcher pass `--watch`, which will survive
-      // the v0.6.0 flip (routing to `watch:prod`).
-      if (
-        envOpt === "prod" &&
-        !opts.tunnel &&
-        !opts.watch &&
-        hasSourceWatchScripts &&
-        childScript === "dev:prod" &&
-        outputMode !== "json"
-      ) {
-        process.stderr.write(
-          "deprecation: `neotoma api start --env prod` on a source checkout currently runs " +
-            "the tsx watcher (`dev:prod`, not release-compiled). In v0.6.0 the default will " +
-            "flip to the built runner (`start:api:prod`); pass `--watch` to preserve the " +
-            "current behavior. For a real headless production deployment, install the " +
-            "published npm package (`npm install -g neotoma`) and use the systemd recipe in " +
-            "install.md § Production deployment (headless / systemd).\n"
-        );
-      }
+            : "start:server";
       const spawnEnv: Record<string, string> = { ...process.env, NEOTOMA_ENV: effectiveEnv };
       if (tunnelProvider) spawnEnv.NEOTOMA_TUNNEL_PROVIDER = tunnelProvider;
       const child = spawn(npmCmd, ["run", childScript], {
@@ -10421,11 +10973,11 @@ apiCommand
         {
           commands: {
             dev: "npm run dev:server",
-            dev_prod: "npm run dev:prod",
-            dev_api_tunnel: "npm run dev:api",
-            watch_prod_tunnel: "npm run watch:prod:tunnel",
-            start_api: "npm run start:api",
-            start_api_prod: "npm run start:api:prod",
+            dev_prod: "npm run dev:server:prod",
+            dev_tunnel: "npm run dev:server:tunnel",
+            dev_prod_tunnel: "npm run dev:server:prod:tunnel",
+            start_server: "npm run start:server",
+            start_server_prod: "npm run start:server:prod",
           },
           ports: { default: 3080, prod: 3180 },
           message:
@@ -10466,38 +11018,15 @@ apiCommand
     }
     const childScript = useTunnel
       ? envOpt === "prod"
-        ? "watch:prod:tunnel"
-        : "dev:api"
+        ? "dev:server:prod:tunnel"
+        : "dev:server:tunnel"
       : envOpt === "prod"
         ? hasSourceWatchScripts
-          ? "dev:prod"
-          : "start:api"
+          ? "dev:server:prod"
+          : "start:server:prod"
         : hasSourceWatchScripts
           ? "dev:server"
-          : "start:api";
-    // v0.5.2 deprecation line (foreground twin of the --background branch
-    // above): when `--env prod` on a source checkout selects the tsx
-    // watcher without an explicit `--watch`, announce the v0.6.0 flip.
-    // NOTE: the json path already early-returned above, so we do not
-    // re-check outputMode here (TS narrows it to "pretty"). The
-    // background branch still needs the outputMode guard because it
-    // emits a json payload *after* spawning rather than early-returning.
-    if (
-      envOpt === "prod" &&
-      !useTunnel &&
-      !opts.watch &&
-      hasSourceWatchScripts &&
-      childScript === "dev:prod"
-    ) {
-      process.stderr.write(
-        "deprecation: `neotoma api start --env prod` on a source checkout currently runs " +
-          "the tsx watcher (`dev:prod`, not release-compiled). In v0.6.0 the default will " +
-          "flip to the built runner (`start:api:prod`); pass `--watch` to preserve the " +
-          "current behavior. For a real headless production deployment, install the " +
-          "published npm package (`npm install -g neotoma`) and use the systemd recipe in " +
-          "install.md § Production deployment (headless / systemd).\n"
-      );
-    }
+          : "start:server";
     const spawnEnv: Record<string, string> = { ...process.env, NEOTOMA_ENV: effectiveEnv };
     if (tunnelProvider) spawnEnv.NEOTOMA_TUNNEL_PROVIDER = tunnelProvider;
     const child = spawn(npmCmd, ["run", childScript], {
@@ -11803,6 +12332,89 @@ schemasCommand
   });
 
 schemasCommand
+  .command("describe")
+  .description("Describe schema fields for an entity type: accepted fields, types, and snapshot promotion")
+  .argument("[entityType]", "Entity type to describe (or use --entity-type)")
+  .option("--entity-type <type>", "Entity type (alternative to positional argument)")
+  .option("--user-id <userId>", "User ID for user-specific schema lookup")
+  .action(async (entityTypeArg: string | undefined, opts: { entityType?: string; userId?: string }) => {
+    const outputMode = resolveOutputMode();
+    const entityType = entityTypeArg || opts.entityType;
+    if (!entityType) throw new Error("Entity type is required (positional or --entity-type)");
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({
+      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      token,
+    });
+    const { data, error } = await api.GET("/schemas/{entity_type}", {
+      params: {
+        path: { entity_type: entityType },
+        query: { user_id: opts.userId } as any,
+      } as any,
+    });
+    if (error) throw new Error("Failed to fetch schema for " + entityType);
+    const schemaData = data as Record<string, unknown> | null;
+    if (!schemaData) {
+      writeCliError("No schema registered for entity type: " + entityType);
+      process.exitCode = 1;
+      return;
+    }
+    const schemaDef = schemaData["schema_definition"] as Record<string, unknown> | undefined;
+    const fields = (schemaDef?.["fields"] ?? schemaData["fields"]) as
+      | Record<string, unknown>[]
+      | Record<string, unknown>
+      | undefined;
+    const canonicalNameFields = (schemaDef?.["canonical_name_fields"] ??
+      schemaData["canonical_name_fields"]) as string[] | undefined;
+    const version = schemaData["version"] ?? schemaData["schema_version"];
+
+    const result: Record<string, unknown> = {
+      entity_type: entityType,
+      version,
+      canonical_name_fields: canonicalNameFields,
+      fields,
+      notes: [
+        "All fields listed above are accepted by the reducer for this entity type.",
+        "Fields in canonical_name_fields are used for entity identity resolution.",
+        "To add a new field, use `neotoma schemas update <type> --add-fields field_name:type`.",
+      ],
+    };
+
+    if (outputMode === "json") {
+      writeOutput(result, outputMode);
+    } else {
+      process.stdout.write(heading("Schema: " + entityType) + nl());
+      if (version) process.stdout.write(keyValue("version", String(version), true) + "\n");
+      if (canonicalNameFields) {
+        process.stdout.write(
+          keyValue("identity fields", canonicalNameFields.join(", "), true) + "\n"
+        );
+      }
+      process.stdout.write(nl());
+      if (Array.isArray(fields)) {
+        process.stdout.write(dim("Fields:") + nl());
+        for (const field of fields) {
+          const f = field as Record<string, unknown>;
+          const name = f.name || f.field_name || "(unknown)";
+          const type = f.type || f.field_type || "any";
+          process.stdout.write(bullet(`${name} (${type})`) + nl());
+        }
+      } else if (fields && typeof fields === "object") {
+        process.stdout.write(dim("Fields:") + nl());
+        for (const [name, def] of Object.entries(fields)) {
+          const type = typeof def === "object" && def !== null ? (def as Record<string, unknown>).type || "any" : "any";
+          process.stdout.write(bullet(`${name} (${type})`) + nl());
+        }
+      } else {
+        process.stdout.write(
+          dim("No field definitions registered. The reducer accepts arbitrary fields for this type.") + nl()
+        );
+      }
+    }
+  });
+
+schemasCommand
   .command("analyze")
   .description("Analyze raw_fragments to identify schema candidate fields")
   .argument("[entityType]", "Entity type to analyze (or use --entity-type)")
@@ -12128,6 +12740,20 @@ schemasCommand
     }
   );
 
+registerPeersCommand(program, {
+  createApiClient: async () => {
+    const config = await readConfig();
+    const token = await getCliToken();
+    return createApiClient({
+      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      token,
+    });
+  },
+  resolveOutputMode,
+  writeOutput,
+  formatApiError,
+});
+
 program
   .command("preferences")
   .description("View or update data type preferences for onboarding discovery")
@@ -12340,11 +12966,29 @@ program
     });
 
     let entities: unknown;
+    let fileRelationships: unknown[] | undefined;
+    let fileIdempotencyKey: string | undefined;
     if (opts.entities) {
       entities = JSON.parse(opts.entities as string);
     } else if (opts.file) {
       const raw = await fs.readFile(opts.file, "utf-8");
-      entities = JSON.parse(raw);
+      const parsed = JSON.parse(raw) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        const envelope = parsed as Record<string, unknown>;
+        if (Array.isArray(envelope.relationships)) {
+          fileRelationships = envelope.relationships as unknown[];
+        }
+        if (typeof envelope.idempotency_key === "string") {
+          fileIdempotencyKey = envelope.idempotency_key;
+        }
+        if (Array.isArray(envelope.entities)) {
+          entities = envelope.entities;
+        } else {
+          entities = parsed;
+        }
+      } else {
+        entities = parsed;
+      }
     }
     if (
       entities &&
@@ -12400,9 +13044,13 @@ program
 
     const structuredBody: Record<string, unknown> = {};
     if (hasStructured) {
-      const idempotencyKey = opts.idempotencyKey ?? createIdempotencyKey({ entities });
+      const idempotencyKey =
+        opts.idempotencyKey ?? fileIdempotencyKey ?? createIdempotencyKey({ entities });
       structuredBody.entities = entities;
       structuredBody.idempotency_key = idempotencyKey;
+      if (fileRelationships && fileRelationships.length > 0) {
+        structuredBody.relationships = fileRelationships;
+      }
       if (opts.sourcePriority) {
         const parsedPriority = parseInt(opts.sourcePriority as string, 10);
         if (!Number.isNaN(parsedPriority)) {
@@ -13182,6 +13830,7 @@ correctionsCommand
       if (!entityId) throw new Error("entity ID is required (positional argument or --entity-id)");
       if (!opts.fieldName) throw new Error("--field-name is required");
       if (opts.correctedValue === undefined) throw new Error("--corrected-value is required");
+      const parsedCorrectedValue = parseCliCorrectedValue(opts.correctedValue);
       const config = await readConfig();
       const token = await getCliToken();
       const api = createApiClient({
@@ -13190,13 +13839,13 @@ correctionsCommand
       });
       const idempotencyKey =
         opts.idempotencyKey ||
-        createIdempotencyKey({ entityId, field: opts.fieldName, value: opts.correctedValue });
+        createIdempotencyKey({ entityId, field: opts.fieldName, value: parsedCorrectedValue });
       const { data, error } = await api.POST("/correct", {
         body: {
           entity_id: entityId,
           entity_type: opts.entityType ?? "unknown",
           field: opts.fieldName,
-          value: opts.correctedValue,
+          value: parsedCorrectedValue,
           idempotency_key: idempotencyKey,
           user_id: opts.userId,
         },
@@ -14004,6 +14653,98 @@ program
     writeOutput(data, outputMode);
   });
 
+program
+  .command("compat")
+  .description("Check version compatibility between CLI and a remote API")
+  .option("--base-url <url>", "Remote API URL to check against")
+  .action(async (opts) => {
+    const outputMode = resolveOutputMode();
+    const config = await readConfig();
+    const baseUrl = await resolveBaseUrl(opts.baseUrl || program.opts().baseUrl, config);
+
+    // Get CLI version
+    let cliVersion = "0.0.0";
+    try {
+      const cliPkgPath = path.resolve(
+        fileURLToPath(import.meta.url),
+        "../../package.json"
+      );
+      const cliPkg = JSON.parse(await fs.readFile(cliPkgPath, "utf-8")) as { version?: string };
+      cliVersion = cliPkg.version || "0.0.0";
+    } catch {
+      // fallback
+    }
+
+    // Probe remote health endpoint for version
+    let apiVersion = "unknown";
+    let apiReachable = false;
+    try {
+      const resp = await fetch(`${baseUrl}/health`, { signal: AbortSignal.timeout(5000) });
+      if (resp.ok) {
+        apiReachable = true;
+        const body = (await resp.json()) as { version?: string };
+        apiVersion = body.version || "unknown";
+      }
+    } catch {
+      // unreachable
+    }
+
+    if (!apiReachable) {
+      const result = {
+        compatible: false,
+        cli_version: cliVersion,
+        api_version: null,
+        api_url: baseUrl,
+        error: "API unreachable at " + baseUrl,
+      };
+      if (outputMode === "json") {
+        writeOutput(result, outputMode);
+      } else {
+        writeCliError("API unreachable at " + baseUrl);
+      }
+      process.exitCode = 1;
+      return;
+    }
+
+    const { compatible, warning } = compareCliApiCompat(cliVersion, apiVersion);
+
+    const result = {
+      compatible,
+      cli_version: cliVersion,
+      api_version: apiVersion,
+      api_url: baseUrl,
+      warning,
+    };
+
+    if (!compatible) process.exitCode = 1;
+
+    if (outputMode === "json") {
+      writeOutput(result, outputMode);
+    } else {
+      if (compatible && !warning) {
+        process.stdout.write(
+          heading("Compatible") +
+            ` CLI ${cliVersion} ↔ API ${apiVersion} at ${baseUrl}` +
+            nl()
+        );
+      } else if (compatible && warning) {
+        process.stdout.write(
+          heading("Compatible") +
+            ` CLI ${cliVersion} ↔ API ${apiVersion} at ${baseUrl}` +
+            nl()
+        );
+        process.stdout.write(warn(warning) + nl());
+      } else {
+        process.stdout.write(
+          heading("Incompatible") +
+            ` CLI ${cliVersion} ↔ API ${apiVersion} at ${baseUrl}` +
+            nl()
+        );
+        if (warning) process.stdout.write(warn(warning) + nl());
+      }
+    }
+  });
+
 let devCommandsReady = false;
 async function ensureDevCommands(): Promise<void> {
   if (devCommandsReady) return;
@@ -14805,7 +15546,7 @@ function getIntroDataPath(summaryLinesOrStats: string[] | DualEnvIntroStats): st
 
 export function buildGetStartedBoxLines(): string[] {
   return [
-    "After installing Neotoma, run neotoma init and choose your client.",
+    "After installing Neotoma, run neotoma setup --tool cursor --yes (or swap cursor for your tool).",
     "1. Restart your tool/session so it picks up MCP configuration.",
     '2. Tell the agent: "Remind me to review my subscription Friday."',
     "3. In the same conversation, ask it to list your open tasks.",
@@ -15486,6 +16227,49 @@ function firstPositionalCliCommand(args: string[]): string | undefined {
   return args.find((a) => a !== "--" && !a.startsWith("-"));
 }
 
+const CLI_LOG_RETENTION_DAYS = parseInt(process.env.NEOTOMA_LOG_RETENTION_DAYS || "7", 10);
+const CLI_LOG_MAX_BYTES = parseInt(process.env.NEOTOMA_LOG_MAX_BYTES || String(100 * 1024 * 1024), 10);
+
+async function cleanupCliLogs(logDir: string): Promise<void> {
+  try {
+    const entries = await fs.readdir(logDir);
+    const logFiles = entries.filter((f) => f.startsWith("cli.") && f.endsWith(".log"));
+    if (logFiles.length < 50) return; // skip cleanup when file count is low
+
+    const now = Date.now();
+    const maxAgeMs = CLI_LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+    let totalSize = 0;
+
+    const fileInfos: { name: string; mtime: number; size: number }[] = [];
+    for (const name of logFiles) {
+      try {
+        const stat = await fs.stat(path.join(logDir, name));
+        fileInfos.push({ name, mtime: stat.mtimeMs, size: stat.size });
+        totalSize += stat.size;
+      } catch {
+        // file may have been removed between readdir and stat
+      }
+    }
+
+    // Sort oldest first for cleanup
+    fileInfos.sort((a, b) => a.mtime - b.mtime);
+
+    for (const info of fileInfos) {
+      const tooOld = now - info.mtime > maxAgeMs;
+      const overSize = totalSize > CLI_LOG_MAX_BYTES;
+      if (!tooOld && !overSize) break;
+      try {
+        await fs.unlink(path.join(logDir, info.name));
+        totalSize -= info.size;
+      } catch {
+        // ignore individual deletion failures
+      }
+    }
+  } catch {
+    // log directory may not exist yet — that's fine
+  }
+}
+
 /** Tee process.stdout and process.stderr to a log file. Used when --log-file is set. */
 function teeToLogFile(logFilePath: string): (() => Promise<void>) | null {
   try {
@@ -15592,7 +16376,10 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
   const logFilePath = noLogFile ? null : (explicitLogPath ?? defaultLogPath);
   let cleanupLogFile: (() => Promise<void>) | null = null;
   if (logFilePath) {
-    await fs.mkdir(path.dirname(logFilePath), { recursive: true }).catch(() => {});
+    const logDir = path.dirname(logFilePath);
+    await fs.mkdir(logDir, { recursive: true }).catch(() => {});
+    // Non-blocking log cleanup: runs in background, does not delay startup
+    cleanupCliLogs(logDir).catch(() => {});
     cleanupLogFile = teeToLogFile(logFilePath);
   }
 

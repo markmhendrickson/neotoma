@@ -1,0 +1,14 @@
+endpoint: "POST /store"
+outcome: rejected
+error_code: ERR_STORE_RESOLUTION_FAILED
+issue_code: ERR_RELATIONSHIP_ENTITY_ID_FORMAT
+hint_match: relationship_entity_id_format
+notes: |
+  v0.12.0 tightening. Store relationship refs that use source_entity_id or
+  target_entity_id must now point at deterministic Neotoma entity ids with the
+  `ent_` prefix. Legacy callers that sent external ids or aliases in these
+  fields now receive `ERR_STORE_RESOLUTION_FAILED` with the
+  `relationship_entity_id_format` hint.
+
+  Fix on the caller side: use source_index / target_index for same-payload
+  entities, or resolve the entity first and pass its `ent_...` entity_id.

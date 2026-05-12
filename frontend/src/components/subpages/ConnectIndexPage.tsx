@@ -137,6 +137,10 @@ export function ConnectIndexPage() {
           <Link to={lp("/mcp")} className={extLink}>
             {c.relatedMcp}
           </Link>
+          {" · "}
+          <Link to={lp("/skills")} className={extLink}>
+            Skills
+          </Link>
         </p>
       </IntegrationSection>
     </DetailPage>

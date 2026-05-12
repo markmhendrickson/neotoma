@@ -442,6 +442,9 @@ describe("CLI infrastructure command smoke tests", () => {
       const dataDir = join(root, "data");
       const outputDir = join(root, "out");
       const restoreDir = join(root, "restore");
+      await mkdir(dataDir, { recursive: true });
+      await mkdir(outputDir, { recursive: true });
+      createTestDb(join(dataDir, "neotoma.db"), [{ id: "a", value: "backup-src" }]);
       const { stdout: backupStdout } = await execAsync(
         `NEOTOMA_DATA_DIR="${dataDir}" ${CLI_PATH} backup create --output "${outputDir}" --json`
       );
@@ -449,6 +452,11 @@ describe("CLI infrastructure command smoke tests", () => {
       expect(backupResult).toHaveProperty("status");
       expect(backupResult.status).toBe("complete");
       expect(backupResult).toHaveProperty("backup_dir");
+      expect(backupResult).toHaveProperty("backup_size");
+      expect((backupResult as { backup_size: { bytes: number; files: number; human: string } }).backup_size.bytes).toBeGreaterThan(0);
+      expect(
+        (backupResult as { backup_size: { bytes: number; files: number; human: string } }).backup_size.human
+      ).toMatch(/\d/);
 
       const { stdout: restoreStdout } = await execAsync(
         `NEOTOMA_DATA_DIR="${dataDir}" ${CLI_PATH} backup restore --from "${backupResult.backup_dir}" --target "${restoreDir}" --json`
@@ -457,6 +465,33 @@ describe("CLI infrastructure command smoke tests", () => {
       expect(restoreResult).toHaveProperty("status");
       expect(restoreResult.status).toBe("restored");
       expect(restoreResult).toHaveProperty("target_dir");
+    });
+
+    it("backup create --tar should write a non-empty tar.gz beside the backup dir", async () => {
+      const root = await mkdtemp(join(tmpdir(), "neotoma-cli-backup-tar-"));
+      const dataDir = join(root, "data");
+      const outputDir = join(root, "out");
+      await mkdir(dataDir, { recursive: true });
+      await mkdir(outputDir, { recursive: true });
+      createTestDb(join(dataDir, "neotoma.db"), [{ id: "b", value: "ok" }]);
+      const { stdout } = await execAsync(
+        `NEOTOMA_DATA_DIR="${dataDir}" ${CLI_PATH} backup create --output "${outputDir}" --tar --json`
+      );
+      const backupResult = JSON.parse(stdout) as {
+        status: string;
+        archive_path?: string;
+        archive_bytes?: number;
+      };
+      expect(backupResult.status).toBe("complete");
+      expect(backupResult).toHaveProperty("backup_size");
+      expect(
+        (backupResult as { backup_size: { archive_bytes?: number } }).backup_size.archive_bytes
+      ).toBeGreaterThan(0);
+      expect(backupResult.archive_path).toBeDefined();
+      expect(backupResult.archive_bytes).toBeGreaterThan(0);
+      const { stat } = await import("fs/promises");
+      const st = await stat(backupResult.archive_path!);
+      expect(st.size).toBe(backupResult.archive_bytes);
     });
 
     it("storage set-data-dir should update NEOTOMA_DATA_DIR in .env", async () => {

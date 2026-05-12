@@ -12,6 +12,7 @@ import type { RelationshipSnapshot } from "../reducers/relationship_reducer.js";
 import { generateDeterministicSourceId } from "./source_identity.js";
 import { getCurrentAgentIdentity } from "./request_context.js";
 import { enforceAttributionPolicy } from "./attribution_policy.js";
+import { emitRelationshipLifecycle } from "../events/substrate_store_emit.js";
 
 export type RelationshipType =
   | "PART_OF"
@@ -110,6 +111,7 @@ export class RelationshipsService {
     source_entity_id: string;
     target_entity_id: string;
     source_id?: string | null;
+    source_peer_id?: string;
     metadata?: Record<string, unknown>;
     user_id: string;
   }): Promise<RelationshipSnapshot> {
@@ -232,12 +234,28 @@ export class RelationshipsService {
       );
     }
 
+    const relTs =
+      snapshot.last_observation_at ||
+      snapshot.computed_at ||
+      new Date().toISOString();
+    emitRelationshipLifecycle({
+      user_id: params.user_id,
+      relationship_key: relationshipKey,
+      relationship_type: params.relationship_type,
+      source_entity_id: params.source_entity_id,
+      target_entity_id: params.target_entity_id,
+      event_type: "relationship.created",
+      timestamp: relTs,
+      source_id: sourceId ?? undefined,
+      source_peer_id: params.source_peer_id,
+    });
+
     return snapshot;
   }
 
   /**
    * Get relationship snapshots for entity (replaces getRelationshipsForEntity)
-   * 
+   *
    * Filters deleted relationships by default.
    */
   async getRelationshipsForEntity(
@@ -277,7 +295,7 @@ export class RelationshipsService {
     // Filter deleted relationships unless explicitly requested
     if (!includeDeleted && relationships.length > 0) {
       const relationshipKeys = relationships.map((r) => r.relationship_key);
-      
+
       // Check for deletion observations (highest priority with _deleted: true)
       const { data: deletionObservations } = await db
         .from("relationship_observations")
@@ -321,7 +339,7 @@ export class RelationshipsService {
 
   /**
    * Get relationship snapshots by type
-   * 
+   *
    * Filters deleted relationships by default.
    */
   async getRelationshipsByType(
@@ -343,7 +361,7 @@ export class RelationshipsService {
     // Filter deleted relationships unless explicitly requested
     if (!includeDeleted && relationships.length > 0) {
       const relationshipKeys = relationships.map((r) => r.relationship_key);
-      
+
       const { data: deletionObservations } = await db
         .from("relationship_observations")
         .select("relationship_key, source_priority, observed_at, metadata")
@@ -382,7 +400,7 @@ export class RelationshipsService {
 
   /**
    * Get a specific relationship snapshot
-   * 
+   *
    * Returns null if relationship is deleted (unless explicitly requested).
    */
   async getRelationshipSnapshot(
@@ -440,7 +458,7 @@ export class RelationshipsService {
     userId: string,
   ): Promise<RelationshipSnapshot> {
     const { relationshipReducer } = await import("../reducers/relationship_reducer.js");
-    
+
     const relationshipKey = `${relationshipType}:${sourceEntityId}:${targetEntityId}`;
 
     // Get all observations for this relationship

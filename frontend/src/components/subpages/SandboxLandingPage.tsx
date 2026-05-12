@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { SANDBOX_TERMS_DOC_PATH } from "@/site/sandbox_doc_paths";
 import { Clock, ShieldAlert, Zap } from "lucide-react";
-import { DetailPage } from "../DetailPage";
+import { MdxSitePage } from "./MdxSitePage";
 import { IntegrationSection } from "../IntegrationSection";
 import { CopyableCodeBlock } from "../CopyableCodeBlock";
 import { InspectorPreviewIllustration } from "../illustrations/InspectorPreviewIllustration";
@@ -28,9 +28,9 @@ It is a public, shared sandbox. Anything I store is publicly visible and will be
 
 Add the server to my current tool's MCP config, then confirm it is reachable with a single retrieve call.`;
 
-export function SandboxLandingPage() {
+export function SandboxLandingPageBody() {
   return (
-    <DetailPage title="Neotoma sandbox">
+    <>
       <div className="flex flex-wrap gap-2 mb-6">
         <span className="inline-flex items-center gap-1.5 rounded border border-sky-500/20 bg-sky-500/5 px-2.5 py-1 text-[12px] font-medium text-sky-600 dark:text-sky-400">
           <Zap className="h-3.5 w-3.5 shrink-0" aria-hidden />
@@ -204,6 +204,10 @@ export function SandboxLandingPage() {
           <Link to="/hosted" className={extLink}>Hosted options overview →</Link>
         </p>
       </IntegrationSection>
-    </DetailPage>
+    </>
   );
+}
+
+export function SandboxLandingPage() {
+  return <MdxSitePage canonicalPath="/sandbox" detailTitle="Neotoma sandbox" />;
 }

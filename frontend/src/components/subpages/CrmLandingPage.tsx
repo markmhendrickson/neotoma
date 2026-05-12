@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { SeoHead } from "../SeoHead";
+import { MdxSitePage } from "./MdxSitePage";
 import { sendCtaClick } from "@/utils/analytics";
 import { SiClaude, SiOpenai } from "react-icons/si";
 import { CodexIcon } from "../icons/CodexIcon";
@@ -643,7 +643,7 @@ const LANDING_SECTIONS = [
   { id: "get-started", label: "Get Started" },
 ];
 
-export function CrmLandingPage() {
+export function CrmLandingPageBody() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [activeSection, setActiveSection] = useState("hero");
   const [showAllMobileOutcomes, setShowAllMobileOutcomes] = useState(false);
@@ -672,7 +672,6 @@ export function CrmLandingPage() {
 
   return (
     <>
-      <SeoHead />
       <div
         ref={scrollContainerRef}
         data-site-header-scroll-root
@@ -1394,4 +1393,8 @@ export function CrmLandingPage() {
       </div>
     </>
   );
+}
+
+export function CrmLandingPage() {
+  return <MdxSitePage canonicalPath="/crm" shell="bare" />;
 }

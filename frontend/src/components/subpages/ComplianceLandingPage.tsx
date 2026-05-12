@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { SeoHead } from "../SeoHead";
+import { MdxSitePage } from "./MdxSitePage";
 import { sendCtaClick } from "@/utils/analytics";
 import { SiClaude, SiOpenai } from "react-icons/si";
 import { CodexIcon } from "../icons/CodexIcon";
@@ -651,7 +651,7 @@ const LANDING_SECTIONS = [
   { id: "get-started", label: "Get Started" },
 ];
 
-export function ComplianceLandingPage() {
+export function ComplianceLandingPageBody() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [activeSection, setActiveSection] = useState("hero");
   const [showAllMobileOutcomes, setShowAllMobileOutcomes] = useState(false);
@@ -680,7 +680,6 @@ export function ComplianceLandingPage() {
 
   return (
     <>
-      <SeoHead />
       <div
         ref={scrollContainerRef}
         data-site-header-scroll-root
@@ -1402,4 +1401,8 @@ export function ComplianceLandingPage() {
       </div>
     </>
   );
+}
+
+export function ComplianceLandingPage() {
+  return <MdxSitePage canonicalPath="/compliance" shell="bare" />;
 }

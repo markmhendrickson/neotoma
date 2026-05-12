@@ -1,0 +1,44 @@
+False closure risk is the likelihood that an agent confidently answers from stale or
+superseded context because the system cannot distinguish resolved decisions from open
+questions. The agent retrieves a relevant-looking fact, treats it as current, and delivers
+it with full confidence, even when the decision was revised months ago.
+
+## Before vs after
+
+Before: an ops team asks "What is our contractor access policy?" The agent
+retrieves the Q3 draft discussion, not the November board-approved version, and answers
+confidently. The team acts on an outdated policy. After: Neotoma's versioned
+observations preserve both the draft and the final decision with timestamps and provenance.
+The reducer surfaces the latest resolved state; the agent can trace that the Q3 draft was
+superseded.
+
+```bash
+# View the full observation history for a policy entity
+neotoma observations list --entity-id <policy_entity_id>
+
+# The snapshot reflects the latest resolved state
+neotoma entities search --query "contractor access policy" --entity-type policy
+```
+
+False closure is prevented by the combination of
+<MdxI18nLink to="/versioned-history" className="text-foreground underline hover:text-foreground">
+  versioned history
+</MdxI18nLink>
+,
+<MdxI18nLink to="/auditable-change-log" className="text-foreground underline hover:text-foreground">
+  auditable change logs
+</MdxI18nLink>
+, and
+<MdxI18nLink to="/deterministic-state-evolution" className="text-foreground underline hover:text-foreground">
+  deterministic state evolution
+</MdxI18nLink>
+. Where
+<MdxI18nLink to="/silent-mutation-risk" className="text-foreground underline hover:text-foreground">
+  silent mutation
+</MdxI18nLink>
+describes data changing without a trail, false closure describes stale data being served
+as if it were current. See also
+<MdxI18nLink to="/conflicting-facts-risk" className="text-foreground underline hover:text-foreground">
+  conflicting facts risk
+</MdxI18nLink>
+.

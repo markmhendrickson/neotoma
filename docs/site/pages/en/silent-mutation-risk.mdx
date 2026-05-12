@@ -1,0 +1,37 @@
+Silent mutation risk is the chance that state changes without an explicit, inspectable trail. High-risk
+systems can overwrite or drop facts without leaving evidence.
+
+## Before vs after
+
+Before: a contact field changes after an agent run and nobody can tell when or why. After: every field
+change is an observation, and lineage can be queried by entity and timestamp.
+
+```bash
+# Inspect mutation trail for one entity
+neotoma observations list --entity-id <entity_id>
+
+# Verify relationship links for source context
+neotoma relationships list --entity-id <entity_id>
+```
+
+Deterministic systems prevent silent mutation by design through
+<MdxI18nLink to="/auditable-change-log" className="text-foreground underline hover:text-foreground">
+  auditable change logs
+</MdxI18nLink>
+and
+<MdxI18nLink to="/versioned-history" className="text-foreground underline hover:text-foreground">
+  versioned history
+</MdxI18nLink>
+. See
+<MdxI18nLink to="/conflicting-facts-risk" className="text-foreground underline hover:text-foreground">
+  conflicting facts risk
+</MdxI18nLink>
+,
+<MdxI18nLink to="/false-closure-risk" className="text-foreground underline hover:text-foreground">
+  false closure risk
+</MdxI18nLink>
+, and
+<MdxI18nLink to="/deterministic-memory" className="text-foreground underline hover:text-foreground">
+  deterministic memory
+</MdxI18nLink>
+.

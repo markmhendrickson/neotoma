@@ -44,6 +44,8 @@ export interface CreateObservationParams {
    * `Observation.observation_source` for the semantic contract.
    */
   observation_source?: ObservationSource | null;
+  /** Cross-instance sync: Neotoma peer id that originated this replayed write. */
+  source_peer_id?: string | null;
   fields: Record<string, unknown>;
   user_id: string;
   idempotency_key?: string | null;
@@ -118,6 +120,9 @@ export async function createObservation(
   }
   if (params.identity_rule) {
     (row as Record<string, unknown>).identity_rule = params.identity_rule;
+  }
+  if (params.source_peer_id) {
+    (row as Record<string, unknown>).source_peer_id = params.source_peer_id;
   }
 
   // Agent attribution (Phase 1). The provenance blob is empty when no

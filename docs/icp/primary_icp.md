@@ -197,7 +197,11 @@ Structured paths from current tools to Neotoma, organized by what the ICP tried,
 
 | Currently using | Why it fails | Receptive to |
 |---|---|---|
-| **Platform memory** (Claude, ChatGPT) | Tool-specific, non-auditable, opaque, doesn't cross tool boundaries | Cross-tool state via MCP; transparency and inspectability |
+| **Claude Projects KB** | Per-project file uploads with 200K context; no cross-project state, no structured extraction, no versioning, no entity resolution, Claude.ai-only | Cross-tool structured state via MCP; schema-first entities with provenance; works in every MCP-connected tool, not just one |
+| **Claude chat memory** | RAG over past Claude.ai conversations; retrieval-based not state-based, no schema, no provenance, no write surface, Claude.ai-only | Deterministic composed state (not retrieval fragments); cross-tool; agents read and write structured entities |
+| **Claude Cowork memory** | CLAUDE.md + auto-learnings (200-line / 25KB cap); local-only, no structured queries, no entity resolution, no cross-tool sync, degrades at scale (Fulkerson failure mode) | Schema-constrained entities that scale without degradation; cross-tool access; temporal queries; no cap on structured state |
+| **Memory tool / homebrew** (API memory files, MEMORY.md, custom implementations) | Client-managed, per-app, no shared state across tools, no provenance, no versioning, maintenance burden grows with scale | All guarantees without building and maintaining it yourself; shared state across all MCP-connected tools |
+| **ChatGPT memory** | Auto-captured preferences within ChatGPT; opaque, non-auditable, ChatGPT-only, no structured schema, no cross-tool portability | Transparent, inspectable state with full provenance; cross-tool via MCP; user controls what's stored and how |
 | **Markdown / flat files** (CLAUDE.md, SOUL.md) | Doesn't scale; agents write Python scripts to manage files; no schema enforcement | Schema-constrained entities that scale without compensatory engineering |
 | **Notion / Airtable** | Fine for human editing; breaks when adding agent reviewers; insufficient hooks for inter-agent validation | MCP-native data layer purpose-built for agent read/write |
 | **JSON / CSV files** | Any real size triggers compensatory tooling; no versioning; last-write-wins | Append-only writes with versioning; no silent overwrites |
@@ -425,6 +429,8 @@ Neotoma is not retrieval memory. Retrieval memory (RAG, vector DB, LangChain-sty
 - Retrieval memory → context lookup
 - Deterministic memory → state governance
 
+Neotoma sits as a state layer beneath your operational tooling — agents, pipelines, custom systems — without prescribing how they reason or act. Strategy artifacts (plans, decisions, rules, preferences) live in Neotoma as state; the act of strategizing happens in the operational layer above it.
+
 ---
 
 ## Objection-to-Framing Map
@@ -484,6 +490,8 @@ The ICP describes problems in everyday language. This table maps their vocabular
 | "it contradicted what I told it last week" | **Conflicting state** / undetected merge conflict | Observations disagree across sessions with no detection mechanism. |
 | "I can't tell if what it remembers is real" | **Missing provenance** / hallucinated memory | No audit trail connecting a referenced "fact" to an actual observation. |
 | "it remembered the what but not the why" | **Lossy compression** / summary degradation | Fuzzy memory flattens nuanced decisions into bare facts, stripping reasoning context. |
+| "the agent doing the work", "my orchestrator", "the pipeline", "my harness" | **Operational layer** | Anything above Neotoma that reads truth and writes results back as observations. Neotoma is the state layer; the operational layer is where reasoning, planning, and action happen. |
+| "the durable bit", "what I keep across runs", "my source of truth" | **State layer** (Neotoma) | The deterministic, versioned substrate the operational layer reads from and writes back to. |
 
 ---
 
@@ -572,6 +580,7 @@ Ordered by how quickly each data type delivers value.
 - [ ] ICP messaging includes role transformation (escaping → into) and interaction pattern shift
 - [ ] Content leads with felt experience before architectural description
 - [ ] Messaging connects chronic tax to acute crisis
+- [ ] Messaging distinguishes state layer (Neotoma) from operational layer (agents, pipelines, custom systems) — without prescribing pure cognition / pure effect
 - [ ] Non-ICP boundaries respected (including capable DIY builders)
 - [ ] Data priority tiers guide onboarding
 - [ ] Content distributed through identified watering holes (AI Twitter, Claude Code communities, indie hacker forums)

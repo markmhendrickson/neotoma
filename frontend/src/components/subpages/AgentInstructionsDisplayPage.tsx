@@ -114,8 +114,8 @@ export function AgentInstructionsDisplayPage() {
             <li>
               <em>Bullet format:</em> each bullet starts with one schema-typed emoji (✅
               task, 👤 contact, 🏢 company, 📅 event, ✉️ email_message, 🧾 receipt, 💸
-              transaction, 📝 note, 📍 place, 📎 file_asset, 🔍 research, 💬{" "}
-              product_feedback; default 🗂️), uses a short primary label, omits verbs
+              transaction, 📝 note, 📍 place, 📎 file_asset, 🔍 research, 🐛 issue;
+              default 🗂️), uses a short primary label, omits verbs
               already in the group header, and ends with the schema{" "}
               <code>entity_type</code> in inline-code parentheses.
             </li>
@@ -268,54 +268,48 @@ export function AgentInstructionsDisplayPage() {
         </li>
       </ul>
 
-      <h2 className={sectionHeading}>Feedback reporting</h2>
+      <h2 className={sectionHeading}>Issue reporting</h2>
       <p className={paragraph}>
         When you hit friction using Neotoma, a failing tool call, an opaque error, a
-        missing surface, or a doc gap, submit feedback proactively via{" "}
-        <code>submit_feedback</code>. This is how fixes get prioritized.
+        missing surface, or a doc gap, file an issue proactively via{" "}
+        <code>submit_issue</code>. This is how fixes get prioritized.
       </p>
       <ul className={listClass}>
         <li className={listItem}>
           <strong className="text-foreground">Reporting modes.</strong> Default is
-          proactive. If the user runs <code>neotoma feedback mode consent</code>, ask once
-          per submission; if <code>off</code>, only submit when the user explicitly asks.
+          proactive. If the user runs <code>neotoma issues config --mode consent</code>, ask
+          once per submission; if <code>off</code>, only file when the user explicitly asks.
         </li>
         <li className={listItem}>
           <strong className="text-foreground">PII redaction.</strong> Redact emails, phone
           numbers, API tokens, UUIDs, and home-directory path fragments with{" "}
-          <code>&lt;LABEL:hash&gt;</code> placeholders before submission. The server applies
-          a backstop redaction pass and returns <code>redaction_preview</code> for audit.
+          <code>&lt;LABEL:hash&gt;</code> placeholders in the issue title and body before
+          submission.
         </li>
         <li className={listItem}>
-          <strong className="text-foreground">metadata.environment.</strong> MUST include at
-          minimum <code>neotoma_version</code>, <code>client_name</code>, <code>os</code>;
-          add <code>tool_name</code>, <code>invocation_shape</code>,{" "}
-          <code>error_message</code>, and best-effort <code>error_class</code>/
-          <code>hit_count</code> when applicable.
+          <strong className="text-foreground">Issue body context.</strong> Include{" "}
+          <code>neotoma_version</code>, <code>client_name</code>, and <code>os</code> in the
+          markdown body; add <code>tool_name</code>, <code>invocation_shape</code>,{" "}
+          <code>error_message</code>, and best-effort <code>error_class</code> when
+          applicable.
         </li>
         <li className={listItem}>
-          <strong className="text-foreground">Persist a product_feedback record.</strong>{" "}
-          Immediately after <code>submit_feedback</code> returns, store or update a Neotoma{" "}
-          <code>product_feedback</code> entity with <code>feedback_id</code>,{" "}
-          <code>access_token</code>, <code>kind</code>, title,{" "}
-          <code>submitted_at</code>, <code>next_check_suggested_at</code>, and current
-          status. Treat <code>access_token</code> as sensitive, keep it inside Neotoma,
-          never in logs or user-visible prose.
+          <strong className="text-foreground">Persist an issue record.</strong> After{" "}
+          <code>submit_issue</code> returns, store or update a Neotoma <code>issue</code>{" "}
+          entity with <code>github_number</code>, <code>github_url</code>, title, and status
+          so later turns can resume tracking.
         </li>
         <li className={listItem}>
-          <strong className="text-foreground">Polling.</strong> Poll via{" "}
-          <code>get_feedback_status(access_token)</code>; respect{" "}
-          <code>next_check_suggested_at</code> and do not poll more frequently. The token is
-          single-purpose, do not share or log it beyond your own agent context.
+          <strong className="text-foreground">Polling and follow-up.</strong> Use{" "}
+          <code>get_issue_status</code> with the issue <code>entity_id</code> to sync from
+          GitHub when local data is stale; add comments with <code>add_issue_message</code>{" "}
+          using the same <code>entity_id</code> when you have new reproduction detail.
         </li>
         <li className={listItem}>
-          <strong className="text-foreground">Upgrade and verification.</strong> When{" "}
-          <code>upgrade_guidance</code> is present, treat it as actionable: run or propose{" "}
-          <code>install_commands</code>, follow <code>verification_steps</code>, then
-          re-attempt the original invocation. If <code>verification_request</code> is
-          present, submit a <code>kind=fix_verification</code> follow-up with{" "}
-          <code>parent_feedback_id</code> and <code>verification_outcome</code> by{" "}
-          <code>verify_by</code>; silence is treated as <code>unable_to_verify</code>.
+          <strong className="text-foreground">Upgrade guidance on issues.</strong> When the
+          operator posts install or verification steps on the GitHub thread, treat them as
+          actionable: run or propose the commands, follow the steps, then re-attempt the
+          original invocation and reply on the issue with results.
         </li>
       </ul>
 

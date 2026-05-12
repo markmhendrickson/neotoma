@@ -1,0 +1,1376 @@
+{
+  "version": 1,
+  "generated_from": "openapi.yaml + scripts/security/sync_protected_routes_manifest.js",
+  "canonical_doc": "docs/security/threat_model.md",
+  "routes": [
+    {
+      "path": "/.well-known/oauth-authorization-server",
+      "method": "GET",
+      "operation_id": "oauthServerMetadata",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/.well-known/oauth-protected-resource",
+      "method": "GET",
+      "operation_id": "oauthProtectedResource",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/access_policies",
+      "method": "GET",
+      "operation_id": "getAccessPolicies",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/admin/compliance/scorecard",
+      "method": "GET",
+      "operation_id": "getComplianceScorecard",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/agents",
+      "method": "GET",
+      "operation_id": null,
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/agents/grants",
+      "method": "GET",
+      "operation_id": "listAgentGrants",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/agents/grants",
+      "method": "POST",
+      "operation_id": "createAgentGrant",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/agents/grants/{id}",
+      "method": "GET",
+      "operation_id": "getAgentGrant",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/agents/grants/{id}",
+      "method": "PATCH",
+      "operation_id": "updateAgentGrant",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/agents/grants/{id}/restore",
+      "method": "POST",
+      "operation_id": "restoreAgentGrant",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/agents/grants/{id}/revoke",
+      "method": "POST",
+      "operation_id": "revokeAgentGrant",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/agents/grants/{id}/suspend",
+      "method": "POST",
+      "operation_id": "suspendAgentGrant",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/agents/{key}",
+      "method": "GET",
+      "operation_id": null,
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/agents/{key}/records",
+      "method": "GET",
+      "operation_id": null,
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/analyze_schema_candidates",
+      "method": "POST",
+      "operation_id": "analyzeSchemaCandidates",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/auth/dev-signin",
+      "method": "POST",
+      "operation_id": "devSignIn",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/correct",
+      "method": "POST",
+      "operation_id": "correct",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/create_relationship",
+      "method": "POST",
+      "operation_id": "createRelationship",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/create_relationships",
+      "method": "POST",
+      "operation_id": "createRelationships",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/delete_entity",
+      "method": "POST",
+      "operation_id": "deleteEntity",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/delete_relationship",
+      "method": "POST",
+      "operation_id": "deleteRelationship",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/entities/duplicates",
+      "method": "GET",
+      "operation_id": "listPotentialDuplicates",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/entities/merge",
+      "method": "POST",
+      "operation_id": "mergeEntities",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/entities/query",
+      "method": "POST",
+      "operation_id": "queryEntities",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/entities/split",
+      "method": "POST",
+      "operation_id": "splitEntity",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/entities/{id}",
+      "method": "GET",
+      "operation_id": "getEntityById",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/entities/{id}/observations",
+      "method": "GET",
+      "operation_id": "getEntityObservations",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/entities/{id}/relationships",
+      "method": "GET",
+      "operation_id": "getEntityRelationships",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/events/stream",
+      "method": "GET",
+      "operation_id": "eventsStream",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/get_authenticated_user",
+      "method": "POST",
+      "operation_id": "getAuthenticatedUser",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/get_entity_snapshot",
+      "method": "POST",
+      "operation_id": "getEntitySnapshot",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/get_field_provenance",
+      "method": "POST",
+      "operation_id": "getFieldProvenance",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/get_file_url",
+      "method": "GET",
+      "operation_id": "getFileUrl",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/get_schema_recommendations",
+      "method": "POST",
+      "operation_id": "getSchemaRecommendations",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/get_subscription_status",
+      "method": "POST",
+      "operation_id": "getSubscriptionStatus",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/health",
+      "method": "GET",
+      "operation_id": "healthCheck",
+      "requires_auth": false,
+      "expected_no_auth_status": [
+        200,
+        400,
+        404,
+        405
+      ],
+      "expected_invalid_auth_status": [
+        200,
+        400,
+        404,
+        405
+      ]
+    },
+    {
+      "path": "/health_check_snapshots",
+      "method": "POST",
+      "operation_id": "healthCheckSnapshots",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/interpretations",
+      "method": "GET",
+      "operation_id": "listInterpretations",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/interpretations/create",
+      "method": "POST",
+      "operation_id": "createInterpretation",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/issues/add_message",
+      "method": "POST",
+      "operation_id": "issuesAddMessage",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/issues/bulk_close",
+      "method": "POST",
+      "operation_id": "bulkCloseIssues",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/issues/bulk_remove",
+      "method": "POST",
+      "operation_id": "bulkRemoveIssues",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/issues/status",
+      "method": "POST",
+      "operation_id": "issuesGetStatus",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/issues/submit",
+      "method": "POST",
+      "operation_id": "issuesSubmit",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/issues/sync",
+      "method": "POST",
+      "operation_id": "issuesSync",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/list_observations",
+      "method": "POST",
+      "operation_id": "listObservationsForEntity",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/list_relationships",
+      "method": "POST",
+      "operation_id": "listRelationshipsForEntity",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/list_subscriptions",
+      "method": "POST",
+      "operation_id": "listSubscriptions",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/mcp/oauth/authorization-details",
+      "method": "GET",
+      "operation_id": "mcpOAuthAuthorizationDetails",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/mcp/oauth/authorize",
+      "method": "GET",
+      "operation_id": "mcpOAuthAuthorize",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/mcp/oauth/callback",
+      "method": "GET",
+      "operation_id": "mcpOAuthCallback",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/mcp/oauth/connections",
+      "method": "GET",
+      "operation_id": "mcpOAuthListConnections",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/mcp/oauth/connections/{connection_id}",
+      "method": "DELETE",
+      "operation_id": "mcpOAuthRevokeConnection",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/mcp/oauth/initiate",
+      "method": "POST",
+      "operation_id": "mcpOAuthInitiate",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/mcp/oauth/key-auth",
+      "method": "GET",
+      "operation_id": "mcpOAuthKeyAuthGet",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/mcp/oauth/key-auth",
+      "method": "POST",
+      "operation_id": "mcpOAuthKeyAuthPost",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/mcp/oauth/local-login",
+      "method": "GET",
+      "operation_id": "mcpOAuthLocalLogin",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/mcp/oauth/register",
+      "method": "POST",
+      "operation_id": "mcpOAuthRegister",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/mcp/oauth/status",
+      "method": "GET",
+      "operation_id": "mcpOAuthStatus",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/mcp/oauth/token",
+      "method": "POST",
+      "operation_id": "mcpOAuthToken",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/me",
+      "method": "GET",
+      "operation_id": "getMe",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/observations",
+      "method": "GET",
+      "operation_id": "listObservations",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/observations/create",
+      "method": "POST",
+      "operation_id": "createObservation",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/observations/query",
+      "method": "POST",
+      "operation_id": "queryObservations",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/openapi.yaml",
+      "method": "GET",
+      "operation_id": "getOpenApiSpec",
+      "requires_auth": false,
+      "expected_no_auth_status": [
+        200,
+        400,
+        404,
+        405
+      ],
+      "expected_invalid_auth_status": [
+        200,
+        400,
+        404,
+        405
+      ]
+    },
+    {
+      "path": "/peers",
+      "method": "GET",
+      "operation_id": "listPeers",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/peers",
+      "method": "POST",
+      "operation_id": "addPeer",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/peers/resolve_sync_conflict",
+      "method": "POST",
+      "operation_id": "resolveSyncConflict",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/peers/{peer_id}",
+      "method": "GET",
+      "operation_id": "getPeerStatus",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/peers/{peer_id}",
+      "method": "DELETE",
+      "operation_id": "removePeer",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/peers/{peer_id}/sync",
+      "method": "POST",
+      "operation_id": "syncPeer",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/recent_conversations",
+      "method": "GET",
+      "operation_id": "getRecentConversations",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/recent_conversations/{conversation_id}",
+      "method": "GET",
+      "operation_id": "getRecentConversation",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/record_activity",
+      "method": "GET",
+      "operation_id": "getRecordActivity",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/register_schema",
+      "method": "POST",
+      "operation_id": "registerSchema",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/relationships",
+      "method": "GET",
+      "operation_id": "listRelationships",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/relationships/snapshot",
+      "method": "POST",
+      "operation_id": "getRelationshipSnapshot",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/relationships/{id}",
+      "method": "GET",
+      "operation_id": "getRelationshipById",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/restore_entity",
+      "method": "POST",
+      "operation_id": "restoreEntity",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/restore_relationship",
+      "method": "POST",
+      "operation_id": "restoreRelationship",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/retrieve_entity_by_identifier",
+      "method": "POST",
+      "operation_id": "retrieveEntityByIdentifier",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/retrieve_graph_neighborhood",
+      "method": "POST",
+      "operation_id": "retrieveGraphNeighborhood",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/retrieve_related_entities",
+      "method": "POST",
+      "operation_id": "retrieveRelatedEntities",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/schemas",
+      "method": "GET",
+      "operation_id": "listSchemas",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/schemas/{entity_type}",
+      "method": "GET",
+      "operation_id": "getSchemaByEntityType",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/server-info",
+      "method": "GET",
+      "operation_id": "getServerInfo",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/session",
+      "method": "GET",
+      "operation_id": "getSessionInfo",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/sources",
+      "method": "GET",
+      "operation_id": "listSources",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/sources/{id}",
+      "method": "GET",
+      "operation_id": "getSourceById",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/sources/{id}/relationships",
+      "method": "GET",
+      "operation_id": "getSourceRelationships",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/stats",
+      "method": "GET",
+      "operation_id": "getStats",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/store",
+      "method": "POST",
+      "operation_id": "store",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/subscribe",
+      "method": "POST",
+      "operation_id": "subscribe",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/sync/entities",
+      "method": "POST",
+      "operation_id": "listSyncEntities",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/sync/webhook",
+      "method": "POST",
+      "operation_id": "applySyncWebhook",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/timeline",
+      "method": "GET",
+      "operation_id": "listTimeline",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/timeline/{id}",
+      "method": "GET",
+      "operation_id": "getTimelineById",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/unsubscribe",
+      "method": "POST",
+      "operation_id": "unsubscribe",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/update_schema_incremental",
+      "method": "POST",
+      "operation_id": "updateSchemaIncremental",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
+      "path": "/",
+      "method": "GET",
+      "operation_id": null,
+      "requires_auth": false,
+      "runtime_only": true,
+      "reason": "Root landing renders public marketing copy when allowed by env.",
+      "expected_no_auth_status": [
+        200,
+        204,
+        400,
+        404,
+        405,
+        429
+      ],
+      "expected_invalid_auth_status": [
+        200,
+        204,
+        400,
+        404,
+        405,
+        429
+      ]
+    },
+    {
+      "path": "/favicon.ico",
+      "method": "GET",
+      "operation_id": null,
+      "requires_auth": false,
+      "runtime_only": true,
+      "reason": "Static asset.",
+      "expected_no_auth_status": [
+        200,
+        204,
+        400,
+        404,
+        405,
+        429
+      ],
+      "expected_invalid_auth_status": [
+        200,
+        204,
+        400,
+        404,
+        405,
+        429
+      ]
+    },
+    {
+      "path": "/sandbox/session/new",
+      "method": "POST",
+      "operation_id": null,
+      "requires_auth": false,
+      "runtime_only": true,
+      "reason": "Public sandbox onboarding (rate-limited).",
+      "expected_no_auth_status": [
+        200,
+        204,
+        400,
+        404,
+        405,
+        429
+      ],
+      "expected_invalid_auth_status": [
+        200,
+        204,
+        400,
+        404,
+        405,
+        429
+      ]
+    },
+    {
+      "path": "/sandbox/session/redeem",
+      "method": "POST",
+      "operation_id": null,
+      "requires_auth": false,
+      "runtime_only": true,
+      "reason": "Public sandbox onboarding (rate-limited).",
+      "expected_no_auth_status": [
+        200,
+        204,
+        400,
+        404,
+        405,
+        429
+      ],
+      "expected_invalid_auth_status": [
+        200,
+        204,
+        400,
+        404,
+        405,
+        429
+      ]
+    },
+    {
+      "path": "/sandbox/session",
+      "method": "GET",
+      "operation_id": null,
+      "requires_auth": false,
+      "runtime_only": true,
+      "reason": "Sandbox session probe.",
+      "expected_no_auth_status": [
+        200,
+        204,
+        400,
+        404,
+        405,
+        429
+      ],
+      "expected_invalid_auth_status": [
+        200,
+        204,
+        400,
+        404,
+        405,
+        429
+      ]
+    },
+    {
+      "path": "/sandbox/session/reset",
+      "method": "POST",
+      "operation_id": null,
+      "requires_auth": false,
+      "runtime_only": true,
+      "reason": "Sandbox self-reset.",
+      "expected_no_auth_status": [
+        200,
+        204,
+        400,
+        404,
+        405,
+        429
+      ],
+      "expected_invalid_auth_status": [
+        200,
+        204,
+        400,
+        404,
+        405,
+        429
+      ]
+    },
+    {
+      "path": "/sandbox/session",
+      "method": "DELETE",
+      "operation_id": null,
+      "requires_auth": false,
+      "runtime_only": true,
+      "reason": "Sandbox self-revoke.",
+      "expected_no_auth_status": [
+        200,
+        204,
+        400,
+        404,
+        405,
+        429
+      ],
+      "expected_invalid_auth_status": [
+        200,
+        204,
+        400,
+        404,
+        405,
+        429
+      ]
+    }
+  ],
+  "overrides": []
+}

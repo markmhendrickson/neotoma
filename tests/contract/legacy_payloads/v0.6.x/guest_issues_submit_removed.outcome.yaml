@@ -1,0 +1,5 @@
+endpoint: "POST /guest/issues/submit"
+outcome: rejected
+notes: |
+  The v0.6 guest issue submission URL is intentionally removed. Use
+  POST /issues/submit with AAuth or a scoped guest principal instead.

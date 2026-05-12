@@ -16,6 +16,7 @@ import {
   UserCheck,
   Users,
 } from "lucide-react";
+import { MdxSitePage } from "./MdxSitePage";
 import { UseCaseLandingShell, type UseCaseConfig } from "./use_case_landing/UseCaseLandingShell";
 
 const CONFIG: UseCaseConfig = {
@@ -263,6 +264,10 @@ const CONFIG: UseCaseConfig = {
   agentLabel: "clinical agent",
 };
 
+export function HealthcareLandingPageBody() {
+  return <UseCaseLandingShell mdxShell config={CONFIG} />;
+}
+
 export function HealthcareLandingPage() {
-  return <UseCaseLandingShell config={CONFIG} />;
+  return <MdxSitePage canonicalPath="/healthcare" shell="bare" />;
 }

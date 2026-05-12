@@ -51,7 +51,7 @@ describe("isNeotomaRelevantTool", () => {
       isNeotomaRelevantTool("mcp_user-neotoma_retrieve_entities", {})
     ).toBe(true);
     expect(isNeotomaRelevantTool("store_structured", {})).toBe(true);
-    expect(isNeotomaRelevantTool("submit_feedback", {})).toBe(true);
+    expect(isNeotomaRelevantTool("submit_issue", {})).toBe(true);
   });
 
   it("matches CLI / HTTP shapes via the input record", () => {
@@ -176,7 +176,7 @@ describe("incrementFailureCounter + readFailureHint", () => {
 });
 
 describe("formatFailureHint", () => {
-  it("renders a one-shot informational nudge mentioning submit_feedback", () => {
+  it("renders a one-shot informational nudge mentioning submit_issue", () => {
     const formatted = formatFailureHint({
       tool_name: "store_structured",
       error_class: "HTTP_500",
@@ -185,7 +185,7 @@ describe("formatFailureHint", () => {
     expect(formatted).toContain("3 recent failures");
     expect(formatted).toContain("store_structured");
     expect(formatted).toContain("HTTP_500");
-    expect(formatted).toContain("submit_feedback");
+    expect(formatted).toContain("submit_issue");
     expect(formatted).toContain("do not auto-submit");
   });
 });

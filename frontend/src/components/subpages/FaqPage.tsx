@@ -1,10 +1,9 @@
 import { useMemo } from "react";
-import { Link } from "react-router-dom";
-import { PRODUCT_NAV_SOURCES } from "@/utils/analytics";
 import { faqItemSectionId, getFaqItems } from "@/site/faq_items";
-import { DetailPage } from "../DetailPage";
-import { TrackedProductLink } from "../TrackedProductNav";
 import { useLocale } from "@/i18n/LocaleContext";
+import { MdxI18nLink } from "@/components/mdx/mdx_i18n_link";
+import { FaqInstallGuideLink } from "@/components/mdx/faq_install_guide_link";
+import { MdxSitePage } from "./MdxSitePage";
 
 export type { FaqItem } from "@/site/faq_items";
 export {
@@ -18,13 +17,15 @@ export {
   getFaqItems,
 } from "@/site/faq_items";
 
-export function FaqPage() {
-  const { locale, subpage } = useLocale();
+/**
+ * FAQ Q&A list (locale-aware). Intros live in `docs/site/pages/{en,es}/faq.mdx`; this component
+ * covers install analytics + internal links that are not plain markdown.
+ */
+export function FaqQuestions() {
+  const { locale } = useLocale();
   const faqItems = useMemo(() => getFaqItems(locale), [locale]);
   return (
-    <DetailPage title={subpage.faq.title}>
-      <p className="text-[15px] leading-7 mb-8">{subpage.faq.intro}</p>
-
+    <>
       {faqItems.map((item) => (
         <section key={item.sectionId} id={faqItemSectionId(item)} className="mb-10 scroll-mt-28">
           <h2 className="text-[18px] font-medium tracking-[-0.01em] mb-2">{item.question}</h2>
@@ -34,24 +35,24 @@ export function FaqPage() {
           )}
           {item.link &&
             (item.link.href === "/install" ? (
-              <TrackedProductLink
-                to="/install"
-                navTarget="install"
-                navSource={PRODUCT_NAV_SOURCES.faqInstallGuide}
-                className="text-[14px] text-foreground underline underline-offset-2 hover:no-underline"
-              >
+              <FaqInstallGuideLink>
                 {item.link.label} &rarr;
-              </TrackedProductLink>
+              </FaqInstallGuideLink>
             ) : (
-              <Link
+              <MdxI18nLink
                 to={item.link.href}
                 className="text-[14px] text-foreground underline underline-offset-2 hover:no-underline"
               >
                 {item.link.label} &rarr;
-              </Link>
+              </MdxI18nLink>
             ))}
         </section>
       ))}
-    </DetailPage>
+    </>
   );
+}
+
+export function FaqPage() {
+  const { subpage } = useLocale();
+  return <MdxSitePage canonicalPath="/faq" detailTitle={subpage.faq.title} />;
 }

@@ -129,12 +129,20 @@ export interface HomeBodyPack {
     viewFullGuideCta: string;
     seeAllGuaranteesCta: string;
     cards: HomeRecordTypeCard[];
+    /** Callout below the record-type cards: schema is inferred and evolves with your data. */
+    schemaEvolutionCalloutHeading: string;
+    schemaEvolutionCalloutBodyBeforeLink: string;
+    schemaEvolutionCalloutLink: string;
+    schemaEvolutionCalloutBodyAfterLink: string;
+    /** Secondary line: nothing is dropped — unfamiliar fields land in raw_fragments. */
+    schemaEvolutionCalloutSecondLine: string;
   };
   who: {
     kicker: string;
     titleLine1: string;
     titleLine2: string;
     subtitle: string;
+    operatorConnector: string;
     calloutHeading: string;
     calloutBodyBeforeLink: string;
     calloutLink: string;
@@ -172,7 +180,6 @@ export interface HomeBodyPack {
     title: string;
     subtitle: string;
     promptHint: string;
-    evaluateIllustrationAlt: string;
     /** Snippet copied from the homepage / integration evaluate cards (keep `neotoma doctor` token). */
     homeEvaluatePrompt: string;
     evaluatePromptPill: string;

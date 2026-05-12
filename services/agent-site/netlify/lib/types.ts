@@ -149,7 +149,7 @@ export interface VerificationRequest {
   verify_by: string;
   verification_steps: string[];
   expected_outcome: string;
-  report_via: "submit_feedback";
+  report_via: "submit_issue";
   report_kind: "fix_verification";
   parent_feedback_id: string;
   deadline_behavior: "silence_treated_as_unable_to_verify";

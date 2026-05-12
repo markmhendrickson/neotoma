@@ -9,7 +9,12 @@ export interface EntityQueryOptions {
   includeMerged?: boolean;
   includeDeleted?: boolean;
   includeSnapshots?: boolean;
-  sortBy?: "entity_id" | "canonical_name" | "observation_count" | "last_observation_at";
+  sortBy?:
+    | "entity_id"
+    | "canonical_name"
+    | "observation_count"
+    | "last_observation_at"
+    | "submitted_at";
   sortOrder?: "asc" | "desc";
   published?: boolean;
   publishedAfter?: string;
@@ -229,6 +234,7 @@ export async function queryEntities(
   const shouldUseSnapshotDrivenScan =
     sortBy === "observation_count" ||
     sortBy === "last_observation_at" ||
+    sortBy === "submitted_at" ||
     published !== undefined ||
     Boolean(publishedAfter) ||
     Boolean(publishedBefore);
@@ -290,6 +296,8 @@ export async function queryEntities(
         snapshotQuery = snapshotQuery.order("observation_count", { ascending });
       } else if (sortBy === "last_observation_at") {
         snapshotQuery = snapshotQuery.order("last_observation_at", { ascending });
+      } else if (sortBy === "submitted_at") {
+        snapshotQuery = snapshotQuery.order("snapshot->>created_at", { ascending });
       } else {
         snapshotQuery = snapshotQuery.order("entity_id", { ascending: true });
       }

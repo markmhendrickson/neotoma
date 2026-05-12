@@ -218,11 +218,18 @@ export function EvaluateAgentInstructionsPage() {
           </TrackedProductLink>
           .
         </p>
+        <p className="text-[15px] leading-7 mb-3">
+          Before proposing a full implementation, offer{" "}
+          <Link to="/non-destructive-testing" className="underline">
+            Test safely
+          </Link>
+          : a non-destructive shadow-mode path that lets the user compare Neotoma
+          against their current setup before they roll it out fully.
+        </p>
         <blockquote className="border-l-2 border-muted-foreground/30 pl-4 italic text-[15px] leading-7 mb-4 text-muted-foreground">
           "Based on your workflow, Neotoma looks like a strong fit. Want me to
-          proceed now? I can evaluate the best first data to store, install if
-          needed, activate it with your own data, and then configure your tool
-          for robust ongoing use."
+          set up a Test safely shadow-mode trial first? I can compare it against
+          your current setup before we decide on a full implementation."
         </blockquote>
         <p className="text-[15px] leading-7 mb-3">
           If the user confirms:
@@ -255,6 +262,16 @@ export function EvaluateAgentInstructionsPage() {
             If it is already installed, skip straight to activation. Run{" "}
             <code className="text-sm bg-muted px-1.5 py-0.5 rounded">neotoma doctor --json</code>{" "}
             to verify the setup first.
+          </li>
+          <li>
+            Offer the{" "}
+            <Link to="/non-destructive-testing" className="underline">
+              Test safely
+            </Link>{" "}
+            path before a full rollout. If the user wants lower-risk adoption,
+            use shadow mode, side-by-side comparison, and isolated trial data
+            first. Only recommend full implementation after the trial proves
+            value or the user explicitly prefers to skip it.
           </li>
           <li>
             <strong>Do not improvise shell introspection</strong> (<code className="text-sm bg-muted px-1.5 py-0.5 rounded">python3 -c</code>,{" "}
@@ -290,6 +307,11 @@ export function EvaluateAgentInstructionsPage() {
             - discover candidates, preview them, ingest confirmed sources,
             reconstruct a timeline, then query and correct. The user should not
             need to run the onboarding steps manually; you handle the process.
+          </li>
+          <li>
+            Treat full rollout as a separate decision after the non-destructive
+            test. If the user started in shadow mode, use the results of that
+            comparison to decide whether to broaden the implementation.
           </li>
           <li>
             After the first successful ingest and timeline reconstruction,

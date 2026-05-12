@@ -21,7 +21,7 @@ import {
 import { runSetup } from "../../src/cli/setup.ts";
 import { applyCliInstructions, scanAgentInstructions } from "../../src/cli/agent_instructions_scan.ts";
 import { createDefaultSetupRunners } from "../../src/cli/setup_runners.ts";
-import { detectCurrentToolHint, runDoctor } from "../../src/cli/doctor.ts";
+import { detectCurrentToolHint, detectDataDirRisks, runDoctor } from "../../src/cli/doctor.ts";
 import { detectHooks } from "../../src/cli/hooks_detect.ts";
 
 async function mkTmp(prefix: string): Promise<string> {
@@ -204,7 +204,7 @@ describe("runSetup", () => {
       },
     });
     const stepIds = report.steps.map((s) => s.id);
-    expect(stepIds).toEqual(["init", "mcp-configure", "cli-instructions", "hooks", "permissions"]);
+    expect(stepIds).toEqual(["init", "mcp-configure", "cli-instructions", "hooks", "skills", "permissions"]);
     expect(report.dry_run).toBe(true);
     expect(report.tool).toBe("cursor");
     expect(report.overall_ok).toBe(true);
@@ -344,9 +344,36 @@ describe("runDoctor", () => {
       expect(report).toHaveProperty("suggested_next_step");
       expect(typeof report.neotoma.installed).toBe("boolean");
       expect(typeof report.neotoma.node_on_path).toBe("boolean");
+      expect(Array.isArray(report.data.risks)).toBe(true);
     } finally {
       await fs.rm(cwd, { recursive: true, force: true });
     }
+  });
+
+  it("flags macOS Documents data directories as SQLite risk", () => {
+    const home = path.join(os.tmpdir(), "ntm-doctor-home");
+    const risks = detectDataDirRisks({
+      dataDir: path.join(home, "Documents", "data"),
+      homeDir: home,
+      platform: "darwin",
+    });
+
+    expect(risks.map((risk) => risk.code)).toContain("macos_synced_desktop_or_documents");
+    expect(risks[0]?.suggested_action).toContain("storage set-data-dir");
+  });
+
+  it("flags prior SQLite repair artifacts", () => {
+    const risks = detectDataDirRisks({
+      dataDir: path.join(os.tmpdir(), "ntm-doctor-data"),
+      platform: "linux",
+      hasPriorRepairArtifacts: true,
+    });
+
+    expect(risks).toContainEqual(
+      expect.objectContaining({
+        code: "prior_sqlite_repair_artifacts",
+      })
+    );
   });
 
   it("includes a mirror block with inside_git_repo / gitignored shape", async () => {

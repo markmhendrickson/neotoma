@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { CorrectEntityRequestSchema, StoreRequestSchema, StoreStructuredRequestSchema } from "./action_schemas.js";
+import {
+  CorrectEntityRequestSchema,
+  RELATIONSHIP_ENTITY_ID_FORMAT_HINT,
+  RELATIONSHIP_ENTITY_ID_FORMAT_ISSUE_CODE,
+  StoreRequestSchema,
+  StoreStructuredRequestSchema,
+} from "./action_schemas.js";
 
 describe("StoreStructuredRequestSchema", () => {
   it("requires idempotency_key", () => {
@@ -55,6 +61,37 @@ describe("StoreRequestSchema", () => {
         mime_type: "text/plain",
       })
     ).not.toThrow();
+  });
+
+  it("rejects non-Neotoma relationship entity ids with a structured hint", () => {
+    const parsed = StoreRequestSchema.safeParse({
+      entities: [{ entity_type: "task", title: "Relationship payload" }],
+      idempotency_key: "idemp_relationship_payload",
+      relationships: [
+        {
+          relationship_type: "REFERS_TO",
+          source_entity_id: "legacy-source-id",
+          target_index: 0,
+        },
+      ],
+    });
+
+    expect(parsed.success).toBe(false);
+    if (parsed.success) {
+      throw new Error("Expected StoreRequestSchema to reject invalid relationship ids");
+    }
+    expect(parsed.error.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: ["relationships", 0, "source_entity_id"],
+          message: expect.stringContaining(RELATIONSHIP_ENTITY_ID_FORMAT_HINT),
+          params: {
+            code: RELATIONSHIP_ENTITY_ID_FORMAT_ISSUE_CODE,
+            hint: RELATIONSHIP_ENTITY_ID_FORMAT_HINT,
+          },
+        }),
+      ])
+    );
   });
 });
 

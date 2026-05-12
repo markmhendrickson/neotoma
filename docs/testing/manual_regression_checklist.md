@@ -17,7 +17,7 @@ This checklist documents the product areas that still require manual verificatio
 - `npm run validate:routes`
 - `npm run build:ui`
 - `npm run validate:locales`
-- `npm run build:pages:site`
+- `npm run build:site:pages`
 - `npm run validate:site-export`
 - `npm run test:remote:critical` when remote-dependent behavior changed
 
@@ -107,7 +107,7 @@ This checklist documents the product areas that still require manual verificatio
 
 ### Automated coverage
 
-- `validate:routes`, `validate:locales`, `build:pages:site`, and `validate:site-export`
+- `validate:routes`, `validate:locales`, `build:site:pages`, and `validate:site-export`
 - GitHub Actions site and CI test lane workflows
 
 ### Manual verification

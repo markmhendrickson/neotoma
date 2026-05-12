@@ -27,6 +27,8 @@
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 
 import {
+  type AAuthRequestContext,
+  type ExternalActor,
   getAgentIdentityFromRequest,
   normaliseClientName,
 } from "../crypto/agent_identity.js";
@@ -73,6 +75,30 @@ function extractClientInfoFromHeaders(req: Request): {
  * {@link runWithRequestContext} themselves to nest a more specific
  * context — nested scopes shadow outer ones exactly as intended.
  */
+/**
+ * Build an ExternalActor from the agent_token's `https://neotoma.io/external_actors`
+ * claim when a GitHub entry is present. Sets `verified_via: "linked_attestation"` and
+ * `attesting_aauth_thumbprint` so downstream code knows this came from a verified JWT.
+ */
+function buildExternalActorFromTokenClaims(req: Request): ExternalActor | null {
+  const aauth = (req as Request & { aauth?: AAuthRequestContext }).aauth;
+  if (!aauth?.verified || !aauth.externalActorClaims?.length) return null;
+
+  const githubClaim = aauth.externalActorClaims.find(
+    (c) => c.provider === "github" && typeof c.login === "string" && typeof c.id === "number",
+  );
+  if (!githubClaim) return null;
+
+  return {
+    provider: "github",
+    login: githubClaim.login,
+    id: githubClaim.id,
+    type: "User",
+    verified_via: "linked_attestation",
+    attesting_aauth_thumbprint: aauth.thumbprint,
+  };
+}
+
 export function attributionContext(): RequestHandler {
   return (req: Request, res: Response, next: NextFunction): void => {
     const { clientName, clientVersion, connectionId } =
@@ -83,10 +109,12 @@ export function attributionContext(): RequestHandler {
       connectionId,
     });
     const decision = getAttributionDecisionFromRequest(req);
+    const externalActor = buildExternalActorFromTokenClaims(req);
     runWithRequestContext(
       {
         agentIdentity: identity,
         attributionDecision: decision,
+        externalActor,
       },
       () => {
         next();

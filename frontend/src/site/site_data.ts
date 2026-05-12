@@ -81,7 +81,7 @@ export const MEMORY_GUARANTEE_ROWS: MemoryGuaranteeRow[] = [
     property: "Deterministic state evolution",
     slug: "deterministic-state-evolution",
     tooltip:
-      "Given the same set of observations, the system always produces the same entity state regardless of when or in what order they are processed. This eliminates ordering bugs and makes state transitions predictable and testable.",
+      "Given the same set of observations, the system always produces the same entity state regardless of when or in what order they are processed. This eliminates ordering bugs and makes state transitions predictable and testable. Note: structured agent writes are fully deterministic. AI-based extraction from unstructured files is auditable (model, prompt hash, and config are logged) but is not replay-deterministic across model versions.",
     platform: "not-provided",
     retrieval: "not-provided",
     file: "not-provided",
@@ -242,6 +242,28 @@ export const MEMORY_GUARANTEE_ROWS: MemoryGuaranteeRow[] = [
     database: "guaranteed",
     neotoma: "guaranteed",
   },
+  {
+    property: "Strong consistency",
+    slug: "strong-consistency",
+    tooltip:
+      "Core records, entities, and events are immediately visible after write. There is no eventual-consistency lag between write and read for the structured store; bounded-eventual delay applies only to optional secondary indices like search (~5s) and embeddings (~10s).",
+    platform: "not-provided",
+    retrieval: "not-provided",
+    file: "not-provided",
+    database: "guaranteed",
+    neotoma: "guaranteed",
+  },
+  {
+    property: "Transactional writes",
+    slug: "transactional-writes",
+    tooltip:
+      "All graph inserts (entities, observations, relationships) commit in a single transaction. Either everything succeeds or nothing changes; there is no partial state where one half of a write landed and the other half did not.",
+    platform: "not-provided",
+    retrieval: "not-provided",
+    file: "not-provided",
+    database: "guaranteed",
+    neotoma: "guaranteed",
+  },
 ];
 
 export const MEMORY_MODEL_VENDORS: Record<string, string> = {
@@ -267,7 +289,7 @@ export interface FoundationCard {
   link: string;
 }
 
-export const THREE_FOUNDATIONS: FoundationCard[] = [
+export const FOUNDATIONS: FoundationCard[] = [
   {
     title: "Privacy-first",
     icon: "ShieldCheck",
@@ -275,6 +297,7 @@ export const THREE_FOUNDATIONS: FoundationCard[] = [
     lines: [
       "Your data stays local. Never used for training.",
       "User-controlled storage, optional encryption at rest.",
+      "Nothing is stored unless you approve it. No background scanning, no implicit captures.",
       "Full export and deletion control.",
     ],
   },
@@ -289,6 +312,16 @@ export const THREE_FOUNDATIONS: FoundationCard[] = [
     ],
   },
   {
+    title: "Immutable and verifiable",
+    icon: "Lock",
+    link: "/foundations#immutable",
+    lines: [
+      "Every observation is append-only. History cannot be rewritten.",
+      "Hash-based entity IDs ensure tamper-evident records.",
+      "Full provenance chain from any state to its source.",
+    ],
+  },
+  {
     title: "Cross-platform",
     icon: "Globe2",
     link: "/foundations#cross-platform",
@@ -299,6 +332,9 @@ export const THREE_FOUNDATIONS: FoundationCard[] = [
     ],
   },
 ];
+
+/** @deprecated alias kept temporarily for downstream imports during the 3->4 foundations expansion. */
+export const THREE_FOUNDATIONS: FoundationCard[] = FOUNDATIONS;
 
 export const SITE_SECTIONS: SiteSection[] = [
   { id: "intro", label: "Intro", shortLabel: "Intro", icon: "Zap" },
@@ -362,10 +398,20 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
       { label: "Meet the creator", href: "/meet", icon: "CalendarClock" },
       { label: "What to store first", href: "/what-to-store", icon: "BookOpen" },
       { label: "Install", href: "/install", icon: "Download" },
+      { label: "Test safely", href: "/non-destructive-testing", icon: "FlaskConical" },
       { label: "Backup and restore", href: "/backup", icon: "Database" },
       { label: "Connect remotely", href: "/connect", icon: "Plug" },
       { label: "Expose tunnel", href: "/tunnel", icon: "SatelliteDish" },
       { label: "Walkthrough", href: "/walkthrough", icon: "Waypoints" },
+    ],
+  },
+  {
+    title: "Architecture",
+    items: [
+      { label: "Foundations", href: "/foundations", icon: "Shield" },
+      { label: "Memory guarantees", href: "/memory-guarantees", icon: "ShieldCheck" },
+      { label: "Architecture", href: "/architecture", icon: "Layers" },
+      { label: "Memory models", href: "/memory-models", icon: "Boxes" },
     ],
   },
   {
@@ -386,6 +432,22 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
       { label: "IronClaw", href: "/neotoma-with-ironclaw", icon: "IronClaw" },
       { label: "OpenClaw", href: "/neotoma-with-openclaw", icon: "Sparkles" },
       { label: "OpenCode", href: "/neotoma-with-opencode", icon: "OpenCode" },
+    ],
+  },
+  {
+    title: "Skills",
+    items: [
+      { label: "All skills", href: "/skills", icon: "Bot" },
+      { label: "Ensure Neotoma", href: "/skills/ensure-neotoma", icon: "Download" },
+      { label: "Remember Email", href: "/skills/remember-email", icon: "Mail" },
+      { label: "Remember Conversations", href: "/skills/remember-conversations", icon: "MessageSquare" },
+      { label: "Remember Meetings", href: "/skills/remember-meetings", icon: "Users" },
+      { label: "Remember Finances", href: "/skills/remember-finances", icon: "Receipt" },
+      { label: "Remember Contacts", href: "/skills/remember-contacts", icon: "BookUser" },
+      { label: "Remember Calendar", href: "/skills/remember-calendar", icon: "CalendarClock" },
+      { label: "Remember Codebase", href: "/skills/remember-codebase", icon: "Code" },
+      { label: "Store Data", href: "/skills/store-data", icon: "Database" },
+      { label: "Query Memory", href: "/skills/query-memory", icon: "Search" },
     ],
   },
   {
@@ -467,6 +529,11 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
       { label: "Memory guarantees", href: "/memory-guarantees", icon: "ShieldCheck" },
       { label: "Memory models", href: "/memory-models", icon: "Container" },
       { label: "Foundations", href: "/foundations", icon: "Layers" },
+      {
+        label: "Problem statement",
+        href: "/foundation/problem-statement",
+        icon: "HelpCircle",
+      },
       { label: "Agent instructions", href: "/agent-instructions", icon: "Bot" },
       { label: "Architecture", href: "/architecture", icon: "Building2" },
       { label: "Terminology", href: "/terminology", icon: "Bookmark" },
@@ -513,7 +580,6 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
         icon: "Bot",
       },
       { label: "Search", href: "/inspector/search", icon: "Search" },
-      { label: "Feedback", href: "/inspector/feedback", icon: "MessageCircle" },
       { label: "Settings", href: "/inspector/settings", icon: "Settings" },
     ],
   },
@@ -580,6 +646,18 @@ neotoma api start --env prod`,
     }
   }
 }`,
+  /** Stdio harness → local HTTP `/mcp` via `mcp proxy` (unsigned dev shim; see docs/developer/mcp/proxy.md). */
+  unsignedStdioDevShimMcpJson: `{
+  "mcpServers": {
+    "neotoma-dev": {
+      "command": "/absolute/path/to/neotoma/scripts/run_neotoma_mcp_unsigned_stdio_dev_shim.sh",
+      "env": {
+        "NEOTOMA_MCP_USE_LOCAL_PORT_FILE": "1",
+        "NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE": "dev"
+      }
+    }
+  }
+}`,
   syncConfigCommands: `cd /path/to/neotoma
 # Add neotoma-dev and neotoma to .cursor/mcp.json (see mcp_cursor_setup.md Option A)
 npm run sync:mcp`,
@@ -603,8 +681,8 @@ docker build -t neotoma .`,
   }
 }`,
   /** Short prompt — home evaluate section + integration “Getting started” blocks. */
-  homeEvaluatePrompt: `Read https://neotoma.io/evaluate. Use any tool, workspace, and chat context already available in this session to assess my real workflow. Avoid ad-hoc shell introspection just to profile me; if Neotoma is already installed, use \`neotoma doctor --json\` for status instead. Then tell me whether Neotoma fits my workflow, what data would be highest value to persist first, and what I should do next.`,
-  agentEvaluationPrompt: `Read https://neotoma.io/evaluate. Use any tool, workspace, and chat context already available in this session to assess my real workflow. Avoid ad-hoc shell introspection just to profile me; if Neotoma is already installed, use \`neotoma doctor --json\` for status instead. Then tell me whether Neotoma is a real fit for my workflow, what data would be highest value to persist first, and what I should do next.`,
+  homeEvaluatePrompt: `Read https://neotoma.io/evaluate. Use any tool, workspace, and chat context already available in this session to assess my real workflow. Avoid ad-hoc shell introspection just to profile me; if Neotoma is already installed, use \`neotoma doctor --json\` for status instead. Then tell me whether Neotoma fits my workflow, what data would be highest value to persist first, and whether you recommend a non-destructive test at https://neotoma.io/non-destructive-testing before any full implementation rollout.`,
+  agentEvaluationPrompt: `Read https://neotoma.io/evaluate. Use any tool, workspace, and chat context already available in this session to assess my real workflow. Avoid ad-hoc shell introspection just to profile me; if Neotoma is already installed, use \`neotoma doctor --json\` for status instead. Then tell me whether Neotoma is a real fit for my workflow, what data would be highest value to persist first, and whether you recommend offering a non-destructive test at https://neotoma.io/non-destructive-testing before any full implementation rollout.`,
   agentEvaluationShareEmail: "contact@neotoma.io",
   agentEvaluationShareSubject: "Agent evaluation of Neotoma",
   dockerCliExample: `# Store an entity
@@ -1579,7 +1657,7 @@ export const SITE_METADATA = {
   ogImageUrl: "https://neotoma.io/neotoma-og-1200x630.png",
   pageTitle: "Your agents forget. Neotoma makes them remember.",
   pageDescription:
-    "Deterministic, versioned state for AI agents that can\u2019t afford to guess. Contacts, tasks, decisions, finances \u2014 stored once, queryable everywhere. Open-source and local-first.",
+    "State integrity for AI agents, not retrieval quality. Versioned contacts, tasks, decisions, finances \u2014 stored once, queryable everywhere. Open-source and local-first.",
   heroImageUrl: "neotoma-hero.png",
 };
 

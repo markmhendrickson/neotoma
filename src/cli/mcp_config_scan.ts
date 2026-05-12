@@ -34,6 +34,14 @@ function isClaudeDesktopConfigPath(filePath: string): boolean {
   return path.basename(path.normalize(filePath)) === "claude_desktop_config.json";
 }
 
+/** Canonical unsigned stdio→HTTP launcher; legacy filename is an exec forwarder. */
+const UNSIGNED_STDIO_DEV_SHIM = "run_neotoma_mcp_unsigned_stdio_dev_shim.sh";
+const UNSIGNED_STDIO_LEGACY_PROXY = "run_neotoma_mcp_unsigned_stdio_proxy.sh";
+
+function isUnsignedStdioMcpCommand(command: string): boolean {
+  return command.includes(UNSIGNED_STDIO_DEV_SHIM) || command.includes(UNSIGNED_STDIO_LEGACY_PROXY);
+}
+
 function neotomaServerIdForConfig(configPath: string, env: "dev" | "prod"): string {
   if (isClaudeDesktopConfigPath(configPath)) {
     return env === "dev" ? CLAUDE_DESKTOP_NEOTOMA_DEV_SERVER_ID : CLAUDE_DESKTOP_NEOTOMA_PROD_SERVER_ID;
@@ -302,11 +310,16 @@ export function detectNeotomaServers(
       command.includes("run_neotoma_mcp_stdio_dev_watch.sh") ||
       command.includes("run_neotoma_mcp_stdio_dev_shim.sh") ||
       (command.includes("run_neotoma_mcp_signed_stdio_dev_shim.sh") &&
+        (idHintsDev || (!idHintsProd && (downstreamPort === wantDevPort || downstreamPort === 3080)))) ||
+      (isUnsignedStdioMcpCommand(command) &&
         (idHintsDev || (!idHintsProd && (downstreamPort === wantDevPort || downstreamPort === 3080))));
     const isProdCommand =
       command.includes("run_neotoma_mcp_stdio_prod.sh") ||
       command.includes("run_neotoma_mcp_stdio_prod_watch.sh") ||
       (command.includes("run_neotoma_mcp_signed_stdio_dev_shim.sh") &&
+        (idHintsProd ||
+          (!idHintsDev && (downstreamPort === wantProdPort || downstreamPort === 3180 || envMode === "production")))) ||
+      (isUnsignedStdioMcpCommand(command) &&
         (idHintsProd ||
           (!idHintsDev && (downstreamPort === wantProdPort || downstreamPort === 3180 || envMode === "production"))));
 
@@ -435,6 +448,14 @@ const DEFAULT_DEV_MCP_URL = "http://127.0.0.1:3080/mcp";
 /** Default HTTP /mcp for `neotoma api start --env prod` (port 3180). */
 const DEFAULT_PROD_MCP_URL = "http://127.0.0.1:3180/mcp";
 
+/**
+ * When set, stdio shims read `.dev-serve/local_http_port_<dev|prod>` (with TCP probe)
+ * so MCP follows the same bound port as `pick-port` / dev-serve — matching prod slot behavior.
+ */
+const NEOTOMA_MCP_PORT_FILE_DISCOVERY: Record<string, string> = {
+  NEOTOMA_MCP_USE_LOCAL_PORT_FILE: "1",
+};
+
 function hasRequiredMcpScripts(root: string): boolean {
   const scriptsDir = path.join(root, "scripts");
   return (
@@ -494,10 +515,6 @@ export function neotomaServerEntries(
       env: { ...baseEnv, NEOTOMA_ENV: "production" },
     },
   };
-}
-
-function maybeEnv(env: Record<string, string>): { env?: Record<string, string> } {
-  return Object.keys(env).length > 0 ? { env } : {};
 }
 
 function downstreamUrlForEnv(env: "dev" | "prod", sessionPorts?: SessionPorts): string {
@@ -574,11 +591,27 @@ export function neotomaServerEntriesForTransport(
     const scriptsDir = path.join(launchTarget.root, "scripts");
     if (transport === "b") {
       const shimScript = path.join(scriptsDir, "run_neotoma_mcp_stdio_dev_shim.sh");
+      const devDownstreamUrlB = downstreamUrlForEnv("dev", sessionPorts);
+      const prodDownstreamUrlB = downstreamUrlForEnv("prod", sessionPorts);
       return {
-        "neotoma-dev": { command: shimScript },
+        "neotoma-dev": {
+          command: shimScript,
+          env: {
+            ...NEOTOMA_MCP_PORT_FILE_DISCOVERY,
+            NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE: "dev",
+            ...(devDownstreamUrlB === DEFAULT_DEV_MCP_URL
+              ? {}
+              : { MCP_PROXY_DOWNSTREAM_URL: devDownstreamUrlB }),
+          },
+        },
         neotoma: {
           command: shimScript,
-          env: { NEOTOMA_ENV: "production" },
+          env: {
+            ...NEOTOMA_MCP_PORT_FILE_DISCOVERY,
+            NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE: "prod",
+            NEOTOMA_ENV: "production",
+            MCP_PROXY_DOWNSTREAM_URL: prodDownstreamUrlB,
+          },
         },
       };
     }
@@ -586,18 +619,25 @@ export function neotomaServerEntriesForTransport(
     const signedShimScript = path.join(scriptsDir, "run_neotoma_mcp_signed_stdio_dev_shim.sh");
     const devDownstreamUrl = transport === "d" ? downstreamUrlForEnv("prod", sessionPorts) : downstreamUrlForEnv("dev", sessionPorts);
     const prodDownstreamUrl = downstreamUrlForEnv("prod", sessionPorts);
+    const devEnv: Record<string, string> = {
+      ...NEOTOMA_MCP_PORT_FILE_DISCOVERY,
+      NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE: "dev",
+      ...(devDownstreamUrl === DEFAULT_DEV_MCP_URL
+        ? {}
+        : { MCP_PROXY_DOWNSTREAM_URL: devDownstreamUrl }),
+    };
     return {
       "neotoma-dev": {
         command: signedShimScript,
-        ...maybeEnv(
-          devDownstreamUrl === DEFAULT_DEV_MCP_URL
-            ? {}
-            : { MCP_PROXY_DOWNSTREAM_URL: devDownstreamUrl }
-        ),
+        env: devEnv,
       },
       neotoma: {
         command: signedShimScript,
-        env: { MCP_PROXY_DOWNSTREAM_URL: prodDownstreamUrl },
+        env: {
+          ...NEOTOMA_MCP_PORT_FILE_DISCOVERY,
+          NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE: "prod",
+          MCP_PROXY_DOWNSTREAM_URL: prodDownstreamUrl,
+        },
       },
     };
   }
@@ -622,12 +662,20 @@ export function neotomaServerEntriesForTransport(
     "neotoma-dev": {
       command: process.execPath,
       args: [cliEntrypoint, "mcp", "proxy", "--aauth"],
-      env: { MCP_PROXY_DOWNSTREAM_URL: devDownstreamUrl },
+      env: {
+        ...NEOTOMA_MCP_PORT_FILE_DISCOVERY,
+        NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE: "dev",
+        MCP_PROXY_DOWNSTREAM_URL: devDownstreamUrl,
+      },
     },
     neotoma: {
       command: process.execPath,
       args: [cliEntrypoint, "mcp", "proxy", "--aauth"],
-      env: { MCP_PROXY_DOWNSTREAM_URL: prodDownstreamUrl },
+      env: {
+        ...NEOTOMA_MCP_PORT_FILE_DISCOVERY,
+        NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE: "prod",
+        MCP_PROXY_DOWNSTREAM_URL: prodDownstreamUrl,
+      },
     },
   };
 }
@@ -679,20 +727,24 @@ export function neotomaProxyServerEntries(
   const proxyArgs = aauth ? ["mcp", "proxy", "--aauth"] : ["mcp", "proxy"];
 
   if (launchTarget.mode === "scripts") {
-    const proxyScript = path.join(launchTarget.root, "scripts", "run_neotoma_mcp_proxy.sh");
-    const env: Record<string, string> = {};
+    const proxyScript = path.join(launchTarget.root, "scripts", UNSIGNED_STDIO_DEV_SHIM);
+    const devShimEnv: Record<string, string> = {
+      ...NEOTOMA_MCP_PORT_FILE_DISCOVERY,
+      NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE: "dev",
+    };
     if (options?.downstreamUrl) {
-      env.MCP_PROXY_DOWNSTREAM_URL = options.downstreamUrl;
+      devShimEnv.MCP_PROXY_DOWNSTREAM_URL = options.downstreamUrl;
     }
     return {
       "neotoma-dev": {
         command: proxyScript,
-        ...(Object.keys(env).length > 0 ? { env } : {}),
+        env: devShimEnv,
       },
       neotoma: {
         command: proxyScript,
         env: {
-          ...env,
+          ...NEOTOMA_MCP_PORT_FILE_DISCOVERY,
+          NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE: "prod",
           MCP_PROXY_DOWNSTREAM_URL: options?.downstreamUrl ?? "http://localhost:3180/mcp",
         },
       },
@@ -700,27 +752,27 @@ export function neotomaProxyServerEntries(
   }
 
   const distEntrypoint = path.join(launchTarget.root, "dist", "cli", "index.js");
-  const baseEnv: Record<string, string> = {};
-  if (options?.downstreamUrl) {
-    baseEnv.MCP_PROXY_DOWNSTREAM_URL = options.downstreamUrl;
-  }
+  const distDevEnv: Record<string, string> = {
+    ...NEOTOMA_MCP_PORT_FILE_DISCOVERY,
+    NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE: "dev",
+    MCP_PROXY_DOWNSTREAM_URL: options?.downstreamUrl ?? "http://localhost:3080/mcp",
+  };
+  const distProdEnv: Record<string, string> = {
+    ...NEOTOMA_MCP_PORT_FILE_DISCOVERY,
+    NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE: "prod",
+    MCP_PROXY_DOWNSTREAM_URL: options?.downstreamUrl ?? "http://localhost:3180/mcp",
+  };
 
   return {
     "neotoma-dev": {
       command: process.execPath,
       args: [distEntrypoint, ...proxyArgs],
-      env: {
-        ...baseEnv,
-        MCP_PROXY_DOWNSTREAM_URL: options?.downstreamUrl ?? "http://localhost:3080/mcp",
-      },
+      env: distDevEnv,
     },
     neotoma: {
       command: process.execPath,
       args: [distEntrypoint, ...proxyArgs],
-      env: {
-        ...baseEnv,
-        MCP_PROXY_DOWNSTREAM_URL: options?.downstreamUrl ?? "http://localhost:3180/mcp",
-      },
+      env: distProdEnv,
     },
   };
 }

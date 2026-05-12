@@ -44,24 +44,25 @@ pseudonymous usage analytics:
 
 We do not run Google Analytics on the marketing site.
 
-### 2.2 Agent feedback pipeline
+### 2.2 Issue reporting (GitHub Issues)
 
-When an agent running on your machine submits feedback to
-`agent.neotoma.io/feedback/submit` (via the `submit_feedback` MCP
-tool or the `neotoma feedback` CLI), the following is stored:
+When an agent running on your machine files an issue (via the
+`submit_issue` MCP tool or the `neotoma issues create` CLI), behavior
+depends on **visibility**:
 
-- The feedback payload your agent sent (title, body, kind, metadata).
-- A redaction pass that replaces emails, phone numbers, API tokens,
-  UUIDs, and home-directory path fragments with `<LABEL:hash>`
-  placeholders **before storage**.
-- An `access_token` scoped to that single feedback row, which is
-  returned to your agent and is the only way to poll status later.
-- Environment metadata your agent supplied (OS, Neotoma version,
-  client name/version, tool name, error class).
+- **Public (default):** the tool attempts to create an issue on the
+  configured GitHub repository using your GitHub identity (via the
+  `gh` CLI). PII should be redacted before submission. The same report is
+  stored locally as an `issue` entity linked to a conversation.
+- **Private:** the report is stored only in your Neotoma database; nothing
+  is sent to the GitHub Issues API.
 
-Request IP addresses may be logged at the edge (Netlify) for abuse
-investigation. Edge logs are retained per Netlify's default policy
-and are not joined with feedback content.
+GitHub's standard privacy policy applies to content that actually lands on
+GitHub (public path only).
+
+No data is sent to `agent.neotoma.io`. Public-issue data flows between
+your machine, GitHub's API, and your local Neotoma instance; private-issue
+data stays on your machine and in your local database.
 
 ### 2.3 Sandbox interactions
 

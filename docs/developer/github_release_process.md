@@ -66,6 +66,23 @@ Minimum supplement requirements for a release that contains any tightening:
 
 Version bump: a release containing any tightening MUST bump the **minor** segment at minimum (or **major** during 1.x+); patch-only rollouts are not allowed to ship tightenings. This rule is enforced in the release-skill preflight (`.cursor/skills/release/SKILL.md` Step 1) via the OpenAPI breaking-change diff gate.
 
+### Security hardening section
+
+Every release supplement MUST contain an explicit `Security hardening` section, in addition to the explicit `Breaking changes` section. This is the artifact the pre-release security gates (`.cursor/plans/pre-release_security_gates_44e01d74.plan.md`) link to and that downstream operators read to decide whether to upgrade urgently.
+
+A release counts as **security-sensitive** when `npm run security:classify-diff` reports `sensitive=true` — i.e., the diff touches `src/actions.ts`, `src/services/{root_landing,subscriptions,sync,issues,entity_submission,access_policy}/**`, `src/middleware/**`, the OpenAPI security blocks, the protected-routes manifest, or adds a new env var matching `LOCAL_DEV_USER_ID|TRUST_PROD_LOOPBACK|*_AUTH_*`.
+
+Minimum supplement requirements for a security-sensitive release:
+
+- The `Security hardening` section MUST link `docs/releases/in_progress/<TAG>/security_review.md` (the AI/human review file produced by `/release` Step 3.5) and `docs/releases/in_progress/<TAG>/post_deploy_security_probes.md` (the deployed-probe report from Step 5).
+- Any advisory under `docs/security/advisories/` opened or referenced by this release MUST be linked from the section by its dated filename and (when assigned) its GHSA / CVE.
+- Each material change describes (1) the surface affected, (2) the exposure shape if a regression had landed, (3) the gate that catches the regression class going forward (G1/G2/G3/G4/G5), and (4) the operator action — typically "upgrade to vX.Y.Z" or "rotate bearer tokens, then upgrade".
+- Patch-only rollouts ARE allowed for security-sensitive releases (see `docs/security/advisories/2026-05-11-inspector-auth-bypass.md` for the v0.11.1 hotfix shape).
+
+For a release that is NOT security-sensitive, the section is still required; write `No security-sensitive surfaces touched.` so the trail is explicit. This mirrors the `Breaking changes` rule and keeps the supplement structure scannable.
+
+The release-skill preflight (`.cursor/skills/release/SKILL.md` Step 3.5) refuses to advance past Security review lane until the supplement contains a non-empty `Security hardening` block.
+
 ## Render release notes
 
 Use **silent** npm output when redirecting to a file (otherwise npm prints script headers into the file):
@@ -116,7 +133,9 @@ gh release edit "$TAG" --notes-file /tmp/gh-release-"$TAG".md
 
 A normal `/release` is **not finished** until the new version is on the npm registry. After the tag is on `origin` and the GitHub Release exists, run **`npm publish`** from the package root (same ordering as `.cursor/skills/release/SKILL.md` Step 4). GitHub Releases alone do not update npm installs. Skip **`npm publish`** only when the user explicitly confirmed a GitHub-only / no-registry scope.
 
-**Registry auth and web login (agents):** If you need to sign in first, run `npm login` in an interactive terminal. When `npm login` prints `Login at: https://www.npmjs.com/login?...`, an agent with shell access may parse that URL from the CLI or terminal output and run `open '<url>'` on macOS or `xdg-open '<url>'` on Linux so the default browser opens the same URL that pressing Enter would open. **Only** open URLs that clearly match the official npmjs.com login/cli flow; prefer explicit user confirmation before running `open`/`xdg-open`. After the browser step, complete any OTP or follow-up prompts, then run **`npm publish`** (and `npm publish --otp=<code>` when 2FA applies).
+**Registry auth and web login (agents):** If you need to sign in first, run `npm login` in an interactive terminal. When `npm login` prints `Login at: https://www.npmjs.com/login?...`, an agent with shell access may parse that URL from the CLI or terminal output and run `open '<url>'` on macOS or `xdg-open '<url>'` on Linux so the default browser opens the same URL that pressing Enter would open. **Only** open URLs that clearly match the official npmjs.com login/cli flow; prefer explicit user confirmation before running `open`/`xdg-open`.
+
+**npm web-login checkpoint:** Browser sign-in does not by itself authenticate the shell that runs `npm publish`. After the browser step **or** if the user says they signed in, run `npm whoami` in that same shell immediately. If it succeeds, run **`npm publish`** (and `npm publish --otp=<code>` when 2FA applies). If it still fails, stop and give copy-paste operator steps plus an explicit **`ready`** reply contract so the next turn retries `npm whoami` then `npm publish` — do not end the turn without that handoff. Full ordering is in `.cursor/skills/release/SKILL.md` Step 4 § **npm web-login checkpoint**.
 
 Before the tag exists, `/release` should still render the preview body to a temp file with `--head-ref` and show that Markdown verbatim for approval. After the tag/commit set is finalized, re-render without `--head-ref` before `gh release create`.
 

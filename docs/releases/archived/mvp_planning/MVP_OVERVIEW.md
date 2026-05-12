@@ -20,31 +20,29 @@ ChatGPT, Claude, and Gemini offer conversation-only memory (platform-locked, pro
 - A workflow engine
 **Is:**
 - The structured personal data memory substrate beneath AI tools
-- The foundation for Strategy Layer (e.g., Agentic Portfolio) and Execution Layer (e.g., Agentic Wallet)
+- The state layer beneath any operational layer — agents, pipelines, orchestrators, custom apps (Agentic Portfolio and Agentic Wallet are illustrative example operational systems)
 - A deterministic personal and team memory engine with dual-path ingestion (supports individuals and small teams 2–20 people)
-## 2. Layered Architecture
-Neotoma is designed as a **State Layer** that can support multiple upper layers. One important example is a financial system:
+## 2. State Layer + Operational Layers
+Neotoma is designed as a **State Layer** that any operational system can build on. One illustrative example is a financial operational layer:
 ```
 ┌───────────────────────────────────────────────┐
-│      Execution Layer                          │
-│  (Agentic Wallet + Domain Agents)            │
-│  Commands → Side Effects → Domain Events    │
+│      Operational Layer                        │
+│   Examples:                                   │
+│   • Agentic Portfolio (reasoning-style)       │
+│   • Agentic Wallet + Domain Agents (effect)   │
+│   • Agent harnesses, pipelines, custom apps   │
+│   Reads truth → reasons / acts                │
+│   Writes results back as observations         │
 └────────────▲─────────────────────────────────┘
-             │ Reads Only, Receives Commands
-┌────────────▼─────────────────────────────────┐
-│      Strategy Layer                           │
-│  (Agentic Portfolio is example instance)    │
-│  State → Evaluates → Decisions + Commands   │
-└────────────▲─────────────────────────────────┘
-             │ Reads Only
+             │ Reads Only / Writes via observations
 ┌────────────▼─────────────────────────────────┐
 │    Neotoma (State Layer)                     │
 │  Event-sourced, Reducer-driven              │
 │  Domain Events → Reducers → State           │
 └─────────────────────────────────────────────┘
 ```
-Neotoma is the **bottom layer** — event-sourced, reducer-driven truth, no strategy, no execution.
-**Note:** Agentic Portfolio is an example instance of the Strategy Layer. Agentic Wallet is part of the Execution Layer alongside domain agents. Many other agent-driven layers are possible. Neotoma is a general-purpose State Layer substrate, not limited to financial use cases.
+Neotoma is the **state layer** — event-sourced, reducer-driven truth, no strategy, no execution.
+**Note:** Agentic Portfolio and Agentic Wallet are illustrative examples of operational systems built on Neotoma. Many other operational systems are possible. Neotoma is a general-purpose State Layer substrate, not limited to financial use cases.
 ## 3. Core Capabilities (MVP)
 ### 3.1 Ingestion
 - Upload PDFs, JPG, PNG (max 50MB) — single and bulk
@@ -161,8 +159,8 @@ See [`docs/specs/METRICS_REQUIREMENTS.md`](./METRICS_REQUIREMENTS.md) for full m
 - ❌ LLM-based extraction (rule-based only)
 - ❌ Semantic search (structured only)
 - ❌ Automatic ingestion (explicit user control)
-- ❌ Strategy or planning (that's Strategy Layer, e.g., Agentic Portfolio)
-- ❌ Execution or transactions (that's Wallet)
+- ❌ Strategy or planning (operational-layer concern, e.g., Agentic Portfolio as an example operational system)
+- ❌ Execution or transactions (operational-layer concern, e.g., Agentic Wallet as an example operational system)
 - ❌ Real-time collaboration (async multi-user only)
 - ❌ Enterprise features (advanced permissions, org-wide governance) — Tier 6, post-MVP
 **Revenue Alignment:** MVP scope enables Tier 1 ICPs (individuals + small teams) to support mid-market ACVs (€3k–€15k/yr). Enterprise features (Tier 6) require post-MVP organizational memory architecture.

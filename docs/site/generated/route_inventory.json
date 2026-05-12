@@ -1,0 +1,566 @@
+[
+  {
+    "path": "/",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/terminology",
+    "classification": "other"
+  },
+  {
+    "path": "/agent-instructions",
+    "classification": "other"
+  },
+  {
+    "path": "/agent-instructions/store-recipes",
+    "classification": "other"
+  },
+  {
+    "path": "/agent-instructions/retrieval-provenance",
+    "classification": "other"
+  },
+  {
+    "path": "/agent-instructions/display-conventions",
+    "classification": "other"
+  },
+  {
+    "path": "/api",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/mcp",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/cli",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/aauth",
+    "classification": "other"
+  },
+  {
+    "path": "/aauth/spec",
+    "classification": "other"
+  },
+  {
+    "path": "/aauth/attestation",
+    "classification": "other"
+  },
+  {
+    "path": "/aauth/cli-keys",
+    "classification": "other"
+  },
+  {
+    "path": "/aauth/integration",
+    "classification": "other"
+  },
+  {
+    "path": "/aauth/capabilities",
+    "classification": "other"
+  },
+  {
+    "path": "/inspector",
+    "classification": "other"
+  },
+  {
+    "path": "/inspector/dashboard",
+    "classification": "other"
+  },
+  {
+    "path": "/inspector/entities",
+    "classification": "other"
+  },
+  {
+    "path": "/inspector/observations-and-sources",
+    "classification": "other"
+  },
+  {
+    "path": "/inspector/relationships-and-graph",
+    "classification": "other"
+  },
+  {
+    "path": "/inspector/schemas",
+    "classification": "other"
+  },
+  {
+    "path": "/inspector/timeline",
+    "classification": "other"
+  },
+  {
+    "path": "/inspector/conversations",
+    "classification": "other"
+  },
+  {
+    "path": "/inspector/agents",
+    "classification": "other"
+  },
+  {
+    "path": "/inspector/peers",
+    "classification": "other"
+  },
+  {
+    "path": "/inspector/search",
+    "classification": "other"
+  },
+  {
+    "path": "/inspector/search-and-settings",
+    "classification": "other"
+  },
+  {
+    "path": "/inspector/settings",
+    "classification": "other"
+  },
+  {
+    "path": "/inspector/settings/connection",
+    "classification": "other"
+  },
+  {
+    "path": "/inspector/settings/attribution-policy",
+    "classification": "other"
+  },
+  {
+    "path": "/inspector/settings/retention",
+    "classification": "other"
+  },
+  {
+    "path": "/install",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/install/manual",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/install/docker",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/what-to-store",
+    "classification": "other"
+  },
+  {
+    "path": "/backup",
+    "classification": "other"
+  },
+  {
+    "path": "/tunnel",
+    "classification": "other"
+  },
+  {
+    "path": "/sandbox",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/sandbox/terms-of-use",
+    "classification": "other"
+  },
+  {
+    "path": "/hosted",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/connect",
+    "classification": "other"
+  },
+  {
+    "path": "/walkthrough",
+    "classification": "other"
+  },
+  {
+    "path": "/developer-walkthrough",
+    "classification": "other"
+  },
+  {
+    "path": "/data-model",
+    "classification": "other"
+  },
+  {
+    "path": "/architecture",
+    "classification": "other"
+  },
+  {
+    "path": "/schema-management",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/non-destructive-testing",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/troubleshooting",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/changelog",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/foundation/problem-statement",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/operating",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/building-pipelines",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/debugging-infrastructure",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/ai-native-operators",
+    "classification": "other"
+  },
+  {
+    "path": "/agentic-systems-builders",
+    "classification": "other"
+  },
+  {
+    "path": "/ai-infrastructure-engineers",
+    "classification": "other"
+  },
+  {
+    "path": "/docs",
+    "classification": "other"
+  },
+  {
+    "path": "/neotoma-with-cursor",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/neotoma-with-claude",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/neotoma-with-claude-connect-desktop",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/neotoma-with-claude-connect-remote-mcp",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/neotoma-with-claude-code",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/neotoma-with-claude-agent-sdk",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/neotoma-with-chatgpt",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/neotoma-with-chatgpt-connect-remote-mcp",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/neotoma-with-chatgpt-connect-custom-gpt",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/neotoma-with-codex",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/neotoma-with-codex-connect-local-stdio",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/neotoma-with-codex-connect-remote-http-oauth",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/neotoma-with-opencode",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/neotoma-with-openclaw",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/neotoma-with-ironclaw",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/neotoma-with-openclaw-connect-local-stdio",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/neotoma-with-openclaw-connect-remote-http",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/memory-guarantees",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/deterministic-state-evolution",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/versioned-history",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/replayable-timeline",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/auditable-change-log",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/strong-consistency",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/transactional-writes",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/schema-constraints",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/silent-mutation-risk",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/conflicting-facts-risk",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/false-closure-risk",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/reproducible-state-reconstruction",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/human-inspectability",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/zero-setup-onboarding",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/semantic-similarity-search",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/direct-human-editability",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/memory-models",
+    "classification": "other"
+  },
+  {
+    "path": "/platform-memory",
+    "classification": "other"
+  },
+  {
+    "path": "/retrieval-memory",
+    "classification": "other"
+  },
+  {
+    "path": "/file-based-memory",
+    "classification": "other"
+  },
+  {
+    "path": "/database-memory",
+    "classification": "other"
+  },
+  {
+    "path": "/deterministic-memory",
+    "classification": "other"
+  },
+  {
+    "path": "/memory-vendors",
+    "classification": "other"
+  },
+  {
+    "path": "/crm",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/compliance",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/contracts",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/diligence",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/portfolio",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/cases",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/financial-ops",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/procurement",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/agent-auth",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/healthcare",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/government",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/customer-ops",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/logistics",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/personal-data",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/trading",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/crypto-engineering",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/use-cases",
+    "classification": "other"
+  },
+  {
+    "path": "/skills",
+    "classification": "other"
+  },
+  {
+    "path": "/skills/:skillSlug",
+    "classification": "dynamic"
+  },
+  {
+    "path": "/verticals",
+    "classification": "other"
+  },
+  {
+    "path": "/build-vs-buy",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/multi-agent-state",
+    "classification": "other"
+  },
+  {
+    "path": "/evaluate",
+    "classification": "other"
+  },
+  {
+    "path": "/evaluate/agent-instructions",
+    "classification": "other"
+  },
+  {
+    "path": "/meet",
+    "classification": "other"
+  },
+  {
+    "path": "/privacy",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/terms",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/faq",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/neotoma-vs-platform-memory",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/neotoma-vs-mem0",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/neotoma-vs-zep",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/neotoma-vs-rag",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/neotoma-vs-files",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/neotoma-vs-database",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/foundations",
+    "classification": "other"
+  },
+  {
+    "path": "/site-markdown",
+    "classification": "other"
+  },
+  {
+    "path": "/raw",
+    "classification": "other"
+  },
+  {
+    "path": "/privacy-first",
+    "classification": "other"
+  },
+  {
+    "path": "/cross-platform",
+    "classification": "other"
+  },
+  {
+    "path": "/types/:slug",
+    "classification": "dynamic"
+  },
+  {
+    "path": "/primitives",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/primitives/:slug",
+    "classification": "dynamic"
+  },
+  {
+    "path": "/schemas",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/schemas/:slug",
+    "classification": "dynamic"
+  }
+]

@@ -8,6 +8,7 @@ describe("CLI command coverage guard", () => {
     // Commands with behavioral coverage in tests/cli.
     const coveredBehavioral = new Set([
       "api",
+      "access",
       "auth",
       "backup",
       "cli",
@@ -27,6 +28,7 @@ describe("CLI command coverage guard", () => {
       "mirror",
       "observations",
       "options",
+      "peers",
       "preferences",
       "processes",
       "recent",
@@ -43,6 +45,8 @@ describe("CLI command coverage guard", () => {
       "timeline",
       "discover",
       "ingest-transcript",
+      "issues",
+      "plans",
       "upload",
     ]);
 
@@ -58,6 +62,7 @@ describe("CLI command coverage guard", () => {
       "list-recent-changes", // read-only reporting command; behavior is covered by recent/activity integration tests
       "agents", // namespace dispatcher; subcommands (e.g. `agents grants import`) are covered by their own integration tests
       "inspector", // UI launcher namespace; behavior is covered by inspector/server integration flows
+      "compat", // remote version probe; exercised by API compatibility tests and manual release checks
     ]);
 
     const uncovered = commandNames.filter(

@@ -1,0 +1,171 @@
+import { MdxI18nLink } from "@/components/mdx/mdx_i18n_link";
+import {
+  McpCommonActionPatternsSnippet,
+  McpHttpConfigSnippet,
+  McpReferenceActionsTable,
+  McpReferenceIntro,
+  McpStdioConfigSnippet,
+} from "@/components/mdx/doc_reference_tables";
+
+<McpReferenceIntro />
+
+## Transport modes
+
+<ul className="list-none pl-0 space-y-2 mb-6">
+  <li className="text-[15px] leading-7 text-muted-foreground">
+    <strong className="text-foreground">stdio</strong> — local process, recommended for Cursor / Claude Code / Codex. The MCP client launches the Neotoma process directly.
+  </li>
+  <li className="text-[15px] leading-7 text-muted-foreground">
+    <strong className="text-foreground">HTTP (SSE)</strong> — remote or{" "}
+    <MdxI18nLink to="/tunnel" className="text-foreground underline underline-offset-2 hover:no-underline">
+      tunnel
+    </MdxI18nLink>{" "}
+    access via <code>http://localhost:3080/mcp</code> (dev) or <code>http://localhost:3180/mcp</code> (prod). Use with <code>--tunnel</code> for HTTPS via ngrok or Cloudflare.
+  </li>
+  <li className="text-[15px] leading-7 text-muted-foreground">
+    <strong className="text-foreground">WebSocket</strong> — bridge mode for clients that require WebSocket transport.
+  </li>
+</ul>
+
+## Client configuration
+
+<p className="text-[15px] leading-7 mb-3">
+  <strong>Cursor</strong> (<code>.cursor/mcp.json</code>):
+</p>
+
+<McpStdioConfigSnippet />
+
+<p className="text-[15px] leading-7 mb-3">
+  <strong>Claude Code</strong> (<code>claude_desktop_config.json</code>) and <strong>Windsurf</strong> (<code>mcp_config.json</code>) use the same structure. Run <code>neotoma mcp config</code> to scan for config files and auto-install missing entries. Add <code>--user-level</code> to include user-level paths.
+</p>
+
+<p className="text-[15px] leading-7 mb-3">
+  <strong>
+    HTTP /{" "}
+    <MdxI18nLink to="/tunnel" className="text-foreground underline underline-offset-2 hover:no-underline">
+      tunnel
+    </MdxI18nLink>
+  </strong>{" "}
+  (remote access):
+</p>
+
+<McpHttpConfigSnippet />
+
+## Authentication
+
+<p className="text-[15px] leading-7 mb-4">
+  All MCP actions operate under an authenticated user context. Authentication is handled via OAuth (recommended) or Bearer token. The <code>user_id</code> parameter is optional and inferred from the auth context. Run <code>neotoma auth login</code> for OAuth setup, or set <code>NEOTOMA_BEARER_TOKEN</code> for token-based auth.
+</p>
+
+<p className="text-[15px] leading-7 mb-4">
+  For agent identity (separate from human user auth), MCP supports <strong>AAuth</strong> (RFC 9421 HTTP Message Signatures plus an <code>aa-agent+jwt</code> token on the <code>initialize</code> handshake). Verified agents render with a <code>hardware</code> or <code>software</code> trust badge in the Inspector. When AAuth is not present, <code>clientInfo.name</code> / <code>clientInfo.version</code> on the MCP <code>initialize</code> handshake serve as a fallback identifier (rendered as <code>unverified_client</code>). See the{" "}
+  <MdxI18nLink to="/aauth" className="text-foreground underline underline-offset-2 hover:no-underline">
+    AAuth reference
+  </MdxI18nLink>{" "}
+  for the full attribution contract.
+</p>
+
+## Common action patterns
+
+<McpCommonActionPatternsSnippet />
+
+## Schema management workflow
+
+<p className="text-[15px] leading-7 mb-4">
+  Schemas evolve automatically. Fields not in the current schema are stored in <code>raw_fragments</code>. High-confidence fields are auto-promoted. Manual workflow:
+</p>
+
+<ol className="list-decimal pl-5 space-y-1 mb-6">
+  <li className="text-[15px] leading-7 text-muted-foreground">
+    <code>list_entity_types(keyword=&quot;invoice&quot;)</code> — discover existing schemas
+  </li>
+  <li className="text-[15px] leading-7 text-muted-foreground">
+    <code>analyze_schema_candidates(entity_type=&quot;invoice&quot;)</code> — see what fields are candidates
+  </li>
+  <li className="text-[15px] leading-7 text-muted-foreground">
+    <code>update_schema_incremental(entity_type=&quot;invoice&quot;, new_fields=[...])</code> — promote fields
+  </li>
+</ol>
+
+<McpReferenceActionsTable />
+
+## Relationship types
+
+<p className="text-[15px] leading-7 mb-4">
+  Supported relationship types for <code>create_relationship</code>: <code>PART_OF</code>, <code>CORRECTS</code>, <code>REFERS_TO</code>, <code>SETTLES</code>, <code>DUPLICATE_OF</code>, <code>DEPENDS_ON</code>, <code>SUPERSEDES</code>, <code>EMBEDS</code>. Use <code>EMBEDS</code> when a container (blog post, document) embeds an asset (image, attachment): source = container, target = asset.
+</p>
+
+## What the server exposes at its root
+
+<p className="text-[15px] leading-7 mb-4">
+  A running Neotoma binds a handful of unauthenticated discovery and health endpoints at the host root alongside the MCP transport itself. These exist so agents, proxies, and operators can identify and probe the deployment without credentials.
+</p>
+
+<ul className="list-disc pl-5 space-y-1 mb-3 text-[15px] leading-7 text-muted-foreground">
+  <li>
+    <code>GET /</code> — root landing. Content-negotiated: browsers get an HTML page with identity, harness-connect snippets (pre-filled with the actual host URL), and an index of{" "}
+    <MdxI18nLink to="/docs" className="text-foreground underline underline-offset-2 hover:no-underline">
+      neotoma.io
+    </MdxI18nLink>{" "}
+    documentation; send <code>Accept: application/json</code> for the same content as JSON, or <code>Accept: text/markdown</code> for a Markdown document. Default (no HTML/Markdown) is JSON. The content adapts to deployment mode: <em>sandbox</em>, <em>personal</em> tunnel, <em>prod</em>, or <em>local</em>.
+  </li>
+  <li>
+    <code>GET /robots.txt</code> — mirrors the deployment mode. Sandbox and local instances disallow crawling; personal and prod allow it and can link an external sitemap via <code>NEOTOMA_PUBLIC_DOCS_URL</code>.
+  </li>
+  <li>
+    <code>GET /.well-known/mcp/server-card.json</code> — MCP server card (name, version, capabilities).
+  </li>
+  <li>
+    <code>GET /.well-known/oauth-authorization-server</code> and <code>/.well-known/oauth-protected-resource</code> — OAuth discovery documents.
+  </li>
+  <li>
+    <code>GET /server-info</code> — runtime details (version, git sha, build timestamp).
+  </li>
+  <li>
+    <code>GET /health</code> — liveness probe.
+  </li>
+  <li>
+    <code>GET /favicon.ico</code> — site icon for browser tabs.
+  </li>
+  <li>
+    In sandbox mode: <code>GET /sandbox/terms</code> (acceptable-use JSON), <code>POST /sandbox/report</code>, and <code>GET /sandbox/report/status</code>.
+  </li>
+</ul>
+
+<p className="text-[14px] leading-6 text-muted-foreground mb-4">
+  See{" "}
+  <MdxI18nLink to="/connect" className="text-foreground underline underline-offset-2 hover:no-underline">
+    Connect remotely
+  </MdxI18nLink>{" "}
+  for per-harness snippets, and{" "}
+  <MdxI18nLink to="/hosted" className="text-foreground underline underline-offset-2 hover:no-underline">
+    Hosted Neotoma
+  </MdxI18nLink>{" "}
+  for the mode comparison.
+</p>
+
+## Entity types
+
+<p className="text-[15px] leading-7 mb-4">
+  Common types agents can set directly: <code>contact</code>, <code>person</code>, <code>company</code>, <code>task</code>, <code>invoice</code>, <code>transaction</code>, <code>receipt</code>, <code>note</code>, <code>contract</code>, <code>event</code>, <code>conversation</code>, <code>agent_message</code>. Codebase types: <code>feature_unit</code>, <code>release</code>, <code>agent_decision</code>, <code>agent_session</code>, <code>validation_result</code>, <code>codebase_entity</code>, <code>architectural_decision</code>. Use <code>list_entity_types</code> to discover all available types or store with any descriptive type and the server infers the schema.
+</p>
+
+<p className="text-[14px] leading-6 text-muted-foreground">
+  Continue with{" "}
+  <MdxI18nLink to="/api" className="text-foreground underline underline-offset-2 hover:no-underline">
+    REST API reference
+  </MdxI18nLink>
+  ,{" "}
+  <MdxI18nLink to="/cli" className="text-foreground underline underline-offset-2 hover:no-underline">
+    CLI reference
+  </MdxI18nLink>
+  ,{" "}
+  <MdxI18nLink to="/agent-instructions" className="text-foreground underline underline-offset-2 hover:no-underline">
+    agent instructions
+  </MdxI18nLink>
+  , and{" "}
+  <MdxI18nLink to="/schema-management" className="text-foreground underline underline-offset-2 hover:no-underline">
+    schema management
+  </MdxI18nLink>
+  .
+</p>

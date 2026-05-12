@@ -42,7 +42,7 @@ Every hook above also accretes onto a single `conversation_turn` keyed by `(sess
 
 ## Failure-signal accumulator
 
-`postToolUseFailure` (and the failure branch of `postToolUse`) classifies the failed call into a coarse `error_class`, scrubs PII out of the message, and persists a `tool_invocation_failure` entity with redacted `error_message_redacted`, `invocation_shape`, and `hit_count_session`. A small JSON file under `NEOTOMA_HOOK_STATE_DIR` (`failures-<session>.json`) holds the per-`(tool, error_class)` counter so the hook can offer a one-shot, prompt-local nudge once the threshold trips: it surfaces a single `Neotoma hook note: …` line via `additional_context` recommending the agent file `submit_feedback` (kind `incident`) if the failure is blocking. The hook NEVER calls `submit_feedback` itself — that is the agent's contract. Counters TTL out after 24h.
+`postToolUseFailure` (and the failure branch of `postToolUse`) classifies the failed call into a coarse `error_class`, scrubs PII out of the message, and persists a `tool_invocation_failure` entity with redacted `error_message_redacted`, `invocation_shape`, and `hit_count_session`. A small JSON file under `NEOTOMA_HOOK_STATE_DIR` (`failures-<session>.json`) holds the per-`(tool, error_class)` counter so the hook can offer a one-shot, prompt-local nudge once the threshold trips: it surfaces a single `Neotoma hook note: …` line via `additional_context` recommending the agent file `submit_issue` if the failure is blocking. The hook NEVER calls `submit_issue` itself — that is the agent's contract. Counters TTL out after 24h.
 
 ## Diagnosing skipped-store turns (`instruction_diagnostics`)
 

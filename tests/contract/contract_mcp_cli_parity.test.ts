@@ -181,6 +181,10 @@ describe("MCP-CLI Parity", () => {
       "list_relationships",
       "list_entity_types",
       "list_timeline_events",
+      "submit_issue",
+      "add_issue_message",
+      "get_issue_status",
+      "sync_issues",
     ];
 
     for (const tool of operationMappedTools) {

@@ -31,13 +31,13 @@ ICPs that get value from Neotoma's guarantees but are not aligned with the devel
 
 ---
 
-## Future Product Layers
+## Future Products
 
-These tiers represent product-layer roadmap, not developer-release audience targeting. They are preserved from the original tier structure for long-term planning.
+These tiers represent product-roadmap targets — future operational systems Neotoma will support — not developer-release audience targeting. They are preserved from the original tier structure for long-term planning. Each tier names an operational system that builds on Neotoma's state layer; Neotoma itself remains a single state-layer substrate.
 
-### Tier 4 — Strategy Layer (Agentic Portfolio)
+### Tier 4 — Strategy Product (Agentic Portfolio)
 
-Requires later product maturity and asset/tax modeling stack.
+A reasoning-style operational system for personal financial strategy. Requires later product maturity and asset/tax modeling stack.
 
 - **High-Net-Worth Individuals**
 - **Multi-Jurisdiction Residents**
@@ -45,11 +45,11 @@ Requires later product maturity and asset/tax modeling stack.
 - **Startup Founders with Equity Docs**
 - **Family-Office-Lite Users**
 
-High future ACV. Complex requirements (risk, tax, multi-asset planning). Requires a mature state layer + strategy engine.
+High future ACV. Complex requirements (risk, tax, multi-asset planning). Requires a mature state layer plus a reasoning-style operational system that reads truth and outputs Decisions + Commands.
 
-### Tier 5 — Execution Layer (Agentic Wallet)
+### Tier 5 — Execution Product (Agentic Wallet)
 
-Dependent on Agentic Portfolio + chain execution layer.
+An effect-style operational system for on-chain execution. Dependent on the Strategy Product and a chain-execution adapter set.
 
 - **High-Frequency On-Chain Actors**
 - **Agent-Compatible Crypto Users**
@@ -77,7 +77,7 @@ Highest ACV and long-term potential. Requires advanced permissions, multi-user g
 Load when:
 - Planning post-developer-release roadmap
 - Evaluating features that require GUI, multi-user, or enterprise capabilities
-- Understanding which ICPs require which product layers
+- Understanding which ICPs require which future products
 
 ### Required Co-Loaded Documents
 
@@ -87,5 +87,5 @@ Load when:
 ### Constraints
 
 1. Future ICP features (GUI, simplified onboarding, multi-user) are explicitly post-dev-release
-2. Tier 4+ ICPs require Agentic Portfolio/Wallet layers (not developer-release scope)
+2. Tier 4+ ICPs require Agentic Portfolio/Wallet products (not developer-release scope)
 3. Do not prioritize future ICP needs over primary ICP needs during the developer release

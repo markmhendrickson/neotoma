@@ -69,7 +69,7 @@ AI interpretation is **auditable but not replay-deterministic**:
 
 **Key Insight:** Idempotence is enforced post-generation, not during generation.
 
-**Policy:** Neotoma prioritizes system-level idempotence over model-level determinism. The LLM is stochastic (not deterministic). The system enforces idempotence through canonicalization, hashing, and deduplication.
+**Policy:** Neotoma's architecture favors system-level idempotence over model-level determinism. The LLM is stochastic (not deterministic). The system enforces idempotence through canonicalization, hashing, and deduplication.
 
 ### 1.6 Agent-Layer Nondeterminism and Bounded Convergence
 
@@ -269,12 +269,12 @@ export function generateEntityId(
 ): string {
   // Normalize inputs
   const normalized = canonicalName.toLowerCase().trim();
-  
+
   // Hash deterministically
   const hash = createHash('sha256')
     .update(`${entityType}:${normalized}`)
     .digest('hex');
-  
+
   // Return stable ID
   return `ent_${hash.substring(0, 24)}`;
 }
@@ -307,7 +307,7 @@ const sortedRecords = records.sort((a, b) => {
 export function deduplicateRecords(records: Record[]): Record[] {
   const seen = new Set<string>();
   const unique: Record[] = [];
-  
+
   for (const record of records) {
     const contentHash = hashRecordContent(record);
     if (!seen.has(contentHash)) {
@@ -315,7 +315,7 @@ export function deduplicateRecords(records: Record[]): Record[] {
       unique.push(record);
     }
   }
-  
+
   return unique;
 }
 function hashRecordContent(record: Record): string {
@@ -325,7 +325,7 @@ function hashRecordContent(record: Record): string {
     raw_text: record.raw_text,
     user_id: record.user_id,
   });
-  
+
   return createHash('sha256').update(canonical).digest('hex');
 }
 ```
@@ -343,22 +343,22 @@ export function resolveEntity(
 ): { id: string; canonical_name: string } {
   // Step 1: Normalize
   const canonical = normalizeEntityValue(entityType, rawValue);
-  
+
   // Step 2: Generate deterministic ID
   const id = generateEntityId(entityType, canonical);
-  
+
   return { id, canonical_name: canonical };
 }
 function normalizeEntityValue(entityType: string, raw: string): string {
   let normalized = raw.trim().toLowerCase();
-  
+
   if (entityType === 'company') {
     // Remove common suffixes deterministically
     normalized = normalized
       .replace(/\s+(inc|llc|ltd|corp|corporation)\.?$/i, '')
       .trim();
   }
-  
+
   return normalized;
 }
 // Examples:
@@ -376,15 +376,15 @@ export function generateEvents(
 ): Event[] {
   const events: Event[] = [];
   const dateFields = getDateFields(schemaType); // Deterministic schema-based
-  
+
   // Sort fields for deterministic order
   for (const fieldName of dateFields.sort()) {
     const dateValue = extractedFields[fieldName];
     if (!dateValue) continue;
-    
+
     const eventType = mapFieldToEventType(fieldName, schemaType);
     const eventId = generateEventId(recordId, fieldName, dateValue);
-    
+
     events.push({
       id: eventId,
       event_type: eventType,
@@ -393,7 +393,7 @@ export function generateEvents(
       source_field: fieldName,
     });
   }
-  
+
   return events;
 }
 function generateEventId(recordId: string, fieldName: string, date: string): string {
@@ -416,11 +416,11 @@ export function rankSearchResults(results: Record[], query: string): Record[] {
     .sort((a, b) => {
       // Primary: score (higher first)
       if (a.score !== b.score) return b.score - a.score;
-      
+
       // Tiebreaker 1: created_at (newer first)
       const timeDiff = b.record.created_at.localeCompare(a.record.created_at);
       if (timeDiff !== 0) return timeDiff;
-      
+
       // Tiebreaker 2: ID (lexicographic)
       return a.record.id.localeCompare(b.record.id);
     })
@@ -428,17 +428,17 @@ export function rankSearchResults(results: Record[], query: string): Record[] {
 }
 function calculateScore(record: Record, query: string): number {
   let score = 0;
-  
+
   // Exact match in schema_type
   if (record.schema_type.toLowerCase().includes(query.toLowerCase())) {
     score += 10;
   }
-  
+
   // Match in raw_text (count occurrences)
   const regex = new RegExp(query, 'gi');
   const matches = record.raw_text.match(regex);
   score += (matches?.length || 0);
-  
+
   return score;
 }
 ```
@@ -460,17 +460,17 @@ function computeSnapshot(
 ): EntitySnapshot {
   // 1. Sort observations deterministically
   const sorted = sortObservations(observations);
-  
+
   // 2. Apply merge policies per field
   const snapshot = {};
   const provenance = {};
-  
+
   for (const [field, policy] of Object.entries(mergePolicies)) {
     const { value, sourceId } = mergeField(field, sorted, policy);
     snapshot[field] = value;
     provenance[field] = sourceId;
   }
-  
+
   return { snapshot, provenance };
 }
 ```
@@ -509,20 +509,20 @@ function generateObservationId(
 test('reducer is deterministic', async () => {
   const observations = [obs1, obs2, obs3];
   const snapshot1 = await reducer.computeSnapshot(entityId);
-  
+
   // Recompute with same observations
   const snapshot2 = await reducer.computeSnapshot(entityId);
-  
+
   expect(snapshot1.snapshot).toEqual(snapshot2.snapshot);
   expect(snapshot1.provenance).toEqual(snapshot2.provenance);
 });
 test('reducer handles out-of-order observations', async () => {
   const observations1 = [obs1, obs2, obs3];
   const observations2 = [obs3, obs1, obs2]; // Different order
-  
+
   const snapshot1 = await reducer.computeSnapshot(entityId, observations1);
   const snapshot2 = await reducer.computeSnapshot(entityId, observations2);
-  
+
   // Should produce same snapshot regardless of input order
   expect(snapshot1.snapshot).toEqual(snapshot2.snapshot);
 });
@@ -555,7 +555,7 @@ export function ingestFile(
 ): Record {
   const fileHash = hashFile(file);
   const recordId = generateRecordId(fileHash, userId, explicitTimestamp);
-  
+
   return {
     id: recordId,
     created_at: explicitTimestamp, // Use explicit input
@@ -591,7 +591,7 @@ test('entity ID generation is deterministic', () => {
 test('extraction output matches snapshot', () => {
   const input = loadFixture('invoice.pdf');
   const extracted = extractFields(input, 'FinancialRecord');
-  
+
   expect(extracted).toMatchSnapshot(); // Fails if output changes
 });
 ```
@@ -658,7 +658,7 @@ test('is deterministic', () => {
   for (let i = 0; i < 10; i++) {
     results.push(performOperation(input));
   }
-  
+
   // All results MUST be identical
   const first = JSON.stringify(results[0]);
   for (const result of results) {

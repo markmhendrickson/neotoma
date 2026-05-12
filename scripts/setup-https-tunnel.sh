@@ -41,13 +41,13 @@ echo "🔒 Setting up HTTPS tunnel for MCP server testing..."
 echo "   Forwarding to http://localhost:${HTTP_PORT}"
 echo ""
 
-# Port-in-use check (skip prompt when TUNNEL_NONINTERACTIVE=1, e.g. dev:api)
+# Port-in-use check (skip prompt when TUNNEL_NONINTERACTIVE=1, e.g. dev:server:tunnel)
 if ! lsof -Pi :"${HTTP_PORT}" -sTCP:LISTEN -t >/dev/null 2>&1; then
   if [[ "${TUNNEL_NONINTERACTIVE:-}" == "1" ]]; then
     echo "⚠️  Port ${HTTP_PORT} not in use yet; tunnel will start anyway (server starting in parallel)."
   else
     echo "⚠️  Port ${HTTP_PORT} is not in use. Make sure the MCP server is running:"
-    echo "   npm run dev:api"
+    echo "   npm run dev:server:tunnel"
     echo ""
     read -p "Continue anyway? (y/n) " -n 1 -r
     echo
@@ -364,7 +364,7 @@ else
     if [ "${TUNNEL_NONINTERACTIVE:-}" = "1" ]; then
       echo ""
       echo "  ℹ️  Restart this process (Ctrl+C, then run again) so the server picks up the URL:"
-      echo "      HOST_URL=${NGROK_URL} npm run dev:server+api   # or dev:api"
+      echo "      HOST_URL=${NGROK_URL} npm run dev:server:tunnel:types   # or dev:server:tunnel"
     else
       echo ""
       echo "  ℹ️  Restart the server (if running) so it picks up the URL."

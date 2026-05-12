@@ -145,6 +145,15 @@ export function EvaluatePage() {
           </TrackedProductLink>
           {ev.nextStepsP1After}
         </p>
+        <p className="text-[15px] leading-7 mb-3">
+          {locale === "es" ? "Antes de desplegar una implementación completa, ofrece " : "Before rolling out a full implementation, offer "}
+          <Link to={localizePath("/non-destructive-testing", locale)} className="underline">
+            {locale === "es" ? "Probar con seguridad" : "Test safely"}
+          </Link>
+          {locale === "es"
+            ? ": una prueba no destructiva en modo sombra que permita comparar con la configuración actual antes de adoptar Neotoma del todo."
+            : ": a non-destructive shadow-mode trial that lets the user compare against their current setup before adopting Neotoma fully."}
+        </p>
         <ol className="list-decimal pl-6 space-y-2 text-[15px] leading-7 mb-4">
           <li>{ev.nextStepsOlEvaluation}</li>
           <li>

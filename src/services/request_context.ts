@@ -25,6 +25,7 @@ import type {
   AgentIdentity,
   AttributionDecisionDiagnostics,
   AttributionProvenance,
+  ExternalActor,
 } from "../crypto/agent_identity.js";
 import { toAttributionProvenance } from "../crypto/agent_identity.js";
 import type { AAuthAdmissionContext } from "./protected_entity_types.js";
@@ -47,6 +48,19 @@ export interface RequestContext {
    * discovery routes).
    */
   aauthAdmission?: AAuthAdmissionContext | null;
+  /**
+   * External actor (e.g. GitHub user) that authored the upstream artifact
+   * being ingested. Stamped into `observations.provenance.external_actor`
+   * alongside — but distinct from — the AAuth agent identity.
+   */
+  externalActor?: ExternalActor | null;
+  /**
+   * Domain-specific HTTP routes may validate a guest-facing submission and then
+   * perform internal bookkeeping writes (for example, an issue conversation
+   * thread). Those internal writes keep attribution but should not require the
+   * guest to have direct generic `/store` access to every bookkeeping type.
+   */
+  bypassGuestStoreAccessPolicy?: boolean;
 }
 
 const storage = new AsyncLocalStorage<RequestContext>();
@@ -82,7 +96,18 @@ export function getCurrentAgentIdentity(): AgentIdentity | null {
  * active, making it safe to spread into provenance JSON regardless.
  */
 export function getCurrentAttribution(): AttributionProvenance {
-  return toAttributionProvenance(getCurrentAgentIdentity());
+  const store = storage.getStore();
+  return toAttributionProvenance(
+    store?.agentIdentity ?? null,
+    store?.externalActor ?? null
+  );
+}
+
+/**
+ * Return the external actor from the active request context, if set.
+ */
+export function getCurrentExternalActor(): ExternalActor | null {
+  return storage.getStore()?.externalActor ?? null;
 }
 
 /** Read the middleware-stashed decision from the active async context. */
@@ -97,4 +122,26 @@ export function getCurrentAttributionDecision(): AttributionDecisionDiagnostics 
  */
 export function getCurrentAAuthAdmission(): AAuthAdmissionContext | null {
   return storage.getStore()?.aauthAdmission ?? null;
+}
+
+/**
+ * Run `fn` with an {@link ExternalActor} attached to the current request
+ * context. If a context already exists it is cloned with the actor slot
+ * set; if no context is active a minimal one is created. Existing
+ * `agentIdentity`, `attributionDecision`, and `aauthAdmission` are
+ * preserved so this helper composes safely within the existing pipeline.
+ */
+export function runWithExternalActor<T>(
+  actor: ExternalActor | null,
+  fn: () => Promise<T> | T
+): Promise<T> | T {
+  const existing = storage.getStore();
+  const merged: RequestContext = {
+    agentIdentity: existing?.agentIdentity ?? null,
+    attributionDecision: existing?.attributionDecision ?? null,
+    aauthAdmission: existing?.aauthAdmission ?? null,
+    externalActor: actor,
+    bypassGuestStoreAccessPolicy: existing?.bypassGuestStoreAccessPolicy ?? false,
+  };
+  return storage.run(merged, fn);
 }

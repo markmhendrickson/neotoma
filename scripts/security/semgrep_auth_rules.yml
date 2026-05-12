@@ -1,0 +1,146 @@
+# Neotoma security static rules (Gate G2).
+#
+# These Semgrep rules describe the *shape* of the v0.11.1 Inspector auth-bypass
+# class — alternate-path auth, proxy / X-Forwarded-For trust, local-dev
+# shortcuts, and unauthenticated public-route exposure — and are wired into
+# `npm run security:lint` (which falls back to a Node-based scanner when the
+# `semgrep` CLI is not installed; see `scripts/security/run_semgrep.js`).
+#
+# Rationale lives in `docs/security/threat_model.md`. Each rule below carries
+# a short rationale + suggested fix in the rule message so PR reviewers and
+# agents see them without having to follow a link.
+#
+# Escape hatches (intentional and bounded):
+#   - `assertExplicitlyTrusted("<reason>")` from src/services/access_policy.ts
+#     marks a deliberate exception; the rule's metavariable check filters it.
+#   - `// neotoma:security-allow:<rule-id> <reason>` on the *previous* line
+#     opts out a single occurrence and is recorded in change-guardrails so
+#     it cannot be added silently.
+rules:
+  - id: no-auth-local-fallback
+    message: |
+      Auth-local fallback detected. A request without an Authorization header
+      is being granted user/session context based on a "local" predicate
+      (`isLocalRequest`, loopback check, or LOCAL_DEV_USER_ID). This is the
+      v0.11.1 Inspector bypass class.
+      Fix: route the branch through `assertExplicitlyTrusted(...)` from
+      `src/services/access_policy.ts`, or require a bearer token even on
+      loopback when `NEOTOMA_ENV=production`.
+    severity: ERROR
+    languages: [typescript]
+    paths:
+      include:
+        - src/**
+      exclude:
+        - src/cli/**
+        - tests/**
+    pattern-either:
+      - patterns:
+          - pattern-either:
+              - pattern: |
+                  if ($AUTH === "" || $AUTH == null) {
+                    if (isLocalRequest($REQ)) { ... return ...; }
+                  }
+              - pattern: |
+                  if (!$AUTH && isLocalRequest($REQ)) { ... }
+              - pattern: |
+                  if (isLocalRequest($REQ) && !$AUTH) { ... }
+          - pattern-not-inside: |
+              assertExplicitlyTrusted(...)
+
+  - id: loopback-trust-in-production
+    message: |
+      `req.socket.remoteAddress` is being trusted as evidence of locality
+      without consulting `forwardedForValues(req)` or the production env
+      gate. Reverse proxies (Caddy, nginx, Cloudflare tunnel) connect over
+      loopback even for public callers.
+      Fix: use `isLocalRequest(req)` from `src/actions.ts` (which combines
+      `isLoopbackAddress` + `forwardedForValues` + `isProductionEnvironment`),
+      not a bare `req.socket.remoteAddress` check.
+    severity: ERROR
+    languages: [typescript]
+    paths:
+      include:
+        - src/**
+      exclude:
+        - src/actions.ts
+        - src/services/root_landing/**
+        - tests/**
+    pattern-either:
+      - pattern: req.socket.remoteAddress === "127.0.0.1"
+      - pattern: req.socket?.remoteAddress === "127.0.0.1"
+      - pattern: |
+          if (req.socket.remoteAddress === "127.0.0.1") { ... }
+      - pattern: |
+          if (req.socket?.remoteAddress === "127.0.0.1") { ... }
+      - pattern: |
+          if (req.socket.remoteAddress?.startsWith("127.")) { ... }
+
+  - id: forwarded-for-trust
+    message: |
+      `X-Forwarded-For` (or `Host`) is being read directly as a trust signal
+      without an explicit allow-list of known proxy hops. The v0.11.1 fix
+      treats *any* loopback + non-loopback forwarded hop as remote.
+      Fix: route the value through `forwardedForValues(req)` and gate trust
+      on `isProductionEnvironment()` + `NEOTOMA_TRUST_PROD_LOOPBACK=1` (or
+      an equivalent allow-list helper).
+    severity: ERROR
+    languages: [typescript]
+    paths:
+      include:
+        - src/**
+      exclude:
+        - src/actions.ts
+        - src/services/root_landing/**
+        - tests/**
+    pattern-either:
+      - pattern: req.headers["x-forwarded-for"]
+      - pattern: req.headers["X-Forwarded-For"]
+      - pattern: req.header("x-forwarded-for")
+      - pattern: req.header("X-Forwarded-For")
+      - pattern: req.header("host")
+      - pattern: req.headers["host"]
+
+  - id: local-dev-user-widening
+    message: |
+      `LOCAL_DEV_USER_ID` is being referenced outside `src/cli/**` and tests.
+      Widening this surface is a high-risk path because it is the same
+      shortcut that turned an Inspector mount into a public-DB browser.
+      Fix: gate the reference behind `isLocalRequest(req)` AND
+      `assertExplicitlyTrusted(...)`, OR move the dev shortcut into the CLI
+      bootstrap path and call `getAuthenticatedUserId` for the request path.
+    severity: WARNING
+    languages: [typescript]
+    paths:
+      include:
+        - src/**
+      exclude:
+        - src/cli/**
+        - src/services/local_auth.ts
+        - tests/**
+    pattern: LOCAL_DEV_USER_ID
+
+  - id: unauth-public-route
+    message: |
+      Express route is being registered without `requireUser` / `auth.*` /
+      `assertGuestWriteAllowed` and is not in the explicit unauth allow-list
+      (`/health`, `/version`, `/openapi.yaml`, `/server-info`,
+      `/.well-known/**`, `/mcp/oauth/**`, `/auth/dev-signin`,
+      `/agents/grants/**` for guest read-back).
+      Fix: wrap the handler in `auth.requireUser()` / matching middleware,
+      or document the new public route in `docs/security/threat_model.md`
+      and `protected_routes_manifest.json` (with `unauth: true`).
+    severity: WARNING
+    languages: [typescript]
+    paths:
+      include:
+        - src/**
+      exclude:
+        - tests/**
+    pattern-either:
+      - pattern: app.get($ROUTE, $HANDLER)
+      - pattern: app.post($ROUTE, $HANDLER)
+      - pattern: app.put($ROUTE, $HANDLER)
+      - pattern: app.delete($ROUTE, $HANDLER)
+      - pattern: router.get($ROUTE, $HANDLER)
+      - pattern: router.post($ROUTE, $HANDLER)

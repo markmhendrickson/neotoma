@@ -113,11 +113,70 @@ class SessionState {
     const value = responseHeaders.get(SESSION_HEADER);
     if (value) this.sessionId = value;
   }
+
+  /** Drop stale session id before re-running initialize against downstream. */
+  clearSession(): void {
+    this.sessionId = null;
+  }
+}
+
+/** Exported for unit tests — matches `src/actions.ts` Streamable HTTP 503 copy. */
+export function isRecoverableMcpSessionLostError(status: number, bodyText: string): boolean {
+  if (status !== 503) return false;
+  const t = bodyText.toLowerCase();
+  return (
+    t.includes("mcp session is unknown") || t.includes("session is unknown on this api instance")
+  );
+}
+
+interface ProxyLoopState {
+  session: SessionState;
+  /** Last downstream initialize body (JSON), after clientInfo injection — replayed on session loss. */
+  lastInitializeBody: string | null;
+}
+
+async function sendDownstream(
+  config: ProxyConfig,
+  headers: Record<string, string>,
+  body: string,
+): Promise<Response> {
+  if (config.aauthSigner) {
+    try {
+      return await signedFetch(config.downstreamUrl, {
+        method: "POST",
+        headers,
+        body,
+        config: config.aauthSigner,
+      });
+    } catch (signErr) {
+      log(`AAuth signing failed: ${describeNetworkError(signErr)}`);
+      if (config.failClosed) {
+        process.stderr.write(`[neotoma-mcp-proxy] fail-closed: AAuth signing error\n`);
+        process.exit(1);
+      }
+      return await fetch(config.downstreamUrl, {
+        method: "POST",
+        headers,
+        body,
+      });
+    }
+  }
+  return await fetch(config.downstreamUrl, {
+    method: "POST",
+    headers,
+    body,
+  });
 }
 
 function emitJson(payload: unknown): void {
   const line = JSON.stringify(payload);
   process.stdout.write(line + "\n");
+}
+
+export function formatDownstreamErrorMessage(status: number, detail: string): string {
+  const trimmed = detail.replace(/\s+/g, " ").trim();
+  if (!trimmed) return `neotoma-mcp-proxy downstream error (${status})`;
+  return `neotoma-mcp-proxy downstream error (${status}): ${trimmed.slice(0, 200)}`;
 }
 
 function emitErrorResponse(
@@ -132,7 +191,7 @@ function emitErrorResponse(
     id: requestId,
     error: {
       code: status < 500 ? -32000 : -32001,
-      message: `neotoma-mcp-proxy downstream error (${status})`,
+      message: formatDownstreamErrorMessage(status, detail),
       data: { detail: detail.slice(0, 500) },
     },
   });
@@ -192,57 +251,73 @@ async function forwardSseResponse(response: Response): Promise<void> {
 }
 
 async function dispatchMessage(
-  state: SessionState,
+  loopState: ProxyLoopState,
   config: ProxyConfig,
   message: Record<string, unknown>,
 ): Promise<void> {
   injectClientInfo(message, config);
-  const headers = buildBaseHeaders(config);
-  state.attach(headers);
   const body = JSON.stringify(message);
+  if (message.method === "initialize") {
+    loopState.lastInitializeBody = body;
+  }
+
+  const postOriginal = async (): Promise<Response> => {
+    const headers = buildBaseHeaders(config);
+    loopState.session.attach(headers);
+    return sendDownstream(config, headers, body);
+  };
 
   try {
-    let resp: Response;
-    if (config.aauthSigner) {
-      try {
-        resp = await signedFetch(config.downstreamUrl, {
-          method: "POST",
-          headers,
-          body,
-          config: config.aauthSigner,
-        });
-      } catch (signErr) {
-        log(`AAuth signing failed: ${describeNetworkError(signErr)}`);
-        if (config.failClosed) {
-          process.stderr.write(
-            `[neotoma-mcp-proxy] fail-closed: AAuth signing error\n`,
+    let resp = await postOriginal();
+    loopState.session.capture(resp.headers);
+
+    if (resp.status >= 400) {
+      const errText = await resp.text();
+      const method = message.method;
+      if (
+        isRecoverableMcpSessionLostError(resp.status, errText) &&
+        method !== "initialize" &&
+        loopState.lastInitializeBody
+      ) {
+        log(
+          "Downstream MCP session unknown on this instance — replaying initialize to downstream, then retrying this JSON-RPC message once (client stdout unchanged)",
+        );
+        loopState.session.clearSession();
+        const reinitHeaders = buildBaseHeaders(config);
+        const reinitResp = await sendDownstream(
+          config,
+          reinitHeaders,
+          loopState.lastInitializeBody,
+        );
+        loopState.session.capture(reinitResp.headers);
+        const reinitBodyText = await reinitResp.text();
+        if (reinitResp.status >= 400) {
+          log(
+            `Re-initialize after session loss failed: status=${reinitResp.status} body=${reinitBodyText.slice(0, 500)}`,
           );
-          process.exit(1);
+          emitErrorResponse(message, reinitResp.status, reinitBodyText);
+          return;
         }
-        resp = await fetch(config.downstreamUrl, {
-          method: "POST",
-          headers,
-          body,
-        });
+        resp = await postOriginal();
+        loopState.session.capture(resp.headers);
+        if (resp.status >= 400) {
+          const retryErr = await resp.text();
+          log(
+            `Downstream error after session recovery: status=${resp.status} body=${retryErr.slice(0, 500)}`,
+          );
+          emitErrorResponse(message, resp.status, retryErr);
+          return;
+        }
+      } else {
+        log(
+          `Downstream error status=${resp.status} content_type=${resp.headers.get("content-type") ?? ""} body=${errText.slice(0, 500)}`,
+        );
+        emitErrorResponse(message, resp.status, errText);
+        return;
       }
-    } else {
-      resp = await fetch(config.downstreamUrl, {
-        method: "POST",
-        headers,
-        body,
-      });
     }
 
-    state.capture(resp.headers);
     const contentType = resp.headers.get("content-type") ?? "";
-    if (resp.status >= 400) {
-      const bodyText = await resp.text();
-      log(
-        `Downstream error status=${resp.status} content_type=${contentType} body=${bodyText.slice(0, 500)}`,
-      );
-      emitErrorResponse(message, resp.status, bodyText);
-      return;
-    }
     if (contentType.includes("text/event-stream")) {
       await forwardSseResponse(resp);
     } else {
@@ -263,7 +338,10 @@ export async function runProxy(config: ProxyConfig): Promise<void> {
     await runPreflight(config);
   }
 
-  const state = new SessionState();
+  const loopState: ProxyLoopState = {
+    session: new SessionState(),
+    lastInitializeBody: null,
+  };
   const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
 
   for await (const rawLine of rl) {
@@ -280,7 +358,7 @@ export async function runProxy(config: ProxyConfig): Promise<void> {
       log(`Dropping non-object JSON-RPC message: ${line.slice(0, 200)}`);
       continue;
     }
-    await dispatchMessage(state, config, message);
+    await dispatchMessage(loopState, config, message);
   }
   log("stdin closed; exiting proxy loop");
 }

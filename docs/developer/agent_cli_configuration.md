@@ -46,7 +46,7 @@ Run `npm run sync:mcp` after changing `.cursor/mcp.json` (or add it to your work
 
 If a client supports standard MCP server configuration, point it at the same Neotoma server definitions used in `.cursor/mcp.json`:
 
-- Local same-machine usage: prefer stdio (`run_neotoma_mcp_stdio*.sh`)
+- Local same-machine usage: prefer stdio (`run_neotoma_mcp_stdio*.sh`). For stdio→local HTTP `/mcp` without the signed shim’s `mcp_dev_shim.ts` worker, use `scripts/run_neotoma_mcp_unsigned_stdio_dev_shim.sh` (see `docs/developer/mcp_cursor_setup.md` and `docs/developer/mcp/proxy.md`).
 - Remote/tunnel/deployed usage: prefer HTTP MCP endpoints
 - Local source iteration with an installed MCP client: use `run_neotoma_mcp_stdio_dev_shim.sh` so the client-facing stdio process remains stable while the shim restarts its worker.
 
@@ -104,7 +104,7 @@ Set permissions and default mode there. Example:
 
 ## OpenAI Codex
 
-**User config (all projects):** `~/.codex/config.toml`  
+**User config (all projects):** `~/.codex/config.toml`
 **Project config:** `.codex/config.toml` (comments only; no overrides)
 
 Set model, approval policy, sandbox, and MCP in your user config. Example snippet:

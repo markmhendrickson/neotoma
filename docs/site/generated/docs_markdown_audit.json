@@ -1,0 +1,1677 @@
+{
+  "generated_at": "2026-05-12T11:46:50.088Z",
+  "total_files": 409,
+  "by_top_level_folder": {
+    "api": 1,
+    "architecture": 19,
+    "conventions": 12,
+    "coverage_manifest.md": 1,
+    "developer": 90,
+    "examples": 1,
+    "feature_units": 20,
+    "foundation": 21,
+    "icp": 8,
+    "implementation": 2,
+    "infrastructure": 1,
+    "integrations": 10,
+    "legal": 8,
+    "migration": 2,
+    "NEOTOMA_MANIFEST.md": 1,
+    "observability": 3,
+    "operations": 4,
+    "plans": 5,
+    "proposals": 13,
+    "prototypes": 2,
+    "reference": 1,
+    "reports": 48,
+    "security": 3,
+    "site": 5,
+    "skills": 1,
+    "specs": 12,
+    "subsystems": 44,
+    "templates": 2,
+    "testing-instructions-init-env-fix.md": 1,
+    "testing": 10,
+    "ui": 40,
+    "use_cases": 17,
+    "vocabulary": 1
+  },
+  "files": [
+    {
+      "rel": "docs/api/rest_api.md",
+      "top": "api"
+    },
+    {
+      "rel": "docs/architecture/agentic_portfolio_overview.md",
+      "top": "architecture"
+    },
+    {
+      "rel": "docs/architecture/agentic_wallet_overview.md",
+      "top": "architecture"
+    },
+    {
+      "rel": "docs/architecture/architectural_decisions.md",
+      "top": "architecture"
+    },
+    {
+      "rel": "docs/architecture/architecture.md",
+      "top": "architecture"
+    },
+    {
+      "rel": "docs/architecture/blockchain_readiness_assessment.md",
+      "top": "architecture"
+    },
+    {
+      "rel": "docs/architecture/bounded_convergence.md",
+      "top": "architecture"
+    },
+    {
+      "rel": "docs/architecture/change_guardrails_rules.mdc",
+      "top": "architecture"
+    },
+    {
+      "rel": "docs/architecture/consistency.md",
+      "top": "architecture"
+    },
+    {
+      "rel": "docs/architecture/conversational_ux_architecture.md",
+      "top": "architecture"
+    },
+    {
+      "rel": "docs/architecture/determinism.md",
+      "top": "architecture"
+    },
+    {
+      "rel": "docs/architecture/idempotence_pattern.md",
+      "top": "architecture"
+    },
+    {
+      "rel": "docs/architecture/mcp_actions_assessment.md",
+      "top": "architecture"
+    },
+    {
+      "rel": "docs/architecture/ner_vs_schema_first_extraction.md",
+      "top": "architecture"
+    },
+    {
+      "rel": "docs/architecture/openapi_contract_flow.md",
+      "top": "architecture"
+    },
+    {
+      "rel": "docs/architecture/progressive_schema_enforcement.md",
+      "top": "architecture"
+    },
+    {
+      "rel": "docs/architecture/query_convergence.md",
+      "top": "architecture"
+    },
+    {
+      "rel": "docs/architecture/schema_expansion.md",
+      "top": "architecture"
+    },
+    {
+      "rel": "docs/architecture/schema_handling.md",
+      "top": "architecture"
+    },
+    {
+      "rel": "docs/architecture/source_material_model.md",
+      "top": "architecture"
+    },
+    {
+      "rel": "docs/conventions/always_on_rules_review.md",
+      "top": "conventions"
+    },
+    {
+      "rel": "docs/conventions/code_conventions_implementation.md",
+      "top": "conventions"
+    },
+    {
+      "rel": "docs/conventions/code_conventions_plan.md",
+      "top": "conventions"
+    },
+    {
+      "rel": "docs/conventions/code_review_summary.md",
+      "top": "conventions"
+    },
+    {
+      "rel": "docs/conventions/documentation_standards.md",
+      "top": "conventions"
+    },
+    {
+      "rel": "docs/conventions/estimation_methodology.md",
+      "top": "conventions"
+    },
+    {
+      "rel": "docs/conventions/file_naming_migration_status.md",
+      "top": "conventions"
+    },
+    {
+      "rel": "docs/conventions/readme_generation_framework.md",
+      "top": "conventions"
+    },
+    {
+      "rel": "docs/conventions/TEST_EXECUTION_IMPROVEMENTS.md",
+      "top": "conventions"
+    },
+    {
+      "rel": "docs/conventions/time_tracking_template.md",
+      "top": "conventions"
+    },
+    {
+      "rel": "docs/conventions/web_content_fetching_rules.md",
+      "top": "conventions"
+    },
+    {
+      "rel": "docs/conventions/writing_style_guide.md",
+      "top": "conventions"
+    },
+    {
+      "rel": "docs/coverage_manifest.md",
+      "top": "coverage_manifest.md"
+    },
+    {
+      "rel": "docs/developer/agent_cli_configuration.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/agent_docker_instructions.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/agent_installation_instructions.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/agent_instructions_sync_rules.mdc",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/agent_instructions.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/agent_memory_failure_interactions_by_schema.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/agent_memory_failure_modes.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/agent_onboarding_confirmation.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/agentic_eval_fixture_format.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/canonical_walkthrough.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/chatgpt_app_readiness_audit.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/chatgpt_app_submission_draft.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/chatgpt_apps_auth_security.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/chatgpt_apps_setup.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/chatgpt_apps_validation_submission_checklist.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/chatgpt_integration_instructions.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/cli_agent_instructions.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/cli_overview.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/cli_reference.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/cli-banner-remaining-fix.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/cli-banner-session-repl-fix.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/cli-banner-user-data-dir-fix.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/developer_preview_launch_checklist.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/developer_preview_storage.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/developer_release_manual_test_checklist.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/development_workflow.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/docker.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/environment_distinction_audit.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/environment/CONNECTOR_SECRET_KEY_SETUP.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/environment/DEV_CONNECTOR_SECRET_KEY_EXPLANATION.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/environment/ENV_MAPPINGS_STATUS.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/environment/ENV_VAR_NAMING_STRATEGY.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/environment/MIGRATION_TO_SINGLE_VAR_NAMES.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/environment/QUICK_START_1PASSWORD.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/environment/README.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/environment/SETUP_ENV_MAPPINGS.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/fix_doc_inconsistencies_plan.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/fleet_onboarding.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/foundation_cursor_sync_rules.mdc",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/getting_started.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/github_release_process.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/github_release_supplement.example.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/illustration_generator.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/import_interpretation_debug.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/launchd_dev_servers.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/launchd_prod_server.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/launchd_watch_build.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/macos_vm_testing.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/mcp_authentication_summary.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/mcp_chatgpt_setup.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/mcp_claude_code_setup.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/mcp_connect_button_troubleshooting.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/mcp_cursor_setup.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/mcp_https_testing_status.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/mcp_https_testing.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/mcp_https_tunnel_status.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/mcp_ironclaw_setup.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/mcp_oauth_implementation.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/mcp_oauth_migration_guide.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/mcp_oauth_troubleshooting.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/mcp_openclaw_setup.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/mcp_overview.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/mcp_server_examples_from_cursor_docs.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/mcp/instructions.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/mcp/invalid_connection_id_handling.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/mcp/proxy.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/mcp/unauthenticated.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/npm_scripts.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/observation_architecture_documentation_integration.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/package_scripts.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/pre_release_checklist.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/release_orchestrator.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/repository_cleanup_plan.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/resolved_blockers.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/schema_initialization.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/scripts_reference.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/secrets/README.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/secrets/secrets_architecture.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/secrets/secrets_manager_value.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/secrets/secrets_secure_approach.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/secrets/secrets_setup.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/seo_analytics_verification.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/shared_components_submodule_setup.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/site_mdx_documentation.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/spec_compliance_validation_system.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/test_coverage_gap_analysis_plan.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/transcript_ingestion.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/tunnel_auth_audit_matrix.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/tunnels.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/vite_troubleshooting.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/examples/schema_breaking_change_reconciliation.md",
+      "top": "examples"
+    },
+    {
+      "rel": "docs/feature_units/completed/FU-050/FU-050_spec.md",
+      "top": "feature_units"
+    },
+    {
+      "rel": "docs/feature_units/completed/FU-051/FU-051_spec.md",
+      "top": "feature_units"
+    },
+    {
+      "rel": "docs/feature_units/completed/FU-052/FU-052_spec.md",
+      "top": "feature_units"
+    },
+    {
+      "rel": "docs/feature_units/completed/FU-053/FU-053_spec.md",
+      "top": "feature_units"
+    },
+    {
+      "rel": "docs/feature_units/completed/FU-054/FU-054_spec.md",
+      "top": "feature_units"
+    },
+    {
+      "rel": "docs/feature_units/completed/FU-702/billing_spec.md",
+      "top": "feature_units"
+    },
+    {
+      "rel": "docs/feature_units/standards/creating_feature_units.md",
+      "top": "feature_units"
+    },
+    {
+      "rel": "docs/feature_units/standards/DISCOVERY_CAGAN_ALIGNMENT.md",
+      "top": "feature_units"
+    },
+    {
+      "rel": "docs/feature_units/standards/discovery_process.md",
+      "top": "feature_units"
+    },
+    {
+      "rel": "docs/feature_units/standards/error_protocol.md",
+      "top": "feature_units"
+    },
+    {
+      "rel": "docs/feature_units/standards/execution_instructions.md",
+      "top": "feature_units"
+    },
+    {
+      "rel": "docs/feature_units/standards/feature_unit_spec.md",
+      "top": "feature_units"
+    },
+    {
+      "rel": "docs/feature_units/standards/integration_test_execution.md",
+      "top": "feature_units"
+    },
+    {
+      "rel": "docs/feature_units/standards/model_selection.md",
+      "top": "feature_units"
+    },
+    {
+      "rel": "docs/feature_units/standards/multi_agent_orchestration.md",
+      "top": "feature_units"
+    },
+    {
+      "rel": "docs/feature_units/standards/release_report_generation.md",
+      "top": "feature_units"
+    },
+    {
+      "rel": "docs/feature_units/standards/release_report_spec.md",
+      "top": "feature_units"
+    },
+    {
+      "rel": "docs/feature_units/standards/release_report_template.md",
+      "top": "feature_units"
+    },
+    {
+      "rel": "docs/feature_units/standards/spec_compliance_validation.md",
+      "top": "feature_units"
+    },
+    {
+      "rel": "docs/feature_units/standards/worker_agent_template.md",
+      "top": "feature_units"
+    },
+    {
+      "rel": "docs/foundation/ai_safety.md",
+      "top": "foundation"
+    },
+    {
+      "rel": "docs/foundation/composability_analysis.md",
+      "top": "foundation"
+    },
+    {
+      "rel": "docs/foundation/core_identity.md",
+      "top": "foundation"
+    },
+    {
+      "rel": "docs/foundation/data_models.md",
+      "top": "foundation"
+    },
+    {
+      "rel": "docs/foundation/developer_release_principles.md",
+      "top": "foundation"
+    },
+    {
+      "rel": "docs/foundation/documentation_design_system.md",
+      "top": "foundation"
+    },
+    {
+      "rel": "docs/foundation/entity_resolution.md",
+      "top": "foundation"
+    },
+    {
+      "rel": "docs/foundation/field_validation.md",
+      "top": "foundation"
+    },
+    {
+      "rel": "docs/foundation/file_ranking_heuristic.md",
+      "top": "foundation"
+    },
+    {
+      "rel": "docs/foundation/layered_architecture.md",
+      "top": "foundation"
+    },
+    {
+      "rel": "docs/foundation/mmry_comparison.md",
+      "top": "foundation"
+    },
+    {
+      "rel": "docs/foundation/philosophy.md",
+      "top": "foundation"
+    },
+    {
+      "rel": "docs/foundation/problem_statement.md",
+      "top": "foundation"
+    },
+    {
+      "rel": "docs/foundation/product_positioning.md",
+      "top": "foundation"
+    },
+    {
+      "rel": "docs/foundation/product_principles.md",
+      "top": "foundation"
+    },
+    {
+      "rel": "docs/foundation/quality_requirements.md",
+      "top": "foundation"
+    },
+    {
+      "rel": "docs/foundation/schema_agnostic_design_rules.md",
+      "top": "foundation"
+    },
+    {
+      "rel": "docs/foundation/scope_decisions.md",
+      "top": "foundation"
+    },
+    {
+      "rel": "docs/foundation/timeline_events.md",
+      "top": "foundation"
+    },
+    {
+      "rel": "docs/foundation/user_workflows.md",
+      "top": "foundation"
+    },
+    {
+      "rel": "docs/foundation/what_to_store.md",
+      "top": "foundation"
+    },
+    {
+      "rel": "docs/icp/developer_release_targeting.md",
+      "top": "icp"
+    },
+    {
+      "rel": "docs/icp/future_icps.md",
+      "top": "icp"
+    },
+    {
+      "rel": "docs/icp/general_release_criteria.md",
+      "top": "icp"
+    },
+    {
+      "rel": "docs/icp/primary_icp.md",
+      "top": "icp"
+    },
+    {
+      "rel": "docs/icp/prioritized_pain_points_and_failure_modes.md",
+      "top": "icp"
+    },
+    {
+      "rel": "docs/icp/profiles.md",
+      "top": "icp"
+    },
+    {
+      "rel": "docs/icp/qualification_survey.md",
+      "top": "icp"
+    },
+    {
+      "rel": "docs/icp/secondary_icps.md",
+      "top": "icp"
+    },
+    {
+      "rel": "docs/implementation/PARQUET_MCP_SERVER_FIXES.md",
+      "top": "implementation"
+    },
+    {
+      "rel": "docs/implementation/PARQUET_SUPPORT_IMPLEMENTATION.md",
+      "top": "implementation"
+    },
+    {
+      "rel": "docs/infrastructure/deployment.md",
+      "top": "infrastructure"
+    },
+    {
+      "rel": "docs/integrations/aauth_tbs_windows.md",
+      "top": "integrations"
+    },
+    {
+      "rel": "docs/integrations/aauth_tpm2_linux.md",
+      "top": "integrations"
+    },
+    {
+      "rel": "docs/integrations/aauth_yubikey.md",
+      "top": "integrations"
+    },
+    {
+      "rel": "docs/integrations/hooks/claude_agent_sdk.md",
+      "top": "integrations"
+    },
+    {
+      "rel": "docs/integrations/hooks/claude_code.md",
+      "top": "integrations"
+    },
+    {
+      "rel": "docs/integrations/hooks/codex_cli.md",
+      "top": "integrations"
+    },
+    {
+      "rel": "docs/integrations/hooks/cursor.md",
+      "top": "integrations"
+    },
+    {
+      "rel": "docs/integrations/hooks/opencode.md",
+      "top": "integrations"
+    },
+    {
+      "rel": "docs/integrations/hooks/README.md",
+      "top": "integrations"
+    },
+    {
+      "rel": "docs/integrations/smithery_external_url.md",
+      "top": "integrations"
+    },
+    {
+      "rel": "docs/legal/compliance.md",
+      "top": "legal"
+    },
+    {
+      "rel": "docs/legal/privacy_policy_changelog.md",
+      "top": "legal"
+    },
+    {
+      "rel": "docs/legal/privacy_policy.md",
+      "top": "legal"
+    },
+    {
+      "rel": "docs/legal/README.md",
+      "top": "legal"
+    },
+    {
+      "rel": "docs/legal/site_privacy_notice.md",
+      "top": "legal"
+    },
+    {
+      "rel": "docs/legal/site_terms_of_use.md",
+      "top": "legal"
+    },
+    {
+      "rel": "docs/legal/terms_of_service_changelog.md",
+      "top": "legal"
+    },
+    {
+      "rel": "docs/legal/terms_of_service.md",
+      "top": "legal"
+    },
+    {
+      "rel": "docs/migration/llm_extraction_removal.md",
+      "top": "migration"
+    },
+    {
+      "rel": "docs/migration/llm_interpretation_docs_update.md",
+      "top": "migration"
+    },
+    {
+      "rel": "docs/NEOTOMA_MANIFEST.md",
+      "top": "NEOTOMA_MANIFEST.md"
+    },
+    {
+      "rel": "docs/observability/logging.md",
+      "top": "observability"
+    },
+    {
+      "rel": "docs/observability/metrics_standard.md",
+      "top": "observability"
+    },
+    {
+      "rel": "docs/observability/tracing.md",
+      "top": "observability"
+    },
+    {
+      "rel": "docs/operations/debugging/error_debug_instructions.md",
+      "top": "operations"
+    },
+    {
+      "rel": "docs/operations/debugging/README.md",
+      "top": "operations"
+    },
+    {
+      "rel": "docs/operations/health_check.md",
+      "top": "operations"
+    },
+    {
+      "rel": "docs/operations/runbook.md",
+      "top": "operations"
+    },
+    {
+      "rel": "docs/plans/agent_identity_attribution_pilot.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/issues_transport_full_parity.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/multi_tenant_operations.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/observer_wire_feedback_channel.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/plans/schema_introspection.md",
+      "top": "plans"
+    },
+    {
+      "rel": "docs/proposals/agent-trust-framework.md",
+      "top": "proposals"
+    },
+    {
+      "rel": "docs/proposals/conversation_turn_identity_reverts_forks.md",
+      "top": "proposals"
+    },
+    {
+      "rel": "docs/proposals/document-v023-release.md",
+      "top": "proposals"
+    },
+    {
+      "rel": "docs/proposals/IMPLEMENTATION_SUMMARY.md",
+      "top": "proposals"
+    },
+    {
+      "rel": "docs/proposals/iterative_chat_store_mcp_instructions.md",
+      "top": "proposals"
+    },
+    {
+      "rel": "docs/proposals/llm_sampling_parameters_interpretation_config.md",
+      "top": "proposals"
+    },
+    {
+      "rel": "docs/proposals/mcp-cli-action-items.md",
+      "top": "proposals"
+    },
+    {
+      "rel": "docs/proposals/MIGRATION_REPORT.md",
+      "top": "proposals"
+    },
+    {
+      "rel": "docs/proposals/plan-migration-command-integrated-with-commit.md",
+      "top": "proposals"
+    },
+    {
+      "rel": "docs/proposals/PROPOSAL_TEMPLATE.md",
+      "top": "proposals"
+    },
+    {
+      "rel": "docs/proposals/README.md",
+      "top": "proposals"
+    },
+    {
+      "rel": "docs/proposals/sources-first-ingestion-v10.md",
+      "top": "proposals"
+    },
+    {
+      "rel": "docs/proposals/test-coverage-gap-analysis.md",
+      "top": "proposals"
+    },
+    {
+      "rel": "docs/prototypes/PROTOTYPE_QUICKSTART.md",
+      "top": "prototypes"
+    },
+    {
+      "rel": "docs/prototypes/README.md",
+      "top": "prototypes"
+    },
+    {
+      "rel": "docs/reference/error_codes.md",
+      "top": "reference"
+    },
+    {
+      "rel": "docs/reports/AUTO_ENHANCEMENT_TEST_RESULTS.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/AUTO_ENHANCEMENT_TEST_SUMMARY.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/beyond_rag_agent_memory_neotoma_architecture_report.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/BIGINT_SERIALIZATION_DEBUG.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/BUG_LEARNING_PROTOCOL_ESTABLISHED.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/CONSOLE_LOG_MCP_PROTOCOL_FIX.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/CRYPTO_TRANSACTION_DISCREPANCY_RESOLUTION.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/CRYPTO_TRANSACTION_SIDE_BY_SIDE_COMPARISON.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/DATA_DIR_SCHEMA_ALIGNMENT.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/data_dir_schema_analysis.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/DATA_INTEGRITY_CHECK_REPORT.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/dhh_clankers_with_claws_neotoma_report.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/dr_cintas_pageindex_structure_over_embeddings_report.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/FAILING_TESTS_ANALYSIS.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/FAILING_TESTS_SUMMARY.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/failure_gallery.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/FINAL_PARQUET_COMPARISON.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/FINAL_TEST_STATUS.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/fixture_expansion_summary.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/LEGACY_REMOVAL_SUMMARY.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/mcp_action_names_review.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/MCP_ACTION_TEST_COVERAGE.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/MCP_ACTIONS_SUMMARY.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/mcp_cli_action_items_fidelity_report.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/MCP_SPEC_COMPARISON_UPDATED.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/MCP_SPEC_COMPARISON.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/MCP_SPEC_VOCABULARY_CONFORMANCE.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/MCP_TEST_SUITE_IMPLEMENTATION.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/MCP_TEST_SUITE_RESULTS.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/neotoma_pdf_interpreted_as_note_investigation_2026_02_23.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/PARQUET_MCP_BUG_REPORT.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/PARQUET_MCP_STORAGE_COMPLETE.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/PARQUET_SAMPLE_FILES_CREATED.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/PARQUET_STORAGE_SUCCESS.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/PARQUET_VS_NEOTOMA_COMPARISON.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/plan_execution_changes_report.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/REIMPORT_TASKS_BLOCKER.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/SAMPLE_FILE_STRUCTURE_UPDATE.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/SAMPLE_PARQUET_IMPORT_TEST_RESULTS.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/schema_distinctions.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/SCHEMA_ENHANCEMENT_STATUS.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/SCHEMA_ENHANCEMENT_TEST_RESULTS.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/schema_redundancy_analysis.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/security_audit_2026_04_22.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/TASK_RELOAD_BLOCKER.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/TEST_FIXES_SUMMARY.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/VOCABULARY_CONFORMANCE_REVIEW.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/reports/WHY_TESTS_MISSED_BIGINT_ISSUE.md",
+      "top": "reports"
+    },
+    {
+      "rel": "docs/security/advisories/2026-05-11-inspector-auth-bypass.md",
+      "top": "security"
+    },
+    {
+      "rel": "docs/security/advisories/README.md",
+      "top": "security"
+    },
+    {
+      "rel": "docs/security/threat_model.md",
+      "top": "security"
+    },
+    {
+      "rel": "docs/site/generated/DOCS_MARKDOWN_AUDIT.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/generated/ROUTE_INVENTORY.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/generated/translation_audit.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/MIGRATION_BATCHES.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/site/README.md",
+      "top": "site"
+    },
+    {
+      "rel": "docs/skills/skill_strategy.md",
+      "top": "skills"
+    },
+    {
+      "rel": "docs/specs/DATA_MODELS.md",
+      "top": "specs"
+    },
+    {
+      "rel": "docs/specs/GENERAL_REQUIREMENTS.md",
+      "top": "specs"
+    },
+    {
+      "rel": "docs/specs/homepage_design_guidelines.md",
+      "top": "specs"
+    },
+    {
+      "rel": "docs/specs/INTERNAL_MCP_RELEASE.md",
+      "top": "specs"
+    },
+    {
+      "rel": "docs/specs/MCP_SPEC.md",
+      "top": "specs"
+    },
+    {
+      "rel": "docs/specs/METRICS_REQUIREMENTS.md",
+      "top": "specs"
+    },
+    {
+      "rel": "docs/specs/neotoma_color_palette.md",
+      "top": "specs"
+    },
+    {
+      "rel": "docs/specs/NONFUNCTIONAL_REQUIREMENTS.md",
+      "top": "specs"
+    },
+    {
+      "rel": "docs/specs/ONBOARDING_SPEC.md",
+      "top": "specs"
+    },
+    {
+      "rel": "docs/specs/PARQUET_MCP_RESOURCES_SPEC.md",
+      "top": "specs"
+    },
+    {
+      "rel": "docs/specs/TEST_PLAN.md",
+      "top": "specs"
+    },
+    {
+      "rel": "docs/specs/UI_SPEC.md",
+      "top": "specs"
+    },
+    {
+      "rel": "docs/subsystems/aauth_attestation.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/aauth_cli_attestation.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/aauth.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/accessibility.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/agent_attribution_integration.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/agent_capabilities.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/agent_feedback_pipeline.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/agentic_eval.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/auth.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/conversation_turn.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/deletion.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/entities.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/entity_merge.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/entity_snapshots.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/entity_submission.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/errors.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/events.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/feedback_neotoma_forwarder.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/guest_access_policy.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/i18n.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/ingestion/ingestion.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/ingestion/state_machines.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/interpretations.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/issues.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/markdown_mirror.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/observation_architecture.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/peer_sync.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/plans.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/privacy.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/record_types.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/reducer.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/relationships.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/release_notes.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/sandbox_deployment.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/schema_registry.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/schema_snapshots/agent_message/README.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/schema_snapshots/README.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/schema.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/search/search.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/sources.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/subscriptions.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/substrate_events.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/timeline_events.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/subsystems/vector_ops.md",
+      "top": "subsystems"
+    },
+    {
+      "rel": "docs/templates/issue_template.md",
+      "top": "templates"
+    },
+    {
+      "rel": "docs/templates/pr_template.md",
+      "top": "templates"
+    },
+    {
+      "rel": "docs/testing-instructions-init-env-fix.md",
+      "top": "testing-instructions-init-env-fix.md"
+    },
+    {
+      "rel": "docs/testing/automated_test_catalog.md",
+      "top": "testing"
+    },
+    {
+      "rel": "docs/testing/cli_command_coverage_review.md",
+      "top": "testing"
+    },
+    {
+      "rel": "docs/testing/fixtures_standard.md",
+      "top": "testing"
+    },
+    {
+      "rel": "docs/testing/integration_run_reports.md",
+      "top": "testing"
+    },
+    {
+      "rel": "docs/testing/manual_regression_checklist.md",
+      "top": "testing"
+    },
+    {
+      "rel": "docs/testing/ROUTE_COVERAGE_MATRIX.md",
+      "top": "testing"
+    },
+    {
+      "rel": "docs/testing/test_catalog_maintenance_rules.mdc",
+      "top": "testing"
+    },
+    {
+      "rel": "docs/testing/test_coverage_audit_summary.md",
+      "top": "testing"
+    },
+    {
+      "rel": "docs/testing/testing_standard.md",
+      "top": "testing"
+    },
+    {
+      "rel": "docs/testing/WHY_PARTIAL_ROUTE_COVERAGE.md",
+      "top": "testing"
+    },
+    {
+      "rel": "docs/ui/DESIGN_SYSTEM_UPDATE_SUMMARY.md",
+      "top": "ui"
+    },
+    {
+      "rel": "docs/ui/design_system.md",
+      "top": "ui"
+    },
+    {
+      "rel": "docs/ui/design_system/accessibility.md",
+      "top": "ui"
+    },
+    {
+      "rel": "docs/ui/design_system/authentication_components.md",
+      "top": "ui"
+    },
+    {
+      "rel": "docs/ui/design_system/billing_components.md",
+      "top": "ui"
+    },
+    {
+      "rel": "docs/ui/design_system/brand_alignment.md",
+      "top": "ui"
+    },
+    {
+      "rel": "docs/ui/design_system/color_palette.md",
+      "top": "ui"
+    },
+    {
+      "rel": "docs/ui/design_system/component_styles.md",
+      "top": "ui"
+    },
+    {
+      "rel": "docs/ui/design_system/dark_mode.md",
+      "top": "ui"
+    },
+    {
+      "rel": "docs/ui/design_system/data_visualization.md",
+      "top": "ui"
+    },
+    {
+      "rel": "docs/ui/design_system/empty_states.md",
+      "top": "ui"
+    },
+    {
+      "rel": "docs/ui/design_system/error_states.md",
+      "top": "ui"
+    },
+    {
+      "rel": "docs/ui/design_system/file_upload_components.md",
+      "top": "ui"
+    },
+    {
+      "rel": "docs/ui/design_system/future_considerations.md",
+      "top": "ui"
+    },
+    {
+      "rel": "docs/ui/design_system/iconography.md",
+      "top": "ui"
+    },
+    {
+      "rel": "docs/ui/design_system/icp_aesthetic_analysis.md",
+      "top": "ui"
+    },
+    {
+      "rel": "docs/ui/design_system/icp_preference_alignment.md",
+      "top": "ui"
+    },
+    {
+      "rel": "docs/ui/design_system/implementation_notes.md",
+      "top": "ui"
+    },
+    {
+      "rel": "docs/ui/design_system/loading_states.md",
+      "top": "ui"
+    },
+    {
+      "rel": "docs/ui/design_system/motion_and_animation.md",
+      "top": "ui"
+    },
+    {
+      "rel": "docs/ui/design_system/navigation_components.md",
+      "top": "ui"
+    },
+    {
+      "rel": "docs/ui/design_system/onboarding_components.md",
+      "top": "ui"
+    },
+    {
+      "rel": "docs/ui/design_system/responsive_design.md",
+      "top": "ui"
+    },
+    {
+      "rel": "docs/ui/design_system/search_components.md",
+      "top": "ui"
+    },
+    {
+      "rel": "docs/ui/design_system/settings_components.md",
+      "top": "ui"
+    },
+    {
+      "rel": "docs/ui/design_system/spacing_and_layout.md",
+      "top": "ui"
+    },
+    {
+      "rel": "docs/ui/design_system/style_guide.md",
+      "top": "ui"
+    },
+    {
+      "rel": "docs/ui/design_system/typography.md",
+      "top": "ui"
+    },
+    {
+      "rel": "docs/ui/design_system/visual_hierarchy.md",
+      "top": "ui"
+    },
+    {
+      "rel": "docs/ui/dsl_spec.md",
+      "top": "ui"
+    },
+    {
+      "rel": "docs/ui/patterns/dashboard.md",
+      "top": "ui"
+    },
+    {
+      "rel": "docs/ui/patterns/detail.md",
+      "top": "ui"
+    },
+    {
+      "rel": "docs/ui/patterns/list.md",
+      "top": "ui"
+    },
+    {
+      "rel": "docs/ui/patterns/navigation.md",
+      "top": "ui"
+    },
+    {
+      "rel": "docs/ui/patterns/settings.md",
+      "top": "ui"
+    },
+    {
+      "rel": "docs/ui/patterns/wizard.md",
+      "top": "ui"
+    },
+    {
+      "rel": "docs/ui/prototype_guide.md",
+      "top": "ui"
+    },
+    {
+      "rel": "docs/ui/shadcn_components.md",
+      "top": "ui"
+    },
+    {
+      "rel": "docs/ui/SHADCN_INTEGRATION_COMPLETE.md",
+      "top": "ui"
+    },
+    {
+      "rel": "docs/ui/style_guide_updates.md",
+      "top": "ui"
+    },
+    {
+      "rel": "docs/use_cases/agent_auth.md",
+      "top": "use_cases"
+    },
+    {
+      "rel": "docs/use_cases/cases.md",
+      "top": "use_cases"
+    },
+    {
+      "rel": "docs/use_cases/compliance.md",
+      "top": "use_cases"
+    },
+    {
+      "rel": "docs/use_cases/contracts.md",
+      "top": "use_cases"
+    },
+    {
+      "rel": "docs/use_cases/crm.md",
+      "top": "use_cases"
+    },
+    {
+      "rel": "docs/use_cases/crypto_engineering.md",
+      "top": "use_cases"
+    },
+    {
+      "rel": "docs/use_cases/customer_ops.md",
+      "top": "use_cases"
+    },
+    {
+      "rel": "docs/use_cases/diligence.md",
+      "top": "use_cases"
+    },
+    {
+      "rel": "docs/use_cases/financial_ops.md",
+      "top": "use_cases"
+    },
+    {
+      "rel": "docs/use_cases/government.md",
+      "top": "use_cases"
+    },
+    {
+      "rel": "docs/use_cases/healthcare.md",
+      "top": "use_cases"
+    },
+    {
+      "rel": "docs/use_cases/logistics.md",
+      "top": "use_cases"
+    },
+    {
+      "rel": "docs/use_cases/personal_data.md",
+      "top": "use_cases"
+    },
+    {
+      "rel": "docs/use_cases/portfolio.md",
+      "top": "use_cases"
+    },
+    {
+      "rel": "docs/use_cases/procurement.md",
+      "top": "use_cases"
+    },
+    {
+      "rel": "docs/use_cases/README.md",
+      "top": "use_cases"
+    },
+    {
+      "rel": "docs/use_cases/trading.md",
+      "top": "use_cases"
+    },
+    {
+      "rel": "docs/vocabulary/canonical_terms.md",
+      "top": "vocabulary"
+    }
+  ]
+}

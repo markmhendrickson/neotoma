@@ -19,8 +19,8 @@ test.describe("Entity List Component", () => {
     }
   });
 
-  test("should render entity list", async ({ page }) => {
-    await page.goto("/entities");
+  test("should render entity list", async ({ page, inspectorSpaUrl }) => {
+    await page.goto(`${inspectorSpaUrl}entities`);
     
     // Wait for page load
     await page.waitForLoadState("networkidle");
@@ -37,7 +37,7 @@ test.describe("Entity List Component", () => {
     await expect(list).toBeVisible();
   });
 
-  test("should paginate entity list", async ({ page }) => {
+  test("should paginate entity list", async ({ page, inspectorSpaUrl }) => {
     // Create test entities
     for (let i = 0; i < 15; i++) {
       const { data: entity } = await db
@@ -55,7 +55,7 @@ test.describe("Entity List Component", () => {
       }
     }
 
-    await page.goto("/entities");
+    await page.goto(`${inspectorSpaUrl}entities`);
     
     await page.waitForLoadState("networkidle");
     
@@ -81,7 +81,7 @@ test.describe("Entity List Component", () => {
     }
   });
 
-  test("should filter entity list by type", async ({ page }) => {
+  test("should filter entity list by type", async ({ page, inspectorSpaUrl }) => {
     // Create entities of different types
     const types = ["company", "person", "invoice"];
     
@@ -101,7 +101,7 @@ test.describe("Entity List Component", () => {
       }
     }
 
-    await page.goto("/entities");
+    await page.goto(`${inspectorSpaUrl}entities`);
     
     await page.waitForLoadState("networkidle");
     
@@ -134,7 +134,7 @@ test.describe("Entity List Component", () => {
     }
   });
 
-  test("should sort entity list", async ({ page }) => {
+  test("should sort entity list", async ({ page, inspectorSpaUrl }) => {
     // Create entities with different names
     const names = ["Alpha Company", "Beta Company", "Charlie Company"];
     
@@ -154,7 +154,7 @@ test.describe("Entity List Component", () => {
       }
     }
 
-    await page.goto("/entities");
+    await page.goto(`${inspectorSpaUrl}entities`);
     
     await page.waitForLoadState("networkidle");
     
@@ -183,8 +183,8 @@ test.describe("Entity List Component", () => {
     }
   });
 
-  test("should show empty state when no entities", async ({ page }) => {
-    await page.goto("/entities?user=empty-user");
+  test("should show empty state when no entities", async ({ page, inspectorSpaUrl }) => {
+    await page.goto(`${inspectorSpaUrl}entities?user=empty-user`);
     
     await page.waitForLoadState("networkidle");
     
@@ -196,14 +196,14 @@ test.describe("Entity List Component", () => {
     // May show empty state or just empty list
     const hasEmptyState = await emptyState.first().isVisible().catch(() => false);
     const hasList = await page.locator(
-      "[data-testid='entity-list'], .entity-list"
+      "[data-testid='entity-list'], .entity-list, table"
     ).isVisible().catch(() => false);
     
     expect(hasEmptyState || hasList).toBe(true);
   });
 
-  test("should handle loading state", async ({ page }) => {
-    await page.goto("/entities");
+  test("should handle loading state", async ({ page, inspectorSpaUrl }) => {
+    await page.goto(`${inspectorSpaUrl}entities`);
     
     // Loading indicator may be visible briefly
     const loading = page.locator(
@@ -221,7 +221,7 @@ test.describe("Entity List Component", () => {
     await expect(list).toBeVisible();
   });
 
-  test("should click entity to view details", async ({ page }) => {
+  test("should click entity to view details", async ({ page, inspectorSpaUrl }) => {
     // Create test entity
     const { data: entity } = await db
       .from("entities")
@@ -237,7 +237,7 @@ test.describe("Entity List Component", () => {
       createdEntityIds.push(entity.id);
     }
 
-    await page.goto("/entities");
+    await page.goto(`${inspectorSpaUrl}entities`);
     
     await page.waitForLoadState("networkidle");
     

@@ -58,7 +58,7 @@ Draft the supplement following the section pattern from `docs/developer/github_r
 - **Docs site & CI / tooling**: If applicable.
 - **Internal changes**: Refactors, architecture, dependency, test-only work.
 - **Fixes**: Bug fixes with user/operator impact.
-- **Tests and validation**: What validates confidence.
+- **Tests and validation**: What validates confidence. (Optional: for a committed Markdown test evidence file, run `npm run test:remote:critical:report` or `npm run test:integration:report`, then copy a redacted `.vitest/reports/*.md` into `docs/releases/in_progress/vX.Y.Z/` per [`docs/testing/integration_run_reports.md`](../../../docs/testing/integration_run_reports.md).)
 - **Breaking changes**: None, or list with migration notes.
 
 **Integrated supplement (mandatory for `/release`):** The narrative is always a **single release story** across committed history and the working tree. Walk the default compare range (commits not yet on `main`, plus any user override) **and** fold **all** material uncommitted and untracked work into **the same sections above**, written **as if that work were already committed** — same grouping and reader-facing tone as shipped commits. Do not isolate dirty work in a separate appendix (for example, do not use a standalone **Uncommitted changes pending inclusion** block as the primary description). If paths cannot ship under repo security or submodule policy, state that in **Breaking changes** or a one-line **Ship constraints** item inside the same structure.
@@ -84,6 +84,41 @@ Write for a human reader deciding whether to upgrade. Do not dump raw commit lis
 > "Confirm release **vX.Y.Z** with these notes? (yes / modify / cancel)"
 
 If the working tree was dirty when drafting, state that **execute** matches the preview only after that local work is committed (excluding forbidden paths); confirm whether the user intends that full scope or needs to narrow it before Step 4.
+
+### Step 3.5: Security review lane
+
+Run after preview is approved by the user, before Step 4. Sources: `.cursor/plans/pre-release_security_gates_44e01d74.plan.md`, `docs/security/threat_model.md`.
+
+1. **Classify the release diff:**
+   ```bash
+   npm run security:classify-diff -- --base <last-tag> --head HEAD --json
+   ```
+   If `sensitive=false`, this lane is informational; still write the gate artifact (Step 3.5.4) so the trail is consistent.
+
+2. **Run the static rules (G2):**
+   ```bash
+   npm run security:lint
+   ```
+   Errors are gating; warnings annotate. Resolve any `error` finding before continuing.
+
+3. **Run the topology auth matrix (G3) and confirm the protected-routes manifest is in sync:**
+   ```bash
+   npm run security:manifest:check
+   npm run test:security:auth-matrix
+   ```
+   If the manifest is out of date, run `npm run security:manifest:write` (this is allowed inside the release commit) and re-render the supplement.
+
+4. **Generate the AI review scaffold (G4):**
+   ```bash
+   npm run security:ai-review -- --tag vX.Y.Z --base <last-tag> --head HEAD
+   ```
+   Provider defaults to `cursor`. Set `NEOTOMA_AI_REVIEW_PROVIDER=claude|gpt|none` to override; `none` keeps the review fully manual.
+
+5. **Fill `docs/releases/in_progress/vX.Y.Z/security_review.md`:** Walk the adversarial prompt sections (alternate-path auth, proxy trust, local-dev widening, unauth public route, guest-access widening, AAuth downgrade). Record findings, suggested negative tests, residual risks, and a sign-off verdict (`yes` | `with-caveats` | `block`). `block` keeps the release on the lane.
+
+6. **Add a `Security hardening` section to the supplement** at `docs/releases/in_progress/vX.Y.Z/github_release_supplement.md` that links the security review file and any advisory under `docs/security/advisories/` opened or referenced by this release. When `classify-diff` was sensitive this section is mandatory; when not sensitive, write `No security-sensitive surfaces touched.` so the trail is explicit.
+
+Re-render the GitHub Release preview (`npm run -s release-notes:render`) so the supplement diff is reflected; STOP and re-confirm if the supplement changed materially.
 
 ### Step 4: Execute
 
@@ -140,7 +175,17 @@ After user confirms, run **every** step below in order through **npm publish and
    From the directory that owns the published `package.json` (repo or workspace root per your monorepo layout):
 
    - **Registry auth:** If `npm publish` fails for auth or the session is stale, run `npm login` in an interactive terminal when needed.
-   - **Web login URL (agent-assisted):** When `npm login` prints `Login at: https://www.npmjs.com/login?...`, an agent with shell access may parse that URL from the CLI or terminal transcript and run `open '<url>'` on macOS or `xdg-open '<url>'` on Linux so the default browser loads the same page pressing Enter would open. **Only** use URLs that clearly come from official `npm` output for `registry.npmjs.org` / `npmjs.com`; prefer explicit user confirmation before opening browser or running `open`/`xdg-open`. After sign-in completes in the browser, return to the terminal and continue the release (including OTP if 2FA prompts for `npm publish --otp=...`).
+   - **Web login URL (agent-assisted):** When `npm login` prints `Login at: https://www.npmjs.com/login?...`, an agent with shell access may parse that URL from the CLI or terminal transcript and run `open '<url>'` on macOS or `xdg-open '<url>'` on Linux so the default browser loads the same page pressing Enter would open. **Only** use URLs that clearly come from official `npm` output for `registry.npmjs.org` / `npmjs.com`; prefer explicit user confirmation before opening browser or running `open`/`xdg-open`.
+
+   **npm web-login checkpoint (mandatory — do not skip):** Browser sign-in does **not** prove the same shell that will run `npm publish` has a valid token. After any web-login assist **or** when the user says they finished signing in:
+
+   1. **Immediately** run `npm whoami` in the **same** environment you use for `npm publish` (same repo root, same `HOME` / `~/.npmrc`).
+   2. **If `npm whoami` succeeds:** State clearly that the session is authenticated, then run `npm publish` (and `npm publish --otp=<code>` when 2FA applies). Do not advance to sandbox until publish and registry verification succeed.
+   3. **If `npm whoami` still fails (`E401` / unauthorized) or `npm login` exited before completing (for example npm printed `Exit handler never called`):** You **must** end the user-visible turn with an explicit handoff that includes all of the following — do not assume the user knows the next step:
+      - Explain that the browser login authorized the **browser**, not necessarily the **agent shell** (or that the CLI session aborted before writing a token).
+      - Give **copy-paste** commands for the operator to finish auth where `npm publish` will run (their own Terminal with the repo as cwd, or fixing `~/.npmrc` / `NPM_TOKEN` for CI-style shells).
+      - Ask them to reply **`ready`** (or confirm they ran `npm publish` locally and the registry shows `X.Y.Z`) so the next turn **retries `npm whoami` then `npm publish` immediately** without waiting for another vague ping.
+   4. **If the user message is only “I signed in” / “done” in the browser:** Treat that as a signal to run the checkpoint (step 1), not as permission to end the release thread without step 2 or step 3 text above.
 
    ```bash
    npm publish
@@ -174,8 +219,15 @@ After user confirms, run **every** step below in order through **npm publish and
 
 ### Step 5: Post-Release
 
-1. Move supplement: `mv docs/releases/in_progress/vX.Y.Z docs/releases/completed/vX.Y.Z` (if directory was created).
-2. Report summary: version, GitHub Release URL, npm package URL (must reflect a successful **`npm publish`** when the release included npm), and sandbox URL/version verification.
+1. **Run the deployed protected-route probes (G5):**
+   ```bash
+   NEOTOMA_PROBE_HOSTS="https://sandbox.neotoma.io
+   https://neotoma.markmhendrickson.com" \
+     bash scripts/security/deployed_probes.sh --tag vX.Y.Z
+   ```
+   The probe writes `docs/releases/in_progress/vX.Y.Z/post_deploy_security_probes.md` and exits non-zero on any unexpected status. A failure here BLOCKS release completion: open an advisory under `docs/security/advisories/`, hotfix the regression, and re-run before declaring done.
+2. Move supplement: `mv docs/releases/in_progress/vX.Y.Z docs/releases/completed/vX.Y.Z` (if directory was created); the security review and probe report move with it.
+3. Report summary: version, GitHub Release URL, npm package URL (must reflect a successful **`npm publish`** when the release included npm), sandbox URL/version verification, and the probe report verdict (passes / failures).
 
 ## Submodule Mode
 
@@ -195,6 +247,7 @@ If the user says `/release foundation` (or another submodule name):
 - Do not merge or tag without user approval of the preview.
 - For a standard `/release`, **always** run **`npm publish`** after `gh release create` unless the user explicitly confirmed GitHub-only / no registry.
 - For a standard `/release`, **always** deploy `sandbox.neotoma.io` with `flyctl deploy -c fly.sandbox.toml --remote-only` and verify the live sandbox version unless the user explicitly confirmed no sandbox.
+- For a standard `/release`, **always** run Step 3.5 (Security review lane) before Step 4 and Step 5 (Deployed probes) before declaring complete; the supplement MUST contain a `Security hardening` section linking `docs/releases/in_progress/<TAG>/security_review.md` (and `post_deploy_security_probes.md` after Step 5).
 - If `docs/developer/github_release_process.md` exists, follow its template and render pipeline.
 
 ## Agent Instructions
@@ -215,3 +268,6 @@ If the user says `/release foundation` (or another submodule name):
 - Using only `git log --oneline` as the GitHub Release body
 - Ending execute after the GitHub Release without **`npm publish`** when the user confirmed a normal (npm-included) release
 - Ending execute after **`npm publish`** without deploying and verifying `sandbox.neotoma.io` when the user confirmed a normal sandbox-included release
+- Ending the execute turn right after npm web-login / “I signed in” **without** running the **npm web-login checkpoint** (`npm whoami` → publish or explicit `ready` handoff with copy-paste commands)
+- Skipping Step 3.5 (Security review lane) before Step 4 when `npm run security:classify-diff` reports the release diff as sensitive, or omitting the supplement's `Security hardening` section
+- Declaring a release complete without running Step 5 deployed probes (`bash scripts/security/deployed_probes.sh --tag vX.Y.Z`) and recording the report under `docs/releases/in_progress/vX.Y.Z/post_deploy_security_probes.md`

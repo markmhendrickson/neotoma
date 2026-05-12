@@ -57,7 +57,7 @@ Same `NEOTOMA_HOOK_STATE_DIR` / `NEOTOMA_HOOK_FEEDBACK_HINT` / `NEOTOMA_HOOK_FEE
 
 ## Failure-signal accumulator
 
-The adapter reimplements the same Neotoma-relevant tool detection, PII scrub, error-class classifier, and per-`(tool, error_class)` counter described in the [Cursor hook docs](./cursor.md#failure-signal-accumulator) so each harness package stays runtime-light. `PostToolUse` writes a `tool_invocation_failure` entity for Neotoma-relevant errors; `UserPromptSubmit` surfaces a one-shot `Neotoma hook note: …` informational line via `additionalContext` once the threshold trips. The hook NEVER calls `submit_feedback` itself.
+The adapter reimplements the same Neotoma-relevant tool detection, PII scrub, error-class classifier, and per-`(tool, error_class)` counter described in the [Cursor hook docs](./cursor.md#failure-signal-accumulator) so each harness package stays runtime-light. `PostToolUse` writes a `tool_invocation_failure` entity for Neotoma-relevant errors; `UserPromptSubmit` surfaces a one-shot `Neotoma hook note: …` informational line via `additionalContext` once the threshold trips. The hook NEVER calls `submit_issue` itself.
 
 Note: the optional Feature B surface (`conversation_turn` per-turn entity, small-model reminder injection, stop-hook compliance follow-up) is currently only wired in the cursor and opencode harnesses; the SDK adapter intentionally stays narrow until the SDK exposes the equivalent lifecycle hooks.
 

@@ -51,4 +51,17 @@ describe("Entity query schema validation", () => {
     });
     expect(parsed.success).toBe(true);
   });
+
+  it("accepts submitted_at sort for entities/query", () => {
+    const parsed = EntitiesQueryRequestSchema.safeParse({
+      entity_type: "issue",
+      sort_by: "submitted_at",
+      sort_order: "desc",
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.sort_by).toBe("submitted_at");
+      expect(parsed.data.sort_order).toBe("desc");
+    }
+  });
 });

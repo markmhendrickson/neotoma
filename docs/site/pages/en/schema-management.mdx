@@ -1,0 +1,97 @@
+Schema constraints are a core invariant: malformed writes should fail at store time, not silently degrade state quality. This page covers the practical CLI workflows.
+
+## You don't have to define a schema first
+
+Neotoma infers schemas from your first write. Store any entity with a descriptive `entity_type` and whatever fields the data implies — Neotoma registers a schema from that observation, and every subsequent field addition bumps a minor version (1.0.0 → 1.1.0) automatically. Fields the active schema doesn't recognize land in a `raw_fragments` layer so nothing is silently dropped, and breaking changes (removing or retyping a field) require an explicit major version bump (1.x → 2.0) that keeps every historical observation readable.
+
+If you're evaluating Neotoma and don't want to commit, the [Test safely guide](/non-destructive-testing) walks through how to install in shadow mode, let your agent populate schemas from your real data, and walk away without affecting anything in your current stack.
+
+## List and inspect schema types
+
+```
+# List known entity types
+neotoma schemas list
+
+# Inspect one schema
+neotoma schemas get contact
+```
+
+## Store data with schema validation
+
+Store operations validate payloads against the target schema. If required fields are missing or have unexpected types, the observation is still stored but a warning is recorded in the raw fragments layer, so no data is silently lost or misclassified.
+
+```
+# Valid write
+neotoma store --json='[{"entity_type":"contact","name":"Ana Rivera","email":"ana@acme.com"}]'
+
+# Invalid write (example: wrong type for age)
+neotoma store --json='[{"entity_type":"person","name":"Ana Rivera","age":"thirty"}]'
+```
+
+## Evolve schemas incrementally
+
+Add new fields without breaking existing workflows. For larger changes, analyze candidates first, then register updates intentionally.
+
+```
+# Analyze candidate fields from observed data
+neotoma schemas analyze-candidates --entity-type contact
+
+# Recommend schema updates
+neotoma schemas recommendations --entity-type contact
+
+# Register or update schema
+neotoma schemas register --file ./contact_schema.json
+```
+
+## Operational guidance
+
+<ul className="list-none pl-0 space-y-2 mb-6">
+  <li className="text-[15px] leading-7 flex items-start gap-2">
+    <span className="text-emerald-500 mt-0.5 shrink-0" aria-hidden>
+      &rarr;
+    </span>
+    Prefer additive schema changes over destructive renames.
+  </li>
+  <li className="text-[15px] leading-7 flex items-start gap-2">
+    <span className="text-emerald-500 mt-0.5 shrink-0" aria-hidden>
+      &rarr;
+    </span>
+    Use versioned changelogs for schema edits with rationale.
+  </li>
+  <li className="text-[15px] leading-7 flex items-start gap-2">
+    <span className="text-emerald-500 mt-0.5 shrink-0" aria-hidden>
+      &rarr;
+    </span>
+    Test representative payloads before changing production schema.
+  </li>
+  <li className="text-[15px] leading-7 flex items-start gap-2">
+    <span className="text-emerald-500 mt-0.5 shrink-0" aria-hidden>
+      &rarr;
+    </span>
+    Treat schema updates as state-model changes, not UI tweaks.
+  </li>
+</ul>
+
+<p className="text-[14px] leading-6 text-muted-foreground">
+  See{" "}
+  <MdxI18nLink to="/schemas" className="text-foreground underline underline-offset-2 hover:no-underline">
+    schemas overview
+  </MdxI18nLink>
+  ,{" "}
+  <MdxI18nLink to="/schemas/versioning" className="text-foreground underline underline-offset-2 hover:no-underline">
+    versioning & evolution
+  </MdxI18nLink>
+  ,{" "}
+  <MdxI18nLink to="/memory-guarantees#schema-constraints" className="text-foreground underline underline-offset-2 hover:no-underline">
+    schema constraints
+  </MdxI18nLink>
+  ,{" "}
+  <MdxI18nLink to="/non-destructive-testing" className="text-foreground underline underline-offset-2 hover:no-underline">
+    Test safely
+  </MdxI18nLink>
+  , and{" "}
+  <MdxI18nLink to="/architecture" className="text-foreground underline underline-offset-2 hover:no-underline">
+    architecture
+  </MdxI18nLink>
+  .
+</p>

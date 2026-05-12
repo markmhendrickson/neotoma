@@ -6,27 +6,27 @@ import {
 import type { Diagnosis } from "../../packages/client/src/diagnose.js";
 
 describe("renderTurnReport", () => {
-  it("renders a Created group with emoji, entity_type, and inspector link", () => {
+  it("renders a Created group with linked entity types", () => {
     const out = renderTurnReport({
       created: [
         { label: "Follow up on invoice", entityType: "task", entityId: "ent_task1" },
         { label: "Ana Pérez", entityType: "contact", entityId: "ent_contact1" },
       ],
-      inspectorBaseUrl: "http://localhost:5175",
+      inspectorBaseUrl: "http://localhost:3180",
     });
-    expect(out).toContain("🧠 Neotoma");
+    expect(out).toContain("## 🧠 Neotoma");
     expect(out).toContain("Created (2)");
     expect(out).toContain(
-      "✅ Follow up on invoice ([inspect](http://localhost:5175/entities/ent_task1)) (`task`)"
+      "✅ Follow up on invoice ([task](http://localhost:3180/inspector/entities/ent_task1))"
     );
     expect(out).toContain(
-      "👤 Ana Pérez ([inspect](http://localhost:5175/entities/ent_contact1)) (`contact`)"
+      "👤 Ana Pérez ([contact](http://localhost:3180/inspector/entities/ent_contact1))"
     );
     expect(out).not.toContain("Updated");
-    expect(out).not.toContain("Reads");
+    expect(out).not.toContain("Retrieved");
   });
 
-  it("renders all substantive groups plus the Conversation bookkeeping group", () => {
+  it("renders a linked conversation heading and all substantive groups", () => {
     const out = renderTurnReport({
       conversation: {
         conversation: { label: "Chat thread", entityType: "conversation", entityId: "ent_conv" },
@@ -44,33 +44,40 @@ describe("renderTurnReport", () => {
       created: [{ label: "A", entityType: "task", entityId: "ent_a" }],
       updated: [{ label: "B", entityType: "contact", entityId: "ent_b" }],
       retrieved: [{ label: "C", entityType: "event", entityId: "ent_c" }],
+      inspectorBaseUrl: "http://localhost:3180",
     });
-    expect(out).toContain("Conversation (3)");
-    expect(out).toContain("Reads (1)");
+    expect(out).toContain(
+      "## 🧠 Neotoma — [Chat thread](http://localhost:3180/inspector/conversations/ent_conv)"
+    );
+    expect(out).toContain("Retrieved (1)");
     expect(out).toContain("Created (1)");
     expect(out).toContain("Updated (1)");
-    expect(out).toContain("/entities/ent_conv");
-    expect(out).toContain("/entities/ent_user");
-    expect(out).toContain("/entities/ent_asst");
-    expect(out).toContain("🧵 Chat thread");
-    expect(out).toContain("💬 user message turn 1");
+    expect(out).toContain("📅 C ([event](http://localhost:3180/inspector/entities/ent_c))");
+    expect(out).toContain("✅ A ([task](http://localhost:3180/inspector/entities/ent_a))");
+    expect(out).toContain("👤 B ([contact](http://localhost:3180/inspector/entities/ent_b))");
+    expect(out).not.toContain("Conversation (");
   });
 
-  it("renders the Conversation group only when no substantive work happened", () => {
+  it("renders only the linked heading when no substantive work happened", () => {
     const out = renderTurnReport({
       conversation: {
+        conversation: { label: "Chat thread", entityType: "conversation", entityId: "ent_conv" },
         userMessage: {
           label: "user message turn 4",
           entityType: "agent_message",
           entityId: "ent_u4",
         },
       },
+      inspectorBaseUrl: "http://localhost:3180",
     });
-    expect(out).toContain("Conversation (1)");
-    expect(out).toContain("No other durable facts read or written this turn.");
-    expect(out).not.toContain("Reads (");
+    expect(out).toContain(
+      "## 🧠 Neotoma — [Chat thread](http://localhost:3180/inspector/conversations/ent_conv)"
+    );
+    expect(out).toContain("No durable facts read or written this turn.");
+    expect(out).not.toContain("Retrieved (");
     expect(out).not.toContain("Created (");
     expect(out).not.toContain("Updated (");
+    expect(out).not.toContain("Conversation (");
   });
 
   it("falls back to a fully empty state when nothing at all happened", () => {
@@ -122,11 +129,11 @@ describe("renderTurnReport", () => {
           severity: "warning",
         },
       ],
-      inspectorBaseUrl: "http://localhost:5175",
+      inspectorBaseUrl: "http://localhost:3180",
     });
     expect(out).toContain("Repairs (1)");
     expect(out).toContain(
-      "🟡 Backfilled missing user message ([inspect](http://localhost:5175/entities/ent_repair1)) (`neotoma_repair`)"
+      "🟡 Backfilled missing user message ([neotoma_repair](http://localhost:3180/inspector/entities/ent_repair1))"
     );
   });
 
@@ -135,15 +142,16 @@ describe("renderTurnReport", () => {
       created: [
         { label: "Custom", entityType: "task", emoji: "🚀", entityId: "ent_custom" },
       ],
+      inspectorBaseUrl: "http://localhost:3180",
     });
-    expect(out).toContain("🚀 Custom ([inspect](");
+    expect(out).toContain("🚀 Custom ([task](http://localhost:3180/inspector/entities/ent_custom))");
   });
 
   it("renders (no id — see Issues) when an entity lacks an entity_id", () => {
     const out = renderTurnReport({
       created: [{ label: "Orphan", entityType: "task" }],
     });
-    expect(out).toContain("✅ Orphan (no id — see Issues) (`task`)");
+    expect(out).toContain("✅ Orphan (no id — see Issues)");
   });
 });
 
@@ -172,24 +180,39 @@ describe("resolveInspectorBaseUrl", () => {
     }
   });
 
-  it("falls back to NEOTOMA_FRONTEND_URL, then default", () => {
+  it("falls back to NEOTOMA_BASE_URL, then NEOTOMA_FRONTEND_URL, then default", () => {
     const prevInspector = process.env.NEOTOMA_INSPECTOR_URL;
+    const prevBase = process.env.NEOTOMA_BASE_URL;
     const prevFrontend = process.env.NEOTOMA_FRONTEND_URL;
     delete process.env.NEOTOMA_INSPECTOR_URL;
+    process.env.NEOTOMA_BASE_URL = "http://localhost:3180/";
+    try {
+      expect(resolveInspectorBaseUrl()).toBe("http://localhost:3180");
+    } finally {
+      if (prevBase === undefined) delete process.env.NEOTOMA_BASE_URL;
+      else process.env.NEOTOMA_BASE_URL = prevBase;
+    }
+
+    delete process.env.NEOTOMA_INSPECTOR_URL;
+    delete process.env.NEOTOMA_BASE_URL;
     process.env.NEOTOMA_FRONTEND_URL = "http://frontend.example";
     try {
       expect(resolveInspectorBaseUrl()).toBe("http://frontend.example");
     } finally {
       if (prevInspector !== undefined) process.env.NEOTOMA_INSPECTOR_URL = prevInspector;
+      if (prevBase !== undefined) process.env.NEOTOMA_BASE_URL = prevBase;
       if (prevFrontend === undefined) delete process.env.NEOTOMA_FRONTEND_URL;
       else process.env.NEOTOMA_FRONTEND_URL = prevFrontend;
     }
 
+    const prevBase2 = process.env.NEOTOMA_BASE_URL;
     const prev2 = process.env.NEOTOMA_FRONTEND_URL;
+    delete process.env.NEOTOMA_BASE_URL;
     delete process.env.NEOTOMA_FRONTEND_URL;
     try {
-      expect(resolveInspectorBaseUrl()).toBe("http://localhost:5175");
+      expect(resolveInspectorBaseUrl()).toBe("http://localhost:3080");
     } finally {
+      if (prevBase2 !== undefined) process.env.NEOTOMA_BASE_URL = prevBase2;
       if (prev2 !== undefined) process.env.NEOTOMA_FRONTEND_URL = prev2;
     }
   });

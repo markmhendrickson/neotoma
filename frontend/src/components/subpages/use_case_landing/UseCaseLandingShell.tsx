@@ -983,7 +983,14 @@ function ArchDiagram({ config, t }: { config: VerticalArchConfig; t: VTheme }) {
 /*  Main shell                                                         */
 /* ------------------------------------------------------------------ */
 
-export function UseCaseLandingShell({ config }: { config: UseCaseConfig }) {
+export function UseCaseLandingShell({
+  config,
+  /** When true, skip `SeoHead`; parent `MdxSitePage` with `shell="bare"` supplies SEO. */
+  mdxShell = false,
+}: {
+  config: UseCaseConfig;
+  mdxShell?: boolean;
+}) {
   const t = T[config.accentColor];
   const BadgeIcon = config.badgeIcon;
 
@@ -1011,7 +1018,7 @@ export function UseCaseLandingShell({ config }: { config: UseCaseConfig }) {
 
   return (
     <>
-      <SeoHead />
+      {!mdxShell ? <SeoHead /> : null}
       <div
         ref={scrollContainerRef}
         data-site-header-scroll-root

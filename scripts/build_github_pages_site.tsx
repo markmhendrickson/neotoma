@@ -9,7 +9,7 @@
  *      indexable pages). Pages with "index,follow" are automatically
  *      included in the sitemap and prerendered as static HTML.
  *   3. Run `npm run validate:routes` to confirm parity.
- *   4. After building (`npm run build:pages:site`), run
+ *   4. After building (`npm run build:site:pages`), run
  *      `npm run validate:site-export` to verify the HTML was emitted.
  *
  * CI runs both validations before deploying; a mismatch blocks the deploy.

@@ -59,6 +59,18 @@ export interface MirrorReport {
   eligible_for_offer: boolean;
 }
 
+export type DataDirRiskCode =
+  | "icloud_drive"
+  | "macos_synced_desktop_or_documents"
+  | "prior_sqlite_repair_artifacts";
+
+export interface DataDirRisk {
+  code: DataDirRiskCode;
+  severity: "warn";
+  message: string;
+  suggested_action: string;
+}
+
 /** Consolidated doctor snapshot. */
 export interface DoctorReport {
   neotoma: {
@@ -78,6 +90,8 @@ export interface DoctorReport {
     data_dir: string;
     db_exists: boolean;
     initialized: boolean;
+    risks: DataDirRisk[];
+    suggested_safe_data_dir: string | null;
   };
   api: {
     running: boolean;
@@ -105,6 +119,76 @@ export interface DoctorReport {
     | "offer-hooks"
     | "offer-mirror"
     | "ready";
+}
+
+function isPathWithin(parent: string, candidate: string): boolean {
+  const relative = path.relative(path.resolve(parent), path.resolve(candidate));
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+export function suggestSafeDataDir(homeDir = os.homedir()): string | null {
+  if (process.platform !== "darwin") return null;
+  return path.join(homeDir, "Library", "Application Support", "neotoma", "data");
+}
+
+export function detectDataDirRisks(params: {
+  dataDir: string;
+  homeDir?: string;
+  platform?: NodeJS.Platform;
+  hasPriorRepairArtifacts?: boolean;
+}): DataDirRisk[] {
+  const dataDir = path.resolve(params.dataDir);
+  const homeDir = params.homeDir ?? os.homedir();
+  const platform = params.platform ?? process.platform;
+  const risks: DataDirRisk[] = [];
+  const suggestedDir = suggestSafeDataDir(homeDir) ?? path.join(homeDir, "neotoma", "data");
+
+  if (dataDir.includes(`${path.sep}Library${path.sep}Mobile Documents${path.sep}`)) {
+    risks.push({
+      code: "icloud_drive",
+      severity: "warn",
+      message: "Data directory is inside iCloud Drive, which can sync SQLite DB/WAL files while Neotoma writes.",
+      suggested_action: `Move NEOTOMA_DATA_DIR to a local-only path such as ${suggestedDir}.`,
+    });
+  }
+
+  if (platform === "darwin") {
+    const documentsDir = path.join(homeDir, "Documents");
+    const desktopDir = path.join(homeDir, "Desktop");
+    if (isPathWithin(documentsDir, dataDir) || isPathWithin(desktopDir, dataDir)) {
+      risks.push({
+        code: "macos_synced_desktop_or_documents",
+        severity: "warn",
+        message:
+          "Data directory is under macOS Documents/Desktop, which is commonly iCloud-synced and higher risk for SQLite sidecar files.",
+        suggested_action: `Use neotoma storage set-data-dir "${suggestedDir}" --move-db-files after stopping Neotoma.`,
+      });
+    }
+  }
+
+  if (params.hasPriorRepairArtifacts) {
+    risks.push({
+      code: "prior_sqlite_repair_artifacts",
+      severity: "warn",
+      message: "Data directory contains prior SQLite repair/swap artifacts, indicating previous corruption or recovery.",
+      suggested_action: "Run neotoma storage recover-db for dev and prod after incidents, and keep DBs on local-only storage.",
+    });
+  }
+
+  return risks;
+}
+
+async function hasPriorSqliteRepairArtifacts(dataDir: string): Promise<boolean> {
+  const directMarkers = ["repair_backups", "repair_swaps", "recover-errors.log"];
+  for (const marker of directMarkers) {
+    if (existsSync(path.join(dataDir, marker))) return true;
+  }
+  try {
+    const entries = await fs.readdir(dataDir);
+    return entries.some((entry) => entry.startsWith("db_corrupt_before_swap_"));
+  } catch {
+    return false;
+  }
 }
 
 function safeExec(cmd: string, args: string[]): string | null {
@@ -350,6 +434,11 @@ export async function runDoctor(opts: RunDoctorOptions = {}): Promise<DoctorRepo
   const dbCandidates = [path.join(dataDir, "neotoma.db"), path.join(dataDir, "neotoma.prod.db")];
   const dbExists = dbCandidates.some((p) => existsSync(p));
   const initialized = dbExists && existsSync(configDir);
+  const priorRepairArtifacts = await hasPriorSqliteRepairArtifacts(dataDir);
+  const risks = detectDataDirRisks({
+    dataDir,
+    hasPriorRepairArtifacts: priorRepairArtifacts,
+  });
 
   // API running?
   let apiRunning = false;
@@ -446,6 +535,8 @@ export async function runDoctor(opts: RunDoctorOptions = {}): Promise<DoctorRepo
       data_dir: dataDir,
       db_exists: dbExists,
       initialized,
+      risks,
+      suggested_safe_data_dir: risks.length > 0 ? suggestSafeDataDir() : null,
     },
     api: {
       running: apiRunning,

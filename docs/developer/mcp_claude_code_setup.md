@@ -46,7 +46,7 @@ npm run build:server
 
 This compiles TypeScript to JavaScript in the `dist/` directory.
 
-**Note:** For active development, use `npm run dev:api` to auto-rebuild on changes.
+**Note:** For active development, use `npm run dev:server:tunnel` to run the server and tunnel together.
 
 ## Step 2: Configure Environment Variables
 
@@ -438,7 +438,7 @@ If you're actively developing the MCP server:
 
 1. **Run automatic rebuild in watch mode:**
    ```bash
-   npm run dev:api
+   npm run dev:server:tunnel
    ```
    This runs `tsc --watch` and automatically rebuilds `dist/` on file changes.
 
@@ -464,7 +464,7 @@ If you use Claude Code from different machines or profiles:
 
 3. **For auto-rebuild** (development):
    ```bash
-   npm run dev:api
+   npm run dev:server:tunnel
    ```
    Keep this running to watch for changes.
 
@@ -497,7 +497,7 @@ All instances will share the same Neotoma database (local SQLite).
 npm run build:server
 
 # Auto-rebuild on code changes (for development)
-npm run dev:api
+npm run dev:server:tunnel
 
 # Get node path
 which node  # macOS/Linux
@@ -516,4 +516,3 @@ npm test
 - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
 
 **Note:** Claude Code runs the MCP server as a child process, communicating via stdin/stdout using the Model Context Protocol JSON-RPC format. This localhost architecture ensures privacy and user control.
-

@@ -11,41 +11,41 @@
     --card-foreground: 28 22% 18%;       /* Warm dark brown */
     --popover: 38 22% 98%;               /* Warm cream */
     --popover-foreground: 28 22% 18%;    /* Warm dark brown */
-    
+
     /* Primary - reddish-brown (brick) */
     --primary: 12 48% 38%;                /* Brick / terracotta */
     --primary-foreground: 0 0% 100%;      /* White text on primary */
-    
+
     /* Secondary - warm tan */
     --secondary: 35 18% 94%;              /* Light warm grey */
     --secondary-foreground: 28 22% 18%;   /* Warm dark brown */
-    
+
     /* Muted - warm beige/grey */
     --muted: 35 18% 94%;                 /* Light warm grey */
     --muted-foreground: 28 14% 44%;      /* Warm grey-brown */
-    
+
     /* Accent - subtle teal accent */
     --accent: 35 18% 92%;                 /* Slightly deeper warm grey */
     --accent-foreground: 28 22% 18%;     /* Warm dark brown */
-    
+
     /* Status Colors (warm-aligned) */
     --destructive: 0 65% 50%;             /* Softer red */
     --destructive-foreground: 0 0% 100%;  /* White text */
     --success: 152 45% 40%;              /* Muted green */
     --warning: 32 85% 48%;               /* Warm amber */
     --info: 175 35% 42%;                  /* Teal accent */
-    
+
     /* Borders and Dividers - warm grey */
     --border: 32 18% 88%;                /* Warm grey borders */
     --input: 32 18% 88%;                 /* Warm grey input */
     --divider: 30 16% 82%;               /* Warm dividers */
-    
+
     /* Ring (focus) - brick to match primary */
     --ring: 12 48% 38%;                  /* Brick */
-    
+
     /* Border Radius */
     --radius: 0.5rem;
-    
+
     /* Sidebar - warm, tactile */
     --sidebar-background: 35 20% 96%;     /* Light warm grey */
     --sidebar-foreground: 28 22% 18%;     /* Warm dark brown */
@@ -55,7 +55,7 @@
     --sidebar-accent-foreground: 28 22% 18%; /* Warm dark brown */
     --sidebar-border: 32 18% 88%;         /* Warm grey borders */
     --sidebar-ring: 12 48% 38%;           /* Brick */
-    
+
     /* Entity Type Colors */
     --entity-person: 239 84% 67%;         /* #6366F1 - Indigo */
     --entity-company: 258 90% 66%;        /* #8B5CF6 - Purple */
@@ -72,38 +72,38 @@
     --card-foreground: 210 40% 95%;       /* #F1F5F9 - Near-white */
     --popover: 222 47% 11%;               /* #0F172A - Deep slate */
     --popover-foreground: 210 40% 95%;   /* #F1F5F9 - Near-white */
-    
+
     /* Primary (Trust/Action) */
     --primary: 217 91% 60%;               /* #3B82F6 - Brighter blue */
     --primary-foreground: 0 0% 100%;      /* #FFFFFF - White text */
-    
+
     /* Secondary */
     --secondary: 217 33% 25%;             /* #334155 - Tertiary background */
     --secondary-foreground: 210 40% 95%; /* #F1F5F9 - Near-white */
-    
+
     /* Muted */
     --muted: 217 33% 25%;                 /* #334155 - Tertiary background */
     --muted-foreground: 215 20% 65%;      /* #94A3B8 - Secondary text */
-    
+
     /* Accent */
     --accent: 217 33% 25%;                /* #334155 - Tertiary background */
     --accent-foreground: 210 40% 95%;    /* #F1F5F9 - Near-white */
-    
+
     /* Status Colors (Dark Mode) */
     --destructive: 0 72% 51%;             /* #F87171 - Softer red */
     --destructive-foreground: 0 0% 100%;  /* #FFFFFF - White text */
     --success: 142 76% 36%;               /* #22C55E - Brighter green */
     --warning: 43 96% 56%;                /* #FBBF24 - Brighter amber */
     --info: 213 94% 68%;                  /* #60A5FA - Lighter blue */
-    
+
     /* Borders and Dividers */
     --border: 217 33% 25%;                /* #334155 - Subtle slate borders */
     --input: 217 33% 25%;                 /* #334155 - Input borders */
     --divider: 215 20% 35%;               /* #475569 - Dividers */
-    
+
     /* Ring (focus) */
     --ring: 217 91% 60%;                  /* #3B82F6 - Primary blue */
-    
+
     /* Sidebar */
     --sidebar-background: 217 33% 18%;     /* #1E293B - Slightly lighter (matches secondary) */
     --sidebar-foreground: 210 40% 95%;    /* #F1F5F9 - Near-white */
@@ -113,7 +113,7 @@
     --sidebar-accent-foreground: 210 40% 95%; /* #F1F5F9 - Near-white */
     --sidebar-border: 217 33% 25%;         /* #334155 - Subtle slate borders */
     --sidebar-ring: 217 91% 60%;          /* #3B82F6 - Primary blue */
-    
+
     /* Entity Type Colors (same in dark mode) */
     --entity-person: 239 84% 67%;         /* #6366F1 - Indigo */
     --entity-company: 258 90% 66%;        /* #8B5CF6 - Purple */
@@ -131,12 +131,12 @@
     --doc-secondary: 28 14% 44%;            /* Warm grey-brown */
     --doc-border: 32 18% 88%;               /* Warm grey borders */
     --doc-code-bg: 35 18% 92%;              /* Warm light grey - code blocks */
-    
+
     /* Primary - brick / terracotta */
     --doc-primary: 12 48% 38%;             /* Brick */
     --doc-primary-hover: 12 48% 30%;       /* Darker brick on hover */
     --doc-primary-foreground: 0 0% 100%;   /* White text on primary */
-    
+
     /* Minimal border radius */
     --doc-radius-minimal: 2px;
     --doc-radius-default: 4px;
@@ -149,7 +149,7 @@
     --doc-secondary: 215 16% 47%;          /* #64748B - Gray for secondary text */
     --doc-border: 217 33% 24%;             /* #1E293B - Subtle borders */
     --doc-code-bg: 217 33% 17%;            /* #1E293B - Code block background */
-    
+
     /* Primary action color - brighter blue for visibility */
     --doc-primary: 217 91% 60%;            /* #3B82F6 - Brighter blue */
     --doc-primary-hover: 217 91% 52%;      /* #2563EB - Darker blue on hover */
@@ -288,6 +288,34 @@
       inset 0 1px 0 rgba(255, 255, 255, 0.42),
       inset 0 0 0 1px rgba(60, 34, 16, 0.04);
   }
+  /**
+   * MDX site pages (`MdxSitePage`): match doc typography and code blocks without repeating
+   * Tailwind on every fence in `docs/site/pages`.
+   */
+  .mdx-site-page-content {
+    @apply text-[15px] leading-7 text-foreground;
+  }
+  .mdx-site-page-content h2 {
+    @apply text-[18px] font-medium tracking-[-0.01em] mt-8 mb-3 text-foreground;
+  }
+  .mdx-site-page-content h3 {
+    @apply text-[16px] font-medium mt-4 mb-2 text-foreground;
+  }
+  .mdx-site-page-content p {
+    @apply mb-4;
+  }
+  .mdx-site-page-content li {
+    @apply mb-1;
+  }
+  .mdx-site-page-content ul,
+  .mdx-site-page-content ol {
+    @apply text-[15px] leading-7 text-foreground;
+  }
+  .mdx-site-page-content pre {
+    @apply rounded-lg border code-block-palette p-4 overflow-x-auto font-mono text-[14px] whitespace-pre-wrap break-words mb-6;
+  }
+  /* Links: use `.post-prose` (paired on `MdxSitePage` detail shell) for underline + CTA exclusions. */
+
   .dark .code-block-palette {
     border-color: color-mix(in srgb, rgb(16 185 129 / 0.3) 52%, hsl(var(--doc-border)) 48%);
     background:
@@ -405,4 +433,3 @@
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
-

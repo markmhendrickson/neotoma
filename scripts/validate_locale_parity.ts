@@ -170,6 +170,7 @@ function shouldSkipHomeBodyPath(path: string): boolean {
   if (path === "proof.founderName") return true;
   /** Punctuation / proper nouns / product names shared across locales. */
   if (path === "who.calloutNotForTrail") return true;
+  if (path === "recordTypes.schemaEvolutionCalloutBodyAfterLink") return true;
   if (path === "proof.founderPhotoAlt") return true;
   if (path === "hero.githubLabel") return true;
   return false;

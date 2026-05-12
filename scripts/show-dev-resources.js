@@ -28,7 +28,7 @@ async function main() {
     const exists = await waitForResourceFile();
     if (!exists) {
       console.error(
-        "No dev resource block found yet. Start npm run watch:full or npm run watch:full:prod first.",
+        "No dev resource block found yet. Start npm run dev or npm run dev:full:prod first.",
       );
       process.exitCode = 1;
       return;
@@ -42,7 +42,7 @@ async function main() {
 
   if (!fs.existsSync(resourcesFile)) {
     console.error(
-      "No dev resource block found yet. Start npm run watch:full or npm run watch:full:prod first.",
+      "No dev resource block found yet. Start npm run dev or npm run dev:full:prod first.",
     );
     process.exit(1);
   }

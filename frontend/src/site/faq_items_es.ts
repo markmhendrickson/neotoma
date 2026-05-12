@@ -97,6 +97,24 @@ export const FAQ_ITEMS_ES: FaqItem[] = [
     link: { href: "/architecture", label: "Arquitectura" },
   },
   {
+    sectionId: "what-happens-to-information-that-doesn-t-fit-a-schema",
+    question: "¿Qué pasa con la información que no encaja en un esquema?",
+    answer:
+      "Nada se descarta en silencio. No necesitas definir un esquema antes de almacenar. Tu agente puede guardar cualquier entidad con un tipo descriptivo y los campos que los datos impliquen; Neotoma infiere y evoluciona esquemas automáticamente. Los campos que el esquema activo aún no reconoce aterrizan en una capa raw_fragments para preservar el valor original junto a la instantánea validada.",
+    detail:
+      "Los esquemas son versionados y aditivos por defecto. La primera vez que tu agente guarde un `workout`, un `lease_payment` o cualquier otro tipo, Neotoma registra un esquema a partir de los datos y aumenta una versión menor. Añadir campos después dispara otra versión menor (p. ej. 1.0.0 → 1.1.0); cambios disruptivos como quitar o re-tipar un campo requieren un salto mayor (1.x → 2.0). Las observaciones antiguas conservan su versión original y siguen siendo legibles. A medida que los patrones maduran, los raw_fragments se promueven al esquema validado de forma automática. Mira los apartados de esquemas y versionado para los detalles.",
+    link: { href: "/schemas/versioning", label: "Versionado y evolución de esquemas" },
+  },
+  {
+    sectionId: "can-i-try-neotoma-without-replacing-my-current-memory-system",
+    question: "¿Puedo probar Neotoma sin reemplazar mi sistema de memoria actual?",
+    answer:
+      "Sí. Neotoma se instala junto a lo que ya uses (MEMORY.md, claw.md, un servidor MCP propio, memoria de plataforma). Nada de tu stack actual se mueve, modifica ni reemplaza. Puedes ingerir logs históricos de sesiones, conversaciones o notas en una base Neotoma nueva, ejecutar un agente con Neotoma habilitado en paralelo y comparar sus respuestas con un agente sin él — luego decides si te quedas o te vas.",
+    detail:
+      'La guía "Probar con seguridad" recorre la ruta recomendada de instalación en sombra: instala, ingiere historial, compara A/B y decide. Tu sistema de memoria existente queda intacto en todo momento. Si decides que Neotoma no es para ti, desinstalarlo deja tu configuración anterior tal cual estaba.',
+    link: { href: "/non-destructive-testing", label: "Probar con seguridad" },
+  },
+  {
     sectionId: "what-should-my-agent-remember-how-do-i-get-started",
     question: "¿Qué debería recordar mi agente? ¿Cómo empiezo?",
     answer:
@@ -118,7 +136,7 @@ export const FAQ_ITEMS_ES: FaqItem[] = [
     sectionId: "how-do-i-install-neotoma",
     question: "¿Cómo instalo Neotoma?",
     answer:
-      "Ejecuta `npm install -g neotoma`, luego `neotoma init` para elegir tu cliente de IA y configurar MCP. Arranca el servidor API con `neotoma api start`. El proceso completo lleva menos de 5 minutos.",
+      "Ejecuta `npm install -g neotoma`, luego `neotoma setup --tool cursor --yes` para inicializar Neotoma y configurar la ruta MCP local por defecto. Sustituye `cursor` por tu herramienta si hace falta. Arranca el servidor API solo si necesitas Inspector, OAuth o la API HTTP local. El proceso completo lleva menos de 5 minutos.",
     link: { href: "/install", label: "Guía de instalación" },
   },
   {

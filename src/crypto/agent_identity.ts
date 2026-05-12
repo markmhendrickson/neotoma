@@ -22,6 +22,49 @@
 
 import type { Request } from "express";
 
+// ---------------------------------------------------------------------------
+// External actor provenance (parallel to AAuth agent identity)
+// ---------------------------------------------------------------------------
+
+/**
+ * Verification strength for an external actor claim. Ordered from weakest
+ * to strongest; the stamping logic picks the strongest available path.
+ */
+export type ExternalActorVerifiedVia =
+  | "claim"
+  | "linked_attestation"
+  | "oauth_link"
+  | "webhook_signature";
+
+/**
+ * A GitHub (or future external-provider) identity that authored the
+ * upstream artifact being ingested. Travels in `observations.provenance`
+ * alongside the AAuth agent attribution but is never conflated with it.
+ */
+export interface ExternalActor {
+  provider: "github";
+  login: string;
+  id: number;
+  type: "User" | "Bot" | "Organization";
+  verified_via: ExternalActorVerifiedVia;
+  /** GitHub webhook delivery UUID — present when `verified_via === "webhook_signature"`. */
+  delivery_id?: string;
+  /** GitHub event type, e.g. "issues", "issue_comment". */
+  event_type?: string;
+  /** Repository full name, e.g. "owner/repo". */
+  repository?: string;
+  /** GitHub issue/event numeric id. */
+  event_id?: number;
+  /** GitHub comment id. */
+  comment_id?: number;
+  /** Operator-local user id; only populated by grant linkage (Phase 4). */
+  linked_neotoma_user_id?: string;
+  /** AAuth thumbprint that carried the agent_token claim (Phase 4b). */
+  attesting_aauth_thumbprint?: string;
+  /** Non-fatal warning when grant link didn't match inbound actor. */
+  provenance_warning?: string;
+}
+
 /**
  * Trust tier shown in the Inspector and surfaced in API responses.
  *
@@ -90,6 +133,13 @@ export interface AAuthRequestContext {
   algorithm?: string;
   sub?: string;
   iss?: string;
+  /** External actor claims from the `https://neotoma.io/external_actors` JWT custom claim. */
+  externalActorClaims?: Array<{
+    provider: string;
+    id: number;
+    login: string;
+    linked_at?: string;
+  }>;
 }
 
 /**
@@ -294,28 +344,39 @@ export interface AttributionProvenance {
   attribution_tier?: AttributionTier;
   /** ISO-8601 timestamp when the attribution was recorded. */
   attributed_at?: string;
+  /** External actor provenance — who authored the upstream artifact. */
+  external_actor?: ExternalActor;
 }
 
 /**
  * Serialise an {@link AgentIdentity} into the provenance JSON shape. Omits
  * keys that are undefined so blobs stay compact.
+ *
+ * When an {@link ExternalActor} is provided it is attached under the
+ * `external_actor` key. This keeps the two identity channels (AAuth agent
+ * vs upstream artifact author) distinct in the persisted JSON.
  */
 export function toAttributionProvenance(
-  identity: AgentIdentity | null | undefined
+  identity: AgentIdentity | null | undefined,
+  externalActor?: ExternalActor | null
 ): AttributionProvenance {
-  if (!identity) return {};
-  const out: AttributionProvenance = {
-    attribution_tier: identity.tier,
-    attributed_at: new Date().toISOString(),
-  };
-  if (identity.publicKey) out.agent_public_key = identity.publicKey;
-  if (identity.thumbprint) out.agent_thumbprint = identity.thumbprint;
-  if (identity.algorithm) out.agent_algorithm = identity.algorithm;
-  if (identity.sub) out.agent_sub = identity.sub;
-  if (identity.iss) out.agent_iss = identity.iss;
-  if (identity.clientName) out.client_name = identity.clientName;
-  if (identity.clientVersion) out.client_version = identity.clientVersion;
-  if (identity.connectionId) out.connection_id = identity.connectionId;
+  if (!identity && !externalActor) return {};
+  const out: AttributionProvenance = {};
+  if (identity) {
+    out.attribution_tier = identity.tier;
+    out.attributed_at = new Date().toISOString();
+    if (identity.publicKey) out.agent_public_key = identity.publicKey;
+    if (identity.thumbprint) out.agent_thumbprint = identity.thumbprint;
+    if (identity.algorithm) out.agent_algorithm = identity.algorithm;
+    if (identity.sub) out.agent_sub = identity.sub;
+    if (identity.iss) out.agent_iss = identity.iss;
+    if (identity.clientName) out.client_name = identity.clientName;
+    if (identity.clientVersion) out.client_version = identity.clientVersion;
+    if (identity.connectionId) out.connection_id = identity.connectionId;
+  }
+  if (externalActor) {
+    out.external_actor = externalActor;
+  }
   return out;
 }
 

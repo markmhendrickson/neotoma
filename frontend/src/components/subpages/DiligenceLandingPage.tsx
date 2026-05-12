@@ -16,6 +16,7 @@ import {
   Terminal,
   Upload,
 } from "lucide-react";
+import { MdxSitePage } from "./MdxSitePage";
 import { UseCaseLandingShell, type UseCaseConfig } from "./use_case_landing/UseCaseLandingShell";
 
 const CONFIG: UseCaseConfig = {
@@ -256,6 +257,10 @@ const CONFIG: UseCaseConfig = {
   agentLabel: "diligence agent",
 };
 
+export function DiligenceLandingPageBody() {
+  return <UseCaseLandingShell mdxShell config={CONFIG} />;
+}
+
 export function DiligenceLandingPage() {
-  return <UseCaseLandingShell config={CONFIG} />;
+  return <MdxSitePage canonicalPath="/diligence" shell="bare" />;
 }

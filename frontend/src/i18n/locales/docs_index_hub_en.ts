@@ -115,6 +115,11 @@ export const DOC_INDEX_HUB_EN: DocHubCategory[] = [
         desc: "Privacy-first architecture and cross-platform design",
       },
       {
+        label: "Problem statement",
+        href: "/foundation/problem-statement",
+        desc: "Why Neotoma exists: fragmented data, AI memory limits, and the substrate gap",
+      },
+      {
         label: "Agent instructions",
         href: "/agent-instructions",
         desc: "Mandatory behavioral rules for agents using Neotoma",
@@ -139,6 +144,27 @@ export const DOC_INDEX_HUB_EN: DocHubCategory[] = [
         label: "All pages (Markdown)",
         href: "/site-markdown",
         desc: "Every indexable route as Markdown (SEO summaries)",
+      },
+    ],
+  },
+  {
+    id: "skills",
+    title: "Skills",
+    items: [
+      {
+        label: "All skills",
+        href: "/skills",
+        desc: "Guided workflows that teach your agent to import and remember data",
+      },
+      {
+        label: "Remember Email",
+        href: "/skills/remember-email",
+        desc: "Import emails and extract contacts, tasks, and events",
+      },
+      {
+        label: "Remember Conversations",
+        href: "/skills/remember-conversations",
+        desc: "Import ChatGPT, Claude, and Slack history into memory",
       },
     ],
   },

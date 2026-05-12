@@ -96,6 +96,33 @@ This model enables:
 - Entity → Relationship Snapshot → Entity (typed relationships between entities)
 - Document → Event (which events derived from document)
 - Event → Entity (which entities involved in event)
+
+### Subscription
+First-class entity for substrate signaling. Subscriptions register a consumer's interest in receiving state-change signals via webhook or SSE. See `philosophy.md` §5.9 (Signal Without Strategy) and `scope_decisions.md` SD-002.
+- `id` (UUID)
+- `subscriber_id` (agent identity: AAuth public-key thumbprint, AAuth JWT subject, or `clientInfo.name+version` identifier)
+- `entity_type_filter` (which entity types trigger delivery; `*` = all)
+- `event_type_filter` (`created` | `updated` | `corrected` | `linked` | `*`)
+- `delivery_method` (`webhook` | `sse`)
+- `delivery_endpoint` (HTTPS URL for webhook; channel id for sse)
+- `created_at`, `updated_at`, `last_delivered_at`, `last_delivery_status`
+
+Identity rule: `(user_id, subscriber_id, delivery_endpoint)` — not hash-based content IDs. Subscriptions are user-scoped and may be created, updated, or deleted by the user or the consumer agent.
+
+### PeerConfig
+First-class entity for cross-instance federation (Phase 5 of the nervous system plan). Each `PeerConfig` row describes a remote Neotoma instance the user has paired with for bidirectional state propagation.
+- `id` (UUID)
+- `peer_instance_id` (stable identifier for the remote instance)
+- `peer_base_url` (HTTPS endpoint of the remote `/store`)
+- `peer_public_key_thumbprint` (AAuth identity used for outbound POST)
+- `direction` (`push` | `pull` | `bidirectional`)
+- `entity_type_filter` (which entity types sync; `*` = all)
+- `created_at`, `updated_at`, `last_sync_at`, `last_sync_status`
+
+Identity rule: `(user_id, peer_instance_id)`.
+
+**Delivery semantics for both:** Best-effort, fire-and-forget. The substrate logs delivery failures but does not maintain a retry queue, dead-letter queue, or ordered delivery guarantees. Consumers responsible for catch-up via state queries (`list_recent_changes`, snapshot reads). See `philosophy.md` §5.9.
+
 ## 12.2 Schema Expectations
 - JSON-schema-definable
 - Backward compatible

@@ -161,7 +161,7 @@ export function AgentInstructionsPage() {
             Display, attribution, and conventions
           </span>
           <p className="text-[13px] leading-5 text-muted-foreground">
-            Display rules, agent attribution, transport conventions, feedback reporting, error recovery, and onboarding.
+            Display rules, agent attribution, transport conventions, issue reporting, error recovery, and onboarding.
           </p>
         </Link>
       </div>

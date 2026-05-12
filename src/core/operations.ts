@@ -116,8 +116,8 @@ export interface Operations {
   /** Look up a single entity by identifier (name, email, canonical_name, etc.). */
   retrieveEntityByIdentifier(input: RetrieveEntityByIdentifierInput): Promise<unknown>;
 
-  /** Snapshot of a single entity. */
-  retrieveEntitySnapshot(input: { entity_id: string }): Promise<unknown>;
+  /** Snapshot of a single entity. Pass format: "json" for machine-readable payloads (e.g. issue tooling). */
+  retrieveEntitySnapshot(input: { entity_id: string; format?: string; at?: string }): Promise<unknown>;
 
   /** List observations for provenance / history. */
   listObservations(input: { entity_id: string; limit?: number }): Promise<unknown>;
@@ -132,9 +132,10 @@ export interface Operations {
   /** Retrieve related entities (graph expansion). */
   retrieveRelatedEntities(input: {
     entity_id: string;
-    relationship_type?: string;
-    direction?: "outgoing" | "incoming" | "both";
-    limit?: number;
+    relationship_types?: string[];
+    direction?: "inbound" | "outbound" | "both";
+    max_hops?: number;
+    include_entities?: boolean;
   }): Promise<unknown>;
 
   /** Create a relationship between two existing entities. */

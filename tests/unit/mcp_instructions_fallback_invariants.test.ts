@@ -50,6 +50,12 @@ describe("MCP_INTERACTION_INSTRUCTIONS_FALLBACK", () => {
     expect(fb).toMatch(/conversation-chat-<turn>/);
   });
 
+  it("tells agents to reuse retrieved conversations deterministically", () => {
+    expect(fb).toContain("conversation_id");
+    expect(fb).toContain("target_id");
+    expect(fb).toMatch(/conversation heuristic-name collision/i);
+  });
+
   it("includes the store retry policy", () => {
     expect(fb).toMatch(/retry once/i);
     expect(fb).toMatch(/surface the error/i);
@@ -73,6 +79,7 @@ describe("MCP_INTERACTION_INSTRUCTIONS_FALLBACK", () => {
       "REFERS_TO",
       "store_structured",
       "idempotency_key",
+      "target_id",
       "Product-bug repair escalation",
     ];
     expect(MCP_INTERACTION_INSTRUCTIONS_FALLBACK.split("\n").slice(1, -1)).toEqual(

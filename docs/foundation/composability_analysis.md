@@ -1,16 +1,16 @@
 # Composability as a Core Principle: Analysis and Recommendation
 ## 1. How Composability Manifests in Neotoma
 ### 1.1 Architectural Composability
-Neotoma is designed as a **composable substrate** that enables multiple layers to build on top:
-**Layered Architecture Model:**
+Neotoma is designed as a **composable substrate** that any operational system can build on top of:
+**Two-tier model:**
 - **State Layer (Neotoma):** Event-sourced, reducer-driven deterministic world model
-- **Strategy Layer:** Pure cognition (e.g., Agentic Portfolio) — reads truth, outputs Decisions + Commands
-- **Execution Layer:** Pure effect (e.g., Agentic Wallet) — takes Commands, performs side effects, emits Domain Events
+- **Operational Layer(s):** Any agent, pipeline, orchestrator, or custom application that reads truth and writes results back as observations. Examples: Agentic Portfolio (financial reasoning over state), Agentic Wallet (financial side-effects writing results back), agentic harnesses (Claude, Cursor, ChatGPT), custom workflow engines.
 **Key Composability Mechanisms:**
-1. **Read-Only Boundaries:** Upper layers can read truth but cannot mutate it directly
-2. **Domain Event → Reducer Pattern:** All truth updates flow through reducers processing Domain Events
+1. **Read-Only Boundaries:** Operational layers can read truth but cannot mutate it directly
+2. **Domain Event → Reducer Pattern:** All inbound truth updates flow through reducers processing Domain Events
 3. **Protocol-Based Interfaces:** MCP exposes structured, validated access points
-4. **Clear Layer Separation:** Strategy and Execution layers are architecturally distinct from State Layer
+4. **Clear Boundary:** operational layers are architecturally distinct from the state layer; the state layer never decides, infers, or acts
+5. **Event-Driven Signaling:** After writes, the substrate emits structured events that consuming layers can subscribe to (webhook/SSE delivery). This enables reactive composition: operational layers respond to state changes rather than polling. Delivery is best-effort; the substrate does not retry, prioritize, or guarantee ordering — those are operational-layer concerns. See `philosophy.md` §5.9 (Signal Without Strategy) and `scope_decisions.md` SD-002.
 ### 1.2 Integration Composability
 **MCP Protocol Integration:**
 - Standardized interface enables any MCP-compatible agent to integrate
@@ -21,10 +21,11 @@ Neotoma is designed as a **composable substrate** that enables multiple layers t
 - Infrastructure layer abstracts external dependencies
 - Domain layer remains independent of external implementations
 ### 1.3 Ecosystem Composability
-**Multiple Upper Layers Possible:**
-- Strategy Layer examples: Agentic Portfolio (financial), General Strategy Engine (general)
-- Execution Layer examples: Agentic Wallet (financial), Domain Agents (various domains)
-- Future layers: Other agent-driven systems can build on Neotoma
+**Multiple operational systems possible on the same state layer:**
+- Reasoning-style operational systems: Agentic Portfolio (financial), general-purpose strategy engines
+- Effect-style operational systems: Agentic Wallet (financial), domain agents (various domains)
+- Agent-harness operational systems: Claude, Cursor, ChatGPT and others reading and writing through MCP
+- Future systems: any operational system can build on Neotoma without architectural changes to the state layer
 **Protocol Evolution:**
 - MCP-based interfaces support future protocol-first, decentralized evolution
 - Event-sourced architecture enables replication and tokenized permission layers
@@ -39,31 +40,31 @@ Neotoma is designed as a **composable substrate** that enables multiple layers t
 **Why Defensible:**
 - Providers cannot pursue due to platform lock-in business models
 - Startups cannot pursue due to separate consumer app positioning
-### 2.2 Composability (Layered Building)
-**Definition:** Ability for external systems to build layers on top of Neotoma, creating new capabilities through composition.
+### 2.2 Composability (Operational Layers Building on State)
+**Definition:** Ability for external systems to build operational layers on top of Neotoma, creating new capabilities through composition.
 **Neotoma's Composability:**
-- Strategy Layer and Execution Layer can build on State Layer
-- Clear boundaries enable independent layer development
+- Any operational system (agent, pipeline, orchestrator, custom application) can build on the state layer
+- Clear boundary enables independent operational-layer development
 - Domain Event → Reducer pattern enables predictable composition
 - **Current Status:** Architecturally fundamental but not explicitly articulated as differentiator
 **Key Distinction:**
 - **Interoperability** = horizontal (works across platforms)
-- **Composability** = vertical (layers build on top)
+- **Composability** = vertical (operational layers build on top of the state layer)
 ### 2.3 Relationship
 Composability and interoperability are **complementary but distinct**:
 - **Interoperability** enables Neotoma to work with multiple AI platforms (horizontal)
-- **Composability** enables Neotoma to serve as foundation for Strategy/Execution layers (vertical)
+- **Composability** enables Neotoma to serve as state layer for any operational system (vertical)
 Both are architecturally fundamental, but they address different dimensions:
 - Interoperability = "works with all your tools"
-- Composability = "foundation for building new capabilities"
+- Composability = "state layer for building new capabilities"
 ## 3. Should Composability Be Articulated as a Principle?
 ### 3.1 Arguments FOR Articulating Composability
 **1. Architectural Foundation:**
-- Composability is architecturally fundamental (enables Strategy/Execution layers)
+- Composability is architecturally fundamental (any operational system can build on the state layer)
 - Not just a feature—it's a core design principle
 - Distinguishes Neotoma from monolithic systems
 **2. Ecosystem Enablement:**
-- Enables others to build on Neotoma (Agentic Portfolio, Agentic Wallet examples)
+- Enables others to build on Neotoma (Agentic Portfolio, Agentic Wallet are illustrative examples)
 - Creates network effects and ecosystem value
 - Positions Neotoma as platform, not just product
 **3. Defensibility:**
@@ -76,7 +77,7 @@ Both are architecturally fundamental, but they address different dimensions:
 - Distinguishes from "just another memory app"
 **5. Separation from Interoperability:**
 - Interoperability = cross-platform access (horizontal)
-- Composability = layered building (vertical)
+- Composability = operational layers building on the state layer (vertical)
 - Both are important but address different dimensions
 ### 3.2 Arguments AGAINST Articulating Composability
 **1. Current Articulation Sufficient:**
@@ -98,37 +99,20 @@ Both are architecturally fundamental, but they address different dimensions:
 ### 3.3 Recommendation: Articulate as Architectural Principle, Not Differentiator
 **Composability should be articulated as a core architectural principle** (like determinism, immutability) but **not as a separate defensible differentiator** at this stage.
 **Rationale:**
-1. **Architectural Principle:** Composability is fundamental to Neotoma's design (enables layered architecture). It belongs alongside determinism, immutability, and privacy-first in core principles.
-2. **Not Yet Differentiator:** While composability is architecturally defensible, it's not yet proven as market differentiator. Strategy/Execution layers are examples, not production systems. Ecosystem value is potential.
-3. **Complementary to Interoperability:** Interoperability (cross-platform access) is the user-facing differentiator. Composability (layered building) is the developer/ecosystem enabler. Both are important but serve different audiences.
-4. **Future Differentiator Potential:** Once Strategy/Execution layers are production systems and ecosystem is proven, composability could become explicit differentiator #4.
+1. **Architectural Principle:** Composability is fundamental to Neotoma's design (any operational system can build on the state layer). It belongs alongside determinism, immutability, and privacy-first in core principles.
+2. **Not Yet Differentiator:** While composability is architecturally defensible, it's not yet proven as market differentiator. Agentic Portfolio and Agentic Wallet remain illustrative examples, not production systems. Ecosystem value is potential.
+3. **Complementary to Interoperability:** Interoperability (cross-platform access) is the user-facing differentiator. Composability (operational layers building on the state layer) is the developer/ecosystem enabler. Both are important but serve different audiences.
+4. **Future Differentiator Potential:** Once multiple operational systems run in production on Neotoma and ecosystem value is proven, composability could become explicit differentiator #4.
 ## 4. How to Articulate Composability
-### 4.1 As Architectural Principle
-**Add to `docs/foundation/philosophy.md`:**
-```markdown
-## 5.8 Composability (Layered Architecture)
-Neotoma is designed as a **composable substrate** that enables multiple layers to build on top:
-- **Read-only boundaries:** Upper layers can read truth but cannot mutate it directly
-- **Domain Event → Reducer pattern:** All truth updates flow through reducers processing Domain Events
-- **Protocol-based interfaces:** MCP exposes structured, validated access points
-- **Clear layer separation:** Strategy and Execution layers are architecturally distinct from State Layer
-**Layer Composition:**
-- Strategy Layer (pure cognition): Reads world state, outputs Decisions + Commands
-- Execution Layer (pure effect): Takes Commands, performs side effects, emits Domain Events
-- State Layer (Neotoma): Processes Domain Events through reducers to update state
-**Why Composability:**
-- Enables ecosystem building (others can build on Neotoma)
-- Creates network effects and platform value
-- Distinguishes Neotoma from monolithic systems
-- Supports future protocol-first, decentralized evolution
-```
+### 4.1 As Architectural Principle (executed 2026-05-07; reframed 2026-05-08)
+**Added to `docs/foundation/philosophy.md` as §5.8 Composability** (executed as part of the Phase 6 foundational docs update; see `docs/private/strategy/nervous_system_plans/06_foundational_docs_update.md`). Reframed 2026-05-08 from three-layer (State + Strategy + Execution) to two-tier (State Layer + Operational Layer) terminology. The current canonical block lives in `philosophy.md` §5.8.
 ### 4.2 Update Core Identity
 **Update `docs/foundation/core_identity.md`:**
 Add to "Core Architectural Choices (Defensible Differentiators)" section:
 ```markdown
 **Architectural Principles (Enabling Differentiators):**
-4. **Composability (Layered Architecture)**
-   - Read-only boundaries enable Strategy/Execution layers to build on State Layer
+4. **Composability (State Layer + Operational Layer)**
+   - Read-only boundaries enable any operational layer to build on the state layer
    - Domain Event → Reducer pattern enables predictable composition
    - Protocol-based interfaces (MCP) enable ecosystem integration
    - **Why Enabling:** Enables ecosystem building and platform value, distinguishes from monolithic systems
@@ -138,19 +122,19 @@ Add to "Core Architectural Choices (Defensible Differentiators)" section:
 Add to positioning section:
 ```markdown
 **Architectural Enablers (Supporting Differentiators):**
-- **Composability:** Layered architecture enables Strategy/Execution layers to build on State Layer. Protocol-based interfaces enable ecosystem integration. Distinguishes Neotoma from monolithic systems.
+- **Composability:** State-layer / operational-layer split enables any operational system to build on Neotoma. Protocol-based interfaces enable ecosystem integration. Distinguishes Neotoma from monolithic systems.
 ```
 **Distinguish from Interoperability:**
 ```markdown
 **Composability vs. Interoperability:**
 - **Interoperability (Differentiator #3):** Works across multiple AI platforms (ChatGPT, Claude, Cursor) via MCP. Horizontal integration.
-- **Composability (Architectural Principle):** Enables Strategy/Execution layers to build on State Layer. Vertical composition. Enables ecosystem building.
+- **Composability (Architectural Principle):** Enables any operational layer to build on the state layer. Vertical composition. Enables ecosystem building.
 ```
 ### 4.4 Update README
 **Add to "Neotoma's Structured Personal Data Memory" section:**
 ```markdown
-**4. Composability (Layered Architecture)**
-- Read-only boundaries enable Strategy/Execution layers to build on State Layer
+**4. Composability (State Layer + Operational Layer)**
+- Read-only boundaries enable any operational layer to build on the state layer
 - Domain Event → Reducer pattern enables predictable composition
 - Protocol-based interfaces enable ecosystem integration
 - Foundation for agent-native personal computing
@@ -162,13 +146,13 @@ Add to positioning section:
 3. **Clarify distinction** between composability and interoperability in positioning docs
 ### 5.2 Future Considerations
 **When to Elevate to Differentiator:**
-- Strategy/Execution layers are production systems (not just examples)
+- Multiple operational systems are running in production on Neotoma (not just examples)
 - Ecosystem has proven value (multiple systems building on Neotoma)
 - Market recognizes composability as competitive advantage
 - Clear evidence that competitors cannot pursue composability
 **Metrics to Track:**
 - Number of external systems building on Neotoma
-- Strategy/Execution layer production deployments
+- Production deployments of operational systems on Neotoma
 - Ecosystem developer adoption
 - Market recognition of composability value
 ## 6. Bitcoin-Like Minimalism: Architectural Evolution Analysis
@@ -294,15 +278,15 @@ Bitcoin's whitepaper solved double-spending with minimal primitives:
 - Protocol itself stayed simple
 **Recommendation:**
 - Keep core State Layer minimal (like Bitcoin's protocol)
-- Push complexity to upper layers (Strategy/Execution layers, like Bitcoin's ecosystem)
+- Push complexity to operational layers (like Bitcoin's ecosystem)
 - Defer features until core is validated (like v0.2.0 deferred async retry until v0.3.0)
 ## 7. Summary
 **Composability is architecturally fundamental** to Neotoma's design and should be articulated as a core architectural principle alongside determinism, immutability, and privacy-first.
 **Composability is distinct from interoperability:**
 - **Interoperability** = horizontal (works across platforms) — explicit differentiator #3
-- **Composability** = vertical (layers build on top) — architectural principle
+- **Composability** = vertical (operational layers build on the state layer) — architectural principle
 **Bitcoin-Like Minimalism:**
 - Core State Layer should remain minimal (like Bitcoin's protocol)
-- Complexity belongs in upper layers (Strategy/Execution, like Bitcoin's ecosystem)
+- Complexity belongs in operational layers (like Bitcoin's ecosystem)
 - Defer features until core is validated (release history shows this pattern)
 **Recommendation:** Articulate composability as architectural principle now, consider elevating to differentiator once ecosystem value is proven. Apply Bitcoin-like minimalism to core State Layer: single merge strategy, untyped relationships, implicit provenance, hardcoded schemas initially.

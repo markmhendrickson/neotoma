@@ -24,6 +24,11 @@ export interface SchemaMetadata {
   icon?: IconMetadata;
 }
 
+const SAFE_SVG_ICON_NAME_ALLOWLIST: Record<string, LucideIcon> = {
+  custom: LucideIcons.File,
+  file: LucideIcons.File,
+};
+
 /**
  * Get icon component for a schema
  * 
@@ -52,8 +57,8 @@ export function getIconComponent(
     return getLucideIcon(iconMetadata.icon_name);
   }
   
-  if (iconMetadata.icon_type === "svg" && iconMetadata.icon_svg) {
-    return createSVGComponent(iconMetadata.icon_svg);
+  if (iconMetadata.icon_type === "svg") {
+    return SAFE_SVG_ICON_NAME_ALLOWLIST[iconMetadata.icon_name.toLowerCase()] ?? getDefaultIcon();
   }
   
   return getDefaultIcon();
@@ -64,7 +69,7 @@ export function getIconComponent(
  */
 function getLucideIcon(iconName: string): LucideIcon | null {
   // Lucide icons are exported with their exact names
-  const Icon = (LucideIcons as any)[iconName];
+  const Icon = (LucideIcons as Record<string, unknown>)[iconName];
   
   if (!Icon) {
     console.warn(`[SCHEMA_ICONS] Lucide icon not found: ${iconName}`);
@@ -72,21 +77,6 @@ function getLucideIcon(iconName: string): LucideIcon | null {
   }
   
   return Icon as LucideIcon;
-}
-
-/**
- * Create React component from SVG string
- */
-function createSVGComponent(
-  svgString: string
-): React.ComponentType<{ className?: string }> {
-  return ({ className }: { className?: string }) => {
-    return React.createElement("span", {
-      className,
-      dangerouslySetInnerHTML: { __html: svgString },
-      style: { display: "inline-flex", alignItems: "center" },
-    });
-  };
 }
 
 /**

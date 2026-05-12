@@ -46,13 +46,14 @@ graph LR
 - **Replayable.** Inspect any entity at any point in time. Diff versions. Reconstruct history from the observation log.
 - **Structure-first.** Schema-first extraction with deterministic retrieval. Optional similarity search when embeddings are configured.
 
-### Three foundations
+### Four foundations
 
-| Foundation         | What it means                                                                                                                           |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| **Privacy-first**  | Your data stays local. Never used for training. User-controlled storage, optional encryption at rest. Full export and deletion control. |
-| **Deterministic**  | Same input always produces same output. Schema-first extraction, hash-based entity IDs, full provenance. No silent mutation.            |
-| **Cross-platform** | One memory graph across Claude, ChatGPT, Cursor, OpenClaw, IronClaw, Codex, and CLI. MCP-based access. No platform lock-in. Works alongside native memory. |
+| Foundation                  | What it means                                                                                                                                              |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Privacy-first**           | Your data stays local. Never used for training. Nothing is stored unless you approve it; no background scanning or implicit captures. Full export and deletion control. |
+| **Deterministic**           | Same input always produces same output. Schema-first extraction, hash-based entity IDs, full provenance. No silent mutation.                                |
+| **Immutable and verifiable** | Append-only observations; history cannot be rewritten. Hash-based entity IDs are tamper-evident. Full provenance chain from any state to its source.       |
+| **Cross-platform**          | One memory graph across Claude, ChatGPT, Cursor, OpenClaw, IronClaw, Codex, and CLI. MCP-based access. No platform lock-in. Works alongside native memory. |
 
 ## State guarantees
 
@@ -72,6 +73,8 @@ Most AI memory systems optimize storage or retrieval. Neotoma enforces state int
 | Zero-setup onboarding                | ✓         | ✗               | ✗          | ✗             | ✗             |
 | Semantic similarity search           | ✗         | ✓               | ✗          | ✗             | ✓             |
 | Direct human editability             | ✗         | ✗               | ✓          | ✗             | ✗             |
+| Strong consistency                   | ✗         | ✗               | ✗          | ✓             | ✓             |
+| Transactional writes                 | ✗         | ✗               | ✗          | ✓             | ✓             |
 
 **Platform:** Claude, ChatGPT, Gemini, Copilot. **Retrieval:** Mem0, Zep, LangChain Memory. **Files:** Markdown files, JSON stores, CRDT docs. **Database:** SQLite, Postgres, MySQL. **Neotoma:** Deterministic state layer (reference implementation).
 
@@ -115,6 +118,26 @@ neotoma upload ./invoice.pdf
 ```
 
 Results reflect versioned entity state with full provenance. Agents perform the same operations through MCP tool calls (`store`, `retrieve_entities`, `retrieve_entity_by_identifier`).
+
+## Available skills
+
+Skills are guided workflows that teach your AI agent to import, extract, and persist data into Neotoma memory. They ship with the npm package and are installed by `neotoma setup`.
+
+| Skill | Description |
+|-------|-------------|
+| **ensure-neotoma** | Install Neotoma, configure MCP, verify connectivity. Prerequisite for all other skills. |
+| **remember-email** | Configure email MCP, import emails, extract contacts, tasks, events, transactions. |
+| **remember-conversations** | Import ChatGPT/Claude/Slack exports, reconstruct decision timeline. |
+| **remember-meetings** | Ingest meeting transcripts, extract decisions and action items. |
+| **remember-finances** | Import bank statements, receipts, invoices. Extract structured transactions. |
+| **remember-contacts** | Consolidate contacts from email, calendar, chat, vCards, LinkedIn. |
+| **remember-calendar** | Configure calendar MCP, import events and commitments. |
+| **remember-codebase** | Developer repo integration — inventory, architecture decisions, MCP wiring. |
+| **store-data** | Generic: persist any structured data or file with provenance. |
+| **query-memory** | Generic: retrieve what your agent knows about anything. |
+| **recover-sqlite-database** | Troubleshooting: check integrity and recover corrupted Neotoma database. |
+
+[Full skill documentation →](https://neotoma.io/skills) | [Skill strategy →](docs/skills/skill_strategy.md)
 
 ## Interfaces
 

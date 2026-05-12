@@ -23,7 +23,7 @@
     ],
     "stop": [
       {
-        "command": "env NEOTOMA_HOOK_COMPLIANCE_PASSES=off node /Users/markmhendrickson/repos/neotoma/packages/cursor-hooks/dist/stop.js",
+        "command": "node /Users/markmhendrickson/repos/neotoma/packages/cursor-hooks/dist/stop.js",
         "loop_limit": 1
       }
     ]
