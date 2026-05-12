@@ -85,6 +85,41 @@ Write for a human reader deciding whether to upgrade. Do not dump raw commit lis
 
 If the working tree was dirty when drafting, state that **execute** matches the preview only after that local work is committed (excluding forbidden paths); confirm whether the user intends that full scope or needs to narrow it before Step 4.
 
+### Step 3.5: Security review lane
+
+Run after preview is approved by the user, before Step 4. Sources: `.cursor/plans/pre-release_security_gates_44e01d74.plan.md`, `docs/security/threat_model.md`.
+
+1. **Classify the release diff:**
+   ```bash
+   npm run security:classify-diff -- --base <last-tag> --head HEAD --json
+   ```
+   If `sensitive=false`, this lane is informational; still write the gate artifact (Step 3.5.4) so the trail is consistent.
+
+2. **Run the static rules (G2):**
+   ```bash
+   npm run security:lint
+   ```
+   Errors are gating; warnings annotate. Resolve any `error` finding before continuing.
+
+3. **Run the topology auth matrix (G3) and confirm the protected-routes manifest is in sync:**
+   ```bash
+   npm run security:manifest:check
+   npm run test:security:auth-matrix
+   ```
+   If the manifest is out of date, run `npm run security:manifest:write` (this is allowed inside the release commit) and re-render the supplement.
+
+4. **Generate the AI review scaffold (G4):**
+   ```bash
+   npm run security:ai-review -- --tag vX.Y.Z --base <last-tag> --head HEAD
+   ```
+   Provider defaults to `cursor`. Set `NEOTOMA_AI_REVIEW_PROVIDER=claude|gpt|none` to override; `none` keeps the review fully manual.
+
+5. **Fill `docs/releases/in_progress/vX.Y.Z/security_review.md`:** Walk the adversarial prompt sections (alternate-path auth, proxy trust, local-dev widening, unauth public route, guest-access widening, AAuth downgrade). Record findings, suggested negative tests, residual risks, and a sign-off verdict (`yes` | `with-caveats` | `block`). `block` keeps the release on the lane.
+
+6. **Add a `Security hardening` section to the supplement** at `docs/releases/in_progress/vX.Y.Z/github_release_supplement.md` that links the security review file and any advisory under `docs/security/advisories/` opened or referenced by this release. When `classify-diff` was sensitive this section is mandatory; when not sensitive, write `No security-sensitive surfaces touched.` so the trail is explicit.
+
+Re-render the GitHub Release preview (`npm run -s release-notes:render`) so the supplement diff is reflected; STOP and re-confirm if the supplement changed materially.
+
 ### Step 4: Execute
 
 After user confirms, run **every** step below in order through **npm publish and sandbox deployment**. Stopping after `gh release create` or `npm publish` is a failed full `/release` unless the user confirmed a GitHub-only / no-registry / no-sandbox scope.
@@ -184,8 +219,15 @@ After user confirms, run **every** step below in order through **npm publish and
 
 ### Step 5: Post-Release
 
-1. Move supplement: `mv docs/releases/in_progress/vX.Y.Z docs/releases/completed/vX.Y.Z` (if directory was created).
-2. Report summary: version, GitHub Release URL, npm package URL (must reflect a successful **`npm publish`** when the release included npm), and sandbox URL/version verification.
+1. **Run the deployed protected-route probes (G5):**
+   ```bash
+   NEOTOMA_PROBE_HOSTS="https://sandbox.neotoma.io
+   https://neotoma.markmhendrickson.com" \
+     bash scripts/security/deployed_probes.sh --tag vX.Y.Z
+   ```
+   The probe writes `docs/releases/in_progress/vX.Y.Z/post_deploy_security_probes.md` and exits non-zero on any unexpected status. A failure here BLOCKS release completion: open an advisory under `docs/security/advisories/`, hotfix the regression, and re-run before declaring done.
+2. Move supplement: `mv docs/releases/in_progress/vX.Y.Z docs/releases/completed/vX.Y.Z` (if directory was created); the security review and probe report move with it.
+3. Report summary: version, GitHub Release URL, npm package URL (must reflect a successful **`npm publish`** when the release included npm), sandbox URL/version verification, and the probe report verdict (passes / failures).
 
 ## Submodule Mode
 
@@ -205,6 +247,7 @@ If the user says `/release foundation` (or another submodule name):
 - Do not merge or tag without user approval of the preview.
 - For a standard `/release`, **always** run **`npm publish`** after `gh release create` unless the user explicitly confirmed GitHub-only / no registry.
 - For a standard `/release`, **always** deploy `sandbox.neotoma.io` with `flyctl deploy -c fly.sandbox.toml --remote-only` and verify the live sandbox version unless the user explicitly confirmed no sandbox.
+- For a standard `/release`, **always** run Step 3.5 (Security review lane) before Step 4 and Step 5 (Deployed probes) before declaring complete; the supplement MUST contain a `Security hardening` section linking `docs/releases/in_progress/<TAG>/security_review.md` (and `post_deploy_security_probes.md` after Step 5).
 - If `docs/developer/github_release_process.md` exists, follow its template and render pipeline.
 
 ## Agent Instructions
@@ -226,3 +269,5 @@ If the user says `/release foundation` (or another submodule name):
 - Ending execute after the GitHub Release without **`npm publish`** when the user confirmed a normal (npm-included) release
 - Ending execute after **`npm publish`** without deploying and verifying `sandbox.neotoma.io` when the user confirmed a normal sandbox-included release
 - Ending the execute turn right after npm web-login / “I signed in” **without** running the **npm web-login checkpoint** (`npm whoami` → publish or explicit `ready` handoff with copy-paste commands)
+- Skipping Step 3.5 (Security review lane) before Step 4 when `npm run security:classify-diff` reports the release diff as sensitive, or omitting the supplement's `Security hardening` section
+- Declaring a release complete without running Step 5 deployed probes (`bash scripts/security/deployed_probes.sh --tag vX.Y.Z`) and recording the report under `docs/releases/in_progress/vX.Y.Z/post_deploy_security_probes.md`

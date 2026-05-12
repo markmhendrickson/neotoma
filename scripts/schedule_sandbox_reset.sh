@@ -30,8 +30,10 @@ echo "  NEOTOMA_SANDBOX_RESET_BASE_URL=${BASE_URL}"
 echo "  NEOTOMA_SANDBOX_POST_WIPE_DELAY_MS=${POST_MS}"
 
 # Remote defaults: same in-container paths as fly.sandbox.toml [[mounts]].
+# Use /bin/sh because the runtime image is Alpine-based and does not guarantee
+# bash is installed inside the app container.
 flyctl ssh console \
   --app "${APP}" \
-  -C "bash -lc 'cd /app && NEOTOMA_DATA_DIR=/data NEOTOMA_SANDBOX_MODE=1 NEOTOMA_SANDBOX_POST_WIPE_DELAY_MS=${POST_MS} NEOTOMA_SANDBOX_BASE_URL=${BASE_URL} node dist/scripts/reset_sandbox.js'"
+  -C "/bin/sh -lc 'cd /app && NEOTOMA_DATA_DIR=/data NEOTOMA_SANDBOX_MODE=1 NEOTOMA_SANDBOX_POST_WIPE_DELAY_MS=${POST_MS} NEOTOMA_SANDBOX_BASE_URL=${BASE_URL} node dist/scripts/reset_sandbox.js'"
 
 echo "Reset finished."
