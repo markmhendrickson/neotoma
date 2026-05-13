@@ -97,6 +97,20 @@ These environment variables shape the *runtime* threat surface that the gates ca
 
 These knobs do **not** protect against authenticated abuse (a `software`/`hardware` AAuth tier write is rate-limited under its own attribution row, not the guest bucket). They exist so a hostile guest token, or a guest token leaked to an automated scraper, cannot DoS the issue / subscription surfaces.
 
+### Tunnel proxy trust — `NEOTOMA_TRUSTED_PROXY_IPS` (v0.12.1+)
+
+When Neotoma runs behind a same-host tunnel sidecar (cloudflared, Caddy, etc.), requests arrive on the loopback socket but carry `x-forwarded-for` entries injected by the sidecar. `isLocalRequest()` rejects any XFF entry that is not itself a loopback address, so the request is treated as remote even though the socket is local.
+
+`NEOTOMA_TRUSTED_PROXY_IPS` (comma-separated IPs or IPv4 CIDRs) marks specific XFF entries as trusted infrastructure rather than public internet addresses. `isLocalRequest()` accepts requests where every XFF entry is either a loopback address or a trusted proxy IP.
+
+**Determining the correct value:** The XFF IP injected by cloudflared depends on its forwarding mode:
+- Warp / CGNAT: typically `100.64.x.x` → `NEOTOMA_TRUSTED_PROXY_IPS=100.64.0.0/10`
+- Passthrough: the upstream client IP (Vercel egress, CDN edge, etc.) → must be discovered at runtime
+
+To discover the actual IP, start the server, make a request through the tunnel, and check stderr for `isLocalRequest rejected: XFF contains <ip>`. Set `NEOTOMA_TRUSTED_PROXY_IPS` to that IP or its enclosing CIDR.
+
+`NEOTOMA_TRUSTED_PROXY_IPS` and `NEOTOMA_TRUST_PROD_LOOPBACK=1` are independent and can coexist. `NEOTOMA_TRUST_PROD_LOOPBACK=1` bypasses the XFF check entirely and remains valid for single-host deployments without a tunnel.
+
 ### OAuth Bearer enforcement on `/mcp` (v0.12+)
 
 Pre-v0.12, an unrecognized OAuth `Bearer` token on `/mcp` could fall through to anonymous attribution if the token was syntactically a UUID. v0.12 closes that gap:

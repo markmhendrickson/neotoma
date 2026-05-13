@@ -57,6 +57,16 @@ async function resolveOptions(opts?: GitHubApiOptions): Promise<{ token: string;
   return { token, owner, repo };
 }
 
+class GitHubApiError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly statusText: string,
+    public readonly body: string,
+  ) {
+    super(`GitHub API ${status} ${statusText}: ${body}`);
+  }
+}
+
 async function githubFetch<T>(
   path: string,
   token: string,
@@ -76,7 +86,7 @@ async function githubFetch<T>(
 
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`GitHub API ${res.status} ${res.statusText}: ${body}`);
+    throw new GitHubApiError(res.status, res.statusText, body);
   }
 
   return res.json() as Promise<T>;
@@ -84,6 +94,11 @@ async function githubFetch<T>(
 
 /**
  * Create a new GitHub issue (for public mirror only).
+ *
+ * When GitHub returns 422 (Unprocessable Entity) for unknown labels, the
+ * unknown labels are dropped and the request is retried with only the labels
+ * that exist on the repo. A warning is logged for each dropped label. This
+ * prevents a stale or unknown label name from silently aborting the mirror.
  */
 export async function createIssue(params: {
   title: string;
@@ -93,17 +108,50 @@ export async function createIssue(params: {
   const { token, owner, repo } = await resolveOptions(opts);
 
   const labels = mergeNeotomaToolingIssueLabels(params.labels);
-  const payload: Record<string, unknown> = {
-    title: params.title,
-    body: params.body,
-    labels,
-  };
 
-  return githubFetch<GitHubIssue>(
-    `/repos/${owner}/${repo}/issues`,
-    token,
-    { method: "POST", body: JSON.stringify(payload) },
-  );
+  try {
+    return await githubFetch<GitHubIssue>(
+      `/repos/${owner}/${repo}/issues`,
+      token,
+      { method: "POST", body: JSON.stringify({ title: params.title, body: params.body, labels }) },
+    );
+  } catch (err) {
+    if (!(err instanceof GitHubApiError) || err.status !== 422) throw err;
+
+    // 422 often means one or more labels do not exist on the repo.
+    // Fetch existing repo labels and retry with only the intersection.
+    let existingLabels: string[];
+    try {
+      existingLabels = await listRepoLabelNames({ token, repo: `${owner}/${repo}` });
+    } catch {
+      // Cannot determine which labels are valid — re-throw original error.
+      throw err;
+    }
+
+    const existingSet = new Set(existingLabels.map((l) => l.toLowerCase()));
+    const validLabels = labels.filter((l) => existingSet.has(l.toLowerCase()));
+    const droppedLabels = labels.filter((l) => !existingSet.has(l.toLowerCase()));
+
+    if (droppedLabels.length === 0) {
+      // 422 was not label-related — re-throw.
+      throw err;
+    }
+
+    // Emit structured warning into stderr so operators can add missing labels.
+    process.stderr.write(
+      `[neotoma] GitHub issue mirror: dropping unknown label(s) [${droppedLabels.join(", ")}] ` +
+        `from repo ${owner}/${repo} — add them in GitHub Settings → Labels to include them.\n`,
+    );
+
+    return githubFetch<GitHubIssue>(
+      `/repos/${owner}/${repo}/issues`,
+      token,
+      {
+        method: "POST",
+        body: JSON.stringify({ title: params.title, body: params.body, labels: validLabels }),
+      },
+    );
+  }
 }
 
 /**
@@ -216,4 +264,16 @@ export async function addIssueLabels(
     token,
     { method: "POST", body: JSON.stringify({ labels }) },
   );
+}
+
+/**
+ * List all label names defined on a repo (used to validate labels before issue creation).
+ */
+export async function listRepoLabelNames(opts?: GitHubApiOptions): Promise<string[]> {
+  const { token, owner, repo } = await resolveOptions(opts);
+  const results = await githubFetch<Array<{ name: string }>>(
+    `/repos/${owner}/${repo}/labels?per_page=100`,
+    token,
+  );
+  return results.map((r) => r.name);
 }

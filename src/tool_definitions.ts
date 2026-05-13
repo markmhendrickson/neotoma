@@ -1031,7 +1031,9 @@ export function buildToolDefinitions(
       description: desc(
         "add_issue_message",
         "Add a message to an existing issue thread. Pass Neotoma `issue` entity_id (from submit_issue, get_issue_status, or Inspector). Submits to the configured operator Neotoma instance first, creates a conversation_message locally, and may push a GitHub comment when the issue has a GitHub mirror. " +
-          "When the local row mirrors a remote operator issue, pass guest_access_token if the token is not already stored on the issue snapshot (same semantics as get_issue_status). " +
+          "Remote auth: when the local row mirrors a remote operator issue, the operator instance requires either (a) a guest_access_token — pass the token returned by submit_issue, or read it from the local issue entity snapshot — or (b) an agent_grant configured by the operator for your agent identity. " +
+          "If the issue snapshot already stores guest_access_token you may omit it here; the server reads it automatically. " +
+          "If add_issue_message returns AUTH_REQUIRED, it means neither path is satisfied: check that guest_access_token from submit_issue was preserved on the local entity, or ask the operator to configure an agent_grant via Inspector → Agents → Grants. " +
           "Fails with an MCP error if the remote Neotoma store is required (non-empty target URL) but unreachable or rejects the request. " +
           "On public issue threads, pass at least one of `reporter_git_sha` / `reporter_app_version` so each message records the environment it was authored against. Missing both emits a server-side warning; the message still persists.",
       ),

@@ -145,7 +145,10 @@ jobs:
             BASE_REF="origin/main"
           fi
           git fetch origin "${BASE_REF#origin/}" --depth=200 || true
-          npm run security:classify-diff -- --base "$BASE_REF" --head HEAD --json | tee /tmp/security_classify.json
+          npm run security:classify-diff -- --base "$BASE_REF" --head HEAD --json > /tmp/security_classify_raw.txt 2>&1
+          # Strip npm script header lines before parsing JSON
+          grep -v "^>" /tmp/security_classify_raw.txt | grep -v "^npm" > /tmp/security_classify.json || true
+          cat /tmp/security_classify.json
           SENSITIVE=$(node -e "console.log(require('/tmp/security_classify.json').sensitive)")
           echo "SECURITY_SENSITIVE=$SENSITIVE" >> "$GITHUB_ENV"
 
