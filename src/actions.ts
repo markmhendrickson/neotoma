@@ -734,6 +734,56 @@ function isLoopbackAddress(value: string | undefined): boolean {
   return false;
 }
 
+/**
+ * Parse NEOTOMA_TRUSTED_PROXY_IPS into an array of IP/CIDR strings.
+ * Accepts comma-separated values. Returns empty array when unset.
+ */
+function parseTrustedProxyIPs(env: NodeJS.ProcessEnv = process.env): string[] {
+  const raw = env.NEOTOMA_TRUSTED_PROXY_IPS || "";
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Returns true when the given IP is within the configured NEOTOMA_TRUSTED_PROXY_IPS.
+ * Supports exact IPv4 match, IPv4 /8–/32 CIDR notation, and ::ffff:<ipv4> mapped addresses.
+ * When NEOTOMA_TRUSTED_PROXY_IPS is not set this always returns false.
+ */
+export function isTrustedProxyIP(ip: string, env: NodeJS.ProcessEnv = process.env): boolean {
+  const candidates = parseTrustedProxyIPs(env);
+  if (candidates.length === 0) return false;
+
+  // Strip IPv4-mapped IPv6 prefix for comparison
+  const normalized = ip.trim().replace(/^::ffff:/i, "");
+
+  for (const candidate of candidates) {
+    if (candidate === normalized || candidate === ip.trim()) return true;
+
+    // Simple IPv4 CIDR check (covers the common case: 100.64.0.0/10 for Cloudflare Tunnel egress)
+    const slashIdx = candidate.indexOf("/");
+    if (slashIdx !== -1) {
+      const cidrBase = candidate.slice(0, slashIdx);
+      const prefixLen = parseInt(candidate.slice(slashIdx + 1), 10);
+      if (!isNaN(prefixLen) && prefixLen >= 0 && prefixLen <= 32) {
+        const ipParts = normalized.split(".").map(Number);
+        const cidrParts = cidrBase.split(".").map(Number);
+        if (ipParts.length === 4 && cidrParts.length === 4) {
+          const ipNum =
+            ((ipParts[0] << 24) | (ipParts[1] << 16) | (ipParts[2] << 8) | ipParts[3]) >>> 0;
+          const cidrNum =
+            ((cidrParts[0] << 24) | (cidrParts[1] << 16) | (cidrParts[2] << 8) | cidrParts[3]) >>>
+            0;
+          const mask = prefixLen === 0 ? 0 : (0xffffffff << (32 - prefixLen)) >>> 0;
+          if ((ipNum & mask) === (cidrNum & mask)) return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
 function forwardedForValues(req: express.Request): string[] {
   const raw = req.headers["x-forwarded-for"] || req.headers["X-Forwarded-For"];
   const values = Array.isArray(raw) ? raw : raw ? [raw] : [];
@@ -754,13 +804,26 @@ function isProductionEnvironment(env: NodeJS.ProcessEnv = process.env): boolean 
  * SECURITY: a same-host reverse proxy (Caddy, nginx, Cloudflare tunnel, etc.)
  * connects to Node over loopback even for public internet callers. In
  * production, loopback alone is therefore not enough to grant local-dev auth.
+ *
+ * NEOTOMA_TRUSTED_PROXY_IPS: comma-separated list of IPs or IPv4 CIDRs whose
+ * XFF entries are trusted and do not disqualify a loopback-socket request from
+ * being considered local. Use this for tunnel setups where cloudflared (or
+ * similar) injects a non-loopback XFF entry that represents a controlled
+ * internal hop, not a public internet caller.
+ *
+ * Example: NEOTOMA_TRUSTED_PROXY_IPS=100.64.0.0/10
  */
 export function isLocalRequest(req: express.Request): boolean {
   if (!isLoopbackAddress(req.socket?.remoteAddress)) return false;
 
   const forwardedFor = forwardedForValues(req);
   if (forwardedFor.length > 0) {
-    return forwardedFor.every(isLoopbackAddress);
+    // A forwarded-for entry disqualifies the request as local unless every
+    // entry is either a loopback address or an explicitly trusted proxy IP.
+    if (forwardedFor.every((ip) => isLoopbackAddress(ip) || isTrustedProxyIP(ip))) {
+      return true;
+    }
+    return false;
   }
 
   if (isProductionEnvironment() && process.env.NEOTOMA_TRUST_PROD_LOOPBACK === "1") {
@@ -1110,17 +1173,21 @@ app.all("/mcp", async (req, res) => {
       | undefined;
     let bearerValidated = false;
 
-    if (config.encryption.enabled) {
-      // Encryption on: require static token derived from user's private key
-      const expectedToken = getMcpAuthToken();
-      if (authHeader?.startsWith("Bearer ") && expectedToken) {
-        const token = authHeader.slice(7).trim();
-        if (safeCompareTokens(token, expectedToken)) {
-          req.headers["x-connection-id"] = "dev-local";
-          connectionIdHeader = "dev-local";
-          bearerValidated = true;
-        }
+    // Key-derived Bearer token is accepted whenever a key source is configured (regardless of
+    // NEOTOMA_ENCRYPTION_ENABLED). This lets tunnel setups authenticate via `neotoma auth mcp-token`
+    // without enabling full data-at-rest encryption.
+    const mcpExpectedToken = getMcpAuthToken();
+    if (authHeader?.startsWith("Bearer ") && mcpExpectedToken) {
+      const token = authHeader.slice(7).trim();
+      if (safeCompareTokens(token, mcpExpectedToken)) {
+        req.headers["x-connection-id"] = "dev-local";
+        connectionIdHeader = "dev-local";
+        bearerValidated = true;
       }
+    }
+
+    if (config.encryption.enabled) {
+      // Encryption on: only key-derived Bearer is accepted; no further no-Bearer paths.
     } else {
       // Encryption off: local requests can use no-auth. HTTP (insecure) defaults to anonymous 000... user; HTTPS/localhost can use dev-local.
       if (!authHeader?.startsWith("Bearer ") && !connectionIdHeader) {
@@ -2894,19 +2961,24 @@ app.use(async (req, res, next) => {
   }
 
   // MCP-style auth (aligns CLI and REST API with MCP). Local requests can skip Bearer; tunnel requires Bearer or OAuth.
-  if (config.encryption.enabled) {
-    const expectedToken = getMcpAuthToken();
-    if (headerAuth.startsWith("Bearer ") && expectedToken) {
-      const token = headerAuth.slice(7).trim();
-      if (safeCompareTokens(token, expectedToken)) {
-        const devUser = ensureLocalDevUser();
-        stampUserPrincipal(req, devUser.id);
-        logger.info(
-          `[Auth] ${req.method} ${req.path} auth_method=bearer_mcp_token user_id=${devUser.id}`
-        );
-        return next();
-      }
+  // Key-derived bearer token is accepted whenever a key source is configured, regardless of whether full encryption
+  // is enabled. This allows tunnel setups (Cloudflare, autossh, etc.) to authenticate via key-derived Bearer
+  // even when NEOTOMA_ENCRYPTION_ENABLED is not set.
+  const mcpExpectedToken = getMcpAuthToken();
+  if (headerAuth.startsWith("Bearer ") && mcpExpectedToken) {
+    const token = headerAuth.slice(7).trim();
+    if (safeCompareTokens(token, mcpExpectedToken)) {
+      const devUser = ensureLocalDevUser();
+      stampUserPrincipal(req, devUser.id);
+      logger.info(
+        `[Auth] ${req.method} ${req.path} auth_method=bearer_mcp_token user_id=${devUser.id}`
+      );
+      return next();
     }
+  }
+
+  if (config.encryption.enabled) {
+    // Encryption on: no further no-Bearer paths — all non-key auth is rejected below.
   } else {
     if (!headerAuth.startsWith("Bearer ")) {
       if (await maybeStampGuestPrincipal(req)) {
