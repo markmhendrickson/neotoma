@@ -811,7 +811,17 @@ function isProductionEnvironment(env: NodeJS.ProcessEnv = process.env): boolean 
  * similar) injects a non-loopback XFF entry that represents a controlled
  * internal hop, not a public internet caller.
  *
- * Example: NEOTOMA_TRUSTED_PROXY_IPS=100.64.0.0/10
+ * The XFF IP that cloudflared injects depends on its forwarding mode:
+ * - Warp / CGNAT mode: typically 100.64.x.x (CGNAT range, NEOTOMA_TRUSTED_PROXY_IPS=100.64.0.0/10)
+ * - Passthrough mode: the upstream client IP (Vercel egress, CDN edge, etc.)
+ *
+ * To find the actual IP: start the server, make a request through the tunnel,
+ * and check Neotoma stderr for "isLocalRequest rejected: XFF contains <ip>".
+ * Set NEOTOMA_TRUSTED_PROXY_IPS to that IP or its enclosing CIDR.
+ *
+ * NEOTOMA_TRUSTED_PROXY_IPS and NEOTOMA_TRUST_PROD_LOOPBACK=1 are independent
+ * and can coexist. NEOTOMA_TRUST_PROD_LOOPBACK=1 bypasses the XFF check
+ * entirely and remains valid for single-host deployments without a tunnel.
  */
 export function isLocalRequest(req: express.Request): boolean {
   if (!isLoopbackAddress(req.socket?.remoteAddress)) return false;
@@ -823,6 +833,11 @@ export function isLocalRequest(req: express.Request): boolean {
     if (forwardedFor.every((ip) => isLoopbackAddress(ip) || isTrustedProxyIP(ip))) {
       return true;
     }
+    const untrusted = forwardedFor.filter((ip) => !isLoopbackAddress(ip) && !isTrustedProxyIP(ip));
+    process.stderr.write(
+      `[neotoma] isLocalRequest: loopback socket rejected because XFF contains untrusted IP(s): ${untrusted.join(", ")}. ` +
+        `Set NEOTOMA_TRUSTED_PROXY_IPS to trust these addresses.\n`
+    );
     return false;
   }
 
