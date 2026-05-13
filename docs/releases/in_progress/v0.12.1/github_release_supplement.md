@@ -83,6 +83,11 @@ Headline:
 - Operator-facing hardening knob documentation does not change runtime behavior; it makes already-shipped knobs findable from the security landing page so hosted-mode operators are less likely to leave them at single-tenant defaults.
 - No new advisory under `docs/security/advisories/`. No CVE.
 
+**Amendment — PR #79 (self-hosted auth + Cloudflare Tunnel, commit `356ee2c10`):**
+
+- `src/crypto/mcp_auth_token.ts` — `getMcpAuthToken()` no longer gates token derivation on `NEOTOMA_ENCRYPTION_ENABLED`. The change only widens the set of accepted valid tokens; constant-time comparison (`safeCompareTokens`) is unchanged.
+- `src/actions.ts` — bearer token validation moved above the `encryption.enabled` branch in both REST and MCP middleware; new `NEOTOMA_TRUSTED_PROXY_IPS` opt-in env var for declaring trusted proxy CIDRs. Both changes are off-by-default for existing deployments. Full gate evidence in `security_review.md` § Amendment — PR #79. `test:security:auth-matrix` → 16 passed, 1 skipped.
+
 ## Deferred follow-up
 
 - **Inspector UI for plans on issues** (carried from v0.12.0): the `Plans` tab on `IssueDetailPage`, per-message plan chips, and the related contract test remain deferred. The v0.12.0 supplement (now archived under `docs/releases/completed/v0.12.0/`) describes the scope.

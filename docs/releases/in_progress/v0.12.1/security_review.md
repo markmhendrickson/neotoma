@@ -107,6 +107,61 @@ These are purely documentation; they describe runtime behaviors that already shi
 
 **Verdict:** approved.
 
+## Amendment — PR #79 (self-hosted auth + Cloudflare Tunnel fixes)
+
+PR #79 (`test/current-branch-build` → `main`, commit `356ee2c10`) touches `src/actions.ts` and `src/crypto/mcp_auth_token.ts` — flagged `sensitive=true` by the G1 classifier (`auth-middleware`).
+
+### G1 — `security:classify-diff`
+
+`npm run -s security:classify-diff -- --base origin/main --head test/current-branch-build --json` → `sensitive=true`.
+
+Flagged: `auth-middleware: src/actions.ts`.
+
+### G2 — `security:lint`
+
+`npm run -s security:lint` → **0 errors, 110 warnings across 290 files**. No new errors or suppression directives.
+
+### G3 — `security:manifest:check` and `test:security:auth-matrix`
+
+- `npm run -s security:manifest:check` → `protected_routes_manifest.json: in sync with openapi.yaml (106 routes)`.
+- `npm run -s test:security:auth-matrix` → 16 passed, 1 skipped, 0 failed.
+
+### G4 — Manual review
+
+#### G4.5 Bearer token auth decoupled from `NEOTOMA_ENCRYPTION_ENABLED` (`src/crypto/mcp_auth_token.ts`, `src/actions.ts`)
+
+**What changed:**
+
+`getMcpAuthToken()` previously returned `null` whenever `config.encryption.enabled` was `false`, regardless of whether a key source (`NEOTOMA_KEY_FILE_PATH` or `NEOTOMA_MNEMONIC`) was configured. The early-return guard is removed. The function now returns a derived token whenever a key source is present.
+
+In `src/actions.ts`, the `bearer_mcp_token` validation block in both the REST middleware and the MCP route handler was nested inside `if (config.encryption.enabled)`. Both blocks are now moved above that condition so they execute whenever `getMcpAuthToken()` returns a non-null value.
+
+**Security analysis:**
+
+The change only widens the set of *accepted* valid tokens — it does not relax validation. The token comparison continues to use `safeCompareTokens` (constant-time). An operator must have `NEOTOMA_KEY_FILE_PATH` or `NEOTOMA_MNEMONIC` set for the new path to activate; absent a key source, `getMcpAuthToken()` still returns `null` and the path is inert.
+
+The previous behavior was a misconfiguration trap: `neotoma auth mcp-token` derived a token that the server silently rejected. Fixing this closes a user-facing gap while leaving the authentication model unchanged.
+
+**Risk introduced:** none. The validation logic is identical; only the gating condition changed.
+
+**Verdict:** approved.
+
+#### G4.6 `NEOTOMA_TRUSTED_PROXY_IPS` (`src/actions.ts`)
+
+**What changed:**
+
+New `parseTrustedProxyIPs` and `isTrustedProxyIP` functions read `NEOTOMA_TRUSTED_PROXY_IPS` (comma-separated IPs/CIDRs). `isLocalRequest()` now accepts a loopback-socket request if every XFF entry is either a loopback address or matches a trusted proxy CIDR.
+
+**Security analysis:**
+
+The feature is opt-in and off-by-default — `NEOTOMA_TRUSTED_PROXY_IPS` is unset in all existing deployments, leaving `isLocalRequest()` behavior unchanged.
+
+When set, the operator explicitly declares which proxy IPs are trusted infrastructure. The CIDR matching uses bitwise IPv4 arithmetic with no external dependency and no dynamic code evaluation. The function does not affect any other auth path; it only influences whether `isLocalRequest()` returns `true`.
+
+Misconfiguration risk: an operator who sets `NEOTOMA_TRUSTED_PROXY_IPS=0.0.0.0/0` would trust all XFF IPs, effectively allowing any request on a loopback socket to be treated as local. This is an operator error analogous to misconfiguring `NEOTOMA_TRUST_PROD_LOOPBACK=1`. It is documented as operator responsibility and consistent with how other trust-extension env vars work in this codebase.
+
+**Verdict:** approved.
+
 ## Suggested negative tests (forward-looking)
 
 - Revoked guest token end-to-end (see G4.1).
