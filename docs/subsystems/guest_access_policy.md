@@ -35,11 +35,11 @@ neotoma access reset <entity_type>
 neotoma access list
 ```
 
-`access reset` clears any deprecated config-file fallback for the entity type
-and, when a schema exists, writes an explicit `closed` policy to
-SchemaMetadata. If a higher-precedence environment variable still applies, the
-CLI reports that remaining effective source instead of claiming the entity type
-is closed.
+`neotoma access reset <entity_type>` clears any deprecated config-file fallback
+for the entity type and, when a schema exists, writes an explicit `closed`
+policy to SchemaMetadata. If a higher-precedence environment variable still
+applies, the CLI reports that remaining effective source instead of claiming the
+effective policy is closed.
 
 Shortcut for issue submission types:
 
@@ -56,6 +56,9 @@ When resolving the effective policy for an entity type, the following sources ar
 2. **SchemaMetadata.guest_access_policy** on the active schema row — the canonical source. Managed via `neotoma access set`.
 3. **Config file** `~/.config/neotoma/config.json` under `access_policies` — **deprecated fallback**. Kept for backward compatibility with pre-v0.12 installs. A deprecation warning is logged when this source is used. Migrate to SchemaMetadata via `neotoma access set <type> <mode>`.
 4. **Default**: `closed`.
+
+`neotoma access list` uses the same effective precedence and omits entries whose
+winning policy is the default `closed`.
 
 ### Default Seeds
 
