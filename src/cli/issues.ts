@@ -200,6 +200,7 @@ export async function issuesMessage(opts: IssuesMessageOpts, api: NeotomaApiClie
     message_entity_id?: string;
     pushed_to_github?: boolean;
     submitted_to_neotoma?: boolean;
+    remote_submission_error?: string | null;
   } | undefined;
 
   if (opts.json) {
@@ -209,6 +210,7 @@ export async function issuesMessage(opts: IssuesMessageOpts, api: NeotomaApiClie
         github_comment_id: row?.github_comment_id ?? null,
         message_entity_id: row?.message_entity_id,
         submitted_to_neotoma: Boolean(row?.submitted_to_neotoma),
+        remote_submission_error: row?.remote_submission_error ?? null,
       },
       true,
     );
@@ -219,6 +221,9 @@ export async function issuesMessage(opts: IssuesMessageOpts, api: NeotomaApiClie
       );
     } else {
       process.stdout.write(`Message stored locally (GitHub push pending or private thread)\n`);
+    }
+    if (row?.remote_submission_error) {
+      process.stderr.write(`Remote Neotoma append failed: ${row.remote_submission_error}\n`);
     }
   }
 }

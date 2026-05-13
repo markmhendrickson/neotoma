@@ -266,6 +266,7 @@ export interface AddMessageResult {
   message_entity_id: string;
   pushed_to_github: boolean;
   submitted_to_neotoma: boolean;
+  remote_submission_error: string | null;
 }
 
 export interface GetIssueStatusResult {
@@ -1114,13 +1115,10 @@ export async function addIssueMessage(
     }),
   );
 
-  if (remoteSubmissionAttempted && !submittedToNeotoma) {
-    const cause = remoteSubmissionError?.message ?? "unknown error";
-    throw new Error(
-      `Failed to submit issue message to Neotoma at ${issuesTargetUrl}: ${cause}. ` +
-        "The message was stored locally for follow-up.",
-    );
-  }
+  const remoteSubmissionErrorMessage =
+    remoteSubmissionAttempted && !submittedToNeotoma
+      ? `Remote issue message submission to ${issuesTargetUrl} failed: ${remoteSubmissionError?.message ?? "unknown error"}`
+      : null;
 
   // No issues.target_url: this instance is the canonical operator store.
   if (!issuesTargetUrl) {
@@ -1132,6 +1130,7 @@ export async function addIssueMessage(
     message_entity_id: messageEntityId,
     pushed_to_github: pushedToGithub,
     submitted_to_neotoma: submittedToNeotoma,
+    remote_submission_error: remoteSubmissionErrorMessage,
   };
 }
 

@@ -1034,7 +1034,7 @@ export function buildToolDefinitions(
           "Remote auth: when the local row mirrors a remote operator issue, the operator instance requires either (a) a guest_access_token — pass the token returned by submit_issue, or read it from the local issue entity snapshot — or (b) an agent_grant configured by the operator for your agent identity. " +
           "If the issue snapshot already stores guest_access_token you may omit it here; the server reads it automatically. " +
           "If add_issue_message returns AUTH_REQUIRED, it means neither path is satisfied: check that guest_access_token from submit_issue was preserved on the local entity, or ask the operator to configure an agent_grant via Inspector → Agents → Grants. " +
-          "Fails with an MCP error if the remote Neotoma store is required (non-empty target URL) but unreachable or rejects the request. " +
+          "If the remote Neotoma append fails after local and/or GitHub side effects are recorded, the response includes `remote_submission_error` instead of throwing so callers do not create duplicate fallback comments. " +
           "On public issue threads, pass at least one of `reporter_git_sha` / `reporter_app_version` so each message records the environment it was authored against. Missing both emits a server-side warning; the message still persists.",
       ),
       inputSchema: {

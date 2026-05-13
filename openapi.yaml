@@ -4193,6 +4193,7 @@ paths:
                   - message_entity_id
                   - pushed_to_github
                   - submitted_to_neotoma
+                  - remote_submission_error
                 properties:
                   github_comment_id:
                     type: string
@@ -4203,6 +4204,10 @@ paths:
                     type: boolean
                   submitted_to_neotoma:
                     type: boolean
+                  remote_submission_error:
+                    type: string
+                    nullable: true
+                    description: Non-null when remote Neotoma append was attempted but failed after local and/or GitHub side effects were recorded.
 
   /issues/submit:
     post:
