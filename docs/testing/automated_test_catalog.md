@@ -362,6 +362,7 @@ flowchart TD
 - `tests/integration/schema_recommendation_integration.test.ts`
 - `tests/integration/session_introspection.test.ts`
 - `tests/integration/store_conversation_message_role_conflict.test.ts`
+- `tests/integration/store_explicit_canonical_name.test.ts`
 - `tests/integration/store_registered_schema_alias_precedence.test.ts`
 - `tests/integration/store_resolution_attributes_hint.test.ts`
 - `tests/integration/submit_issue_advisory_alias.test.ts`

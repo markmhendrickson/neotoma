@@ -521,8 +521,16 @@ export function deriveCanonicalNameFromFieldsWithTrace(
     });
   }
 
+  // When the caller supplied an explicit `canonical_name` field, use it
+  // verbatim — do not apply the heuristic normalizer that strips hyphens.
+  // Any other path still goes through formatCanonicalNameForStorage.
+  const canonicalName =
+    matchedRule === "name_key:canonical_name"
+      ? resolvedRaw.trim()
+      : formatCanonicalNameForStorage(entityType, resolvedRaw);
+
   return {
-    canonicalName: formatCanonicalNameForStorage(entityType, resolvedRaw),
+    canonicalName,
     path: matchedPath ? [matchedPath] : ["unknown"],
     identityBasis: matchedBasis ?? "heuristic_fallback",
     identityRule: matchedRule || "unknown",

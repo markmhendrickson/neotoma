@@ -4353,6 +4353,18 @@ export class NeotomaServer {
           : undefined;
       delete fieldsToValidate.target_id;
 
+      // Extract an explicit canonical_name from the payload before schema
+      // validation. validateFieldsWithConverters routes it to unknownFields
+      // when the schema's fields dict doesn't declare it, which causes the
+      // resolver to fall back to heuristic derivation (e.g. from `title`)
+      // and silently ignore the caller-supplied value. We hoist it here so
+      // it is available as a resolver hint regardless of schema declaration.
+      const explicitCanonicalName =
+        typeof (fieldsToValidate as Record<string, unknown>).canonical_name === "string" &&
+        ((fieldsToValidate as Record<string, unknown>).canonical_name as string).trim() !== ""
+          ? ((fieldsToValidate as Record<string, unknown>).canonical_name as string)
+          : undefined;
+
       const { getSchemaDefinition, resolveEntityTypeFromAlias } = await import(
         "./services/schema_definitions.js"
       );
@@ -4484,6 +4496,21 @@ export class NeotomaServer {
       const unknownFields = validationResult.unknownFields;
       const originalValues = validationResult.originalValues;
 
+      // When canonical_name was supplied explicitly but is not a declared
+      // schema field, validateFieldsWithConverters routes it to unknownFields
+      // and the resolver never sees it. Remove it from unknownFields (so it
+      // doesn't inflate unknown_fields_count or create a raw_fragment) and
+      // inject it into the resolver-only fields so the derivation honors the
+      // caller's intent. The value is intentionally NOT added to validFields
+      // so it is not stored as an observation field unless the schema declares it.
+      if (explicitCanonicalName && !schema.schema_definition.fields["canonical_name"]) {
+        delete (unknownFields as Record<string, unknown>)["canonical_name"];
+      }
+      const fieldsForResolver =
+        explicitCanonicalName && !schema.schema_definition.fields["canonical_name"]
+          ? { canonical_name: explicitCanonicalName, ...validFields }
+          : validFields;
+
       // Include date-like unknown fields in the observation so they flow into the snapshot
       // and timeline derivation, even when not yet in the entity schema.
       const { getDateLikeFields } = await import("./services/timeline_events.js");
@@ -4514,7 +4541,7 @@ export class NeotomaServer {
       try {
         const result = await resolveEntityWithTrace({
           entityType,
-          fields: fieldsToValidate,
+          fields: fieldsForResolver,
           userId,
           commit: true,
           strict,
