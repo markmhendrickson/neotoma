@@ -105,6 +105,8 @@ Shipped in [v0.11.1](https://github.com/markmhendrickson/neotoma/releases/tag/v0
 
 If your deployment runs Neotoma behind a single-host reverse proxy and the bearer-fronted UX is too friction-heavy, you may opt back into trusting the loopback chain with `NEOTOMA_TRUST_PROD_LOOPBACK=1`. Document this choice in your runbook; the gates record any new reference to the env var as security-sensitive.
 
+**Operational note — cloud-fronted topologies (added v0.12.1):** `NEOTOMA_TRUST_PROD_LOOPBACK=1` is nullified when callers arrive through a cloud service (Vercel, CDN edge, Cloudflare Access) that injects a non-loopback `x-forwarded-for` entry. In those topologies, loopback-trust never activates regardless of this variable. The symptom is `401 AUTH_REQUIRED` on requests that work fine from CLI or stdio MCP clients (which carry no XFF). The remedy is explicit bearer authentication from the cloud caller — see `docs/developer/tunnels.md` § "Caller authentication for cloud-fronted topologies". As of v0.12.1, Neotoma logs the untrusted XFF IP to stderr when it rejects a loopback-socket request, making this failure mode self-diagnosing.
+
 ## Detection
 
 - Pre-fix releases match the regression shape of the static rule `loopback-trust-in-production` in `scripts/security/semgrep_auth_rules.yml` (i.e. a bare `req.socket.remoteAddress === "127.0.0.1"` check). Run `npm run security:lint` against any pre-0.11.1 checkout to surface the rule firing.
