@@ -364,6 +364,7 @@ flowchart TD
 - `tests/integration/store_builtin_identity_opt_out_schemas.test.ts`
 - `tests/integration/store_conversation_message_role_conflict.test.ts`
 - `tests/integration/store_explicit_canonical_name.test.ts`
+- `tests/integration/store_external_link_schema.test.ts`
 - `tests/integration/store_registered_schema_alias_precedence.test.ts`
 - `tests/integration/store_resolution_attributes_hint.test.ts`
 - `tests/integration/submit_issue_advisory_alias.test.ts`
