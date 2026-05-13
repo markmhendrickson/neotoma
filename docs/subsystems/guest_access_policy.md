@@ -41,6 +41,10 @@ policy to SchemaMetadata. If a higher-precedence environment variable still
 applies, the CLI reports that remaining effective source instead of claiming the
 effective policy is closed.
 
+Access mutations are local-only today. `neotoma access set`, `reset`, `enable-issues`, and `disable-issues`
+reject `--base-url` / `--api-only` (and the equivalent `NEOTOMA_BASE_URL` / `NEOTOMA_API_ONLY`
+overrides) instead of pretending to change a remote instance.
+
 Shortcut for issue submission types:
 
 ```bash
