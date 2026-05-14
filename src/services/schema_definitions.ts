@@ -1514,10 +1514,16 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
+        amount: { type: "number", required: false },
+        amount_original: { type: "number", required: false },
+        currency: { type: "string", required: false },
+        date: { type: "date", required: false },
         posting_date: { type: "date", required: false },
+        merchant_name: { type: "string", required: false },
+        status: { type: "string", required: false },
+        account_id: { type: "string", required: false },
         category: { type: "string", required: false },
         bank_provider: { type: "string", required: false },
-        amount_original: { type: "number", required: false },
       },
       canonical_name_fields: [
         "posting_date",
@@ -1527,12 +1533,13 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       ],
       temporal_fields: [
         { field: "posting_date", event_type: "TransactionPosted" },
-        { field: "transaction_date", event_type: "TransactionDate" },
+        { field: "date", event_type: "TransactionDate" },
       ],
     },
     reducer_config: {
       merge_policies: {
         posting_date: { strategy: "last_write" },
+        status: { strategy: "last_write" },
         category: { strategy: "last_write" },
       },
     },
@@ -1606,7 +1613,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       fields: {
         schema_version: { type: "string", required: true },
         name: { type: "string", required: false },
+        contract_number: { type: "string", required: false },
+        parties: { type: "string", required: false },
+        effective_date: { type: "date", required: false },
+        expiration_date: { type: "date", required: false },
         signed_date: { type: "date", required: false },
+        status: { type: "string", required: false },
         companies: { type: "string", required: false },
         files: { type: "string", required: false },
         type: { type: "string", required: false },
@@ -1620,6 +1632,9 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
     reducer_config: {
       merge_policies: {
         signed_date: { strategy: "last_write" },
+        effective_date: { strategy: "last_write" },
+        expiration_date: { strategy: "last_write" },
+        status: { strategy: "last_write" },
         files: { strategy: "merge_array" },
       },
     },
@@ -1637,6 +1652,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
+        external_id: { type: "string", required: false },
+        institution: { type: "string", required: false },
+        currency: { type: "string", required: false },
+        balance: { type: "number", required: false },
         wallet: { type: "string", required: false },
         wallet_name: { type: "string", required: false },
         number: { type: "string", required: false },
