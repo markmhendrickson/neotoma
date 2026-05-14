@@ -46,7 +46,17 @@ const ID_KEYS = new Set([
   "idempotency_key",
 ]);
 
-const ENVIRONMENT_KEYS = new Set(["git_branch"]);
+const ENVIRONMENT_KEYS = new Set([
+  "git_branch",
+  "cwd",
+  "repository_root",
+  "repository_remote",
+  "repository_name",
+  "scope_summary",
+  "title",
+  "working_directory",
+  "workspace_kind",
+]);
 
 function scrubValue(value: unknown, ctx: { idMap: Map<string, string>; nextId: { n: number } }): unknown {
   if (value == null) return value;

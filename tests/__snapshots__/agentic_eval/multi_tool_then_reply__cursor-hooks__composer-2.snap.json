@@ -8,22 +8,21 @@
           {
             "client_name": "Cursor",
             "conversation_id": "<id:1>",
-            "cwd": "/Users/markmhendrickson/repos/neotoma",
+            "cwd": "<env>",
             "data_source": "cursor-hook",
             "entity_type": "conversation",
             "harness": "cursor-hook",
             "hook_event": "beforeSubmitPrompt",
-            "repository_name": "neotoma",
-            "repository_remote": "git@github.com:markmhendrickson/neotoma.git",
-            "repository_root": "/Users/markmhendrickson/repos/neotoma",
-            "scope_summary": "Cursor session in git repository neotoma.",
+            "repository_name": "<env>",
+            "repository_remote": "<env>",
+            "scope_summary": "<env>",
             "thread_kind": "human_agent",
-            "title": "Cursor session neotoma",
-            "workspace_kind": "git_repository"
+            "title": "<env>",
+            "workspace_kind": "<env>"
           },
           {
             "content": "Find the auth flow in this repo.",
-            "cwd": "/Users/markmhendrickson/repos/neotoma",
+            "cwd": "<env>",
             "data_source": "cursor-hook",
             "entity_type": "conversation_message",
             "harness": "cursor",
@@ -51,7 +50,7 @@
           {
             "context_source": "cursor-hook",
             "conversation_id": "<id:1>",
-            "cwd": "/Users/markmhendrickson/repos/neotoma",
+            "cwd": "<env>",
             "data_source": "cursor-hook",
             "entity_type": "conversation_turn",
             "git_branch": "<env>",
@@ -65,7 +64,7 @@
             "started_at": "<ts>",
             "turn_id": "<id:3>",
             "turn_key": "multi_tool_then_reply__cursor-hooks__composer-2:turn-1",
-            "working_directory": "/Users/markmhendrickson/repos/neotoma"
+            "working_directory": "<env>"
           }
         ],
         "idempotency_key": "<id:4>"
@@ -77,7 +76,7 @@
       "body": {
         "entities": [
           {
-            "cwd": "/Users/markmhendrickson/repos/neotoma",
+            "cwd": "<env>",
             "data_source": "cursor-hook",
             "entity_type": "tool_invocation",
             "harness": "cursor",
@@ -101,7 +100,7 @@
         "entities": [
           {
             "context_source": "cursor-hook",
-            "cwd": "/Users/markmhendrickson/repos/neotoma",
+            "cwd": "<env>",
             "data_source": "cursor-hook",
             "entity_type": "conversation_turn",
             "git_branch": "<env>",
@@ -118,7 +117,7 @@
             "tool_invocation_count": 1,
             "turn_id": "<id:3>",
             "turn_key": "multi_tool_then_reply__cursor-hooks__composer-2:turn-1",
-            "working_directory": "/Users/markmhendrickson/repos/neotoma"
+            "working_directory": "<env>"
           }
         ],
         "idempotency_key": "<id:4>"
@@ -130,7 +129,7 @@
       "body": {
         "entities": [
           {
-            "cwd": "/Users/markmhendrickson/repos/neotoma",
+            "cwd": "<env>",
             "data_source": "cursor-hook",
             "entity_type": "tool_invocation",
             "harness": "cursor",
@@ -154,7 +153,7 @@
         "entities": [
           {
             "context_source": "cursor-hook",
-            "cwd": "/Users/markmhendrickson/repos/neotoma",
+            "cwd": "<env>",
             "data_source": "cursor-hook",
             "entity_type": "conversation_turn",
             "git_branch": "<env>",
@@ -171,7 +170,7 @@
             "tool_invocation_count": 2,
             "turn_id": "<id:3>",
             "turn_key": "multi_tool_then_reply__cursor-hooks__composer-2:turn-1",
-            "working_directory": "/Users/markmhendrickson/repos/neotoma"
+            "working_directory": "<env>"
           }
         ],
         "idempotency_key": "<id:4>"
@@ -184,7 +183,7 @@
         "entities": [
           {
             "content": "Found 3 references to createSession across src/auth/.",
-            "cwd": "/Users/markmhendrickson/repos/neotoma",
+            "cwd": "<env>",
             "data_source": "cursor-hook",
             "entity_type": "conversation_message",
             "harness": "cursor",
@@ -206,18 +205,17 @@
           {
             "client_name": "Cursor",
             "conversation_id": "<id:1>",
-            "cwd": "/Users/markmhendrickson/repos/neotoma",
+            "cwd": "<env>",
             "data_source": "cursor-hook",
             "entity_type": "conversation",
             "harness": "cursor-hook",
             "hook_event": "stop_backfill",
-            "repository_name": "neotoma",
-            "repository_remote": "git@github.com:markmhendrickson/neotoma.git",
-            "repository_root": "/Users/markmhendrickson/repos/neotoma",
-            "scope_summary": "Cursor session in git repository neotoma.",
+            "repository_name": "<env>",
+            "repository_remote": "<env>",
+            "scope_summary": "<env>",
             "thread_kind": "human_agent",
-            "title": "Cursor session neotoma",
-            "workspace_kind": "git_repository"
+            "title": "<env>",
+            "workspace_kind": "<env>"
           }
         ],
         "idempotency_key": "<id:8>"
@@ -231,7 +229,7 @@
           {
             "context_source": "cursor-hook",
             "conversation_id": "<id:1>",
-            "cwd": "/Users/markmhendrickson/repos/neotoma",
+            "cwd": "<env>",
             "data_source": "cursor-hook",
             "diagnosis_confidence": "high",
             "ended_at": "<ts>",
@@ -281,7 +279,7 @@
             "tool_invocation_count": 2,
             "turn_id": "<id:3>",
             "turn_key": "multi_tool_then_reply__cursor-hooks__composer-2:turn-1",
-            "working_directory": "/Users/markmhendrickson/repos/neotoma"
+            "working_directory": "<env>"
           }
         ],
         "idempotency_key": "<id:4>"
@@ -298,21 +296,21 @@
       "hook": "postToolUse",
       "exitCode": 0,
       "output": {
-        "additional_context": "Neotoma turn must-do (compact; full rules at MCP `instructions`):\n0. Every turn must interact with Neotoma at least once, usually by storing the conversation turn.\n1. Bounded retrieval first when the user message implies known entities (retrieve_entity_by_identifier for ids, retrieve_entities for category lists).\n2. User-phase store (one **`store`** MCP call): conversation + user conversation_message (sender_kind=user) + any extracted entities; PART_OF message->conversation; REFERS_TO message->each extracted entity.\n3. Tool calls and host edits run AFTER step 2.\n4. Closing store: assistant conversation_message (sender_kind=assistant, exact reply text) with REFERS_TO to every entity the reply cites or produced; PART_OF same conversation.\n5. Display rule: when this turn created/updated/retrieved non-bookkeeping entities, the visible reply ends with a `🧠 Neotoma` section listing them as bullets.\nForbidden: skipping store on greetings, persisting only the user message, ending the turn without the assistant store. Idempotency keys are per-turn unique.\nNote: this client (composer-2) is on a small/fast model. Treat the above as a hard checklist — run it every turn even when the answer feels trivial."
+        "additional_context": "Neotoma turn must-do (compact; full rules at MCP `instructions`):\n0. Every turn must interact with Neotoma at least once, usually by storing the conversation turn.\n1. Bounded retrieval first when the user message implies known entities (retrieve_entity_by_identifier for ids, retrieve_entities for category lists).\n2. User-phase store (one **`store`** MCP call): conversation + user conversation_message (sender_kind=user) + any extracted entities; PART_OF message->conversation; REFERS_TO message->each extracted entity.\n3. Tool calls and host edits run AFTER step 2.\n4. Closing store: assistant conversation_message (sender_kind=assistant, exact reply text) with REFERS_TO to every entity the reply cites or produced; PART_OF same conversation.\n5. Display rule: when this turn created/updated/retrieved non-bookkeeping entities, the visible reply ends with a `🧠 Neotoma` section listing them as bullets.\nForbidden: skipping store on greetings, persisting only the user message, ending the turn without the assistant store. Idempotency keys are per-turn unique.\nForbidden: reusing the user-phase conversation_message `turn_key` for the closing assistant store (must use `{conversation_id}:{turn_id}:assistant`, not the bare `{conversation_id}:{turn_id}`).\nNote: this client (composer-2) is on a small/fast model. Treat the above as a hard checklist — run it every turn even when the answer feels trivial."
       }
     },
     {
       "hook": "postToolUse",
       "exitCode": 0,
       "output": {
-        "additional_context": "Neotoma turn must-do (compact; full rules at MCP `instructions`):\n0. Every turn must interact with Neotoma at least once, usually by storing the conversation turn.\n1. Bounded retrieval first when the user message implies known entities (retrieve_entity_by_identifier for ids, retrieve_entities for category lists).\n2. User-phase store (one **`store`** MCP call): conversation + user conversation_message (sender_kind=user) + any extracted entities; PART_OF message->conversation; REFERS_TO message->each extracted entity.\n3. Tool calls and host edits run AFTER step 2.\n4. Closing store: assistant conversation_message (sender_kind=assistant, exact reply text) with REFERS_TO to every entity the reply cites or produced; PART_OF same conversation.\n5. Display rule: when this turn created/updated/retrieved non-bookkeeping entities, the visible reply ends with a `🧠 Neotoma` section listing them as bullets.\nForbidden: skipping store on greetings, persisting only the user message, ending the turn without the assistant store. Idempotency keys are per-turn unique.\nNote: this client (composer-2) is on a small/fast model. Treat the above as a hard checklist — run it every turn even when the answer feels trivial."
+        "additional_context": "Neotoma turn must-do (compact; full rules at MCP `instructions`):\n0. Every turn must interact with Neotoma at least once, usually by storing the conversation turn.\n1. Bounded retrieval first when the user message implies known entities (retrieve_entity_by_identifier for ids, retrieve_entities for category lists).\n2. User-phase store (one **`store`** MCP call): conversation + user conversation_message (sender_kind=user) + any extracted entities; PART_OF message->conversation; REFERS_TO message->each extracted entity.\n3. Tool calls and host edits run AFTER step 2.\n4. Closing store: assistant conversation_message (sender_kind=assistant, exact reply text) with REFERS_TO to every entity the reply cites or produced; PART_OF same conversation.\n5. Display rule: when this turn created/updated/retrieved non-bookkeeping entities, the visible reply ends with a `🧠 Neotoma` section listing them as bullets.\nForbidden: skipping store on greetings, persisting only the user message, ending the turn without the assistant store. Idempotency keys are per-turn unique.\nForbidden: reusing the user-phase conversation_message `turn_key` for the closing assistant store (must use `{conversation_id}:{turn_id}:assistant`, not the bare `{conversation_id}:{turn_id}`).\nNote: this client (composer-2) is on a small/fast model. Treat the above as a hard checklist — run it every turn even when the answer feels trivial."
       }
     },
     {
       "hook": "stop",
       "exitCode": 0,
       "output": {
-        "followup_message": "Neotoma compliance pass: the previous turn skipped the required Neotoma writes. Please re-run this turn now using one batched **`store`** MCP call: (1) bounded retrieval if the user message implied known entities, (2) user-phase store with conversation + user conversation_message + extracted entities + PART_OF/REFERS_TO links, (3) closing assistant store with the exact reply text. Reply with a one-line summary noting the entity_ids stored. Likely cause: agent ignored available instructions — Compact reminder was injected and Neotoma tooling was reachable, but the agent did not call **`store`**. Because this is a Neotoma source checkout, do not stop after backfilling the turn; proactively resolve the repo-owned root cause now when safe. Recommended repairs: Add or extend a Tier 1 fixture in `tests/fixtures/agentic_eval/` that asserts the `agent_ignored_available_instructions` classification for this model. Check the postToolUse reminder gate so wrapped host tool calls still receive the compact Neotoma reminder. Investigate whether the MCP `[COMPACT MODE]` block omits a contract this model needs; expand `docs/developer/mcp/instructions.md` accordingly.\n\nNeotoma turn must-do (compact; full rules at MCP `instructions`):\n0. Every turn must interact with Neotoma at least once, usually by storing the conversation turn.\n1. Bounded retrieval first when the user message implies known entities (retrieve_entity_by_identifier for ids, retrieve_entities for category lists).\n2. User-phase store (one **`store`** MCP call): conversation + user conversation_message (sender_kind=user) + any extracted entities; PART_OF message->conversation; REFERS_TO message->each extracted entity.\n3. Tool calls and host edits run AFTER step 2.\n4. Closing store: assistant conversation_message (sender_kind=assistant, exact reply text) with REFERS_TO to every entity the reply cites or produced; PART_OF same conversation.\n5. Display rule: when this turn created/updated/retrieved non-bookkeeping entities, the visible reply ends with a `🧠 Neotoma` section listing them as bullets.\nForbidden: skipping store on greetings, persisting only the user message, ending the turn without the assistant store. Idempotency keys are per-turn unique.\nNote: this client (composer-2) is on a small/fast model. Treat the above as a hard checklist — run it every turn even when the answer feels trivial."
+        "followup_message": "Neotoma compliance pass: the previous turn skipped the required Neotoma writes. Please re-run this turn now using one batched **`store`** MCP call: (1) bounded retrieval if the user message implied known entities, (2) user-phase store with conversation + user conversation_message + extracted entities + PART_OF/REFERS_TO links, (3) closing assistant store with the exact reply text. Reply with a one-line summary noting the entity_ids stored. Likely cause: agent ignored available instructions — Compact reminder was injected and Neotoma tooling was reachable, but the agent did not call **`store`**. Because this is a Neotoma source checkout, do not stop after backfilling the turn; proactively resolve the repo-owned root cause now when safe. Recommended repairs: Add or extend a Tier 1 fixture in `tests/fixtures/agentic_eval/` that asserts the `agent_ignored_available_instructions` classification for this model. Check the postToolUse reminder gate so wrapped host tool calls still receive the compact Neotoma reminder. Investigate whether the MCP `[COMPACT MODE]` block omits a contract this model needs; expand `docs/developer/mcp/instructions.md` accordingly.\n\nNeotoma turn must-do (compact; full rules at MCP `instructions`):\n0. Every turn must interact with Neotoma at least once, usually by storing the conversation turn.\n1. Bounded retrieval first when the user message implies known entities (retrieve_entity_by_identifier for ids, retrieve_entities for category lists).\n2. User-phase store (one **`store`** MCP call): conversation + user conversation_message (sender_kind=user) + any extracted entities; PART_OF message->conversation; REFERS_TO message->each extracted entity.\n3. Tool calls and host edits run AFTER step 2.\n4. Closing store: assistant conversation_message (sender_kind=assistant, exact reply text) with REFERS_TO to every entity the reply cites or produced; PART_OF same conversation.\n5. Display rule: when this turn created/updated/retrieved non-bookkeeping entities, the visible reply ends with a `🧠 Neotoma` section listing them as bullets.\nForbidden: skipping store on greetings, persisting only the user message, ending the turn without the assistant store. Idempotency keys are per-turn unique.\nForbidden: reusing the user-phase conversation_message `turn_key` for the closing assistant store (must use `{conversation_id}:{turn_id}:assistant`, not the bare `{conversation_id}:{turn_id}`).\nNote: this client (composer-2) is on a small/fast model. Treat the above as a hard checklist — run it every turn even when the answer feels trivial."
       }
     }
   ]

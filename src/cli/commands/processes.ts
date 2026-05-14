@@ -813,7 +813,7 @@ function buildServerContextByPid(rows: readonly NeotomaProcessRow[]): Map<number
 
 export function buildNeotomaServerSummaries(
   rows: readonly NeotomaProcessRow[],
-  options: { psSnapshotRaw?: string } = {}
+  options: { psSnapshotRaw?: string; platform?: NodeJS.Platform } = {}
 ): NeotomaServerProcessSummary[] {
   const filtered = filterNeotomaServerRows(rows);
   const psIndex = readPsIndexBestEffort(options.psSnapshotRaw);
@@ -860,7 +860,7 @@ export function buildNeotomaServerSummaries(
       pid: representative.pid,
       neotoma_env,
       port: formatListenPortsForServers(ports),
-      launchagent: inferLaunchAgentLabel(process.platform, representative.pid, representative.ppid, representative.command, psIndex),
+      launchagent: inferLaunchAgentLabel(options.platform ?? process.platform, representative.pid, representative.ppid, representative.command, psIndex),
       data_dir,
       log_paths,
     });
