@@ -116,6 +116,14 @@ export default defineConfig({
     ],
     testTimeout: 60000, // Increased timeout for integration tests
     hookTimeout: 30000,
+    // parquet-wasm ships a node/ entry that uses `module.exports` (CJS) despite
+    // the package declaring `"type": "module"`.  Tell Vite's SSR runtime to
+    // leave it alone rather than try to re-process it.
+    server: {
+      deps: {
+        external: [/parquet-wasm/],
+      },
+    },
     // Sequential execution for integration tests (avoid DB conflicts)
     sequence: {
       concurrent: false,
