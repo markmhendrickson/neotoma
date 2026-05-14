@@ -233,6 +233,14 @@ For environment and ports, see [Getting started](getting_started.md#start-develo
 - `--tunnel-provider <provider>`: Force tunnel provider to `ngrok` or `cloudflare` when using `--tunnel`; default is auto-detect from installed tools.
 - `--no-update-check`: Disable the update availability check. When enabled (default), the CLI checks the npm registry for a newer version and, if available, prints a one-line notice to stderr. The notice is never shown when `--json` is used.
 
+### Access Policies
+
+- `neotoma access list`: Show effective non-default guest access policies. Resolution follows env var > SchemaMetadata > deprecated config fallback > default; text output includes the winning source.
+- `neotoma access set <entity_type> <mode>`: Set a schema metadata guest policy when the schema exists, falling back to the deprecated config file only when SchemaMetadata is unavailable.
+- `neotoma access reset <entity_type>`: Clear any deprecated config fallback for the entity type and set schema metadata to the default `closed` policy when the schema exists. If an environment override still wins, output reports the remaining effective mode/source.
+- `neotoma access enable-issues`: Set `issue`, `conversation`, and `conversation_message` to `submitter_scoped`.
+- `neotoma access disable-issues`: Reset `issue`, `conversation`, and `conversation_message` to effective `closed` policy, subject to any env override.
+
 ### Runtime overrides (precedence: flag > env > default)
 
 CLI behavior can be pinned per invocation via flags or across invocations via environment variables. Every runtime override follows the same precedence: explicit flag > environment variable > default.
