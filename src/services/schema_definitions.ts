@@ -1514,10 +1514,19 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
+        amount: { type: "number", required: false },
+        amount_original: { type: "number", required: false },
+        currency: { type: "string", required: false },
+        merchant_name: { type: "string", required: false },
+        status: { type: "string", required: false },
+        account_id: { type: "string", required: false },
         posting_date: { type: "date", required: false },
+        transaction_date: { type: "date", required: false },
         category: { type: "string", required: false },
         bank_provider: { type: "string", required: false },
-        amount_original: { type: "number", required: false },
+        description: { type: "string", required: false },
+        transaction_id: { type: "string", required: false },
+        external_id: { type: "string", required: false },
       },
       canonical_name_fields: [
         "posting_date",
@@ -1534,6 +1543,9 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       merge_policies: {
         posting_date: { strategy: "last_write" },
         category: { strategy: "last_write" },
+        status: { strategy: "last_write" },
+        amount: { strategy: "last_write" },
+        amount_original: { strategy: "last_write" },
       },
     },
   },
@@ -1606,8 +1618,13 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       fields: {
         schema_version: { type: "string", required: true },
         name: { type: "string", required: false },
+        status: { type: "string", required: false },
         signed_date: { type: "date", required: false },
+        effective_date: { type: "date", required: false },
+        expiration_date: { type: "date", required: false },
         companies: { type: "string", required: false },
+        parties: { type: "string", required: false },
+        contract_number: { type: "string", required: false },
         files: { type: "string", required: false },
         type: { type: "string", required: false },
         notes: { type: "string", required: false },
@@ -1620,6 +1637,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
     reducer_config: {
       merge_policies: {
         signed_date: { strategy: "last_write" },
+        status: { strategy: "last_write" },
         files: { strategy: "merge_array" },
       },
     },
@@ -1637,6 +1655,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
+        external_id: { type: "string", required: false },
+        institution: { type: "string", required: false },
+        currency: { type: "string", required: false },
+        balance: { type: "number", required: false },
         wallet: { type: "string", required: false },
         wallet_name: { type: "string", required: false },
         number: { type: "string", required: false },
@@ -1645,14 +1667,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         status: { type: "string", required: false },
         notes: { type: "string", required: false },
       },
-      // R2: bookkeeping/auxiliary schema with no inherent strong identifier;
-      // declare explicit opt-out so resolution falls through to the heuristic
-      // path. See docs/foundation/schema_agnostic_design_rules.md.
-      identity_opt_out: "heuristic_canonical_name",
+      canonical_name_fields: ["external_id", "institution", "wallet_name", "wallet"],
     },
     reducer_config: {
       merge_policies: {
         status: { strategy: "last_write" },
+        balance: { strategy: "last_write" },
         categories: { strategy: "merge_array" },
       },
     },
