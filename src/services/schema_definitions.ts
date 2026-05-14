@@ -2723,6 +2723,79 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       },
     },
   },
+
+  gist: {
+    entity_type: "gist",
+    schema_version: "1.0",
+    metadata: {
+      label: "Gist",
+      description: "GitHub Gists and similar code/text snippets shared via URL.",
+      category: "knowledge",
+      aliases: ["github_gist", "code_snippet"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: false },
+        url: { type: "string", required: false },
+        gist_id: { type: "string", required: false },
+        description: { type: "string", required: false, preserveCase: true },
+        title: { type: "string", required: false, preserveCase: true },
+        content: { type: "string", required: false, preserveCase: true },
+        language: { type: "string", required: false },
+        created_at: { type: "date", required: false },
+        updated_at: { type: "date", required: false },
+      },
+      // Callers commonly supply a pre-formed canonical_name or a stable gist_id;
+      // identity_opt_out allows both paths without requiring composite fields.
+      identity_opt_out: "heuristic_canonical_name",
+    },
+    reducer_config: {
+      merge_policies: {
+        description: { strategy: "last_write" },
+        title: { strategy: "last_write" },
+        content: { strategy: "last_write" },
+        url: { strategy: "last_write" },
+        language: { strategy: "last_write" },
+        updated_at: { strategy: "last_write" },
+      },
+    },
+  },
+
+  neotoma_repair: {
+    entity_type: "neotoma_repair",
+    schema_version: "1.0",
+    metadata: {
+      label: "Neotoma Repair",
+      description: "A record of a repair or remediation action taken within Neotoma.",
+      category: "agent_runtime",
+      aliases: ["repair", "remediation"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: false },
+        title: { type: "string", required: false, preserveCase: true },
+        diagnosis: { type: "string", required: false, preserveCase: true },
+        diagnosis_classification: { type: "string", required: false },
+        trigger: { type: "string", required: false, preserveCase: true },
+        applied_fix: { type: "string", required: false, preserveCase: true },
+        proactive_remediation_required: { type: "boolean", required: false },
+        remediation_status: { type: "string", required: false },
+        created_at: { type: "date", required: false },
+      },
+      identity_opt_out: "heuristic_canonical_name",
+    },
+    reducer_config: {
+      merge_policies: {
+        title: { strategy: "last_write" },
+        diagnosis: { strategy: "last_write" },
+        diagnosis_classification: { strategy: "last_write" },
+        trigger: { strategy: "last_write" },
+        applied_fix: { strategy: "last_write" },
+        proactive_remediation_required: { strategy: "last_write" },
+        remediation_status: { strategy: "last_write" },
+      },
+    },
+  },
 };
 
 /**
