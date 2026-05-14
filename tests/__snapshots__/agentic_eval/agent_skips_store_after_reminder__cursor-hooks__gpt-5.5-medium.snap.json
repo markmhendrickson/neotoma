@@ -98,6 +98,7 @@
             "hook_event": "stop_backfill",
             "repository_name": "<env>",
             "repository_remote": "<env>",
+            "repository_root": "<env>",
             "scope_summary": "<env>",
             "thread_kind": "human_agent",
             "title": "<env>",

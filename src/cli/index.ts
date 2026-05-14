@@ -1330,6 +1330,14 @@ export function getSqliteRecoveryHint(
 export function writeCliError(err: unknown): void {
   const msg = formatCliError(err);
   const recoveryHint = getSqliteRecoveryHint(err);
+  const outputMode = resolveOutputMode();
+  if (outputMode === "json") {
+    const envelope: Record<string, unknown> = { error: msg };
+    if (err instanceof CliHintError) envelope.hint = err.hint;
+    else if (recoveryHint) envelope.hint = { code: "SQLITE_CORRUPT", message: recoveryHint };
+    process.stderr.write(JSON.stringify(envelope) + "\n");
+    return;
+  }
   if (process.stdout.isTTY) process.stderr.write("\n");
   process.stderr.write(`neotoma: ${msg}\n`);
   if (recoveryHint) process.stderr.write(`tip: ${recoveryHint}\n`);
@@ -1662,6 +1670,17 @@ class SessionExit extends Error {
   constructor(public code: number) {
     super("SessionExit");
     this.name = "SessionExit";
+  }
+}
+
+/** Error that carries a machine-readable hint emitted in --json mode. */
+class CliHintError extends Error {
+  constructor(
+    message: string,
+    public readonly hint: { code: string; [key: string]: unknown }
+  ) {
+    super(message);
+    this.name = "CliHintError";
   }
 }
 
@@ -11537,10 +11556,16 @@ entitiesCommand
           !/^ent_/i.test(id) &&
           !msg.includes("Run `neotoma auth login`")
         ) {
-          msg += `\n${dim(
-            "This command expects an entity ID (ent_…). For names, slugs, or other identifiers, run: neotoma entities search " +
-              JSON.stringify(id)
-          )}`;
+          const searchCmd = `neotoma entities search ${JSON.stringify(id)}`;
+          const hintText = `This command expects an entity ID (ent_…). For names, slugs, or other identifiers, run: ${searchCmd}`;
+          if (outputMode === "json") {
+            throw new CliHintError(`${msg}\n${hintText}`, {
+              code: "USE_SEARCH_FOR_NAMES",
+              message: "This command expects an entity ID (ent_…). For names, slugs, or other identifiers use entities search.",
+              suggestion_command: searchCmd,
+            });
+          }
+          msg += `\n${dim(hintText)}`;
         }
         throw new Error(msg);
       }

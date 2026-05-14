@@ -3,6 +3,7 @@ import { SeoHead } from "@/components/SeoHead";
 import { useLocale } from "@/i18n/LocaleContext";
 import { NotFound } from "@/components/NotFound";
 import { useEffectiveRoutePath } from "@/hooks/useEffectiveRoutePath";
+import { localizePath } from "@/i18n/routing";
 import { hasMdxSitePage, resolveMdxSitePage } from "@/site/mdx_site_registry";
 
 export function MdxSitePage({
@@ -39,7 +40,7 @@ export function MdxSitePage({
     if (shell === "bare") {
       return (
         <>
-          <SeoHead routePath={effectivePath} />
+          <SeoHead routePath={localizePath(effectivePath, locale)} />
           {/* Do not apply `.mdx-site-page-content` here: bare routes render full-bleed landings
               (e.g. `<SitePage />`) and doc typography utilities would cascade into marketing layout. */}
           <div className="min-h-0 bg-background text-foreground">
