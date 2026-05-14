@@ -507,6 +507,7 @@ describe("Issue Operations (Neotoma-canonical)", () => {
         message_entity_id: "remote-msg-private",
         pushed_to_github: false,
         submitted_to_neotoma: true,
+        remote_submission_error: null,
       });
     });
 
