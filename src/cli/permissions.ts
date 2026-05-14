@@ -179,7 +179,10 @@ export async function writePermissionsForTool(
       break;
     }
     case "claude-desktop":
-    case "openclaw": {
+    case "openclaw":
+    case "windsurf":
+    case "continue":
+    case "vscode": {
       // These harnesses don't surface an allowlist file; documented in the preflight UI instead.
       break;
     }
@@ -194,6 +197,9 @@ export function toolFromString(s: string): ToolId | null {
   if (n === "cursor") return "cursor";
   if (n === "codex") return "codex";
   if (n === "openclaw") return "openclaw";
+  if (n === "windsurf") return "windsurf";
+  if (n === "continue") return "continue";
+  if (n === "vscode" || n === "vs-code" || n === "vs_code") return "vscode";
   return null;
 }
 

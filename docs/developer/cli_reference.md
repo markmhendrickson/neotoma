@@ -341,7 +341,7 @@ neotoma init --data-dir /path/to/data
 ### Harness setup
 
 - `neotoma setup`: One-shot, idempotent harness setup. It runs init when needed, configures MCP entries, applies agent CLI instruction files, installs lifecycle hooks or the Claude Code plugin for the selected harness, then patches permission allowlists where the harness supports them.
-  - `--tool <claude-code|cursor|codex|openclaw|claude-desktop>`: Target harness. If omitted, `doctor` supplies the current tool hint when available.
+  - `--tool <claude-code|cursor|codex|openclaw|claude-desktop|windsurf|continue|vscode>`: Target harness. If omitted, `doctor` supplies the current tool hint when available. `windsurf`, `continue`, and `vscode` are MCP-only targets (no skills or hook installation; setup writes the MCP config entry only).
   - `--install-scope <project|user|both>`: Scope for MCP entries and agent CLI instruction files.
   - `--scope <project|user|both>`: Permission-file scope only. This is intentionally separate from `--install-scope`.
   - `--mcp-transport <a|b|c|d>`: Same transport presets as `neotoma mcp config`.
@@ -419,6 +419,9 @@ Commands for managing MCP server configuration files (Cursor, Claude Code, Winds
     - **Windsurf:** `mcp_config.json` (project or user-level with `--user-level`):
       - macOS/Linux: `~/.codeium/windsurf/mcp_config.json`
       - Windows: `%APPDATA%\Codeium\Windsurf\mcp_config.json`
+    - **Continue:** `config.json` (user-level with `--user-level`):
+      - All platforms: `~/.continue/config.json`
+    - **VS Code (Copilot Chat MCP):** `.vscode/mcp.json` (project-level, picked up by directory scan)
   - For each found config, checks for `neotoma-dev` and `neotoma` server entries (based on `command` script names or `url` patterns). In Claude Desktop's `claude_desktop_config.json`, new entries use `mcpsrv_neotoma_dev` and `mcpsrv_neotoma`, and legacy `neotoma-dev` / `neotoma` keys are reported for repair because Claude Desktop validates server IDs as UUIDs or `mcpsrv_*` tags.
   - If any config is missing dev or prod servers, prompts to add them with absolute script paths.
   - If no config files found, offers to create `.cursor/mcp.json` in current directory.
@@ -714,7 +717,7 @@ The CLI and the Inspector share one `applyBatchCorrection` backend (`src/service
 
 - `neotoma doctor`: Project health check. Verifies that the global CLI is on `PATH`, that `NEOTOMA_DATA_DIR` and the SQLite db are usable, whether a local API process is running, which MCP server entries the configured harnesses expose, and whether the data directory is on a high-risk filesystem.
   - `--json`: Emit a structured report instead of the human summary. Designed for agent-led installs (`neotoma setup --output json` consumes it) and for CI/operator scripts.
-  - `--tool <claude-code|cursor|codex|openclaw|claude-desktop>`: Override the current-tool hint that `doctor` ships in the report and that `neotoma setup` reads.
+  - `--tool <claude-code|cursor|codex|openclaw|claude-desktop|windsurf|continue|vscode>`: Override the current-tool hint that `doctor` ships in the report and that `neotoma setup` reads.
 
   **`--json` shape (v0.12+):**
 

@@ -1,0 +1,62 @@
+import { MdxI18nLink } from "@/components/mdx/mdx_i18n_link";
+
+# Integrations
+
+Neotoma is cross-platform by design. One memory graph across every agent host you use — no platform lock-in, no separate state per tool.
+
+This page is the single index of every host, harness, and framework Neotoma integrates with today, and the status of each.
+
+## Supported via MCP
+
+MCP is the primary integration protocol. Every host below speaks MCP over local stdio, remote HTTP, or both.
+
+| Host | Modes | Install | Setup guide |
+| --- | --- | --- | --- |
+| Cursor | stdio, remote HTTP | `neotoma setup --tool cursor --yes` | <MdxI18nLink to="/neotoma-with-cursor">neotoma-with-cursor</MdxI18nLink> |
+| Claude Code | stdio, remote HTTP | `neotoma setup --tool claude-code --yes` | <MdxI18nLink to="/neotoma-with-claude-code">neotoma-with-claude-code</MdxI18nLink> |
+| Claude Desktop | local, remote MCP | `neotoma setup --tool claude-desktop --yes` | <MdxI18nLink to="/neotoma-with-claude-connect-desktop">desktop</MdxI18nLink> · <MdxI18nLink to="/neotoma-with-claude-connect-remote-mcp">remote MCP</MdxI18nLink> |
+| ChatGPT | MCP App, Custom GPT Actions | Manual HTTPS + OAuth | <MdxI18nLink to="/neotoma-with-chatgpt">neotoma-with-chatgpt</MdxI18nLink> · <MdxI18nLink to="/neotoma-with-chatgpt-connect-remote-mcp">remote MCP</MdxI18nLink> · <MdxI18nLink to="/neotoma-with-chatgpt-connect-custom-gpt">custom GPT</MdxI18nLink> |
+| Codex CLI | stdio, remote HTTP (OAuth) | `neotoma setup --tool codex --yes` | <MdxI18nLink to="/neotoma-with-codex">neotoma-with-codex</MdxI18nLink> · <MdxI18nLink to="/neotoma-with-codex-connect-local-stdio">stdio</MdxI18nLink> · <MdxI18nLink to="/neotoma-with-codex-connect-remote-http-oauth">remote HTTP</MdxI18nLink> |
+| OpenClaw | Native plugin + MCP | `neotoma setup --tool openclaw --yes` | <MdxI18nLink to="/neotoma-with-openclaw">neotoma-with-openclaw</MdxI18nLink> · <MdxI18nLink to="/neotoma-with-openclaw-connect-local-stdio">stdio</MdxI18nLink> · <MdxI18nLink to="/neotoma-with-openclaw-connect-remote-http">remote HTTP</MdxI18nLink> |
+| IronClaw | MCP | `neotoma setup --tool ironclaw --yes` | <MdxI18nLink to="/neotoma-with-ironclaw">neotoma-with-ironclaw</MdxI18nLink> |
+
+## Supported via hooks
+
+Hooks integrate with harnesses that expose lifecycle events. They provide guaranteed capture, retrieval injection, and persistence safety nets — the reliability floor that composes with MCP's quality ceiling.
+
+| Harness | Setup guide |
+| --- | --- |
+| Claude Code | <MdxI18nLink to="/neotoma-with-claude-code">neotoma-with-claude-code</MdxI18nLink> |
+| Cursor | <MdxI18nLink to="/neotoma-with-cursor">neotoma-with-cursor</MdxI18nLink> |
+| OpenCode | <MdxI18nLink to="/neotoma-with-opencode">neotoma-with-opencode</MdxI18nLink> |
+| Codex CLI | <MdxI18nLink to="/neotoma-with-codex">neotoma-with-codex</MdxI18nLink> |
+| Claude Agent SDK | <MdxI18nLink to="/neotoma-with-claude-agent-sdk">neotoma-with-claude-agent-sdk</MdxI18nLink> |
+
+## Client libraries
+
+Embed Neotoma directly in your application:
+
+| Language | Package |
+| --- | --- |
+| TypeScript | `@neotoma/client` |
+| Python | `neotoma-client` |
+
+## Not yet supported
+
+These hosts are commonly requested. They are not yet supported. The "What it would take" column is descriptive, not committal — open a feature request if you want one prioritized.
+
+| Host / framework | What it would take |
+| --- | --- |
+| LangGraph | A Python adapter on top of the Neotoma Python client, exposing `store` and `retrieve_*` as LangGraph memory nodes. |
+| CrewAI | A Python adapter that exposes Neotoma actions as CrewAI tools, similar in shape to the OpenClaw native plugin. |
+| Continue (IDE) | Likely works today via generic MCP configuration. Gap is verification and a dedicated setup page. |
+| Windsurf | Same shape as Continue. The MCP reference already documents Windsurf's config file format; verification and a setup page would lift it to Stable. |
+| VS Code (Copilot Chat MCP) | Verify Copilot Chat's MCP path, document, ship. |
+
+**Want one of these prioritized?** Open an issue at [github.com/Lemonbrand/neotoma-feedback](https://github.com/Lemonbrand/neotoma-feedback) describing your use case.
+
+## Related
+
+- <MdxI18nLink to="/mcp">MCP reference</MdxI18nLink> — protocol details and transport modes
+- <MdxI18nLink to="/cli">CLI reference</MdxI18nLink> — `neotoma setup`, `neotoma mcp config`
+- <MdxI18nLink to="/install">Install</MdxI18nLink> — get started

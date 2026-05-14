@@ -65,6 +65,10 @@ import { CodexConnectRemoteHttpOauthPage } from "@/components/subpages/CodexConn
 import { NeotomaWithOpenCodePage } from "@/components/subpages/NeotomaWithOpenCodePage";
 import { NeotomaWithOpenClawPage } from "@/components/subpages/NeotomaWithOpenClawPage";
 import { NeotomaWithIronClawPage } from "@/components/subpages/NeotomaWithIronClawPage";
+import { NeotomaWithContinuePage } from "@/components/subpages/NeotomaWithContinuePage";
+import { NeotomaWithWindsurfPage } from "@/components/subpages/NeotomaWithWindsurfPage";
+import { NeotomaWithVSCodePage } from "@/components/subpages/NeotomaWithVSCodePage";
+import { NeotomaWithLettaPage } from "@/components/subpages/NeotomaWithLettaPage";
 import { OpenClawConnectLocalStdioPage } from "@/components/subpages/OpenClawConnectLocalStdioPage";
 import { OpenClawConnectRemoteHttpPage } from "@/components/subpages/OpenClawConnectRemoteHttpPage";
 import { MemoryGuaranteesPage } from "@/components/subpages/MemoryGuaranteesPage";
@@ -219,6 +223,7 @@ const APP_ROUTES: readonly AppRoute[] = [
   { path: "/sandbox", element: <SandboxLandingPage /> },
   { path: "/sandbox/terms-of-use", element: <SandboxTermsOfUsePage /> },
   { path: "/hosted", element: <HostedLandingPage /> },
+  { path: "/integrations", element: <MdxSitePage canonicalPath="/integrations" /> },
   { path: "/connect", element: <ConnectIndexPage /> },
   { path: "/walkthrough", element: <DeveloperWalkthroughPage /> },
   { path: "/developer-walkthrough", element: <Navigate to="/walkthrough" replace /> },
@@ -254,6 +259,10 @@ const APP_ROUTES: readonly AppRoute[] = [
   { path: "/neotoma-with-opencode", element: <NeotomaWithOpenCodePage /> },
   { path: "/neotoma-with-openclaw", element: <NeotomaWithOpenClawPage /> },
   { path: "/neotoma-with-ironclaw", element: <NeotomaWithIronClawPage /> },
+  { path: "/neotoma-with-continue", element: <NeotomaWithContinuePage /> },
+  { path: "/neotoma-with-windsurf", element: <NeotomaWithWindsurfPage /> },
+  { path: "/neotoma-with-vscode", element: <NeotomaWithVSCodePage /> },
+  { path: "/neotoma-with-letta", element: <NeotomaWithLettaPage /> },
   { path: "/neotoma-with-openclaw-connect-local-stdio", element: <OpenClawConnectLocalStdioPage /> },
   { path: "/neotoma-with-openclaw-connect-remote-http", element: <OpenClawConnectRemoteHttpPage /> },
   { path: "/memory-guarantees", element: <MemoryGuaranteesPage /> },
@@ -340,6 +349,10 @@ const BASENAME_TO_ROOT_PAGE: Record<string, JSX.Element> = {
   "/neotoma-with-opencode": <NeotomaWithOpenCodePage />,
   "/neotoma-with-openclaw": <NeotomaWithOpenClawPage />,
   "/neotoma-with-ironclaw": <NeotomaWithIronClawPage />,
+  "/neotoma-with-continue": <NeotomaWithContinuePage />,
+  "/neotoma-with-windsurf": <NeotomaWithWindsurfPage />,
+  "/neotoma-with-vscode": <NeotomaWithVSCodePage />,
+  "/neotoma-with-letta": <NeotomaWithLettaPage />,
 };
 
 function getRootElement(): JSX.Element {

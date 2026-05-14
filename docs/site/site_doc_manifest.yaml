@@ -119,6 +119,26 @@ entries:
     status: canonical_site_page
     canonical_site_path: /neotoma-with-openclaw
 
+  - repo_path: docs/site/pages/en/neotoma-with-continue.mdx
+    status: canonical_site_page
+    canonical_site_path: /neotoma-with-continue
+    supporting_source: docs/developer/mcp_continue_setup.md
+
+  - repo_path: docs/site/pages/en/neotoma-with-windsurf.mdx
+    status: canonical_site_page
+    canonical_site_path: /neotoma-with-windsurf
+    supporting_source: docs/developer/mcp_windsurf_setup.md
+
+  - repo_path: docs/site/pages/en/neotoma-with-vscode.mdx
+    status: canonical_site_page
+    canonical_site_path: /neotoma-with-vscode
+    supporting_source: docs/developer/mcp_vscode_setup.md
+
+  - repo_path: docs/site/pages/en/neotoma-with-letta.mdx
+    status: canonical_site_page
+    canonical_site_path: /neotoma-with-letta
+    supporting_source: docs/developer/mcp_letta_setup.md
+
   - repo_path: docs/site/pages/en/memory-guarantees.mdx
     status: canonical_site_page
     canonical_site_path: /memory-guarantees
