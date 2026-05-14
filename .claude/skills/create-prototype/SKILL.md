@@ -1,12 +1,5 @@
 ---
 name: create-prototype
-description: Create Prototype
----
-
-<!-- Source: foundation/.cursor/skills/create-prototype/SKILL.md -->
-
----
-name: create-prototype
 description: Create prototype per foundation command.
 triggers:
   - create prototype

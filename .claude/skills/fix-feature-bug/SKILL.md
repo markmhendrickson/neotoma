@@ -1,12 +1,5 @@
 ---
 name: fix-feature-bug
-description: Fix Feature Bug
----
-
-<!-- Source: foundation/.cursor/skills/fix-feature-bug/SKILL.md -->
-
----
-name: fix-feature-bug
 description: Fix bugs using structured workflow with error classification and regression tests.
 triggers:
   - bug
@@ -25,7 +18,7 @@ Fix a bug in a feature or module.
 
 Configuration is read from `foundation-config.yaml`.
 
-This workflow can also be triggered automatically via `.claude/rules/bug_fix_detection.md` (or `foundation/agent_instructions/cursor_rules/bug_fix_detection.md`) when you mention bug/error-related patterns in natural language (e.g., "bug", "error", "fix", "broken"). Both paths execute the same workflow.
+This workflow can also be triggered automatically via `.cursor/rules/bug_fix_detection.md` (or `foundation/agent_instructions/cursor_rules/bug_fix_detection.md`) when you mention bug/error-related patterns in natural language (e.g., "bug", "error", "fix", "broken"). Both paths execute the same workflow.
 
 ## Workflow
 

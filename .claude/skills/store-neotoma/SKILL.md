@@ -1,12 +1,5 @@
 ---
 name: store-neotoma
-description: store-neotoma
----
-
-<!-- Source: foundation/.cursor/skills/store-neotoma/SKILL.md -->
-
----
-name: store-neotoma
 description: Review chat, preview exact Neotoma payloads, then store conversation, dual agent_message rows per turn (user + assistant, PART_OF conversation), and attachments after user confirmation.
 triggers:
   - store_neotoma
@@ -36,7 +29,7 @@ Preview-before-execute: On first run, this workflow MUST preview what will be st
 
 - Chat transcript available in agent context (user and agent messages).
 - Neotoma MCP available.
-- Load `.claude/rules/conversation_tracking.mdc` and `.claude/rules/neotoma_access_policy.mdc` for entity schemas and access rules. `conversation_tracking` defines dual-message + `PART_OF`; do not use merged `role_user`/`role_agent` on a single `agent_message`.
+- Load `.cursor/rules/conversation_tracking.mdc` and `.cursor/rules/neotoma_access_policy.mdc` for entity schemas and access rules. `conversation_tracking` defines dual-message + `PART_OF`; do not use merged `role_user`/`role_agent` on a single `agent_message`.
 
 ## Phase 0: Preview (MANDATORY — Execute First)
 
@@ -136,8 +129,8 @@ For each file in the attachments list with an accessible path:
 
 After execution, report:
 - Storage summary: `conversation_id`, **agent_message count** (expect ~2× turn count when both sides exist), attachments stored, relationship count, derived entity count.
-- Per `.claude/rules/persistence.mdc`, show stored entities via retrieve/list observation actions where relevant.
-- Render the mandatory `🧠 Neotoma` turn report per `.claude/rules/neotoma_turn_lifecycle.mdc`.
+- Per `.cursor/rules/persistence.mdc`, show stored entities via retrieve/list observation actions where relevant.
+- Render the mandatory `🧠 Neotoma` turn report per `.cursor/rules/neotoma_turn_lifecycle.mdc`.
 
 ## Error Handling
 
@@ -147,8 +140,8 @@ After execution, report:
 ## References
 
 - `execution/scripts/migrate_neotoma_chat_dual_messages.py` — One-off migration for legacy merged `role_user`/`role_agent` rows and inverted `PART_OF` edges; use `--cli` with the `neotoma` binary when HTTP bearer is rejected (dry-run by default, `--execute` to apply). Path is relative to repos that include `execution/` (e.g. ateles); omit or locate equivalent in other layouts.
-- `.claude/rules/conversation_tracking.mdc` — Entity model and fields.
-- `.claude/rules/neotoma_access_policy.mdc` — Canonical Neotoma-only access rules.
-- `.claude/rules/neotoma_turn_lifecycle.mdc` — Turn lifecycle and turn report contract.
-- `.claude/rules/confirmation_requirements.mdc` — Preview/confirm pattern.
+- `.cursor/rules/conversation_tracking.mdc` — Entity model and fields.
+- `.cursor/rules/neotoma_access_policy.mdc` — Canonical Neotoma-only access rules.
+- `.cursor/rules/neotoma_turn_lifecycle.mdc` — Turn lifecycle and turn report contract.
+- `.cursor/rules/confirmation_requirements.mdc` — Preview/confirm pattern.
 - `.cursor/skills/neotoma-learn/SKILL.md` — Update Neotoma MCP instructions after user provides "how to store" input (repo-local skill where present; not bundled in foundation-only checkouts).

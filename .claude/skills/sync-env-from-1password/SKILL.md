@@ -1,12 +1,5 @@
 ---
 name: sync-env-from-1password
-description: Sync Environment Variables from 1Password
----
-
-<!-- Source: foundation/.cursor/skills/sync-env-from-1password/SKILL.md -->
-
----
-name: sync-env-from-1password
 description: Sync .env from 1Password using env_var_mappings.
 triggers:
   - sync env from 1password

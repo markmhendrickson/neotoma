@@ -1,12 +1,5 @@
 ---
 name: publish
-description: publish
----
-
-<!-- Source: foundation/.cursor/skills/publish/SKILL.md -->
-
----
-name: publish
 description: Publish workflow per foundation publish command.
 triggers:
   - publish

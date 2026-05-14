@@ -151,6 +151,17 @@ Implements Checkpoint 0 of the Feature Unit creation workflow:
    - Manifest follows configured complexity mode
    - Next steps: "If UI changes, proceed to Create Prototype → Prototype Review. Otherwise proceed to implementation."
 
+10. **Offer publish-plan prompt once:**
+
+    ```
+    Feature unit spec saved to {configured_directory}/in_progress/{{input:feature_id}}/{{input:feature_id}}_spec.md.
+
+    Would you like to share this as a GitHub Discussion for pre-execution
+    input? Run /publish-plan {path} to generate a public-facing post.
+    ```
+
+    Do not wait for a response before completing this skill.
+
 ## Required Documents
 
 Load before starting:

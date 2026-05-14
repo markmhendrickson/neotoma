@@ -65,6 +65,18 @@ Check if Release plan exists:
 
 **After user input:** Generate complete Release plan (`release_plan.md`), create manifest YAML (`manifest.yaml`), create integration test spec (`integration_tests.md`), create status tracker (`status.md`), save all to `docs/releases/in_progress/{release_id}/`.
 
+**After saving the release plan**, offer the publish-plan prompt once:
+
+```
+Release plan saved to docs/releases/in_progress/{release_id}/release_plan.md.
+
+Would you like to share this as a GitHub Discussion for pre-execution
+input? Run /publish-plan docs/releases/in_progress/{release_id}/release_plan.md
+to generate a public-facing post.
+```
+
+Do not wait for a response before proceeding to Step 3.
+
 ### Step 3: Dependency Analysis and Schedule Generation
 
 Analyze dependencies:

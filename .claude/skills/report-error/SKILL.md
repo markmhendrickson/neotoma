@@ -1,12 +1,5 @@
 ---
 name: report-error
-description: Report Error Command
----
-
-<!-- Source: foundation/.cursor/skills/report-error/SKILL.md -->
-
----
-name: report-error
 description: Report error per foundation command.
 triggers:
   - report error

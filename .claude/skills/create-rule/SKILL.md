@@ -1,12 +1,5 @@
 ---
 name: create-rule
-description: Create Rule
----
-
-<!-- Source: foundation/.cursor/skills/create-rule/SKILL.md -->
-
----
-name: create-rule
 description: Create Cursor rule for persistent AI guidance.
 triggers:
   - create rule
@@ -16,7 +9,7 @@ triggers:
 
 # Create Rule
 
-Create a new rule file with `_rules` suffix and automatically create symlink in `.claude/rules/`.
+Create a new rule file with `_rules` suffix and automatically create symlink in `.cursor/rules/`.
 
 **SUBMODULE MODE**: If a submodule name is provided (e.g., `/create-rule foundation`), create the rule in that submodule. If no submodule name is provided, create in the main repository's `docs/` directory.
 
@@ -199,16 +192,16 @@ For foundation submodule, create file following foundation cursor-rules pattern 
    ./foundation/scripts/setup-cursor-rules.sh
    ```
 
-2. Verify symlink created in `.claude/rules/`:
+2. Verify symlink created in `.cursor/rules/`:
    - Expected symlink name: `{location}_{name}_rules.md`
-   - Example: `docs/conventions/entity_resolution_rules.md` → `.claude/rules/conventions_entity_resolution_rules.md`
+   - Example: `docs/conventions/entity_resolution_rules.md` → `.cursor/rules/conventions_entity_resolution_rules.md`
 
 3. Output success message:
    ```
    ✅ Rule created successfully!
    
    File: docs/{location}/{name}_rules.md
-   Symlink: .claude/rules/{location}_{name}_rules.md
+   Symlink: .cursor/rules/{location}_{name}_rules.md
    
    The rule is now available to all Cursor agents in this repository.
    
@@ -232,7 +225,7 @@ For foundation submodule, create file following foundation cursor-rules pattern 
    ✅ Rule created in submodule successfully!
    
    File: {submodule}/{rule_path}/{name}{suffix}.mdc (for foundation submodule, use .mdc extension)
-   Symlink: .claude/rules/{prefix}{name}.mdc (if applicable)
+   Symlink: .cursor/rules/{prefix}{name}.mdc (if applicable)
    
    The rule is now available to all repositories using this submodule.
    ```
@@ -272,7 +265,7 @@ Prompts:
 
 Creates:
 - `docs/subsystems/entity_resolution_rules.md`
-- `.claude/rules/subsystems_entity_resolution_rules.md` (symlink)
+- `.cursor/rules/subsystems_entity_resolution_rules.md` (symlink)
 
 ### Example 2: Create Foundation Submodule Rule
 
@@ -287,7 +280,7 @@ Prompts:
 
 Creates:
 - `foundation/agent_instructions/cursor_rules/testing_patterns.mdc`
-- `.claude/rules/foundation_testing_patterns.mdc` (symlink)
+- `.cursor/rules/foundation_testing_patterns.mdc` (symlink)
 
 ## Required Documents
 

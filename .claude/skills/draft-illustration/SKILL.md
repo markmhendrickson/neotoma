@@ -1,12 +1,5 @@
 ---
 name: draft-illustration
-description: Blog Post Visual Style (Cross-Repo)
----
-
-<!-- Source: foundation/.cursor/skills/draft-illustration/SKILL.md -->
-
----
-name: draft-illustration
 description: Apply consistent visual style for blog post hero and social images across repos. Use when creating or generating hero images, OG images, or post artwork so all assets share the same look.
 triggers:
   - draft illustration

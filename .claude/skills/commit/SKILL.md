@@ -1,12 +1,5 @@
 ---
 name: commit
-description: commit
----
-
-<!-- Source: foundation/.cursor/skills/commit/SKILL.md -->
-
----
-name: commit
 description: Commit submodules and/or main repo with structured messages; supports /commit repo, /commit <submodule>.
 triggers:
   - commit
@@ -299,14 +292,14 @@ Run entire test suite and resolve any errors as necessary. Proceed to analyze al
 
 **CRITICAL: PRE-COMMIT SECURITY AUDIT** - MUST RUN BEFORE STAGING:
 
-Execute security audit from `foundation/agent_instructions/cursor_rules/security.md` (or `.claude/rules/foundation_security.md` if installed) before staging ANY files:
+Execute security audit from `foundation/agent_instructions/cursor_rules/security.md` (or `.cursor/rules/foundation_security.md` if installed) before staging ANY files:
 
 1. **Run security audit script:**
    ```bash
    # Use foundation security audit script if available
    if [ -f "foundation/security/pre-commit-audit.sh" ]; then
      ./foundation/security/pre-commit-audit.sh
-   elif [ -f ".claude/rules/foundation_security.md" ]; then
+   elif [ -f ".cursor/rules/foundation_security.md" ]; then
      # Follow security rule checks
      # (Implementation depends on how security rules are executed)
    fi
@@ -726,7 +719,7 @@ development:
 # Use foundation security audit script or rules
 if [ -f "foundation/security/pre-commit-audit.sh" ]; then
   ./foundation/security/pre-commit-audit.sh
-elif [ -f ".claude/rules/foundation_security.md" ]; then
+elif [ -f ".cursor/rules/foundation_security.md" ]; then
   # Follow security rule checks
 fi
 
@@ -736,7 +729,7 @@ fi
 
 If final security check passes, proceed to git commit with the comprehensive commit message and push to origin. **If push is rejected** (remote has new commits): run `git pull --rebase origin <current_branch>` (or `git pull origin <current_branch> --no-rebase --no-edit`), resolve any conflicts, then `git push origin HEAD` again. Always reconcile and retry before reporting push failure.
 
-**WORKTREE DETECTION:** Follow the Worktree Rule (`.claude/rules/foundation_worktree_env.md` or `foundation/agent_instructions/cursor_rules/worktree_env.md`) to restrict all commit activity to the current worktree.
+**WORKTREE DETECTION:** Follow the Worktree Rule (`.cursor/rules/foundation_worktree_env.md` or `foundation/agent_instructions/cursor_rules/worktree_env.md`) to restrict all commit activity to the current worktree.
 
 **COMMIT MESSAGE DISPLAY**: After successfully committing and pushing, always display the full commit message to the user by running `git log -1 --pretty=format:"%B"` and showing the output. This allows the user to review what was committed.
 
