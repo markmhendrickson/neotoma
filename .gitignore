@@ -1,5 +1,8 @@
 node_modules/
 dist/
+
+# Neotoma plan mirrors (local only, regenerated via `npm run mirror:plans`)
+plans/
 .env*
 !.env.example
 !.env.development.example
@@ -78,3 +81,7 @@ neotoma*.tgz
 
 # Native package build outputs (node-gyp; generated at install time)
 packages/*/build/
+.claude/worktrees/
+@/
+__pycache__/
+*.pyc

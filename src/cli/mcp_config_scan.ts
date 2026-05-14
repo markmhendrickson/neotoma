@@ -18,7 +18,7 @@ import { blackBox } from "./format.js";
 const CONFIG_FILENAMES = ["mcp.json", "mcp_config.json", "claude_desktop_config.json"] as const;
 
 /** Project-relative config paths to check (repo-level Cursor/Claude/Codex). */
-const PROJECT_CONFIG_PATHS = [".cursor/mcp.json", ".mcp.json", ".codex/config.toml"] as const;
+const PROJECT_CONFIG_PATHS = [".cursor/mcp.json", ".mcp.json", ".codex/config.toml", ".vscode/mcp.json"] as const;
 const LEGACY_NEOTOMA_DEV_SERVER_ID = "neotoma-dev";
 const LEGACY_NEOTOMA_PROD_SERVER_ID = "neotoma";
 const CLAUDE_DESKTOP_NEOTOMA_DEV_SERVER_ID = "mcpsrv_neotoma_dev";
@@ -32,6 +32,16 @@ function isCodexConfigPath(filePath: string): boolean {
 
 function isClaudeDesktopConfigPath(filePath: string): boolean {
   return path.basename(path.normalize(filePath)) === "claude_desktop_config.json";
+}
+
+/**
+ * VS Code (Copilot Chat MCP) uses .vscode/mcp.json with a `servers` top-level key
+ * and `"type": "stdio"` / `"type": "sse"` transport declarations rather than the
+ * standard `mcpServers` + bare `command`/`url` format used by Cursor, Windsurf, etc.
+ */
+function isVSCodeMcpConfigPath(filePath: string): boolean {
+  const normalized = path.normalize(filePath);
+  return normalized.includes(".vscode") && path.basename(normalized) === "mcp.json";
 }
 
 /** Canonical unsigned stdio→HTTP launcher; legacy filename is an exec forwarder. */
@@ -225,6 +235,24 @@ function getUserLevelConfigPaths(): { env: string; path: string }[] {
       });
     }
   }
+
+  // Continue (continuedev/continue) — user-level config at ~/.continue/config.json
+  if (platform === "darwin" || platform === "linux") {
+    paths.push({
+      env: "Continue",
+      path: path.join(homedir, ".continue", "config.json"),
+    });
+  } else if (platform === "win32") {
+    paths.push({
+      env: "Continue",
+      path: path.join(homedir, ".continue", "config.json"),
+    });
+  }
+
+  // VS Code (GitHub Copilot Chat MCP) — project-level .vscode/mcp.json is handled
+  // by project-level scanning; user-level is in VS Code's user settings.json under
+  // `mcp.servers`, which is not a standalone MCP config file. Project-level scanning
+  // picks up .vscode/mcp.json automatically via CONFIG_FILENAMES + directory walk.
 
   return paths;
 }
@@ -1801,6 +1829,35 @@ export async function offerInstall(
 
   for (const config of selectedMissingConfigs) {
     if (isCodexConfigPath(config.path)) continue; // Codex uses TOML; updated via sync:mcp from .cursor/mcp.json
+
+    // VS Code uses { servers: { name: { type, command, args } } } not { mcpServers: { name: { command, args } } }
+    if (isVSCodeMcpConfigPath(config.path)) {
+      const vsRaw = await fs.readFile(config.path, "utf-8").catch(() => "{}");
+      let vsParsed: { servers?: Record<string, unknown> } = {};
+      try { vsParsed = JSON.parse(vsRaw) as { servers?: Record<string, unknown> }; } catch { /* ignore */ }
+      if (!vsParsed.servers) vsParsed.servers = {};
+      if (!selectedEnv || selectedEnv === "dev") {
+        if (forceRewriteNeotoma || !config.hasDev) {
+          const e = entries["neotoma-dev"];
+          if ("command" in e) {
+            vsParsed.servers["neotoma-dev"] = { type: "stdio", command: e.command, ...(e.args ? { args: e.args } : {}), ...(e.env ? { env: e.env } : {}) };
+          }
+        }
+      }
+      if (!selectedEnv || selectedEnv === "prod") {
+        if (forceRewriteNeotoma || !config.hasProd) {
+          const e = entries.neotoma;
+          if ("command" in e) {
+            vsParsed.servers["neotoma"] = { type: "stdio", command: e.command, ...(e.args ? { args: e.args } : {}), ...(e.env ? { env: e.env } : {}) };
+          }
+        }
+      }
+      await fs.mkdir(path.dirname(config.path), { recursive: true });
+      await fs.writeFile(config.path, JSON.stringify(vsParsed, null, 2) + "\n");
+      updatedPaths.push(config.path);
+      continue;
+    }
+
     const parsed = await parseMcpConfig(config.path);
     if (!parsed) continue;
 

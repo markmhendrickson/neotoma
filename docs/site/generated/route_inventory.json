@@ -176,6 +176,10 @@
     "classification": "static_mdx"
   },
   {
+    "path": "/integrations",
+    "classification": "static_mdx"
+  },
+  {
     "path": "/connect",
     "classification": "other"
   },
@@ -301,6 +305,22 @@
   },
   {
     "path": "/neotoma-with-ironclaw",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/neotoma-with-continue",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/neotoma-with-windsurf",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/neotoma-with-vscode",
+    "classification": "static_mdx"
+  },
+  {
+    "path": "/neotoma-with-letta",
     "classification": "static_mdx"
   },
   {

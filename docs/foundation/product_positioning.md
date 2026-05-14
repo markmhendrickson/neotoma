@@ -404,3 +404,5 @@ Agent evaluation is an emerging acquisition funnel. When a contact's agent evalu
 - **Agent-evaluatable claims:** Each claim on the site should be verifiable by an agent reading the docs or repo. "Append-only" — agent can check the code. "Versioned" — agent can check the schema. "Auditable" — agent can check the observation model.
 - **Machine-readable comparison points:** The memory models comparison page and guarantee table provide structured data agents can evaluate against their own capabilities.
 - **Test with multiple agent stacks:** Run the standard evaluation prompt through Claude, ChatGPT, and Gemini. Fix whatever they get wrong.
+
+**Operational runbooks:** [docs/specs/agent_evaluation_optimization_playbook.md](../specs/agent_evaluation_optimization_playbook.md) (checklists, rubrics, claim-to-proof matrix) and [docs/specs/agent_evaluation_operational_long_running_agent.md](../specs/agent_evaluation_operational_long_running_agent.md) (long-running agent ownership, Neotoma entity shapes, triggers, skills, guardrails, 30-day bootstrap).

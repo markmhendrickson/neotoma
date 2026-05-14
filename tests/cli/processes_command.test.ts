@@ -323,6 +323,7 @@ n127.0.0.1:18080
 10     1 npm run dev:server
 11    10 node /Users/me/repos/neotoma/src/actions.ts
 `,
+      platform: "darwin",
     });
     // Stack dedup: parent+child form one connected component → one summary row
     expect(summaries).toHaveLength(1);

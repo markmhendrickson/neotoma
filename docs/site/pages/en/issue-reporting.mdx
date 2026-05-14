@@ -1,12 +1,21 @@
 import { MdxI18nLink } from "@/components/mdx/mdx_i18n_link";
+import { DOC_TABLE_SCROLL_OUTER_CLASS, TableScrollWrapper } from "@/components/ui/table-scroll-wrapper";
 
 The issues subsystem is the primary feedback channel for iterative Neotoma improvement based on agentic usage. v0.12.0 hardens the reporter provenance contract, formalizes operator-mirror flows, and adds bulk operator tools for triage.
 
 Use the issues surface when:
 
-- An agent hits friction during a Neotoma operation (failing tool call, opaque error, missing surface, doc gap) and the harness `issues.reporting_mode` allows filing.
-- A per-turn self-audit produces a file-worthy finding (schema-projection drift, ambiguous identity rule, recurring product weakness) and the agent should file or escalate.
-- A human operator wants to triage many issues at once (close, soft-remove) from the Inspector or scripts.
+<ul className="list-none pl-0 space-y-2 mb-6">
+  <li className="text-[15px] leading-7 text-muted-foreground">
+    An agent hits friction during a Neotoma operation (failing tool call, opaque error, missing surface, doc gap) and the harness <code>issues.reporting_mode</code> allows filing.
+  </li>
+  <li className="text-[15px] leading-7 text-muted-foreground">
+    A per-turn self-audit produces a file-worthy finding (schema-projection drift, ambiguous identity rule, recurring product weakness) and the agent should file or escalate.
+  </li>
+  <li className="text-[15px] leading-7 text-muted-foreground">
+    A human operator wants to triage many issues at once (close, soft-remove) from the Inspector or scripts.
+  </li>
+</ul>
 
 ## MCP tools
 
@@ -32,16 +41,46 @@ Each `/issues/*` route is also mounted under `/api/issues/*` for same-origin pro
 
 `submit_issue` (and the `add_issue_message` soft-warn path) require enough environment to reconstruct what an agent saw at filing time. The required fields:
 
-| Field | Meaning |
-|-------|---------|
-| `reporter_git_sha` | Commit SHA of the Neotoma source the agent was running. Required when `reporter_app_version` is absent. |
-| `reporter_app_version` | Published `neotoma` package version. Required when `reporter_git_sha` is absent. |
-| `reporter_git_ref` | Optional branch / tag the agent was on. |
-| `reporter_channel` | Optional channel (`stable`, `next`, etc.). |
-| `reporter_ci_run_id` | Optional CI run id for automated reproduction. |
-| `reporter_patch_source_id` | Optional pointer at a local patch source the agent was running. |
+<TableScrollWrapper className={DOC_TABLE_SCROLL_OUTER_CLASS}>
+  <table className="w-full text-[14px] leading-6 border-collapse md:rounded-lg md:overflow-hidden md:border md:border-border">
+    <thead>
+      <tr className="border-b border-border">
+        <th className="px-4 py-3 text-left font-semibold text-foreground bg-muted">Field</th>
+        <th className="px-4 py-3 text-left font-semibold text-foreground bg-muted">Meaning</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr className="border-b border-border hover:bg-muted/50 transition-colors">
+        <td className="px-4 py-3 align-top"><code>reporter_git_sha</code></td>
+        <td className="px-4 py-3 align-top text-muted-foreground">Commit SHA of the Neotoma source the agent was running. Required when <code>reporter_app_version</code> is absent.</td>
+      </tr>
+      <tr className="border-b border-border hover:bg-muted/50 transition-colors">
+        <td className="px-4 py-3 align-top"><code>reporter_app_version</code></td>
+        <td className="px-4 py-3 align-top text-muted-foreground">Published <code>neotoma</code> package version. Required when <code>reporter_git_sha</code> is absent.</td>
+      </tr>
+      <tr className="border-b border-border hover:bg-muted/50 transition-colors">
+        <td className="px-4 py-3 align-top"><code>reporter_git_ref</code></td>
+        <td className="px-4 py-3 align-top text-muted-foreground">Optional branch / tag the agent was on.</td>
+      </tr>
+      <tr className="border-b border-border hover:bg-muted/50 transition-colors">
+        <td className="px-4 py-3 align-top"><code>reporter_channel</code></td>
+        <td className="px-4 py-3 align-top text-muted-foreground">Optional channel (<code>stable</code>, <code>next</code>, etc.).</td>
+      </tr>
+      <tr className="border-b border-border hover:bg-muted/50 transition-colors">
+        <td className="px-4 py-3 align-top"><code>reporter_ci_run_id</code></td>
+        <td className="px-4 py-3 align-top text-muted-foreground">Optional CI run id for automated reproduction.</td>
+      </tr>
+      <tr className="hover:bg-muted/50 transition-colors">
+        <td className="px-4 py-3 align-top"><code>reporter_patch_source_id</code></td>
+        <td className="px-4 py-3 align-top text-muted-foreground">Optional pointer at a local patch source the agent was running.</td>
+      </tr>
+    </tbody>
+  </table>
+</TableScrollWrapper>
 
-> **Breaking change in v0.12.0:** Pre-v0.12 `submit_issue` calls without any of `reporter_git_sha` / `reporter_app_version` were accepted. They now reject with `ERR_REPORTER_ENVIRONMENT_REQUIRED`. See the contract fixture at `tests/contract/legacy_payloads/v0.12.x/issues_submit_without_reporter_env`.
+<p className="text-[14px] leading-6 border-l-2 border-muted-foreground/40 pl-4 text-muted-foreground">
+  <strong className="text-foreground">Breaking change in v0.12.0:</strong> Pre-v0.12 <code>submit_issue</code> calls without any of <code>reporter_git_sha</code> / <code>reporter_app_version</code> were accepted. They now reject with <code>ERR_REPORTER_ENVIRONMENT_REQUIRED</code>. See the contract fixture at <code>tests/contract/legacy_payloads/v0.12.x/issues_submit_without_reporter_env</code>.
+</p>
 
 ## Reporting modes
 
@@ -83,3 +122,5 @@ curl -X POST http://localhost:3080/issues/bulk_close \
 ## Full reference
 
 [`docs/subsystems/issues.md`](https://github.com/markmhendrickson/neotoma/blob/main/docs/subsystems/issues.md) covers the reporter-provenance contract end to end, the `sync_issues_from_github.ts` and `submit_issue.ts` services, the redaction backstop in the entity-submission flow, and the recommended `process-issues` operator skill.
+
+See <MdxI18nLink to="/security-hardening" className="text-foreground underline underline-offset-2 hover:no-underline">security hardening</MdxI18nLink>, <MdxI18nLink to="/api" className="text-foreground underline underline-offset-2 hover:no-underline">API reference</MdxI18nLink>, and <MdxI18nLink to="/mcp" className="text-foreground underline underline-offset-2 hover:no-underline">MCP reference</MdxI18nLink>.

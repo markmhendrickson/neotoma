@@ -36,6 +36,7 @@ export default {
   			ring: 'hsl(var(--ring))',
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',
+  			divider: 'hsl(var(--divider))',
   			primary: {
   				DEFAULT: 'hsl(var(--primary))',
   				foreground: 'hsl(var(--primary-foreground))'
@@ -73,6 +74,16 @@ export default {
   				'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
   				border: 'hsl(var(--sidebar-border))',
   				ring: 'hsl(var(--sidebar-ring))'
+  			},
+  			success: 'hsl(var(--success))',
+  			warning: 'hsl(var(--warning))',
+  			info: 'hsl(var(--info))',
+  			entity: {
+  				person: 'hsl(var(--entity-person))',
+  				company: 'hsl(var(--entity-company))',
+  				location: 'hsl(var(--entity-location))',
+  				event: 'hsl(var(--entity-event))',
+  				document: 'hsl(var(--entity-document))'
   			}
   		},
   		borderRadius: {
@@ -80,7 +91,34 @@ export default {
   			md: 'calc(var(--radius) - 2px)',
   			sm: 'calc(var(--radius) - 4px)'
   		},
+  		boxShadow: {
+  			card: '0px 15px 30px 0px rgba(0,0,0,0.05)'
+  		},
   		fontSize: {
+  			caption: [
+  				'0.6875rem',
+  				{
+  					lineHeight: '1.4'
+  				}
+  			],
+  			fine: [
+  				'0.75rem',
+  				{
+  					lineHeight: '1.4'
+  				}
+  			],
+  			ui: [
+  				'0.8125rem',
+  				{
+  					lineHeight: '1.5'
+  				}
+  			],
+  			base: [
+  				'0.875rem',
+  				{
+  					lineHeight: '1.5'
+  				}
+  			],
   			body: [
   				'0.9375rem',
   				{

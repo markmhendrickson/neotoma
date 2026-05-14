@@ -26,7 +26,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 /** Tool identifiers used across commands. */
-export type ToolId = "claude-code" | "claude-desktop" | "cursor" | "codex" | "openclaw";
+export type ToolId = "claude-code" | "claude-desktop" | "cursor" | "codex" | "openclaw" | "windsurf" | "continue" | "vscode";
 
 /** How the `neotoma` binary was located (if at all). */
 export type ResolvedVia = "mise" | "nvm" | "fnm" | "npm" | "path" | "unknown";
@@ -300,6 +300,7 @@ export function detectCurrentToolHint(cwd: string, env: NodeJS.ProcessEnv = proc
     if (existsSync(path.join(cwd, ".claude"))) markers.push("claude-code");
     if (existsSync(path.join(cwd, ".cursor"))) markers.push("cursor");
     if (existsSync(path.join(cwd, ".codex"))) markers.push("codex");
+    if (existsSync(path.join(cwd, ".vscode", "mcp.json"))) markers.push("vscode");
     if (markers.length === 1) return markers[0]!;
   } catch {
     // ignore

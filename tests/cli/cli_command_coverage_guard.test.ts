@@ -63,6 +63,7 @@ describe("CLI command coverage guard", () => {
       "agents", // namespace dispatcher; subcommands (e.g. `agents grants import`) are covered by their own integration tests
       "inspector", // UI launcher namespace; behavior is covered by inspector/server integration flows
       "compat", // remote version probe; exercised by API compatibility tests and manual release checks
+      "db", // bulk encryption migration; requires live SQLite file, covered by column_encryption unit tests and manual migration flows
     ]);
 
     const uncovered = commandNames.filter(

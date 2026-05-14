@@ -68,18 +68,18 @@ export function PermissionsPreflight(): React.ReactElement {
       <header className="mb-3 flex flex-col gap-1">
         <h2
           id="permissions-preflight-heading"
-          className="text-[15px] font-semibold tracking-[-0.01em]"
+          className="text-body font-semibold tracking-[-0.01em]"
         >
           Permissions pre-flight (copy once, before running the agent prompt below)
         </h2>
-        <p className="text-[13px] leading-5 text-muted-foreground">
+        <p className="text-ui leading-5 text-muted-foreground">
           Paste this snippet into the right file for your agent harness so the
           rest of onboarding only needs two approvals: <code className="rounded bg-muted px-1 py-0.5">neotoma *</code>{" "}
           and one <code className="rounded bg-muted px-1 py-0.5">npm install -g neotoma</code>.
           Without this, directory-scoped harnesses will prompt for every
           individual command.
         </p>
-        <p className="text-[12px] leading-5 text-muted-foreground">
+        <p className="text-fine leading-5 text-muted-foreground">
           Using <strong>OpenClaw</strong>? Skip this — the native plugin handles
           consent. Just run{" "}
           <code className="rounded bg-muted px-1 py-0.5">openclaw plugins install clawhub:neotoma</code>{" "}
@@ -102,7 +102,7 @@ export function PermissionsPreflight(): React.ReactElement {
               id={`preflight-tab-${tab.id}`}
               type="button"
               onClick={() => setActiveId(tab.id)}
-              className={`rounded-md px-3 py-1.5 text-[13px] transition-colors ${
+              className={`rounded-md px-3 py-1.5 text-ui transition-colors ${
                 selected
                   ? "bg-foreground text-background"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -120,10 +120,10 @@ export function PermissionsPreflight(): React.ReactElement {
       >
         <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <p className="text-[13px] leading-5 text-muted-foreground">
+            <p className="text-ui leading-5 text-muted-foreground">
               {active.description}
             </p>
-            <p className="mt-0.5 text-[12px] leading-5 text-muted-foreground">
+            <p className="mt-0.5 text-fine leading-5 text-muted-foreground">
               Target: <code className="rounded bg-muted px-1 py-0.5">{active.filePath}</code>
             </p>
           </div>
@@ -136,10 +136,10 @@ export function PermissionsPreflight(): React.ReactElement {
             className="shrink-0"
           >
             {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-            <span className="ml-1.5 text-[12px]">{copied ? "Copied" : "Copy"}</span>
+            <span className="ml-1.5 text-fine">{copied ? "Copied" : "Copy"}</span>
           </Button>
         </div>
-        <pre className="max-h-72 overflow-x-auto rounded-md bg-muted/40 p-3 font-mono text-[12px] leading-5 whitespace-pre-wrap break-words">
+        <pre className="max-h-72 overflow-x-auto rounded-md bg-muted/40 p-3 font-mono text-fine leading-5 whitespace-pre-wrap break-words">
           <code>{active.snippet}</code>
         </pre>
       </div>

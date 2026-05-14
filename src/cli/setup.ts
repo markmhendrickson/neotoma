@@ -68,12 +68,16 @@ export interface RunSetupOptions {
  * "user" scope uses the home-directory path; "project" uses cwd.
  */
 function getSkillsTarget(tool: ToolId, cwd: string, scope: "project" | "user"): string | null {
-  const harnessMap: Record<ToolId, { dir: string }> = {
+  const harnessMap: Partial<Record<ToolId, { dir: string }>> = {
     cursor:          { dir: ".cursor/skills" },
     "claude-code":   { dir: ".claude/skills" },
     "claude-desktop": { dir: ".claude/skills" },
     codex:           { dir: ".codex/skills" },
     openclaw:        { dir: ".openclaw/skills" },
+    // MCP-only tools: no skills directory; setup writes MCP config only.
+    windsurf:        undefined,
+    continue:        undefined,
+    vscode:          undefined,
   };
   const entry = harnessMap[tool];
   if (!entry) return null;

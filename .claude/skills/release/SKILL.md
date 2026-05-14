@@ -236,8 +236,66 @@ After user confirms, run **every** step below in order through **npm publish and
      bash scripts/security/deployed_probes.sh --tag vX.Y.Z
    ```
    The probe writes `docs/releases/in_progress/vX.Y.Z/post_deploy_security_probes.md` and exits non-zero on any unexpected status. A failure here BLOCKS release completion: open an advisory under `docs/security/advisories/`, hotfix the regression, and re-run before declaring done.
-2. Move supplement: `mv docs/releases/in_progress/vX.Y.Z docs/releases/completed/vX.Y.Z` (if directory was created); the security review and probe report move with it.
-3. Report summary: version, GitHub Release URL, npm package URL (must reflect a successful **`npm publish`** when the release included npm), sandbox URL/version verification, and the probe report verdict (passes / failures).
+
+2. **Verify GitHub Actions workflows triggered by the release push:**
+
+   The `git push origin main` and `git push origin vX.Y.Z` in Step 4.5 trigger CI and deployment workflows. All must succeed before declaring the release complete.
+
+   a. **Wait for runs to start** (allow ~30s after push, then poll):
+      ```bash
+      gh run list --branch main --limit 10 --json databaseId,name,status,conclusion,headSha,createdAt
+      ```
+
+   b. **Watch each in-progress run** (repeat for each relevant run ID):
+      ```bash
+      gh run watch <run-id>
+      ```
+      Or wait for completion in batch (exit 1 on any failure):
+      ```bash
+      gh run list --branch main --limit 10 --json databaseId,status,conclusion,name \
+        | node -e "
+          const runs = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
+          const relevant = runs.filter(r => ['CI test lanes','Deploy site (GitHub Pages)','Sandbox weekly reset'].includes(r.name) || r.status !== 'completed');
+          const failed = runs.filter(r => r.conclusion && r.conclusion !== 'success' && r.conclusion !== 'skipped');
+          if (failed.length) { console.error('FAILED:', failed.map(r=>r.name)); process.exit(1); }
+          console.log('All relevant runs passed or in-progress.');
+        "
+      ```
+
+   c. **Workflows to verify:**
+      - `CI test lanes` — all four jobs (`baseline`, `frontend`, `site_export`, `security_gates`) must pass
+      - `Deploy site (GitHub Pages)` — triggered by push to `main`; must reach `success`
+      - Any tag-triggered workflows (inspect `gh run list --ref vX.Y.Z`)
+
+   d. **If any workflow fails:**
+      - Inspect with `gh run view <run-id> --log-failed`
+      - Fix the root cause (typically a commit in the release range introduced the failure)
+      - If the fix requires a new commit, create a patch release (`vX.Y.Z+1`) using this same workflow — do not force-push the tag
+      - Re-run this step after the patch push until all checks pass
+
+   e. **Record the outcome** in the release summary (step 4 of this section).
+
+3. **Close resolved GitHub issues:**
+   - Fetch the release URL created in Step 4.8:
+     ```bash
+     RELEASE_URL=$(gh release view vX.Y.Z --json url --jq .url)
+     ```
+   - List open issues and cross-reference against the commits in this release:
+     ```bash
+     gh issue list --state open --json number,title,body,labels
+     git log <last-tag>..vX.Y.Z --oneline
+     ```
+   - For each issue that is resolved by a commit in the release range (via `Fixes #N`, `Closes #N`, `Resolves #N` in commit messages or PR descriptions) **or** whose described behavior is demonstrably fixed:
+     ```bash
+     gh issue close <number> --comment "Resolved in [vX.Y.Z]($RELEASE_URL)."
+     ```
+   - If there are open issues that are partially addressed but not fully resolved, add a comment noting what was fixed and what remains:
+     ```bash
+     gh issue comment <number> --body "Partially addressed in [vX.Y.Z]($RELEASE_URL): <what changed>. Remaining: <what's still open>."
+     ```
+   - Report which issues were closed and which were commented on.
+4. Move supplement: `mv docs/releases/in_progress/vX.Y.Z docs/releases/completed/vX.Y.Z` (if directory was created); the security review and probe report move with it.
+5. Report summary: version, GitHub Release URL, npm package URL (must reflect a successful **`npm publish`** when the release included npm), sandbox URL/version verification, the probe report verdict (passes / failures), issues closed, and CI workflow outcomes (all-pass / any-failure with run IDs).
 
 ## Submodule Mode
 
@@ -258,6 +316,7 @@ If the user says `/release foundation` (or another submodule name):
 - For a standard `/release`, **always** run **`npm publish`** after `gh release create` unless the user explicitly confirmed GitHub-only / no registry.
 - For a standard `/release`, **always** deploy `sandbox.neotoma.io` with `flyctl deploy -c fly.sandbox.toml --remote-only` and verify the live sandbox version unless the user explicitly confirmed no sandbox.
 - For a standard `/release`, **always** run Step 3.5 (Security review lane) before Step 4 and Step 5 (Deployed probes) before declaring complete; the supplement MUST contain a `Security hardening` section linking `docs/releases/in_progress/<TAG>/security_review.md` (and `post_deploy_security_probes.md` after Step 5).
+- For a standard `/release`, **always** verify that all GitHub Actions workflows triggered by the release push (`CI test lanes`, `Deploy site (GitHub Pages)`, and any tag-triggered workflows) reach `success` before declaring complete. A CI failure after push is a partial release — fix and re-verify.
 - If `docs/developer/github_release_process.md` exists, follow its template and render pipeline.
 
 ## Agent Instructions
@@ -281,3 +340,4 @@ If the user says `/release foundation` (or another submodule name):
 - Ending the execute turn right after npm web-login / “I signed in” **without** running the **npm web-login checkpoint** (`npm whoami` → publish or explicit `ready` handoff with copy-paste commands)
 - Skipping Step 3.5 (Security review lane) before Step 4 when `npm run security:classify-diff` reports the release diff as sensitive, or omitting the supplement's `Security hardening` section
 - Declaring a release complete without running Step 5 deployed probes (`bash scripts/security/deployed_probes.sh --tag vX.Y.Z`) and recording the report under `docs/releases/in_progress/vX.Y.Z/post_deploy_security_probes.md`
+- Declaring a release complete without verifying all release-triggered GitHub Actions workflows (`CI test lanes`, `Deploy site`, tag-triggered workflows) reached `success` via `gh run list` / `gh run watch`

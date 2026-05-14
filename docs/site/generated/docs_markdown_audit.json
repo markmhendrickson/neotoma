@@ -1,19 +1,19 @@
 {
-  "generated_at": "2026-05-12T14:17:19.220Z",
-  "total_files": 410,
+  "generated_at": "2026-05-14T08:55:56.690Z",
+  "total_files": 415,
   "by_top_level_folder": {
     "api": 1,
     "architecture": 19,
     "conventions": 12,
     "coverage_manifest.md": 1,
-    "developer": 90,
+    "developer": 94,
     "examples": 1,
     "feature_units": 20,
     "foundation": 21,
     "icp": 8,
     "implementation": 2,
     "infrastructure": 1,
-    "integrations": 11,
+    "integrations": 12,
     "legal": 8,
     "migration": 2,
     "NEOTOMA_MANIFEST.md": 1,
@@ -378,6 +378,10 @@
       "top": "developer"
     },
     {
+      "rel": "docs/developer/mcp_continue_setup.md",
+      "top": "developer"
+    },
+    {
       "rel": "docs/developer/mcp_cursor_setup.md",
       "top": "developer"
     },
@@ -395,6 +399,10 @@
     },
     {
       "rel": "docs/developer/mcp_ironclaw_setup.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/mcp_letta_setup.md",
       "top": "developer"
     },
     {
@@ -419,6 +427,14 @@
     },
     {
       "rel": "docs/developer/mcp_server_examples_from_cursor_docs.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/mcp_vscode_setup.md",
+      "top": "developer"
+    },
+    {
+      "rel": "docs/developer/mcp_windsurf_setup.md",
       "top": "developer"
     },
     {
@@ -775,6 +791,10 @@
     },
     {
       "rel": "docs/integrations/hooks/README.md",
+      "top": "integrations"
+    },
+    {
+      "rel": "docs/integrations/matrix.md",
       "top": "integrations"
     },
     {

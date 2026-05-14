@@ -15,7 +15,7 @@ import {
 } from "@/components/code_block_copy_button_classes";
 
 const footerMarkdownLinkClass =
-  "inline-flex h-9 min-h-9 items-center gap-1.5 rounded-md px-2 text-[13px] text-muted-foreground no-underline transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
+  "inline-flex h-9 min-h-9 items-center gap-1.5 rounded-md px-2 text-ui text-muted-foreground no-underline transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 
 /** Markdown (when available), language, and theme — shown in the global footer and use case landing shells. */
 export function SiteFooterUtilities() {
@@ -52,7 +52,7 @@ function FooterLink({
 }) {
   const isExternal = href.startsWith("http://") || href.startsWith("https://");
   const linkClassName =
-    "text-[13px] text-muted-foreground no-underline transition-colors hover:text-foreground";
+    "text-ui text-muted-foreground no-underline transition-colors hover:text-foreground";
 
   if (isExternal) {
     return (
@@ -137,12 +137,12 @@ export function SiteTailpiece() {
                 aria-hidden="true"
               />
             </figure>
-            <p className="text-[13px] font-medium text-foreground">Neotoma</p>
-            <p className="mt-2 text-[13px] leading-6 text-muted-foreground">{dict.footerTagline}</p>
+            <img src="/neotoma-wordmark.svg" alt="Neotoma" className="h-7 w-auto dark:invert" />
+            <p className="mt-2 text-ui leading-6 text-muted-foreground">{dict.footerTagline}</p>
           </div>
 
           <div>
-            <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground/80 dark:text-muted-foreground">
+            <p className="text-caption uppercase tracking-[0.12em] text-muted-foreground/80 dark:text-muted-foreground">
               {dict.footerColumnProduct}
             </p>
             <div className="mt-3 flex flex-col gap-2">
@@ -160,7 +160,7 @@ export function SiteTailpiece() {
           </div>
 
           <div>
-            <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground/80 dark:text-muted-foreground">
+            <p className="text-caption uppercase tracking-[0.12em] text-muted-foreground/80 dark:text-muted-foreground">
               {dict.footerColumnDocumentation}
             </p>
             <div className="mt-3 flex flex-col gap-2">
@@ -171,7 +171,7 @@ export function SiteTailpiece() {
           </div>
 
           <div>
-            <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground/80 dark:text-muted-foreground">
+            <p className="text-caption uppercase tracking-[0.12em] text-muted-foreground/80 dark:text-muted-foreground">
               {dict.footerColumnExternal}
             </p>
             <div className="mt-3 flex flex-col gap-2">
@@ -182,7 +182,7 @@ export function SiteTailpiece() {
           </div>
 
           <div>
-            <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground/80 dark:text-muted-foreground">
+            <p className="text-caption uppercase tracking-[0.12em] text-muted-foreground/80 dark:text-muted-foreground">
               {dict.footerColumnLegal}
             </p>
             <div className="mt-3 flex flex-col gap-2">
@@ -195,7 +195,7 @@ export function SiteTailpiece() {
 
         <div className="mt-8 border-t border-border/60 pt-6 space-y-6">
           <div className="w-full space-y-3 sm:max-w-xl">
-            <p className="text-[12px] leading-5 text-muted-foreground">{dict.footerCtaBlurb}</p>
+            <p className="text-fine leading-5 text-muted-foreground">{dict.footerCtaBlurb}</p>
             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
               <Link
                 to="/evaluate"
@@ -216,7 +216,7 @@ export function SiteTailpiece() {
             </div>
           </div>
           <div className="flex flex-col gap-3 border-t border-border/40 pt-4 md:flex-row md:items-center md:justify-between">
-            <p className="max-w-full text-[12px] leading-relaxed text-muted-foreground">
+            <p className="max-w-full text-fine leading-relaxed text-muted-foreground">
               © {year} Neotoma · v{liveVersion} · {liveReleasesCount}{" "}
               {liveReleasesCount === 1 ? dict.footerReleaseSingular : dict.footerReleasePlural} ·{" "}
               {dict.footerMitLicensed} · {dict.footerBuiltBy}{" "}

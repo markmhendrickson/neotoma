@@ -274,6 +274,17 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Hosted", path: "/hosted" },
     ],
   },
+  "/integrations": {
+    title: "Integrations | Neotoma",
+    description:
+      "Every host, harness, and framework Neotoma integrates with: Cursor, Claude Code, ChatGPT, Codex, OpenClaw, IronClaw, Windsurf, Continue, VS Code, and more.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Integrations", path: "/integrations" },
+    ],
+  },
   "/connect": {
     title: "Connect remotely | Neotoma",
     description:
@@ -1074,6 +1085,54 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Docs", path: "/docs" },
       { name: "OpenClaw", path: "/neotoma-with-openclaw" },
       { name: "Local setup", path: "/neotoma-with-openclaw-connect-local-stdio" },
+    ],
+  },
+  "/neotoma-with-continue": {
+    title: "Neotoma with Continue | Integration Guide",
+    description:
+      "Connect Continue (the open-source AI code assistant) to Neotoma over MCP for persistent structured memory across IDE sessions.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Continue", path: "/neotoma-with-continue" },
+    ],
+  },
+  "/neotoma-with-windsurf": {
+    title: "Neotoma with Windsurf | Integration Guide",
+    description:
+      "Add persistent structured memory to Windsurf (Codeium) using Neotoma MCP. Neotoma auto-detects Windsurf's config path.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Windsurf", path: "/neotoma-with-windsurf" },
+    ],
+  },
+  "/neotoma-with-vscode": {
+    title: "Neotoma with VS Code | Integration Guide",
+    description:
+      "Connect VS Code's GitHub Copilot Chat to Neotoma via MCP for structured memory in Agent Mode. Setup via .vscode/mcp.json.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "VS Code", path: "/neotoma-with-vscode" },
+    ],
+  },
+  "/neotoma-with-letta": {
+    title: "Neotoma with Letta | Integration Guide",
+    description:
+      "Add persistent structured memory to Letta agents via MCP. Register Neotoma as an MCP server using the Letta Python or TypeScript SDK.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Letta", path: "/neotoma-with-letta" },
     ],
   },
   "/neotoma-with-openclaw-connect-remote-http": {

@@ -62,6 +62,7 @@ import {
   resolveNeotomaPackageRoot,
 } from "../mcp_instruction_doc.js";
 import { registerProcessesCommands } from "./commands/processes.js";
+import { registerDbCommand } from "./commands/db.js";
 import { registerPeersCommand } from "./peers.js";
 import { buildInspectorFeedbackAdminUnlockPageUrl } from "./inspector_admin_unlock_url.js";
 import {
@@ -10516,6 +10517,18 @@ registerProcessesCommands(program, {
   writeCliError,
 });
 
+registerDbCommand(program, {
+  resolveDbPath: async () => {
+    const { repoRoot } = await resolveRepoRootFromInitContext();
+    await hydrateDataDirFromConfiguredEnv(repoRoot);
+    const dataDir =
+      process.env.NEOTOMA_DATA_DIR || (repoRoot ? path.join(repoRoot, "data") : "data");
+    const env = process.env.NEOTOMA_ENV || "development";
+    const dbFile = env === "production" ? "neotoma.prod.db" : "neotoma.db";
+    return path.resolve(dataDir, dbFile);
+  },
+});
+
 // ── Logs ──────────────────────────────────────────────────────────────────
 
 const logsCommand = program.command("logs").description("View and decrypt persistent log files");
@@ -17452,6 +17465,7 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
     "auth",
     "api",
     "backup",
+    "db",
     "dev",
     "doctor",
     "entities",

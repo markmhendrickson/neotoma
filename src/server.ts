@@ -4495,6 +4495,14 @@ export class NeotomaServer {
 
       // Resolve entity (user-scoped) and capture the resolver trace so we
       // can surface action / canonical_name / resolver_path per observation.
+      //
+      // Pass the full fieldsToValidate (all user-supplied fields minus entity_type/
+      // type/target_id) so the resolver can use heuristic identity keys that are
+      // not declared schema fields — e.g. `canonical_name`, `name`, `external_id`.
+      // Without this, those keys are stripped by validateFieldsWithConverters and
+      // the resolver sees an empty map, causing ERR_CANONICAL_NAME_UNRESOLVED even
+      // when the caller explicitly supplies `canonical_name`. Observation storage
+      // still uses `fieldsForObservation` (schema-valid + date-like extras only).
       let entityId: string;
       let resolverTrace: {
         canonicalName: string;
@@ -4506,7 +4514,7 @@ export class NeotomaServer {
       try {
         const result = await resolveEntityWithTrace({
           entityType,
-          fields: validFields,
+          fields: fieldsToValidate,
           userId,
           commit: true,
           strict,

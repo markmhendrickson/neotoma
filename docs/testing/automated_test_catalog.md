@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **338**
-- Backend and repo Vitest files: **305**
+- Total automated test files: **343**
+- Backend and repo Vitest files: **310**
 - Frontend Vitest files: **9**
 - Playwright spec files: **24**
 
@@ -72,11 +72,11 @@ flowchart TD
 | Vitest unit tests | 81 |
 | Vitest service tests | 33 |
 | Source-adjacent tests | 39 |
-| Vitest integration tests | 86 |
+| Vitest integration tests | 89 |
 | Vitest CLI tests | 49 |
 | Vitest contract tests | 10 |
 | Vitest security tests | 1 |
-| Vitest subscription tests | 2 |
+| Vitest subscription tests | 3 |
 | Vitest agent tests | 1 |
 | Vitest fixture tests | 1 |
 | Vitest helper tests | 1 |
@@ -84,6 +84,7 @@ flowchart TD
 | Frontend Vitest tests | 9 |
 | Playwright E2E tests | 22 |
 | Playwright Inspector E2E tests | 2 |
+| Tests Scripts | 1 |
 
 ## Primary validation commands
 - `npm test`
@@ -280,7 +281,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (86):**
+**Files (89):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_resource_metadata.test.ts`
 - `tests/integration/aauth_revocation_e2e.test.ts`
@@ -310,7 +311,9 @@ flowchart TD
 - `tests/integration/field_converters.test.ts`
 - `tests/integration/fixture_mcp_store_replay.test.ts`
 - `tests/integration/gdpr_deletion.test.ts`
+- `tests/integration/guest_invalid_bearer_routes.test.ts`
 - `tests/integration/guest_token_isolation.test.ts`
+- `tests/integration/guest_write_rate_limit.test.ts`
 - `tests/integration/hook_failure_hint.test.ts`
 - `tests/integration/inspector_bundled_mount.test.ts`
 - `tests/integration/interpretation_store.test.ts`
@@ -335,6 +338,7 @@ flowchart TD
 - `tests/integration/mcp_schema_actions.test.ts`
 - `tests/integration/mcp_schema_variations.test.ts`
 - `tests/integration/mcp_stdio_attribution.test.ts`
+- `tests/integration/mcp_store_canonical_name_unknown_fields.test.ts`
 - `tests/integration/mcp_store_parquet.test.ts`
 - `tests/integration/mcp_store_unstructured.test.ts`
 - `tests/integration/mcp_store_variations.test.ts`
@@ -454,7 +458,8 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npx vitest run tests/subscriptions`
 **Requirements:** Basic `.env`; some tests start an in-process HTTP server.
-**Files (2):**
+**Files (3):**
+- `tests/subscriptions/guest_write_rate_limit_routing.test.ts`
 - `tests/subscriptions/subscription_guest_auth.test.ts`
 - `tests/subscriptions/subscription_loop_prevention.test.ts`
 
@@ -543,6 +548,14 @@ flowchart TD
 **Files (2):**
 - `playwright/tests/inspector/inspector-entity-detail.spec.ts`
 - `playwright/tests/inspector/inspector-issues.spec.ts`
+
+### Tests Scripts
+**Directory:** `tests/scripts/`
+**Runner:** `vitest`
+**Command:** `npx vitest run tests/scripts`
+**Requirements:** Basic `.env` if required by the module under test.
+**Files (1):**
+- `tests/scripts/launchd_cli_sync_tooling.test.ts`
 
 ## Agent instructions
 ### When to load this document

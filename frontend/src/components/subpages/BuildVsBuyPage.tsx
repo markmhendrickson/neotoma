@@ -351,7 +351,7 @@ export function BuildVsBuyPageBody() {
             </p>
             <Collapsible defaultOpen={false}>
               <CollapsibleTrigger asChild>
-                <button type="button" className="group flex items-center gap-2 w-full text-left focus:outline-none">
+                <button type="button" className="group flex items-center gap-2 w-full text-left focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm">
                   <h2 id="where-observability-ends-and-state-integrity-begins" className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
                     Where observability ends and state integrity begins
                   </h2>
@@ -438,7 +438,7 @@ export function BuildVsBuyPageBody() {
             </p>
             <Collapsible defaultOpen={false}>
               <CollapsibleTrigger asChild>
-                <button type="button" className="group flex items-center gap-2 w-full text-left focus:outline-none">
+                <button type="button" className="group flex items-center gap-2 w-full text-left focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm">
                   <h2 id="how-many-of-these-describe-your-system" className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
                     How many of these describe your system?
                   </h2>
@@ -525,7 +525,7 @@ export function BuildVsBuyPageBody() {
             </p>
             <Collapsible defaultOpen={false}>
               <CollapsibleTrigger asChild>
-                <button type="button" className="group flex items-center gap-2 w-full text-left focus:outline-none">
+                <button type="button" className="group flex items-center gap-2 w-full text-left focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm">
                   <h2 id="where-the-line-shows-up-in-typed-state" className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
                     Where the line shows up in typed state
                   </h2>

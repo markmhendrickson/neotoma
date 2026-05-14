@@ -79,7 +79,13 @@ async function loadSimpleGit(dir: string): Promise<import("simple-git").SimpleGi
       baseDir: dir,
       binary: "git",
       maxConcurrentProcesses: 1,
-      config: ["commit.gpgsign=false"],
+      // Provide a fallback identity so commits succeed in environments (e.g. CI)
+      // where global git user.name/user.email are not configured.
+      config: [
+        "commit.gpgsign=false",
+        "user.name=Neotoma Mirror",
+        "user.email=neotoma-mirror@localhost",
+      ],
     });
   } catch {
     return null;

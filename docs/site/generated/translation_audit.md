@@ -32,6 +32,7 @@
 | `/install` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/install/docker` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/install/manual` | en, es | 2026-05-07 | canonical, machine_draft |
+| `/integrations` | en | 2026-05-13 | canonical |
 | `/issue-reporting` | en | 2026-05-12 | canonical |
 | `/logistics` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/mcp` | en | 2026-05-07 | canonical |
@@ -53,12 +54,16 @@
 | `/neotoma-with-codex` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/neotoma-with-codex-connect-local-stdio` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/neotoma-with-codex-connect-remote-http-oauth` | en, es | 2026-05-07 | canonical, machine_draft |
+| `/neotoma-with-continue` | en | 2026-05-13 | canonical |
 | `/neotoma-with-cursor` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/neotoma-with-ironclaw` | en, es | 2026-05-07 | canonical, machine_draft |
+| `/neotoma-with-letta` | en | 2026-05-14 | canonical |
 | `/neotoma-with-openclaw` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/neotoma-with-openclaw-connect-local-stdio` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/neotoma-with-openclaw-connect-remote-http` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/neotoma-with-opencode` | en, es | 2026-05-07 | canonical, machine_draft |
+| `/neotoma-with-vscode` | en | 2026-05-13 | canonical |
+| `/neotoma-with-windsurf` | en | 2026-05-13 | canonical |
 | `/non-destructive-testing` | en, es | 2026-05-08 | canonical |
 | `/operating` | en, es | 2026-05-07 | canonical, machine_draft |
 | `/peer-sync` | en | 2026-05-12 | canonical |

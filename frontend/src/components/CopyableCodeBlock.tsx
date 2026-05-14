@@ -84,7 +84,7 @@ export function CopyableCodeBlock({
               <span className="h-2 w-2 rounded-full bg-emerald-500/80 dark:bg-emerald-400/80" aria-hidden />
               {evaluateChromeTitle}
             </div>
-            <div className="text-[12px] leading-5 text-muted-foreground">{evaluateChromeSubtitle}</div>
+            <div className="text-fine leading-5 text-muted-foreground">{evaluateChromeSubtitle}</div>
           </div>
           <button type="button" className={copyButtonClass} onClick={onCopy}>
             {copied ? (
@@ -101,7 +101,7 @@ export function CopyableCodeBlock({
           </button>
           <pre
             className={cn(
-              "order-2 mb-0 rounded-xl border border-border/80 bg-muted/35 text-foreground shadow-inner shadow-black/5 code-block-shell p-4 overflow-x-auto overflow-y-auto font-mono text-[13px] leading-6 whitespace-pre-wrap break-words sm:order-none sm:col-span-2 sm:row-start-2",
+              "order-2 mb-0 rounded-xl border border-border/80 bg-muted/35 text-foreground shadow-inner shadow-black/5 code-block-shell p-4 overflow-x-auto overflow-y-auto font-mono text-ui leading-6 whitespace-pre-wrap break-words sm:order-none sm:col-span-2 sm:row-start-2",
               canExpand && !showFullCode && "max-h-60 md:max-h-none",
               className,
             )}
@@ -113,7 +113,7 @@ export function CopyableCodeBlock({
               type="button"
               variant="ghost"
               size="sm"
-              className="order-4 mt-0 px-2 h-10 w-full justify-center text-[12px] text-muted-foreground hover:text-foreground sm:order-none sm:col-span-2 sm:row-start-3 sm:mt-2 sm:h-8 sm:w-auto sm:justify-start"
+              className="order-4 mt-0 px-2 h-10 w-full justify-center text-fine text-muted-foreground hover:text-foreground sm:order-none sm:col-span-2 sm:row-start-3 sm:mt-2 sm:h-8 sm:w-auto sm:justify-start"
               onClick={() => setShowFullCode((prev) => !prev)}
               aria-label={showFullCode ? dict.showLess : dict.showMore}
             >
@@ -159,7 +159,7 @@ export function CopyableCodeBlock({
       <pre
         className={cn(
           CODE_BLOCK_CARD_INNER_CLASS,
-          "p-4 overflow-x-auto overflow-y-auto font-mono text-[13px] leading-6 whitespace-pre-wrap break-words",
+          "p-4 overflow-x-auto overflow-y-auto font-mono text-ui leading-6 whitespace-pre-wrap break-words",
           canExpand && !showFullCode && "max-h-60 md:max-h-none",
           "sm:col-span-2 sm:row-start-2",
           className,
@@ -172,7 +172,7 @@ export function CopyableCodeBlock({
           type="button"
           variant="ghost"
           size="sm"
-          className="mt-2 px-2 h-8 text-[12px] text-muted-foreground hover:text-foreground"
+          className="mt-2 px-2 h-8 text-fine text-muted-foreground hover:text-foreground"
           onClick={() => setShowFullCode((prev) => !prev)}
           aria-label={showFullCode ? dict.showLess : dict.showMore}
         >

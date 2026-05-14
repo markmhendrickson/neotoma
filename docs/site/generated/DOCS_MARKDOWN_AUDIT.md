@@ -2,11 +2,11 @@
 
 Excludes `docs/private` and paths containing `archived`, `releases`, or `in_progress` directory names.
 
-Total files: **410**
+Total files: **415**
 
 ## By top-level folder under docs/
 
-- **developer**: 90
+- **developer**: 94
 - **reports**: 48
 - **subsystems**: 44
 - **ui**: 40
@@ -16,8 +16,8 @@ Total files: **410**
 - **use_cases**: 17
 - **proposals**: 13
 - **conventions**: 12
+- **integrations**: 12
 - **specs**: 12
-- **integrations**: 11
 - **testing**: 10
 - **icp**: 8
 - **legal**: 8

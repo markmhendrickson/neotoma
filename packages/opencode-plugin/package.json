@@ -40,16 +40,18 @@
     "url": "https://github.com/markmhendrickson/neotoma/issues"
   },
   "dependencies": {
-    "@neotoma/client": "^0.1.0"
+    "@neotoma/client": "file:../client"
   },
   "peerDependencies": {
     "@opencode-ai/plugin": "*"
   },
   "peerDependenciesMeta": {
-    "@opencode-ai/plugin": { "optional": true }
+    "@opencode-ai/plugin": {
+      "optional": true
+    }
   },
   "devDependencies": {
-    "typescript": "^5.4.0",
-    "@types/node": "^20.11.0"
+    "@types/node": "^20.11.0",
+    "typescript": "^5.4.0"
   }
 }

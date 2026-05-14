@@ -502,7 +502,7 @@ export function ArchitecturePage() {
       {/* Problems solved */}
       <Collapsible defaultOpen={false}>
         <CollapsibleTrigger asChild>
-          <button type="button" className="group flex items-center gap-2 w-full text-left focus:outline-none">
+          <button type="button" className="group flex items-center gap-2 w-full text-left focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm">
             <h2 id="problems-solved" className="scroll-mt-6 text-[20px] font-medium tracking-[-0.02em] mt-14 mb-3">
               Problems solved
             </h2>
@@ -669,7 +669,7 @@ export function ArchitecturePage() {
       {/* Go deeper */}
       <Collapsible defaultOpen={false}>
         <CollapsibleTrigger asChild>
-          <button type="button" className="group flex items-center gap-2 w-full text-left focus:outline-none">
+          <button type="button" className="group flex items-center gap-2 w-full text-left focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm">
             <h2 id="go-deeper" className="scroll-mt-6 text-[20px] font-medium tracking-[-0.02em] mt-14 mb-3">
               Go deeper
             </h2>

@@ -1,12 +1,21 @@
 import { MdxI18nLink } from "@/components/mdx/mdx_i18n_link";
+import { DOC_TABLE_SCROLL_OUTER_CLASS, TableScrollWrapper } from "@/components/ui/table-scroll-wrapper";
 
 Peer sync lets two explicit Neotoma instances exchange selected entity state without a central hub. Each side stores immutable sync-originated observations and the reducer computes snapshots locally, so peers stay independent stores of truth that converge through signed webhooks. Available since v0.12.0.
 
 Use peer sync when:
 
-- A team operator wants to mirror selected entity types (issues, product feedback, runbook notes) from a personal instance to a shared "central" instance.
-- Two self-hosted instances need to stay in step without a hosted broker.
-- A hosted operator instance wants to receive guest-tagged entities from many personal instances over a signed webhook.
+<ul className="list-none pl-0 space-y-2 mb-6">
+  <li className="text-[15px] leading-7 text-muted-foreground">
+    A team operator wants to mirror selected entity types (issues, product feedback, runbook notes) from a personal instance to a shared "central" instance.
+  </li>
+  <li className="text-[15px] leading-7 text-muted-foreground">
+    Two self-hosted instances need to stay in step without a hosted broker.
+  </li>
+  <li className="text-[15px] leading-7 text-muted-foreground">
+    A hosted operator instance wants to receive guest-tagged entities from many personal instances over a signed webhook.
+  </li>
+</ul>
 
 ## MCP tools
 
@@ -19,13 +28,44 @@ Use peer sync when:
 
 ## HTTP routes
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| GET | `/peers/{peer_id}` | Snapshot + `remote_health`. |
-| POST | `/peers` | Add peer. |
-| POST | `/peers/{peer_id}/sync` | Bounded outbound batch. |
-| POST | `/sync/webhook` | Inbound signed notification (HMAC `X-Neotoma-Sync-Signature-256` or AAuth). |
-| POST | `/peers/resolve_sync_conflict` | Strategy-based conflict resolution. |
+<TableScrollWrapper className={DOC_TABLE_SCROLL_OUTER_CLASS}>
+  <table className="w-full text-[14px] leading-6 border-collapse md:rounded-lg md:overflow-hidden md:border md:border-border">
+    <thead>
+      <tr className="border-b border-border">
+        <th className="px-4 py-3 text-left font-semibold text-foreground bg-muted w-[8ch]">Method</th>
+        <th className="px-4 py-3 text-left font-semibold text-foreground bg-muted">Path</th>
+        <th className="px-4 py-3 text-left font-semibold text-foreground bg-muted">Purpose</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr className="border-b border-border hover:bg-muted/50 transition-colors">
+        <td className="px-4 py-3 align-top"><code>GET</code></td>
+        <td className="px-4 py-3 align-top"><code>/peers/{"{peer_id}"}</code></td>
+        <td className="px-4 py-3 align-top text-muted-foreground">Snapshot + <code>remote_health</code>.</td>
+      </tr>
+      <tr className="border-b border-border hover:bg-muted/50 transition-colors">
+        <td className="px-4 py-3 align-top"><code>POST</code></td>
+        <td className="px-4 py-3 align-top"><code>/peers</code></td>
+        <td className="px-4 py-3 align-top text-muted-foreground">Add peer.</td>
+      </tr>
+      <tr className="border-b border-border hover:bg-muted/50 transition-colors">
+        <td className="px-4 py-3 align-top"><code>POST</code></td>
+        <td className="px-4 py-3 align-top"><code>/peers/{"{peer_id}"}/sync</code></td>
+        <td className="px-4 py-3 align-top text-muted-foreground">Bounded outbound batch.</td>
+      </tr>
+      <tr className="border-b border-border hover:bg-muted/50 transition-colors">
+        <td className="px-4 py-3 align-top"><code>POST</code></td>
+        <td className="px-4 py-3 align-top"><code>/sync/webhook</code></td>
+        <td className="px-4 py-3 align-top text-muted-foreground">Inbound signed notification (HMAC <code>X-Neotoma-Sync-Signature-256</code> or AAuth).</td>
+      </tr>
+      <tr className="hover:bg-muted/50 transition-colors">
+        <td className="px-4 py-3 align-top"><code>POST</code></td>
+        <td className="px-4 py-3 align-top"><code>/peers/resolve_sync_conflict</code></td>
+        <td className="px-4 py-3 align-top text-muted-foreground">Strategy-based conflict resolution.</td>
+      </tr>
+    </tbody>
+  </table>
+</TableScrollWrapper>
 
 ## Environment
 
@@ -66,8 +106,11 @@ Set `sync_scope: "tagged"` on the peer and stamp eligible entities with `sync_pe
 
 ## Loop prevention via subscriptions
 
-For steady-state propagation, create a substrate <MdxI18nLink to="/subscriptions">subscription</MdxI18nLink> with `sync_peer_id: "central"`. The bridge skips events whose `source_peer_id` matches the destination, so replicated rows do not bounce back. Replicated writes carry `observation_source: "sync"` and rank below local sources in the reducer's default tie-breaking.
+For steady-state propagation, create a substrate <MdxI18nLink to="/subscriptions" className="text-foreground underline underline-offset-2 hover:no-underline">subscription</MdxI18nLink> with `sync_peer_id: "central"`. The bridge skips events whose `source_peer_id` matches the destination, so replicated rows do not bounce back. Replicated writes carry `observation_source: "sync"` and rank below local sources in the reducer's default tie-breaking.
 
 ## Full reference
 
 [`docs/subsystems/peer_sync.md`](https://github.com/markmhendrickson/neotoma/blob/main/docs/subsystems/peer_sync.md) covers the full inbound / outbound paths (`sync_webhook_inbound.ts`, `sync_webhook_outbound.ts`, `peer_sync_batch.ts`, `full_sync.ts`, `conflict_resolver.ts`), the semver compatibility rules in `src/semver_compat.ts`, and the seeded `peer_config` schema.
+
+See <MdxI18nLink to="/subscriptions" className="text-foreground underline underline-offset-2 hover:no-underline">substrate subscriptions</MdxI18nLink>, <MdxI18nLink to="/security-hardening" className="text-foreground underline underline-offset-2 hover:no-underline">security hardening</MdxI18nLink>, <MdxI18nLink to="/api" className="text-foreground underline underline-offset-2 hover:no-underline">API reference</MdxI18nLink>, and <MdxI18nLink to="/mcp" className="text-foreground underline underline-offset-2 hover:no-underline">MCP reference</MdxI18nLink>.
+.
