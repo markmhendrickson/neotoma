@@ -1057,6 +1057,7 @@ export async function addIssueMessage(
       message_entity_id: remoteMessageEntityId,
       pushed_to_github: false,
       submitted_to_neotoma: true,
+      remote_submission_error: null,
     };
   }
 
