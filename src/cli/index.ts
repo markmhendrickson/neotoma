@@ -1330,6 +1330,14 @@ export function getSqliteRecoveryHint(
 export function writeCliError(err: unknown): void {
   const msg = formatCliError(err);
   const recoveryHint = getSqliteRecoveryHint(err);
+  const outputMode = resolveOutputMode();
+  if (outputMode === "json") {
+    const envelope: Record<string, unknown> = { error: msg };
+    if (err instanceof CliHintError) envelope.hint = err.hint;
+    else if (recoveryHint) envelope.hint = { code: "SQLITE_CORRUPT", message: recoveryHint };
+    process.stderr.write(JSON.stringify(envelope) + "\n");
+    return;
+  }
   if (process.stdout.isTTY) process.stderr.write("\n");
   process.stderr.write(`neotoma: ${msg}\n`);
   if (recoveryHint) process.stderr.write(`tip: ${recoveryHint}\n`);
@@ -1662,6 +1670,17 @@ class SessionExit extends Error {
   constructor(public code: number) {
     super("SessionExit");
     this.name = "SessionExit";
+  }
+}
+
+/** Error that carries a machine-readable hint emitted in --json mode. */
+class CliHintError extends Error {
+  constructor(
+    message: string,
+    public readonly hint: { code: string; [key: string]: unknown }
+  ) {
+    super(message);
+    this.name = "CliHintError";
   }
 }
 
@@ -2072,6 +2091,44 @@ function isHttpOnlyInspectorAdminUnlockCommand(cmd: Command): boolean {
   if (!admin || admin.name() !== "admin") return false;
   const inspector = admin.parent;
   return Boolean(inspector && inspector.name() === "inspector");
+}
+
+function rejectRemoteAccessMutationIfNeeded(opts: {
+  json?: boolean;
+  baseUrl?: string;
+  apiOnly?: boolean;
+}): boolean {
+  const envApiOnly = envFlag("NEOTOMA_API_ONLY");
+  const envBaseUrl = process.env.NEOTOMA_BASE_URL?.trim();
+  const effectiveApiOnly = opts.apiOnly !== undefined ? opts.apiOnly : envApiOnly;
+  const explicitBaseUrl = typeof opts.baseUrl === "string" && opts.baseUrl.trim().length > 0;
+  const effectiveBaseUrl = explicitBaseUrl ? opts.baseUrl!.trim() : envBaseUrl;
+
+  if (!effectiveApiOnly && !effectiveBaseUrl) {
+    return false;
+  }
+
+  const remoteSources: string[] = [];
+  if (effectiveApiOnly) {
+    remoteSources.push(opts.apiOnly ? "--api-only" : "NEOTOMA_API_ONLY");
+  }
+  if (effectiveBaseUrl) {
+    remoteSources.push(explicitBaseUrl ? "--base-url" : "NEOTOMA_BASE_URL");
+  }
+
+  const message =
+    "`neotoma access set`, `reset`, `enable-issues`, and `disable-issues` currently mutate local state only " +
+    "and do not honor remote transport overrides (" +
+    remoteSources.join(", ") +
+    "). Remove those overrides and run the command locally, or change guest access policy on the target instance directly.";
+
+  if (opts.json) {
+    writeOutput({ ok: false, error: message }, "json");
+  } else {
+    process.stderr.write(`Error: ${message}\n`);
+  }
+  process.exitCode = 1;
+  return true;
 }
 
 // No preAction auth validation: CLI uses MCP-style auth (key-derived or no token),
@@ -8640,8 +8697,10 @@ accessCommand
   .command("set <entity_type> <mode>")
   .description("Set access policy for an entity type (closed, read_only, submit_only, submitter_scoped, open)")
   .action(async (entityType, mode) => {
+    const opts = program.opts() as { json?: boolean; baseUrl?: string; apiOnly?: boolean };
+    if (rejectRemoteAccessMutationIfNeeded(opts)) return;
     const { accessSet } = await import("./access.js");
-    await accessSet(entityType, mode, { json: Boolean((program.opts() as { json?: boolean }).json) });
+    await accessSet(entityType, mode, { json: Boolean(opts.json) });
   });
 
 accessCommand
@@ -8656,24 +8715,30 @@ accessCommand
   .command("reset <entity_type>")
   .description("Reset an entity type's access policy to default (closed)")
   .action(async (entityType) => {
+    const opts = program.opts() as { json?: boolean; baseUrl?: string; apiOnly?: boolean };
+    if (rejectRemoteAccessMutationIfNeeded(opts)) return;
     const { accessReset } = await import("./access.js");
-    await accessReset(entityType, { json: Boolean((program.opts() as { json?: boolean }).json) });
+    await accessReset(entityType, { json: Boolean(opts.json) });
   });
 
 accessCommand
   .command("enable-issues")
   .description("Set issue, conversation, conversation_message to submitter_scoped")
   .action(async () => {
+    const opts = program.opts() as { json?: boolean; baseUrl?: string; apiOnly?: boolean };
+    if (rejectRemoteAccessMutationIfNeeded(opts)) return;
     const { accessEnableIssues } = await import("./access.js");
-    await accessEnableIssues({ json: Boolean((program.opts() as { json?: boolean }).json) });
+    await accessEnableIssues({ json: Boolean(opts.json) });
   });
 
 accessCommand
   .command("disable-issues")
   .description("Reset issue, conversation, conversation_message to closed")
   .action(async () => {
+    const opts = program.opts() as { json?: boolean; baseUrl?: string; apiOnly?: boolean };
+    if (rejectRemoteAccessMutationIfNeeded(opts)) return;
     const { accessDisableIssues } = await import("./access.js");
-    await accessDisableIssues({ json: Boolean((program.opts() as { json?: boolean }).json) });
+    await accessDisableIssues({ json: Boolean(opts.json) });
   });
 
 // ─── Issues commands ───────────────────────────────────────────────────────
@@ -11491,10 +11556,16 @@ entitiesCommand
           !/^ent_/i.test(id) &&
           !msg.includes("Run `neotoma auth login`")
         ) {
-          msg += `\n${dim(
-            "This command expects an entity ID (ent_…). For names, slugs, or other identifiers, run: neotoma entities search " +
-              JSON.stringify(id)
-          )}`;
+          const searchCmd = `neotoma entities search ${JSON.stringify(id)}`;
+          const hintText = `This command expects an entity ID (ent_…). For names, slugs, or other identifiers, run: ${searchCmd}`;
+          if (outputMode === "json") {
+            throw new CliHintError(`${msg}\n${hintText}`, {
+              code: "USE_SEARCH_FOR_NAMES",
+              message: "This command expects an entity ID (ent_…). For names, slugs, or other identifiers use entities search.",
+              suggestion_command: searchCmd,
+            });
+          }
+          msg += `\n${dim(hintText)}`;
         }
         throw new Error(msg);
       }

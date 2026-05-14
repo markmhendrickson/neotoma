@@ -139,13 +139,15 @@ const MCP_INTERACTION_INSTRUCTIONS_COMPACT_BODY_LINES = [
   "",
   "FORBIDDEN: skipping Neotoma for an entire rapid-fire session; persisting only the user message; ending the turn without the closing assistant store.",
   "",
-  "Display rule: when a turn creates, updates, or retrieves Neotoma entities other than chat bookkeeping (conversation, conversation_message), the reply MUST render a section headed `🧠 Neotoma — [<conversation name>](<active Neotoma origin>/inspector/conversations/<conversation entity_id>)` with bullet points. Use the active Neotoma origin for the current session (local defaults: 3080 dev, 3180 prod). Each bullet: emoji + label + linked entity_type text pointing to `<origin>/inspector/entities/<entity_id>`. Groups: Created (N), Updated (N), Retrieved (N).",
+  "Display rule: when a turn creates, updates, or retrieves Neotoma entities other than chat bookkeeping (conversation, conversation_message), render `🧠 Neotoma — [<conversation name>](<origin>/inspector/conversations/<id>)` with bullet groups Created (N), Updated (N), Retrieved (N). Each bullet: emoji + label + linked entity_type to `<origin>/inspector/entities/<id>`. Origin: 3080 dev, 3180 prod.",
+  "",
+  "Schema/fidelity: for known entity_types (seen this session), check declared fields via get_schema_recommendations or an existing snapshot before storing; use declared fields, invent snake_case only for unfit data. unknown_fields_count > 0 = mandatory repair before closing store. FORBIDDEN: inventing all fields for a known type without checking; ignoring unknown_fields_count > 0.",
   "",
   "Per-turn QA: before finalizing, self-audit for missing user/assistant stores, missing PART_OF/REFERS_TO/EMBEDS relationships, orphaned entities, missing provenance, ignored ErrorEnvelope, and source extraction mistakes. Repair safe gaps in-turn; otherwise list Issues with immediate meaning, risk if unresolved, and recommended resolution.",
   "",
-  "Product-bug repair escalation: when a Neotoma MCP/API/tooling call fails during compliance or QA repair, classify before stopping. Fix caller payload/procedure issues and retry. If it appears to be a deterministic Neotoma product bug and you are inside the Neotoma source checkout, proactively inspect tool docs, trace code, read canonical docs, add or find focused tests, apply the smallest safe fix, and run targeted validation. Stop and ask before schema migrations, auth/security, foundation docs, architecture/layer-boundary changes, destructive data repair, or ambiguous product design. Outside the repo, submit_issue with redacted reproduction instead of editing the consumer project.",
+  "Product-bug repair escalation: when a Neotoma MCP/API/tooling call fails during compliance or QA repair, classify before stopping. Fix caller payload/procedure issues and retry. If it appears to be a deterministic Neotoma product bug and you are inside the Neotoma source checkout, proactively inspect tool docs, trace code, read canonical docs, add or find focused tests, apply the smallest safe fix, and run targeted validation. Stop and ask before schema migrations, auth/security, foundation docs, or destructive data repair. Outside the repo, submit_issue with redacted reproduction instead of editing the consumer project.",
   "",
-  "Issue reporting QA: every Issues item about Neotoma product/tooling/doc/schema-instruction behavior needs either a local fix when operating inside the Neotoma repo, or submit_issue when outside it. If issue filing is skipped because of local fix, consent, waiver, or the issue already exists, show that decision in an Issues group.",
+  "Issue reporting QA: every Issues item about Neotoma product/tooling/doc behavior needs a local fix (inside the repo) or submit_issue (outside). Show skipped-filing decisions in the Issues group.",
   "",
   "Store retry policy: if **`store`** fails, (1) fix caller payload issues first (for conversation heuristic-name collision, reuse bounded-retrieval entity with target_id or stable conversation_id) and retry once; (2) if it fails again, surface the error to the user before responding; (3) do not silently skip storage.",
   "",
@@ -4353,6 +4355,18 @@ export class NeotomaServer {
           : undefined;
       delete fieldsToValidate.target_id;
 
+      // Extract an explicit canonical_name from the payload before schema
+      // validation. validateFieldsWithConverters routes it to unknownFields
+      // when the schema's fields dict doesn't declare it, which causes the
+      // resolver to fall back to heuristic derivation (e.g. from `title`)
+      // and silently ignore the caller-supplied value. We hoist it here so
+      // it is available as a resolver hint regardless of schema declaration.
+      const explicitCanonicalName =
+        typeof (fieldsToValidate as Record<string, unknown>).canonical_name === "string" &&
+        ((fieldsToValidate as Record<string, unknown>).canonical_name as string).trim() !== ""
+          ? ((fieldsToValidate as Record<string, unknown>).canonical_name as string)
+          : undefined;
+
       const { getSchemaDefinition, resolveEntityTypeFromAlias } = await import(
         "./services/schema_definitions.js"
       );
@@ -4484,6 +4498,21 @@ export class NeotomaServer {
       const unknownFields = validationResult.unknownFields;
       const originalValues = validationResult.originalValues;
 
+      // When canonical_name was supplied explicitly but is not a declared
+      // schema field, validateFieldsWithConverters routes it to unknownFields
+      // and the resolver never sees it. Remove it from unknownFields (so it
+      // doesn't inflate unknown_fields_count or create a raw_fragment) and
+      // inject it into the resolver-only fields so the derivation honors the
+      // caller's intent. The value is intentionally NOT added to validFields
+      // so it is not stored as an observation field unless the schema declares it.
+      if (explicitCanonicalName && !schema.schema_definition.fields["canonical_name"]) {
+        delete (unknownFields as Record<string, unknown>)["canonical_name"];
+      }
+      const fieldsForResolver =
+        explicitCanonicalName && !schema.schema_definition.fields["canonical_name"]
+          ? { canonical_name: explicitCanonicalName, ...validFields }
+          : validFields;
+
       // Include date-like unknown fields in the observation so they flow into the snapshot
       // and timeline derivation, even when not yet in the entity schema.
       const { getDateLikeFields } = await import("./services/timeline_events.js");
@@ -4514,7 +4543,7 @@ export class NeotomaServer {
       try {
         const result = await resolveEntityWithTrace({
           entityType,
-          fields: fieldsToValidate,
+          fields: fieldsForResolver,
           userId,
           commit: true,
           strict,

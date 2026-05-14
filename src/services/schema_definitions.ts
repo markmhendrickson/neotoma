@@ -1514,10 +1514,16 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
+        amount: { type: "number", required: false },
+        amount_original: { type: "number", required: false },
+        currency: { type: "string", required: false },
+        date: { type: "date", required: false },
         posting_date: { type: "date", required: false },
+        merchant_name: { type: "string", required: false },
+        status: { type: "string", required: false },
+        account_id: { type: "string", required: false },
         category: { type: "string", required: false },
         bank_provider: { type: "string", required: false },
-        amount_original: { type: "number", required: false },
       },
       canonical_name_fields: [
         "posting_date",
@@ -1527,12 +1533,13 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       ],
       temporal_fields: [
         { field: "posting_date", event_type: "TransactionPosted" },
-        { field: "transaction_date", event_type: "TransactionDate" },
+        { field: "date", event_type: "TransactionDate" },
       ],
     },
     reducer_config: {
       merge_policies: {
         posting_date: { strategy: "last_write" },
+        status: { strategy: "last_write" },
         category: { strategy: "last_write" },
       },
     },
@@ -1606,7 +1613,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       fields: {
         schema_version: { type: "string", required: true },
         name: { type: "string", required: false },
+        contract_number: { type: "string", required: false },
+        parties: { type: "string", required: false },
+        effective_date: { type: "date", required: false },
+        expiration_date: { type: "date", required: false },
         signed_date: { type: "date", required: false },
+        status: { type: "string", required: false },
         companies: { type: "string", required: false },
         files: { type: "string", required: false },
         type: { type: "string", required: false },
@@ -1620,6 +1632,9 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
     reducer_config: {
       merge_policies: {
         signed_date: { strategy: "last_write" },
+        effective_date: { strategy: "last_write" },
+        expiration_date: { strategy: "last_write" },
+        status: { strategy: "last_write" },
         files: { strategy: "merge_array" },
       },
     },
@@ -1637,6 +1652,10 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
+        external_id: { type: "string", required: false },
+        institution: { type: "string", required: false },
+        currency: { type: "string", required: false },
+        balance: { type: "number", required: false },
         wallet: { type: "string", required: false },
         wallet_name: { type: "string", required: false },
         number: { type: "string", required: false },
@@ -2720,6 +2739,111 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         chars_injected: { strategy: "last_write" },
         entity_ids: { strategy: "last_write" },
         harness: { strategy: "last_write" },
+      },
+    },
+  },
+
+  gist: {
+    entity_type: "gist",
+    schema_version: "1.0",
+    metadata: {
+      label: "Gist",
+      description: "GitHub Gists and similar code/text snippets shared via URL.",
+      category: "knowledge",
+      aliases: ["github_gist", "code_snippet"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: false },
+        url: { type: "string", required: false },
+        gist_id: { type: "string", required: false },
+        description: { type: "string", required: false, preserveCase: true },
+        title: { type: "string", required: false, preserveCase: true },
+        content: { type: "string", required: false, preserveCase: true },
+        language: { type: "string", required: false },
+        created_at: { type: "date", required: false },
+        updated_at: { type: "date", required: false },
+      },
+      // Callers commonly supply a pre-formed canonical_name or a stable gist_id;
+      // identity_opt_out allows both paths without requiring composite fields.
+      identity_opt_out: "heuristic_canonical_name",
+    },
+    reducer_config: {
+      merge_policies: {
+        description: { strategy: "last_write" },
+        title: { strategy: "last_write" },
+        content: { strategy: "last_write" },
+        url: { strategy: "last_write" },
+        language: { strategy: "last_write" },
+        updated_at: { strategy: "last_write" },
+      },
+    },
+  },
+
+  neotoma_repair: {
+    entity_type: "neotoma_repair",
+    schema_version: "1.0",
+    metadata: {
+      label: "Neotoma Repair",
+      description: "A record of a repair or remediation action taken within Neotoma.",
+      category: "agent_runtime",
+      aliases: ["repair", "remediation"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: false },
+        title: { type: "string", required: false, preserveCase: true },
+        diagnosis: { type: "string", required: false, preserveCase: true },
+        diagnosis_classification: { type: "string", required: false },
+        trigger: { type: "string", required: false, preserveCase: true },
+        applied_fix: { type: "string", required: false, preserveCase: true },
+        proactive_remediation_required: { type: "boolean", required: false },
+        remediation_status: { type: "string", required: false },
+        created_at: { type: "date", required: false },
+      },
+      identity_opt_out: "heuristic_canonical_name",
+    },
+    reducer_config: {
+      merge_policies: {
+        title: { strategy: "last_write" },
+        diagnosis: { strategy: "last_write" },
+        diagnosis_classification: { strategy: "last_write" },
+        trigger: { strategy: "last_write" },
+        applied_fix: { strategy: "last_write" },
+        proactive_remediation_required: { strategy: "last_write" },
+        remediation_status: { strategy: "last_write" },
+      },
+    },
+  },
+
+  external_link: {
+    entity_type: "external_link",
+    schema_version: "1.0",
+    metadata: {
+      label: "External Link",
+      description:
+        "A URL bookmark or reference with optional metadata. Supports common link provenance fields: description, data_source, link_kind, visibility.",
+      category: "knowledge",
+      aliases: ["bookmark", "link", "url_reference"],
+    },
+    schema_definition: {
+      fields: {
+        title: { type: "string", required: true },
+        url: { type: "string", required: true },
+        description: { type: "string", required: false },
+        data_source: { type: "string", required: false },
+        link_kind: { type: "string", required: false },
+        visibility: { type: "string", required: false },
+      },
+      canonical_name_fields: ["url", "title"],
+    },
+    reducer_config: {
+      merge_policies: {
+        title: { strategy: "last_write" },
+        description: { strategy: "last_write" },
+        data_source: { strategy: "last_write" },
+        link_kind: { strategy: "last_write" },
+        visibility: { strategy: "last_write" },
       },
     },
   },

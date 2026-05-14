@@ -211,15 +211,32 @@ export class SchemaRecommendationService {
       0,
     );
 
+    // Derive effective thresholds — apply global_conservative tightening for global-scope schemas
+    // (global_conservative: true raises threshold by 2x and min_confidence by 0.05 for global schemas
+    // to protect all users from premature schema changes on shared entity types)
+    const isGlobalSchema =
+      config.global_conservative &&
+      currentSchema != null &&
+      (currentSchema.scope === "global" || currentSchema.user_id == null);
+    const effectiveThreshold =
+      config.threshold === "pattern"
+        ? "pattern"
+        : isGlobalSchema
+          ? (config.threshold as number) * 2
+          : (config.threshold as number);
+    const effectiveMinConfidence = isGlobalSchema
+      ? config.min_confidence + 0.05
+      : config.min_confidence;
+
     // Check threshold
     if (
-      config.threshold !== "pattern" &&
-      totalFrequency < (config.threshold as number)
+      effectiveThreshold !== "pattern" &&
+      totalFrequency < (effectiveThreshold as number)
     ) {
       return {
         eligible: false,
         confidence: 0,
-        reasoning: `Frequency ${totalFrequency} below threshold ${config.threshold}`,
+        reasoning: `Frequency ${totalFrequency} below threshold ${effectiveThreshold}${isGlobalSchema ? " (global_conservative)" : ""}`,
       };
     }
 
@@ -231,11 +248,11 @@ export class SchemaRecommendationService {
     });
 
     // 8. Check minimum confidence
-    if (confidenceResult.confidence < config.min_confidence) {
+    if (confidenceResult.confidence < effectiveMinConfidence) {
       return {
         eligible: false,
         confidence: confidenceResult.confidence,
-        reasoning: `Confidence ${confidenceResult.confidence.toFixed(2)} below minimum ${config.min_confidence}`,
+        reasoning: `Confidence ${confidenceResult.confidence.toFixed(2)} below minimum ${effectiveMinConfidence.toFixed(2)}${isGlobalSchema ? " (global_conservative)" : ""}`,
       };
     }
 

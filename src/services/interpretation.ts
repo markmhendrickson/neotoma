@@ -271,11 +271,31 @@ export async function runInterpretation(
       delete fieldsToValidate.entity_type;
       delete fieldsToValidate.type;
 
+      // Extract an explicit canonical_name before schema validation.
+      // validateFieldsWithConverters routes it to unknownFields when the
+      // schema's fields dict doesn't declare it, causing the resolver to fall
+      // back to heuristic derivation (e.g. from `title`) instead of honoring
+      // the caller's intent. We hoist it here so it can be passed to the
+      // resolver regardless of schema declaration.
+      const explicitCanonicalName =
+        typeof (fieldsToValidate as Record<string, unknown>).canonical_name === "string" &&
+        ((fieldsToValidate as Record<string, unknown>).canonical_name as string).trim() !== ""
+          ? ((fieldsToValidate as Record<string, unknown>).canonical_name as string)
+          : undefined;
+
       // Validate fields against schema (with converter support)
       const { validFields, unknownFields, originalValues } = validateAgainstSchema(
         fieldsToValidate,
         effectiveSchemaDefinition
       );
+
+      // When canonical_name was explicitly supplied but is not a declared schema
+      // field, remove it from unknownFields (so it doesn't inflate
+      // unknown_fields_count or create a raw_fragment) — it is an identity
+      // hint, not a data field the schema doesn't know about.
+      if (explicitCanonicalName && !effectiveSchemaDefinition.fields["canonical_name"]) {
+        delete (unknownFields as Record<string, unknown>)["canonical_name"];
+      }
 
       // Store original values in raw_fragments for converted fields (preserves zero data loss)
       for (const [key, value] of Object.entries(originalValues)) {
@@ -473,6 +493,16 @@ export async function runInterpretation(
       const canonicalFields = canonicalizeFields(validFields, effectiveSchemaDefinition);
       const canonicalHash = computeCanonicalHash(canonicalFields);
 
+      // Build resolver fields: inject explicit canonical_name so the resolver
+      // honors the caller's intent when the schema doesn't declare it as a
+      // schema field (identity_opt_out schemas are the common case here).
+      // The injected key is only used for derivation — canonicalFields (and
+      // thus the stored observation) are unmodified.
+      const fieldsForResolver =
+        explicitCanonicalName && !effectiveSchemaDefinition.fields["canonical_name"]
+          ? { canonical_name: explicitCanonicalName, ...canonicalFields }
+          : canonicalFields;
+
       // Resolve entity (user-scoped). Interpretation runs must not fail the
       // whole pipeline when derivation can't settle — skip this observation
       // and warn so the operator can declare canonical_name_fields.
@@ -480,7 +510,7 @@ export async function runInterpretation(
       try {
         entityId = await resolveEntity({
           entityType,
-          fields: canonicalFields,
+          fields: fieldsForResolver,
           userId,
         });
       } catch (err) {
