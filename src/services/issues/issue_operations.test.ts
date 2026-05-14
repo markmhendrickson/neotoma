@@ -405,6 +405,7 @@ describe("Issue Operations (Neotoma-canonical)", () => {
       expect(result.submitted_to_neotoma).toBe(true);
       expect(result.pushed_to_github).toBe(true);
       expect(result.github_comment_id).toBe("456");
+      expect(result.remote_submission_error).toBeNull();
       expect(mockAddMessageToRemote).toHaveBeenCalledWith(
         expect.objectContaining({
           body: "Follow-up comment",
@@ -510,7 +511,7 @@ describe("Issue Operations (Neotoma-canonical)", () => {
       });
     });
 
-    it("throws after local store when remote Neotoma fails", async () => {
+    it("returns partial success after local and GitHub side effects when remote Neotoma fails", async () => {
       mockAddMessageToRemote.mockRejectedValue(new Error("ECONNREFUSED"));
       mockAddIssueComment.mockResolvedValue({
         id: 789,
@@ -521,14 +522,18 @@ describe("Issue Operations (Neotoma-canonical)", () => {
         html_url: "https://github.com/test/repo/issues/1#issuecomment-789",
       });
 
-      await expect(
-        addIssueMessage(ops, {
-          issue_number: 1,
-          body: "Follow-up",
-        }),
-      ).rejects.toThrow(/Failed to submit issue message to Neotoma at https:\/\/neotoma\.example\.com/);
+      const result = await addIssueMessage(ops, {
+        issue_number: 1,
+        body: "Follow-up",
+      });
 
       expect(mockStore).toHaveBeenCalled();
+      expect(result.pushed_to_github).toBe(true);
+      expect(result.github_comment_id).toBe("789");
+      expect(result.submitted_to_neotoma).toBe(false);
+      expect(result.remote_submission_error).toMatch(
+        /Remote issue message submission to https:\/\/neotoma\.example\.com failed: ECONNREFUSED/,
+      );
     });
   });
 

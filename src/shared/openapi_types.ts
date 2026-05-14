@@ -5171,6 +5171,8 @@ export interface operations {
                         message_entity_id: string;
                         pushed_to_github: boolean;
                         submitted_to_neotoma: boolean;
+                        /** @description Non-null when remote Neotoma append was attempted but failed after local and/or GitHub side effects were recorded. */
+                        remote_submission_error: string | null;
                     };
                 };
             };

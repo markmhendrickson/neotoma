@@ -167,7 +167,7 @@ Repo change guardrails expect MCP, CLI, and HTTP surfaces to stay traceably alig
 Canonical programmatic surface for full issue lifecycle (see [`docs/specs/MCP_SPEC.md`](../specs/MCP_SPEC.md)):
 
 - `submit_issue({ title, body, labels?, visibility?, reporter_git_sha?, ... })`.
-- `add_issue_message({ entity_id, body, guest_access_token? })` — optional `guest_access_token` when the local row mirrors a remote operator issue and the token is not stored on the issue snapshot.
+- `add_issue_message({ entity_id, body, guest_access_token? })` — optional `guest_access_token` when the local row mirrors a remote operator issue and the token is not stored on the issue snapshot. If remote append fails after local/GitHub side effects are recorded, the result carries `remote_submission_error` so callers avoid duplicate fallback comments.
 - `get_issue_status({ entity_id, skip_sync?, guest_access_token? })` — optional `guest_access_token` for the same read-through case.
 - `sync_issues({ since?, state?, labels? })`.
 - `bulk_close_issues({ entity_ids: string[], reason?: string })` — closes multiple `issue` entities in one call, mirrors `POST /issues/bulk_close`, and is what the Inspector bulk-close action drives.
