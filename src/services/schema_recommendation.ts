@@ -43,7 +43,13 @@ export interface AutoEnhancementConfig {
   auto_enhance_high_confidence: boolean; // Auto-enhance high-confidence fields
   user_specific_aggressive: boolean; // More aggressive for user-specific schemas
   global_conservative: boolean; // More conservative for global schemas
+  trusted_source_relaxation: boolean; // Relax thresholds for trusted observation sources on user-scoped schemas
 }
+
+// Observation sources considered "trusted" for threshold relaxation.
+// These represent agent-driven or bulk-import sessions where repeated
+// observations of the same field pattern are high-signal, not noise.
+const TRUSTED_OBSERVATION_SOURCES = new Set(["llm_summary", "import", "sync"]);
 
 // Default configuration (recommended)
 export const DEFAULT_AUTO_ENHANCEMENT_CONFIG: AutoEnhancementConfig = {
@@ -53,6 +59,7 @@ export const DEFAULT_AUTO_ENHANCEMENT_CONFIG: AutoEnhancementConfig = {
   auto_enhance_high_confidence: true, // Auto-enhance high-confidence fields
   user_specific_aggressive: true, // More aggressive for user-specific schemas (user's own data)
   global_conservative: true, // Conservative for global schemas (affects all users)
+  trusted_source_relaxation: true, // Relax thresholds for trusted sources on user-scoped schemas
 };
 
 export class SchemaRecommendationService {
@@ -85,6 +92,7 @@ export class SchemaRecommendationService {
     fragment_key: string;
     user_id?: string;
     config?: AutoEnhancementConfig;
+    observation_source?: string;
   }): Promise<{
     eligible: boolean;
     confidence: number;
@@ -211,22 +219,62 @@ export class SchemaRecommendationService {
       0,
     );
 
-    // Derive effective thresholds — apply global_conservative tightening for global-scope schemas
-    // (global_conservative: true raises threshold by 2x and min_confidence by 0.05 for global schemas
-    // to protect all users from premature schema changes on shared entity types)
+    // Derive effective thresholds — two modifiers applied in order:
+    //
+    // 1. global_conservative (tighten): raises threshold 2x and min_confidence +0.05
+    //    for global-scope schemas, protecting all users from premature changes.
+    //
+    // 2. trusted_source_relaxation (loosen): lowers threshold to ceil(base * 0.5)
+    //    (min 1) and min_confidence -0.05 for user-scoped schemas when the dominant
+    //    observation source is trusted (llm_summary, import, sync). Does NOT apply
+    //    to global schemas — global_conservative always wins.
     const isGlobalSchema =
       config.global_conservative &&
       currentSchema != null &&
       (currentSchema.scope === "global" || currentSchema.user_id == null);
-    const effectiveThreshold =
-      config.threshold === "pattern"
-        ? "pattern"
-        : isGlobalSchema
-          ? (config.threshold as number) * 2
-          : (config.threshold as number);
-    const effectiveMinConfidence = isGlobalSchema
-      ? config.min_confidence + 0.05
-      : config.min_confidence;
+
+    // Determine trusted-source eligibility: user-scoped schema + trusted observation source
+    let isTrustedSource = false;
+    if (config.trusted_source_relaxation && !isGlobalSchema) {
+      if (
+        options.observation_source &&
+        TRUSTED_OBSERVATION_SOURCES.has(options.observation_source)
+      ) {
+        isTrustedSource = true;
+      } else {
+        // Look up dominant observation_source for this entity_type + user_id
+        const dominantSource = await this.lookupDominantObservationSource(
+          options.entity_type,
+          options.user_id,
+        );
+        if (dominantSource && TRUSTED_OBSERVATION_SOURCES.has(dominantSource)) {
+          isTrustedSource = true;
+        }
+      }
+    }
+
+    let effectiveThreshold: number | "pattern";
+    let effectiveMinConfidence: number;
+
+    if (config.threshold === "pattern") {
+      effectiveThreshold = "pattern";
+      effectiveMinConfidence = config.min_confidence;
+    } else if (isGlobalSchema) {
+      effectiveThreshold = (config.threshold as number) * 2;
+      effectiveMinConfidence = config.min_confidence + 0.05;
+    } else if (isTrustedSource) {
+      effectiveThreshold = Math.max(1, Math.ceil((config.threshold as number) * 0.5));
+      effectiveMinConfidence = config.min_confidence - 0.05;
+    } else {
+      effectiveThreshold = config.threshold as number;
+      effectiveMinConfidence = config.min_confidence;
+    }
+
+    const thresholdSuffix = isGlobalSchema
+      ? " (global_conservative)"
+      : isTrustedSource
+        ? " (trusted_source)"
+        : "";
 
     // Check threshold
     if (
@@ -236,7 +284,7 @@ export class SchemaRecommendationService {
       return {
         eligible: false,
         confidence: 0,
-        reasoning: `Frequency ${totalFrequency} below threshold ${effectiveThreshold}${isGlobalSchema ? " (global_conservative)" : ""}`,
+        reasoning: `Frequency ${totalFrequency} below threshold ${effectiveThreshold}${thresholdSuffix}`,
       };
     }
 
@@ -252,7 +300,7 @@ export class SchemaRecommendationService {
       return {
         eligible: false,
         confidence: confidenceResult.confidence,
-        reasoning: `Confidence ${confidenceResult.confidence.toFixed(2)} below minimum ${effectiveMinConfidence.toFixed(2)}${isGlobalSchema ? " (global_conservative)" : ""}`,
+        reasoning: `Confidence ${confidenceResult.confidence.toFixed(2)} below minimum ${effectiveMinConfidence.toFixed(2)}${thresholdSuffix}`,
       };
     }
 
@@ -976,6 +1024,57 @@ Return your recommendations in JSON format:
   }
 
   // --- Private helper methods ---
+
+  /**
+   * Look up the most common observation_source for a given entity_type + user_id.
+   * Used to determine if the majority of observations come from trusted sources.
+   */
+  private async lookupDominantObservationSource(
+    entityType: string,
+    userId?: string,
+  ): Promise<string | null> {
+    try {
+      const defaultUserId = "00000000-0000-0000-0000-000000000000";
+      let query = db
+        .from("observations")
+        .select("observation_source")
+        .eq("entity_type", entityType)
+        .not("observation_source", "is", null)
+        .order("observed_at", { ascending: false })
+        .limit(20);
+
+      if (userId) {
+        if (userId === defaultUserId) {
+          query = query.or(`user_id.eq.${defaultUserId},user_id.is.null`);
+        } else {
+          query = query.eq("user_id", userId);
+        }
+      } else {
+        query = query.or(`user_id.is.null,user_id.eq.${defaultUserId}`);
+      }
+
+      const { data, error } = await query;
+      if (error || !data || data.length === 0) return null;
+
+      const counts = new Map<string, number>();
+      for (const row of data) {
+        const src = (row as { observation_source?: string }).observation_source;
+        if (src) counts.set(src, (counts.get(src) || 0) + 1);
+      }
+
+      let dominant: string | null = null;
+      let maxCount = 0;
+      for (const [src, count] of counts) {
+        if (count > maxCount) {
+          dominant = src;
+          maxCount = count;
+        }
+      }
+      return dominant;
+    } catch {
+      return null;
+    }
+  }
 
   /**
    * Detect if a converter is needed for an existing field with type mismatch

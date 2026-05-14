@@ -4344,10 +4344,15 @@ export class NeotomaServer {
       let entityType =
         (entityData.entity_type as string) || (entityData.type as string) || "generic";
 
-      // Exclude entity_type and type from field validation (they're metadata)
+      // Exclude entity_type, type, target_id, and schema_version from field
+      // validation — they are metadata consumed by the store pipeline, not
+      // entity-data fields.  schema_version in particular was routed to
+      // unknownFields (and thus raw_fragments) when the DB-registered schema
+      // didn't declare it, inflating unknown_fields_count.
       const fieldsToValidate = { ...entityData };
       delete fieldsToValidate.entity_type;
       delete fieldsToValidate.type;
+      delete fieldsToValidate.schema_version;
 
       const targetIdForResolve =
         typeof (entityData as Record<string, unknown>).target_id === "string"
@@ -4508,10 +4513,34 @@ export class NeotomaServer {
       if (explicitCanonicalName && !schema.schema_definition.fields["canonical_name"]) {
         delete (unknownFields as Record<string, unknown>)["canonical_name"];
       }
-      const fieldsForResolver =
-        explicitCanonicalName && !schema.schema_definition.fields["canonical_name"]
-          ? { canonical_name: explicitCanonicalName, ...validFields }
-          : validFields;
+
+      // Hoist heuristic identity keys (name, full_name, title, email, url)
+      // from unknownFields into the resolver so the entity resolver can use
+      // them as fallback identity when canonical_name_fields are absent or
+      // incomplete. These keys are consumed only by the resolver — they are
+      // NOT stored as observation fields and should NOT inflate
+      // unknown_fields_count. Same pattern as the canonical_name hoist above.
+      const HEURISTIC_IDENTITY_KEYS = ["name", "full_name", "title", "email", "url"] as const;
+      const hoistedIdentityFields: Record<string, unknown> = {};
+      for (const key of HEURISTIC_IDENTITY_KEYS) {
+        if (
+          key in unknownFields &&
+          unknownFields[key] != null &&
+          typeof unknownFields[key] === "string" &&
+          (unknownFields[key] as string).trim() !== ""
+        ) {
+          hoistedIdentityFields[key] = unknownFields[key];
+          delete (unknownFields as Record<string, unknown>)[key];
+        }
+      }
+
+      const fieldsForResolver = {
+        ...(explicitCanonicalName && !schema.schema_definition.fields["canonical_name"]
+          ? { canonical_name: explicitCanonicalName }
+          : {}),
+        ...hoistedIdentityFields,
+        ...validFields,
+      };
 
       // Include date-like unknown fields in the observation so they flow into the snapshot
       // and timeline derivation, even when not yet in the entity schema.
