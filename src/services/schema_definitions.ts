@@ -2796,6 +2796,38 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       },
     },
   },
+
+  external_link: {
+    entity_type: "external_link",
+    schema_version: "1.0",
+    metadata: {
+      label: "External Link",
+      description:
+        "A URL bookmark or reference with optional metadata. Supports common link provenance fields: description, data_source, link_kind, visibility.",
+      category: "knowledge",
+      aliases: ["bookmark", "link", "url_reference"],
+    },
+    schema_definition: {
+      fields: {
+        title: { type: "string", required: true },
+        url: { type: "string", required: true },
+        description: { type: "string", required: false },
+        data_source: { type: "string", required: false },
+        link_kind: { type: "string", required: false },
+        visibility: { type: "string", required: false },
+      },
+      canonical_name_fields: ["url", "title"],
+    },
+    reducer_config: {
+      merge_policies: {
+        title: { strategy: "last_write" },
+        description: { strategy: "last_write" },
+        data_source: { strategy: "last_write" },
+        link_kind: { strategy: "last_write" },
+        visibility: { strategy: "last_write" },
+      },
+    },
+  },
 };
 
 /**
