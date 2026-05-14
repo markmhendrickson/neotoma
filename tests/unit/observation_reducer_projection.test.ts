@@ -240,4 +240,81 @@ describe("ObservationReducer - Schema Projection Filtering", () => {
     expect(snapshot!.schema_version).toBe("2.0.0");
     expect(snapshot!.snapshot.old_noise).toBeUndefined();
   });
+
+  it("should let null corrections clear older task date fields", async () => {
+    (schemaRegistry.loadActiveSchema as any).mockResolvedValue({
+      id: "schema-task",
+      entity_type: "task",
+      schema_version: "1.0.0",
+      schema_definition: {
+        fields: {
+          title: { type: "string", required: true },
+          status: { type: "string", required: false },
+          due_date: { type: "date", required: false },
+          completed_date: { type: "date", required: false },
+        },
+        identity_opt_out: "heuristic_canonical_name",
+      },
+      reducer_config: {
+        merge_policies: {
+          title: { strategy: "last_write" },
+          status: { strategy: "last_write" },
+          due_date: { strategy: "last_write" },
+          completed_date: { strategy: "last_write" },
+        },
+      },
+      active: true,
+    });
+
+    const observations: Observation[] = [
+      makeObs({
+        id: "obs_original",
+        entity_type: "task",
+        observed_at: "2025-01-01T00:00:00Z",
+        fields: {
+          title: "Yoga payment",
+          status: "completed",
+          due_date: "2026-04-30",
+          completed_date: "2025-01-10",
+        },
+      }),
+      makeObs({
+        id: "obs_clear_due_date",
+        entity_type: "task",
+        observed_at: "2025-02-01T00:00:00Z",
+        source_priority: 1000,
+        fields: {
+          due_date: null,
+        },
+      }),
+      makeObs({
+        id: "obs_clear_completed_date",
+        entity_type: "task",
+        observed_at: "2025-02-02T00:00:00Z",
+        source_priority: 1000,
+        fields: {
+          completed_date: null,
+        },
+      }),
+      makeObs({
+        id: "obs_reopen",
+        entity_type: "task",
+        observed_at: "2025-02-03T00:00:00Z",
+        source_priority: 1000,
+        fields: {
+          status: "pending",
+        },
+      }),
+    ];
+
+    const snapshot = await reducer.computeSnapshot("ent_test", observations);
+
+    expect(snapshot).not.toBeNull();
+    expect(snapshot!.snapshot.title).toBe("Yoga payment");
+    expect(snapshot!.snapshot.status).toBe("pending");
+    expect(snapshot!.snapshot.due_date).toBeUndefined();
+    expect(snapshot!.snapshot.completed_date).toBeUndefined();
+    expect(snapshot!.provenance.due_date).toBeUndefined();
+    expect(snapshot!.provenance.completed_date).toBeUndefined();
+  });
 });
