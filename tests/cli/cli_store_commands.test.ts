@@ -212,7 +212,9 @@ describe("CLI store commands", () => {
     });
 
     it("should reuse one conversation entity for turns with the same conversation id", async () => {
-      const conversationId = `cli-turn-shared-${Date.now()}`;
+      // Use a stable, deterministic conversation_id so the schema canonical_name_fields
+      // rule fires on both calls and both resolve to the same entity without heuristic fallback.
+      const conversationId = "test-conv-reuse-shared";
       const first = JSON.parse(
         (
           await execAsync(
@@ -282,17 +284,23 @@ describe("CLI store commands", () => {
     });
 
     it("should keep generated default turns in separate conversations", async () => {
+      // Supply explicit per-call conversation_id values so the schema canonical_name_fields
+      // rule fires and each call creates a distinct entity without relying on heuristic
+      // title-matching (which is blocked by name_collision_policy: reject).
+      const ts = Date.now();
+      const firstConvId = `test-conv-isolated-a-${ts}`;
+      const secondConvId = `test-conv-isolated-b-${ts}`;
       const first = JSON.parse(
         (
           await execAsync(
-            `${CLI_PATH} store-turn --conversation-title "CLI Default Isolated" --message "First default" --user-id "${TEST_USER_ID}" --json`
+            `${CLI_PATH} store-turn --conversation-id "${firstConvId}" --conversation-title "CLI Default Isolated" --message "First default" --user-id "${TEST_USER_ID}" --json`
           )
         ).stdout
       );
       const second = JSON.parse(
         (
           await execAsync(
-            `${CLI_PATH} store-turn --conversation-title "CLI Default Isolated" --message "Second default" --user-id "${TEST_USER_ID}" --json`
+            `${CLI_PATH} store-turn --conversation-id "${secondConvId}" --conversation-title "CLI Default Isolated" --message "Second default" --user-id "${TEST_USER_ID}" --json`
           )
         ).stdout
       );

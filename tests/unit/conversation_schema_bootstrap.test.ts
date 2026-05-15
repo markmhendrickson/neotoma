@@ -3,7 +3,7 @@
  *
  * Verifies that:
  * - The `conversation` schema is present in ENTITY_SCHEMAS after bootstrap
- * - `canonical_name_fields` contains both "conversation_id" and "session_id"
+ * - `canonical_name_fields` has independent rules for "conversation_id" and "session_id" (either alone resolves)
  * - `agent_instructions` is a non-empty string
  * - `temporal_fields` includes `started_at` and `ended_at`
  * - Standard fields (title, summary, session_id, etc.) project to the top
@@ -82,16 +82,26 @@ describe("conversation schema definition — bootstrap registration (#138)", () 
     expect(ENTITY_SCHEMAS.conversation.entity_type).toBe("conversation");
   });
 
-  it("canonical_name_fields contains 'conversation_id'", () => {
+  it("canonical_name_fields includes a rule for 'conversation_id'", () => {
     const cnf = ENTITY_SCHEMAS.conversation.schema_definition.canonical_name_fields;
     expect(cnf).toBeDefined();
-    expect(cnf).toContain("conversation_id");
+    // Uses ordered-rule form: each field is an independent { composite: [...] } rule
+    // so either field alone resolves deterministically without requiring both.
+    const hasConversationId = cnf?.some(
+      (r) => typeof r === "string" ? r === "conversation_id" : r.composite?.includes("conversation_id")
+    );
+    expect(hasConversationId).toBe(true);
   });
 
-  it("canonical_name_fields contains 'session_id' (fix for issue #138)", () => {
+  it("canonical_name_fields includes a rule for 'session_id' (fix for issue #138)", () => {
     const cnf = ENTITY_SCHEMAS.conversation.schema_definition.canonical_name_fields;
     expect(cnf).toBeDefined();
-    expect(cnf).toContain("session_id");
+    // Uses ordered-rule form: each field is an independent { composite: [...] } rule
+    // so either field alone resolves deterministically without requiring both.
+    const hasSessionId = cnf?.some(
+      (r) => typeof r === "string" ? r === "session_id" : r.composite?.includes("session_id")
+    );
+    expect(hasSessionId).toBe(true);
   });
 
   it("agent_instructions is a non-empty string", () => {
