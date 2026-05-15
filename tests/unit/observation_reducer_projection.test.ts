@@ -317,4 +317,97 @@ describe("ObservationReducer - Schema Projection Filtering", () => {
     expect(snapshot!.provenance.due_date).toBeUndefined();
     expect(snapshot!.provenance.completed_date).toBeUndefined();
   });
+
+  it("should restore a field when a later non-null observation follows a null clear (last_write)", async () => {
+    (schemaRegistry.loadActiveSchema as any).mockResolvedValue({
+      id: "schema-task",
+      entity_type: "task",
+      schema_version: "1.0.0",
+      schema_definition: {
+        fields: {
+          title: { type: "string", required: true },
+          due_date: { type: "date", required: false },
+        },
+        identity_opt_out: "heuristic_canonical_name",
+      },
+      reducer_config: {
+        merge_policies: {
+          title: { strategy: "last_write" },
+          due_date: { strategy: "last_write" },
+        },
+      },
+      active: true,
+    });
+
+    const observations: Observation[] = [
+      makeObs({
+        id: "obs_initial",
+        entity_type: "task",
+        observed_at: "2025-01-01T00:00:00Z",
+        fields: { title: "Pay invoice", due_date: "2025-03-01" },
+      }),
+      makeObs({
+        id: "obs_clear",
+        entity_type: "task",
+        observed_at: "2025-02-01T00:00:00Z",
+        fields: { due_date: null },
+      }),
+      makeObs({
+        id: "obs_restore",
+        entity_type: "task",
+        observed_at: "2025-03-01T00:00:00Z",
+        fields: { due_date: "2025-04-15" },
+      }),
+    ];
+
+    const snapshot = await reducer.computeSnapshot("ent_test", observations);
+
+    expect(snapshot).not.toBeNull();
+    expect(snapshot!.snapshot.title).toBe("Pay invoice");
+    expect(snapshot!.snapshot.due_date).toBe("2025-04-15");
+  });
+
+  it("should respect priority when null clear has lower priority than non-null (highest_priority)", async () => {
+    (schemaRegistry.loadActiveSchema as any).mockResolvedValue({
+      id: "schema-task",
+      entity_type: "task",
+      schema_version: "1.0.0",
+      schema_definition: {
+        fields: {
+          title: { type: "string", required: true },
+          due_date: { type: "date", required: false },
+        },
+        identity_opt_out: "heuristic_canonical_name",
+      },
+      reducer_config: {
+        merge_policies: {
+          title: { strategy: "last_write" },
+          due_date: { strategy: "highest_priority" },
+        },
+      },
+      active: true,
+    });
+
+    const observations: Observation[] = [
+      makeObs({
+        id: "obs_high_priority_value",
+        entity_type: "task",
+        observed_at: "2025-01-01T00:00:00Z",
+        source_priority: 1000,
+        fields: { title: "Pay invoice", due_date: "2025-03-01" },
+      }),
+      makeObs({
+        id: "obs_low_priority_clear",
+        entity_type: "task",
+        observed_at: "2025-02-01T00:00:00Z",
+        source_priority: 10,
+        fields: { due_date: null },
+      }),
+    ];
+
+    const snapshot = await reducer.computeSnapshot("ent_test", observations);
+
+    expect(snapshot).not.toBeNull();
+    expect(snapshot!.snapshot.due_date).toBe("2025-03-01");
+  });
 });
