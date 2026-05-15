@@ -1,3 +1,12 @@
+/**
+ * Pure field-type → chart-type validation logic.
+ *
+ * NOTE: Although the ChatPanel surface that originally used this module is deprecated
+ * (see docs/architecture/conversational_ux_architecture.md), this utility contains
+ * no UI or chat dependencies and is preserved as a candidate for reuse in a future
+ * MCP-native visualization path (e.g., an MCP tool that validates a suggested chart
+ * against the records it references before returning it to an external agent).
+ */
 import type { VisualizationRequest } from '@/types/visualization';
 import type { LocalRecord } from '@/store/types';
 

@@ -1,3 +1,8 @@
+/**
+ * @deprecated GraphPanel is part of the deprecated ChatPanel surface.
+ * Neotoma uses MCP-first architecture; this component is scheduled for removal
+ * along with ChatPanel. See docs/architecture/conversational_ux_architecture.md.
+ */
 import { useEffect, useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -79,7 +84,21 @@ const ChartFallback = ({ message }: { message: string }) => (
   </div>
 );
 
+let _graphPanelDeprecationWarned = false;
+
+/**
+ * @deprecated GraphPanel is part of the deprecated ChatPanel surface and will be removed.
+ * See docs/architecture/conversational_ux_architecture.md.
+ */
 export function GraphPanel({ messageId, request, datastore, seedRecords = [], onClose }: GraphPanelProps) {
+  if (!_graphPanelDeprecationWarned) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      '[Neotoma] GraphPanel is deprecated and will be removed with ChatPanel. ' +
+      'See docs/architecture/conversational_ux_architecture.md'
+    );
+    _graphPanelDeprecationWarned = true;
+  }
   const visualizationState = useVisualizations();
   const preferences = visualizationState.entries[messageId]?.preferences;
   const [loading, setLoading] = useState(true);

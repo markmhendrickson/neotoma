@@ -1,3 +1,8 @@
+/**
+ * @deprecated This visualization store backs the deprecated ChatPanel surface.
+ * It is scheduled for removal along with ChatPanel.
+ * See docs/architecture/conversational_ux_architecture.md.
+ */
 import { useSyncExternalStore } from 'react';
 import type { VisualizationRequest, VisualizationGraphType } from '@/types/visualization';
 

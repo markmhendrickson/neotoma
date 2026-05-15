@@ -249,9 +249,11 @@ app.use(async (req, res, next) => {
 app.use(encryptResponseMiddleware);
 
 // Schemas
-const VISUALIZATION_GRAPH_TYPES = ['line', 'bar', 'stacked_bar', 'scatter'] as const;
-const VisualizationSuggestionSchema = z.object({
-  graph_type: z.enum(VISUALIZATION_GRAPH_TYPES),
+const VisualizationSuggestionSchema_UNUSED = z.object({
+  // NOTE: suggest_visualization was removed from the /chat handler because the ChatPanel
+  // surface it served is deprecated (see docs/architecture/conversational_ux_architecture.md).
+  // This schema is retained only as a reference; it is not registered with any endpoint.
+  graph_type: z.enum(['line', 'bar', 'stacked_bar', 'scatter'] as const),
   justification: z.string().min(1),
   title: z.string().optional(),
   dataset_label: z.string().optional(),
@@ -280,39 +282,10 @@ const VisualizationSuggestionSchema = z.object({
   notes: z.string().optional(),
 }).strict();
 
-type VisualizationSuggestion = z.infer<typeof VisualizationSuggestionSchema>;
-
-function normalizeVisualizationSuggestion(
-  suggestion: VisualizationSuggestion
-) {
-  return {
-    graphType: suggestion.graph_type,
-    justification: suggestion.justification,
-    title: suggestion.title ?? undefined,
-    datasetLabel: suggestion.dataset_label ?? undefined,
-    summary: suggestion.summary ?? undefined,
-    recordIds: suggestion.record_ids ?? undefined,
-    dimensionField: suggestion.dimension
-      ? {
-          key: suggestion.dimension.field,
-          label: suggestion.dimension.label ?? undefined,
-          kind: suggestion.dimension.kind ?? undefined,
-        }
-      : undefined,
-    measureFields: suggestion.measures?.map((measure) => ({
-      key: measure.field,
-      label: measure.label ?? undefined,
-      aggregate: measure.aggregate ?? undefined,
-      color: measure.color ?? undefined,
-    })),
-    filters: suggestion.filters?.map((filter) => ({
-      key: filter.field,
-      operator: filter.operator,
-      value: filter.value,
-    })),
-    notes: suggestion.notes ?? undefined,
-  };
-}
+// normalizeVisualizationSuggestion and its VisualizationSuggestion type have been removed.
+// The suggest_visualization LLM function call was removed from the /chat handler because
+// the ChatPanel surface it served is deprecated.
+// See docs/architecture/conversational_ux_architecture.md.
 
 const StoreSchema = z.object({
   type: z.string(),
@@ -1788,13 +1761,7 @@ Guidelines:
 - Do NOT infer record types from recent records shown in context - those are just examples
 - Provide clear, concise answers based on the retrieved records
 - If no records are found, let the user know
-- Be conversational and helpful
-
-Visualization guidance:
-- When a user explicitly asks for a graph, trend, comparison over time, percentages by category, or otherwise references data that would clearly benefit from a chart, call the suggest_visualization function.
-- Only suggest charts that can be satisfied by the records you have referenced (recent context or retrieve_records results). Include record_ids so the client can source the underlying rows.
-- Limit graph types to line, bar, stacked_bar, or scatter. Favor the simplest representation that answers the question.
-- Provide axis hints via dimension/measures, and include a short justification for why the chart is useful.`, 
+- Be conversational and helpful`,
   };
 
   const retrieveRecordsFunction = {
@@ -1844,99 +1811,8 @@ Visualization guidance:
     },
   };
 
-  const suggestVisualizationFunction = {
-    name: 'suggest_visualization',
-    description: 'Describe a graph visualization that would help the user interpret the referenced records or metrics. Use this when the user requests a chart or when a chart would materially clarify numeric comparisons or trends.',
-    parameters: {
-      type: 'object',
-      properties: {
-        graph_type: {
-          type: 'string',
-          description: 'Graph primitive to render.',
-          enum: Array.from(VISUALIZATION_GRAPH_TYPES),
-        },
-        justification: {
-          type: 'string',
-          description: 'One-sentence reason this chart helps answer the user.',
-        },
-        title: {
-          type: 'string',
-          description: 'Optional chart title.',
-        },
-        dataset_label: {
-          type: 'string',
-          description: 'Name for dataset (e.g., Transactions Q1).',
-        },
-        summary: {
-          type: 'string',
-          description: 'Optional short description of what the chart will show.',
-        },
-        record_ids: {
-          type: 'array',
-          description: 'Record IDs involved in the visualization (reference existing records queried).',
-          items: { type: 'string' },
-          minItems: 1,
-          maxItems: 200,
-        },
-        dimension: {
-          type: 'object',
-          description: 'Field used for x-axis or grouping.',
-          properties: {
-            field: { type: 'string' },
-            label: { type: 'string' },
-            kind: { type: 'string', enum: ['time', 'category'] },
-          },
-          required: ['field'],
-        },
-        measures: {
-          type: 'array',
-          description: 'Numeric fields plotted on the chart.',
-          items: {
-            type: 'object',
-            properties: {
-              field: { type: 'string' },
-              label: { type: 'string' },
-              aggregate: { type: 'string', enum: ['sum', 'avg', 'mean', 'count', 'min', 'max'] },
-              color: { type: 'string' },
-            },
-            required: ['field'],
-          },
-          minItems: 1,
-          maxItems: 4,
-        },
-        filters: {
-          type: 'array',
-          description: 'Optional filters applied before plotting.',
-          items: {
-            type: 'object',
-            properties: {
-              field: { type: 'string' },
-              operator: { type: 'string', enum: ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'between'] },
-              value: {
-                anyOf: [
-                  { type: 'string' },
-                  { type: 'number' },
-                  {
-                    type: 'array',
-                    items: { anyOf: [{ type: 'string' }, { type: 'number' }] },
-                    minItems: 1,
-                    maxItems: 2,
-                  },
-                ],
-              },
-            },
-            required: ['field', 'operator', 'value'],
-          },
-          maxItems: 5,
-        },
-        notes: {
-          type: 'string',
-          description: 'Extra implementation hints for the client.',
-        },
-      },
-      required: ['graph_type', 'justification'],
-    },
-  };
+  // suggestVisualizationFunction removed: the ChatPanel surface it served is deprecated.
+  // See docs/architecture/conversational_ux_architecture.md.
 
   try {
     const chatMessages: ChatMessage[] = [systemMessage];
@@ -2022,7 +1898,6 @@ Visualization guidance:
     chatMessages.push(...messages);
     const functionCalls: Array<{ name: string; arguments: string; result?: any }> = [];
     const recordsQueried: any[] = [];
-    let visualizationSuggestion: ReturnType<typeof normalizeVisualizationSuggestion> | null = null;
     const maxIterations = 5;
     let iteration = 0;
 
@@ -2037,7 +1912,7 @@ Visualization guidance:
         body: JSON.stringify({
           model,
           messages: openAIMessages,
-          functions: [retrieveRecordsFunction, suggestVisualizationFunction],
+          functions: [retrieveRecordsFunction],
           function_call: 'auto',
           temperature,
         }),
@@ -2120,37 +1995,9 @@ Visualization guidance:
             iteration++;
             continue;
           }
-        } else if (functionName === 'suggest_visualization') {
-          try {
-            const args = JSON.parse(functionArgs);
-            const parsed = VisualizationSuggestionSchema.safeParse(args);
-            if (parsed.success) {
-              visualizationSuggestion = normalizeVisualizationSuggestion(parsed.data);
-            } else {
-              logWarn('VisualizationSuggestion:validation_failed', req, { issues: parsed.error.issues });
-            }
-            chatMessages.push({
-              role: 'function',
-              name: functionName,
-              content: JSON.stringify({ acknowledged: true }),
-            });
-            functionCalls.push({
-              name: functionName,
-              arguments: functionArgs,
-            });
-            iteration++;
-            continue;
-          } catch (error) {
-            logError('FunctionExecutionError:visualization', req, error, { args: functionArgs });
-            chatMessages.push({
-              role: 'function',
-              name: functionName,
-              content: JSON.stringify({ error: 'Failed to parse visualization suggestion' }),
-            });
-            iteration++;
-            continue;
-          }
         }
+        // suggest_visualization handler removed: ChatPanel surface deprecated.
+        // See docs/architecture/conversational_ux_architecture.md.
       }
 
       // If no function call, we have the final response
@@ -2162,7 +2009,6 @@ Visualization guidance:
       return res.json({
         message: assistantMessage,
         records_queried: recordsQueried.length > 0 ? recordsQueried : undefined,
-        visualization: visualizationSuggestion ?? undefined,
         function_calls: functionCalls.length > 0 ? functionCalls.map(fc => ({
           name: fc.name,
           arguments: JSON.parse(fc.arguments),
@@ -2178,7 +2024,6 @@ Visualization guidance:
         content: typeof lastMessage.content === 'string' ? lastMessage.content : 'Unable to complete request',
       },
       records_queried: recordsQueried.length > 0 ? recordsQueried : undefined,
-      visualization: visualizationSuggestion ?? undefined,
       function_calls: functionCalls.length > 0 ? functionCalls.map(fc => ({
         name: fc.name,
         arguments: JSON.parse(fc.arguments),

@@ -1,3 +1,8 @@
+/**
+ * @deprecated ChatPanel is deprecated. Neotoma uses MCP-first architecture;
+ * this embedded chat UI is scheduled for removal.
+ * See docs/architecture/conversational_ux_architecture.md.
+ */
 import { useState, useEffect, useRef, useCallback, useMemo, MutableRefObject } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -278,12 +283,28 @@ const getStoredPanelWidth = (key: string, fallback: number, min: number, max: nu
   }
 };
 
-export function ChatPanel({ 
+let _chatPanelDeprecationWarned = false;
+
+/**
+ * @deprecated ChatPanel is deprecated. Neotoma uses MCP-first architecture;
+ * this embedded chat UI is scheduled for removal.
+ * See docs/architecture/conversational_ux_architecture.md.
+ */
+export function ChatPanel({
   datastore,
-  onFileUploaded, 
+  onFileUploaded,
   onFileUploadRef,
   onErrorRef,
 }: ChatPanelProps) {
+  if (!_chatPanelDeprecationWarned) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      '[Neotoma] ChatPanel is deprecated and will be removed. ' +
+      'Use MCP-first harness instead. ' +
+      'See docs/architecture/conversational_ux_architecture.md'
+    );
+    _chatPanelDeprecationWarned = true;
+  }
   const { settings } = useSettings();
   const { bearerToken: keysBearerToken, x25519, ed25519, loading: keysLoading } = useKeys();
   // Use bearer token from keys hook if available, fallback to settings
