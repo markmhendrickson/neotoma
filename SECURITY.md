@@ -4,9 +4,9 @@
 
 | Version  | Supported |
 |----------|-----------|
+| `0.12.x` | Yes       |
 | `0.11.x` | Yes       |
-| `0.10.x` | Yes       |
-| `< 0.10` | No (patch only on critical advisories — see [advisories index](docs/security/advisories/README.md)) |
+| `< 0.11` | No (patch only on critical advisories — see [advisories index](docs/security/advisories/README.md)) |
 
 The most recent published Neotoma version is the only one that receives proactive support. Critical advisories may produce a one-off patch on the previous minor when the affected range is large; see the per-advisory file under [`docs/security/advisories/`](docs/security/advisories/README.md) for the exact range.
 
@@ -23,7 +23,7 @@ If you discover a security vulnerability in Neotoma, please report it **privatel
 
 1. **Private intake.** A reporter files via the GitHub Security tab or `security@`. The maintainer opens (or accepts) a private GHSA and requests a CVE when warranted.
 2. **Hotfix branch.** Fix lands on `hotfix/<version>-<slug>` cut from the affected `main` SHA, with regression tests under `tests/integration/` or `tests/security/` that fail on the pre-fix code and pass post-fix.
-3. **Pre-release security gates** (`docs/security/threat_model.md`, `.cursor/plans/pre-release_security_gates_44e01d74.plan.md`):
+3. **Pre-release security gates** (`docs/security/threat_model.md`, `.cursor/skills/release/SKILL.md`):
    - G1 `npm run security:classify-diff` confirms the diff is sensitive.
    - G2 `npm run security:lint` is clean.
    - G3 `npm run security:manifest:check` + `npm run test:security:auth-matrix` are green.
@@ -39,7 +39,7 @@ Neotoma implements defense-in-depth at the State Layer:
 
 - **Bearer authentication** for the HTTP `/mcp` endpoint and protected REST routes.
 - **AAuth (RFC 9421 + `aa-agent+jwt`)** for verified per-agent attribution; see [`docs/subsystems/aauth.md`](docs/subsystems/aauth.md) and [`docs/subsystems/agent_attribution_integration.md`](docs/subsystems/agent_attribution_integration.md).
-- **Loopback / reverse-proxy classification** centralized in `src/actions.ts` (`isLocalRequest`, `forwardedForValues`, `isProductionEnvironment`); see [`docs/security/threat_model.md`](docs/security/threat_model.md) for the channels this covers.
+- **Loopback / reverse-proxy classification** centralized in `src/actions.ts` (exported: `isLocalRequest`; internal helpers: `forwardedForValues`, `isProductionEnvironment`); see [`docs/security/threat_model.md`](docs/security/threat_model.md) for the channels this covers.
 - **Guest access policy** — `src/services/access_policy.ts` and the entity-submission flow gate non-owner writes; see [`docs/subsystems/guest_access_policy.md`](docs/subsystems/guest_access_policy.md).
 - **Audit trail** — every observation, relationship, source, timeline event, and interpretation carries the writer's attribution tier; immutable by design (see [`docs/subsystems/observation_architecture.md`](docs/subsystems/observation_architecture.md)).
 - **Row-level user scoping** on local SQLite; planned hosted-Postgres parity in a future release.
@@ -58,7 +58,7 @@ Every release runs through the pre-release security gates before tagging and aga
 | G4 — AI adversarial review | `/release` Step 3.5 | `npm run security:ai-review` — produces `docs/releases/in_progress/<TAG>/security_review.md` for human sign-off. |
 | G5 — deployed probes | `/release` Step 5 + weekly | `bash scripts/security/deployed_probes.sh` — external probe of every protected route in the manifest against the live host. |
 
-The full plan and rationale are in [`.cursor/plans/pre-release_security_gates_44e01d74.plan.md`](.cursor/plans/pre-release_security_gates_44e01d74.plan.md).
+The full plan and rationale are in [`.cursor/skills/release/SKILL.md`](.cursor/skills/release/SKILL.md).
 
 ## Security best practices for operators
 
@@ -80,7 +80,7 @@ When deploying or developing Neotoma:
 
 - [`docs/security/advisories/README.md`](docs/security/advisories/README.md) — disclosed advisories.
 - [`docs/security/threat_model.md`](docs/security/threat_model.md) — channels covered by the gates.
-- [`.cursor/plans/pre-release_security_gates_44e01d74.plan.md`](.cursor/plans/pre-release_security_gates_44e01d74.plan.md) — Track 1 plan (pre-release gates).
+- [`.cursor/skills/release/SKILL.md`](.cursor/skills/release/SKILL.md) — Track 1 plan (pre-release gates).
 - [`docs/subsystems/auth.md`](docs/subsystems/auth.md) — auth subsystem.
 - [`docs/subsystems/aauth.md`](docs/subsystems/aauth.md) — AAuth signing and verification.
 - [`docs/subsystems/privacy.md`](docs/subsystems/privacy.md) — privacy / PII boundaries.

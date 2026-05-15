@@ -43,7 +43,7 @@ For each change type, follow the linked canonical doc. The matrix lists only the
 | New CLI runtime override (env var + flag) | `docs/developer/cli_reference.md` § Runtime overrides | `src/cli/index.ts` `preAction` hook, env-var precedence table in cli_reference |
 | Error response / envelope change | `docs/subsystems/errors.md` | `openapi.yaml` schema, server builders, contract / unit tests |
 | User-scoped endpoint / user-id handling | `docs/subsystems/auth.md` § User-ID Resolution | `getAuthenticatedUserId` usage; `openapi.yaml` query params; never parallel resolution paths |
-| Auth middleware / proxy trust / local-dev shortcuts (the v0.11.1 class) | `docs/security/threat_model.md` + `.cursor/plans/pre-release_security_gates_44e01d74.plan.md` | `src/actions.ts` (`isLocalRequest`, `forwardedForValues`, `isProductionEnvironment`); `src/services/root_landing/**` mirrors; `protected_routes_manifest.json` regenerated via `npm run security:manifest:write`; `npm run security:lint` clean; `tests/security/auth_topology_matrix.test.ts` updated when the topology surface changes; supplement `Security hardening` section + `docs/security/advisories/` entry on regression |
+| Auth middleware / proxy trust / local-dev shortcuts (the v0.11.1 class) | `docs/security/threat_model.md` + `.cursor/skills/release/SKILL.md` § Step 3.5 | `src/actions.ts` (exported: `isLocalRequest`; internal: `forwardedForValues`, `isProductionEnvironment`); `src/services/root_landing/**` mirrors; `protected_routes_manifest.json` regenerated via `npm run security:manifest:write`; `npm run security:lint` clean; `tests/security/auth_topology_matrix.test.ts` updated when the topology surface changes; supplement `Security hardening` section + `docs/security/advisories/` entry on regression |
 | MCP ↔ CLI agent-instruction parity | `docs/developer/agent_instructions_sync_rules.mdc` | Mirrored edits in both instruction files + anchor-table row |
 
 **Data model & core semantics**
@@ -161,7 +161,7 @@ Load the canonical doc for the surface your change touches, not this rule, for s
 - `docs/foundation/schema_agnostic_design_rules.md` — schema-driven behavior, no per-type branches.
 - `docs/security/threat_model.md` — channels the pre-release security gates cover (alternate-path auth, proxy trust, local-dev shortcuts, unauth public route, guest-access widening).
 - `docs/security/advisories/` — disclosed advisories, indexed by `README.md`; the seed entry `2026-05-11-inspector-auth-bypass.md` documents the v0.11.1 regression class the gates were designed against.
-- `.cursor/plans/pre-release_security_gates_44e01d74.plan.md` — Track 1 (this) plan; Track 2 (advisory + rollout via subscriptions / peer / guest) follows.
+- `.cursor/skills/release/SKILL.md` § Step 3.5 — Track 1 security gates (pre-release review lane); Track 2 (advisory + rollout via subscriptions / peer / guest) follows.
 
 **API & contract**
 

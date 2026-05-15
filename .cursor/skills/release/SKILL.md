@@ -94,7 +94,7 @@ If the working tree was dirty when drafting, state that **execute** matches the 
 
 ### Step 3.5: Security review lane
 
-Run after preview is approved by the user, before Step 4. Sources: `.cursor/plans/pre-release_security_gates_44e01d74.plan.md`, `docs/security/threat_model.md`.
+Run after preview is approved by the user, before Step 4. Sources: `docs/security/threat_model.md`, `SECURITY.md`.
 
 1. **Classify the release diff:**
    ```bash
@@ -156,7 +156,12 @@ After user confirms, run **every** step below in order through **npm publish and
    git commit -m "Bump version to vX.Y.Z"
    ```
 
-3. **Merge dev into main**:
+3. **Update `SECURITY.md` Supported Versions table** if this release introduces a new minor (e.g. `0.12.x` → `0.13.x`):
+   - Add the new minor series as supported.
+   - Demote the oldest supported series to the unsupported row.
+   - Stage and amend into the version bump commit, or create a separate commit.
+
+4. **Merge dev into main**:
    ```bash
    git checkout main
    git pull origin main
@@ -164,31 +169,31 @@ After user confirms, run **every** step below in order through **npm publish and
    ```
    If merge conflicts: STOP and report. User resolves manually.
 
-4. **Tag**:
+5. **Tag**:
    ```bash
    git tag -a "vX.Y.Z" -m "Release vX.Y.Z"
    ```
 
-5. **Push**:
+6. **Push**:
    ```bash
    git push origin main
    git push origin "vX.Y.Z"
    ```
 
-6. **Write supplement file**: Save the confirmed changelog to `docs/releases/in_progress/vX.Y.Z/github_release_supplement.md`.
+7. **Write supplement file**: Save the confirmed changelog to `docs/releases/in_progress/vX.Y.Z/github_release_supplement.md`.
 
-7. **Render release notes**:
+8. **Render release notes**:
    ```bash
    npm run -s release-notes:render -- --tag vX.Y.Z > /tmp/gh-release-vX.Y.Z.md
    ```
    If the last npm publish does not match the previous git tag, use `--compare-base <last_published_tag>`. This must reproduce the same body style shown in Step 3, now with the final tag/commit set.
 
-8. **Create GitHub Release**:
+9. **Create GitHub Release**:
    ```bash
    gh release create "vX.Y.Z" --title "vX.Y.Z" --notes-file /tmp/gh-release-vX.Y.Z.md
    ```
 
-9. **Publish to npm (mandatory for a full release)**:
+10. **Publish to npm (mandatory for a full release)**:
    From the directory that owns the published `package.json` (repo or workspace root per your monorepo layout):
 
    - **Registry auth:** If `npm publish` fails for auth or the session is stale, run `npm login` in an interactive terminal when needed.
@@ -215,7 +220,7 @@ After user confirms, run **every** step below in order through **npm publish and
    ```
    The output must equal `X.Y.Z`. If it still reports the previous version, the registry has not propagated yet — wait 30s and retry rather than advancing.
 
-10. **Deploy sandbox.neotoma.io (mandatory for a full release)**:
+11. **Deploy sandbox.neotoma.io (mandatory for a full release)**:
     Deploy the Fly app from the final release commit:
     ```bash
     flyctl deploy -c fly.sandbox.toml --remote-only
@@ -227,7 +232,7 @@ After user confirms, run **every** step below in order through **npm publish and
     ```
     Do not treat the release as complete until the root JSON reports `version: X.Y.Z`, `mode: sandbox`, and `/health` returns `X-Neotoma-Sandbox: 1`. If sandbox deployment fails after npm publish, report the partial-release state and keep working the sandbox failure unless the user explicitly pauses.
 
-11. **Merge main back to dev** (keep branches in sync):
+12. **Merge main back to dev** (keep branches in sync):
     ```bash
     git checkout dev
     git merge main

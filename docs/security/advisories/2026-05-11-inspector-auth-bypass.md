@@ -199,5 +199,5 @@ Both G2 and G3 independently reject a re-introduction of the v0.11.1 shape; G1 r
 
 - v0.11.1 release supplement: `docs/releases/completed/v0.11.1/github_release_supplement.md` (after the in-progress folder is moved per `/release` Step 5).
 - Threat model channels covered: `docs/security/threat_model.md` § 1, § 2.
-- Track 1 plan that produced the gates: `.cursor/plans/pre-release_security_gates_44e01d74.plan.md`.
+- Track 1 plan that produced the gates: `.cursor/skills/release/SKILL.md` § Step 3.5.
 - Track 2 (advisory + rollout via subscriptions / peer / guest) — _planned_.
