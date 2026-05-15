@@ -806,6 +806,7 @@ export function conversationsToEntities(
   for (const conv of conversations) {
     entities.push({
       entity_type: "conversation",
+      conversation_id: conv.id,
       title: conv.title,
       source_platform: conv.source,
       message_count: conv.messages.length,

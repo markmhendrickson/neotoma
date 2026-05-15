@@ -10,6 +10,7 @@
  */
 
 import fs from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { createHash } from "node:crypto";
@@ -44,8 +45,35 @@ function idempotencyKey(filePath: string): string {
 }
 
 // Path to tsx (for running neotoma store) — use the one in node_modules
-const TSX = path.join(import.meta.dirname ?? path.dirname(new URL(import.meta.url).pathname), "..", "node_modules", ".bin", "tsx");
-const CLI = path.join(import.meta.dirname ?? path.dirname(new URL(import.meta.url).pathname), "..", "src", "cli", "index.ts");
+const REPO_ROOT = path.join(import.meta.dirname ?? path.dirname(new URL(import.meta.url).pathname), "..");
+const TSX = path.join(REPO_ROOT, "node_modules", ".bin", "tsx");
+const CLI = path.join(REPO_ROOT, "src", "cli", "index.ts");
+
+// Load .env.production for NEOTOMA_BEARER_TOKEN (needed to talk to prod server at 3180)
+function loadEnvFile(envPath: string): Record<string, string> {
+  const vars: Record<string, string> = {};
+  try {
+    const content = readFileSync(envPath, "utf-8");
+    for (const line of content.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const eq = trimmed.indexOf("=");
+      if (eq === -1) continue;
+      const key = trimmed.slice(0, eq).trim();
+      const val = trimmed.slice(eq + 1).trim().replace(/^["']|["']$/g, "");
+      vars[key] = val;
+    }
+  } catch {
+    // env file may not exist
+  }
+  return vars;
+}
+
+const prodEnv = loadEnvFile(path.join(REPO_ROOT, ".env.production"));
+const childEnv: Record<string, string> = {
+  ...process.env as Record<string, string>,
+  ...(prodEnv.NEOTOMA_BEARER_TOKEN ? { NEOTOMA_BEARER_TOKEN: prodEnv.NEOTOMA_BEARER_TOKEN } : {}),
+};
 
 async function storeEntities(entities: Record<string, unknown>[], filePath: string): Promise<boolean> {
   if (entities.length === 0) return true;
@@ -60,14 +88,20 @@ async function storeEntities(entities: Record<string, unknown>[], filePath: stri
       return true;
     }
 
+    const baseUrl = process.env.NEOTOMA_BASE_URL ?? "http://localhost:3180";
     const result = execFileSync(TSX, [
       CLI,
       "store",
       "--file", tmpFile,
       "--observation-source", "import",
       "--idempotency-key", ikey,
+      "--base-url", baseUrl,
       "--no-log-file",
-    ], { stdio: verbose ? "inherit" : "pipe", encoding: "utf-8" });
+    ], {
+      stdio: verbose ? "inherit" : "pipe",
+      encoding: "utf-8",
+      env: childEnv,
+    });
 
     if (verbose && result) process.stdout.write(result + "\n");
     return true;
