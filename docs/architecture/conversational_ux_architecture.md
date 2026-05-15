@@ -156,12 +156,13 @@ Neotoma maintains State Layer purity by:
 - **MCP-only interface:** All external access via MCP protocol
 ## 5. Migration Path
 ### 5.1 Existing Chat UI Components
-**Current state:** `frontend/src/components/ChatPanel.tsx` exists and provides chat functionality.
-**Migration approach:**
-1. **Deprecate ChatPanel:** Mark as deprecated, document MCP-first architecture
-2. **Extract deterministic operations:** Preserve any deterministic search/filter operations as standalone components
-3. **Remove conversational state:** Remove transcript storage, threading, and conversational context
-4. **Document MCP integration:** Provide clear documentation for external agent integration
+**Current state (as of 2026-05):** `ChatPanel.tsx` and the `suggest_visualization` server-side tool have been removed from `main`. The `/chat` HTTP endpoint was removed from `src/actions.ts` and replaced with a comment: "Chat endpoint removed — violates Application Layer constraint." The in-progress `feat/visualization-e2e-hardening` branch (issue #114) added these components but was never merged; the branch is considered abandoned per the MCP-first architectural decision.
+
+**Migration complete:**
+1. **ChatPanel removed:** Never present on `main`; only existed on the visualization feature branch which was closed without merging.
+2. **suggest_visualization removed:** Not present on `main`; only existed on the visualization feature branch.
+3. **Conversational state removed:** No transcript storage, threading, or conversational context on `main`.
+4. **MCP integration documented:** See `docs/integrations/` and `docs/developer/` for MCP agent integration guides.
 ### 5.2 UI Component Evolution
 **Preserved components:**
 - List views (records, entities, events)
