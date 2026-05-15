@@ -172,6 +172,19 @@ function mergeArrays(
 - `aliases` for entities (all known names)
 - `tags` for records (all tags from all sources)
 - `categories` for transactions (all applicable categories)
+
+**Null-clear exception:** `merge_array` does **not** honor field-level null clears. A null
+observation for a `merge_array` field is silently skipped; the strategy returns the
+accumulated array from the remaining observations rather than omitting the key from the
+snapshot. This is an intentional exception to the general null-clear invariant (which
+`last_write`, `highest_priority`, `most_specific`, and the no-schema defaults path all
+respect).
+
+To clear a `merge_array` field, use one of these approaches:
+1. Submit a correction with `strategy: last_write` on the field, set the value to `null`,
+   then restore `merge_array` if needed.
+2. Remove and re-add the field via `update_schema_incremental` to drop all accumulated
+   observation data.
 ## 4. Merge Policy Configuration
 ### 4.1 Schema Registry Configuration
 Merge policies are configured per field in the schema registry:
