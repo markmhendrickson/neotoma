@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 /**
- * Installs or removes Neotoma hooks in a Cursor project.
+ * Installs or removes Neotoma hooks in a Cursor project or globally.
  *
  * Usage:
- *   npx @neotoma/cursor-hooks install         # add to .cursor/hooks.json in cwd
- *   npx @neotoma/cursor-hooks install --path  # custom project root
+ *   npx @neotoma/cursor-hooks install           # add to .cursor/hooks.json in cwd
+ *   npx @neotoma/cursor-hooks install --global  # add to ~/.cursor/hooks.json
+ *   npx @neotoma/cursor-hooks install --path <dir>  # custom project root
  *   npx @neotoma/cursor-hooks --uninstall
+ *   npx @neotoma/cursor-hooks --uninstall --global
  *
  * The script merges Neotoma's hook entries into any existing hooks.json
  * so it plays nicely with hooks another tool may have installed.
@@ -13,6 +15,7 @@
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -20,11 +23,13 @@ const packageRoot = resolve(__dirname, "..");
 const templatePath = join(packageRoot, "hooks.template.json");
 
 function parseArgs(argv) {
-  const args = { uninstall: false, projectRoot: process.cwd() };
+  const args = { uninstall: false, global: false, projectRoot: process.cwd() };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--uninstall" || arg === "uninstall") {
       args.uninstall = true;
+    } else if (arg === "--global" || arg === "-g") {
+      args.global = true;
     } else if (arg === "--path" && argv[i + 1]) {
       args.projectRoot = resolve(argv[i + 1]);
       i += 1;
@@ -39,10 +44,12 @@ function parseArgs(argv) {
 }
 
 function printHelp() {
-  console.log(`Usage: neotoma-cursor-hooks [install|--uninstall] [--path <dir>]
+  console.log(`Usage: neotoma-cursor-hooks [install|--uninstall] [--global] [--path <dir>]
 
-Installs Neotoma hooks into .cursor/hooks.json in the target project.
-Defaults to the current directory.`);
+Installs Neotoma hooks into .cursor/hooks.json.
+  --global   Target ~/.cursor/hooks.json (Cursor's global config) instead of the project directory.
+  --path     Custom project root (ignored when --global is set).
+Defaults to the current working directory.`);
 }
 
 function loadExistingHooks(hooksFile) {
@@ -116,8 +123,9 @@ function removeNeotoma(existing) {
 
 function main() {
   const args = parseArgs(process.argv.slice(2));
-  const projectRoot = args.projectRoot;
-  const cursorDir = join(projectRoot, ".cursor");
+  const cursorDir = args.global
+    ? join(homedir(), ".cursor")
+    : join(args.projectRoot, ".cursor");
   const hooksFile = join(cursorDir, "hooks.json");
 
   mkdirSync(cursorDir, { recursive: true });
