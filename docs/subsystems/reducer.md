@@ -229,7 +229,7 @@ Reducer-wide rule, applied uniformly across all entity types and merge strategie
 
 This is a reducer-level invariant, not a per-type declaration. Schemas MUST NOT declare per-type "treat null as absent" overrides; if a type needs that behavior, model it explicitly with a distinct field value (e.g. a sentinel) rather than overloading null.
 
-`merge_array` is the documented exception: array merge filters null entries from contributed arrays (a null entry is not a meaningful array element). A correction that sends `field: null` for an array-typed field still clears the field per the rule above; only null *inside* an array contribution is dropped.
+`merge_array` is the documented exception: array merge filters null entries from contributed arrays (a null entry is not a meaningful array element). A correction that sends `field: null` for an array-typed field does NOT omit the snapshot key — instead `merge_array` writes `[]` (empty array) to the snapshot; only null *inside* an array contribution is dropped.
 
 ## 5. Determinism Requirements
 ### 5.1 Deterministic Execution
