@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **346**
-- Backend and repo Vitest files: **313**
+- Total automated test files: **347**
+- Backend and repo Vitest files: **314**
 - Frontend Vitest files: **9**
 - Playwright spec files: **24**
 
@@ -72,7 +72,7 @@ flowchart TD
 | Vitest unit tests | 81 |
 | Vitest service tests | 33 |
 | Source-adjacent tests | 39 |
-| Vitest integration tests | 92 |
+| Vitest integration tests | 93 |
 | Vitest CLI tests | 49 |
 | Vitest contract tests | 10 |
 | Vitest security tests | 1 |
@@ -281,7 +281,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (92):**
+**Files (93):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_resource_metadata.test.ts`
 - `tests/integration/aauth_revocation_e2e.test.ts`
@@ -317,6 +317,7 @@ flowchart TD
 - `tests/integration/hook_failure_hint.test.ts`
 - `tests/integration/inspector_bundled_mount.test.ts`
 - `tests/integration/interpretation_store.test.ts`
+- `tests/integration/issue_37_event_schema_projection.test.ts`
 - `tests/integration/lexical_search.test.ts`
 - `tests/integration/live_issues_tooling.test.ts`
 - `tests/integration/mcp_actions_matrix.test.ts`
