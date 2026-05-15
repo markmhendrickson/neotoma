@@ -14,6 +14,7 @@ describe("MCP store raw files and parse_file", () => {
 
   beforeAll(async () => {
     server = new NeotomaServer();
+    (server as any).authenticatedUserId = testUserId;
   });
 
   beforeEach(async () => {

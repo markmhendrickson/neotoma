@@ -1,0 +1,43 @@
+name: Claude PR Review
+
+on:
+  pull_request:
+    types:
+      - ready_for_review
+  issue_comment:
+    types:
+      - created
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  review:
+    if: |
+      (github.event_name == 'pull_request' && github.event.pull_request.draft == false) ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request != null &&
+       contains(github.event.comment.body, '@claude review'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: anthropics/claude-code-action@beta
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          model: claude-opus-4-7
+          trigger_phrase: "@claude review"
+          direct_prompt: |
+            Review this pull request thoroughly. Focus on:
+            - Correctness and logic errors
+            - Architectural boundary violations (State Layer constraints, no strategy/execution logic in Neotoma)
+            - Determinism violations (random IDs, unstable sorts, Date.now() in business logic)
+            - Immutability violations (mutating observations or sources after creation)
+            - Security issues (auth bypasses, PII in logs, unprotected routes)
+            - Missing idempotency_key on mutating operations
+            - Contract surface changes without matching openapi.yaml edits
+            - Test coverage gaps for new behavior
+            - Breaking changes that should be named in a release supplement
+            Be direct and specific. Cite file and line numbers. Skip praise.

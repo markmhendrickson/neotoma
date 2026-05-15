@@ -108,7 +108,12 @@ export async function inferSchemaFromEntities(
   );
 
   return {
-    schemaDefinition: { fields },
+    schemaDefinition: {
+      fields,
+      // Auto-inferred schemas have no explicit canonical identity — opt out of
+      // the R2 canonical_name_fields requirement so registration succeeds.
+      identity_opt_out: "heuristic_canonical_name" as const,
+    },
     reducerConfig: { merge_policies: mergePolicies },
     metadata: {
       field_count: allFields.size,
@@ -174,7 +179,10 @@ export async function inferSchemaFromParquet(
     );
 
     return {
-      schemaDefinition: { fields },
+      schemaDefinition: {
+        fields,
+        identity_opt_out: "heuristic_canonical_name" as const,
+      },
       reducerConfig: { merge_policies: mergePolicies },
       metadata: {
         field_count: Object.keys(fields).length,

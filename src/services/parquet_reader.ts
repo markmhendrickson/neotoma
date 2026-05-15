@@ -6,6 +6,9 @@
 
 import { logger } from "../utils/logger.js";
 
+// Track whether parquet-wasm ESM WASM module has been initialized
+let _parquetWasmInitialized = false;
+
 export interface ParquetReadResult {
   entities: Array<Record<string, unknown>>;
   metadata: {
@@ -121,7 +124,22 @@ async function readParquetFileInternal(
     const fsPromises = await import("node:fs/promises");
     const path = await import("path");
     const { Type, tableFromIPC } = await import("apache-arrow");
-    const parquetWasm = await import("parquet-wasm");
+    // Use the ESM build to avoid the CJS/ESM conflict in the default node/ entry
+    // (parquet-wasm declares "type": "module" but node/parquet_wasm.js uses module.exports).
+    // We initialize WASM lazily once per process.
+    const parquetWasm = await (async () => {
+      const mod = await import("parquet-wasm/esm/parquet_wasm.js");
+      if (!_parquetWasmInitialized) {
+        const { readFileSync } = await import("fs");
+        const { fileURLToPath } = await import("url");
+        const { dirname: _dirname, join: _join } = await import("path");
+        const _file = fileURLToPath(import.meta.url);
+        const wasmFile = _join(_dirname(_file), "../../node_modules/parquet-wasm/esm/parquet_wasm_bg.wasm");
+        mod.initSync({ module: readFileSync(wasmFile) });
+        _parquetWasmInitialized = true;
+      }
+      return mod;
+    })();
     
     // Infer entity type from filename if not provided
     // e.g., "transactions.parquet" -> "transaction"
