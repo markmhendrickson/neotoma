@@ -43,6 +43,8 @@ const heroImageSrc = path.join(repoRoot, "frontend", "public", "neotoma-hero.png
 const heroImageDest = path.join(outputDir, "neotoma-hero.png");
 const ogImageSrc = path.join(repoRoot, "frontend", "public", "neotoma-og-1200x630.png");
 const ogImageDest = path.join(outputDir, "neotoma-og-1200x630.png");
+const wordmarkSrc = path.join(repoRoot, "frontend", "public", "neotoma-wordmark.svg");
+const wordmarkDest = path.join(outputDir, "neotoma-wordmark.svg");
 const robotsFile = path.join(outputDir, "robots.txt");
 const sitemapFile = path.join(outputDir, "sitemap.xml");
 const llmsTxtSrc = path.join(repoRoot, "frontend", "public", "llms.txt");
@@ -278,6 +280,10 @@ async function main() {
   if (fs.existsSync(ogImageSrc)) {
     fs.copyFileSync(ogImageSrc, ogImageDest);
     console.log(`Copied OG image: ${path.relative(repoRoot, ogImageDest)}`);
+  }
+  if (fs.existsSync(wordmarkSrc)) {
+    fs.copyFileSync(wordmarkSrc, wordmarkDest);
+    console.log(`Copied wordmark: ${path.relative(repoRoot, wordmarkDest)}`);
   }
   fs.writeFileSync(robotsFile, buildRobotsTxt(), "utf-8");
   fs.writeFileSync(sitemapFile, buildSitemapXml(), "utf-8");
