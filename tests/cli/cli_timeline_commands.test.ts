@@ -136,6 +136,17 @@ describe("CLI timeline commands", () => {
     });
 
     it("should paginate with --offset", async () => {
+      // Need at least 4 events for offset=2 to land on distinct rows from
+      // offset=0; below that threshold the assertion is meaningless because
+      // page2 may legitimately wrap or be empty. Check available count first.
+      const { stdout: countStdout } = await execAsync(
+        `${CLI_PATH} timeline list --limit 100 --json`
+      );
+      const totalEvents = JSON.parse(countStdout).events?.length ?? 0;
+      if (totalEvents < 4) {
+        return;
+      }
+
       const { stdout: page1 } = await execAsync(
         `${CLI_PATH} timeline list --limit 2 --offset 0 --json`
       );
@@ -147,8 +158,13 @@ describe("CLI timeline commands", () => {
       const result1 = JSON.parse(page1);
       const result2 = JSON.parse(page2);
 
-      if (result1.events.length > 0 && result2.events.length > 0) {
-        expect(result1.events[0].id).not.toBe(result2.events[0].id);
+      expect(result1.events.length).toBe(2);
+      expect(result2.events.length).toBeGreaterThan(0);
+
+      // Page 2 must not overlap with page 1 at all.
+      const page1Ids = new Set(result1.events.map((e: { id: string }) => e.id));
+      for (const event of result2.events) {
+        expect(page1Ids.has(event.id)).toBe(false);
       }
     });
 

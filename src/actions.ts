@@ -4316,7 +4316,10 @@ app.get("/timeline", async (req, res) => {
     }
 
     // Default: sort by event_timestamp (document dates). Use order_by=created_at for "what changed recently".
-    query = query.order(orderByColumn, { ascending: false });
+    // Secondary sort on id is a deterministic tie-breaker — events with identical
+    // event_timestamp values (common when many are ingested from the same source)
+    // otherwise produce non-stable page boundaries across offset queries.
+    query = query.order(orderByColumn, { ascending: false }).order("id", { ascending: true });
 
     // Pagination
     query = query.range(offset, offset + limit - 1);

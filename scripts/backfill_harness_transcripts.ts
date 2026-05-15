@@ -60,18 +60,21 @@ async function storeEntities(entities: Record<string, unknown>[], filePath: stri
       return true;
     }
 
-    execFileSync(TSX, [
+    const result = execFileSync(TSX, [
       CLI,
       "store",
       "--file", tmpFile,
       "--observation-source", "import",
       "--idempotency-key", ikey,
       "--no-log-file",
-    ], { stdio: verbose ? "inherit" : "pipe" });
+    ], { stdio: verbose ? "inherit" : "pipe", encoding: "utf-8" });
 
+    if (verbose && result) process.stdout.write(result + "\n");
     return true;
   } catch (err: any) {
-    if (verbose) console.error(`  Error storing ${path.basename(filePath)}:`, err.message ?? err);
+    if (verbose) {
+      console.error(`  Error storing ${path.basename(filePath)}:`, err.stderr ?? err.message ?? err);
+    }
     return false;
   } finally {
     await fs.unlink(tmpFile).catch(() => {});
