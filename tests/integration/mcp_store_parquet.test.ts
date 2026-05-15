@@ -6,6 +6,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
+import { randomUUID } from "crypto";
 import { db } from "../../src/db.js";
 import { NeotomaServer } from "../../src/server.js";
 import { readParquetFile } from "../../src/services/parquet_reader.js";
@@ -43,6 +44,7 @@ describe("MCP Store with Parquet Files - Integration", () => {
 
   beforeAll(async () => {
     server = new NeotomaServer();
+    (server as any).authenticatedUserId = testUserId;
   });
 
   beforeEach(async () => {
@@ -78,7 +80,7 @@ describe("MCP Store with Parquet Files - Integration", () => {
     await db.from("observations").delete().eq("entity_type", testEntityType);
     await db.from("entity_snapshots").delete().eq("entity_type", testEntityType);
     await db.from("entities").delete().eq("entity_type", testEntityType);
-    await db.from("sources").delete().like("%test_parquet%");
+    // Note: sources tracked in createdSourceIds are cleaned up in beforeEach; no extra cleanup needed here
     
     // Cleanup temp files
     for (const file of tempFiles) {
@@ -142,6 +144,7 @@ describe("MCP Store with Parquet Files - Integration", () => {
       // Call MCP store action
       const result = await (server as any).store({
         user_id: testUserId,
+        idempotency_key: randomUUID(),
         file_path: testFile,
         interpret: false,
       });
@@ -192,6 +195,7 @@ describe("MCP Store with Parquet Files - Integration", () => {
       try {
         result = await (server as any).store({
           user_id: testUserId,
+          idempotency_key: randomUUID(),
           file_path: testFile,
           interpret: false,
         });
@@ -236,6 +240,7 @@ describe("MCP Store with Parquet Files - Integration", () => {
       // Store via MCP
       const result = await (server as any).store({
         user_id: testUserId,
+        idempotency_key: randomUUID(),
         file_path: testFile,
         interpret: false,
       });
@@ -323,6 +328,7 @@ describe("MCP Store with Parquet Files - Integration", () => {
       // 3. Store via MCP
       const result = await (server as any).store({
         user_id: testUserId,
+        idempotency_key: randomUUID(),
         file_path: testFile,
         interpret: false,
       });
@@ -380,6 +386,7 @@ describe("MCP Store with Parquet Files - Integration", () => {
       // 3. Store via MCP
       const result = await (server as any).store({
         user_id: testUserId,
+        idempotency_key: randomUUID(),
         file_path: testFile,
         interpret: false,
       });
@@ -432,6 +439,7 @@ describe("MCP Store with Parquet Files - Integration", () => {
       // Import once
       const result1 = await (server as any).store({
         user_id: testUserId,
+        idempotency_key: randomUUID(),
         file_path: testFile,
         interpret: false,
       });
@@ -443,9 +451,10 @@ describe("MCP Store with Parquet Files - Integration", () => {
       createdEntityIds.push(...entityIds1);
       createdSourceIds.push(responseData1.source_id);
 
-      // Import again (same file)
+      // Import again (same file, different idempotency_key — testing content-hash deduplication)
       const result2 = await (server as any).store({
         user_id: testUserId,
+        idempotency_key: randomUUID(),
         file_path: testFile,
         interpret: false,
       });

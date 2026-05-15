@@ -114,6 +114,16 @@ export async function runInterpretation(
   enforceAttributionPolicy("interpretations", getCurrentAgentIdentity());
   const { userId, sourceId, extractedData, config } = options;
 
+  // Validate that the source exists before creating an interpretation
+  const { data: sourceCheck, error: sourceCheckError } = await db
+    .from("sources")
+    .select("id")
+    .eq("id", sourceId)
+    .single();
+  if (sourceCheckError || !sourceCheck) {
+    throw new Error(`Source not found: ${sourceId}`);
+  }
+
   // Create interpretation
   const interpretationAttribution = getCurrentAttribution();
   const { data: run, error: runError } = await db
@@ -892,8 +902,13 @@ export async function createRelationshipObservations(
       // Generate relationship key
       const relationshipKey = `${rel.relationship_type}:${rel.source_entity_id}:${rel.target_entity_id}`;
 
-      // Canonicalize metadata
-      const canonicalMetadata = canonicalizeFields(rel.metadata || {}, relationshipSchema.schema_definition);
+      // Relationship metadata is freeform (varies by relationship type) — do not filter
+      // through canonicalizeFields which would strip fields not in the fixed relationship schema.
+      // Sort keys for a stable canonical hash used for deduplication.
+      const rawMetadata = rel.metadata || {};
+      const canonicalMetadata = Object.fromEntries(
+        Object.entries(rawMetadata).sort(([a], [b]) => a.localeCompare(b))
+      );
       const canonicalHash = hashCanonicalFields(canonicalMetadata);
 
       // Generate deterministic observation ID (UUID format)
