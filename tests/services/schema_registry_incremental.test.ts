@@ -32,6 +32,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
       range: vi.fn(),
       is: vi.fn(), // For .is("user_id", null)
       or: vi.fn(), // For .or("user_id.is.null,user_id.eq....")
+      not: vi.fn(), // For .not("id", "eq", id) used in register() deactivation
     };
     // Make each method return the mock so chaining works
     Object.keys(mock).forEach((key) => {
@@ -65,8 +66,8 @@ describe("SchemaRegistryService - Incremental Updates", () => {
       }
     });
     
-    // Ensure update/insert/select/eq/is/range still return mock for chaining (unless overridden)
-    ['update', 'insert', 'select', 'eq', 'is', 'range'].forEach((method) => {
+    // Ensure update/insert/select/eq/is/range/not still return mock for chaining (unless overridden)
+    ['update', 'insert', 'select', 'eq', 'is', 'range', 'not'].forEach((method) => {
       if (!methods[method] || typeof methods[method] !== 'function') {
         // Only set if not already a function that returns something
         if (typeof mock[method] === 'function' && !mock[method].mock) {
@@ -1173,7 +1174,13 @@ describe("SchemaRegistryService - Incremental Updates", () => {
         }),
       });
 
-      mockFrom.mockReturnValueOnce(mockInsert);
+      // When activate: true, register() also calls db.from("schema_registry").update(...)
+      // to deactivate prior active schemas. Provide a mock for that call.
+      const mockDeactivate = createChainableQuery({});
+
+      mockFrom
+        .mockReturnValueOnce(mockInsert)     // insert call
+        .mockReturnValueOnce(mockDeactivate); // deactivate prior active versions
 
       const result = await service.register({
         entity_type: "transaction",
@@ -1185,6 +1192,8 @@ describe("SchemaRegistryService - Incremental Updates", () => {
 
       const insertedData = mockInsert.insert.mock.calls[0][0];
       expect(insertedData.active).toBe(true);
+      // Verify deactivation was attempted for prior active schemas
+      expect(mockDeactivate.update).toHaveBeenCalledWith({ active: false });
     });
 
     it("should not activate by default", async () => {
