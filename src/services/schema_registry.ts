@@ -218,6 +218,17 @@ export interface SchemaDefinition {
    * docs/subsystems/entity_merge.md.
    */
   duplicate_detection_threshold?: number;
+
+  /**
+   * Markdown instructions injected into agent context when entities of this
+   * type are retrieved. Agents MUST treat this as behavioral context for the
+   * entity type and apply it to the current turn. Individual entities may
+   * store an `agent_instructions` snapshot field that extends or overrides
+   * this schema-level value.
+   *
+   * Must be a non-empty string when present.
+   */
+  agent_instructions?: string;
 }
 
 /** Known opt-out tokens for {@link SchemaDefinition.identity_opt_out}. */
@@ -1920,6 +1931,17 @@ export class SchemaRegistryService {
             );
           }
         }
+      }
+    }
+
+    if (definition.agent_instructions !== undefined) {
+      if (
+        typeof definition.agent_instructions !== "string" ||
+        definition.agent_instructions.trim().length === 0
+      ) {
+        throw new Error(
+          "agent_instructions must be a non-empty string when present",
+        );
       }
     }
   }

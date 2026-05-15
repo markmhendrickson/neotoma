@@ -2300,9 +2300,8 @@ export class NeotomaServer {
       observation_count: number;
       last_observation_at: string | null | undefined;
     }): Promise<{ content: Array<{ type: string; text: string }> }> => {
-      if (responseFormat === "json") {
-        return this.buildTextResponse(payload);
-      }
+      // Resolve schema-level agent_instructions once for both formats.
+      let schemaInstructions: string | null = null;
       let schemaFieldOrder: string[] | undefined;
       try {
         const schema = await schemaRegistry.loadActiveSchema(
@@ -2312,8 +2311,25 @@ export class NeotomaServer {
         if (schema?.schema_definition?.fields) {
           schemaFieldOrder = Object.keys(schema.schema_definition.fields);
         }
+        if (typeof schema?.schema_definition?.agent_instructions === "string") {
+          schemaInstructions = schema.schema_definition.agent_instructions;
+        }
       } catch {
-        // Fall through with alphabetical ordering if schema load fails.
+        // Fall through with no instructions and alphabetical ordering if schema load fails.
+      }
+
+      // Per-entity agent_instructions stored as a snapshot field.
+      const entityInstructions =
+        typeof payload.snapshot.agent_instructions === "string"
+          ? payload.snapshot.agent_instructions
+          : null;
+
+      if (responseFormat === "json") {
+        return this.buildTextResponse({
+          ...payload,
+          ...(schemaInstructions !== null ? { schema_instructions: schemaInstructions } : {}),
+          ...(entityInstructions !== null ? { entity_instructions: entityInstructions } : {}),
+        });
       }
       const text = renderEntityCompactText(
         {
@@ -2329,7 +2345,17 @@ export class NeotomaServer {
         schemaFieldOrder,
         { includeProvenance: true }
       );
-      return { content: [{ type: "text", text }] };
+      // Append agent instructions sections so agents see them in markdown format too.
+      const instructionParts: string[] = [];
+      if (schemaInstructions) {
+        instructionParts.push(`## Schema Instructions\n\n${schemaInstructions}`);
+      }
+      if (entityInstructions) {
+        instructionParts.push(`## Entity Instructions\n\n${entityInstructions}`);
+      }
+      const fullText =
+        instructionParts.length > 0 ? `${text}\n\n${instructionParts.join("\n\n")}` : text;
+      return { content: [{ type: "text", text: fullText }] };
     };
 
     // Get entity first to check if it exists and handle merged entity redirection

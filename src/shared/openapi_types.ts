@@ -1396,7 +1396,17 @@ export interface paths {
         put?: never;
         /**
          * Submit issue
-         * @description Creates a local `issue` row, optional GitHub mirror for public visibility, and optional forward to the configured operator instance (same flow as MCP submit_issue). Authenticated users use the normal user scope. AAuth-signed guest submitters may create operator-side issues when the `issue`, `conversation`, and `conversation_message` guest access policies allow writes; the response includes a guest read-back token.
+         * @description Creates a local `issue` row, optional GitHub mirror for public visibility, and optional forward
+         *     to the configured operator instance (same flow as MCP submit_issue).
+         *     Authenticated users use the normal user scope. AAuth-signed guest
+         *     submitters may create operator-side issues when the `issue`,
+         *     `conversation`, and `conversation_message` guest access policies allow
+         *     writes; the response includes a guest read-back token.
+         *
+         *     **Reporter environment is required.** Callers MUST supply at least
+         *     one of `reporter_git_sha` or `reporter_app_version`. Submissions
+         *     missing both are rejected with `error_code: ERR_REPORTER_ENVIRONMENT_REQUIRED`.
+         *     See `docs/subsystems/issues.md` § Reporter provenance.
          */
         post: operations["issuesSubmit"];
         delete?: never;
@@ -2389,6 +2399,20 @@ export interface components {
             entity_type_label?: string | null;
             /** @description Optional ordered list of the most important snapshot fields for overview display. */
             primary_fields?: string[] | null;
+            /**
+             * @description Markdown instructions from the entity's schema definition. Injected into agent context
+             *     when this entity is retrieved. Agents MUST treat this as behavioral context for the
+             *     entity type and apply it to the current turn. Sourced from
+             *     `SchemaDefinition.agent_instructions` on the registered schema.
+             */
+            schema_instructions?: string | null;
+            /**
+             * @description Markdown instructions stored on this specific entity (from the entity's snapshot
+             *     `agent_instructions` field). Extends or overrides `schema_instructions` for this
+             *     individual entity. Agents MUST treat this as behavioral context and apply it to the
+             *     current turn.
+             */
+            entity_instructions?: string | null;
         };
         Source: {
             id?: string;
@@ -5155,6 +5179,19 @@ export interface operations {
                     body: string;
                     /** @description Optional guest token for operator Neotoma read-through / remote append when the local issue mirrors a remote instance. If omitted, guest_access_token on the issue snapshot is used. */
                     guest_access_token?: string;
+                    /**
+                     * @description Soft requirement on public issue threads (server emits a warning when both
+                     *     `reporter_git_sha` and `reporter_app_version` are missing). Persisted on the
+                     *     `conversation_message` row so debugging steps stay correlated with the build under test.
+                     */
+                    reporter_git_sha?: string;
+                    reporter_git_ref?: string;
+                    reporter_channel?: string;
+                    /**
+                     * @description Soft requirement on public issue threads (server emits a warning when both
+                     *     `reporter_git_sha` and `reporter_app_version` are missing).
+                     */
+                    reporter_app_version?: string;
                     user_id?: string;
                 };
             };
@@ -5193,9 +5230,14 @@ export interface operations {
                     labels?: string[];
                     /** @enum {string} */
                     visibility?: "public" | "private";
+                    /**
+                     * @description Required (this OR `reporter_app_version`). Git SHA the reporter is reproducing against
+                     *     (`git rev-parse HEAD`).
+                     */
                     reporter_git_sha?: string;
                     reporter_git_ref?: string;
                     reporter_channel?: string;
+                    /** @description Required (this OR `reporter_git_sha`). App / CLI version (semver) the reporter is using. */
                     reporter_app_version?: string;
                     reporter_ci_run_id?: string;
                     reporter_patch_source_id?: string;
@@ -5236,6 +5278,20 @@ export interface operations {
                         entity_ids?: string[];
                         github_mirror_guidance: string | null;
                     };
+                };
+            };
+            /**
+             * @description Validation error. `error_code: ERR_REPORTER_ENVIRONMENT_REQUIRED`
+             *     is returned when neither `reporter_git_sha` nor
+             *     `reporter_app_version` is provided. `details.acceptable_field_groups`
+             *     lists the alternatives the caller can supply.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
         };
