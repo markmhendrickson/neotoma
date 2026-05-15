@@ -1,4 +1,4 @@
-# Neotoma MCP — Mobile setup (Claude iOS / Android)
+# Neotoma MCP: Mobile setup (Claude iOS / Android)
 
 ## Scope
 
@@ -16,7 +16,7 @@ Claude mobile does not run a hook runtime. The MCP instruction payload is the on
 
 ---
 
-## Step 1 — Connect Neotoma MCP
+## Step 1: Connect Neotoma MCP
 
 In the Claude mobile app, navigate to **Settings → Integrations (MCP)** and add a new server:
 
@@ -28,11 +28,11 @@ In the Claude mobile app, navigate to **Settings → Integrations (MCP)** and ad
 
 Replace `<your-neotoma-host>` with the public hostname of your Neotoma instance (for example, `neotoma.example.com`).
 
-After saving, the Claude mobile app will fetch the tool list and the `instructions` / `serverUseInstructions` payload from the Neotoma server. The full MCP instruction block — including the retrieval-first rule for tasks, schedule, contacts, notes, issues, events, finances, decisions, and commitments — is delivered at connection time.
+After saving, the Claude mobile app will fetch the tool list and the `instructions` / `serverUseInstructions` payload from the Neotoma server. The full MCP instruction block, which includes the retrieval-first rule for tasks, schedule, contacts, notes, issues, events, finances, decisions, and commitments, is delivered at connection time.
 
 ---
 
-## Step 2 — Optional: set a custom system prompt
+## Step 2: Optional: set a custom system prompt
 
 A custom system prompt reinforces Neotoma-first behavior and makes it explicit that native integrations (Reminders, Calendar, Contacts) are fallbacks only.
 
@@ -45,7 +45,7 @@ Retrieval-first rule (mandatory):
 When I ask about tasks, schedule, contacts, notes, issues, events, finances, decisions, or commitments, ALWAYS check Neotoma first using the retrieve_entities or retrieve_entity_by_identifier MCP tools before answering or falling back to any native device integration (Reminders, Calendar, Contacts, or similar). Do not say "I don't have that information" until a bounded Neotoma retrieval has been attempted and returned no relevant results.
 
 Storage rule (mandatory):
-Store every conversation turn — user message and assistant reply — in Neotoma using the store MCP tool. Do not skip storage for short or routine turns.
+Store every conversation turn, both user message and assistant reply, in Neotoma using the store MCP tool. Do not skip storage for short or routine turns.
 
 Native integrations are fallbacks:
 Only read from Reminders, Calendar, or Contacts when Neotoma retrieval returns no relevant results for that query.
@@ -55,7 +55,7 @@ This prompt works whether or not `NEOTOMA_MCP_COMPACT_INSTRUCTIONS=1` is set on 
 
 ---
 
-## Step 3 — Verify the connection
+## Step 3: Verify the connection
 
 Send a message such as:
 

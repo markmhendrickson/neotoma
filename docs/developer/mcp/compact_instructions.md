@@ -1,4 +1,4 @@
-# Neotoma MCP — Compact instructions mode
+# Neotoma MCP: Compact instructions mode
 
 ## Scope
 
@@ -14,7 +14,7 @@ The compact payload is defined in `src/server.ts` as `MCP_INTERACTION_INSTRUCTIO
 
 - Turn lifecycle (5 steps in order: bounded retrieval, user-phase store, other tools, compose reply, closing store).
 - Core store recipe (flat entity shape, idempotency key, fallback IDs, FORBIDDEN patterns).
-- Retrieval-first rule (tasks, schedule, contacts, notes, issues, events, finances, decisions, commitments — check Neotoma before native integrations).
+- Retrieval-first rule (tasks, schedule, contacts, notes, issues, events, finances, decisions, commitments: check Neotoma before native integrations).
 - Display rule (Neotoma attribution block when entities are created, updated, or retrieved).
 - Schema/fidelity (check declared fields, repair unknown_fields_count > 0).
 - Per-turn QA and issue reporting.
@@ -28,7 +28,7 @@ The compact payload ends with a pointer to the full doc (`docs/developer/mcp/ins
 
 Use `NEOTOMA_MCP_COMPACT_INSTRUCTIONS=1` when:
 
-- **The host already injects expanded Neotoma workspace rules.** For example, Claude Code with `.cursor/rules/` or `.claude/rules/` containing a full copy of the Neotoma behavioral contract. Sending the full MCP block again would duplicate context and waste tokens.
+- **The host already injects expanded Neotoma workspace rules.** For example, Claude Code with `.cursor/rules/` or `.claude/rules/` containing a full copy of the Neotoma behavioral contract. Sending the full MCP block again duplicates context and wastes tokens.
 - **Mobile or short-context deployments.** Claude iOS/Android context windows are shorter than desktop. Compact mode reduces instruction overhead so more context is available for conversation and retrieval results.
 - **Token budget is constrained.** Any deployment where the full ~200-line instruction block is too large relative to the expected conversation length.
 
@@ -83,7 +83,7 @@ If the payload starts with `[TURN LIFECYCLE]`, the full instruction block is act
 
 ## Related
 
-- [`mobile_setup.md`](./mobile_setup.md) — Mobile setup guide (Claude iOS/Android)
-- [`instructions.md`](./instructions.md) — Full MCP instruction source (canonical)
-- `src/server.ts` (`MCP_INTERACTION_INSTRUCTIONS_COMPACT_DUAL_HOST`, `MCP_INTERACTION_INSTRUCTIONS_COMPACT_BODY_LINES`) — Implementation
-- [`../agent_instructions.md`](../agent_instructions.md) — Agent instructions index
+- [`mobile_setup.md`](./mobile_setup.md): Mobile setup guide (Claude iOS/Android)
+- [`instructions.md`](./instructions.md): Full MCP instruction source (canonical)
+- `src/server.ts` (`MCP_INTERACTION_INSTRUCTIONS_COMPACT_DUAL_HOST`, `MCP_INTERACTION_INSTRUCTIONS_COMPACT_BODY_LINES`): Implementation
+- [`../agent_instructions.md`](../agent_instructions.md): Agent instructions index
