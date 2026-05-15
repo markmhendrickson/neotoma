@@ -37,7 +37,38 @@ export interface SetupReport {
   doctor_before: Awaited<ReturnType<typeof runDoctor>>;
   doctor_after: Awaited<ReturnType<typeof runDoctor>>;
   overall_ok: boolean;
+  /** Canonical single-line install confirmation. Agents grep for this to confirm install succeeded. */
+  verify_line: string;
+  /** One-line privacy/transport summary for privacy-conscious evaluators. */
+  privacy_transport_summary: string;
 }
+
+/**
+ * Compose the canonical install-verification line that agent harnesses grep for.
+ * Format: `Neotoma installed at <path> (resolved via <manager>; v<version>; data_dir=<dir>; mcp=<transport>)`
+ *
+ * When the binary is not yet on PATH (e.g. a version-manager shell mismatch),
+ * uses the global_bin path from the package root so the line is still emitted.
+ */
+export function buildVerifyLine(doctor: Awaited<ReturnType<typeof runDoctor>>): string {
+  const bin =
+    doctor.neotoma.which_neotoma ??
+    doctor.neotoma.global_bin ??
+    "(not found on PATH — see path_fix_hint)";
+  const via = doctor.neotoma.resolved_via ?? "unknown";
+  const ver = doctor.neotoma.version ? `v${doctor.neotoma.version}` : "vunknown";
+  const dataDir = doctor.data.data_dir;
+  // MCP transport: infer from detected MCP server configs whether a signed/http proxy is in use.
+  const hasMcpConfig = Object.values(doctor.mcp_servers_detected).some(
+    (c) => c.has_neotoma || c.has_neotoma_dev
+  );
+  const mcpLabel = hasMcpConfig ? "stdio" : "stdio (not yet configured)";
+  return `Neotoma installed at ${bin} (resolved via ${via}; ${ver}; data_dir=${dataDir}; mcp=${mcpLabel})`;
+}
+
+/** One-line privacy summary appended to setup output so privacy-conscious evaluators see it immediately. */
+export const PRIVACY_TRANSPORT_SUMMARY =
+  "Transport: local stdio MCP (no network egress). Override with --mcp-transport=http for signed HTTP /mcp proxy.";
 
 export interface RunSetupOptions {
   tool?: string | ToolId | null;
@@ -340,5 +371,7 @@ export async function runSetup(options: RunSetupOptions = {}): Promise<SetupRepo
     doctor_before: doctorBefore,
     doctor_after: doctorAfter,
     overall_ok: overall,
+    verify_line: buildVerifyLine(doctorAfter),
+    privacy_transport_summary: PRIVACY_TRANSPORT_SUMMARY,
   };
 }

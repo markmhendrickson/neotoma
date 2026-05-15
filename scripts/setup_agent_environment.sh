@@ -12,6 +12,12 @@ if [ -f .env ]; then
   export $(grep -v '^#' .env | xargs)
 fi
 
+# Step 1b: Configure git identity for castor-agent
+echo "[INFO] Configuring git identity for castor-agent..."
+git config user.name "castor-agent"
+git config user.email "markmhendrickson+castor-agent@gmail.com"
+echo "[INFO] ✅ Git identity set to castor-agent"
+
 # Step 2: Install Playwright browsers (if needed)
 echo "[INFO] Checking Playwright browsers..."
 if npx playwright install --with-deps chromium --dry-run 2>&1 | grep -q "already installed"; then

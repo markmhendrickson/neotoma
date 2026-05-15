@@ -9189,6 +9189,11 @@ program
     });
     const exitCode = report.overall_ok ? 0 : 1;
     writeOutput(report, outputMode);
+    // Always emit verify_line + privacy_transport_summary as plain stdout lines
+    // so agent harnesses can grep for them regardless of --json / --pretty mode.
+    // These are appended after the JSON blob because agents capture full stdout.
+    process.stdout.write(`${report.verify_line}\n`);
+    process.stdout.write(`${report.privacy_transport_summary}\n`);
     process.exitCode = exitCode;
   });
 

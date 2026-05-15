@@ -16,7 +16,8 @@
       "WebFetch(domain:old.reddit.com)",
       "mcp__mcpsrv_neotoma_dev__retrieve_entity_by_identifier",
       "mcp__mcpsrv_neotoma_dev__get_session_identity",
-      "Bash(mkdir -p /Users/markmhendrickson/repos/neotoma/.claude/skills/shadcn)"
+      "Bash(mkdir -p /Users/markmhendrickson/repos/neotoma/.claude/skills/shadcn)",
+      "mcp__mcpsrv_neotoma__get_authenticated_user"
     ]
   },
   "enableAllProjectMcpServers": true,

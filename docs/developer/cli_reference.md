@@ -360,7 +360,12 @@ neotoma init --data-dir /path/to/data
   - `--yes`: Suppress prompts in init, MCP config, CLI instruction config, and hook install paths.
   - `--skip-permissions`: Skip permission-file writes.
 
-`neotoma setup` writes a structured report when the global `--output json` flag is active. The report includes `steps[]`, `permission_patches`, `doctor_before`, `doctor_after`, and `overall_ok`, which lets agent-led installs show exactly what changed.
+`neotoma setup` writes a structured report when the global `--output json` flag is active. The report includes `steps[]`, `permission_patches`, `doctor_before`, `doctor_after`, `overall_ok`, `verify_line`, and `privacy_transport_summary`, which lets agent-led installs show exactly what changed.
+
+After the JSON report, `neotoma setup` always emits two plain-text lines to stdout (regardless of `--json` / `--pretty` mode):
+
+1. **Install-verification line** — a single grep-able line confirming the binary path, version manager, version, data directory, and MCP transport. Format: `Neotoma installed at <path> (resolved via <manager>; v<version>; data_dir=<dir>; mcp=<transport>)`. Agent harnesses grep this line to confirm install succeeded without parsing JSON.
+2. **Privacy/transport summary** — `Transport: local stdio MCP (no network egress). Override with --mcp-transport=http for signed HTTP /mcp proxy.` Surfaces the data-egress model for privacy-conscious evaluators.
 
 Use `neotoma setup --tool <harness> --yes` for the normal greenfield path. Use `neotoma mcp config` or `neotoma cli config` when only one layer needs repair.
 

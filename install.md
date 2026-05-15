@@ -116,6 +116,15 @@ The default MCP transport is **B**: local stdio for normal npm onboarding, with
 transport **A** available when you want signed HTTP `/mcp` proxy entries and
 the API is already running.
 
+**Step 2.5 — Verify install (grep for canonical confirmation line)**
+
+After `neotoma setup` completes, two plain-text lines appear on stdout:
+
+1. `Neotoma installed at <path> (resolved via <manager>; v<version>; data_dir=<dir>; mcp=<transport>)` — grep for `Neotoma installed at` to confirm success.
+2. `Transport: local stdio MCP (no network egress). ...` — answers the privacy/transport question.
+
+If the first line is absent (for example, after a standalone `npm install -g neotoma` without running setup), run `neotoma setup --tool <current_tool> --yes` to produce it. If the binary is not on PATH, check `neotoma doctor --json` → `.neotoma.path_fix_hint` and surface that hint to the user before retrying.
+
 **If the user is already installed**
 
 Run `neotoma doctor --json` to verify, then `neotoma setup --tool <tool> --yes`

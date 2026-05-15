@@ -18,7 +18,7 @@ import {
   writePermissionsForTool,
   toolFromString,
 } from "../../src/cli/permissions.ts";
-import { runSetup } from "../../src/cli/setup.ts";
+import { runSetup, buildVerifyLine, PRIVACY_TRANSPORT_SUMMARY } from "../../src/cli/setup.ts";
 import { applyCliInstructions, scanAgentInstructions } from "../../src/cli/agent_instructions_scan.ts";
 import { createDefaultSetupRunners } from "../../src/cli/setup_runners.ts";
 import { detectCurrentToolHint, detectDataDirRisks, runDoctor } from "../../src/cli/doctor.ts";
@@ -463,6 +463,139 @@ describe("detectHooks", () => {
 
       expect(report.installed.cursor.present).toBe(true);
       expect(report.eligible_for_offer).toBe(false);
+    } finally {
+      await fs.rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("buildVerifyLine", () => {
+  function makeDoctor(overrides: {
+    which_neotoma?: string | null;
+    global_bin?: string | null;
+    resolved_via?: string | null;
+    version?: string | null;
+    data_dir?: string;
+    has_neotoma_mcp?: boolean;
+  }): Parameters<typeof buildVerifyLine>[0] {
+    // Use explicit key presence check so null values are preserved (not coalesced to defaults).
+    const whichNeotoma = "which_neotoma" in overrides ? overrides.which_neotoma : "/usr/local/bin/neotoma";
+    const globalBin = "global_bin" in overrides ? overrides.global_bin : "/usr/local/bin/neotoma";
+    return {
+      neotoma: {
+        installed: true,
+        which_neotoma: whichNeotoma,
+        global_bin: globalBin,
+        resolved_via: (overrides.resolved_via ?? "npm") as "npm" | "mise" | "nvm" | "fnm" | "path" | "unknown",
+        version: overrides.version ?? "0.11.0",
+        node_on_path: true,
+        npm_global_root: null,
+        global_package_dir: null,
+        neotoma_on_path: whichNeotoma !== null && whichNeotoma !== undefined,
+        path_fix_hint: null,
+      },
+      data: {
+        config_dir: "/home/user/.config/neotoma",
+        data_dir: overrides.data_dir ?? "/home/user/neotoma/data",
+        db_exists: true,
+        initialized: true,
+        risks: [],
+        suggested_safe_data_dir: null,
+      },
+      api: { running: false, env: null, port: null, pid: null, base_url: null },
+      mcp_servers_detected: overrides.has_neotoma_mcp
+        ? { cursor: { path: "/home/user/.cursor/mcp.json", has_neotoma: true, has_neotoma_dev: false } }
+        : {},
+      cli_instructions: {
+        project: { cursor: false, claude: false, codex: false },
+        user: { cursor: false, claude: false, codex: false },
+      },
+      permission_files: {
+        claude_code_project: null,
+        claude_code_user: null,
+        cursor_project: null,
+        codex_user: null,
+      },
+      current_tool_hint: null,
+      hooks: {
+        installed: {},
+        eligible_for_offer: false,
+      },
+      mirror: { enabled: false, peers: [] },
+      suggested_next_step: null,
+    } as unknown as Parameters<typeof buildVerifyLine>[0];
+  }
+
+  it("produces the canonical single-line format agents grep for", () => {
+    const line = buildVerifyLine(makeDoctor({}));
+    expect(line).toMatch(/^Neotoma installed at .+ \(resolved via .+; v.+; data_dir=.+; mcp=.+\)$/);
+  });
+
+  it("includes the binary path", () => {
+    const line = buildVerifyLine(makeDoctor({ which_neotoma: "/home/user/.local/bin/neotoma" }));
+    expect(line).toContain("/home/user/.local/bin/neotoma");
+  });
+
+  it("includes the resolved_via manager", () => {
+    const line = buildVerifyLine(makeDoctor({ resolved_via: "mise" }));
+    expect(line).toContain("resolved via mise");
+  });
+
+  it("includes the version with v-prefix", () => {
+    const line = buildVerifyLine(makeDoctor({ version: "0.12.3" }));
+    expect(line).toContain("v0.12.3");
+  });
+
+  it("includes the data_dir", () => {
+    const line = buildVerifyLine(makeDoctor({ data_dir: "/custom/data" }));
+    expect(line).toContain("data_dir=/custom/data");
+  });
+
+  it("shows stdio when MCP is configured", () => {
+    const line = buildVerifyLine(makeDoctor({ has_neotoma_mcp: true }));
+    expect(line).toContain("mcp=stdio");
+    expect(line).not.toContain("not yet configured");
+  });
+
+  it("notes mcp not configured when no MCP server detected", () => {
+    const line = buildVerifyLine(makeDoctor({ has_neotoma_mcp: false }));
+    expect(line).toContain("mcp=stdio (not yet configured)");
+  });
+
+  it("falls back to global_bin when binary is not on PATH", () => {
+    const line = buildVerifyLine(
+      makeDoctor({ which_neotoma: null, global_bin: "/home/user/.local/share/mise/bin/neotoma" })
+    );
+    expect(line).toContain("/home/user/.local/share/mise/bin/neotoma");
+  });
+
+  it("falls back to not-found message when neither path nor global_bin is available", () => {
+    const line = buildVerifyLine(makeDoctor({ which_neotoma: null, global_bin: null }));
+    expect(line).toContain("not found on PATH");
+    expect(line).toContain("path_fix_hint");
+  });
+
+  it("PRIVACY_TRANSPORT_SUMMARY mentions local stdio and no network egress", () => {
+    expect(PRIVACY_TRANSPORT_SUMMARY).toContain("local stdio MCP");
+    expect(PRIVACY_TRANSPORT_SUMMARY).toContain("no network egress");
+  });
+
+  it("runSetup report includes verify_line and privacy_transport_summary", async () => {
+    const cwd = await mkTmp("ntm-verify-line");
+    try {
+      const report = await runSetup({
+        tool: "cursor",
+        dryRun: true,
+        cwd,
+        runners: {
+          init: async () => ({ id: "init", ok: true, changed: false, skipped: true, reason: "dry-run" }),
+          mcpConfigure: async () => ({ id: "mcp-configure", ok: true, changed: false, skipped: true, reason: "dry-run" }),
+          cliInstructionsConfigure: async () => ({ id: "cli-instructions", ok: true, changed: false, skipped: true, reason: "dry-run" }),
+        },
+      });
+      expect(report.verify_line).toMatch(/^Neotoma installed at .+ \(resolved via .+; v.+; data_dir=.+; mcp=.+\)$/);
+      expect(report.privacy_transport_summary).toContain("local stdio MCP");
+      expect(report.privacy_transport_summary).toContain("no network egress");
     } finally {
       await fs.rm(cwd, { recursive: true, force: true });
     }
