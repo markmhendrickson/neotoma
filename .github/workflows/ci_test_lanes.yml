@@ -40,6 +40,10 @@ jobs:
           npm run build --prefix packages/client
           npm ci --prefix packages/cursor-hooks
           npm run build --prefix packages/cursor-hooks
+          # opencode-plugin imports @neotoma/client via "file:../client" — its
+          # tests import src/ directly so no build step is needed, but the
+          # node_modules symlink must exist for ESM resolution.
+          npm ci --prefix packages/opencode-plugin
 
       - name: Type check
         run: npm run type-check
