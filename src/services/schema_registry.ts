@@ -548,6 +548,39 @@ export class SchemaRegistryService {
 
     const registeredSchema = data as SchemaRegistryEntry;
 
+    // When activating a new schema version, deactivate all previously active
+    // versions for the same entity_type and scope so only one row ever has
+    // active = true. Without this, `loadGlobalSchema` / `loadUserSpecificSchema`
+    // use `.single()` which errors (or non-deterministically returns the old
+    // version) when multiple active rows exist, causing new fields to be routed
+    // to raw_fragments instead of the top-level snapshot. (Fixes #142)
+    if (config.activate) {
+      let deactivateQuery = db
+        .from("schema_registry")
+        .update({ active: false })
+        .eq("entity_type", config.entity_type)
+        .eq("active", true)
+        .not("id", "eq", registeredSchema.id);
+
+      if (scope === "user" && config.user_specific && config.user_id) {
+        deactivateQuery = deactivateQuery
+          .eq("scope", "user")
+          .eq("user_id", config.user_id);
+      } else {
+        deactivateQuery = deactivateQuery
+          .eq("scope", "global")
+          .is("user_id", null);
+      }
+
+      const { error: deactivateError } = await deactivateQuery;
+      if (deactivateError) {
+        logSchemaRegistryInfo(
+          `[SCHEMA_REGISTRY] Warning: failed to deactivate prior active schemas for ` +
+          `${config.entity_type}: ${deactivateError.message}`,
+        );
+      }
+    }
+
     // Auto-generate icon if not provided (non-blocking)
     this.generateIconAsync(registeredSchema.entity_type, config.metadata);
 
