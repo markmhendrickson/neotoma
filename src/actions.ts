@@ -784,6 +784,25 @@ export function isTrustedProxyIP(ip: string, env: NodeJS.ProcessEnv = process.en
   return false;
 }
 
+/**
+ * Redact an IP for log output. IPv4 is shown as `a.b.c.x/24`; IPv6 as `a:b::/48`.
+ * Set NEOTOMA_DEBUG_TUNNEL=1 in the operator environment to bypass redaction
+ * and surface the full address. Raw client IPs are PII; the default log path
+ * MUST NOT emit them. See docs/subsystems/privacy.md.
+ */
+function redactIpForLog(ip: string): string {
+  const trimmed = ip.trim();
+  if (trimmed.includes(":")) {
+    const parts = trimmed.split(":");
+    return parts.slice(0, 3).join(":") + "::/48";
+  }
+  const v4 = trimmed.split(".");
+  if (v4.length === 4) {
+    return `${v4[0]}.${v4[1]}.${v4[2]}.x/24`;
+  }
+  return "<redacted>";
+}
+
 function forwardedForValues(req: express.Request): string[] {
   const raw = req.headers["x-forwarded-for"] || req.headers["X-Forwarded-For"];
   const values = Array.isArray(raw) ? raw : raw ? [raw] : [];
@@ -834,9 +853,15 @@ export function isLocalRequest(req: express.Request): boolean {
       return true;
     }
     const untrusted = forwardedFor.filter((ip) => !isLoopbackAddress(ip) && !isTrustedProxyIP(ip));
+    const debugTunnel = process.env.NEOTOMA_DEBUG_TUNNEL === "1";
+    const displayed = debugTunnel
+      ? untrusted.join(", ")
+      : untrusted.map(redactIpForLog).join(", ");
     process.stderr.write(
-      `[neotoma] isLocalRequest: loopback socket rejected because XFF contains untrusted IP(s): ${untrusted.join(", ")}. ` +
-        `Set NEOTOMA_TRUSTED_PROXY_IPS to trust these addresses.\n`
+      `[neotoma] isLocalRequest: loopback socket rejected because XFF contains untrusted IP(s): ${displayed}. ` +
+        `Set NEOTOMA_TRUSTED_PROXY_IPS to trust these addresses` +
+        (debugTunnel ? "" : " (set NEOTOMA_DEBUG_TUNNEL=1 to see full IPs)") +
+        `.\n`
     );
     return false;
   }
