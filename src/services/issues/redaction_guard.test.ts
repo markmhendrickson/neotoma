@@ -104,4 +104,28 @@ describe("runRedactionGuard", () => {
     expect(result.applied).toBe(true);
     expect(result.title).toMatch(/Call <PHONE:[0-9a-f]{4}>/);
   });
+
+  it("does not redact Neotoma entity IDs as phone numbers (issue #130)", () => {
+    const entityId = "ent_bced6a22f0bc36d14505ab";
+    const result = runRedactionGuard({
+      title: `Entity ${entityId} has a bug`,
+      body: `Task entity ${entityId} represents a recurring workflow.`,
+    });
+    expect(result.applied).toBe(false);
+    expect(result.title).toBe(`Entity ${entityId} has a bug`);
+    expect(result.body).toBe(`Task entity ${entityId} represents a recurring workflow.`);
+    expect(result.title).not.toContain("<PHONE:");
+  });
+
+  it("still redacts phone numbers alongside entity IDs", () => {
+    const entityId = "ent_bced6a22f0bc36d14505ab";
+    const result = runRedactionGuard({
+      title: "ok",
+      body: `Entity ${entityId} called 202-555-0123`,
+    });
+    expect(result.applied).toBe(true);
+    expect(result.body).toContain(entityId);
+    expect(result.body).not.toContain("202-555-0123");
+    expect(result.body).toMatch(/<PHONE:[0-9a-f]{4}>/);
+  });
 });

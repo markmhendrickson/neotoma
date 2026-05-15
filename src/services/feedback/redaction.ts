@@ -26,6 +26,8 @@ export interface RedactionResult {
 
 const EMAIL_RE = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi;
 const PHONE_RE = /(?<!\d)(?:\+?\d[\s\-().]?){7,15}\d(?!\d)/g;
+// Neotoma entity IDs: ent_[a-f0-9]{24} — must not be matched as phone numbers.
+const ENTITY_ID_RE = /\bent_[a-f0-9]{24}\b/g;
 const TOKEN_RE =
   /\b(?:sk-[a-zA-Z0-9_-]{16,}|ghp_[a-zA-Z0-9]{20,}|gho_[a-zA-Z0-9]{20,}|AKIA[0-9A-Z]{16}|Bearer\s+[A-Za-z0-9._~+/=-]{16,})/g;
 const UUID_RE =
@@ -93,6 +95,15 @@ function scanField(value: string, salt: string, hits: string[]): string {
   let out = value;
   let changed = false;
 
+  // Temporarily replace entity IDs with stable sentinels so PHONE_RE cannot
+  // match the hex digit runs inside them.  Restored after all pattern scans.
+  const entityIdSlots: string[] = [];
+  out = out.replace(ENTITY_ID_RE, (m) => {
+    const idx = entityIdSlots.length;
+    entityIdSlots.push(m);
+    return `ENTID${idx}`;
+  });
+
   out = out.replace(EMAIL_RE, (m) => {
     if (isExistingPlaceholder(m)) return m;
     hits.push(`email`);
@@ -122,6 +133,9 @@ function scanField(value: string, salt: string, hits: string[]): string {
     changed = true;
     return "~";
   });
+
+  // Restore entity ID sentinels.
+  out = out.replace(/ENTID(\d+)/g, (_, idx) => entityIdSlots[Number(idx)]);
 
   void changed;
   return out;
