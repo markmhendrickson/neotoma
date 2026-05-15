@@ -19,15 +19,18 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+# Prefer the vendored copy bundled alongside this file so the hook works
+# without any manual pip install, regardless of the system Python environment.
+sys.path.insert(0, str(Path(__file__).parent))
 try:
     from neotoma_client import NeotomaClient, NeotomaClientError  # type: ignore
-except Exception:  # pragma: no cover - import fallback when package not installed
+except Exception:  # pragma: no cover
     NeotomaClient = None  # type: ignore[assignment]
     NeotomaClientError = Exception  # type: ignore[assignment]
 
 
 NEOTOMA_BASE_URL = os.environ.get("NEOTOMA_BASE_URL", "http://127.0.0.1:3080")
-NEOTOMA_TOKEN = os.environ.get("NEOTOMA_TOKEN", "dev-local")
+NEOTOMA_TOKEN = os.environ.get("NEOTOMA_TOKEN") or None
 NEOTOMA_LOG_LEVEL = os.environ.get("NEOTOMA_LOG_LEVEL", "warn").lower()
 
 
