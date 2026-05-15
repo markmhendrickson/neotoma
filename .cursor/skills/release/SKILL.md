@@ -46,7 +46,8 @@ Run before anything else:
 5. **Submodules**: `git submodule status` — surface any that are ahead/behind recorded SHAs.
 6. **Previous tag**: `git tag --sort=-v:refname | head -1` — this is the compare base unless the user specifies `--compare-base`.
 7. **Current package.json version**: Read and display.
-8. **Sandbox deploy readiness**: Confirm `fly.sandbox.toml` exists, `flyctl` is available, and the active Fly account can deploy `neotoma-sandbox`. If Fly auth is missing, report that execute will block at sandbox deployment unless the user explicitly scopes the release to no sandbox.
+8. **Existing GitHub Release check**: Run `gh release view "vX.Y.Z" --json isDraft,tagName 2>/dev/null` for the target version. If a release exists and is a draft, surface this to the user ("Draft release vX.Y.Z already exists on GitHub — execute will update it rather than create a new one."). If a release exists and is **not** a draft (already published), **STOP** and ask the user explicitly before proceeding — updating a published release's notes is a hold point.
+9. **Sandbox deploy readiness**: Confirm `fly.sandbox.toml` exists, `flyctl` is available, and the active Fly account can deploy `neotoma-sandbox`. If Fly auth is missing, report that execute will block at sandbox deployment unless the user explicitly scopes the release to no sandbox.
 
 ### Step 2: Resolve Version
 
@@ -188,10 +189,15 @@ After user confirms, run **every** step below in order through **npm publish and
    ```
    If the last npm publish does not match the previous git tag, use `--compare-base <last_published_tag>`. This must reproduce the same body style shown in Step 3, now with the final tag/commit set.
 
-9. **Create GitHub Release**:
+9. **Create or update GitHub Release draft**:
    ```bash
-   gh release create "vX.Y.Z" --title "vX.Y.Z" --notes-file /tmp/gh-release-vX.Y.Z.md
+   if gh release view "vX.Y.Z" --json isDraft --jq '.isDraft' 2>/dev/null | grep -q true; then
+     gh release edit "vX.Y.Z" --title "vX.Y.Z" --notes-file /tmp/gh-release-vX.Y.Z.md
+   else
+     gh release create "vX.Y.Z" --title "vX.Y.Z" --notes-file /tmp/gh-release-vX.Y.Z.md --draft
+   fi
    ```
+   If a draft already exists it is updated in place; otherwise a new draft is created. In either case the release remains invisible to users and does not trigger the "latest release" pointer until published in step 11b. If `gh release view` returns a release that is **not** a draft, **STOP** — do not overwrite a published release without explicit user approval.
 
 10. **Publish to npm (mandatory for a full release)**:
    From the directory that owns the published `package.json` (repo or workspace root per your monorepo layout):
@@ -231,6 +237,12 @@ After user confirms, run **every** step below in order through **npm publish and
     curl -fsSI https://sandbox.neotoma.io/health | grep -i '^x-neotoma-sandbox: 1'
     ```
     Do not treat the release as complete until the root JSON reports `version: X.Y.Z`, `mode: sandbox`, and `/health` returns `X-Neotoma-Sandbox: 1`. If sandbox deployment fails after npm publish, report the partial-release state and keep working the sandbox failure unless the user explicitly pauses.
+
+11b. **Publish the GitHub Release draft** (after sandbox verified):
+    ```bash
+    gh release edit "vX.Y.Z" --draft=false
+    ```
+    This makes the release public and sets it as the latest release. Only run after sandbox verification passes.
 
 12. **Merge main back to dev** (keep branches in sync):
     ```bash
@@ -325,7 +337,8 @@ If the user says `/release foundation` (or another submodule name):
 - Always describe uncommitted changes concretely — never use a generic placeholder.
 - Do not ship a GitHub Release body that is only an auto-generated commit list.
 - Do not merge or tag without user approval of the preview.
-- For a standard `/release`, **always** run **`npm publish`** after `gh release create` unless the user explicitly confirmed GitHub-only / no registry.
+- For a standard `/release`, always create the GitHub Release as a **draft** (`--draft`) in Step 4.9 and publish it (`gh release edit --draft=false`) only after sandbox verification passes in Step 4.11b.
+- For a standard `/release`, **always** run **`npm publish`** after `gh release create --draft` unless the user explicitly confirmed GitHub-only / no registry.
 - For a standard `/release`, **always** deploy `sandbox.neotoma.io` with `flyctl deploy -c fly.sandbox.toml --remote-only` and verify the live sandbox version unless the user explicitly confirmed no sandbox.
 - For a standard `/release`, **always** run Step 3.5 (Security review lane) before Step 4 and Step 5 (Deployed probes) before declaring complete; the supplement MUST contain a `Security hardening` section linking `docs/releases/in_progress/<TAG>/security_review.md` (and `post_deploy_security_probes.md` after Step 5).
 - For a standard `/release`, **always** verify that all GitHub Actions workflows triggered by the release push (`CI test lanes`, `Deploy site (GitHub Pages)`, and any tag-triggered workflows) reach `success` before declaring complete. A CI failure after push is a partial release — fix and re-verify.
@@ -347,6 +360,10 @@ If the user says `/release foundation` (or another submodule name):
 - Omitting material working-tree changes from the integrated preview (they must appear in-section, not dropped)
 - Treating confirmed uncommitted changes as shipped without committing them first
 - Using only `git log --oneline` as the GitHub Release body
+- Creating the GitHub Release without `--draft` when no draft exists yet (must be a draft until sandbox is verified)
+- Calling `gh release create` when a draft already exists for the tag (must use `gh release edit` to update it)
+- Silently overwriting a published (non-draft) GitHub Release — always stop and ask the user first
+- Publishing the GitHub Release draft (`gh release edit --draft=false`) before sandbox verification passes
 - Ending execute after the GitHub Release without **`npm publish`** when the user confirmed a normal (npm-included) release
 - Ending execute after **`npm publish`** without deploying and verifying `sandbox.neotoma.io` when the user confirmed a normal sandbox-included release
 - Ending the execute turn right after npm web-login / “I signed in” **without** running the **npm web-login checkpoint** (`npm whoami` → publish or explicit `ready` handoff with copy-paste commands)
