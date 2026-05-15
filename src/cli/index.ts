@@ -9197,6 +9197,33 @@ program
     process.exitCode = exitCode;
   });
 
+program
+  .command("preflight")
+  .description(
+    "Check or apply harness permission-file entries for Neotoma (allowlist writer). " +
+      "Without --apply: prints a copy-paste block. With --apply: writes the file(s) directly."
+  )
+  .option("--tool <tool>", "Target harness (claude-code|cursor|codex|openclaw|claude-desktop|windsurf|continue|vscode)")
+  .option("--apply", "Write permission files directly instead of printing a copy-paste block", false)
+  .option("--scope <scope>", "Permission scope for claude-code (project|user|both)", "both")
+  .option("--dry-run", "Plan the write without modifying files", false)
+  .action(async (opts) => {
+    const outputMode = resolveOutputMode();
+    const { runPreflight } = await import("./preflight.js");
+    const report = await runPreflight({
+      tool: opts.tool ?? null,
+      apply: Boolean(opts.apply),
+      dryRun: Boolean(opts.dryRun),
+      cwd: process.cwd(),
+      scope: opts.scope ?? "both",
+    });
+    writeOutput(report, outputMode);
+    if (!report.overall_ok) process.exitCode = 1;
+    if (report.copy_paste_block) {
+      process.stdout.write(`${report.copy_paste_block}\n`);
+    }
+  });
+
 // `neotoma hooks` — lifecycle hook install/uninstall/status. Setup flows call
 // this after MCP is configured; the runtime MCP server never mutates harness
 // hook configuration on its own.
@@ -12948,6 +12975,7 @@ program
   .option("--top <n>", "Number of top candidates to show", "20")
   .option("--mode <mode>", "Discovery mode: quick, guided, full", "quick")
   .option("--output <format>", "Output format: text, json", "text")
+  .option("--harness-transcripts", "Also detect harness transcript files (claude-code, codex, cursor)", false)
   .action(async (
     paths: string[],
     opts: {
@@ -12955,9 +12983,10 @@ program
       top?: string;
       mode?: string;
       output?: string;
+      harnessTranscripts?: boolean;
     },
   ) => {
-    const { discover, formatDiscoveryOutput, formatDiscoveryJson } = await import(
+    const { discover, discoverHarnessTranscripts, formatDiscoveryOutput, formatDiscoveryJson } = await import(
       "./discovery.js"
     );
     const scanPaths =
@@ -12970,6 +12999,16 @@ program
       top: parseInt(opts.top ?? "20", 10),
       mode: (opts.mode ?? "quick") as "quick" | "guided" | "full",
     });
+
+    // Harness transcript detection is always included via discover(), but
+    // --harness-transcripts can be used to run it standalone (no path scan)
+    if (opts.harnessTranscripts && !result.harnessTranscripts) {
+      const homeDir = process.env.HOME ?? process.env.USERPROFILE ?? "";
+      if (homeDir) {
+        result.harnessTranscripts = await discoverHarnessTranscripts(homeDir);
+      }
+    }
+
     if (opts.output === "json") {
       console.log(formatDiscoveryJson(result));
     } else {
@@ -12978,27 +13017,135 @@ program
   });
 
 program
-  .command("ingest-transcript <path>")
+  .command("ingest-transcript [path]")
   .description("Parse and preview a chat transcript for ingestion")
   .option(
     "--source <type>",
-    "Source platform: chatgpt, claude, slack, discord, meeting, other",
+    "Source platform: chatgpt, claude, slack, discord, meeting, claude-code, codex, cursor, other",
   )
   .option("--preview", "Preview extracted data without storing", false)
   .option("--limit <n>", "Process only the N most recent conversations")
   .option("--filter <term>", "Only process conversations containing this term")
+  .option(
+    "--harness <name>",
+    "Import all transcripts from a known harness: claude-code, codex, cursor",
+  )
   .action(async (
-    filePath: string,
+    filePath: string | undefined,
     opts: {
       source?: string;
       preview?: boolean;
       limit?: string;
       filter?: string;
+      harness?: string;
     },
   ) => {
     const { parseTranscript, formatTranscriptPreview } = await import(
       "./transcript_parser.js"
     );
+
+    if (opts.harness) {
+      const homeDir = process.env.HOME ?? process.env.USERPROFILE ?? "";
+      if (!homeDir) {
+        console.error("Cannot determine home directory for harness transcript lookup.");
+        process.exit(1);
+      }
+
+      const harness = opts.harness as "claude-code" | "codex" | "cursor";
+      let harnessFiles: string[] = [];
+
+      if (harness === "claude-code") {
+        try {
+          const { discoverHarnessTranscripts } = await import("./discovery.js");
+          const summaries = await discoverHarnessTranscripts(homeDir);
+          const summary = summaries.find((s) => s.harness === "claude-code");
+          harnessFiles = summary?.paths ?? [];
+        } catch {
+          console.error("Failed to find Claude Code transcripts.");
+          process.exit(1);
+        }
+      } else if (harness === "codex") {
+        const { discoverHarnessTranscripts } = await import("./discovery.js");
+        const summaries = await discoverHarnessTranscripts(homeDir);
+        const summary = summaries.find((s) => s.harness === "codex");
+        harnessFiles = summary?.paths ?? [];
+      } else if (harness === "cursor") {
+        const { discoverHarnessTranscripts } = await import("./discovery.js");
+        const summaries = await discoverHarnessTranscripts(homeDir);
+        const summary = summaries.find((s) => s.harness === "cursor");
+        harnessFiles = summary?.paths ?? [];
+      } else {
+        console.error(`Unknown harness: ${harness}. Use claude-code, codex, or cursor.`);
+        process.exit(1);
+      }
+
+      if (harnessFiles.length === 0) {
+        console.log(`No ${harness} transcript files found.`);
+        return;
+      }
+
+      // Apply limit: take most recent N files by mtime
+      const limit = opts.limit ? parseInt(opts.limit, 10) : undefined;
+      let files = harnessFiles;
+      if (limit && limit > 0) {
+        const { stat } = await import("node:fs/promises");
+        const withMtime = await Promise.all(
+          files.map(async (f) => {
+            try {
+              const s = await stat(f);
+              return { path: f, mtime: s.mtime.getTime() };
+            } catch {
+              return { path: f, mtime: 0 };
+            }
+          }),
+        );
+        withMtime.sort((a, b) => b.mtime - a.mtime);
+        files = withMtime.slice(0, limit).map((x) => x.path);
+      }
+
+      let totalConversations = 0;
+      let totalMessages = 0;
+
+      for (const f of files) {
+        try {
+          const result = await parseTranscript({
+            filePath: f,
+            source: harness as any,
+            filter: opts.filter,
+          });
+          if (result.conversations.length > 0) {
+            totalConversations += result.conversations.length;
+            totalMessages += result.totalMessages;
+            if (opts.preview) {
+              console.log(formatTranscriptPreview(result));
+            }
+          }
+        } catch {
+          // Skip unreadable files
+        }
+      }
+
+      console.log(
+        `\n${harness}: ${files.length} file${files.length === 1 ? "" : "s"} scanned, ` +
+        `${totalConversations} conversation${totalConversations === 1 ? "" : "s"}, ` +
+        `${totalMessages} message${totalMessages === 1 ? "" : "s"}.`,
+      );
+
+      if (!opts.preview) {
+        console.log(
+          `\nTo store all ${harness} transcripts, pass each file to:\n` +
+            `  neotoma store --file-path <path>\n` +
+            "\nOr use the MCP store action with parsed entities.",
+        );
+      }
+      return;
+    }
+
+    if (!filePath) {
+      console.error("Either provide a file path or use --harness <name>.");
+      process.exit(1);
+    }
+
     const result = await parseTranscript({
       filePath,
       source: opts.source as any,

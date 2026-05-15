@@ -57,19 +57,27 @@ NOT improvise shell introspection (`python3 -c`, `grep -r`, `ls`, `cat`, `jq`,
 permission prompt; the canonical commands collapse the entire flow into two
 approvals: `neotoma *` (wildcard) and a one-time `npm install -g neotoma`.
 
-**Step 2.1 — Permissions pre-flight (user action)**
+**Step 2.1 — Permissions pre-flight**
 
-Before running any command, ask the user to paste the allowlist snippet for
-their current harness from the
-[Permissions pre-flight](https://neotoma.io/install#permissions-preflight)
-block into the appropriate file:
+Neotoma needs one wildcard allow entry so subsequent commands run without
+per-command prompts.
 
+Run `neotoma preflight --tool <current_tool> --apply` to write the entry
+directly. If the user prefers to apply it manually, run
+`neotoma preflight --tool <current_tool>` (no `--apply`) to print a single
+copy-paste block.
+
+Harness file locations for manual reference:
 - Claude Code: `.claude/settings.local.json` (project) or `~/.claude/settings.json` (user)
 - Cursor: `.cursor/allowlist.json` (project)
 - Codex: `~/.codex/config.toml` (user)
-- OpenClaw: handled by the native plugin; no allowlist needed
+- OpenClaw: handled by the native plugin; no allowlist file needed
 
-If the user declines the preflight, every command below may prompt individually.
+The `preflight` command is idempotent — re-running it after the entry is
+already present reports `already_ok: true` and makes no changes.
+
+If `neotoma` is not yet on PATH, skip this step and the install step (Step 2.2)
+will place the binary; then return here.
 
 **Step 2.2 — Install the binary (if needed)**
 
@@ -234,6 +242,46 @@ Detected 3 likely high-value domains:
 2. Zurich insurance (~/Notes/Insurance/) -- 3 files
 3. Neotoma docs (~/repos/neotoma/docs/) -- 6 files
 ```
+
+**Harness transcript detection (always run as part of discovery):**
+
+`neotoma discover` automatically checks well-known harness transcript paths alongside the regular file scan. You can also run it explicitly:
+
+```bash
+neotoma discover --harness-transcripts
+```
+
+This checks for existing AI harness chat history at the following locations:
+- **Claude Code** — `~/.claude/projects/**/*.jsonl`
+- **Codex** — `~/.codex/archived_sessions/*.jsonl`
+- **Cursor** — `~/.cursor/chats/*/store.db` (per-workspace SQLite) and `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb` (global SQLite)
+
+Example output when harness transcripts are found:
+
+```
+Harness transcripts detected:
+  claude-code: 424 files (2024-01 → 2026-05), ~/.claude/projects/
+  cursor:      3 dbs (via store.db + state.vscdb), ~/.cursor/chats/
+  codex:       11 files (2026-03 → 2026-05), ~/.codex/archived_sessions/
+
+Use `neotoma ingest-transcript --harness <name>` to preview and import.
+```
+
+**Previewing and importing harness transcripts:**
+
+Use `--preview` to inspect transcripts before storing:
+
+```bash
+neotoma ingest-transcript --harness claude-code --limit 5 --preview
+neotoma ingest-transcript --harness codex --preview
+neotoma ingest-transcript --harness cursor --limit 20 --preview
+```
+
+**Consent requirement:** Follow the same preview contract as all other activation ingests (step 4 below). Show the candidate list and confirm with the user before any bulk import. Pass `observation_source: import` when storing.
+
+**Idempotency:** Conversations already imported (matched by `conversation_id`) are skipped automatically.
+
+**Including harness transcripts in the step 3 proposal:** If harness transcripts are detected, include them as a separate cluster in the step 3 proposal alongside file discovery results.
 
 Also gather candidate data from existing context and available sources per the original migration strategy (see [Migration from existing tools](#migration-from-existing-tools) below).
 
@@ -590,10 +638,10 @@ only two approvals:
 1. `Bash(neotoma:*)` / `neotoma *` wildcard
 2. A one-time `npm install -g neotoma`
 
-The per-harness allowlist snippets live in the
-[Permissions pre-flight](https://neotoma.io/install#permissions-preflight)
-section of the site. When the user pastes the correct snippet before the agent
-runs any command, the agent never needs individual approvals for `neotoma init`,
+Run `neotoma preflight --tool <harness> --apply` at the start of the install
+flow to write the allowlist entry directly, or `neotoma preflight --tool <harness>`
+(no `--apply`) to print a copy-paste block for manual application. Either path
+ensures the agent never needs individual approvals for `neotoma init`,
 `neotoma doctor`, `neotoma setup`, `neotoma mcp …`, or any other `neotoma`
 subcommand.
 

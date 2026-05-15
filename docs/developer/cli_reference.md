@@ -369,6 +369,22 @@ After the JSON report, `neotoma setup` always emits two plain-text lines to stdo
 
 Use `neotoma setup --tool <harness> --yes` for the normal greenfield path. Use `neotoma mcp config` or `neotoma cli config` when only one layer needs repair.
 
+### Preflight
+
+- `neotoma preflight`: Check or apply harness permission-file entries for Neotoma.
+  - `--tool <tool>`: Target harness. Supports `claude-code`, `cursor`, `codex`, `openclaw`, `claude-desktop`, `windsurf`, `continue`, `vscode`.
+  - `--apply`: Write the allowlist file(s) directly instead of printing a copy-paste block.
+  - `--scope <project|user|both>`: Permission scope for `claude-code` (default: `both` when `--apply` is set).
+  - `--dry-run`: Plan the write without modifying files.
+
+Without `--apply`, prints a single copy-paste block describing exactly what to add to the harness config file. This eliminates the multi-prompt back-and-forth of the old setup flow.
+
+With `--apply`, delegates to `writePermissionsForTool()` and writes the allowlist file(s) directly. `claude-code` writes both project (`.claude/settings.local.json`) and user (`~/.claude/settings.json`) scopes by default.
+
+Tools that do not expose a command allowlist (`claude-desktop`, `openclaw`, `windsurf`, `continue`, `vscode`) always return an informational message pointing to `neotoma setup`.
+
+The structured report includes `tool`, `apply`, `dry_run`, `patches[]`, `already_ok`, `copy_paste_block`, and `overall_ok`.
+
 ### Reset
 
 - `neotoma reset`: Reset local Neotoma state to a clean slate.

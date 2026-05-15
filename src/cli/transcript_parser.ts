@@ -813,10 +813,12 @@ export function conversationsToEntities(
       ended_at: conv.updatedAt,
     });
 
-    for (const msg of conv.messages) {
+    for (let i = 0; i < conv.messages.length; i++) {
+      const msg = conv.messages[i];
       const role = msg.role === "unknown" ? "user" : msg.role;
       entities.push({
         entity_type: "conversation_message",
+        turn_key: `${conv.id}:${i}`,
         role,
         sender_kind: role,
         content: msg.content,

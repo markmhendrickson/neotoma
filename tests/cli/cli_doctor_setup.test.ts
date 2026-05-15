@@ -19,6 +19,7 @@ import {
   toolFromString,
 } from "../../src/cli/permissions.ts";
 import { runSetup, buildVerifyLine, PRIVACY_TRANSPORT_SUMMARY } from "../../src/cli/setup.ts";
+import { runPreflight } from "../../src/cli/preflight.ts";
 import { applyCliInstructions, scanAgentInstructions } from "../../src/cli/agent_instructions_scan.ts";
 import { createDefaultSetupRunners } from "../../src/cli/setup_runners.ts";
 import { detectCurrentToolHint, detectDataDirRisks, runDoctor } from "../../src/cli/doctor.ts";
@@ -596,6 +597,115 @@ describe("buildVerifyLine", () => {
       expect(report.verify_line).toMatch(/^Neotoma installed at .+ \(resolved via .+; v.+; data_dir=.+; mcp=.+\)$/);
       expect(report.privacy_transport_summary).toContain("local stdio MCP");
       expect(report.privacy_transport_summary).toContain("no network egress");
+    } finally {
+      await fs.rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("runPreflight", () => {
+  async function mkTmp(prefix: string): Promise<string> {
+    return fs.mkdtemp(path.join(os.tmpdir(), `${prefix}-`));
+  }
+
+  it("returns overall_ok=false and null patches when no tool is specified", async () => {
+    const report = await runPreflight({});
+    expect(report.overall_ok).toBe(false);
+    expect(report.tool).toBeNull();
+    expect(report.patches).toHaveLength(0);
+  });
+
+  it("returns overall_ok=false for unknown tool string", async () => {
+    const report = await runPreflight({ tool: "not-a-tool" });
+    expect(report.overall_ok).toBe(false);
+    expect(report.tool).toBeNull();
+  });
+
+  it("prints copy-paste block for claude-code without --apply", async () => {
+    const report = await runPreflight({ tool: "claude-code" });
+    expect(report.overall_ok).toBe(true);
+    expect(report.apply).toBe(false);
+    expect(report.copy_paste_block).toMatch(/Bash\(neotoma:\*\)/);
+    expect(report.patches).toHaveLength(0);
+  });
+
+  it("prints copy-paste block for cursor without --apply", async () => {
+    const report = await runPreflight({ tool: "cursor" });
+    expect(report.overall_ok).toBe(true);
+    expect(report.copy_paste_block).toMatch(/neotoma \*/);
+    expect(report.patches).toHaveLength(0);
+  });
+
+  it("prints copy-paste block for codex without --apply", async () => {
+    const report = await runPreflight({ tool: "codex" });
+    expect(report.overall_ok).toBe(true);
+    expect(report.copy_paste_block).toMatch(/\[approvals\]/);
+    expect(report.patches).toHaveLength(0);
+  });
+
+  it("prints informational block for tools without allowlist files", async () => {
+    for (const tool of ["claude-desktop", "openclaw", "windsurf", "continue", "vscode"] as const) {
+      const report = await runPreflight({ tool });
+      expect(report.overall_ok).toBe(true);
+      expect(report.copy_paste_block).toBeTruthy();
+      expect(report.patches).toHaveLength(0);
+    }
+  });
+
+  it("applies permissions for claude-code when --apply is set", async () => {
+    const cwd = await mkTmp("ntm-preflight-claude");
+    try {
+      const report = await runPreflight({ tool: "claude-code", apply: true, scope: "project", cwd });
+      expect(report.overall_ok).toBe(true);
+      expect(report.apply).toBe(true);
+      expect(report.copy_paste_block).toBeNull();
+      expect(report.patches.length).toBeGreaterThan(0);
+      expect(report.patches.some((p) => p.changed)).toBe(true);
+      // Verify the file was written
+      const written = await fs.readFile(path.join(cwd, ".claude", "settings.local.json"), "utf8");
+      const parsed = JSON.parse(written) as { permissions?: { allow?: string[] } };
+      expect(parsed.permissions?.allow).toContain("Bash(neotoma:*)");
+    } finally {
+      await fs.rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("applies permissions for cursor when --apply is set", async () => {
+    const cwd = await mkTmp("ntm-preflight-cursor");
+    try {
+      const report = await runPreflight({ tool: "cursor", apply: true, cwd });
+      expect(report.overall_ok).toBe(true);
+      expect(report.patches.length).toBeGreaterThan(0);
+      const written = await fs.readFile(path.join(cwd, ".cursor", "allowlist.json"), "utf8");
+      const parsed = JSON.parse(written) as { allow?: string[] };
+      expect(parsed.allow).toContain("neotoma *");
+    } finally {
+      await fs.rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("reports already_ok=true when permissions are already present", async () => {
+    const cwd = await mkTmp("ntm-preflight-already");
+    try {
+      // Apply once
+      await runPreflight({ tool: "cursor", apply: true, cwd });
+      // Apply again
+      const report = await runPreflight({ tool: "cursor", apply: true, cwd });
+      expect(report.overall_ok).toBe(true);
+      expect(report.already_ok).toBe(true);
+      expect(report.patches.every((p) => !p.changed)).toBe(true);
+    } finally {
+      await fs.rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("dry-run does not write files", async () => {
+    const cwd = await mkTmp("ntm-preflight-dry");
+    try {
+      const report = await runPreflight({ tool: "cursor", apply: true, dryRun: true, cwd });
+      expect(report.dry_run).toBe(true);
+      const exists = await fs.access(path.join(cwd, ".cursor", "allowlist.json")).then(() => true).catch(() => false);
+      expect(exists).toBe(false);
     } finally {
       await fs.rm(cwd, { recursive: true, force: true });
     }

@@ -142,4 +142,104 @@ describe("CLI onboarding commands", () => {
       expect(text).toContain("Total messages: 2");
     });
   });
+
+  it("ingest-transcript --harness claude-code --preview reports count", async () => {
+    await withTempHome(async (homeDir) => {
+      const projectDir = path.join(homeDir, ".claude", "projects", "proj-abc");
+      await fs.mkdir(projectDir, { recursive: true });
+
+      const lines = [
+        JSON.stringify({ type: "user", message: { role: "user", content: "Hello" } }),
+        JSON.stringify({ type: "assistant", message: { role: "assistant", content: "Hi" } }),
+      ].join("\n");
+      await fs.writeFile(path.join(projectDir, "conv-001.jsonl"), lines);
+
+      const { runCli } = await loadCli();
+      const stdout = captureLogs();
+
+      try {
+        await runCli([
+          "node",
+          "cli",
+          "ingest-transcript",
+          "--harness",
+          "claude-code",
+          "--preview",
+          "--no-log-file",
+        ]);
+      } finally {
+        stdout.restore();
+      }
+
+      const text = stdout.output.join("");
+      expect(text).toContain("claude-code");
+      expect(text).toMatch(/1 file/);
+    });
+  });
+
+  it("ingest-transcript --harness codex --preview reports count", async () => {
+    await withTempHome(async (homeDir) => {
+      const codexDir = path.join(homeDir, ".codex", "archived_sessions");
+      await fs.mkdir(codexDir, { recursive: true });
+
+      const lines = [
+        JSON.stringify({
+          timestamp: "2026-03-01T10:00:00Z",
+          type: "session_meta",
+          payload: { id: "s1", title: "Test session" },
+        }),
+        JSON.stringify({
+          timestamp: "2026-03-01T10:00:01Z",
+          type: "response_item",
+          payload: { type: "message", role: "user", content: [{ type: "text", text: "Go" }] },
+        }),
+      ].join("\n");
+      await fs.writeFile(path.join(codexDir, "s1.jsonl"), lines);
+
+      const { runCli } = await loadCli();
+      const stdout = captureLogs();
+
+      try {
+        await runCli([
+          "node",
+          "cli",
+          "ingest-transcript",
+          "--harness",
+          "codex",
+          "--preview",
+          "--no-log-file",
+        ]);
+      } finally {
+        stdout.restore();
+      }
+
+      const text = stdout.output.join("");
+      expect(text).toContain("codex");
+      expect(text).toMatch(/1 file/);
+    });
+  });
+
+  it("ingest-transcript --harness with no files reports zero", async () => {
+    await withTempHome(async () => {
+      const { runCli } = await loadCli();
+      const stdout = captureLogs();
+
+      try {
+        await runCli([
+          "node",
+          "cli",
+          "ingest-transcript",
+          "--harness",
+          "codex",
+          "--preview",
+          "--no-log-file",
+        ]);
+      } finally {
+        stdout.restore();
+      }
+
+      const text = stdout.output.join("");
+      expect(text).toContain("No codex transcript files found.");
+    });
+  });
 });
