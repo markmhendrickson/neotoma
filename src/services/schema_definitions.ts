@@ -901,7 +901,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
 
   conversation: {
     entity_type: "conversation",
-    schema_version: "1.3",
+    schema_version: "1.4",
     metadata: {
       label: "Conversation",
       description: "Chat conversation container entity.",
@@ -918,7 +918,36 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         // docs/foundation/entity_resolution.md and
         // .cursor/plans/conversation_entity_collision_fix_aef8ba0d.plan.md.
         conversation_id: { type: "string", required: false },
+        // v1.4: alternate stable session identifier used by some callers
+        // (e.g. hook-based stores). Accepted as a canonical_name_fields rule
+        // alongside conversation_id so either alone is sufficient for
+        // deterministic identity. See issue #138.
+        session_id: { type: "string", required: false },
         title: { type: "string", required: false, preserveCase: true },
+        // v1.4: free-text session summary written by agent or human.
+        summary: { type: "string", required: false, preserveCase: true },
+        // v1.4: temporal bounds of the conversation session.
+        started_at: { type: "date", required: false },
+        ended_at: { type: "date", required: false },
+        // v1.4: session date (day-level, for filtering/display).
+        date: { type: "date", required: false },
+        // v1.4: participant count and message count for aggregate views.
+        participant_count: { type: "number", required: false },
+        message_count: { type: "number", required: false },
+        // v1.4: names or identifiers of participants.
+        participants: { type: "array", required: false },
+        // v1.4: topics covered in the conversation.
+        topics: { type: "array", required: false },
+        // v1.4: decisions made during the conversation.
+        decisions: { type: "array", required: false },
+        // v1.4: open tasks identified but not yet completed.
+        open_tasks: { type: "array", required: false },
+        // v1.4: model or agent harness used (e.g. claude-sonnet-4-5, gpt-4o).
+        model: { type: "string", required: false },
+        // v1.4: agent harness / tool name (e.g. claude_code, cursor).
+        tool: { type: "string", required: false },
+        // v1.4: canonical URL of the conversation on the source platform.
+        source_url: { type: "string", required: false },
         // Phase 1: identifies the participant topology of the conversation so
         // downstream views can distinguish human<->agent chats from
         // agent<->agent (A2A) or multi-party threads. Optional; defaults to
@@ -936,16 +965,44 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         scope_summary: { type: "string", required: false, preserveCase: true },
       },
       // v1.2+: session-scoped identity via caller-supplied `conversation_id`.
+      // v1.4+: `session_id` accepted as an alternate single-field rule so
+      // callers that only supply session_id can still resolve deterministically.
       // When absent, resolution falls through to the heuristic path; the
       // schema-level `name_collision_policy: reject` (R2) then converts that
       // heuristic match into ERR_STORE_RESOLUTION_FAILED instead of silently
       // collapsing unrelated sessions by `title`.
-      canonical_name_fields: ["conversation_id"],
+      canonical_name_fields: ["conversation_id", "session_id"],
       name_collision_policy: "reject",
+      // v1.4: emit timeline events when temporal bounds are stored.
+      temporal_fields: [
+        { field: "started_at", event_type: "conversation_started" },
+        { field: "ended_at", event_type: "conversation_ended" },
+      ],
+      agent_instructions:
+        "A conversation entity represents a single AI conversation session. " +
+        "Use the title field as the primary display name. " +
+        "The conversation_id or session_id field holds the external/platform identifier — " +
+        "always supply one of these when storing so the entity resolves deterministically " +
+        "rather than falling through to the heuristic path. " +
+        "The summary field should capture the high-level purpose and outcome of the session. " +
+        "Link related entities observed during the conversation using REFERS_TO relationships.",
     },
     reducer_config: {
       merge_policies: {
         title: { strategy: "highest_priority", tie_breaker: "source_priority" },
+        summary: { strategy: "highest_priority", tie_breaker: "source_priority" },
+        started_at: { strategy: "last_write" },
+        ended_at: { strategy: "last_write" },
+        date: { strategy: "last_write" },
+        participant_count: { strategy: "last_write" },
+        message_count: { strategy: "last_write" },
+        participants: { strategy: "merge_array" },
+        topics: { strategy: "merge_array" },
+        decisions: { strategy: "merge_array" },
+        open_tasks: { strategy: "merge_array" },
+        model: { strategy: "last_write" },
+        tool: { strategy: "last_write" },
+        source_url: { strategy: "last_write" },
         thread_kind: { strategy: "last_write" },
         client_name: { strategy: "last_write" },
         harness: { strategy: "last_write" },
