@@ -40,6 +40,16 @@ export interface DiscoveryResult {
   clusters: DomainCluster[];
   totalFilesScanned: number;
   totalCandidates: number;
+  harnessTranscripts?: HarnessTranscriptSummary[];
+}
+
+export interface HarnessTranscriptSummary {
+  harness: "claude-code" | "codex" | "cursor";
+  paths: string[];
+  fileCount: number;
+  estimatedDateRange: { earliest: Date; latest: Date } | null;
+  sampleTitles: string[];
+  requiresSqlite?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -348,6 +358,182 @@ function clusterByDirectory(files: ScoredFile[]): DomainCluster[] {
 }
 
 // ---------------------------------------------------------------------------
+// Harness transcript discovery
+// ---------------------------------------------------------------------------
+
+async function globFiles(pattern: string): Promise<string[]> {
+  // Simple glob implementation for known patterns: dir/**/*.ext or dir/*.ext
+  const results: string[] = [];
+
+  if (pattern.includes("/**/*.")) {
+    const parts = pattern.split("/**/");
+    const baseDir = parts[0];
+    const ext = parts[1].replace("*", "");
+
+    const walk = async (dir: string): Promise<void> => {
+      let entries: import("node:fs").Dirent[];
+      try {
+        entries = await fs.readdir(dir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const entry of entries) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          await walk(full);
+        } else if (entry.isFile() && entry.name.endsWith(ext)) {
+          results.push(full);
+        }
+      }
+    }
+
+    try {
+      await walk(baseDir);
+    } catch {
+      // Directory doesn't exist
+    }
+  } else if (pattern.includes("/*.")) {
+    const dir = path.dirname(pattern);
+    const ext = path.extname(pattern);
+    try {
+      const entries = await fs.readdir(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isFile() && entry.name.endsWith(ext)) {
+          results.push(path.join(dir, entry.name));
+        }
+      }
+    } catch {
+      // Directory doesn't exist
+    }
+  } else {
+    // Exact path
+    try {
+      await fs.stat(pattern);
+      results.push(pattern);
+    } catch {
+      // File doesn't exist
+    }
+  }
+
+  return results;
+}
+
+async function findCursorStoreDbs(homeDir: string): Promise<string[]> {
+  const results: string[] = [];
+  const cursorChatsDir = path.join(homeDir, ".cursor", "chats");
+
+  async function walk(dir: string, depth: number): Promise<void> {
+    if (depth > 3) return;
+    let entries: import("node:fs").Dirent[];
+    try {
+      entries = await fs.readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        await walk(full, depth + 1);
+      } else if (entry.isFile() && entry.name === "store.db") {
+        results.push(full);
+      }
+    }
+  }
+
+  try {
+    await walk(cursorChatsDir, 0);
+  } catch {
+    // Directory doesn't exist
+  }
+
+  return results;
+}
+
+export async function discoverHarnessTranscripts(homeDir: string): Promise<HarnessTranscriptSummary[]> {
+  const summaries: HarnessTranscriptSummary[] = [];
+
+  // Claude Code
+  const claudeCodeFiles = await globFiles(path.join(homeDir, ".claude", "projects", "**", "*.jsonl"));
+  if (claudeCodeFiles.length > 0) {
+    const stats = await Promise.all(
+      claudeCodeFiles.map((f) => fs.stat(f).catch(() => null)),
+    );
+    const mtimes = stats.filter(Boolean).map((s) => s!.mtime);
+    const sorted = [...mtimes].sort((a, b) => a.getTime() - b.getTime());
+
+    summaries.push({
+      harness: "claude-code",
+      paths: claudeCodeFiles,
+      fileCount: claudeCodeFiles.length,
+      estimatedDateRange: sorted.length > 0
+        ? { earliest: sorted[0], latest: sorted[sorted.length - 1] }
+        : null,
+      sampleTitles: claudeCodeFiles.slice(0, 3).map((f) =>
+        path.basename(path.dirname(f)) + "/" + path.basename(f),
+      ),
+    });
+  }
+
+  // Codex
+  const codexFiles = await globFiles(path.join(homeDir, ".codex", "archived_sessions", "*.jsonl"));
+  if (codexFiles.length > 0) {
+    const stats = await Promise.all(
+      codexFiles.map((f) => fs.stat(f).catch(() => null)),
+    );
+    const mtimes = stats.filter(Boolean).map((s) => s!.mtime);
+    const sorted = [...mtimes].sort((a, b) => a.getTime() - b.getTime());
+
+    summaries.push({
+      harness: "codex",
+      paths: codexFiles,
+      fileCount: codexFiles.length,
+      estimatedDateRange: sorted.length > 0
+        ? { earliest: sorted[0], latest: sorted[sorted.length - 1] }
+        : null,
+      sampleTitles: codexFiles.slice(0, 3).map((f) => path.basename(f, ".jsonl")),
+    });
+  }
+
+  // Cursor — per-workspace store.db files + global state.vscdb
+  const cursorStoreDbs = await findCursorStoreDbs(homeDir);
+  const cursorStateVscdb = path.join(
+    homeDir,
+    "Library",
+    "Application Support",
+    "Cursor",
+    "User",
+    "globalStorage",
+    "state.vscdb",
+  );
+
+  const stateVscdbExists = await fs.stat(cursorStateVscdb).then(() => true).catch(() => false);
+  const cursorPaths = [...cursorStoreDbs, ...(stateVscdbExists ? [cursorStateVscdb] : [])];
+
+  if (cursorPaths.length > 0) {
+    const stats = await Promise.all(
+      cursorPaths.map((f) => fs.stat(f).catch(() => null)),
+    );
+    const mtimes = stats.filter(Boolean).map((s) => s!.mtime);
+    const sorted = [...mtimes].sort((a, b) => a.getTime() - b.getTime());
+
+    summaries.push({
+      harness: "cursor",
+      paths: cursorPaths,
+      fileCount: cursorPaths.length,
+      estimatedDateRange: sorted.length > 0
+        ? { earliest: sorted[0], latest: sorted[sorted.length - 1] }
+        : null,
+      sampleTitles: cursorStoreDbs.slice(0, 3).map((f) =>
+        path.basename(path.dirname(f)),
+      ),
+      requiresSqlite: true,
+    });
+  }
+
+  return summaries;
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -376,10 +562,14 @@ export async function discover(options: DiscoveryOptions): Promise<DiscoveryResu
   const clusters = clusterByDirectory(topFiles);
   const topClusters = clusters.slice(0, options.top);
 
+  const homeDir = process.env.HOME ?? process.env.USERPROFILE ?? "";
+  const harnessTranscripts = homeDir ? await discoverHarnessTranscripts(homeDir) : [];
+
   return {
     clusters: topClusters,
     totalFilesScanned: totalScanned,
     totalCandidates: allFiles.length,
+    harnessTranscripts: harnessTranscripts.length > 0 ? harnessTranscripts : undefined,
   };
 }
 
@@ -420,6 +610,25 @@ export function formatDiscoveryOutput(result: DiscoveryResult): string {
   lines.push(
     `Scanned ${result.totalFilesScanned} files, found ${result.totalCandidates} candidates.`,
   );
+
+  if (result.harnessTranscripts && result.harnessTranscripts.length > 0) {
+    lines.push("");
+    lines.push("Harness transcripts detected:");
+    for (const h of result.harnessTranscripts) {
+      const homeDir = process.env.HOME ?? process.env.USERPROFILE ?? "";
+      const dateRange = h.estimatedDateRange
+        ? ` (${h.estimatedDateRange.earliest.toISOString().slice(0, 7)} → ${h.estimatedDateRange.latest.toISOString().slice(0, 7)})`
+        : "";
+      const countLabel = h.harness === "cursor" && h.fileCount === 1
+        ? "1 db"
+        : `${h.fileCount} ${h.harness === "cursor" ? "db" + (h.fileCount > 1 ? "s" : "") : "file" + (h.fileCount > 1 ? "s" : "")}`;
+      const sampleDir = h.paths[0] ? path.dirname(h.paths[0]).replace(homeDir, "~") : "";
+      lines.push(`  ${h.harness}: ${countLabel}${dateRange}, ${sampleDir}`);
+    }
+    lines.push("");
+    lines.push("Use `neotoma ingest-transcript --harness <name>` to preview and import.");
+  }
+
   return lines.join("\n");
 }
 
@@ -445,6 +654,19 @@ export function formatDiscoveryJson(result: DiscoveryResult): string {
       })),
       totalFilesScanned: result.totalFilesScanned,
       totalCandidates: result.totalCandidates,
+      harnessTranscripts: result.harnessTranscripts?.map((h) => ({
+        harness: h.harness,
+        fileCount: h.fileCount,
+        paths: h.paths,
+        estimatedDateRange: h.estimatedDateRange
+          ? {
+              earliest: h.estimatedDateRange.earliest.toISOString(),
+              latest: h.estimatedDateRange.latest.toISOString(),
+            }
+          : null,
+        sampleTitles: h.sampleTitles,
+        requiresSqlite: h.requiresSqlite ?? false,
+      })),
     },
     null,
     2,
