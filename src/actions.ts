@@ -9444,6 +9444,25 @@ function tryListen(
       const addr = server.address();
       const boundPort =
         addr && typeof addr === "object" && typeof addr.port === "number" ? addr.port : port;
+
+      // Extend keep-alive so MCP SSE streams and long-lived Inspector
+      // connections survive behind reverse proxies (Cloudflare Tunnel,
+      // ngrok, etc.). Node 18+ defaults keepAliveTimeout to 5 s, which is
+      // shorter than most proxy idle timeouts (60–300 s) and causes the
+      // proxy to receive a TCP RST mid-stream, triggering a 502/reconnect
+      // cycle that looks like "bearer token expired." headersTimeout must
+      // exceed keepAliveTimeout to avoid a Node bug where the socket is
+      // closed before the headers timeout fires.
+      // Both values are configurable via env vars (milliseconds).
+      server.keepAliveTimeout = parseInt(
+        process.env.NEOTOMA_KEEPALIVE_TIMEOUT_MS ?? "120000",
+        10
+      );
+      server.headersTimeout = parseInt(
+        process.env.NEOTOMA_HEADERS_TIMEOUT_MS ?? "125000",
+        10
+      );
+
       resolve({ server, port: boundPort });
     });
     server.once("error", (err: NodeJS.ErrnoException) => {
