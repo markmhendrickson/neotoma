@@ -489,7 +489,13 @@ export class SchemaRecommendationService {
           logger.error(
             `[AUTO_ENHANCE] Idempotency key collision - enhancement already in progress`,
           );
-          return null;
+          // Return the existing record rather than null so callers get a usable result
+          const { data: existingRec } = await db
+            .from("schema_recommendations")
+            .select("*")
+            .eq("idempotency_key", idempotencyKey)
+            .single();
+          return existingRec ?? null;
         }
         throw recError;
       }
