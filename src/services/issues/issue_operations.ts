@@ -912,6 +912,21 @@ export async function submitIssue(
   const entityId = structuredEntityIdAt(storeResult, 0);
   const conversationId = structuredEntityIdAt(storeResult, 1);
 
+  // Create REFERS_TO relationships from the issue entity to caller-provided entity IDs.
+  const entityIdsToLink = Array.isArray(params.entity_ids_to_link)
+    ? params.entity_ids_to_link.filter((id): id is string => typeof id === "string" && id.trim().length > 0)
+    : [];
+  if (entityId && entityIdsToLink.length > 0) {
+    const relationships: import("../../core/operations.js").CreateRelationshipInput[] = entityIdsToLink.map(
+      (targetId) => ({
+        relationship_type: "REFERS_TO" as const,
+        source_entity_id: entityId,
+        target_entity_id: targetId.trim(),
+      }),
+    );
+    await ops.createRelationships({ relationships });
+  }
+
   let remoteSubmissionErrorMessage: string | null = null;
   if (remoteSubmissionAttempted && !submittedToNeotoma) {
     const cause = remoteSubmissionError?.message ?? "unknown error";
@@ -1052,6 +1067,22 @@ export async function addIssueMessage(
       author: "remote",
       idempotencyKey: `issue-shadow-message-activity-${issueEntityId}-${remoteMessageEntityId || now}`,
     });
+
+    // Create REFERS_TO relationships from the issue entity to caller-provided entity IDs.
+    const entityIdsToLinkRemote = Array.isArray(params.entity_ids_to_link)
+      ? params.entity_ids_to_link.filter((id): id is string => typeof id === "string" && id.trim().length > 0)
+      : [];
+    if (entityIdsToLinkRemote.length > 0) {
+      const rels: import("../../core/operations.js").CreateRelationshipInput[] = entityIdsToLinkRemote.map(
+        (targetId) => ({
+          relationship_type: "REFERS_TO" as const,
+          source_entity_id: issueEntityId,
+          target_entity_id: targetId.trim(),
+        }),
+      );
+      await ops.createRelationships({ relationships: rels });
+    }
+
     return {
       github_comment_id: null,
       message_entity_id: remoteMessageEntityId,
@@ -1115,6 +1146,21 @@ export async function addIssueMessage(
       idempotencyKey: `issue-message-activity-${issueEntityId}-${commentKey}`,
     }),
   );
+
+  // Create REFERS_TO relationships from the issue entity to caller-provided entity IDs.
+  const entityIdsToLink = Array.isArray(params.entity_ids_to_link)
+    ? params.entity_ids_to_link.filter((id): id is string => typeof id === "string" && id.trim().length > 0)
+    : [];
+  if (entityIdsToLink.length > 0) {
+    const rels: import("../../core/operations.js").CreateRelationshipInput[] = entityIdsToLink.map(
+      (targetId) => ({
+        relationship_type: "REFERS_TO" as const,
+        source_entity_id: issueEntityId,
+        target_entity_id: targetId.trim(),
+      }),
+    );
+    await ops.createRelationships({ relationships: rels });
+  }
 
   const remoteSubmissionErrorMessage =
     remoteSubmissionAttempted && !submittedToNeotoma

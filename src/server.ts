@@ -980,6 +980,7 @@ export class NeotomaServer {
       reporter_app_version: z.string().optional(),
       reporter_ci_run_id: z.string().optional(),
       reporter_patch_source_id: z.string().optional(),
+      entity_ids_to_link: z.array(z.string().min(1)).optional(),
     });
     const parsed = schema.parse(args ?? {});
 
@@ -1002,6 +1003,7 @@ export class NeotomaServer {
         reporter_app_version: parsed.reporter_app_version,
         reporter_ci_run_id: parsed.reporter_ci_run_id,
         reporter_patch_source_id: parsed.reporter_patch_source_id,
+        ...(parsed.entity_ids_to_link ? { entity_ids_to_link: parsed.entity_ids_to_link } : {}),
       });
 
       return this.buildTextResponse({
@@ -1169,6 +1171,7 @@ export class NeotomaServer {
         reporter_git_ref: z.string().optional(),
         reporter_channel: z.string().optional(),
         reporter_app_version: z.string().optional(),
+        entity_ids_to_link: z.array(z.string().min(1)).optional(),
       })
       .refine(
         (v) =>
@@ -1193,6 +1196,7 @@ export class NeotomaServer {
         ...(parsed.reporter_git_ref ? { reporter_git_ref: parsed.reporter_git_ref } : {}),
         ...(parsed.reporter_channel ? { reporter_channel: parsed.reporter_channel } : {}),
         ...(parsed.reporter_app_version ? { reporter_app_version: parsed.reporter_app_version } : {}),
+        ...(parsed.entity_ids_to_link ? { entity_ids_to_link: parsed.entity_ids_to_link } : {}),
       });
       return this.buildTextResponse(result);
     } catch (err: any) {

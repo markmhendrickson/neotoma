@@ -307,6 +307,66 @@ describe("Issue Operations (Neotoma-canonical)", () => {
       expect(result.submitted_to_neotoma).toBe(false);
       expect(result.pushed_to_github).toBe(true);
     });
+
+    it("creates REFERS_TO relationships when entity_ids_to_link is provided", async () => {
+      mockCreateIssue.mockResolvedValue({
+        number: 77,
+        html_url: "https://github.com/test/repo/issues/77",
+        user: { login: "tester" },
+        created_at: "2026-05-01T00:00:00Z",
+      });
+      mockSubmitIssueToRemote.mockResolvedValue({
+        entity_ids: ["remote-issue-1", "remote-conv-1"],
+        issue_entity_id: "remote-issue-1",
+        conversation_id: "remote-conv-1",
+        access_token: "tok",
+      });
+
+      const mockCreateRelationships = vi.fn().mockResolvedValue({});
+      ops = { ...ops, createRelationships: mockCreateRelationships } as unknown as typeof ops;
+
+      await submitIssue(ops, {
+        title: "Linked Issue",
+        body: "Issue body",
+        visibility: "public",
+        reporter_git_sha: "abc1234",
+        entity_ids_to_link: ["entity-a", "entity-b"],
+      });
+
+      expect(mockCreateRelationships).toHaveBeenCalledWith({
+        relationships: [
+          { relationship_type: "REFERS_TO", source_entity_id: "local-issue-1", target_entity_id: "entity-a" },
+          { relationship_type: "REFERS_TO", source_entity_id: "local-issue-1", target_entity_id: "entity-b" },
+        ],
+      });
+    });
+
+    it("does not call createRelationships when entity_ids_to_link is absent", async () => {
+      mockCreateIssue.mockResolvedValue({
+        number: 78,
+        html_url: "https://github.com/test/repo/issues/78",
+        user: { login: "tester" },
+        created_at: "2026-05-01T00:00:00Z",
+      });
+      mockSubmitIssueToRemote.mockResolvedValue({
+        entity_ids: ["remote-issue-2"],
+        issue_entity_id: "remote-issue-2",
+        conversation_id: "remote-conv-2",
+      });
+
+      const mockCreateRelationships = vi.fn().mockResolvedValue({});
+      ops = { ...ops, createRelationships: mockCreateRelationships } as unknown as typeof ops;
+
+      const result = await submitIssue(ops, {
+        title: "No Link Issue",
+        body: "Issue body",
+        visibility: "public",
+        reporter_git_sha: "abc1234",
+      });
+
+      expect(mockCreateRelationships).not.toHaveBeenCalled();
+      expect(result.entity_id).toBeTruthy();
+    });
   });
 
   describe("submitGuestIssue", () => {
@@ -535,6 +595,34 @@ describe("Issue Operations (Neotoma-canonical)", () => {
       expect(result.remote_submission_error).toMatch(
         /Remote issue message submission to https:\/\/neotoma\.example\.com failed: ECONNREFUSED/,
       );
+    });
+
+    it("creates REFERS_TO relationships when entity_ids_to_link is provided (local store path)", async () => {
+      mockLoadIssuesConfig.mockResolvedValue({ ...defaultIssuesConfig, target_url: "" });
+      mockAddIssueComment.mockResolvedValue({
+        id: 999,
+        body: "test",
+        user: { login: "tester" },
+        created_at: "2026-05-01T00:00:00Z",
+        updated_at: "2026-05-01T00:00:00Z",
+        html_url: "https://github.com/test/repo/issues/1#issuecomment-999",
+      });
+
+      const mockCreateRelationships = vi.fn().mockResolvedValue({});
+      ops = { ...ops, createRelationships: mockCreateRelationships } as unknown as typeof ops;
+
+      await addIssueMessage(ops, {
+        entity_id: "local-issue-1",
+        body: "Test message",
+        entity_ids_to_link: ["target-entity-x", "target-entity-y"],
+      });
+
+      expect(mockCreateRelationships).toHaveBeenCalledWith({
+        relationships: [
+          { relationship_type: "REFERS_TO", source_entity_id: "local-issue-1", target_entity_id: "target-entity-x" },
+          { relationship_type: "REFERS_TO", source_entity_id: "local-issue-1", target_entity_id: "target-entity-y" },
+        ],
+      });
     });
   });
 

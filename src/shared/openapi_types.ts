@@ -5192,6 +5192,8 @@ export interface operations {
                      *     `reporter_git_sha` and `reporter_app_version` are missing).
                      */
                     reporter_app_version?: string;
+                    /** @description Entity IDs to link to the issue entity via REFERS_TO relationships. Created server-side in the same operation as the message is stored. */
+                    entity_ids_to_link?: string[];
                     user_id?: string;
                 };
             };
@@ -5251,6 +5253,8 @@ export interface operations {
                     local_issue_id?: string;
                     /** @description Guest submitter timestamp used for deterministic local thread identity. */
                     submission_timestamp?: string;
+                    /** @description Entity IDs to link to this issue via REFERS_TO relationships. Created server-side in the same operation as issue creation. */
+                    entity_ids_to_link?: string[];
                     user_id?: string;
                 };
             };
