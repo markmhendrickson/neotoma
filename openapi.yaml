@@ -874,6 +874,22 @@ components:
           description: Optional ordered list of the most important snapshot fields for overview display.
           items:
             type: string
+        schema_instructions:
+          type: string
+          nullable: true
+          description: |
+            Markdown instructions from the entity's schema definition. Injected into agent context
+            when this entity is retrieved. Agents MUST treat this as behavioral context for the
+            entity type and apply it to the current turn. Sourced from
+            `SchemaDefinition.agent_instructions` on the registered schema.
+        entity_instructions:
+          type: string
+          nullable: true
+          description: |
+            Markdown instructions stored on this specific entity (from the entity's snapshot
+            `agent_instructions` field). Extends or overrides `schema_instructions` for this
+            individual entity. Agents MUST treat this as behavioral context and apply it to the
+            current turn.
     Source:
       type: object
       properties:
