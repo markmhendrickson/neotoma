@@ -109,7 +109,8 @@ describe("reject-policy schemas have reachable canonical rules (R1/R2 regression
       expect(fields[field]!.required).toBe(false);
     }
 
-    expect(schema!.schema_definition.canonical_name_fields).toEqual(["conversation_id"]);
+    // v1.4: session_id added as an alternate single-field canonical rule (issue #138)
+    expect(schema!.schema_definition.canonical_name_fields).toEqual(["conversation_id", "session_id"]);
   });
 
   it("conversation_turn is reject-policy with composite [session_id, turn_id] canonical", () => {
