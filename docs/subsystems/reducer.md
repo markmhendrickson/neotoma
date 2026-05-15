@@ -156,6 +156,10 @@ function mergeArrays(
   
   for (const obs of observations) {
     const value = obs.fields[field];
+    // Skip observations that did not carry the field (undefined) and
+    // null contributions (a null entry is not a meaningful array element).
+    // A field-level clear via `field: null` is handled separately by the
+    // reducer per §4.3 Null semantics and clears the snapshot key.
     if (value !== undefined && value !== null) {
       values.add(value);
       observationIds.push(obs.id);
@@ -172,6 +176,19 @@ function mergeArrays(
 - `aliases` for entities (all known names)
 - `tags` for records (all tags from all sources)
 - `categories` for transactions (all applicable categories)
+
+**Null-clear exception:** `merge_array` does **not** honor field-level null clears. A null
+observation for a `merge_array` field is silently skipped; the strategy returns the
+accumulated array from the remaining observations rather than omitting the key from the
+snapshot. This is an intentional exception to the general null-clear invariant (which
+`last_write`, `highest_priority`, `most_specific`, and the no-schema defaults path all
+respect).
+
+To clear a `merge_array` field, use one of these approaches:
+1. Submit a correction with `strategy: last_write` on the field, set the value to `null`,
+   then restore `merge_array` if needed.
+2. Remove and re-add the field via `update_schema_incremental` to drop all accumulated
+   observation data.
 ## 4. Merge Policy Configuration
 ### 4.1 Schema Registry Configuration
 Merge policies are configured per field in the schema registry:
@@ -202,6 +219,18 @@ interface MergePolicy {
 ```
 ### 4.2 Default Merge Policy
 If no merge policy specified for a field, default to `last_write`.
+
+### 4.3 Null vs Undefined Field Semantics
+
+Reducer-wide rule, applied uniformly across all entity types and merge strategies:
+
+- **`undefined` (or a missing key) on `obs.fields`** means the observation did not carry that field. The reducer treats the field as absent and the observation does not participate in merge ordering for that field.
+- **`null` on `obs.fields`** means the observation explicitly cleared the field. The null value participates in merge ordering exactly like any other value and, when it wins under the active strategy, clears the field from the snapshot (the snapshot key is omitted; `provenance[field]` is also omitted).
+
+This is a reducer-level invariant, not a per-type declaration. Schemas MUST NOT declare per-type "treat null as absent" overrides; if a type needs that behavior, model it explicitly with a distinct field value (e.g. a sentinel) rather than overloading null.
+
+`merge_array` is the documented exception: array merge filters null entries from contributed arrays (a null entry is not a meaningful array element). A correction that sends `field: null` for an array-typed field does NOT omit the snapshot key — instead `merge_array` writes `[]` (empty array) to the snapshot; only null *inside* an array contribution is dropped.
+
 ## 5. Determinism Requirements
 ### 5.1 Deterministic Execution
 Reducers MUST be deterministic:

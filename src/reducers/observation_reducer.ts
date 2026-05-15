@@ -247,9 +247,12 @@ export class ObservationReducer {
     fieldDef?: FieldDefinition,
     observationSourceRank: Map<string, number> = buildObservationSourceRank(),
   ): { value: unknown; source_observation_id: string } | null {
-    // Filter observations that have this field
+    // Treat null as an explicit clear. Only undefined means the observation did
+    // not carry this field and should be ignored by the reducer.
     const relevantObservations = observations.filter(
-      (obs) => obs.fields[field] !== undefined && obs.fields[field] !== null,
+      (obs) =>
+        Object.prototype.hasOwnProperty.call(obs.fields, field) &&
+        obs.fields[field] !== undefined,
     );
 
     if (relevantObservations.length === 0) {
@@ -288,6 +291,10 @@ export class ObservationReducer {
 
       default:
         throw new Error(`Unknown merge strategy: ${strategy}`);
+    }
+
+    if (mergedResult.value === undefined || mergedResult.value === null) {
+      return mergedResult;
     }
 
     // Apply converters if field definition exists and value doesn't match type
@@ -528,7 +535,8 @@ export class ObservationReducer {
         field,
         sortedObservations.filter(
           (obs) =>
-            obs.fields[field] !== undefined && obs.fields[field] !== null,
+            Object.prototype.hasOwnProperty.call(obs.fields, field) &&
+            obs.fields[field] !== undefined,
         ),
       );
 
