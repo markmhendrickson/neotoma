@@ -7996,6 +7996,7 @@ const handleIssuesAddMessageHttp: express.RequestHandler = async (req, res) => {
               ...(parsed.data.reporter_git_ref ? { reporter_git_ref: parsed.data.reporter_git_ref } : {}),
               ...(parsed.data.reporter_channel ? { reporter_channel: parsed.data.reporter_channel } : {}),
               ...(parsed.data.reporter_app_version ? { reporter_app_version: parsed.data.reporter_app_version } : {}),
+              ...(parsed.data.entity_ids_to_link ? { entity_ids_to_link: parsed.data.entity_ids_to_link } : {}),
             });
       logDebug("Success:issues_add_message", req, { message_entity_id: result.message_entity_id });
       return res.json(result);
@@ -8083,6 +8084,7 @@ const handleIssuesSubmitHttp: express.RequestHandler = async (req, res) => {
           reporter_app_version: parsed.data.reporter_app_version,
           reporter_ci_run_id: parsed.data.reporter_ci_run_id,
           reporter_patch_source_id: parsed.data.reporter_patch_source_id,
+          ...(parsed.data.entity_ids_to_link ? { entity_ids_to_link: parsed.data.entity_ids_to_link } : {}),
         });
       })();
       logDebug("Success:issues_submit", req, { entity_id: result.entity_id });

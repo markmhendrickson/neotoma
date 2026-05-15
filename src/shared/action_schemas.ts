@@ -645,6 +645,7 @@ export const IssuesAddMessageRequestSchema = z
     reporter_git_ref: z.string().optional(),
     reporter_channel: z.string().optional(),
     reporter_app_version: z.string().optional(),
+    entity_ids_to_link: z.array(z.string().min(1)).optional(),
     user_id: z.string().optional(),
   })
   .refine(
@@ -671,6 +672,7 @@ export const IssuesSubmitRequestSchema = z.object({
   author: z.string().optional(),
   local_issue_id: z.string().optional(),
   submission_timestamp: z.string().optional(),
+  entity_ids_to_link: z.array(z.string().min(1)).optional(),
   user_id: z.string().optional(),
 });
 

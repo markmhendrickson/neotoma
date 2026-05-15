@@ -31,6 +31,11 @@ export interface IssueCreateParams {
   reporter_app_version?: string;
   reporter_ci_run_id?: string;
   reporter_patch_source_id?: string;
+  /**
+   * Optional entity IDs to link to the created issue entity via REFERS_TO relationships.
+   * Created server-side in the same operation as issue creation.
+   */
+  entity_ids_to_link?: string[];
 }
 
 export interface IssueMessageParams {
@@ -56,6 +61,11 @@ export interface IssueMessageParams {
   reporter_git_ref?: string;
   reporter_channel?: string;
   reporter_app_version?: string;
+  /**
+   * Optional entity IDs to link to the issue entity via REFERS_TO relationships.
+   * Created server-side in the same operation as the message is stored.
+   */
+  entity_ids_to_link?: string[];
 }
 
 export interface IssueSyncParams {

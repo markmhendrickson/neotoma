@@ -4189,6 +4189,14 @@ paths:
                   description: |
                     Soft requirement on public issue threads (server emits a warning when both
                     `reporter_git_sha` and `reporter_app_version` are missing).
+                entity_ids_to_link:
+                  type: array
+                  items:
+                    type: string
+                    minLength: 1
+                  description: >
+                    Entity IDs to link to the issue entity via REFERS_TO relationships.
+                    Created server-side in the same operation as the message is stored.
                 user_id:
                   type: string
               description: |
@@ -4298,6 +4306,14 @@ paths:
                 submission_timestamp:
                   type: string
                   description: Guest submitter timestamp used for deterministic local thread identity.
+                entity_ids_to_link:
+                  type: array
+                  items:
+                    type: string
+                    minLength: 1
+                  description: >
+                    Entity IDs to link to this issue via REFERS_TO relationships.
+                    Created server-side in the same operation as issue creation.
                 user_id:
                   type: string
       responses:
