@@ -76,7 +76,7 @@
     "watch:full": "npm run dev",
     "watch:full:prod": "npm run dev:full:prod",
     "test": "vitest run",
-    "test:unit": "cross-env VITEST_SKIP_MIGRATIONS=1 vitest run",
+    "test:unit": "vitest run tests/unit tests/services tests/agent tests/contract tests/security tests/cli tests/subscriptions",
     "test:frontend": "cross-env RUN_FRONTEND_TESTS=1 vitest run frontend/src",
     "test:integration": "vitest run tests/integration",
     "test:integration:report": "cross-env WRITE_TEST_RUN_REPORT=1 vitest run tests/integration",

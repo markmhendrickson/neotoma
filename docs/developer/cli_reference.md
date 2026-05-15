@@ -158,7 +158,7 @@ Scripts that start servers use the port(s) above when free; if a port is in use,
 | Script                   | Description                                      |
 | ------------------------ | ------------------------------------------------ |
 | `test`                   | Run Vitest                                       |
-| `test:unit`              | Vitest, skip migrations                          |
+| `test:unit`              | Vitest, unit/services/agent/contract/security/cli only (no integration dir) |
 | `test:remote`            | Vitest with remote DB tests (RUN_REMOTE_TESTS=1) |
 | `test:frontend`          | Vitest for frontend                              |
 | `test:integration`       | Integration tests                                |

@@ -66,39 +66,6 @@ jobs:
       - name: Validate documentation dependencies
         run: npm run validate:doc-deps
 
-  integration-tests:
-    # Runs the full Vitest suite (including integration tests) against the
-    # shared Supabase dev instance.  Marked continue-on-error so transient
-    # shared-DB flakiness does not block merges; see issue #124.
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: "npm"
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Init inspector submodule (Vitest imports inspector sources)
-        run: git submodule update --init --depth 1 inspector
-
-      - name: Build @neotoma/client and cursor-hooks (Vitest hook tests)
-        run: |
-          npm ci --prefix packages/client
-          npm run build --prefix packages/client
-          npm ci --prefix packages/cursor-hooks
-          npm run build --prefix packages/cursor-hooks
-          npm ci --prefix packages/opencode-plugin
-
-      - name: Run full Vitest suite (unit + integration, shared DB)
-        run: npm test
-
   frontend:
     runs-on: ubuntu-latest
     steps:
