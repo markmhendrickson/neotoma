@@ -1,0 +1,8 @@
+[
+  {
+    "file": "/Users/markmhendrickson/repos/neotoma/frontend/src/assets/images/mascots/beige_guarantee_concept_20260515-081858_01.png",
+    "prompt": "Transparent background. Stylized editorial line illustration in the same visual language as a refined product hero: warm beige and tan palette only (cream #f4ebe0, sand #d9cbb8, taupe #a0907a, deep tan #6e6254). No pure black, no gradients, no shading blocks, no photorealism. Two stroke weights for hierarchy; clean joins; generous negative space; subject slightly off-center. CONCEPTUAL METAPHOR ONLY — suggest the idea through organic or abstract forms (braided strands, stacked layers, folded leaves, a small nest, woven threads, a gentle spiral). STRICTLY FORBIDDEN: flowcharts, arrows, boxes, rectangles, circles used as nodes, graphs, charts, connectors, schematic UI, isometric blocks, circuit motifs, or anything that reads as a diagram or infographic. No text, no logos, no emoji, no icons. No cute mascots unless the prompt explicitly asks for a small animal in the same restrained style as a minimal packrat silhouette. Square 1:1 composition.\n\nConcept focus: a beaver: small rounded body, broad flat tail, two prominent front teeth, holding a small twig or branch — rendered as a minimal restrained mascot silhouette in the same editorial line-art style as a packrat, warm beige palette only, transparent background, square composition",
+    "model": "gpt-image-1",
+    "size": "1024x1024"
+  }
+]
