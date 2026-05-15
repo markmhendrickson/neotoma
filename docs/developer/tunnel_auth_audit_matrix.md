@@ -12,7 +12,7 @@ Generated as part of the tunnel/OAuth/bearer-token audit. Maps each critical flo
 | **`/mcp` auth gate (encryption off)** | `src/actions.ts:322-342` local → auto-assign, bearer → validate `NEOTOMA_BEARER_TOKEN` | `tunnels.md` Security, `auth.md` MCP Authentication | **None** for remote path | **Gap: no integration test for remote rejection** |
 | **`/mcp` auth gate (encryption on)** | `src/actions.ts:312-321` requires key-derived MCP token | `tunnels.md` line 56, `auth.md` Key-Based Auth section | **None** for tunnel path | Gap |
 | **`NEOTOMA_BEARER_TOKEN` validation** | `src/actions.ts:336-342` (MCP), `src/actions.ts:1648-1657` (REST) | `tunnels.md` line 55, `getting_started.md` line 65 | **None** | **Gap: no test** |
-| **`ACTIONS_BEARER_TOKEN` (REST API)** | Not in `src/` code (playwright test fixtures only) | `rest_api.md:38-44`, `.env.example:27` | Playwright fixtures set it | **Naming divergence**: code uses `NEOTOMA_BEARER_TOKEN`; docs/env say `ACTIONS_BEARER_TOKEN`. Possibly legacy. |
+| **`ACTIONS_BEARER_TOKEN` (REST API)** | Not in `src/` code (playwright test fixtures only) | `rest_api.md:38-44` | Playwright fixtures set it | **FIXED**: `.env.example` now uses `NEOTOMA_BEARER_TOKEN`; `ACTIONS_BEARER_TOKEN` is a legacy alias. |
 | **OAuth discovery** (`/.well-known/oauth-authorization-server`) | `src/actions.ts:162` | `rest_api.md` (not documented), `mcp_https_tunnel_status.md` mentions it | Playwright `oauth-flow.spec.ts` (indirect) | Gap: docs don't list this endpoint |
 | **OAuth initiate** (`POST /mcp/oauth/initiate`) | `src/actions.ts:628` | `rest_api.md:55` uses `/api/mcp/oauth/initiate` | Playwright `oauth-flow.spec.ts` mocks it | **Route mismatch**: code = `/mcp/oauth/initiate`, docs = `/api/mcp/oauth/initiate` |
 | **OAuth callback** (`GET /mcp/oauth/callback`) | `src/actions.ts:695` | `rest_api.md:90` uses `/api/mcp/oauth/callback` | Playwright mocks | **Route mismatch** |
@@ -38,7 +38,7 @@ Code routes use `/mcp/oauth/*`. Documentation previously used `/api/mcp/oauth/*`
 | Token | Used in code | Used in docs | Resolution |
 |-------|-------------|-------------|------------|
 | `NEOTOMA_BEARER_TOKEN` | `src/actions.ts:336,1648`, CLI | `tunnels.md`, `auth.md` | **Active token for MCP/REST auth** |
-| `ACTIONS_BEARER_TOKEN` | Playwright test fixtures only | `rest_api.md:38`, `.env.example:27`, `getting_started.md:65` | **Legacy**: not checked in production code. Docs should clarify or migrate. |
+| `ACTIONS_BEARER_TOKEN` | Playwright test fixtures only | `rest_api.md:38`, `getting_started.md:65` | **Legacy**: not checked in production code. `.env.example` migrated to `NEOTOMA_BEARER_TOKEN`. |
 
 ## 4. Previously Missing Referenced Documents — CREATED
 
@@ -83,7 +83,7 @@ Code routes use `/mcp/oauth/*`. Documentation previously used `/api/mcp/oauth/*`
 | Fix | Files affected |
 |-----|---------------|
 | Route prefix `/api/mcp/oauth/*` → `/mcp/oauth/*` | `rest_api.md`, `auth.md`, `MCP_SPEC.md`, `developer_release_manual_test_checklist.md`, `mcp_server_examples_from_cursor_docs.md` |
-| Token naming clarification | `rest_api.md` — `ACTIONS_BEARER_TOKEN` → `NEOTOMA_BEARER_TOKEN` with legacy note |
+| Token naming clarification | `rest_api.md` — `ACTIONS_BEARER_TOKEN` → `NEOTOMA_BEARER_TOKEN` with legacy note; `.env.example` corrected |
 | Created `mcp_cursor_setup.md` | Cursor IDE setup (stdio + HTTP, OAuth, troubleshooting) |
 | Created `mcp_oauth_implementation.md` | OAuth flow details, endpoint table, sequence diagram |
 | Created `mcp_oauth_troubleshooting.md` | Common failure diagnostics (connect button, flow, token, tunnel) |
@@ -97,6 +97,7 @@ Code routes use `/mcp/oauth/*`. Documentation previously used `/api/mcp/oauth/*`
 | `isLocalRequest` IPv6 `[::1]` limitation | Low | IPv6 loopback in Host headers is extremely rare; tunnel providers never use it. Documented in test. |
 | No E2E Playwright test for full tunnel OAuth flow | Medium | Requires live tunnel or complex mock; existing unit/integration tests cover all component behavior. |
 | `ACTIONS_BEARER_TOKEN` not used in code | Low | Only in Playwright test fixtures. May be removed in future cleanup. |
+| Node.js `keepAliveTimeout` (5 s default) drops tunnel MCP sessions | Medium | **FIXED**: `src/actions.ts` `tryListen()` now sets `keepAliveTimeout=120s`, `headersTimeout=125s`; configurable via `NEOTOMA_KEEPALIVE_TIMEOUT_MS` / `NEOTOMA_HEADERS_TIMEOUT_MS`. |
 
 ## Related Documents
 
