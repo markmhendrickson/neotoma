@@ -54,6 +54,9 @@ jobs:
       - name: Lint site copy
         run: npm run lint:site-copy
 
+      - name: Build server (required by CLI tests)
+        run: npm run build:server
+
       - name: Run unit Vitest suite (no DB)
         run: npm run test:unit
 
