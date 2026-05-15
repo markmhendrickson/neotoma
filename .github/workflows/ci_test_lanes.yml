@@ -54,8 +54,11 @@ jobs:
       - name: Lint site copy
         run: npm run lint:site-copy
 
-      - name: Run default Vitest suite
-        run: npm test
+      - name: Build server (required by CLI tests)
+        run: npm run build:server
+
+      - name: Run unit Vitest suite (no DB)
+        run: npm run test:unit
 
       - name: Validate Playwright coverage map
         run: npm run validate:coverage
