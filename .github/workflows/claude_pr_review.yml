@@ -33,14 +33,18 @@ jobs:
           model: claude-opus-4-7
           trigger_phrase: "@claude review"
           direct_prompt: |
-            Review this pull request thoroughly. Focus on:
+            Before reviewing, read docs/developer/pr_review_reading_list.md.
+            It tells you which docs to always read and which to read based on what paths changed in this PR.
+            Follow it exactly — read the always-read docs first, then load the conditional docs for any touched paths.
+
+            Then review the PR diff against those constraints. Cover:
             - Correctness and logic errors
-            - Architectural boundary violations (State Layer constraints, no strategy/execution logic in Neotoma)
-            - Determinism violations (random IDs, unstable sorts, Date.now() in business logic)
-            - Immutability violations (mutating observations or sources after creation)
-            - Security issues (auth bypasses, PII in logs, unprotected routes)
+            - Violations of any invariant in the docs you read
+            - Security issues (auth bypasses, PII in logs, unprotected routes, proxy trust)
             - Missing idempotency_key on mutating operations
             - Contract surface changes without matching openapi.yaml edits
-            - Test coverage gaps for new behavior
-            - Breaking changes that should be named in a release supplement
+            - Test coverage gaps for changed behavior
+            - Breaking changes that need a release supplement entry
+            - Scope creep (production changes bundled into unrelated fixes)
+
             Be direct and specific. Cite file and line numbers. Skip praise.
