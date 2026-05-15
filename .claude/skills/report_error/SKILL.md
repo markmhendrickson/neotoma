@@ -1,10 +1,11 @@
 ---
-name: report_error
-description: Report Error Command
+name: report-error
+description: Report error per foundation command.
+triggers:
+  - report error
+  - /report_error
+  - report-error
 ---
-
-<!-- Source: .cursor/skills/report-error/SKILL.md -->
-
 
 # Report Error Command
 

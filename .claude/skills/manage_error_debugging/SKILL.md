@@ -1,10 +1,11 @@
 ---
-name: manage_error_debugging
-description: Manage Error Debugging Automation
+name: manage-error-debugging
+description: Manage error debugging per foundation command.
+triggers:
+  - manage error debugging
+  - /manage_error_debugging
+  - manage-error-debugging
 ---
-
-<!-- Source: .cursor/skills/manage-error-debugging/SKILL.md -->
-
 
 # Manage Error Debugging Automation
 

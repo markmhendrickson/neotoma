@@ -1,10 +1,11 @@
 ---
-name: setup_commands
-description: Setup Commands (Legacy)
+name: setup-commands
+description: Legacy setup for .cursor/commands; foundation uses skills instead. Prefer setup-cursor-copies.
+triggers:
+  - setup commands
+  - /setup_commands
+  - setup-commands
 ---
-
-<!-- Source: .cursor/skills/setup-commands/SKILL.md -->
-
 
 # Setup Commands (Legacy)
 
@@ -12,14 +13,14 @@ Foundation workflows have been **replaced by skills**. There is no longer a `fou
 
 ## What to do instead
 
-1. **Use setup-cursor-copies** — Run `./foundation/scriptsscripts/setup_claude_instructions.sh.sh` (or the **setup-cursor-copies** skill). It copies foundation rules into `.claude/rules/` and foundation skills into `.cursor/skills/`.
+1. **Use setup-cursor-copies** — Run `./foundation/scripts/setup_cursor_copies.sh` (or the **setup-cursor-copies** skill). It copies foundation rules into `.cursor/rules/` and foundation skills into `.cursor/skills/`.
 2. **Load skills by trigger** — When a trigger matches (e.g. commit, pull, push, fix-feature-bug), load the corresponding skill from `.cursor/skills/{slug}/SKILL.md` per the router rule.
 
 ## When this skill is invoked
 
-- Tell the user that foundation no longer installs into `.claude/skills/`.
-- Run or direct them to run **setup-cursor-copies** to refresh `.claude/rules/` and `.cursor/skills/`.
-- Repository-specific command files in `docs/*_command.md` (if any) may still be installed by setup into `.claude/skills/` when configured in the manifest; foundation workflows are only in `.cursor/skills/`.
+- Tell the user that foundation no longer installs into `.cursor/commands/`.
+- Run or direct them to run **setup-cursor-copies** to refresh `.cursor/rules/` and `.cursor/skills/`.
+- Repository-specific command files in `docs/*_command.md` (if any) may still be installed by setup into `.cursor/commands/` when configured in the manifest; foundation workflows are only in `.cursor/skills/`.
 
 ## Related
 

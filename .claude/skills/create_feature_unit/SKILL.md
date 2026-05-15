@@ -1,10 +1,13 @@
 ---
-name: create_feature_unit
-description: Create New Feature Unit
+name: create-feature-unit
+description: Create a new feature unit with spec, manifest, and test structure.
+triggers:
+  - create feature
+  - new feature
+  - create feature unit
+  - create-feature-unit
+  - /create-feature-unit
 ---
-
-<!-- Source: .cursor/skills/create-feature-unit/SKILL.md -->
-
 
 # Create New Feature Unit
 
@@ -12,7 +15,7 @@ Create a new Feature Unit with feature_id = {{input:feature_id}}.
 
 Follow the complete workflow in `foundation/development/feature_unit_workflow.md`. Configuration is read from `foundation-config.yaml`.
 
-This workflow can also be triggered automatically via `.claude/rules/feature_unit_detection.md` when you mention feature-related patterns in natural language (e.g., "create feature", "new feature", feature IDs). Both paths execute the same workflow.
+This workflow can also be triggered automatically via `.cursor/rules/feature_unit_detection.md` when you mention feature-related patterns in natural language (e.g., "create feature", "new feature", feature IDs). Both paths execute the same workflow.
 
 ## Workflow Overview
 
@@ -147,6 +150,17 @@ Implements Checkpoint 0 of the Feature Unit creation workflow:
    - Spec document includes configured sections
    - Manifest follows configured complexity mode
    - Next steps: "If UI changes, proceed to Create Prototype → Prototype Review. Otherwise proceed to implementation."
+
+10. **Offer publish-plan prompt once:**
+
+    ```
+    Feature unit spec saved to {configured_directory}/in_progress/{{input:feature_id}}/{{input:feature_id}}_spec.md.
+
+    Would you like to share this as a GitHub Discussion for pre-execution
+    input? Run /publish-plan {path} to generate a public-facing post.
+    ```
+
+    Do not wait for a response before completing this skill.
 
 ## Required Documents
 
