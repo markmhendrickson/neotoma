@@ -112,7 +112,7 @@ npm run dev:server:tunnel
 
 ### 1.11 Security gates (pre-release)
 
-These gates implement the v0.11.1 lessons (`docs/security/advisories/2026-05-11-inspector-auth-bypass.md`). They are Track 1 of the pre-release security plan (`.cursor/plans/pre-release_security_gates_44e01d74.plan.md`).
+These gates implement the v0.11.1 lessons (`docs/security/advisories/2026-05-11-inspector-auth-bypass.md`). They are Track 1 of the pre-release security plan (`.cursor/skills/release/SKILL.md` § Step 3.5).
 
 ```bash
 # G1: Classify the release diff

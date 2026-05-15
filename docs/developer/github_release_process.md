@@ -68,7 +68,7 @@ Version bump: a release containing any tightening MUST bump the **minor** segmen
 
 ### Security hardening section
 
-Every release supplement MUST contain an explicit `Security hardening` section, in addition to the explicit `Breaking changes` section. This is the artifact the pre-release security gates (`.cursor/plans/pre-release_security_gates_44e01d74.plan.md`) link to and that downstream operators read to decide whether to upgrade urgently.
+Every release supplement MUST contain an explicit `Security hardening` section, in addition to the explicit `Breaking changes` section. This is the artifact the pre-release security gates (`.cursor/skills/release/SKILL.md` § Step 3.5) link to and that downstream operators read to decide whether to upgrade urgently.
 
 A release counts as **security-sensitive** when `npm run security:classify-diff` reports `sensitive=true` — i.e., the diff touches `src/actions.ts`, `src/services/{root_landing,subscriptions,sync,issues,entity_submission,access_policy}/**`, `src/middleware/**`, the OpenAPI security blocks, the protected-routes manifest, or adds a new env var matching `LOCAL_DEV_USER_ID|TRUST_PROD_LOOPBACK|*_AUTH_*`.
 

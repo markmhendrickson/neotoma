@@ -59,4 +59,4 @@ The seed entry `2026-05-11-inspector-auth-bypass.md` is a worked example.
 
 - `SECURITY.md` — disclosure flow + supported versions
 - `docs/security/threat_model.md` — channels the gates cover
-- `.cursor/plans/pre-release_security_gates_44e01d74.plan.md` — Track 1 plan that produced this directory
+- `.cursor/skills/release/SKILL.md` § Step 3.5 — Track 1 security gates (pre-release review lane)

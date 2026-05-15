@@ -87,7 +87,7 @@ If the working tree was dirty when drafting, state that **execute** matches the 
 
 ### Step 3.5: Security review lane
 
-Run after preview is approved by the user, before Step 4. Sources: `.cursor/plans/pre-release_security_gates_44e01d74.plan.md`, `docs/security/threat_model.md`.
+Run after preview is approved by the user, before Step 4. Sources: `docs/security/threat_model.md`, `SECURITY.md`.
 
 1. **Classify the release diff:**
    ```bash
