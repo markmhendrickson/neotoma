@@ -40,6 +40,7 @@ jobs:
           npm run build --prefix packages/client
           npm ci --prefix packages/cursor-hooks
           npm run build --prefix packages/cursor-hooks
+          npm ci --prefix packages/opencode-plugin
 
       - name: Type check
         run: npm run type-check
