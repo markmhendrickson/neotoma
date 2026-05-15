@@ -967,11 +967,15 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       // v1.2+: session-scoped identity via caller-supplied `conversation_id`.
       // v1.4+: `session_id` accepted as an alternate single-field rule so
       // callers that only supply session_id can still resolve deterministically.
-      // When absent, resolution falls through to the heuristic path; the
-      // schema-level `name_collision_policy: reject` (R2) then converts that
-      // heuristic match into ERR_STORE_RESOLUTION_FAILED instead of silently
-      // collapsing unrelated sessions by `title`.
-      canonical_name_fields: ["conversation_id", "session_id"],
+      // Ordered precedence: `conversation_id` wins when present; falls back to
+      // `session_id` when only that field is supplied. When neither is present,
+      // resolution falls through to the heuristic path; the schema-level
+      // `name_collision_policy: reject` (R2) then converts that heuristic match
+      // into ERR_STORE_RESOLUTION_FAILED instead of silently collapsing
+      // unrelated sessions by `title`.
+      // NOTE: uses ordered-rule form `{ composite: [...] }` so each field is an
+      // independent single-field rule rather than a joint composite requiring both.
+      canonical_name_fields: [{ composite: ["conversation_id"] }, { composite: ["session_id"] }],
       name_collision_policy: "reject",
       // v1.4: emit timeline events when temporal bounds are stored.
       temporal_fields: [
