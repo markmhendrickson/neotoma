@@ -32,7 +32,11 @@ Follow the MCP `instructions` / `serverUseInstructions` payload only for turn or
 
 ## Compact MCP instructions (dual-host)
 
-If the host already injects expanded Neotoma workspace rules, operators may set `NEOTOMA_MCP_COMPACT_INSTRUCTIONS=1` on the Neotoma MCP server so clients receive a short checklist plus a pointer to the full doc and to `neotoma instructions print`. See [`src/server.ts`](../../src/server.ts) (`MCP_INTERACTION_INSTRUCTIONS_COMPACT_DUAL_HOST`).
+If the host already injects expanded Neotoma workspace rules, operators may set `NEOTOMA_MCP_COMPACT_INSTRUCTIONS=1` on the Neotoma MCP server so clients receive a short checklist plus a pointer to the full doc and to `neotoma instructions print`. See [`mcp/compact_instructions.md`](./mcp/compact_instructions.md) for full documentation and [`src/server.ts`](../../src/server.ts) (`MCP_INTERACTION_INSTRUCTIONS_COMPACT_DUAL_HOST`) for the implementation.
+
+## Mobile setup (Claude iOS / Android)
+
+Claude mobile does not run the Claude Code hook runtime. The MCP instruction payload and an optional custom system prompt are the only enforcement paths for Neotoma-first behavior. See [`mcp/mobile_setup.md`](./mcp/mobile_setup.md) for connection steps, a recommended custom system prompt template, and notes on compact mode for short-context deployments.
 
 ## Editing and review policy
 
@@ -44,3 +48,5 @@ If the host already injects expanded Neotoma workspace rules, operators may set 
 - [`agent_cli_configuration.md`](./agent_cli_configuration.md) — where CLI instructions are applied
 - [`cli_reference.md`](./cli_reference.md) — CLI commands including `instructions print`
 - [`mcp/instructions.md`](./mcp/instructions.md) — MCP-delivered block (source of truth)
+- [`mcp/compact_instructions.md`](./mcp/compact_instructions.md) — Compact instructions mode documentation
+- [`mcp/mobile_setup.md`](./mcp/mobile_setup.md) — Mobile setup guide (Claude iOS/Android)

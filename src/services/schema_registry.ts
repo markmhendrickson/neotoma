@@ -831,6 +831,30 @@ export class SchemaRegistryService {
       };
     }
 
+    // Add converters to existing fields
+    for (const converterSpec of options.converters_to_add || []) {
+      if (!mergedFields[converterSpec.field_name]) {
+        throw new Error(
+          `Field "${converterSpec.field_name}" does not exist in schema for entity type "${options.entity_type}". ` +
+          `Add the field first before adding a converter to it.`,
+        );
+      }
+      const existingField = mergedFields[converterSpec.field_name];
+      const existingConverters: ConverterDefinition[] =
+        Array.isArray(existingField.converters) ? [...(existingField.converters as ConverterDefinition[])] : [];
+      // Deduplicate by function name — adding the same converter twice is a no-op
+      const alreadyPresent = existingConverters.some(
+        (c) => c.function === converterSpec.converter.function,
+      );
+      if (!alreadyPresent) {
+        existingConverters.push(converterSpec.converter);
+      }
+      mergedFields[converterSpec.field_name] = {
+        ...existingField,
+        converters: existingConverters,
+      };
+    }
+
     // Remove fields (schema-projection: data preserved in observations, just
     // excluded from future snapshots via reducer projection filtering)
     for (const fieldName of options.fields_to_remove || []) {
@@ -843,8 +867,10 @@ export class SchemaRegistryService {
       delete mergedFields[fieldName];
     }
 
-    // Validate that at least one field remains after removal
-    if (Object.keys(mergedFields).length === 0) {
+    // Validate that at least one field remains after removal — but only if
+    // fields were actually removed. An empty schema that started empty is fine.
+    const fieldsWereRemoved = (options.fields_to_remove || []).length > 0;
+    if (fieldsWereRemoved && Object.keys(mergedFields).length === 0) {
       throw new Error(
         `Cannot remove all fields from schema for entity type: ${options.entity_type}. At least one field must remain.`,
       );
