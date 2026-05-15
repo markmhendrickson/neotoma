@@ -16,13 +16,28 @@ No LLM-based extraction runs in the hook layer — that stays with the agent via
 
 ## Install
 
+**Global install** (recommended — applies to every Cursor workspace):
+
 ```bash
-# From the project where you want Cursor to use Neotoma
+npm install --save-dev @neotoma/cursor-hooks @neotoma/client
+npx @neotoma/cursor-hooks install --global
+```
+
+This merges Neotoma entries into `~/.cursor/hooks.json`, which Cursor loads for every project. To remove:
+
+```bash
+npx @neotoma/cursor-hooks --uninstall --global
+```
+
+**Per-project install** (add hooks only to the current workspace):
+
+```bash
+# From the project root
 npm install --save-dev @neotoma/cursor-hooks @neotoma/client
 npx @neotoma/cursor-hooks install
 ```
 
-This writes Neotoma entries into `.cursor/hooks.json` in the current directory, merging with anything already there. To remove:
+This writes to `.cursor/hooks.json` in the current directory. To remove:
 
 ```bash
 npx @neotoma/cursor-hooks --uninstall
@@ -38,7 +53,7 @@ npx @neotoma/cursor-hooks --uninstall
 | Env var | Default | Purpose |
 | --- | --- | --- |
 | `NEOTOMA_BASE_URL` | `http://127.0.0.1:3080` | Neotoma API root. |
-| `NEOTOMA_TOKEN` | `dev-local` | Auth token. |
+| `NEOTOMA_TOKEN` | (unset) | Auth token. Omit for anonymous access to a local dev server; set to a registered Bearer token for authenticated instances. |
 | `NEOTOMA_LOG_LEVEL` | `warn` | `debug` \| `info` \| `warn` \| `error` \| `silent`. |
 | `NEOTOMA_HOOK_FEEDBACK_HINT` | `on` | Set to `off` to disable the one-shot failure hint surfaced by `postToolUse`. |
 | `NEOTOMA_HOOK_FEEDBACK_HINT_THRESHOLD` | `2` | Minimum repeated-failure count for `(tool, error_class)` before a hint is surfaced. |
