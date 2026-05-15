@@ -229,6 +229,34 @@ export interface SchemaDefinition {
    * Must be a non-empty string when present.
    */
   agent_instructions?: string;
+
+  /**
+   * Declarative store-time warnings emitted when an observation payload is
+   * missing expected fields. Each entry describes one warning: if none of the
+   * listed `fields` are present in the stored payload, the `message` is
+   * appended to the response `warnings` array. The store operation is NOT
+   * blocked — warnings are non-fatal and informational only.
+   *
+   * Example: require at least one identity field on `product_feedback`:
+   * ```ts
+   * store_warnings: [{
+   *   code: "MISSING_IDENTITY_FIELDS",
+   *   fields: ["feedback_source", "reporter_email", "reporter_name", "reporter_id"],
+   *   message: "product_feedback stored without identity fields ...",
+   * }]
+   * ```
+   */
+  store_warnings?: Array<{
+    /** Machine-readable warning code surfaced in the response. */
+    code: string;
+    /**
+     * At least one of these fields must be present in the payload to suppress
+     * the warning. If none are found the warning fires.
+     */
+    fields: string[];
+    /** Human-readable warning message included in the response. */
+    message: string;
+  }>;
 }
 
 /** Known opt-out tokens for {@link SchemaDefinition.identity_opt_out}. */

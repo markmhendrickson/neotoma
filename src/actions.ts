@@ -6441,6 +6441,44 @@ export async function storeStructuredForApi(params: {
     }
   }
 
+  // Schema-driven store_warnings: emit non-blocking warnings declared in the
+  // schema when none of the listed fields are present in the observation payload.
+  // These are schema-agnostic — no per-type branches here; the schema drives it.
+  const schemaStoreWarnings: Array<{
+    code: string;
+    message: string;
+    observation_index: number;
+    entity_type: string;
+    entity_id: string;
+  }> = [];
+  {
+    const { schemaRegistry } = await import("./services/schema_registry.js");
+    for (const r of resolved) {
+      let schemaEntry;
+      try {
+        schemaEntry = await schemaRegistry.loadActiveSchema(r.entity_type, userId);
+      } catch {
+        // Best-effort; never block store on registry IO failure.
+      }
+      const storeWarningRules = schemaEntry?.schema_definition?.store_warnings;
+      if (!storeWarningRules?.length) continue;
+      for (const rule of storeWarningRules) {
+        const hasIdentityField = rule.fields.some(
+          (f) => r.fields[f] !== undefined && r.fields[f] !== null && r.fields[f] !== "",
+        );
+        if (!hasIdentityField) {
+          schemaStoreWarnings.push({
+            code: rule.code,
+            message: rule.message,
+            observation_index: r.observation_index,
+            entity_type: r.entity_type,
+            entity_id: r.entity_id,
+          });
+        }
+      }
+    }
+  }
+
   if (commit && interpretationId) {
     await completeInterpretationRun({
       interpretationId,
@@ -6464,6 +6502,7 @@ export async function storeStructuredForApi(params: {
     entities: createdEntities,
     relationships_created: relationshipsCreated,
     ...(aggregatedWarnings.length > 0 ? { warnings: aggregatedWarnings } : {}),
+    ...(schemaStoreWarnings.length > 0 ? { store_warnings: schemaStoreWarnings } : {}),
   };
 }
 

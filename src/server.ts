@@ -4366,6 +4366,8 @@ export class NeotomaServer {
       identityRule: string;
       action: string;
     }> = [];
+    // Track the resolved fields per observation index for schema-driven store_warnings.
+    const resolvedFieldsByIndex = new Map<number, Record<string, unknown>>();
     const insertedObservationIds = new Set<string>();
     let unknownFieldsCount = 0;
 
@@ -4723,6 +4725,7 @@ export class NeotomaServer {
         insertedObservationIds.add(observationId);
       }
 
+      resolvedFieldsByIndex.set(createdEntities.length, fieldsToValidate as Record<string, unknown>);
       createdEntities.push({
         entityId,
         entityType,
@@ -4950,6 +4953,43 @@ export class NeotomaServer {
       createdEntities.map((e) => e.entityId)
     );
 
+    // Schema-driven store_warnings: non-blocking warnings declared in the schema
+    // when none of the listed fields are present in the observation payload.
+    // Schema-agnostic — no per-type branches; the schema drives it.
+    const schemaStoreWarnings: Array<{
+      code: string;
+      message: string;
+      observation_index: number;
+      entity_type: string;
+      entity_id: string;
+    }> = [];
+    for (let i = 0; i < createdEntities.length; i++) {
+      const e = createdEntities[i];
+      const entityFields = resolvedFieldsByIndex.get(i) ?? {};
+      let schemaEntry;
+      try {
+        schemaEntry = await schemaRegistry.loadActiveSchema(e.entityType, userId);
+      } catch {
+        // Best-effort; never block store on registry IO failure.
+      }
+      const storeWarningRules = schemaEntry?.schema_definition?.store_warnings;
+      if (!storeWarningRules?.length) continue;
+      for (const rule of storeWarningRules) {
+        const hasIdentityField = rule.fields.some(
+          (f) => entityFields[f] !== undefined && entityFields[f] !== null && entityFields[f] !== "",
+        );
+        if (!hasIdentityField) {
+          schemaStoreWarnings.push({
+            code: rule.code,
+            message: rule.message,
+            observation_index: i,
+            entity_type: e.entityType,
+            entity_id: e.entityId,
+          });
+        }
+      }
+    }
+
     return this.buildTextResponse({
       source_id: storageResult.sourceId,
       entities: createdEntities.map((e, idx) => ({
@@ -4967,6 +5007,7 @@ export class NeotomaServer {
       unknown_fields_count: unknownFieldsCount,
       related_entities: relatedData.entities,
       related_relationships: relatedData.relationships,
+      ...(schemaStoreWarnings.length > 0 ? { store_warnings: schemaStoreWarnings } : {}),
     });
   }
 
