@@ -39,11 +39,13 @@ interface GitHubApiOptions {
   repo?: string;
 }
 
-async function resolveOptions(opts?: GitHubApiOptions): Promise<{ token: string; owner: string; repo: string }> {
-  const token = opts?.token ?? await resolveGitHubToken();
+async function resolveOptions(
+  opts?: GitHubApiOptions
+): Promise<{ token: string; owner: string; repo: string }> {
+  const token = opts?.token ?? (await resolveGitHubToken());
   if (!token) {
     throw new Error(
-      "No GitHub token available. Run `gh auth login` or set NEOTOMA_ISSUES_GITHUB_TOKEN.",
+      "No GitHub token available. Run `gh auth login` or set NEOTOMA_ISSUES_GITHUB_TOKEN."
     );
   }
 
@@ -61,17 +63,13 @@ class GitHubApiError extends Error {
   constructor(
     public readonly status: number,
     public readonly statusText: string,
-    public readonly body: string,
+    public readonly body: string
   ) {
     super(`GitHub API ${status} ${statusText}: ${body}`);
   }
 }
 
-async function githubFetch<T>(
-  path: string,
-  token: string,
-  options?: RequestInit,
-): Promise<T> {
+async function githubFetch<T>(path: string, token: string, options?: RequestInit): Promise<T> {
   const url = `${GITHUB_API}${path}`;
   const res = await fetch(url, {
     ...options,
@@ -100,21 +98,23 @@ async function githubFetch<T>(
  * that exist on the repo. A warning is logged for each dropped label. This
  * prevents a stale or unknown label name from silently aborting the mirror.
  */
-export async function createIssue(params: {
-  title: string;
-  body: string;
-  labels?: string[];
-}, opts?: GitHubApiOptions): Promise<GitHubIssue> {
+export async function createIssue(
+  params: {
+    title: string;
+    body: string;
+    labels?: string[];
+  },
+  opts?: GitHubApiOptions
+): Promise<GitHubIssue> {
   const { token, owner, repo } = await resolveOptions(opts);
 
   const labels = mergeNeotomaToolingIssueLabels(params.labels);
 
   try {
-    return await githubFetch<GitHubIssue>(
-      `/repos/${owner}/${repo}/issues`,
-      token,
-      { method: "POST", body: JSON.stringify({ title: params.title, body: params.body, labels }) },
-    );
+    return await githubFetch<GitHubIssue>(`/repos/${owner}/${repo}/issues`, token, {
+      method: "POST",
+      body: JSON.stringify({ title: params.title, body: params.body, labels }),
+    });
   } catch (err) {
     if (!(err instanceof GitHubApiError) || err.status !== 422) throw err;
 
@@ -140,17 +140,13 @@ export async function createIssue(params: {
     // Emit structured warning into stderr so operators can add missing labels.
     process.stderr.write(
       `[neotoma] GitHub issue mirror: dropping unknown label(s) [${droppedLabels.join(", ")}] ` +
-        `from repo ${owner}/${repo} — add them in GitHub Settings → Labels to include them.\n`,
+        `from repo ${owner}/${repo} — add them in GitHub Settings → Labels to include them.\n`
     );
 
-    return githubFetch<GitHubIssue>(
-      `/repos/${owner}/${repo}/issues`,
-      token,
-      {
-        method: "POST",
-        body: JSON.stringify({ title: params.title, body: params.body, labels: validLabels }),
-      },
-    );
+    return githubFetch<GitHubIssue>(`/repos/${owner}/${repo}/issues`, token, {
+      method: "POST",
+      body: JSON.stringify({ title: params.title, body: params.body, labels: validLabels }),
+    });
   }
 }
 
@@ -160,41 +156,38 @@ export async function createIssue(params: {
 export async function addIssueComment(
   issueNumber: number,
   body: string,
-  opts?: GitHubApiOptions,
+  opts?: GitHubApiOptions
 ): Promise<GitHubComment> {
   const { token, owner, repo } = await resolveOptions(opts);
 
   return githubFetch<GitHubComment>(
     `/repos/${owner}/${repo}/issues/${issueNumber}/comments`,
     token,
-    { method: "POST", body: JSON.stringify({ body }) },
+    { method: "POST", body: JSON.stringify({ body }) }
   );
 }
 
 /**
  * Get a single issue by number.
  */
-export async function getIssue(
-  issueNumber: number,
-  opts?: GitHubApiOptions,
-): Promise<GitHubIssue> {
+export async function getIssue(issueNumber: number, opts?: GitHubApiOptions): Promise<GitHubIssue> {
   const { token, owner, repo } = await resolveOptions(opts);
-  return githubFetch<GitHubIssue>(
-    `/repos/${owner}/${repo}/issues/${issueNumber}`,
-    token,
-  );
+  return githubFetch<GitHubIssue>(`/repos/${owner}/${repo}/issues/${issueNumber}`, token);
 }
 
 /**
  * List issues from the configured GitHub repo.
  */
-export async function listIssues(params?: {
-  state?: "open" | "closed" | "all";
-  labels?: string[];
-  since?: string;
-  per_page?: number;
-  page?: number;
-}, opts?: GitHubApiOptions): Promise<GitHubIssue[]> {
+export async function listIssues(
+  params?: {
+    state?: "open" | "closed" | "all";
+    labels?: string[];
+    since?: string;
+    per_page?: number;
+    page?: number;
+  },
+  opts?: GitHubApiOptions
+): Promise<GitHubIssue[]> {
   const { token, owner, repo } = await resolveOptions(opts);
 
   const query = new URLSearchParams();
@@ -206,10 +199,7 @@ export async function listIssues(params?: {
   query.set("direction", "desc");
   query.set("sort", "updated");
 
-  return githubFetch<GitHubIssue[]>(
-    `/repos/${owner}/${repo}/issues?${query.toString()}`,
-    token,
-  );
+  return githubFetch<GitHubIssue[]>(`/repos/${owner}/${repo}/issues?${query.toString()}`, token);
 }
 
 /**
@@ -218,7 +208,7 @@ export async function listIssues(params?: {
 export async function listIssueComments(
   issueNumber: number,
   params?: { since?: string; per_page?: number; page?: number },
-  opts?: GitHubApiOptions,
+  opts?: GitHubApiOptions
 ): Promise<GitHubComment[]> {
   const { token, owner, repo } = await resolveOptions(opts);
 
@@ -229,7 +219,7 @@ export async function listIssueComments(
 
   return githubFetch<GitHubComment[]>(
     `/repos/${owner}/${repo}/issues/${issueNumber}/comments?${query.toString()}`,
-    token,
+    token
   );
 }
 
@@ -238,15 +228,14 @@ export async function listIssueComments(
  */
 export async function closeIssue(
   issueNumber: number,
-  opts?: GitHubApiOptions,
+  opts?: GitHubApiOptions
 ): Promise<GitHubIssue> {
   const { token, owner, repo } = await resolveOptions(opts);
 
-  return githubFetch<GitHubIssue>(
-    `/repos/${owner}/${repo}/issues/${issueNumber}`,
-    token,
-    { method: "PATCH", body: JSON.stringify({ state: "closed" }) },
-  );
+  return githubFetch<GitHubIssue>(`/repos/${owner}/${repo}/issues/${issueNumber}`, token, {
+    method: "PATCH",
+    body: JSON.stringify({ state: "closed" }),
+  });
 }
 
 /**
@@ -255,14 +244,14 @@ export async function closeIssue(
 export async function addIssueLabels(
   issueNumber: number,
   labels: string[],
-  opts?: GitHubApiOptions,
+  opts?: GitHubApiOptions
 ): Promise<Array<{ name: string }>> {
   const { token, owner, repo } = await resolveOptions(opts);
 
   return githubFetch<Array<{ name: string }>>(
     `/repos/${owner}/${repo}/issues/${issueNumber}/labels`,
     token,
-    { method: "POST", body: JSON.stringify({ labels }) },
+    { method: "POST", body: JSON.stringify({ labels }) }
   );
 }
 
@@ -273,7 +262,7 @@ export async function listRepoLabelNames(opts?: GitHubApiOptions): Promise<strin
   const { token, owner, repo } = await resolveOptions(opts);
   const results = await githubFetch<Array<{ name: string }>>(
     `/repos/${owner}/${repo}/labels?per_page=100`,
-    token,
+    token
   );
   return results.map((r) => r.name);
 }

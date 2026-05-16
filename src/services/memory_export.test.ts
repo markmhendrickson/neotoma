@@ -1,9 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  importanceScore,
-  sortEntities,
-  BOOKKEEPING_ENTITY_TYPES,
-} from "./memory_export.js";
+import { importanceScore, sortEntities, BOOKKEEPING_ENTITY_TYPES } from "./memory_export.js";
 
 describe("memory_export.sortEntities", () => {
   // All same entity_type so type weight does not disambiguate — the test
@@ -38,9 +34,7 @@ describe("memory_export.sortEntities", () => {
   const fixedNow = Date.parse("2025-01-10T00:00:00Z");
 
   it("recency: orders by last_observation_at desc, ties broken by entity_id asc", () => {
-    const result = sortEntities(sameTypeRows, "recency", fixedNow).map(
-      (r) => r.entity_id
-    );
+    const result = sortEntities(sameTypeRows, "recency", fixedNow).map((r) => r.entity_id);
     expect(result).toEqual(["ent_c", "ent_a", "ent_b", "ent_d"]);
   });
 
@@ -48,9 +42,7 @@ describe("memory_export.sortEntities", () => {
     // At fixed_now (2025-01-10) both ent_a and ent_c have obs=5, but ent_c is
     // more recent so its decay factor is larger. ent_b (obs=2, same date as
     // ent_a) ranks below. ent_d (no last_observation_at) ranks last.
-    const result = sortEntities(sameTypeRows, "importance", fixedNow).map(
-      (r) => r.entity_id
-    );
+    const result = sortEntities(sameTypeRows, "importance", fixedNow).map((r) => r.entity_id);
     expect(result).toEqual(["ent_c", "ent_a", "ent_b", "ent_d"]);
   });
 
@@ -69,9 +61,7 @@ describe("memory_export.sortEntities", () => {
         observation_count: 1,
       },
     ];
-    const result = sortEntities(rows, "importance", fixedNow).map(
-      (r) => r.entity_id
-    );
+    const result = sortEntities(rows, "importance", fixedNow).map((r) => r.entity_id);
     // typeWeight for agent_message is 0, so task wins even though it is older.
     expect(result[0]).toBe("ent_task");
   });
@@ -91,19 +81,13 @@ describe("memory_export.sortEntities", () => {
         observation_count: 1,
       },
     ];
-    const result = sortEntities(rows, "importance", fixedNow).map(
-      (r) => r.entity_id
-    );
+    const result = sortEntities(rows, "importance", fixedNow).map((r) => r.entity_id);
     expect(result[0]).toBe("ent_task");
   });
 
   it("is deterministic across repeated calls", () => {
-    const a = sortEntities(sameTypeRows, "importance", fixedNow).map(
-      (r) => r.entity_id
-    );
-    const b = sortEntities(sameTypeRows, "importance", fixedNow).map(
-      (r) => r.entity_id
-    );
+    const a = sortEntities(sameTypeRows, "importance", fixedNow).map((r) => r.entity_id);
+    const b = sortEntities(sameTypeRows, "importance", fixedNow).map((r) => r.entity_id);
     expect(a).toEqual(b);
   });
 

@@ -17,7 +17,12 @@
  * Private issues never touch GitHub.
  */
 
-import type { Operations, StoreEntityInput, StoreInput, StoreResult } from "../../core/operations.js";
+import type {
+  Operations,
+  StoreEntityInput,
+  StoreInput,
+  StoreResult,
+} from "../../core/operations.js";
 import { assertGuestWriteAllowed } from "../access_policy.js";
 import {
   getCurrentAgentIdentity,
@@ -38,9 +43,15 @@ import {
 import { loadIssuesConfig } from "./config.js";
 import { IssueTransportError, IssueValidationError } from "./errors.js";
 import { runRedactionGuard } from "./redaction_guard.js";
-import { buildExternalActorFromGithubComment, buildExternalActorFromGithubIssue } from "./external_actor_builder.js";
+import {
+  buildExternalActorFromGithubComment,
+  buildExternalActorFromGithubIssue,
+} from "./external_actor_builder.js";
 import * as github from "./github_client.js";
-import { githubIssueThreadConversationId, localIssueThreadConversationId } from "./github_issue_thread.js";
+import {
+  githubIssueThreadConversationId,
+  localIssueThreadConversationId,
+} from "./github_issue_thread.js";
 import {
   githubIssueBodyTurnKey,
   githubIssueCommentTurnKey,
@@ -62,7 +73,8 @@ import type {
 const GITHUB_MIRROR_GUIDANCE_MAX_CAUSE = 240;
 
 function entityPrimaryId(entity: { entity_id?: string; id?: string }): string {
-  if (typeof entity.entity_id === "string" && entity.entity_id.trim()) return entity.entity_id.trim();
+  if (typeof entity.entity_id === "string" && entity.entity_id.trim())
+    return entity.entity_id.trim();
   if (typeof entity.id === "string" && entity.id.trim()) return entity.id.trim();
   return "";
 }
@@ -107,23 +119,25 @@ type ResolvedIssueRow = {
   localIssueId: string | null;
 };
 
-function snapshotFromEntityRow(row: { snapshot?: Record<string, unknown> }): Record<string, unknown> {
+function snapshotFromEntityRow(row: {
+  snapshot?: Record<string, unknown>;
+}): Record<string, unknown> {
   const snapshot = row.snapshot ?? {};
   return snapshot.snapshot && typeof snapshot.snapshot === "object"
-    ? snapshot.snapshot as Record<string, unknown>
+    ? (snapshot.snapshot as Record<string, unknown>)
     : snapshot;
 }
 
 async function resolveIssueEntityIdByGithubNumber(
   ops: Operations,
   githubNumber: number,
-  repo: string,
+  repo: string
 ): Promise<string> {
-  const result = await ops.retrieveEntities({
+  const result = (await ops.retrieveEntities({
     entity_type: "issue",
     limit: 200,
     include_snapshots: true,
-  }) as {
+  })) as {
     entities?: Array<{
       id?: string;
       entity_id?: string;
@@ -147,7 +161,7 @@ async function resolveIssueEntityIdByGithubNumber(
  */
 export async function resolveIssueRow(
   ops: Operations,
-  params: { entity_id?: string; issue_number?: number },
+  params: { entity_id?: string; issue_number?: number }
 ): Promise<ResolvedIssueRow> {
   const trimmedEid = typeof params.entity_id === "string" ? params.entity_id.trim() : "";
   const hasEid = trimmedEid.length > 0;
@@ -186,7 +200,9 @@ export async function resolveIssueRow(
   } | null;
 
   if (!raw || raw.entity_type !== "issue") {
-    throw new Error(`entity_id must refer to an issue entity (got ${raw?.entity_type ?? "unknown"}).`);
+    throw new Error(
+      `entity_id must refer to an issue entity (got ${raw?.entity_type ?? "unknown"}).`
+    );
   }
 
   const snapshot = (raw.snapshot ?? {}) as Record<string, unknown>;
@@ -197,13 +213,18 @@ export async function resolveIssueRow(
       : null;
 
   if (hasEid && hasNum && githubNumber > 0 && num !== githubNumber) {
-    throw new Error(`issue_number (${num}) does not match github_number on entity (${githubNumber}).`);
+    throw new Error(
+      `issue_number (${num}) does not match github_number on entity (${githubNumber}).`
+    );
   }
 
   return { issue_entity_id, snapshot, githubNumber, localIssueId };
 }
 
-function remoteIssueEntityIdForTarget(snapshot: Record<string, unknown>, localIssueEntityId: string): string {
+function remoteIssueEntityIdForTarget(
+  snapshot: Record<string, unknown>,
+  localIssueEntityId: string
+): string {
   const r = snapshot.remote_entity_id;
   if (typeof r === "string" && r.trim().length > 0) return r.trim();
   return localIssueEntityId;
@@ -290,7 +311,7 @@ export interface GetIssueStatusResult {
 
 function mergeIssueStatusMessages(
   remoteMessages: GetIssueStatusResult["messages"],
-  localMessages: GetIssueStatusResult["messages"],
+  localMessages: GetIssueStatusResult["messages"]
 ): GetIssueStatusResult["messages"] {
   const byKey = new Map<string, GetIssueStatusResult["messages"][number]>();
 
@@ -324,7 +345,7 @@ function issueStatusMessageMergeKey(message: GetIssueStatusResult["messages"][nu
 
 function shouldPreferIssueStatusMessage(
   candidate: GetIssueStatusResult["messages"][number],
-  existing: GetIssueStatusResult["messages"][number],
+  existing: GetIssueStatusResult["messages"][number]
 ): boolean {
   if (existing.author === "guest" && candidate.author !== "guest") {
     return true;
@@ -336,7 +357,7 @@ function coerceRemoteIssueThreadPayload(
   raw: Record<string, unknown>,
   issueEntityIdForResponse: string,
   config: { repo: string },
-  synced: boolean,
+  synced: boolean
 ): GetIssueStatusResult | null {
   if (!Array.isArray(raw.messages)) return null;
 
@@ -375,7 +396,9 @@ function coerceRemoteIssueThreadPayload(
         : null;
 
   const labelsRaw = raw.labels;
-  const labels = Array.isArray(labelsRaw) ? (labelsRaw as string[]).filter((x) => typeof x === "string") : [];
+  const labels = Array.isArray(labelsRaw)
+    ? (labelsRaw as string[]).filter((x) => typeof x === "string")
+    : [];
 
   return {
     issue_entity_id: issueEntityIdForResponse,
@@ -397,7 +420,7 @@ function coerceRemoteIssueThreadPayload(
  */
 export async function loadIssueThreadMessages(
   ops: Operations,
-  issueEntityId: string,
+  issueEntityId: string
 ): Promise<GetIssueStatusResult["messages"]> {
   const related = (await ops.retrieveRelatedEntities({
     entity_id: issueEntityId,
@@ -417,8 +440,8 @@ export async function loadIssueThreadMessages(
       (related?.entities ?? [])
         .filter((e) => e.entity_type === "conversation")
         .map((e) => entityPrimaryId(e))
-        .filter(Boolean),
-    ),
+        .filter(Boolean)
+    )
   ).sort();
   if (conversationEntityIds.length === 0) return [];
 
@@ -472,7 +495,7 @@ export async function loadIssueThreadMessages(
 export async function loadIssueStatusFromGraph(
   ops: Operations,
   issueEntityId: string,
-  config: { repo: string },
+  config: { repo: string }
 ): Promise<GetIssueStatusResult> {
   const raw = (await ops.retrieveEntitySnapshot({
     entity_id: issueEntityId,
@@ -484,7 +507,9 @@ export async function loadIssueStatusFromGraph(
   } | null;
 
   if (!raw || raw.entity_type !== "issue") {
-    throw new Error(`entity_id must refer to an issue entity (got ${raw?.entity_type ?? "unknown"}).`);
+    throw new Error(
+      `entity_id must refer to an issue entity (got ${raw?.entity_type ?? "unknown"}).`
+    );
   }
 
   const snapshot = (raw.snapshot ?? {}) as Record<string, unknown>;
@@ -498,7 +523,8 @@ export async function loadIssueStatusFromGraph(
     status: (snapshot.status as string) ?? "open",
     labels: (snapshot.labels as string[]) ?? [],
     github_url:
-      (snapshot.github_url as string) ?? (ghNum > 0 ? `https://github.com/${config.repo}/issues/${ghNum}` : ""),
+      (snapshot.github_url as string) ??
+      (ghNum > 0 ? `https://github.com/${config.repo}/issues/${ghNum}` : ""),
     author: (snapshot.author as string) ?? "unknown",
     created_at: (snapshot.created_at as string) ?? "",
     closed_at: (snapshot.closed_at as string) ?? null,
@@ -509,7 +535,7 @@ export async function loadIssueStatusFromGraph(
 
 export async function submitGuestIssue(
   ops: Operations,
-  params: GuestIssueSubmitParams,
+  params: GuestIssueSubmitParams
 ): Promise<GuestIssueSubmitResult> {
   await assertGuestWriteAllowed(["issue"], {});
 
@@ -518,7 +544,8 @@ export async function submitGuestIssue(
     typeof params.submission_timestamp === "string" && params.submission_timestamp.trim().length > 0
       ? params.submission_timestamp.trim()
       : new Date().toISOString();
-  const ghNum = params.githubNumber && params.githubNumber > 0 ? Math.trunc(params.githubNumber) : 0;
+  const ghNum =
+    params.githubNumber && params.githubNumber > 0 ? Math.trunc(params.githubNumber) : 0;
   const localId =
     ghNum > 0
       ? undefined
@@ -598,9 +625,9 @@ export async function submitGuestIssue(
             externalActor: currentContext?.externalActor ?? null,
             bypassGuestStoreAccessPolicy: true,
           },
-          () => ops.store(input),
+          () => ops.store(input)
         ),
-    },
+    }
   );
   const structured = structuredEntities(storeResult);
   const entityIds = structured.map((e) => e.entity_id ?? "").filter(Boolean);
@@ -629,7 +656,7 @@ export async function submitGuestIssue(
 
 export async function appendGuestIssueMessage(
   ops: Operations,
-  params: { issue_entity_id: string; body: string },
+  params: { issue_entity_id: string; body: string }
 ): Promise<{ message_entity_id: string }> {
   const raw = (await ops.retrieveEntitySnapshot({
     entity_id: params.issue_entity_id,
@@ -639,7 +666,9 @@ export async function appendGuestIssueMessage(
     snapshot?: Record<string, unknown>;
   } | null;
   if (!raw || raw.entity_type !== "issue") {
-    throw new Error(`entity_id must refer to an issue entity (got ${raw?.entity_type ?? "unknown"}).`);
+    throw new Error(
+      `entity_id must refer to an issue entity (got ${raw?.entity_type ?? "unknown"}).`
+    );
   }
 
   const snapshot = (raw.snapshot ?? {}) as Record<string, unknown>;
@@ -688,7 +717,10 @@ export async function appendGuestIssueMessage(
 }
 
 function reporterProvenanceFieldsForMessage(
-  params: Pick<IssueMessageParams, "reporter_git_sha" | "reporter_git_ref" | "reporter_channel" | "reporter_app_version">,
+  params: Pick<
+    IssueMessageParams,
+    "reporter_git_sha" | "reporter_git_ref" | "reporter_channel" | "reporter_app_version"
+  >
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   const keys = [
@@ -711,7 +743,7 @@ async function touchIssueThreadActivity(
     messageAt: string;
     author?: string;
     idempotencyKey: string;
-  },
+  }
 ): Promise<void> {
   const entity: StoreEntityInput = {
     entity_type: "issue",
@@ -731,7 +763,8 @@ async function touchIssueThreadActivity(
 
 function assertSubmitIssueReporterEnvironment(params: IssueCreateParams): void {
   const sha = typeof params.reporter_git_sha === "string" ? params.reporter_git_sha.trim() : "";
-  const version = typeof params.reporter_app_version === "string" ? params.reporter_app_version.trim() : "";
+  const version =
+    typeof params.reporter_app_version === "string" ? params.reporter_app_version.trim() : "";
   if (sha.length === 0 && version.length === 0) {
     throw new IssueValidationError({
       code: "ERR_REPORTER_ENVIRONMENT_REQUIRED",
@@ -752,7 +785,7 @@ function assertSubmitIssueReporterEnvironment(params: IssueCreateParams): void {
  */
 export async function submitIssue(
   ops: Operations,
-  params: IssueCreateParams,
+  params: IssueCreateParams
 ): Promise<SubmitIssueResult> {
   assertSubmitIssueReporterEnvironment(params);
   const config = await loadIssuesConfig();
@@ -861,7 +894,9 @@ export async function submitIssue(
       ...(localId ? { local_issue_id: localId } : {}),
       visibility,
       author,
-      github_actor: externalActor ? { login: externalActor.login, id: externalActor.id, type: externalActor.type } : undefined,
+      github_actor: externalActor
+        ? { login: externalActor.login, id: externalActor.id, type: externalActor.type }
+        : undefined,
       created_at: githubIssue?.created_at ?? now,
       closed_at: null,
       last_synced_at: submittedToNeotoma ? now : null,
@@ -889,7 +924,9 @@ export async function submitIssue(
       sender_kind: "agent",
       content: params.body,
       author,
-      github_actor: externalActor ? { login: externalActor.login, id: externalActor.id, type: externalActor.type } : undefined,
+      github_actor: externalActor
+        ? { login: externalActor.login, id: externalActor.id, type: externalActor.type }
+        : undefined,
       github_comment_id: issueNumber ? `issue-body-${issueNumber}` : `local-issue-body-${localId}`,
       turn_key: bodyTurnKey,
       created_at: githubIssue?.created_at ?? now,
@@ -901,29 +938,30 @@ export async function submitIssue(
     { relationship_type: "PART_OF", source_index: 2, target_index: 1 },
   ];
 
-  const storeResult: StoreResult = await runWithExternalActor(externalActor, () =>
+  const storeResult: StoreResult = (await runWithExternalActor(externalActor, () =>
     ops.store({
       entities,
       relationships,
       idempotency_key: `issue-create-${config.repo}-${issueNumber || Date.now()}`,
-    }),
-  ) as StoreResult;
+    })
+  )) as StoreResult;
 
   const entityId = structuredEntityIdAt(storeResult, 0);
   const conversationId = structuredEntityIdAt(storeResult, 1);
 
   // Create REFERS_TO relationships from the issue entity to caller-provided entity IDs.
   const entityIdsToLink = Array.isArray(params.entity_ids_to_link)
-    ? params.entity_ids_to_link.filter((id): id is string => typeof id === "string" && id.trim().length > 0)
+    ? params.entity_ids_to_link.filter(
+        (id): id is string => typeof id === "string" && id.trim().length > 0
+      )
     : [];
   if (entityId && entityIdsToLink.length > 0) {
-    const relationships: import("../../core/operations.js").CreateRelationshipInput[] = entityIdsToLink.map(
-      (targetId) => ({
+    const relationships: import("../../core/operations.js").CreateRelationshipInput[] =
+      entityIdsToLink.map((targetId) => ({
         relationship_type: "REFERS_TO" as const,
         source_entity_id: entityId,
         target_entity_id: targetId.trim(),
-      }),
-    );
+      }));
     await ops.createRelationships({ relationships });
   }
 
@@ -931,16 +969,16 @@ export async function submitIssue(
   if (remoteSubmissionAttempted && !submittedToNeotoma) {
     const cause = remoteSubmissionError?.message ?? "unknown error";
     const githubHint =
-      pushedToGithub && githubUrl
-        ? ` A GitHub issue was created anyway: ${githubUrl}.`
-        : "";
+      pushedToGithub && githubUrl ? ` A GitHub issue was created anyway: ${githubUrl}.` : "";
     remoteSubmissionErrorMessage =
       `Remote submission to ${issuesTargetUrl} failed: ${cause}.${githubHint} ` +
       "Issue stored locally with sync_pending=true for a later retry.";
   }
 
   const githubMirrorGuidance =
-    visibility === "public" && !pushedToGithub ? buildGithubMirrorGuidance(githubMirrorFailure) : null;
+    visibility === "public" && !pushedToGithub
+      ? buildGithubMirrorGuidance(githubMirrorFailure)
+      : null;
 
   return {
     issue_number: issueNumber,
@@ -967,18 +1005,19 @@ export async function submitIssue(
  */
 export async function addIssueMessage(
   ops: Operations,
-  params: IssueMessageParams,
+  params: IssueMessageParams
 ): Promise<AddMessageResult> {
   const config = await loadIssuesConfig();
   const resolved = await resolveIssueRow(ops, params);
   const { issue_entity_id: issueEntityId, snapshot, githubNumber, localIssueId } = resolved;
 
-  const visibilitySnapshot = typeof snapshot.visibility === "string" ? snapshot.visibility.trim() : "";
+  const visibilitySnapshot =
+    typeof snapshot.visibility === "string" ? snapshot.visibility.trim() : "";
   const isPublicThread = visibilitySnapshot === "public" || githubNumber > 0;
   const messageEnv = reporterProvenanceFieldsForMessage(params);
   if (Object.keys(messageEnv).length === 0 && isPublicThread) {
     process.stderr.write(
-      "[issues] add_issue_message: reporter environment missing on public thread message — set `reporter_git_sha` and/or `reporter_app_version` so debugging steps stay correlated with the build under test.\n",
+      "[issues] add_issue_message: reporter environment missing on public thread message — set `reporter_git_sha` and/or `reporter_app_version` so debugging steps stay correlated with the build under test.\n"
     );
   }
 
@@ -1004,7 +1043,7 @@ export async function addIssueMessage(
 
   if (!threadConversationId) {
     throw new Error(
-      "Issue is missing thread identity (no github_number and no local_issue_id); cannot append a message.",
+      "Issue is missing thread identity (no github_number and no local_issue_id); cannot append a message."
     );
   }
 
@@ -1017,7 +1056,8 @@ export async function addIssueMessage(
   const guestForRemote =
     typeof params.guest_access_token === "string" && params.guest_access_token.trim().length > 0
       ? params.guest_access_token.trim()
-      : typeof snapshot.guest_access_token === "string" && snapshot.guest_access_token.trim().length > 0
+      : typeof snapshot.guest_access_token === "string" &&
+          snapshot.guest_access_token.trim().length > 0
         ? snapshot.guest_access_token.trim()
         : undefined;
 
@@ -1032,7 +1072,8 @@ export async function addIssueMessage(
         local_issue_id: localIssueId ?? undefined,
         issue_title: issueTitle,
         remote_conversation_id:
-          typeof snapshot.remote_conversation_id === "string" && snapshot.remote_conversation_id.trim().length > 0
+          typeof snapshot.remote_conversation_id === "string" &&
+          snapshot.remote_conversation_id.trim().length > 0
             ? snapshot.remote_conversation_id.trim()
             : undefined,
         guest_access_token: guestForRemote,
@@ -1070,16 +1111,17 @@ export async function addIssueMessage(
 
     // Create REFERS_TO relationships from the issue entity to caller-provided entity IDs.
     const entityIdsToLinkRemote = Array.isArray(params.entity_ids_to_link)
-      ? params.entity_ids_to_link.filter((id): id is string => typeof id === "string" && id.trim().length > 0)
+      ? params.entity_ids_to_link.filter(
+          (id): id is string => typeof id === "string" && id.trim().length > 0
+        )
       : [];
     if (entityIdsToLinkRemote.length > 0) {
-      const rels: import("../../core/operations.js").CreateRelationshipInput[] = entityIdsToLinkRemote.map(
-        (targetId) => ({
+      const rels: import("../../core/operations.js").CreateRelationshipInput[] =
+        entityIdsToLinkRemote.map((targetId) => ({
           relationship_type: "REFERS_TO" as const,
           source_entity_id: issueEntityId,
           target_entity_id: targetId.trim(),
-        }),
-      );
+        }));
       await ops.createRelationships({ relationships: rels });
     }
 
@@ -1094,7 +1136,9 @@ export async function addIssueMessage(
 
   const now = new Date().toISOString();
   const author = githubComment?.user?.login ?? "local";
-  const commentActor = buildExternalActorFromGithubComment(githubComment, null, { repository: config.repo });
+  const commentActor = buildExternalActorFromGithubComment(githubComment, null, {
+    repository: config.repo,
+  });
   const commentKey = githubComment ? String(githubComment.id) : `local-${Date.now()}`;
   const turnKey =
     githubNumber > 0
@@ -1116,7 +1160,9 @@ export async function addIssueMessage(
       sender_kind: "agent",
       content: params.body,
       author,
-      github_actor: commentActor ? { login: commentActor.login, id: commentActor.id, type: commentActor.type } : undefined,
+      github_actor: commentActor
+        ? { login: commentActor.login, id: commentActor.id, type: commentActor.type }
+        : undefined,
       github_comment_id: commentKey,
       turn_key: turnKey,
       created_at: githubComment?.created_at ?? now,
@@ -1128,13 +1174,13 @@ export async function addIssueMessage(
     { relationship_type: "PART_OF", source_index: 1, target_index: 0 },
   ];
 
-  const storeResult: StoreResult = await runWithExternalActor(commentActor, () =>
+  const storeResult: StoreResult = (await runWithExternalActor(commentActor, () =>
     ops.store({
       entities,
       relationships,
       idempotency_key: `issue-message-${issueEntityId}-${commentKey}`,
-    }),
-  ) as StoreResult;
+    })
+  )) as StoreResult;
 
   const messageEntityId = structuredEntityIdAt(storeResult, 1);
 
@@ -1144,12 +1190,14 @@ export async function addIssueMessage(
       messageAt: githubComment?.created_at ?? now,
       author,
       idempotencyKey: `issue-message-activity-${issueEntityId}-${commentKey}`,
-    }),
+    })
   );
 
   // Create REFERS_TO relationships from the issue entity to caller-provided entity IDs.
   const entityIdsToLink = Array.isArray(params.entity_ids_to_link)
-    ? params.entity_ids_to_link.filter((id): id is string => typeof id === "string" && id.trim().length > 0)
+    ? params.entity_ids_to_link.filter(
+        (id): id is string => typeof id === "string" && id.trim().length > 0
+      )
     : [];
   if (entityIdsToLink.length > 0) {
     const rels: import("../../core/operations.js").CreateRelationshipInput[] = entityIdsToLink.map(
@@ -1157,7 +1205,7 @@ export async function addIssueMessage(
         relationship_type: "REFERS_TO" as const,
         source_entity_id: issueEntityId,
         target_entity_id: targetId.trim(),
-      }),
+      })
     );
     await ops.createRelationships({ relationships: rels });
   }
@@ -1186,7 +1234,7 @@ async function fetchOperatorIssueMirrorIfApplicable(
   localIssueEntityId: string,
   snapshot: Record<string, unknown>,
   synced: boolean,
-  guestAccessTokenOverride?: string | null,
+  guestAccessTokenOverride?: string | null
 ): Promise<GetIssueStatusResult | null> {
   const target = typeof config.target_url === "string" ? config.target_url.trim() : "";
   const remoteIdRaw = snapshot.remote_entity_id;
@@ -1229,7 +1277,7 @@ async function fetchOperatorIssueMirrorIfApplicable(
  */
 export async function getIssueStatus(
   ops: Operations,
-  params: IssueStatusParams,
+  params: IssueStatusParams
 ): Promise<GetIssueStatusResult> {
   const config = await loadIssuesConfig();
 
@@ -1256,7 +1304,7 @@ export async function getIssueStatus(
     resolved.issue_entity_id,
     snapshot,
     synced,
-    params.guest_access_token,
+    params.guest_access_token
   );
   if (remoteFirst) {
     const local = await loadIssueStatusFromGraph(ops, resolved.issue_entity_id, config);

@@ -31,7 +31,7 @@ export function githubIssueBodyTurnKey(repo: string, issueNumber: number): strin
 export function githubIssueCommentTurnKey(
   repo: string,
   issueNumber: number,
-  commentId: string,
+  commentId: string
 ): string {
   return `${githubIssueThreadPrefix(repo, issueNumber)}:comment:${String(commentId).trim()}`;
 }
@@ -41,6 +41,10 @@ export function localIssueBodyTurnKey(repo: string, issueId: string): string {
 }
 
 /** Stable `turn_key` for follow-up messages on Neotoma-local issue threads (no GitHub number). */
-export function localIssueCommentTurnKey(repo: string, issueId: string, commentKey: string): string {
+export function localIssueCommentTurnKey(
+  repo: string,
+  issueId: string,
+  commentKey: string
+): string {
   return `${localIssueThreadPrefix(repo, issueId)}:comment:${String(commentKey).trim()}`;
 }

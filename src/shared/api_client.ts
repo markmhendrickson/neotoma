@@ -142,7 +142,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
         ) => Promise<unknown>;
         return localMethod(path, ...args);
       }
-    }) as typeof client[TMethod];
+    }) as (typeof client)[TMethod];
   };
 
   return {

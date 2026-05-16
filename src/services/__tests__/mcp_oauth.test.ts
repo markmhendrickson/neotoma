@@ -5,8 +5,7 @@
 // Set required environment variables BEFORE any imports
 // Config module reads env vars at import time, so this must be set first
 process.env.NEOTOMA_OAUTH_CLIENT_ID = "test-client-id";
-const testEncryptionKey =
-  "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+const testEncryptionKey = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 process.env.NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY = testEncryptionKey;
 process.env.MCP_TOKEN_ENCRYPTION_KEY = testEncryptionKey;
 
@@ -106,7 +105,7 @@ describe("MCP OAuth Service", () => {
 
     afterEach(() => {
       // Restore original env, but keep NEOTOMA_OAUTH_CLIENT_ID if it was set
-      Object.keys(process.env).forEach(key => {
+      Object.keys(process.env).forEach((key) => {
         if (!(key in originalEnv)) {
           delete process.env[key];
         } else {
@@ -329,9 +328,9 @@ describe("MCP OAuth Service", () => {
       await expect(mcpAuth.validateSessionToken(tokenResponse.access_token)).rejects.toThrow(
         "Local session token expired"
       );
-      await expect(oauth.validateTokenAndGetConnectionId(tokenResponse.access_token)).rejects.toThrow(
-        "Access token expired"
-      );
+      await expect(
+        oauth.validateTokenAndGetConnectionId(tokenResponse.access_token)
+      ).rejects.toThrow("Access token expired");
 
       rmSync(tempDir, { recursive: true, force: true });
     });
@@ -486,7 +485,11 @@ describe("MCP OAuth Service", () => {
   describe("Input Validation", () => {
     describe("validateConnectionId", () => {
       it("createAuthUrl does not take connection_id (validated in initiateOAuthFlow)", async () => {
-        const url = await createAuthUrl("valid-state-token", "challenge", "http://localhost/callback");
+        const url = await createAuthUrl(
+          "valid-state-token",
+          "challenge",
+          "http://localhost/callback"
+        );
         expect(url).toBeDefined();
       });
 
@@ -533,11 +536,7 @@ describe("MCP OAuth Service", () => {
       });
 
       it("accepts custom protocol redirect URI (cursor://)", async () => {
-        const url = await createAuthUrl(
-          "valid-state-token",
-          "challenge",
-          "cursor://callback"
-        );
+        const url = await createAuthUrl("valid-state-token", "challenge", "cursor://callback");
         expect(url).toBeDefined();
       });
     });
@@ -618,20 +617,20 @@ describe("MCP OAuth Service", () => {
     it("throws OAuthError when decrypting with tampered data", () => {
       const encrypted = encryptRefreshToken(testToken);
       const parts = encrypted.split(":");
-      
+
       // Tamper with encrypted data
       const tampered = `${parts[0]}:${parts[1]}:${parts[2].slice(0, -4)}ffff`;
-      
+
       expect(() => decryptRefreshToken(tampered)).toThrow();
     });
 
     it("throws OAuthError when decrypting with wrong auth tag", () => {
       const encrypted = encryptRefreshToken(testToken);
       const parts = encrypted.split(":");
-      
+
       // Tamper with auth tag
       const tampered = `${parts[0]}:${"0".repeat(32)}:${parts[2]}`;
-      
+
       expect(() => decryptRefreshToken(tampered)).toThrow();
     });
   });

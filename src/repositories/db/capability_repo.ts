@@ -22,8 +22,6 @@ export class DbCapabilityRepository implements CapabilityRepository {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async validateCapability(_capabilityId: string): Promise<boolean> {
     // Stub: Not implemented yet
-    throw new Error(
-      "CapabilityRepository.validateCapability not yet implemented",
-    );
+    throw new Error("CapabilityRepository.validateCapability not yet implemented");
   }
 }

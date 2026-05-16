@@ -57,7 +57,7 @@ export interface PeerRemoteHealth {
 
 export function mergeProbeIntoRemoteHealth(
   localApiVersion: string,
-  probe: PeerHealthProbeResult,
+  probe: PeerHealthProbeResult
 ): PeerRemoteHealth {
   if (!probe.reachable) {
     return {

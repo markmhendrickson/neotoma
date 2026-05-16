@@ -20,9 +20,9 @@ function defaultInspectorBaseFromApi(apiBaseUrl: string): string {
     return trimTrailingSlash(apiBaseUrl);
   }
 
-  const basePath = (
-    process.env.NEOTOMA_INSPECTOR_BASE_PATH?.trim() || "/inspector"
-  ).replace(/\/+$/, "") || "/inspector";
+  const basePath =
+    (process.env.NEOTOMA_INSPECTOR_BASE_PATH?.trim() || "/inspector").replace(/\/+$/, "") ||
+    "/inspector";
   const normalizedPath = basePath.startsWith("/") ? basePath : `/${basePath}`;
   return `${origin}${normalizedPath}`;
 }
@@ -38,7 +38,7 @@ export function buildInspectorFeedbackAdminUnlockPageUrl(options: {
     throw new Error("Challenge is required to build the Inspector unlock URL.");
   }
   const base = trimTrailingSlash(
-    (options.inspectorBaseUrl?.trim() || defaultInspectorBaseFromApi(options.apiBaseUrl)).trim(),
+    (options.inspectorBaseUrl?.trim() || defaultInspectorBaseFromApi(options.apiBaseUrl)).trim()
   );
   const path = `${base}/feedback/admin-unlock`;
   const url = new URL(path);

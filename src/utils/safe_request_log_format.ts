@@ -123,7 +123,8 @@ function deepSanitizeForRequestLog(value: unknown, seen: WeakSet<object>, depth:
       continue;
     }
     if (typeof raw === "string" && TRUNCATE_STRING_KEYS.has(lower) && raw.length > 180) {
-      out[key] = `${scrubScalarString(raw.slice(0, TRUNCATE_PREFIX_LEN))}…[truncated len=${raw.length}]`;
+      out[key] =
+        `${scrubScalarString(raw.slice(0, TRUNCATE_PREFIX_LEN))}…[truncated len=${raw.length}]`;
       continue;
     }
     out[key] = deepSanitizeForRequestLog(raw, seen, depth + 1);

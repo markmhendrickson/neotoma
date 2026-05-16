@@ -27,10 +27,7 @@
  *     fleet-specific code.
  */
 
-import type {
-  ExportedEntitySnapshot,
-  SnapshotExportDocument,
-} from "./snapshot_export.js";
+import type { ExportedEntitySnapshot, SnapshotExportDocument } from "./snapshot_export.js";
 
 /** Normalised shape every parser must return. */
 export interface NormalizedExternalSnapshot {
@@ -128,11 +125,12 @@ export const identityJsonParser: ExternalParser = {
     const entities: NormalizedExternalEntity[] = Array.isArray(parsed)
       ? (parsed as NormalizedExternalEntity[])
       : Array.isArray((parsed as { entities?: unknown }).entities)
-        ? ((parsed as { entities: NormalizedExternalEntity[] }).entities)
+        ? (parsed as { entities: NormalizedExternalEntity[] }).entities
         : [];
     const typed = entities
-      .filter((e): e is NormalizedExternalEntity =>
-        typeof e?.entity_id === "string" && e.entity_id.length > 0
+      .filter(
+        (e): e is NormalizedExternalEntity =>
+          typeof e?.entity_id === "string" && e.entity_id.length > 0
       )
       .map((e) => ({
         entity_id: e.entity_id,
@@ -144,7 +142,7 @@ export const identityJsonParser: ExternalParser = {
       source_label: "json",
       exported_at:
         typeof (parsed as { exported_at?: unknown }).exported_at === "string"
-          ? ((parsed as { exported_at: string }).exported_at)
+          ? (parsed as { exported_at: string }).exported_at
           : undefined,
       entities: typed,
     };
@@ -230,18 +228,14 @@ export function compareSnapshots(
   };
 }
 
-function diagnoseProvenanceGap(
-  entity: ExportedEntitySnapshot
-): ProvenanceGap | null {
+function diagnoseProvenanceGap(entity: ExportedEntitySnapshot): ProvenanceGap | null {
   const reasons: ProvenanceGapReason[] = [];
-  const unclassified =
-    (entity.observation_source_histogram?.unclassified ?? 0) > 0;
+  const unclassified = (entity.observation_source_histogram?.unclassified ?? 0) > 0;
   if (unclassified) reasons.push("unclassified_observation_source");
 
   const tiers = entity.attribution_fingerprint?.tiers ?? {};
   if ((tiers.anonymous ?? 0) > 0) reasons.push("anonymous_attribution");
-  if ((tiers.unverified_client ?? 0) > 0)
-    reasons.push("unverified_client_attribution");
+  if ((tiers.unverified_client ?? 0) > 0) reasons.push("unverified_client_attribution");
 
   if (reasons.length === 0) return null;
   return {

@@ -1,9 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import {
-  isUpdateAvailable,
-  formatUpgradeCommand,
-  getLatestFromRegistry,
-} from "./version_check.js";
+import { isUpdateAvailable, formatUpgradeCommand, getLatestFromRegistry } from "./version_check.js";
 
 describe("isUpdateAvailable", () => {
   it("returns true when current is less than latest", () => {
@@ -34,27 +30,17 @@ describe("isUpdateAvailable", () => {
 
 describe("formatUpgradeCommand", () => {
   it("returns global npm install for context global", () => {
-    expect(formatUpgradeCommand("neotoma", "latest", "global")).toBe(
-      "npm i -g neotoma@latest"
-    );
-    expect(formatUpgradeCommand("some-pkg", "next", "global")).toBe(
-      "npm i -g some-pkg@next"
-    );
+    expect(formatUpgradeCommand("neotoma", "latest", "global")).toBe("npm i -g neotoma@latest");
+    expect(formatUpgradeCommand("some-pkg", "next", "global")).toBe("npm i -g some-pkg@next");
   });
 
   it("defaults to global when context omitted", () => {
-    expect(formatUpgradeCommand("neotoma", "latest")).toBe(
-      "npm i -g neotoma@latest"
-    );
+    expect(formatUpgradeCommand("neotoma", "latest")).toBe("npm i -g neotoma@latest");
   });
 
   it("returns npx hint for context npx", () => {
-    expect(formatUpgradeCommand("neotoma", "latest", "npx")).toBe(
-      "npx neotoma@latest"
-    );
-    expect(formatUpgradeCommand("some-pkg", "next", "npx")).toBe(
-      "npx some-pkg@next"
-    );
+    expect(formatUpgradeCommand("neotoma", "latest", "npx")).toBe("npx neotoma@latest");
+    expect(formatUpgradeCommand("some-pkg", "next", "npx")).toBe("npx some-pkg@next");
   });
 });
 
@@ -68,8 +54,7 @@ describe("getLatestFromRegistry", () => {
         if (url.includes("/neotoma/")) {
           return Promise.resolve({
             ok: true,
-            json: () =>
-              Promise.resolve({ latest: "0.2.20", next: "0.3.0-beta.1" }),
+            json: () => Promise.resolve({ latest: "0.2.20", next: "0.3.0-beta.1" }),
           } as Response);
         }
         if (url.includes("/nonexistent-pkg-xyz/")) {

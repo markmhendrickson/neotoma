@@ -24,9 +24,7 @@ export function resolveOpenApiPath(): string {
     }
   }
 
-  throw new Error(
-    `OpenAPI schema not found. Tried: ${candidates.join(", ")}`
-  );
+  throw new Error(`OpenAPI schema not found. Tried: ${candidates.join(", ")}`);
 }
 
 export function readOpenApiFile(): string {

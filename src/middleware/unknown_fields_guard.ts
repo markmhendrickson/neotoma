@@ -34,16 +34,7 @@ interface ClosedShape {
   allowedFields: Set<string>;
 }
 
-const HTTP_METHODS = [
-  "get",
-  "put",
-  "post",
-  "delete",
-  "patch",
-  "options",
-  "head",
-  "trace",
-];
+const HTTP_METHODS = ["get", "put", "post", "delete", "patch", "options", "head", "trace"];
 
 function resolveRef(schema: unknown, root: JsonObject): unknown {
   if (!schema || typeof schema !== "object") return schema;
@@ -115,10 +106,7 @@ function getClosedShapes(): ClosedShape[] {
   } catch (err) {
     // Fail open rather than crashing the server; log and continue.
     // eslint-disable-next-line no-console
-    console.error(
-      "[unknownFieldsGuard] Failed to load openapi.yaml; guard disabled.",
-      err,
-    );
+    console.error("[unknownFieldsGuard] Failed to load openapi.yaml; guard disabled.", err);
     CACHED_SHAPES = [];
   }
   return CACHED_SHAPES;
@@ -137,10 +125,7 @@ function findShapeFor(method: string, urlPath: string): ClosedShape | null {
  * Returns the list of unknown top-level keys the body contains relative to
  * `allowed`. Exported for test use.
  */
-export function findUnknownFields(
-  body: unknown,
-  allowed: Set<string>,
-): string[] {
+export function findUnknownFields(body: unknown, allowed: Set<string>): string[] {
   if (!body || typeof body !== "object" || Array.isArray(body)) return [];
   return Object.keys(body as JsonObject).filter((k) => !allowed.has(k));
 }
@@ -148,7 +133,7 @@ export function findUnknownFields(
 export function unknownFieldsGuard(
   req: express.Request,
   res: express.Response,
-  next: express.NextFunction,
+  next: express.NextFunction
 ): void {
   if (!req.body || typeof req.body !== "object" || Array.isArray(req.body)) {
     next();

@@ -25,12 +25,7 @@ import * as path from "node:path";
 import * as os from "node:os";
 import { logger } from "../utils/logger.js";
 
-export type AccessPolicyMode =
-  | "closed"
-  | "read_only"
-  | "submit_only"
-  | "submitter_scoped"
-  | "open";
+export type AccessPolicyMode = "closed" | "read_only" | "submit_only" | "submitter_scoped" | "open";
 
 const VALID_MODES = new Set<AccessPolicyMode>([
   "closed",
@@ -46,11 +41,7 @@ export interface AccessPolicyMap {
   [entityType: string]: AccessPolicyMode;
 }
 
-export type AccessPolicySource =
-  | "env"
-  | "schema_metadata"
-  | "config_file"
-  | "default";
+export type AccessPolicySource = "env" | "schema_metadata" | "config_file" | "default";
 
 export interface AccessPolicyResolution {
   mode: AccessPolicyMode;
@@ -97,7 +88,7 @@ function setIfNonDefault(
   entries: Record<string, AccessPolicyEntry>,
   entityType: string,
   mode: AccessPolicyMode,
-  source: AccessPolicySource,
+  source: AccessPolicySource
 ): void {
   if (mode === DEFAULT_MODE) {
     delete entries[entityType];
@@ -131,12 +122,7 @@ export async function loadAccessPolicyEntries(): Promise<Record<string, AccessPo
     for (const schema of allSchemas) {
       const policy = schema.metadata?.guest_access_policy;
       if (policy && VALID_MODES.has(policy as AccessPolicyMode)) {
-        setIfNonDefault(
-          entries,
-          schema.entity_type,
-          policy as AccessPolicyMode,
-          "schema_metadata",
-        );
+        setIfNonDefault(entries, schema.entity_type, policy as AccessPolicyMode, "schema_metadata");
       }
     }
   } catch {
@@ -166,7 +152,7 @@ export async function loadAccessPolicyEntries(): Promise<Record<string, AccessPo
 export async function loadAccessPolicies(): Promise<AccessPolicyMap> {
   const entries = await loadAccessPolicyEntries();
   return Object.fromEntries(
-    Object.entries(entries).map(([entityType, entry]) => [entityType, entry.mode]),
+    Object.entries(entries).map(([entityType, entry]) => [entityType, entry.mode])
   );
 }
 
@@ -176,7 +162,7 @@ export async function loadAccessPolicies(): Promise<AccessPolicyMap> {
  * Precedence: env var > schema metadata > config file (deprecated) > default.
  */
 export async function resolveAccessPolicyWithSource(
-  entityType: string,
+  entityType: string
 ): Promise<AccessPolicyResolution> {
   // 1. Env var override (highest priority — operator escape hatch)
   const envKey = `NEOTOMA_ACCESS_POLICY_${entityType.toUpperCase()}`;
@@ -205,8 +191,12 @@ export async function resolveAccessPolicyWithSource(
         event: "access_policy_deprecated_config_file",
         entity_type: entityType,
         mode: stored,
-        hint: "Move guest_access_policy to SchemaMetadata via: neotoma access set " + entityType + " " + stored,
-      }),
+        hint:
+          "Move guest_access_policy to SchemaMetadata via: neotoma access set " +
+          entityType +
+          " " +
+          stored,
+      })
     );
     return { mode: stored, source: "config_file" };
   }
@@ -222,13 +212,10 @@ export async function resolveAccessPolicy(entityType: string): Promise<AccessPol
 /**
  * Set the access policy for an entity type in persisted config.
  */
-export async function setAccessPolicy(
-  entityType: string,
-  mode: AccessPolicyMode,
-): Promise<void> {
+export async function setAccessPolicy(entityType: string, mode: AccessPolicyMode): Promise<void> {
   if (!VALID_MODES.has(mode)) {
     throw new Error(
-      `Invalid access policy mode "${mode}". Valid modes: ${Array.from(VALID_MODES).join(", ")}`,
+      `Invalid access policy mode "${mode}". Valid modes: ${Array.from(VALID_MODES).join(", ")}`
     );
   }
   const cfg = await readConfig();
@@ -253,11 +240,11 @@ export async function resetAccessPolicy(entityType: string): Promise<void> {
  */
 export async function setAccessPolicies(
   entityTypes: string[],
-  mode: AccessPolicyMode,
+  mode: AccessPolicyMode
 ): Promise<void> {
   if (!VALID_MODES.has(mode)) {
     throw new Error(
-      `Invalid access policy mode "${mode}". Valid modes: ${Array.from(VALID_MODES).join(", ")}`,
+      `Invalid access policy mode "${mode}". Valid modes: ${Array.from(VALID_MODES).join(", ")}`
     );
   }
   const cfg = await readConfig();
@@ -306,7 +293,7 @@ export interface AccessPolicyDecision {
 export async function enforceGuestAccess(
   op: GuestOp,
   entityTypes: string[],
-  _identity: GuestIdentity,
+  _identity: GuestIdentity
 ): Promise<Map<string, AccessPolicyDecision>> {
   const decisions = new Map<string, AccessPolicyDecision>();
 
@@ -361,7 +348,7 @@ function evaluatePolicy(op: GuestOp, mode: AccessPolicyMode): AccessPolicyDecisi
  */
 export async function assertGuestWriteAllowed(
   entityTypes: string[],
-  identity: GuestIdentity,
+  identity: GuestIdentity
 ): Promise<void> {
   const decisions = await enforceGuestAccess("store", entityTypes, identity);
 
@@ -380,7 +367,7 @@ export async function assertGuestWriteAllowed(
           entity_type: entityType,
           mode: decision.mode,
           reason: decision.reason,
-        }),
+        })
       );
       throw err;
     }
@@ -393,7 +380,7 @@ export async function assertGuestWriteAllowed(
  */
 export async function resolveGuestReadAccess(
   entityType: string,
-  identity: GuestIdentity,
+  identity: GuestIdentity
 ): Promise<AccessPolicyDecision> {
   const decisions = await enforceGuestAccess("retrieve", [entityType], identity);
   return decisions.get(entityType)!;
@@ -407,15 +394,10 @@ export class AccessPolicyError extends Error {
   readonly mode: AccessPolicyMode;
   readonly policyReason: string;
 
-  constructor(params: {
-    op: GuestOp;
-    entityType: string;
-    mode: AccessPolicyMode;
-    reason: string;
-  }) {
+  constructor(params: { op: GuestOp; entityType: string; mode: AccessPolicyMode; reason: string }) {
     super(
       `Access policy "${params.mode}" for entity_type "${params.entityType}" ` +
-        `denies "${params.op}" for guest callers.`,
+        `denies "${params.op}" for guest callers.`
     );
     this.name = "AccessPolicyError";
     this.op = params.op;

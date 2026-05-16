@@ -33,10 +33,7 @@ import * as path from "node:path";
 
 import { db } from "../db.js";
 import { schemaRegistry } from "./schema_registry.js";
-import {
-  renderEntityCompactText,
-  type RenderEntityInput,
-} from "./canonical_markdown.js";
+import { renderEntityCompactText, type RenderEntityInput } from "./canonical_markdown.js";
 
 export type MemoryExportOrder = "recency" | "importance";
 
@@ -172,10 +169,7 @@ function recencyDecay(
  * Importance score. Exported for tests so we can assert ordering by real
  * inputs rather than reaching into the sort closure.
  */
-export function importanceScore(
-  row: Record<string, unknown>,
-  nowMs: number = Date.now()
-): number {
+export function importanceScore(row: Record<string, unknown>, nowMs: number = Date.now()): number {
   const entityType = (row.entity_type as string | undefined) ?? "";
   const weight = typeWeightFor(entityType);
   const obsCount = (row.observation_count as number | undefined) ?? 0;
@@ -194,10 +188,7 @@ export function sortEntities(
   order: MemoryExportOrder,
   nowMs: number = Date.now()
 ): Array<Record<string, unknown>> {
-  const byEntityIdAsc = (
-    a: Record<string, unknown>,
-    b: Record<string, unknown>
-  ): number => {
+  const byEntityIdAsc = (a: Record<string, unknown>, b: Record<string, unknown>): number => {
     const ax = (a.entity_id as string) ?? "";
     const bx = (b.entity_id as string) ?? "";
     return ax < bx ? -1 : ax > bx ? 1 : 0;
@@ -247,9 +238,7 @@ function rowToRenderInput(row: Record<string, unknown>): RenderEntityInput {
  * Render and write MEMORY.md. Pure function over DB contents; the only side
  * effect is `fs.writeFile` on the resolved output path.
  */
-export async function exportMemory(
-  options: MemoryExportOptions
-): Promise<MemoryExportResult> {
+export async function exportMemory(options: MemoryExportOptions): Promise<MemoryExportResult> {
   const order: MemoryExportOrder = options.order ?? "importance";
   const limitLines = options.limit_lines ?? 200;
   const maxFieldChars = options.max_field_chars ?? 400;
@@ -279,9 +268,7 @@ export async function exportMemory(
   const rawRows = (data ?? []) as Array<Record<string, unknown>>;
   const rows =
     effectiveExcludes.size > 0
-      ? rawRows.filter(
-          (r) => !effectiveExcludes.has((r.entity_type as string) ?? "")
-        )
+      ? rawRows.filter((r) => !effectiveExcludes.has((r.entity_type as string) ?? ""))
       : rawRows;
   const ordered = sortEntities(rows, order);
 
@@ -317,11 +304,9 @@ export async function exportMemory(
     } catch {
       // Alphabetical fallback.
     }
-    const rendered = renderEntityCompactText(
-      rowToRenderInput(row),
-      schemaFieldOrder,
-      { maxFieldChars: maxFieldChars > 0 ? maxFieldChars : undefined }
-    );
+    const rendered = renderEntityCompactText(rowToRenderInput(row), schemaFieldOrder, {
+      maxFieldChars: maxFieldChars > 0 ? maxFieldChars : undefined,
+    });
     blocks.push(rendered.trimEnd());
   }
 

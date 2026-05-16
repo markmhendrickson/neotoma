@@ -219,10 +219,7 @@ async function countVisibleEntities(params: {
     entityIdQuery = entityIdQuery.gte("created_at", createdSince);
   }
   if (published !== undefined || publishedAfter || publishedBefore) {
-    let snapshotQuery = db
-      .from("entity_snapshots")
-      .select("entity_id")
-      .eq("user_id", userId);
+    let snapshotQuery = db.from("entity_snapshots").select("entity_id").eq("user_id", userId);
     if (entityType) {
       snapshotQuery = snapshotQuery.eq("entity_type", entityType);
     }
@@ -239,7 +236,9 @@ async function countVisibleEntities(params: {
     if (snapshotError) {
       throw new Error(`Failed to query snapshot ids for count: ${snapshotError.message}`);
     }
-    const snapshotEntityIds = (snapshotRows || []).map((row: { entity_id: string }) => row.entity_id);
+    const snapshotEntityIds = (snapshotRows || []).map(
+      (row: { entity_id: string }) => row.entity_id
+    );
     if (snapshotEntityIds.length === 0) {
       return 0;
     }
@@ -268,7 +267,9 @@ async function countVisibleEntities(params: {
       .order("observed_at", { ascending: false });
 
     if (observationsError) {
-      throw new Error(`Failed to query deletion observations for count: ${observationsError.message}`);
+      throw new Error(
+        `Failed to query deletion observations for count: ${observationsError.message}`
+      );
     }
 
     const highestByEntity = new Map<string, any>();

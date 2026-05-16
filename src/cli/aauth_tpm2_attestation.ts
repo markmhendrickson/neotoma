@@ -50,10 +50,7 @@ export interface Tpm2BackendProbe {
 
 interface Tpm2BindingShape {
   isSupported(): { supported: boolean; reason?: string };
-  generateKey(opts: {
-    hierarchy?: "owner" | "endorsement";
-    alg?: "ES256" | "RS256";
-  }): {
+  generateKey(opts: { hierarchy?: "owner" | "endorsement"; alg?: "ES256" | "RS256" }): {
     jwk: Record<string, unknown>;
     handle: string;
     hierarchy: "owner" | "endorsement";
@@ -86,8 +83,7 @@ function loadTpm2Binding(): Tpm2BindingShape | null {
     cachedBinding = required;
     return cachedBinding;
   } catch (err) {
-    cachedLoadError =
-      err instanceof Error ? err : new Error(String(err));
+    cachedLoadError = err instanceof Error ? err : new Error(String(err));
     return null;
   }
 }
@@ -97,9 +93,7 @@ function loadTpm2Binding(): Tpm2BindingShape | null {
  * this hook so they can exercise the helper without requiring the
  * real native package or a TPM 2.0 chip.
  */
-export function __setTpm2BindingForTesting(
-  binding: Tpm2BindingShape | null,
-): void {
+export function __setTpm2BindingForTesting(binding: Tpm2BindingShape | null): void {
   cachedBinding = binding;
   cachedLoadError = null;
 }
@@ -120,8 +114,7 @@ export function isTpm2BackendAvailable(): Tpm2BackendProbe {
     return {
       supported: false,
       reason:
-        cachedLoadError?.message ??
-        `optional native package ${TPM2_PACKAGE_NAME} not installed`,
+        cachedLoadError?.message ?? `optional native package ${TPM2_PACKAGE_NAME} not installed`,
     };
   }
   try {
@@ -207,18 +200,14 @@ const COSE_ALG_FOR_BACKEND: Record<"ES256" | "RS256", number> = {
  * }
  * ```
  */
-export function buildTpm2AttestationEnvelope(
-  args: BuildTpm2EnvelopeArgs,
-): Tpm2AttestationEnvelope {
+export function buildTpm2AttestationEnvelope(args: BuildTpm2EnvelopeArgs): Tpm2AttestationEnvelope {
   const probe = isTpm2BackendAvailable();
   if (!probe.supported) {
     throw new Tpm2BackendUnavailableError(probe.reason ?? "unknown");
   }
   const binding = loadTpm2Binding();
   if (!binding) {
-    throw new Tpm2BackendUnavailableError(
-      cachedLoadError?.message ?? "binding load failed",
-    );
+    throw new Tpm2BackendUnavailableError(cachedLoadError?.message ?? "binding load failed");
   }
   const challenge = computeAttestationChallenge({
     iss: args.iss,
@@ -232,7 +221,7 @@ export function buildTpm2AttestationEnvelope(
   });
   if (result.format !== "tpm2" || result.ver !== "2.0") {
     throw new Error(
-      `aauth-tpm2: unexpected attest() shape (format=${String(result.format)}, ver=${String(result.ver)})`,
+      `aauth-tpm2: unexpected attest() shape (format=${String(result.format)}, ver=${String(result.ver)})`
     );
   }
   const cose = COSE_ALG_FOR_BACKEND[result.alg];

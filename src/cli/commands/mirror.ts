@@ -54,9 +54,7 @@ function parseKind(raw: string | undefined): MirrorKind | "all" | undefined {
   const v = raw.trim().toLowerCase();
   if (v === "all") return "all";
   if ((ALL_MIRROR_KINDS as readonly string[]).includes(v)) return v as MirrorKind;
-  throw new Error(
-    `Invalid --kind: ${raw}. Allowed: all, ${ALL_MIRROR_KINDS.join(", ")}`
-  );
+  throw new Error(`Invalid --kind: ${raw}. Allowed: all, ${ALL_MIRROR_KINDS.join(", ")}`);
 }
 
 function parseKinds(raw: string | undefined): MirrorKind[] | undefined {
@@ -65,9 +63,7 @@ function parseKinds(raw: string | undefined): MirrorKind[] | undefined {
     .split(",")
     .map((s) => s.trim().toLowerCase())
     .filter((s) => s.length > 0);
-  const invalid = parts.filter(
-    (p) => !(ALL_MIRROR_KINDS as readonly string[]).includes(p)
-  );
+  const invalid = parts.filter((p) => !(ALL_MIRROR_KINDS as readonly string[]).includes(p));
   if (invalid.length > 0) {
     throw new Error(
       `Invalid --kinds values: ${invalid.join(", ")}. Allowed: ${ALL_MIRROR_KINDS.join(", ")}`
@@ -138,9 +134,7 @@ export interface MirrorConfigResult {
   gitignore?: MirrorGitignoreResult | null;
 }
 
-export async function runMirrorEnable(
-  options: MirrorEnableOptions
-): Promise<MirrorConfigResult> {
+export async function runMirrorEnable(options: MirrorEnableOptions): Promise<MirrorConfigResult> {
   const patch: Parameters<typeof setMirrorConfig>[0] = { enabled: true };
   if (typeof options.path === "string" && options.path.length > 0) {
     patch.path = options.path;
@@ -207,17 +201,13 @@ export function formatMirrorStatus(status: MirrorStatusResult): string {
 export function formatRebuildReport(result: MirrorRebuildResult): string {
   const lines: string[] = [];
   if (!result.config.enabled) {
-    lines.push(
-      "Mirror is disabled. Run `neotoma mirror enable` first, or pass explicit options."
-    );
+    lines.push("Mirror is disabled. Run `neotoma mirror enable` first, or pass explicit options.");
     lines.push("");
   }
   lines.push(`Path:   ${path.resolve(result.config.path)}`);
   lines.push(`Kinds:  ${result.report.kinds.join(", ") || "(none)"}`);
   lines.push("");
-  lines.push(
-    "Kind            Written  Unchanged  Removed"
-  );
+  lines.push("Kind            Written  Unchanged  Removed");
   for (const kind of ALL_MIRROR_KINDS) {
     const c = result.report.counts[kind];
     if (!c) continue;
@@ -295,13 +285,7 @@ function buildMirrorIgnoreEntry(repoRoot: string, mirrorPath: string): string {
 
 function gitignoreContainsEntry(text: string, entry: string): boolean {
   const normalized = entry.replace(/\/+$/, "");
-  const variants = new Set([
-    entry,
-    `${entry}/`,
-    normalized,
-    `/${normalized}`,
-    `/${normalized}/`,
-  ]);
+  const variants = new Set([entry, `${entry}/`, normalized, `/${normalized}`, `/${normalized}/`]);
   for (const rawLine of text.split(/\r?\n/)) {
     const line = rawLine.trim();
     if (!line || line.startsWith("#")) continue;
@@ -366,9 +350,7 @@ export function ensureMirrorGitignored(
  * Detect whether the mirror path is already ignored by the enclosing git
  * repo. Read-only; does not mutate `.gitignore`. Used by `neotoma doctor`.
  */
-export function checkMirrorGitignoreStatus(
-  cfg: MirrorConfig = getMirrorConfig()
-): {
+export function checkMirrorGitignoreStatus(cfg: MirrorConfig = getMirrorConfig()): {
   inside_git_repo: boolean;
   git_repo_root: string | null;
   gitignored: boolean;
@@ -397,9 +379,7 @@ export async function runMirrorGitignore(): Promise<MirrorGitignoreResult> {
   return ensureMirrorGitignored();
 }
 
-export function formatMirrorGitignore(
-  result: MirrorGitignoreResult | null
-): string {
+export function formatMirrorGitignore(result: MirrorGitignoreResult | null): string {
   if (result === null) {
     return "Gitignore: skipped";
   }

@@ -45,18 +45,17 @@ async function fetchCanonicalName(entityId: string): Promise<string | null> {
  */
 export async function prepareEntitySnapshotWithEmbedding(
   snapshotRow: EntitySnapshotRowForEmbedding,
-  canonicalName?: string | null,
+  canonicalName?: string | null
 ): Promise<EntitySnapshotRowWithEmbedding> {
   // Generate embedding for both pgvector and local (sqlite-vec)
   // Skip only when OPENAI_API_KEY is not configured
-  const name =
-    canonicalName ?? (await fetchCanonicalName(snapshotRow.entity_id));
+  const name = canonicalName ?? (await fetchCanonicalName(snapshotRow.entity_id));
   const effectiveName = name ?? snapshotRow.entity_id;
 
   const searchableText = getEntitySearchableText(
     snapshotRow.entity_type,
     effectiveName,
-    snapshotRow.snapshot,
+    snapshotRow.snapshot
   );
 
   const embedding = await generateEmbedding(searchableText);
@@ -72,13 +71,12 @@ export async function prepareEntitySnapshotWithEmbedding(
  * Single entry point for all entity_snapshots upserts to ensure local embedding storage.
  */
 export async function upsertEntitySnapshotWithEmbedding(
-  row: EntitySnapshotRowWithEmbedding,
+  row: EntitySnapshotRowWithEmbedding
 ): Promise<void> {
   const payload = getEntitySnapshotUpsertPayload(row);
-  await db.from("entity_snapshots").upsert(
-    payload as Record<string, unknown>,
-    { onConflict: "entity_id" }
-  );
+  await db
+    .from("entity_snapshots")
+    .upsert(payload as Record<string, unknown>, { onConflict: "entity_id" });
   if (config.storageBackend === "local" && row.embedding) {
     storeLocalEntityEmbedding({
       entity_id: row.entity_id,
@@ -95,7 +93,7 @@ export async function upsertEntitySnapshotWithEmbedding(
  * Omits embedding for local/SQLite backend (no embedding column).
  */
 export function getEntitySnapshotUpsertPayload(
-  row: EntitySnapshotRowWithEmbedding,
+  row: EntitySnapshotRowWithEmbedding
 ): Record<string, unknown> {
   const payload: Record<string, unknown> = {
     entity_id: row.entity_id,

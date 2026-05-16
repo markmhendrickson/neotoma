@@ -62,12 +62,7 @@ export interface RecordActivityItem {
    * carry attribution (e.g. entity rows are derived, not directly
    * written by an agent) or for rows that predate AAuth.
    */
-  attribution_tier?:
-    | "hardware"
-    | "software"
-    | "unverified_client"
-    | "anonymous"
-    | null;
+  attribution_tier?: "hardware" | "software" | "unverified_client" | "anonymous" | null;
   /**
    * Best-effort human-readable agent label for activity feeds. Picked in
    * priority order: `client_name` (+ version) → `agent_sub` → short
@@ -324,7 +319,10 @@ export function parseRecordActivityTypesQuery(raw: unknown): RecordActivityType[
   if (raw === undefined || raw === null) return undefined;
   const s = String(raw).trim();
   if (!s) return undefined;
-  const parts = s.split(",").map((p) => p.trim()).filter(Boolean) as RecordActivityType[];
+  const parts = s
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean) as RecordActivityType[];
   return normalizeRecordTypes(parts);
 }
 
@@ -405,9 +403,7 @@ function computeGroupKey(row: SqlRow): string | null {
 function normalizeItem(row: SqlRow): RecordActivityItem {
   const type = row.record_type as RecordActivityType;
   const title =
-    row.title && String(row.title).trim()
-      ? String(row.title).trim()
-      : humanizeRecordType(type);
+    row.title && String(row.title).trim() ? String(row.title).trim() : humanizeRecordType(type);
   const subtitle = cleanString(row.subtitle);
   const provenance = parseProvenance(row.provenance_json);
   return {

@@ -84,7 +84,10 @@ const IRREGULAR_SINGULAR_NAMES: Set<string> = new Set([
 function parseForbiddenPatternsFromEnv(): RegExp[] {
   const raw = process.env.NEOTOMA_FORBIDDEN_TYPE_PATTERNS;
   if (!raw) return DEFAULT_FORBIDDEN_PATTERNS;
-  const parts = raw.split(",").map((p) => p.trim()).filter(Boolean);
+  const parts = raw
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean);
   if (parts.length === 0) return DEFAULT_FORBIDDEN_PATTERNS;
   const compiled: RegExp[] = [];
   for (const pattern of parts) {
@@ -93,7 +96,7 @@ function parseForbiddenPatternsFromEnv(): RegExp[] {
     } catch (err) {
       logger.warn(
         `[ENTITY_TYPE_GUARD] Invalid pattern in NEOTOMA_FORBIDDEN_TYPE_PATTERNS ` +
-          `"${pattern}": ${(err as Error).message}`,
+          `"${pattern}": ${(err as Error).message}`
       );
     }
   }
@@ -107,7 +110,7 @@ function parseAllowlistFromEnv(envVar: string): Set<string> {
     raw
       .split(",")
       .map((p) => p.trim().toLowerCase())
-      .filter(Boolean),
+      .filter(Boolean)
   );
 }
 
@@ -117,9 +120,7 @@ export interface EntityTypeGuardResult {
   suggestion?: string;
 }
 
-export function checkForbiddenTestArtifactType(
-  entityType: string,
-): EntityTypeGuardResult {
+export function checkForbiddenTestArtifactType(entityType: string): EntityTypeGuardResult {
   const allowlist = parseAllowlistFromEnv("NEOTOMA_ALLOWED_TEST_TYPES");
   if (allowlist.has(entityType.toLowerCase())) {
     return { reason: null, message: "" };
@@ -167,9 +168,7 @@ export function suggestSingular(entityType: string): string | null {
   return null;
 }
 
-export function checkPluralEntityType(
-  entityType: string,
-): EntityTypeGuardResult {
+export function checkPluralEntityType(entityType: string): EntityTypeGuardResult {
   const allowlist = parseAllowlistFromEnv("NEOTOMA_ALLOWED_PLURAL_TYPES");
   if (allowlist.has(entityType.toLowerCase())) {
     return { reason: null, message: "" };
@@ -201,7 +200,7 @@ export interface EntityTypeGuardOptions {
  */
 export function enforceEntityTypeGuards(
   entityType: string,
-  options: EntityTypeGuardOptions = {},
+  options: EntityTypeGuardOptions = {}
 ): void {
   if (options.force) return;
   if (!entityType || typeof entityType !== "string") return;
