@@ -1,3 +1,8 @@
+---
+title: Github Release Supplement
+summary: v0.11.0 is a release finalization for the unified store contract, interpretation provenance, MCP onboarding, Inspector feedback administration, and localized site expansion.
+---
+
 v0.11.0 is a release finalization for the unified store contract, interpretation provenance, MCP onboarding, Inspector feedback administration, and localized site expansion.
 
 ## Highlights

@@ -1,3 +1,8 @@
+---
+title: "Neotoma Determinism Doctrine — Reproducibility and Predictability Guarantees"
+summary: "*(Determinism Requirements Across All Subsystems)* ## Scope This document covers: - Definition and requirements of determinism - Deterministic patterns for common operations - Sorting, ordering, and ID generation rules - Elimination of r..."
+---
+
 # Neotoma Determinism Doctrine — Reproducibility and Predictability Guarantees
 *(Determinism Requirements Across All Subsystems)*
 ## Scope

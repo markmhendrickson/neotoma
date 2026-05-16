@@ -1,3 +1,8 @@
+---
+title: Github Release Preview
+summary: "| | | |:--|:--| | **npm** | https://www.npmjs.com/package/neotoma/v/0.4.1 | | **Compare** | `v0.4.0` → `v0.4.1` — [view diff](https://github.com/markmhendrickson/neotoma/compare/v0.4.0...v0.4.1) |"
+---
+
 ## Install
 
 ```bash

@@ -1,3 +1,8 @@
+---
+title: OpenAPI Contract Flow
+summary: "**Scope:** How HTTP endpoints, generated types, MCP tools, and CLI commands stay in sync with the OpenAPI spec. This is the canonical home for the \"OpenAPI-first\" workflow."
+---
+
 # OpenAPI Contract Flow
 
 **Scope:** How HTTP endpoints, generated types, MCP tools, and CLI commands stay in sync with the OpenAPI spec. This is the canonical home for the "OpenAPI-first" workflow.

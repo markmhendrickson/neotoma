@@ -1,3 +1,7 @@
+---
+title: Code Conventions Documentation Plan
+---
+
 # Code Conventions Documentation Plan
 ## Overview
 Create `docs/conventions/code_conventions.md` that defines code style, naming, organization, and patterns for all languages used in Neotoma. The document will reference existing standards (determinism, error handling, testing, architecture) and provide detailed examples.

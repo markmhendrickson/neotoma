@@ -1,3 +1,8 @@
+---
+title: Neotoma Metrics Standard
+summary: "*(Metrics Naming, Types, and Collection Rules)* ## Metric Naming **Pattern:** `neotoma_{subsystem}_{operation}_{unit}` **Examples:** - `neotoma_record_upload_total` (counter) - `neotoma_record_upload_duration_ms` (histogram) - `neotoma_s..."
+---
+
 # Neotoma Metrics Standard
 *(Metrics Naming, Types, and Collection Rules)*
 ## Metric Naming

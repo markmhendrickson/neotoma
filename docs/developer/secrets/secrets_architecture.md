@@ -1,3 +1,8 @@
+---
+title: Secrets Manager Architecture
+summary: "**Flow:** 1. Orchestrator reads encrypted secrets file (`.secrets/secrets.enc`) 2. Orchestrator uses encryption key (`.secrets/.key` or `NEOTOMA_SECRETS_MASTER_KEY`) to decrypt 3. Orchestrator base64-encodes **already-decrypted** credent..."
+---
+
 # Secrets Manager Architecture
 
 ## Current Architecture (Recommended)

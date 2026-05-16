@@ -1,3 +1,8 @@
+---
+title: Neotoma Scope Decisions
+summary: "This document records explicit in-scope / out-of-scope decisions for Neotoma's product surface, so that absences from the roadmap are understood as deliberate choices rather than gaps."
+---
+
 # Neotoma Scope Decisions
 
 This document records explicit in-scope / out-of-scope decisions for Neotoma's product surface, so that absences from the roadmap are understood as deliberate choices rather than gaps.

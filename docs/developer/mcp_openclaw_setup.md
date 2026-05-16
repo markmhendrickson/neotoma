@@ -1,3 +1,8 @@
+---
+title: OpenClaw MCP Setup Guide
+summary: This guide covers connecting OpenClaw to Neotoma using MCP when OpenClaw is running on the same machine as Neotoma, and fallback options when MCP is not available in your OpenClaw environment.
+---
+
 # OpenClaw MCP Setup Guide
 
 This guide covers connecting OpenClaw to Neotoma using MCP when OpenClaw is running on the same machine as Neotoma, and fallback options when MCP is not available in your OpenClaw environment.

@@ -1,3 +1,8 @@
+---
+title: Color Palette
+summary: "**Light Mode:**"
+---
+
 # Color Palette
 
 ## Base Colors

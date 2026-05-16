@@ -1,3 +1,8 @@
+---
+title: Neotoma Test Fixtures Standard
+summary: "**All fixtures consolidated in**: `tests/fixtures/`"
+---
+
 # Neotoma Test Fixtures Standard
 
 ## Unified Fixture Location

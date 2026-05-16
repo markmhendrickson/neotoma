@@ -1,3 +1,8 @@
+---
+title: v0.2.3 Release Overview
+summary: "Release v0.2.3 extends Neotoma's schema to support foundation agent memory, enabling AI agents to store and query codebase metadata alongside real-world entities in a unified memory system. This release addresses a critical gap in agent ..."
+---
+
 # v0.2.3 Release Overview
 
 ## Descriptive Summary

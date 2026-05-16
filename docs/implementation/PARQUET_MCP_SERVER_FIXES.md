@@ -1,3 +1,8 @@
+---
+title: Parquet MCP Server - Implementation Fixes
+summary: "**Date**: 2026-01-14 **Purpose**: Implementation guide to fix issues with `user-parquet (user)` MCP server"
+---
+
 # Parquet MCP Server - Implementation Fixes
 
 **Date**: 2026-01-14  

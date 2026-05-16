@@ -1,3 +1,8 @@
+---
+title: MCP Specification vs Implementation Comparison (Updated)
+summary: "**Generated:** 2025-01-27 (Updated after fixes) **Spec:** `docs/specs/MCP_SPEC.md` **Implementation:** `src/server.ts`"
+---
+
 # MCP Specification vs Implementation Comparison (Updated)
 
 **Generated:** 2025-01-27 (Updated after fixes)  

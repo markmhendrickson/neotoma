@@ -1,3 +1,8 @@
+---
+title: Neotoma Developer Release
+summary: This document captures the strategic intent behind the Neotoma developer release. It defines how the project should be positioned, who it is for, and what constraints should govern design, messaging, and product decisions.
+---
+
 # Neotoma Developer Release
 ## Principles, Goals, and Constraints
 

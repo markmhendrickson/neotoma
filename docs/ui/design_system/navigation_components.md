@@ -1,3 +1,8 @@
+---
+title: Navigation Components
+summary: "**Structure:**"
+---
+
 # Navigation Components
 
 ## Sidebar Navigation

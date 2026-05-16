@@ -1,3 +1,8 @@
+---
+title: Neotoma Product Principles
+summary: "This mirrors the architectural invariant in `philosophy.md` §5.9 (Signal Without Strategy) in product-principle language. Practical implications for product decisions: - Substrate emits events for all state changes; consumers filter, pri..."
+---
+
 # Neotoma Product Principles
 ## 10.1 Truth Before Experience
 Correctness > convenience. Never sacrifice accuracy for UX.

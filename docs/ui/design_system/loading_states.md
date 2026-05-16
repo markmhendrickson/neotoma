@@ -1,3 +1,8 @@
+---
+title: Loading States
+summary: "**Skeleton Screens:**"
+---
+
 # Loading States
 
 ## Loading Indicators

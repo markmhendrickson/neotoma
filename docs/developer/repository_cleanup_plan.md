@@ -1,3 +1,8 @@
+---
+title: Repository Cleanup and Reorganization Plan
+summary: "name: Repository Cleanup and Reorganization overview: Clean up outdated files, remove build artifacts, reorganize documentation, and improve repository structure todos: - id: remove-outdated-docs content: Delete CLAUDE.md and SETUP_INSTR..."
+---
+
 name: Repository Cleanup and Reorganization
 overview: Clean up outdated files, remove build artifacts, reorganize documentation, and improve repository structure
 todos:

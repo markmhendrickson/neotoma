@@ -1,3 +1,8 @@
+---
+title: Github Release Supplement
+summary: "v0.9.0 finishes the v0.8.0 attestation framework by replacing every server-side stub with a real verifier and by giving the Inspector the surface to explain what each verifier decided. After v0.9.0 the format dispatch in `src/services/aa..."
+---
+
 v0.9.0 finishes the v0.8.0 attestation framework by replacing every server-side stub with a real verifier and by giving the Inspector the surface to explain what each verifier decided. After v0.9.0 the format dispatch in `src/services/aauth_attestation_verifier.ts` accepts three real-world attestation formats — `apple-secure-enclave` (already shipped in v0.8.0), `webauthn-packed` (FIDO2 / WebAuthn registration), and `tpm2` (Linux / Windows hardware attestation) — with the same `AttestationOutcome` contract for all three. No CLI surfaces change in this release; v0.9.0 is server-side and Inspector-only so operators can adopt it without coordinating client upgrades.
 
 This release implements three follow-up Feature Units from the v0.8.0 attestation plan:

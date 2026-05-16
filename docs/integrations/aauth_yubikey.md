@@ -1,3 +1,8 @@
+---
+title: "AAuth YubiKey PKCS#11 (cross-platform)"
+summary: "Operator-facing setup guide for the optional `@neotoma/aauth-yubikey` native package (FU-6). When installed and probing successfully on a host with `libykcs11` (the Yubico PKCS#11 provider, part of YubiKey Manager / yubico-piv-tool) and ..."
+---
+
 # AAuth YubiKey PKCS#11 (cross-platform)
 
 ## Purpose

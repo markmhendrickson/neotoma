@@ -1,3 +1,8 @@
+---
+title: Integration Test Execution Guide
+summary: "**Purpose:** Defines when and how integration tests are executed during release builds. **Related Documents:** - [`release_workflow.md`](./release_workflow.md) — Release workflow integration - [`release_orchestrator.js`](../../../scripts..."
+---
+
 # Integration Test Execution Guide
 **Purpose:** Defines when and how integration tests are executed during release builds.
 **Related Documents:**

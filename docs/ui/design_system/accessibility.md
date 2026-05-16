@@ -1,3 +1,8 @@
+---
+title: Accessibility
+summary: "**WCAG AA Minimum:**"
+---
+
 # Accessibility
 
 ## Contrast Requirements

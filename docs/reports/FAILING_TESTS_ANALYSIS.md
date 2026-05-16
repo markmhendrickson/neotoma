@@ -1,3 +1,8 @@
+---
+title: Failing Tests Analysis
+summary: "**Date**: 2026-01-15"
+---
+
 # Failing Tests Analysis
 
 **Date**: 2026-01-15

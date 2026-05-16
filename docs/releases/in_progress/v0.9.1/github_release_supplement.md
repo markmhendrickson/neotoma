@@ -1,3 +1,8 @@
+---
+title: Github Release Supplement
+summary: v0.9.1 is a narrow Claude Desktop MCP compatibility hotfix for local Neotoma MCP installs.
+---
+
 v0.9.1 is a narrow Claude Desktop MCP compatibility hotfix for local Neotoma MCP installs.
 
 ## Highlights

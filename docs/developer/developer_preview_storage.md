@@ -1,3 +1,8 @@
+---
+title: Developer preview storage
+summary: "This document states the storage stance for the Neotoma **developer preview**: what is supported and what is not. It does not define migration or deployment procedures."
+---
+
 # Developer preview storage
 
 ## Scope

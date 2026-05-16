@@ -1,3 +1,8 @@
+---
+title: Contract lifecycle management
+summary: Contracts evolve through negotiations, amendments, and renewals, yet most CLM systems treat each version as a flat document rather than a temporal entity with observable state changes. Neotoma provides version control for every clause, a...
+---
+
 # Contract lifecycle management
 
 Contracts evolve through negotiations, amendments, and renewals, yet most CLM systems treat each version as a flat document rather than a temporal entity with observable state changes. Neotoma provides version control for every clause, amendment, and obligation by storing each contract modification as an immutable observation with provenance tracing back to the source document, the parties involved, and the timestamp of agreement. This enables legal teams and AI agents to reconstruct the exact contractual state at any point in time, compare amendment histories, and track obligation fulfillment across the full lifecycle.

@@ -1,3 +1,8 @@
+---
+title: Chat transcript ingestion
+summary: Chat transcripts are one of the highest-value ingestion sources for Neotoma. They encode decision flow, commitments, task assignments, negotiations, evolving ideas, and references to external artifacts -- with natural timestamps and enti...
+---
+
 # Chat transcript ingestion
 
 ## Purpose

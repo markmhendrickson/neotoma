@@ -1,3 +1,8 @@
+---
+title: "Environment Variable Naming Strategy: Prefixes vs Environment-Based Selection"
+summary: "Should we use: - **Current**: `DEV_CONNECTOR_SECRET_KEY` and `PROD_CONNECTOR_SECRET_KEY` (different variable names) - **Proposed**: `CONNECTOR_SECRET_KEY` (same variable name, different values per environment)"
+---
+
 # Environment Variable Naming Strategy: Prefixes vs Environment-Based Selection
 
 ## The Question

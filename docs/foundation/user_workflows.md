@@ -1,3 +1,7 @@
+---
+title: Neotoma Key User Workflows (MVP)
+---
+
 # Neotoma Key User Workflows (MVP)
 ## Workflow 1: Upload Documents → See Structured Memory
 User uploads invoices, receipts, contracts, travel docs.

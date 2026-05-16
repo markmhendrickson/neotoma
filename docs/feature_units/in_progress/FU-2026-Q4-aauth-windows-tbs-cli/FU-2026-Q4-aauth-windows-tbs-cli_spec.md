@@ -1,3 +1,8 @@
+---
+title: "Feature Unit: FU-2026-Q4-aauth-windows-tbs-cli — Windows TBS CLI Attestation Source"
+summary: "**Status:** In Progress **Priority:** P1 (unblocks Windows hardware-tier coverage) **Risk Level:** Medium (new native package, new platform path) **Target Release:** v0.10.0 **Owner:** Engineering **Created:** 2026-04-27 **Last Updated:*..."
+---
+
 # Feature Unit: FU-2026-Q4-aauth-windows-tbs-cli — Windows TBS CLI Attestation Source
 
 **Status:** In Progress

@@ -1,3 +1,8 @@
+---
+title: "Schema Extension: feature_unit"
+summary: "- **Entity Type**: `feature_unit` - **Version**: `v1` - **Status**: Proposed - **Purpose**: Track Feature Unit development records in Neotoma"
+---
+
 # Schema Extension: feature_unit
 
 ## Overview

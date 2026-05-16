@@ -1,3 +1,8 @@
+---
+title: "Feature Unit: FU-050 Event-Sourcing Foundation"
+summary: "**Status:** Draft **Priority:** P0 (Critical) **Risk Level:** High **Target Release:** v0.1.0 **Owner:** Engineering Team **Reviewers:** Tech Lead **Created:** 2025-01-XX **Last Updated:** 2025-01-XX ## Overview **Brief Description:** Im..."
+---
+
 # Feature Unit: FU-050 Event-Sourcing Foundation
 **Status:** Draft
 **Priority:** P0 (Critical)

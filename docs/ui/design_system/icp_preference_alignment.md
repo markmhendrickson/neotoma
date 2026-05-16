@@ -1,3 +1,8 @@
+---
+title: ICP Preference Alignment
+summary: "**Preferences Met:**"
+---
+
 # ICP Preference Alignment
 
 ## AI-Native Individual Operators

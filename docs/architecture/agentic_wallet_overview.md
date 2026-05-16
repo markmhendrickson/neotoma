@@ -1,3 +1,8 @@
+---
+title: Agentic Wallet Overview
+summary: "The execution style is pure effect: - Commands in → Events out - All truth updates flow through reducers ### Core Responsibilities - Read Commands from Neotoma - Convert high-level goals into specific transactional operations - Evaluate ..."
+---
+
 # Agentic Wallet Overview
 ## Purpose
 The **Agentic Wallet** is an example **operational system** built on Neotoma's state layer — a financial effect system that reads Commands stored in Neotoma, performs side effects via external adapters, and emits Domain Events back into Neotoma's reducer pipeline.

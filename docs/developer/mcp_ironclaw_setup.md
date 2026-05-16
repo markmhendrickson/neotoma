@@ -1,3 +1,8 @@
+---
+title: IronClaw MCP Setup Guide
+summary: "This guide covers connecting IronClaw to Neotoma through MCP. IronClaw can use hosted MCP servers through `ironclaw mcp`, while Neotoma exposes the structured memory tools IronClaw needs for cross-tool state."
+---
+
 # IronClaw MCP Setup Guide
 
 This guide covers connecting IronClaw to Neotoma through MCP. IronClaw can use hosted MCP servers through `ironclaw mcp`, while Neotoma exposes the structured memory tools IronClaw needs for cross-tool state.

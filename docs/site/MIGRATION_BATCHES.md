@@ -1,3 +1,8 @@
+---
+title: MDX site migration batches
+summary: "Batch plan for moving TSX page bodies into `docs/site/pages/**/*.mdx` while keeping shells, charts, and dynamic data in React."
+---
+
 # MDX site migration batches
 
 Batch plan for moving TSX page bodies into `docs/site/pages/**/*.mdx` while keeping shells, charts, and dynamic data in React.

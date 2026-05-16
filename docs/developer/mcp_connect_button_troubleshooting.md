@@ -1,3 +1,8 @@
+---
+title: MCP Connect Button Troubleshooting
+summary: "This document is now consolidated into [mcp_oauth_troubleshooting.md](mcp_oauth_troubleshooting.md)."
+---
+
 # MCP Connect Button Troubleshooting
 
 This document is now consolidated into [mcp_oauth_troubleshooting.md](mcp_oauth_troubleshooting.md).

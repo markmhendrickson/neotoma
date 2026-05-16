@@ -1,3 +1,8 @@
+---
+title: "Implementation Decision Log: FU-061"
+summary: "**Generated:** 2025-12-14T06:22:10.565Z ## Overview This log documents implementation decisions made for FU-061 and how each requirement from the specification was addressed. ## Implementation Decisions ### Decision 1: Rule-based schema ..."
+---
+
 # Implementation Decision Log: FU-061
 **Generated:** 2025-12-14T06:22:10.565Z
 ## Overview

@@ -1,3 +1,7 @@
+---
+title: Status
+---
+
 ## Release v0.1.0 — Status
 ### 1. Summary
 - **Release ID**: `v0.1.0`

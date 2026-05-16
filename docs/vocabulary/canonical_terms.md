@@ -1,3 +1,8 @@
+---
+title: Neotoma Canonical Vocabulary
+summary: "**Definition:** Rules for normalizing structured [source](#source) data for deterministic deduplication (field selection, string normalization, array sorting). [Canonicalization rules](#canonicalization-rules) are part of [entity schemas..."
+---
+
 # Neotoma Canonical Vocabulary
 
 ## Core Terms

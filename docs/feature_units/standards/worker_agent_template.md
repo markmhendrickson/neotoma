@@ -1,3 +1,7 @@
+---
+title: Worker Agent Instructions Template
+---
+
 # Worker Agent Instructions Template
 ## Instructions for {{FU_ID}} in Batch {{BATCH_ID}}
 You are a worker agent executing Feature Unit **{{FU_ID}}** in Batch **{{BATCH_ID}}** for Release **{{RELEASE_ID}}**.

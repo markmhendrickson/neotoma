@@ -1,3 +1,8 @@
+---
+title: Agent capability scoping
+summary: "**Audience:** operators wiring a new agent into Neotoma, and integrators who need to predict whether their service-to-service calls will be allowed."
+---
+
 # Agent capability scoping
 
 **Audience:** operators wiring a new agent into Neotoma, and integrators

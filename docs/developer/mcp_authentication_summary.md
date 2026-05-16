@@ -1,3 +1,8 @@
+---
+title: MCP Authentication Summary
+summary: "Overview of Neotoma's authentication mechanisms for MCP connections."
+---
+
 # MCP Authentication Summary
 
 Overview of Neotoma's authentication mechanisms for MCP connections.

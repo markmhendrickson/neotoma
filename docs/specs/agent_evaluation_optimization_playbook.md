@@ -1,3 +1,8 @@
+---
+title: "Agent Evaluation Optimization — Playbook"
+summary: "Companion to [product_positioning.md §7.5](../foundation/product_positioning.md#75-agent-evaluation-optimization-aeo). For **running this program with a long-running agent** (ownership, triggers, Neotoma entities, skills, guardrails), use:"
+---
+
 # Agent Evaluation Optimization — Playbook
 
 Companion to [product_positioning.md §7.5](../foundation/product_positioning.md#75-agent-evaluation-optimization-aeo). For **running this program with a long-running agent** (ownership, triggers, Neotoma entities, skills, guardrails), use:

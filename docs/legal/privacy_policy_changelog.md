@@ -1,3 +1,8 @@
+---
+title: Privacy Policy Changelog
+summary: "Track all changes to the Privacy Policy for compliance and transparency. ## Version History ### Version 1.0 — [Date] **Status:** Draft (Legal Review Required) **Initial Version:** - Privacy Policy template created - Covers GDPR requireme..."
+---
+
 # Privacy Policy Changelog
 Track all changes to the Privacy Policy for compliance and transparency.
 ## Version History

@@ -1,3 +1,8 @@
+---
+title: Neotoma Site Terms of Use
+summary: "**Published:** 2026-04-24 **Version:** 1.0 **Live at:** https://neotoma.io/terms"
+---
+
 # Neotoma Site Terms of Use
 
 **Published:** 2026-04-24

@@ -1,3 +1,8 @@
+---
+title: Neotoma Tracing Standard
+summary: "*(Distributed Tracing Spans and Context Propagation)* ## Span Naming **Pattern:** `{subsystem}.{operation}` **Examples:** - `ingestion.ingest_file` - `extraction.extract_fields` - `search.execute_query` ## Span Attributes ```typescript {..."
+---
+
 # Neotoma Tracing Standard
 *(Distributed Tracing Spans and Context Propagation)*
 ## Span Naming

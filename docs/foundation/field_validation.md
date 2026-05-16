@@ -1,3 +1,8 @@
+---
+title: Field Validation and Market Evidence
+summary: "Developers are independently building their own agent memory systems. This is the strongest market timing signal: the problem is real enough that 10+ teams have built their own solutions, confirming both the need and the timing."
+---
+
 # Field Validation and Market Evidence
 
 ## Build-in-house explosion

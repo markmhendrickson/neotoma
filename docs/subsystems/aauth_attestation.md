@@ -1,3 +1,8 @@
+---
+title: AAuth attestation
+summary: "Defines how Neotoma cryptographically verifies that an AAuth-signing key is bound to a hardware root of trust before promoting a request to the `hardware` attribution tier. Specifies the JSON-native `cnf.attestation` claim envelope carri..."
+---
+
 # AAuth attestation
 
 ## Purpose

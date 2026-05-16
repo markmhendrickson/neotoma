@@ -1,3 +1,8 @@
+---
+title: HTTPS Tunnels for MCP Remote Access
+summary: "This document is the canonical reference for using HTTPS tunnels with the Neotoma MCP server. It covers:"
+---
+
 # HTTPS Tunnels for MCP Remote Access
 
 ## Scope

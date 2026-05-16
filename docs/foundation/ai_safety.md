@@ -1,3 +1,7 @@
+---
+title: AI Safety Doctrine
+---
+
 # AI Safety Doctrine
 ## AI Tool Requirements
 AI tools (ChatGPT, Claude, Cursor) MUST:

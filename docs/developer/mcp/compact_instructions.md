@@ -1,3 +1,8 @@
+---
+title: "Neotoma MCP: Compact instructions mode"
+summary: "Description of `NEOTOMA_MCP_COMPACT_INSTRUCTIONS=1`, when to use it, and what it changes relative to the full MCP instruction block."
+---
+
 # Neotoma MCP: Compact instructions mode
 
 ## Scope

@@ -1,3 +1,8 @@
+---
+title: v0.2.3 Foundation Agent Integration Guide
+summary: "**Alignment**: This guide implements [Agent Skills for Context Engineering](https://github.com/muratcankoylan/Agent-Skills-for-Context-Engineering) principles throughout."
+---
+
 # v0.2.3 Foundation Agent Integration Guide
 
 **Alignment**: This guide implements [Agent Skills for Context Engineering](https://github.com/muratcankoylan/Agent-Skills-for-Context-Engineering) principles throughout.

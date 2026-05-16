@@ -1,3 +1,8 @@
+---
+title: Crypto Transaction Discrepancy Resolution
+summary: "**Date**: 2026-01-19 **Status**: ✅ **RESOLVED** - No data loss, entity merging working correctly"
+---
+
 # Crypto Transaction Discrepancy Resolution
 
 **Date**: 2026-01-19  

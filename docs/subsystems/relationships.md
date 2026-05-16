@@ -1,3 +1,8 @@
+---
+title: "Neotoma Relationships — First-Class Typed Graph Edges"
+summary: "Relationships follow the same **observation-snapshot pattern** as entities:"
+---
+
 # Neotoma Relationships — First-Class Typed Graph Edges
 ## Scope
 This document covers:

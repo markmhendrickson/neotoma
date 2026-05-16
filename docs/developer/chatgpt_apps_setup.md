@@ -1,3 +1,8 @@
+---
+title: ChatGPT Apps Setup Guide
+summary: This guide explains how to run Neotoma as a ChatGPT App connector using the MCP endpoint.
+---
+
 # ChatGPT Apps Setup Guide
 
 This guide explains how to run Neotoma as a ChatGPT App connector using the MCP endpoint.

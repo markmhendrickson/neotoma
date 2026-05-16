@@ -1,3 +1,8 @@
+---
+title: Secure Credential Management for Cloud Agents
+summary: "Passing credentials in conversation text (even base64-encoded) is insecure because: - Credentials appear in conversation history - Base64 is easily reversible (not encryption) - Security policies block this approach - Credentials can be ..."
+---
+
 # Secure Credential Management for Cloud Agents
 
 ## Problem

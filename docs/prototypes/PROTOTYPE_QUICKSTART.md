@@ -1,3 +1,8 @@
+---
+title: "Neotoma MVP Prototype — Quick Start"
+summary: "Interactive demonstration of Neotoma MVP with static data fixtures. ## One-Command Start ```bash npm run dev:prototype ``` Or: ```bash ./scripts/run-prototype.sh ``` Opens on `http://localhost:5174` **Note**: Uses dedicated `vite.prototy..."
+---
+
 # Neotoma MVP Prototype — Quick Start
 Interactive demonstration of Neotoma MVP with static data fixtures.
 ## One-Command Start

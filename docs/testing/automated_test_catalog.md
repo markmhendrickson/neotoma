@@ -1,3 +1,8 @@
+---
+title: Automated test catalog
+summary: "This document does not cover: - Test quality policy - Fixture design standards - Feature-specific testing strategy - Historical audit narratives"
+---
+
 # Automated test catalog
 ## Scope
 This document summarizes repo-wide automated test coverage and inventories every automated test file in the repository. It does not define test-writing standards, fixture rules, or route coverage policy.

@@ -1,3 +1,7 @@
+---
+title: Time Tracking Template
+---
+
 # Time Tracking Template
 ## Purpose
 This template provides the standard format for recording time tracking data in release `status.md` files. Time tracking enables:

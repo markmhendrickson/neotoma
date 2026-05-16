@@ -1,3 +1,8 @@
+---
+title: "Crypto Transaction: Side-by-Side Comparison"
+summary: "**Date**: 2026-01-19 **Sample**: 5 random entries from `crypto_transaction.parquet` **Purpose**: Verify data integrity and import accuracy"
+---
+
 # Crypto Transaction: Side-by-Side Comparison
 ## Parquet File vs Neotoma Entities
 

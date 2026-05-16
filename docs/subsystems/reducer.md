@@ -1,3 +1,8 @@
+---
+title: "Neotoma Reducer Engine — Deterministic Snapshot Computation"
+summary: "style Start fill:#e1f5ff style StoreSnapshot fill:#e6ffe6 style ApplyStrategy fill:#fff4e6 style ApplyConverter fill:#ffe6e6 ``` ### 2.2 Reducer Interface ```typescript interface Reducer { computeSnapshot(entityId: string): Promise<Entit..."
+---
+
 # Neotoma Reducer Engine — Deterministic Snapshot Computation
 ## Scope
 This document covers:

@@ -1,3 +1,7 @@
+---
+title: "Neotoma Internal MCP Release — Specification"
+---
+
 # Neotoma Internal MCP Release — Specification
 ## Scope
 ### Included Capabilities

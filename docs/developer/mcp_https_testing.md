@@ -1,3 +1,8 @@
+---
+title: MCP HTTPS Testing Guide
+summary: "**Purpose:** Test Neotoma MCP server with HTTPS to verify Connect button appears in Cursor."
+---
+
 # MCP HTTPS Testing Guide
 
 **Purpose:** Test Neotoma MCP server with HTTPS to verify Connect button appears in Cursor.

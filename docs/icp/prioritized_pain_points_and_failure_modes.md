@@ -1,3 +1,8 @@
+---
+title: ICP-Prioritized Pain Points and Failure Modes
+summary: "- ICP definition: [`docs/icp/primary_icp.md`](./primary_icp.md) - ICP profiles: [`docs/icp/profiles.md`](./profiles.md) - Developer release targeting: [`docs/icp/developer_release_targeting.md`](./developer_release_targeting.md) - Platfo..."
+---
+
 # ICP-Prioritized Pain Points and Failure Modes
 
 ## Source of Truth

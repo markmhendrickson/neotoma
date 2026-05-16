@@ -1,3 +1,8 @@
+---
+title: Parquet Sample Files Created
+summary: "**Date**: 2026-01-14 **Status**: ✅ **COMPLETE**"
+---
+
 # Parquet Sample Files Created
 
 **Date**: 2026-01-14  

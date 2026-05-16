@@ -1,3 +1,8 @@
+---
+title: v0.2.3 Agent Skills Alignment Review
+summary: "This document reviews the v0.2.3 release documentation against [Agent Skills for Context Engineering](https://github.com/muratcankoylan/Agent-Skills-for-Context-Engineering) principles, verifying alignment and identifying coverage."
+---
+
 # v0.2.3 Agent Skills Alignment Review
 
 ## Overview

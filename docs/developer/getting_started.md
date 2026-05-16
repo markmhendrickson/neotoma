@@ -1,3 +1,8 @@
+---
+title: Developer Getting Started Guide
+summary: _(Local-only setup)_
+---
+
 # Developer Getting Started Guide
 
 _(Local-only setup)_

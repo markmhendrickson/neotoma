@@ -1,3 +1,8 @@
+---
+title: MCP OAuth Troubleshooting
+summary: Common issues when connecting MCP clients (Cursor, Claude Code) to Neotoma via OAuth.
+---
+
 # MCP OAuth Troubleshooting
 
 Common issues when connecting MCP clients (Cursor, Claude Code) to Neotoma via OAuth.

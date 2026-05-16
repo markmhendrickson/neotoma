@@ -1,3 +1,8 @@
+---
+title: Github Release Supplement
+summary: "Neotoma `0.4.3` combines the committed marketing-site refresh already on `main` with the current release-candidate worktree: a narrower marketing-first frontend, OpenClaw-oriented packaging and contract surface, slimmer server wiring, an..."
+---
+
 Neotoma `0.4.3` combines the committed marketing-site refresh already on `main` with the current release-candidate worktree: a narrower marketing-first frontend, OpenClaw-oriented packaging and contract surface, slimmer server wiring, and updated release tooling that can preview the exact GitHub Release body before tagging.
 
 ## What changed for npm package users

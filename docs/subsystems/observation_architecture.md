@@ -1,3 +1,8 @@
+---
+title: "Neotoma Observation Architecture — Three-Layer Truth Model"
+summary: "**Authoritative Vocabulary:** [`docs/vocabulary/canonical_terms.md`](../vocabulary/canonical_terms.md)"
+---
+
 # Neotoma Observation Architecture — Three-Layer Truth Model
 
 **Authoritative Vocabulary:** [`docs/vocabulary/canonical_terms.md`](../vocabulary/canonical_terms.md)

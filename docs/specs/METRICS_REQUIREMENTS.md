@@ -1,3 +1,8 @@
+---
+title: Neotoma Metrics Requirements
+summary: "*(Product Activation, Business, Technical, and AI Reliability Metrics)* ## Scope This document covers: - Product activation metrics (user onboarding success) - Business metrics (usage, retention, growth) - Technical performance metrics (..."
+---
+
 # Neotoma Metrics Requirements
 *(Product Activation, Business, Technical, and AI Reliability Metrics)*
 ## Scope

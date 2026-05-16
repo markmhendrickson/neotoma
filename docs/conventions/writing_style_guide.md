@@ -1,3 +1,8 @@
+---
+title: Neotoma Documentation Writing Style Guide
+summary: "This guide defines writing style rules for all Neotoma documentation. Always apply these rules when creating or editing documentation. ## Purpose This guide ensures consistent, professional technical writing that avoids AI-generated patt..."
+---
+
 # Neotoma Documentation Writing Style Guide
 This guide defines writing style rules for all Neotoma documentation. Always apply these rules when creating or editing documentation.
 ## Purpose

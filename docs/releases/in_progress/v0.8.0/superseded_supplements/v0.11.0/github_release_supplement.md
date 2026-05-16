@@ -1,3 +1,8 @@
+---
+title: Github Release Supplement
+summary: "v0.11.0 closes the credential lifecycle gap that the v0.8.0 attestation framework left open: when an attestation key is revoked at its source (Apple App Attestation revocation endpoint, OCSP for WebAuthn-packed leaves, OCSP / CRL for TPM..."
+---
+
 v0.11.0 closes the credential lifecycle gap that the v0.8.0 attestation framework left open: when an attestation key is revoked at its source (Apple App Attestation revocation endpoint, OCSP for WebAuthn-packed leaves, OCSP / CRL for TPM AIK chains), Neotoma now sees the revocation and surfaces it in `attribution.decision.attestation.revocation`. v0.11.0 ships this lookup in `log_only` mode by default — operators can audit how often previously-trusted attestations would be demoted before any tier change actually happens. v0.12.0 will flip the default to `enforce`.
 
 This release implements one follow-up Feature Unit from the v0.8.0 attestation plan:

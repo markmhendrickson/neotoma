@@ -1,3 +1,7 @@
+---
+title: Execution Schedule
+---
+
 ## Release v0.1.0 — Execution Schedule
 ### 1. Batch Overview
 | Batch ID | Feature Units                  | Dependencies           | Can Parallelize? | Estimated Effort |

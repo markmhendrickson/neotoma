@@ -1,3 +1,8 @@
+---
+title: Agent Installation Instructions
+summary: "Canonical source for the workflow, guardrails, and handoff is the root-level file:"
+---
+
 # Agent Installation Instructions
 
 Canonical source for the workflow, guardrails, and handoff is the root-level file:

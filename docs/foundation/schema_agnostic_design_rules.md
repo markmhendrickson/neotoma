@@ -1,3 +1,8 @@
+---
+title: Schema-Agnostic Design Rules
+summary: "Ensure behavior that varies by `entity_type` is driven by declarations on the schema in the registry, not by hardcoded per-type branches in code. New entity types must be addable without modifying `src/`."
+---
+
 # Schema-Agnostic Design Rules
 
 ## Purpose

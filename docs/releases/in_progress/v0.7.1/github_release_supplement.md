@@ -1,3 +1,8 @@
+---
+title: Github Release Supplement
+summary: "v0.7.1 is a surgical hotfix on top of v0.7.0 that turns Neotoma into a credible AAuth resource server in public form: it exposes the `/.well-known/aauth-resource.json` discovery endpoint everywhere, partitions sandbox writes by AAuth thu..."
+---
+
 v0.7.1 is a surgical hotfix on top of v0.7.0 that turns Neotoma into a credible AAuth resource server in public form: it exposes the `/.well-known/aauth-resource.json` discovery endpoint everywhere, partitions sandbox writes by AAuth thumbprint so signed agents land under their own deterministic identity instead of the shared sandbox public user, and adds a sandbox-only AAuth-required write route so the “signature → admission → identity-bound provenance” chain is demonstrable end-to-end without changing any non-sandbox auth behavior.
 
 ## Ship constraints

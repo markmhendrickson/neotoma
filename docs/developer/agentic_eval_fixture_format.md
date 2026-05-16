@@ -1,3 +1,8 @@
+---
+title: "Agentic Eval — Tier 1 Fixture Format"
+summary: "This document specifies the JSON fixture format consumed by the `tests/helpers/agentic_eval/runner.ts` runner. Each fixture describes a single agentic scenario as a sequence of synthetic hook events plus a set of declarative assertions a..."
+---
+
 # Agentic Eval — Tier 1 Fixture Format
 
 This document specifies the JSON fixture format consumed by the

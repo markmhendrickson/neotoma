@@ -1,3 +1,8 @@
+---
+title: AAuth
+summary: "Defines **AAuth** — Neotoma's mechanism for cryptographically verifiable *agent identity* on every write. AAuth lives alongside (not in place of) Neotoma's human user authentication: where `user_id` answers \"whose data is this?\", AAuth a..."
+---
+
 # AAuth
 
 ## Purpose

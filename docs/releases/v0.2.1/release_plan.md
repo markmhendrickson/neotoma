@@ -1,3 +1,8 @@
+---
+title: Release Plan
+summary: "- `FU-301`: Static Documentation Web Server - One-page landing website presenting key information from README.md - Design system compliance (follows `docs/ui/design_system.md`) - Directory access to documentation (organized by category) ..."
+---
+
 ## Release v0.2.1 — Documentation Generation System
 ### 1. Release Overview
 - **Release ID**: `v0.2.1`

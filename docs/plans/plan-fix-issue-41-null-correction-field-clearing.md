@@ -1,3 +1,8 @@
+---
+title: "Fix issue #41 null correction field clearing"
+summary: "**Entity ID:** `ent_2b74a2b8b473033583303820` **Status:** implemented_blocked_by_precommit **Last observation:** 2026-05-11T13:11:30.806Z"
+---
+
 # Fix issue #41 null correction field clearing
 
 **Entity ID:** `ent_2b74a2b8b473033583303820`  

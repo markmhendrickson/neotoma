@@ -1,3 +1,8 @@
+---
+title: MDX translation audit (generated)
+summary: "| Canonical path | Locales | Revisions | Statuses | |----------------|---------|-----------|----------| | `/` | en, es | 2026-05-07 | canonical, machine_draft | | `/agent-auth` | en, es | 2026-05-07 | canonical, machine_draft | | `/api` ..."
+---
+
 # MDX translation audit (generated)
 
 | Canonical path | Locales | Revisions | Statuses |

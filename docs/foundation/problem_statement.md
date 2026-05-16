@@ -1,3 +1,8 @@
+---
+title: "Why Neotoma Exists: The Problem"
+summary: "The primary ICP — the **personal agentic OS builder/operator** (see [`docs/icp/primary_icp.md`](../icp/primary_icp.md)) — spends significant effort, attention, and emotional energy compensating for the absence of reliable agent state. Th..."
+---
+
 # Why Neotoma Exists: The Problem
 
 The primary ICP — the **personal agentic OS builder/operator** (see [`docs/icp/primary_icp.md`](../icp/primary_icp.md)) — spends significant effort, attention, and emotional energy compensating for the absence of reliable agent state. The pain is not the absence of features; it is the daily tax of being the human sync layer between AI tools, compounded by the acute risk of agents acting confidently on wrong, stale, or lossy-compressed state.

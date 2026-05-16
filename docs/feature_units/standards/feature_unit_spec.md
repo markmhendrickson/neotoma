@@ -1,3 +1,7 @@
+---
+title: Feature Unit Specification Standard
+---
+
 # Feature Unit Specification Standard
 ## 1. What is a Feature Unit?
 A **Feature Unit** is a complete, self-contained unit of functionality consisting of:

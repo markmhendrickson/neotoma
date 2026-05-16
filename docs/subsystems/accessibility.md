@@ -1,3 +1,8 @@
+---
+title: Neotoma Accessibility (A11y)
+summary: "*(Semantic HTML, Keyboard Navigation, ARIA, and Focus Management)* ## Core Requirements 1. **Semantic HTML:** Use correct tags (`<button>`, `<nav>`, `<main>`, etc.) 2. **Keyboard navigation:** All interactive elements reachable via Tab 3..."
+---
+
 # Neotoma Accessibility (A11y)
 *(Semantic HTML, Keyboard Navigation, ARIA, and Focus Management)*
 ## Core Requirements

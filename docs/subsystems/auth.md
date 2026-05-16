@@ -1,3 +1,8 @@
+---
+title: Neotoma Authentication and Authorization
+summary: "*(Auth Flows, Permissions, and Access Control)* ## Authentication **Provider:** Local auth (built-in) or OAuth **Flows:** - Local dev stub (no credentials) - OAuth (when configured) - Key-derived Bearer token (when encryption enabled) **..."
+---
+
 # Neotoma Authentication and Authorization
 *(Auth Flows, Permissions, and Access Control)*
 ## Authentication

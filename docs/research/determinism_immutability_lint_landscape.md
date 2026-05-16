@@ -1,3 +1,8 @@
+---
+title: "Determinism and immutability: lint/static-enforcement landscape"
+summary: "**Status:** Research note. Input to a follow-up plan deciding whether to add domain-specific lint rules in Neotoma. Not a decision document."
+---
+
 # Determinism and immutability: lint/static-enforcement landscape
 
 **Status:** Research note. Input to a follow-up plan deciding whether to add

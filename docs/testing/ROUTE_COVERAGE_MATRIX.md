@@ -1,3 +1,8 @@
+---
+title: Route Coverage Matrix
+summary: "**Date**: 2026-01-23 **Purpose**: Track E2E test coverage for all application routes"
+---
+
 # Route Coverage Matrix
 
 **Date**: 2026-01-23  

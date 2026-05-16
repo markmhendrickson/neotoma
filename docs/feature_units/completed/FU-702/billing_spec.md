@@ -1,3 +1,8 @@
+---
+title: "Feature Unit: FU-702 Billing and Subscription Management"
+summary: "**Status:** Draft **Priority:** P1 (High) **Risk Level:** Medium **Target Release:** v1.0.0 **Owner:** Engineering Team **Reviewers:** Tech Lead, Product **Created:** 2025-01-XX **Last Updated:** 2025-01-XX ## Overview **Brief Descriptio..."
+---
+
 # Feature Unit: FU-702 Billing and Subscription Management
 **Status:** Draft
 **Priority:** P1 (High)

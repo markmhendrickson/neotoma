@@ -1,3 +1,8 @@
+---
+title: Neotoma MCP Specification
+summary: "**Authoritative Vocabulary:** [`docs/vocabulary/canonical_terms.md`](../vocabulary/canonical_terms.md)"
+---
+
 # Neotoma MCP Specification
 
 **Authoritative Vocabulary:** [`docs/vocabulary/canonical_terms.md`](../vocabulary/canonical_terms.md)

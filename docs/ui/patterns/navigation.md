@@ -1,3 +1,8 @@
+---
+title: "UI Pattern: Navigation"
+summary: "*(Sidebar Navigation with Entity Types, Search, and User Menu)*"
+---
+
 # UI Pattern: Navigation
 *(Sidebar Navigation with Entity Types, Search, and User Menu)*
 

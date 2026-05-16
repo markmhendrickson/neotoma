@@ -1,3 +1,8 @@
+---
+title: Unauthenticated-state instructions
+summary: Text the MCP server returns when the client is not authenticated. The server loads this file at runtime and uses it in the Initialize response (instructions and serverInfo.description).
+---
+
 # Unauthenticated-state instructions
 
 ## Scope

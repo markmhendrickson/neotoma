@@ -1,3 +1,8 @@
+---
+title: Future ICPs (Post Developer Release)
+summary: "ICPs that get value from Neotoma's guarantees but are not aligned with the developer release's distribution model, interface complexity, or feature scope. For the primary ICP, see [`primary_icp.md`](./primary_icp.md). For secondary ICPs,..."
+---
+
 # Future ICPs (Post Developer Release)
 
 ## Scope

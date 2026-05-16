@@ -1,3 +1,8 @@
+---
+title: "Legal & investigation cases"
+summary: "Legal proceedings and investigations hinge on establishing what was known at specific moments — yet case files grow across months or years, with evidence, filings, and witness statements accumulating in ways that make temporal reconstruc..."
+---
+
 # Legal & investigation cases
 
 Legal proceedings and investigations hinge on establishing what was known at specific moments — yet case files grow across months or years, with evidence, filings, and witness statements accumulating in ways that make temporal reconstruction difficult. Neotoma enables legal teams to reconstruct what was known at any point in a case timeline by versioning every piece of evidence, filing, party interaction, and case development as immutable observations with full provenance. This supports litigation strategy, regulatory defense, and internal investigations where the sequence and timing of knowledge is as important as the knowledge itself.

@@ -1,3 +1,8 @@
+---
+title: "Feature Unit: FU-2026-Q4-aauth-yubikey-cli — YubiKey CLI Attestation Source"
+summary: "**Status:** In Progress **Priority:** P1 (cross-platform hardware-tier coverage) **Risk Level:** Medium (new native package, new platform path, new trust roots) **Target Release:** v0.10.x **Owner:** Engineering **Created:** 2026-04-27 *..."
+---
+
 # Feature Unit: FU-2026-Q4-aauth-yubikey-cli — YubiKey CLI Attestation Source
 
 **Status:** In Progress

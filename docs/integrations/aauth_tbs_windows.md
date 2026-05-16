@@ -1,3 +1,8 @@
+---
+title: AAuth TBS / NCrypt on Windows
+summary: "Operator-facing setup guide for the optional `@neotoma/aauth-win-tbs` native package (FU-5). When installed and probing successfully on a Windows host with a usable TPM 2.0 chip, `neotoma auth keygen --hardware` mints a TPM-resident AIK ..."
+---
+
 # AAuth TBS / NCrypt on Windows
 
 ## Purpose

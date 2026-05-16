@@ -1,3 +1,8 @@
+---
+title: Secrets Manager Value Assessment
+summary: "If we decrypt secrets just to pass via an API field (which gets rejected anyway), the secrets manager provides **minimal additional security** for cloud agents specifically."
+---
+
 # Secrets Manager Value Assessment
 
 ## The Problem

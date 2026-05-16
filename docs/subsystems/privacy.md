@@ -1,3 +1,8 @@
+---
+title: "Neotoma Privacy — PII Handling and Data Protection"
+summary: "*(PII Categories, Logging Restrictions, Retention, and Erasure)* ## PII Categories | Category | Examples | Handling | |----------|----------|----------| | **Identity** | Name, SSN, passport number | Store in `properties`, RLS protected |..."
+---
+
 # Neotoma Privacy — PII Handling and Data Protection
 *(PII Categories, Logging Restrictions, Retention, and Erasure)*
 ## PII Categories

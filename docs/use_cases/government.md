@@ -1,3 +1,8 @@
+---
+title: "Public sector & GovTech"
+summary: "Government determinations — benefit eligibility, permit approvals, enforcement actions — must be traceable to the specific policy version under which they were made. When policies change, agencies need to know which version governed each..."
+---
+
 # Public sector & GovTech
 
 Government determinations — benefit eligibility, permit approvals, enforcement actions — must be traceable to the specific policy version under which they were made. When policies change, agencies need to know which version governed each decision and reconstruct the evidence that supported it. Neotoma provides policy-version-bound determinations and inter-agency evidence provenance, enabling government agencies and their AI systems to maintain full audit trails that connect every determination to its governing policy version, supporting evidence, and decision rationale across agency boundaries.

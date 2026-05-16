@@ -1,3 +1,8 @@
+---
+title: v0.2.3 MCP Capabilities Documentation
+summary: "This document details the 7 new capability IDs added in v0.2.3 for codebase metadata management. These capabilities are used with existing generic MCP actions (`submit_payload`, `retrieve_records`, `retrieve_entities`, `list_timeline_eve..."
+---
+
 # v0.2.3 MCP Capabilities Documentation
 
 ## Overview

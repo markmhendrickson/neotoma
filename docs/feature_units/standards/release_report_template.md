@@ -1,3 +1,8 @@
+---
+title: "Release {RELEASE_ID} — Build Report"
+summary: "**Report Generated:** {REPORT_DATE} **Release Name:** {RELEASE_NAME} **Release Status:** {RELEASE_STATUS} ## Executive Summary {STATUS_ICON} **Release Status:** {RELEASE_STATUS} - **Batches:** {COMPLETED_BATCHES}/{TOTAL_BATCHES} complete..."
+---
+
 # Release {RELEASE_ID} — Build Report
 **Report Generated:** {REPORT_DATE}  
 **Release Name:** {RELEASE_NAME}  

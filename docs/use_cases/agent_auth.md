@@ -1,3 +1,8 @@
+---
+title: "Agent authorization & governance"
+summary: "As AI agents gain the ability to act autonomously — executing transactions, accessing sensitive data, and making decisions on behalf of humans — the question of authorization provenance becomes critical. Neotoma provides versioned policy..."
+---
+
 # Agent authorization & governance
 
 As AI agents gain the ability to act autonomously — executing transactions, accessing sensitive data, and making decisions on behalf of humans — the question of authorization provenance becomes critical. Neotoma provides versioned policy state, consent timelines, delegation provenance, and DAO governance lineage, enabling platforms to reconstruct whether an agent was authorized for a specific action at a specific time, under which policy version, and through which delegation chain. This is foundational for multi-agent systems, DAOs, and any environment where autonomous action requires auditable consent and governance traceability.

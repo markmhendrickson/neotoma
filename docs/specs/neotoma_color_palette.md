@@ -1,3 +1,8 @@
+---
+title: Neotoma Color Palette
+summary: "- `--primary`: brand violet - `--primary-foreground`: white in light and dark - `--accent`: brand violet subtle - `--accent-foreground`: text primary - `--success`: brand emerald hover in light, emerald 400 in dark - `--background`: canv..."
+---
+
 # Neotoma Color Palette
 
 ## Scope

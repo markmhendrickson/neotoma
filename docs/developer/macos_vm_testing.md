@@ -1,3 +1,8 @@
+---
+title: macOS VM Testing with UTM
+summary: For macOS-specific testing, UTM is a practical option for running disposable macOS VMs locally. It is useful for validating setup docs, OAuth/browser behavior, and clean-environment onboarding.
+---
+
 # macOS VM Testing with UTM
 
 For macOS-specific testing, UTM is a practical option for running disposable macOS VMs locally.

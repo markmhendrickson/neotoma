@@ -1,3 +1,8 @@
+---
+title: "Neotoma Entity Snapshot Record Type — Reducer Output Primitive"
+summary: "**Authoritative Vocabulary:** [`docs/vocabulary/canonical_terms.md`](../vocabulary/canonical_terms.md)"
+---
+
 # Neotoma Entity Snapshot Record Type — Reducer Output Primitive
 
 **Authoritative Vocabulary:** [`docs/vocabulary/canonical_terms.md`](../vocabulary/canonical_terms.md)

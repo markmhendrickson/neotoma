@@ -1,3 +1,8 @@
+---
+title: "Implementation Decision Log: FU-051"
+summary: "**Generated:** 2025-12-14T06:22:09.893Z ## Overview This log documents implementation decisions made for FU-051 and how each requirement from the specification was addressed. ## Implementation Decisions ### Decision 1: Domain logic MUST ..."
+---
+
 # Implementation Decision Log: FU-051
 **Generated:** 2025-12-14T06:22:09.893Z
 ## Overview

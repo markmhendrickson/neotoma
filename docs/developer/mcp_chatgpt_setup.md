@@ -1,3 +1,8 @@
+---
+title: ChatGPT Custom GPT Actions Setup Guide
+summary: This guide explains how to configure Neotoma as a Custom GPT Action in ChatGPT using the HTTP Actions API (OpenAPI schema).
+---
+
 # ChatGPT Custom GPT Actions Setup Guide
 
 This guide explains how to configure Neotoma as a Custom GPT Action in ChatGPT using the HTTP Actions API (OpenAPI schema).

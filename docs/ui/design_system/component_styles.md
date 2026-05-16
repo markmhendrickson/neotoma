@@ -1,3 +1,8 @@
+---
+title: Component Styles
+summary: "**Primary:**"
+---
+
 # Component Styles
 
 ## Buttons

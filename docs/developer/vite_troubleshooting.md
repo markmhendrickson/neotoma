@@ -1,3 +1,7 @@
+---
+title: Vite Troubleshooting Guide
+---
+
 # Vite Troubleshooting Guide
 ## Common Issues and Solutions
 ### Outdated Optimize Dep Error

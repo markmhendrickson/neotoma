@@ -1,3 +1,8 @@
+---
+title: Future Considerations
+summary: - Custom theme support (user-defined colors) - Density preferences (compact/comfortable/spacious) - Font size preferences - Customizable entity type colors
+---
+
 # Future Considerations
 
 ## Potential Enhancements

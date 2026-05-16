@@ -1,3 +1,8 @@
+---
+title: "Neotoma MCP: Mobile setup (Claude iOS / Android)"
+summary: How to connect Neotoma MCP in the Claude mobile app and configure a custom system prompt so retrieval-first behavior applies before native device integrations (Reminders, Calendar, Contacts, etc.).
+---
+
 # Neotoma MCP: Mobile setup (Claude iOS / Android)
 
 ## Scope

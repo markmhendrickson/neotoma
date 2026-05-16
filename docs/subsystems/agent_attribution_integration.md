@@ -1,3 +1,8 @@
+---
+title: Agent attribution integration guide
+summary: "**Audience:** MCP client authors, local-proxy authors, and operators who need to wire a new agent into Neotoma and confirm the attribution tier their writes land with."
+---
+
 # Agent attribution integration guide
 
 **Audience:** MCP client authors, local-proxy authors, and operators who

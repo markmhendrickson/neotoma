@@ -1,3 +1,8 @@
+---
+title: "Release v0.2.1 — Status"
+summary: "**Release ID**: v0.2.1 **Release Name**: Documentation Generation System **Status**: `in_progress` **Owner**: Mark Hendrickson **Last Updated**: 2025-12-31 ## 1. Release Metadata - **Release ID**: `v0.2.1` - **Name**: Documentation Gener..."
+---
+
 # Release v0.2.1 — Status
 **Release ID**: v0.2.1  
 **Release Name**: Documentation Generation System  
