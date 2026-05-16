@@ -164,6 +164,7 @@ flowchart TD
 - `tests/unit/mcp_proxy.test.ts`
 - `tests/unit/mcp_resource_uri.test.ts`
 - `tests/unit/mcp_server_card.test.ts`
+- `tests/unit/mirror_profiles.test.ts`
 - `tests/unit/neotoma_entity_id.test.ts`
 - `tests/unit/observation_reducer_converters.test.ts`
 - `tests/unit/observation_reducer_observation_source.test.ts`
