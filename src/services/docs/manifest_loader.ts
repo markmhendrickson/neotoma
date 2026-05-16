@@ -9,7 +9,11 @@
  */
 
 import fs from "node:fs";
-import type { DocsManifest, DocsManifestCategory, DocsManifestSubcategory } from "./index_builder.js";
+import type {
+  DocsManifest,
+  DocsManifestCategory,
+  DocsManifestSubcategory,
+} from "./index_builder.js";
 
 export interface ManifestEntry {
   repo_path: string;
@@ -208,7 +212,7 @@ function parseCategories(lines: string[]): DocsManifestCategory[] {
 function applyScalar(
   target: Partial<DocsManifestCategory | DocsManifestSubcategory>,
   key: string,
-  value: string,
+  value: string
 ) {
   const v = stripQuotes(value);
   if (key === "display_name") (target as { display_name?: string }).display_name = v;

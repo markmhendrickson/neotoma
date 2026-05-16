@@ -101,7 +101,12 @@ export async function auditEntityType(
   const misfiledFields = [...new Set(misfiled.map((f: any) => f.fragment_key as string))].sort();
   const fragmentCount = misfiled.reduce((s: number, f: any) => s + (f.frequency_count ?? 1), 0);
 
-  return { entity_type: entityType, user_id: userId, misfiled_fields: misfiledFields, fragment_count: fragmentCount };
+  return {
+    entity_type: entityType,
+    user_id: userId,
+    misfiled_fields: misfiledFields,
+    fragment_count: fragmentCount,
+  };
 }
 
 /** Audit all entity types present in raw_fragments. */
@@ -164,7 +169,13 @@ export async function repairEntityType(
   // Group by entity_id or source+interpretation.
   const groups = new Map<
     string,
-    { entityId: string | null; sourceId: string | null; interpId: string | null; userId: string | null; fields: Record<string, unknown> }
+    {
+      entityId: string | null;
+      sourceId: string | null;
+      interpId: string | null;
+      userId: string | null;
+      fields: Record<string, unknown>;
+    }
   >();
 
   for (const frag of fragments) {
@@ -187,7 +198,10 @@ export async function repairEntityType(
   // Resolve entity_id for source-keyed groups.
   for (const [key, group] of groups) {
     if (group.entityId) continue;
-    if (!group.sourceId) { groups.delete(key); continue; }
+    if (!group.sourceId) {
+      groups.delete(key);
+      continue;
+    }
 
     let obsQ = db
       .from("observations")
@@ -203,7 +217,9 @@ export async function repairEntityType(
 
     const { data: existing } = await (obsQ as any);
     const ids = new Set(
-      (existing ?? []).map((o: any) => o.entity_id).filter((id: unknown): id is string => typeof id === "string")
+      (existing ?? [])
+        .map((o: any) => o.entity_id)
+        .filter((id: unknown): id is string => typeof id === "string")
     );
 
     if (ids.size === 1) {
@@ -281,9 +297,7 @@ export async function repairEntityType(
 }
 
 /** Repair all affected entity types. Returns a run_id usable for rollback. */
-export async function repairAll(
-  filterEntityTypes?: string[]
-): Promise<RepairRunResult> {
+export async function repairAll(filterEntityTypes?: string[]): Promise<RepairRunResult> {
   const runId = `schema_lag_${new Date().toISOString()}`;
   let repairedEntityTypes = 0;
   let insertedObservations = 0;
@@ -296,19 +310,24 @@ export async function repairAll(
     : hits;
 
   for (const hit of filtered) {
-    const { inserted, recomputed, errors: errs } = await repairEntityType(
-      hit.entity_type,
-      hit.user_id,
-      runId,
-      hit.misfiled_fields
-    );
+    const {
+      inserted,
+      recomputed,
+      errors: errs,
+    } = await repairEntityType(hit.entity_type, hit.user_id, runId, hit.misfiled_fields);
     if (inserted > 0 || recomputed > 0) repairedEntityTypes++;
     insertedObservations += inserted;
     recomputedSnapshots += recomputed;
     errors.push(...errs);
   }
 
-  return { run_id: runId, repaired_entity_types: repairedEntityTypes, inserted_observations: insertedObservations, recomputed_snapshots: recomputedSnapshots, errors };
+  return {
+    run_id: runId,
+    repaired_entity_types: repairedEntityTypes,
+    inserted_observations: insertedObservations,
+    recomputed_snapshots: recomputedSnapshots,
+    errors,
+  };
 }
 
 /** Roll back a prior repair run by deleting its sentinel observations and
@@ -324,7 +343,9 @@ export async function rollbackRun(runId: string): Promise<RollbackResult> {
     try {
       const fields = typeof o.fields === "string" ? JSON.parse(o.fields) : o.fields;
       return fields?._migration_run_id === runId;
-    } catch { return false; }
+    } catch {
+      return false;
+    }
   });
 
   if (migrated.length === 0) {
@@ -339,7 +360,10 @@ export async function rollbackRun(runId: string): Promise<RollbackResult> {
   // Delete in batches.
   const ids = (migrated as any[]).map((o) => o.id);
   for (let i = 0; i < ids.length; i += BATCH_SIZE) {
-    await db.from("observations").delete().in("id", ids.slice(i, i + BATCH_SIZE));
+    await db
+      .from("observations")
+      .delete()
+      .in("id", ids.slice(i, i + BATCH_SIZE));
   }
 
   // Recompute snapshots.
@@ -371,7 +395,9 @@ export async function rollbackRun(runId: string): Promise<RollbackResult> {
       await upsertEntitySnapshotWithEmbedding(row);
       recomputed++;
     } catch (err: any) {
-      logger.warn(`[SCHEMA_LAG_REPAIR] Snapshot recompute failed during rollback for ${entityId}: ${err.message}`);
+      logger.warn(
+        `[SCHEMA_LAG_REPAIR] Snapshot recompute failed during rollback for ${entityId}: ${err.message}`
+      );
     }
   }
 
@@ -400,7 +426,9 @@ export async function queueSchemaLagRepair(
       .select("id, status")
       .eq("entity_type", entityType)
       .eq("job_type", "schema_lag_repair");
-    q = normalizedUserId ? (q as any).eq("user_id", normalizedUserId) : (q as any).is("user_id", null);
+    q = normalizedUserId
+      ? (q as any).eq("user_id", normalizedUserId)
+      : (q as any).is("user_id", null);
 
     const { data: existing } = await (q as any).maybeSingle();
 

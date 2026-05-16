@@ -25,7 +25,15 @@ import { promises as fs } from "node:fs";
 import * as path from "node:path";
 import * as yaml from "js-yaml";
 
-export type Harness = "cursor" | "claude_code" | "codex" | "openclaw" | "cli" | "agent" | "human" | "other";
+export type Harness =
+  | "cursor"
+  | "claude_code"
+  | "codex"
+  | "openclaw"
+  | "cli"
+  | "agent"
+  | "human"
+  | "other";
 
 const HARNESS_DIR_HINTS: Array<{ marker: string; harness: Harness }> = [
   { marker: `${path.sep}.cursor${path.sep}plans${path.sep}`, harness: "cursor" },
@@ -122,7 +130,10 @@ export function detectHarnessFromPath(filePath: string): Harness {
  *   process-issues_skill_2d3bdfdc.plan.md → slug="process-issues_skill_2d3bdfdc", harness_plan_id="2d3bdfdc"
  *   site-react-tailwind-parity.plan.md   → slug="site-react-tailwind-parity",   harness_plan_id=null
  */
-export function deriveIdentityFromFilename(filePath: string, harness: Harness): DerivedPlanIdentity {
+export function deriveIdentityFromFilename(
+  filePath: string,
+  harness: Harness
+): DerivedPlanIdentity {
   const filename = path.basename(filePath);
   const match = FILENAME_STEM_RE.exec(filename);
   if (!match || !match.groups) {
@@ -157,7 +168,10 @@ export function parsePlanMarkdown(raw: string): ParsedPlan {
     return { frontmatter: {}, body: trimmed, raw: trimmed };
   }
   const frontmatterRaw = lines.slice(1, endIndex).join("\n");
-  const body = lines.slice(endIndex + 1).join("\n").replace(/^\n+/, "");
+  const body = lines
+    .slice(endIndex + 1)
+    .join("\n")
+    .replace(/^\n+/, "");
   let frontmatter: HarnessPlanFrontmatter = {};
   try {
     const loaded = yaml.load(frontmatterRaw);
@@ -170,7 +184,9 @@ export function parsePlanMarkdown(raw: string): ParsedPlan {
   return { frontmatter, body, raw: trimmed };
 }
 
-function normalizeTodos(value: unknown): Array<{ id: string; content: string; status: string }> | undefined {
+function normalizeTodos(
+  value: unknown
+): Array<{ id: string; content: string; status: string }> | undefined {
   if (!Array.isArray(value)) return undefined;
   const out = value
     .map((entry) => {
@@ -197,7 +213,7 @@ function normalizeTodos(value: unknown): Array<{ id: string; content: string; st
  * execution keeps the helper transport-agnostic.
  */
 export async function captureHarnessPlan(
-  input: CaptureHarnessPlanInput,
+  input: CaptureHarnessPlanInput
 ): Promise<CapturedPlanPayload> {
   const filePath = path.resolve(input.file_path);
   const fileStat = await fs.stat(filePath);
@@ -217,7 +233,8 @@ export async function captureHarnessPlan(
   const createdAt = input.created_at ?? fileStat.mtime.toISOString();
   const todos = normalizeTodos(fm.todos);
   const isProject = typeof fm.isProject === "boolean" ? fm.isProject : undefined;
-  const overview = typeof fm.overview === "string" && fm.overview.trim() ? fm.overview.trim() : undefined;
+  const overview =
+    typeof fm.overview === "string" && fm.overview.trim() ? fm.overview.trim() : undefined;
 
   const planEntity: Record<string, unknown> = {
     entity_type: "plan",
@@ -233,14 +250,15 @@ export async function captureHarnessPlan(
     status: "draft",
     created_at: createdAt,
     data_source:
-      input.data_source ??
-      `${identity.harness} harness plan file ${createdAt.slice(0, 10)}`,
+      input.data_source ?? `${identity.harness} harness plan file ${createdAt.slice(0, 10)}`,
   };
   if (identity.harness_plan_id) planEntity.harness_plan_id = identity.harness_plan_id;
-  if (input.conversation_entity_id) planEntity.conversation_id_entity = input.conversation_entity_id;
+  if (input.conversation_entity_id)
+    planEntity.conversation_id_entity = input.conversation_entity_id;
   if (input.source_entity_id) planEntity.source_entity_id = input.source_entity_id;
   if (input.source_entity_type) planEntity.source_entity_type = input.source_entity_type;
-  if (input.source_message_entity_id) planEntity.source_message_entity_id = input.source_message_entity_id;
+  if (input.source_message_entity_id)
+    planEntity.source_message_entity_id = input.source_message_entity_id;
   if (input.repository_name) planEntity.repository_name = input.repository_name;
   if (input.repository_root) planEntity.repository_root = input.repository_root;
   if (input.agent_id) planEntity.agent_id = input.agent_id;

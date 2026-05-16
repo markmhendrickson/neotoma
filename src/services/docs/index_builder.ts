@@ -253,7 +253,5 @@ export function buildDocsIndex(opts: BuildDocsIndexOptions): DocsIndex {
 }
 
 function humanizeKey(key: string): string {
-  return key
-    .replace(/[_-]+/g, " ")
-    .replace(/\b([a-z])/g, (_, c: string) => c.toUpperCase());
+  return key.replace(/[_-]+/g, " ").replace(/\b([a-z])/g, (_, c: string) => c.toUpperCase());
 }

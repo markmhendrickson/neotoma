@@ -3,10 +3,14 @@ import { isVisible, shouldShowInternal } from "./visibility.js";
 
 describe("shouldShowInternal", () => {
   it("explicit true wins", () => {
-    expect(shouldShowInternal({ NEOTOMA_DOCS_SHOW_INTERNAL: "true", NODE_ENV: "production" })).toBe(true);
+    expect(shouldShowInternal({ NEOTOMA_DOCS_SHOW_INTERNAL: "true", NODE_ENV: "production" })).toBe(
+      true
+    );
   });
   it("explicit false wins", () => {
-    expect(shouldShowInternal({ NEOTOMA_DOCS_SHOW_INTERNAL: "false", NODE_ENV: "development" })).toBe(false);
+    expect(
+      shouldShowInternal({ NEOTOMA_DOCS_SHOW_INTERNAL: "false", NODE_ENV: "development" })
+    ).toBe(false);
   });
   it("unset + production hides internal", () => {
     expect(shouldShowInternal({ NODE_ENV: "production" })).toBe(false);
@@ -28,7 +32,10 @@ describe("isVisible", () => {
     expect(isVisible({ visibility: "internal" }, { NODE_ENV: "production" })).toBe(false);
     expect(isVisible({ visibility: "internal" }, { NODE_ENV: "development" })).toBe(false);
     expect(
-      isVisible({ visibility: "internal" }, { NODE_ENV: "production", NEOTOMA_DOCS_SHOW_INTERNAL: "true" }),
+      isVisible(
+        { visibility: "internal" },
+        { NODE_ENV: "production", NEOTOMA_DOCS_SHOW_INTERNAL: "true" }
+      )
     ).toBe(true);
   });
 });

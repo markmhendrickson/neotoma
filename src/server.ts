@@ -4662,7 +4662,9 @@ export class NeotomaServer {
         const hasMisfiled = Object.keys(unknownFields).some((k) => declaredFields.has(k));
         if (hasMisfiled) {
           const { queueSchemaLagRepair } = await import("./services/schema_lag_repair.js");
-          queueSchemaLagRepair(entityType, userId).catch(() => {/* best-effort */});
+          queueSchemaLagRepair(entityType, userId).catch(() => {
+            /* best-effort */
+          });
         }
       }
 

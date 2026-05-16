@@ -40,39 +40,178 @@ type FieldSpec = Array<{
 }>;
 
 const PLAN_FIELDS: FieldSpec = [
-  { name: "title", type: "string", required: true, description: "Human-readable plan title (matches harness `name`)" },
-  { name: "slug", type: "string", description: "URL-safe identifier; for harness plans the on-disk filename stem (e.g. process-issues_skill_2d3bdfdc)" },
-  { name: "harness", type: "string", description: "Authoring harness: cursor | claude_code | codex | openclaw | cli | agent | human | other" },
-  { name: "harness_plan_id", type: "string", description: "Stable id assigned by the harness (e.g. Cursor's hex suffix); null for non-harness plans" },
-  { name: "plan_file_path", type: "string", description: "Absolute path on disk when the plan is materialized as a file; null otherwise" },
-  { name: "plan_kind", type: "string", description: "Free-form kind: issue_resolution | feature_implementation | refactor | research | neotoma_repair | other" },
-  { name: "overview", type: "string", description: "One-paragraph summary (matches harness `overview` frontmatter field)" },
-  { name: "body", type: "string", description: "Full markdown body of the plan; preserves harness-authored content verbatim" },
-  { name: "public_overview", type: "string", description: "Redacted overview suitable for public artifacts derived from a private source" },
-  { name: "public_body", type: "string", description: "Redacted body suitable for public artifacts derived from a private source" },
-  { name: "is_project", type: "boolean", description: "Matches harness `isProject` frontmatter flag" },
-  { name: "status", type: "string", description: "draft | awaiting_input | approved | executing | executed | abandoned | superseded" },
-  { name: "outcome", type: "string", description: "pr_opened | worktree_created | commits_landed | input_requested | abandoned | null" },
-  { name: "decision_required", type: "boolean", description: "True when the plan requires human input before execution can proceed" },
-  { name: "decision_blockers", type: "array", reducer: "merge_array", description: "List of strings naming blockers (schema change, security review, ambiguous architecture, etc.)" },
-  { name: "todos", type: "array", description: "Structured todo items: [{ id, content, status }] matching harness frontmatter shape" },
-  { name: "source_entity_id", type: "string", description: "When the plan is `about` something, the entity_id of that source (e.g. an `issue`, `feature_unit`, `repository`)" },
-  { name: "source_entity_type", type: "string", description: "Entity_type of the source (e.g. `issue`, `feature_unit`)" },
-  { name: "source_message_entity_id", type: "string", description: "The prompting `conversation_message` entity_id when the plan was generated in chat" },
-  { name: "conversation_id", type: "string", description: "Stable conversation_id this plan belongs to (for harness plans this is the active session)" },
-  { name: "repository_name", type: "string", description: "Repository the plan is scoped to (e.g. neotoma)" },
-  { name: "repository_root", type: "string", description: "Local checkout path of the repository when applicable" },
-  { name: "reproduction_environment_kind", type: "string", description: "public_release | local_commit | local_branch | not_applicable | unknown" },
-  { name: "git_sha", type: "string", description: "Git commit SHA the plan targets or was authored against" },
+  {
+    name: "title",
+    type: "string",
+    required: true,
+    description: "Human-readable plan title (matches harness `name`)",
+  },
+  {
+    name: "slug",
+    type: "string",
+    description:
+      "URL-safe identifier; for harness plans the on-disk filename stem (e.g. process-issues_skill_2d3bdfdc)",
+  },
+  {
+    name: "harness",
+    type: "string",
+    description:
+      "Authoring harness: cursor | claude_code | codex | openclaw | cli | agent | human | other",
+  },
+  {
+    name: "harness_plan_id",
+    type: "string",
+    description:
+      "Stable id assigned by the harness (e.g. Cursor's hex suffix); null for non-harness plans",
+  },
+  {
+    name: "plan_file_path",
+    type: "string",
+    description: "Absolute path on disk when the plan is materialized as a file; null otherwise",
+  },
+  {
+    name: "plan_kind",
+    type: "string",
+    description:
+      "Free-form kind: issue_resolution | feature_implementation | refactor | research | neotoma_repair | other",
+  },
+  {
+    name: "overview",
+    type: "string",
+    description: "One-paragraph summary (matches harness `overview` frontmatter field)",
+  },
+  {
+    name: "body",
+    type: "string",
+    description: "Full markdown body of the plan; preserves harness-authored content verbatim",
+  },
+  {
+    name: "public_overview",
+    type: "string",
+    description: "Redacted overview suitable for public artifacts derived from a private source",
+  },
+  {
+    name: "public_body",
+    type: "string",
+    description: "Redacted body suitable for public artifacts derived from a private source",
+  },
+  {
+    name: "is_project",
+    type: "boolean",
+    description: "Matches harness `isProject` frontmatter flag",
+  },
+  {
+    name: "status",
+    type: "string",
+    description:
+      "draft | awaiting_input | approved | executing | executed | abandoned | superseded",
+  },
+  {
+    name: "outcome",
+    type: "string",
+    description:
+      "pr_opened | worktree_created | commits_landed | input_requested | abandoned | null",
+  },
+  {
+    name: "decision_required",
+    type: "boolean",
+    description: "True when the plan requires human input before execution can proceed",
+  },
+  {
+    name: "decision_blockers",
+    type: "array",
+    reducer: "merge_array",
+    description:
+      "List of strings naming blockers (schema change, security review, ambiguous architecture, etc.)",
+  },
+  {
+    name: "todos",
+    type: "array",
+    description:
+      "Structured todo items: [{ id, content, status }] matching harness frontmatter shape",
+  },
+  {
+    name: "source_entity_id",
+    type: "string",
+    description:
+      "When the plan is `about` something, the entity_id of that source (e.g. an `issue`, `feature_unit`, `repository`)",
+  },
+  {
+    name: "source_entity_type",
+    type: "string",
+    description: "Entity_type of the source (e.g. `issue`, `feature_unit`)",
+  },
+  {
+    name: "source_message_entity_id",
+    type: "string",
+    description:
+      "The prompting `conversation_message` entity_id when the plan was generated in chat",
+  },
+  {
+    name: "conversation_id",
+    type: "string",
+    description:
+      "Stable conversation_id this plan belongs to (for harness plans this is the active session)",
+  },
+  {
+    name: "repository_name",
+    type: "string",
+    description: "Repository the plan is scoped to (e.g. neotoma)",
+  },
+  {
+    name: "repository_root",
+    type: "string",
+    description: "Local checkout path of the repository when applicable",
+  },
+  {
+    name: "reproduction_environment_kind",
+    type: "string",
+    description: "public_release | local_commit | local_branch | not_applicable | unknown",
+  },
+  {
+    name: "git_sha",
+    type: "string",
+    description: "Git commit SHA the plan targets or was authored against",
+  },
   { name: "git_ref", type: "string", description: "Branch or ref name the plan targets" },
-  { name: "release_tag", type: "string", description: "Release tag (e.g. v0.11.0) when reproduction is a public release" },
-  { name: "app_version", type: "string", description: "App / CLI version (semver) the plan targets" },
-  { name: "worktree_path", type: "string", description: "Absolute path to the git worktree created during execution (local-commit/branch repros)" },
-  { name: "branch_name", type: "string", description: "Branch name created or targeted during execution" },
+  {
+    name: "release_tag",
+    type: "string",
+    description: "Release tag (e.g. v0.11.0) when reproduction is a public release",
+  },
+  {
+    name: "app_version",
+    type: "string",
+    description: "App / CLI version (semver) the plan targets",
+  },
+  {
+    name: "worktree_path",
+    type: "string",
+    description:
+      "Absolute path to the git worktree created during execution (local-commit/branch repros)",
+  },
+  {
+    name: "branch_name",
+    type: "string",
+    description: "Branch name created or targeted during execution",
+  },
   { name: "pr_url", type: "string", description: "Pull request URL after execution opens one" },
-  { name: "github_issue_url", type: "string", description: "GitHub issue URL when the plan resolves a public issue with a GitHub mirror" },
-  { name: "data_source", type: "string", description: "Provenance — e.g. 'cursor harness plan file 2026-05-11' or 'process-issues skill 2026-05-11'" },
-  { name: "agent_id", type: "string", description: "Authoring agent identifier (AAuth thumbprint, clientInfo.name, etc.)" },
+  {
+    name: "github_issue_url",
+    type: "string",
+    description: "GitHub issue URL when the plan resolves a public issue with a GitHub mirror",
+  },
+  {
+    name: "data_source",
+    type: "string",
+    description:
+      "Provenance — e.g. 'cursor harness plan file 2026-05-11' or 'process-issues skill 2026-05-11'",
+  },
+  {
+    name: "agent_id",
+    type: "string",
+    description: "Authoring agent identifier (AAuth thumbprint, clientInfo.name, etc.)",
+  },
   { name: "created_at", type: "date", description: "Plan creation timestamp" },
 ];
 
@@ -140,9 +279,7 @@ export async function seedPlanSchema(options?: {
     });
   }
 
-  const existingFieldNames = new Set(
-    Object.keys(existing.schema_definition.fields ?? {}),
-  );
+  const existingFieldNames = new Set(Object.keys(existing.schema_definition.fields ?? {}));
   const missing = PLAN_FIELDS.filter((spec) => !existingFieldNames.has(spec.name));
   if (missing.length === 0) return existing;
 

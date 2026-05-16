@@ -15,12 +15,12 @@ beforeAll(() => {
   fs.mkdirSync(path.join(docsRoot, "private"), { recursive: true });
   fs.writeFileSync(
     path.join(docsRoot, "foundation", "core_identity.md"),
-    "# Core Identity\n\nNeotoma is the State Layer.\n",
+    "# Core Identity\n\nNeotoma is the State Layer.\n"
   );
   fs.writeFileSync(path.join(docsRoot, "plans", "next.md"), "# Next Plan\n\nDraft.\n");
   fs.writeFileSync(
     path.join(docsRoot, "private", "secret.md"),
-    "# Secret\n\nShould never render.\n",
+    "# Secret\n\nShould never render.\n"
   );
 });
 
@@ -50,7 +50,10 @@ describe("lookupDoc — slug sanitization", () => {
     if (!r.ok) expect(r.error.kind).toBe("invalid_slug");
   });
   it("rejects docs/private regardless of visibility", () => {
-    const r = lookupDoc("private/secret", { docsRoot, env: { NEOTOMA_DOCS_SHOW_INTERNAL: "true" } });
+    const r = lookupDoc("private/secret", {
+      docsRoot,
+      env: { NEOTOMA_DOCS_SHOW_INTERNAL: "true" },
+    });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error.kind).toBe("not_found");
   });
