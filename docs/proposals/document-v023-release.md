@@ -9,6 +9,8 @@ estimated_effort: "13 days"
 
 # Document v0.2.3 Release
 
+> **Status (2026-05-16):** Superseded. v0.2.3 as scoped here was never cut; the project moved on (current release is v0.13.0, see [`docs/releases/`](../releases/)). Several proposed entity types have schemas in code (notably `plan` via [`src/services/plans/seed_schema.ts`](../../src/services/plans/seed_schema.ts), and `feature_unit` is referenced in [`src/services/memory_export.ts`](../../src/services/memory_export.ts)), but the full 7-entity + 7-MCP-action package described below was not implemented as a single release. Kept for historical reference; do not treat as an active plan.
+
 ## Proposal Context
 
 This proposal was migrated from `.cursor/plans/agent_skills_analysis_aac0f1b6.plan.md` on 2026-01-22.
