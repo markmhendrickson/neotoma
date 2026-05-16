@@ -18,7 +18,9 @@ export default async function globalSetup() {
   process.env.NODE_ENV = "test";
 
   // Pick a stable base port for tests and let the server probe upward if in use.
-  const httpPort = process.env.NEOTOMA_HTTP_PORT || process.env.HTTP_PORT || "18080";
+  // Default 19080 keeps tests off the 18080-18099 range used by the local
+  // dev-server LaunchAgents (see scripts/reload_neotoma_launchagents.sh).
+  const httpPort = process.env.NEOTOMA_HTTP_PORT || process.env.HTTP_PORT || "19080";
   process.env.NEOTOMA_HTTP_PORT = httpPort;
   process.env.HTTP_PORT = httpPort;
 
