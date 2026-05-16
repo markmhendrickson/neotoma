@@ -3530,12 +3530,34 @@ paths:
   /schemas:
     get:
       summary: List entity schemas
+      description: |
+        List available entity types. Without `keyword`: returns a short summary
+        (entity_type, schema_version, field_count) for all types. With `keyword`:
+        returns matching types via hybrid keyword/semantic search; pass
+        `summary: true` to keep the response shape compact even when keyword is
+        supplied. Use before storing structured data to determine the correct
+        entity_type and its declared field names.
       operationId: listSchemas
       parameters:
         - in: query
           name: user_id
           required: false
           schema: { type: string }
+        - in: query
+          name: keyword
+          required: false
+          description: |
+            Optional keyword for hybrid keyword + semantic search across
+            entity_type names and schema field summaries.
+          schema: { type: string }
+        - in: query
+          name: summary
+          required: false
+          description: |
+            When true, return summary-only response (entity_type,
+            schema_version, field_count) even when `keyword` is supplied.
+            Defaults to false when `keyword` is present, true when it is not.
+          schema: { type: boolean }
       responses:
         '200':
           description: Schemas
@@ -3789,6 +3811,12 @@ paths:
   /create_relationship:
     post:
       summary: Create relationship
+      description: |
+        Create a single typed relationship between two existing entities. For
+        bulk creation use `/create_relationships`. For embedding-style links
+        (post embeds image, document embeds attachment) prefer
+        `relationship_type: EMBEDS` with the container as source and the asset
+        as target.
       operationId: createRelationship
       requestBody:
         required: true
@@ -3797,6 +3825,44 @@ paths:
             schema:
               type: object
               additionalProperties: true
+              description: |
+                The server zod schema rejects a request that omits any of
+                `relationship_type`, `source_entity_id`, or `target_entity_id`
+                with `ERR_VALIDATION`. They are not marked `required` here only
+                because they were not previously declared in the OpenAPI body
+                schema; the OpenAPI body is being reconciled to declared shape
+                without changing accepted inputs.
+              properties:
+                relationship_type:
+                  type: string
+                  description: |
+                    Typed relationship category. Canonical structural types are
+                    `PART_OF`, `CORRECTS`, `REFERS_TO`, `SETTLES`,
+                    `DUPLICATE_OF`, `DEPENDS_ON`, `SUPERSEDES`, `EMBEDS`. Domain
+                    types (e.g. `works_at`, `owns`, `manages`) are also accepted.
+                  enum: [PART_OF, CORRECTS, REFERS_TO, SETTLES, DUPLICATE_OF, DEPENDS_ON, SUPERSEDES, EMBEDS, works_at, owns, manages, part_of, related_to, depends_on, references, transacted_with, member_of, reports_to, located_at, created_by, funded_by, acquired_by, subsidiary_of, partner_of, competitor_of, supplies_to, contracted_with, invested_in]
+                source_entity_id:
+                  type: string
+                  description: Existing entity id at the source end of the edge.
+                target_entity_id:
+                  type: string
+                  description: Existing entity id at the target end of the edge.
+                source_id:
+                  type: string
+                  description: |
+                    Optional `sources` row id stamped as provenance on the
+                    relationship observation.
+                metadata:
+                  type: object
+                  additionalProperties: true
+                  description: |
+                    Optional metadata attached to the relationship (e.g.
+                    `caption`, `order` for `EMBEDS` edges).
+                user_id:
+                  type: string
+                  description: |
+                    Optional explicit user id; inferred from authentication
+                    when omitted.
       responses:
         '200':
           description: Relationship created

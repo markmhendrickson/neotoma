@@ -1046,7 +1046,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List entity schemas */
+        /**
+         * List entity schemas
+         * @description List available entity types. Without `keyword`: returns a short summary
+         *     (entity_type, schema_version, field_count) for all types. With `keyword`:
+         *     returns matching types via hybrid keyword/semantic search; pass
+         *     `summary: true` to keep the response shape compact even when keyword is
+         *     supplied. Use before storing structured data to determine the correct
+         *     entity_type and its declared field names.
+         */
         get: operations["listSchemas"];
         put?: never;
         post?: never;
@@ -1223,7 +1231,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Create relationship */
+        /**
+         * Create relationship
+         * @description Create a single typed relationship between two existing entities. For
+         *     bulk creation use `/create_relationships`. For embedding-style links
+         *     (post embeds image, document embeds attachment) prefer
+         *     `relationship_type: EMBEDS` with the container as source and the asset
+         *     as target.
+         */
         post: operations["createRelationship"];
         delete?: never;
         options?: never;
@@ -4561,6 +4576,17 @@ export interface operations {
         parameters: {
             query?: {
                 user_id?: string;
+                /**
+                 * @description Optional keyword for hybrid keyword + semantic search across
+                 *     entity_type names and schema field summaries.
+                 */
+                keyword?: string;
+                /**
+                 * @description When true, return summary-only response (entity_type,
+                 *     schema_version, field_count) even when `keyword` is supplied.
+                 *     Defaults to false when `keyword` is present, true when it is not.
+                 */
+                summary?: boolean;
             };
             header?: never;
             path?: never;
@@ -4855,6 +4881,36 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
+                    /**
+                     * @description Typed relationship category. Canonical structural types are
+                     *     `PART_OF`, `CORRECTS`, `REFERS_TO`, `SETTLES`,
+                     *     `DUPLICATE_OF`, `DEPENDS_ON`, `SUPERSEDES`, `EMBEDS`. Domain
+                     *     types (e.g. `works_at`, `owns`, `manages`) are also accepted.
+                     * @enum {string}
+                     */
+                    relationship_type?: "PART_OF" | "CORRECTS" | "REFERS_TO" | "SETTLES" | "DUPLICATE_OF" | "DEPENDS_ON" | "SUPERSEDES" | "EMBEDS" | "works_at" | "owns" | "manages" | "part_of" | "related_to" | "depends_on" | "references" | "transacted_with" | "member_of" | "reports_to" | "located_at" | "created_by" | "funded_by" | "acquired_by" | "subsidiary_of" | "partner_of" | "competitor_of" | "supplies_to" | "contracted_with" | "invested_in";
+                    /** @description Existing entity id at the source end of the edge. */
+                    source_entity_id?: string;
+                    /** @description Existing entity id at the target end of the edge. */
+                    target_entity_id?: string;
+                    /**
+                     * @description Optional `sources` row id stamped as provenance on the
+                     *     relationship observation.
+                     */
+                    source_id?: string;
+                    /**
+                     * @description Optional metadata attached to the relationship (e.g.
+                     *     `caption`, `order` for `EMBEDS` edges).
+                     */
+                    metadata?: {
+                        [key: string]: unknown;
+                    };
+                    /**
+                     * @description Optional explicit user id; inferred from authentication
+                     *     when omitted.
+                     */
+                    user_id?: string;
+                } & {
                     [key: string]: unknown;
                 };
             };
