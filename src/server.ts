@@ -6397,6 +6397,13 @@ export class NeotomaServer {
       logger.error("[MCP Error]", error);
     };
 
+    // Skip signal handlers in test environments: registering process.on('SIGINT')
+    // causes vitest to report "Worker exited unexpectedly" when it terminates workers
+    // after a test run, even when all tests pass.
+    if (process.env.NODE_ENV === "test") {
+      return;
+    }
+
     process.on("SIGINT", async () => {
       await this.mcpServer.server.close();
       process.exit(0);
