@@ -1,3 +1,8 @@
+---
+title: Motion and Animation
+summary: "**Minimal, Fast, Functional:**"
+---
+
 # Motion and Animation
 
 ## Animation Principles

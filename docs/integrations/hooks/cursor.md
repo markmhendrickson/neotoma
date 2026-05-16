@@ -1,3 +1,8 @@
+---
+title: "Neotoma + Cursor (hooks)"
+summary: "The installer merges Neotoma entries into `.cursor/hooks.json`, preserving anything already there. Uninstall with `npx @neotoma/cursor-hooks --uninstall`."
+---
+
 # Neotoma + Cursor (hooks)
 
 ## Install

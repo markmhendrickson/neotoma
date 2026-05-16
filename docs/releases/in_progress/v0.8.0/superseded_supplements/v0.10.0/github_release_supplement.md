@@ -1,3 +1,8 @@
+---
+title: Github Release Supplement
+summary: "v0.10.0 takes the server-side TPM 2.0 verifier shipped in v0.9.0 and gives it real-world client-side counterparts on Linux and Windows. After v0.10.0, `neotoma auth keygen --hardware` works on three operating systems instead of one: macO..."
+---
+
 v0.10.0 takes the server-side TPM 2.0 verifier shipped in v0.9.0 and gives it real-world client-side counterparts on Linux and Windows. After v0.10.0, `neotoma auth keygen --hardware` works on three operating systems instead of one: macOS via Apple Secure Enclave (v0.8.0), Linux via libtss2 / TPM 2.0 (this release), and Windows via TBS + CNG (this release). Hardware attestation is no longer a darwin-only feature.
 
 This release implements two follow-up Feature Units from the v0.8.0 attestation plan:

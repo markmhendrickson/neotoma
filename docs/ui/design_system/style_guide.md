@@ -1,3 +1,8 @@
+---
+title: Style Guide
+summary: _(UI Copy Rules for Neotoma)_
+---
+
 # Style Guide
 
 _(UI Copy Rules for Neotoma)_

@@ -1,3 +1,8 @@
+---
+title: "Schema Extension: codebase_entity"
+summary: "- **Entity Type**: `codebase_entity` - **Version**: `v1` - **Status**: Proposed - **Purpose**: Track codebase entities (subsystems, components, modules) in Neotoma"
+---
+
 # Schema Extension: codebase_entity
 
 ## Overview

@@ -1,3 +1,8 @@
+---
+title: Healthcare operations
+summary: "Clinical decision-making depends on understanding what was known about a patient at the moment a recommendation was made — yet EHR systems typically present only current state, making it difficult to audit AI-assisted clinical decisions ..."
+---
+
 # Healthcare operations
 
 Clinical decision-making depends on understanding what was known about a patient at the moment a recommendation was made — yet EHR systems typically present only current state, making it difficult to audit AI-assisted clinical decisions after the fact. Neotoma provides versioned clinical state, authorization lifecycles, and care plan lineage, enabling healthcare operations teams to reconstruct the exact patient context, active authorizations, and clinical evidence that existed when an AI agent recommended a treatment change. This supports clinical governance, payer audit defense, and patient safety review.

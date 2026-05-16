@@ -1,3 +1,8 @@
+---
+title: "Schema Extension: validation_result"
+summary: "- **Entity Type**: `validation_result` - **Version**: `v1` - **Status**: Proposed - **Purpose**: Track validation checkpoint results in Neotoma"
+---
+
 # Schema Extension: validation_result
 
 ## Overview

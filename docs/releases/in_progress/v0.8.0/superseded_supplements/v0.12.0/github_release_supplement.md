@@ -1,3 +1,8 @@
+---
+title: Github Release Supplement
+summary: "v0.12.0 flips the attestation-revocation policy default from `log_only` (v0.11.0) to `enforce`. Agents whose attestation keys appear on Apple's anonymous-attestation revocation endpoint, on the OCSP responder for their `webauthn-packed` ..."
+---
+
 v0.12.0 flips the attestation-revocation policy default from `log_only` (v0.11.0) to `enforce`. Agents whose attestation keys appear on Apple's anonymous-attestation revocation endpoint, on the OCSP responder for their `webauthn-packed` leaf, or on the OCSP / CRL chain for their `tpm2` AIK now demote from `hardware` (or `operator_attested`) to `software` with `failure_reason: "revoked"`. The behaviour is the same one that was already observable in v0.11.0 under `NEOTOMA_AAUTH_REVOCATION_MODE=enforce`; v0.12.0 simply makes it the default.
 
 This release contains no new Feature Units. It is the policy-flip half of:

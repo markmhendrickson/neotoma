@@ -1,3 +1,8 @@
+---
+title: Shared UI Components Submodule Setup
+summary: This document describes how to set up and use the shared UI components as a git submodule.
+---
+
 # Shared UI Components Submodule Setup
 
 This document describes how to set up and use the shared UI components as a git submodule.

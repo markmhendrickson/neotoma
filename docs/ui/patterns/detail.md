@@ -1,3 +1,8 @@
+---
+title: "UI Pattern: Detail View"
+summary: "*(Single Item Display with Metadata and Actions)* ## Purpose Detail pattern for displaying a single source, entity, or event with full metadata. ## When to Use - Source detail page (SourceDetail component) - Entity profile view (EntityDe..."
+---
+
 # UI Pattern: Detail View
 *(Single Item Display with Metadata and Actions)*
 ## Purpose

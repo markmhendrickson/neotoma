@@ -1,3 +1,8 @@
+---
+title: "Testing instructions: init .env and env config status (branch `fix/init-env-and-error-message`)"
+summary: "Install the unreleased fix:"
+---
+
 # Testing instructions: init .env and env config status (branch `fix/init-env-and-error-message`)
 
 Install the unreleased fix:

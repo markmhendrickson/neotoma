@@ -1,3 +1,8 @@
+---
+title: Neotoma v0.2.15 - Complete Architecture Migration
+summary: "**Authoritative Vocabulary:** [`docs/vocabulary/canonical_terms.md`](../../vocabulary/canonical_terms.md)"
+---
+
 # Neotoma v0.2.15 - Complete Architecture Migration
 
 **Authoritative Vocabulary:** [`docs/vocabulary/canonical_terms.md`](../../vocabulary/canonical_terms.md)

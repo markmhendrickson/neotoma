@@ -1,3 +1,8 @@
+---
+title: What to store in Neotoma
+summary: "Neotoma stores any structured fact that benefits from deterministic state evolution, versioning, and provenance. The deciding question is not \"is this personal data?\" but **\"does this fact benefit from being versioned, auditable, and rep..."
+---
+
 # What to store in Neotoma
 
 ## Principle

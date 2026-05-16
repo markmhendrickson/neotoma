@@ -1,3 +1,8 @@
+---
+title: Setting Up Environment Variable Mappings for 1Password Sync
+summary: "This guide helps you add mappings for Neotoma-specific environment variables to the `env_var_mappings` parquet data type."
+---
+
 # Setting Up Environment Variable Mappings for 1Password Sync
 
 This guide helps you add mappings for Neotoma-specific environment variables to the `env_var_mappings` parquet data type.

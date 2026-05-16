@@ -1,3 +1,8 @@
+---
+title: "AI-assisted crypto & security-sensitive engineering"
+summary: "In codebases where a single vulnerability can result in catastrophic financial loss — smart contracts, cryptographic libraries, consensus implementations — AI-assisted development introduces a new audit requirement: understanding exactly..."
+---
+
 # AI-assisted crypto & security-sensitive engineering
 
 In codebases where a single vulnerability can result in catastrophic financial loss — smart contracts, cryptographic libraries, consensus implementations — AI-assisted development introduces a new audit requirement: understanding exactly what the agent did, what it verified, what it skipped, and why. Neotoma provides agent-session replay, review-cost reduction, and bounty-report provenance by versioning every agent session, commit attribution, verification step, and security finding as immutable observations. This enables security teams to reconstruct the full agent decision chain behind any commit, reducing review burden while maintaining the audit trail that security-sensitive codebases demand.

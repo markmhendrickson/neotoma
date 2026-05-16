@@ -1,3 +1,8 @@
+---
+title: Neotoma Onboarding Specification
+summary: "The primary onboarding path is agent-driven and evaluation-led. The outer funnel is:"
+---
+
 # Neotoma Onboarding Specification
 ## Scope
 This document covers:

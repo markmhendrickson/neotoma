@@ -1,3 +1,7 @@
+---
+title: "Neotoma vs. mmry.io: Marketing Comparison"
+---
+
 # Neotoma vs. mmry.io: Marketing Comparison
 ## Competitive Dynamic Summary
 **Overall Assessment: Complementary, Not Competitive**

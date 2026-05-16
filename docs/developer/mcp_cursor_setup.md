@@ -1,3 +1,8 @@
+---
+title: Cursor MCP Setup Guide
+summary: This guide covers connecting the Neotoma MCP server to Cursor IDE.
+---
+
 # Cursor MCP Setup Guide
 
 This guide covers connecting the Neotoma MCP server to Cursor IDE.

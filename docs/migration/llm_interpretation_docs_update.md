@@ -1,3 +1,8 @@
+---
+title: LLM Interpretation Documentation Update
+summary: "**Date:** 2026-01-19 **Purpose:** Fix documentation inconsistencies regarding LLM interpretation for unstructured data storage"
+---
+
 # LLM Interpretation Documentation Update
 
 **Date:** 2026-01-19  

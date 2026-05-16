@@ -1,3 +1,8 @@
+---
+title: Idempotence Pattern for LLM Interpretation
+summary: "**Reference:** [`docs/architecture/determinism.md`](./determinism.md) — Section 1.4 on idempotence vs determinism"
+---
+
 # Idempotence Pattern for LLM Interpretation
 
 **Reference:** [`docs/architecture/determinism.md`](./determinism.md) — Section 1.4 on idempotence vs determinism

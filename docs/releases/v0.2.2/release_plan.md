@@ -1,3 +1,7 @@
+---
+title: Release Plan
+---
+
 ## Release v0.2.2 — list_capabilities MCP Action
 ### 1. Release Overview
 - **Release ID**: `v0.2.2`

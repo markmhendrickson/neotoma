@@ -1,3 +1,8 @@
+---
+title: Peer Sync
+summary: "Peer sync lets two explicit Neotoma instances exchange selected entity state without a central hub. It is a substrate-level replication surface: each side stores immutable sync-originated observations and the reducer computes snapshots l..."
+---
+
 # Peer Sync
 
 Peer sync lets two explicit Neotoma instances exchange selected entity state without a central hub. It is a substrate-level replication surface: each side stores immutable sync-originated observations and the reducer computes snapshots locally.

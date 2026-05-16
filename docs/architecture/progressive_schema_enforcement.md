@@ -1,3 +1,8 @@
+---
+title: Progressive schema enforcement
+summary: "Pre-defining entity schemas before storing data gives users consistency, validation, queryability, and discoverability. But most users won't do it. Agents storing financial data (or any structured data) incrementally will `store` whateve..."
+---
+
 # Progressive schema enforcement
 
 ## Problem

@@ -1,3 +1,8 @@
+---
+title: All Feature Units Compliance Summary
+summary: "**Generated:** 2025-12-14T06:22:11.460Z **Total FUs Validated:** 26 ## Executive Summary - **Overall Compliance Rate:** 69.4% - **Total Requirements Checked:** 121 - **Total Passed:** 84 - **Total Failed:** 37 - **Fully Compliant FUs:** ..."
+---
+
 # All Feature Units Compliance Summary
 **Generated:** 2025-12-14T06:22:11.460Z  
 **Total FUs Validated:** 26

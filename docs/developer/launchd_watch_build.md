@@ -1,3 +1,8 @@
+---
+title: Run tsc --watch at login (macOS)
+summary: "Use a LaunchAgent so `tsc --watch` runs when you log in and after reboot. The agent also re-links the global `neotoma` command to this checkout using the same Node/npm toolchain that installed the agent, so the CLI on your `PATH` stays p..."
+---
+
 # Run tsc --watch at login (macOS)
 
 Use a LaunchAgent so `tsc --watch` runs when you log in and after reboot. The agent also re-links the global `neotoma` command to this checkout using the same Node/npm toolchain that installed the agent, so the CLI on your `PATH` stays pointed at the repo it is rebuilding.

@@ -1,3 +1,8 @@
+---
+title: Integrations matrix
+summary: Neotoma is cross-platform by design. This page is the single canonical index of every host, harness, and framework Neotoma integrates with, and the status of each integration.
+---
+
 # Integrations matrix
 
 Neotoma is cross-platform by design. This page is the single canonical index of every host, harness, and framework Neotoma integrates with, and the status of each integration.

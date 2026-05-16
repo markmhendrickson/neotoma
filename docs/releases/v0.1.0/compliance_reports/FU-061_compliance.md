@@ -1,3 +1,8 @@
+---
+title: FU-061 Compliance Report
+summary: "**Generated:** 2025-12-14T06:22:10.623Z ## Summary - **Total Requirements:** 4 - **✅ Passed:** 3 - **❌ Failed:** 1 - **Compliance Rate:** 75.0% ## Requirements Status | Requirement | Location | Status | Evidence | Gap | |------------|---..."
+---
+
 # FU-061 Compliance Report
 **Generated:** 2025-12-14T06:22:10.623Z
 ## Summary

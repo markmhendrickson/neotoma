@@ -1,3 +1,8 @@
+---
+title: Schema Handling Architecture
+summary: "// 2. Get [entity schema](#entity-schema) definition for detected [entity type](#entity-type) const entitySchema = getEntitySchema(detectedEntityType);"
+---
+
 # Schema Handling Architecture
 ## 1. Three-Layer Storage Model
 Neotoma uses a **three-layer storage model** to reconcile two requirements:

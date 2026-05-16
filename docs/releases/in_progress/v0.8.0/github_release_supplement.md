@@ -1,3 +1,8 @@
+---
+title: Github Release Supplement
+summary: "v0.8.0 makes attribution tiers honest, ships hardware attestation end-to-end on macOS, Linux, Windows, and YubiKey, replaces the env-driven agent capability registry with a managed `agent_grant` entity type, promotes AAuth from a Sandbox..."
+---
+
 v0.8.0 makes attribution tiers honest, ships hardware attestation end-to-end on macOS, Linux, Windows, and YubiKey, replaces the env-driven agent capability registry with a managed `agent_grant` entity type, promotes AAuth from a Sandbox-only auth path to a first-class auth method on every deployment, and gives the Inspector a real surface for the new attestation and admission diagnostics. This release consolidates work originally planned for v0.8.0 through v0.12.0 — the four-tier cascade, three real attestation verifiers (Apple Secure Enclave, WebAuthn-packed, TPM 2.0), four CLI hardware backends (Apple SE, libtss2, Windows TBS+CNG, YubiKey via libykcs11), attestation revocation lookup in `enforce` mode by default — into one cut.
 
 ## Highlights

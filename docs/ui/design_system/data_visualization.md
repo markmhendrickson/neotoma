@@ -1,3 +1,8 @@
+---
+title: Data Visualization
+summary: "**Visual Style:**"
+---
+
 # Data Visualization
 
 ## Timeline

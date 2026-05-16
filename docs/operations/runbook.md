@@ -1,3 +1,8 @@
+---
+title: Operational Runbook
+summary: _(Startup, health checks, shutdown, and common operations)_
+---
+
 # Operational Runbook
 
 _(Startup, health checks, shutdown, and common operations)_

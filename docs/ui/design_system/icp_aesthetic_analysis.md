@@ -1,3 +1,8 @@
+---
+title: Tier 1 ICP Aesthetic Analysis
+summary: "**AI-Native Individual Operators:**"
+---
+
 # Tier 1 ICP Aesthetic Analysis
 
 ## Apps Used by Tier 1 ICPs

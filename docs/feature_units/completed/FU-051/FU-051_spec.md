@@ -1,3 +1,8 @@
+---
+title: "Feature Unit: FU-051 Repository Abstractions"
+summary: "**Status:** Draft **Priority:** P0 (Critical) **Risk Level:** Medium **Target Release:** v0.1.0 **Owner:** Engineering Team **Reviewers:** Tech Lead **Created:** 2025-01-XX **Last Updated:** 2025-01-XX ## Overview **Brief Description:** ..."
+---
+
 # Feature Unit: FU-051 Repository Abstractions
 **Status:** Draft
 **Priority:** P0 (Critical)

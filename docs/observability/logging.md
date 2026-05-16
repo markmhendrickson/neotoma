@@ -1,3 +1,8 @@
+---
+title: Neotoma Logging Standard
+summary: "*(Log Levels, Schema, and PII Restrictions)* ## Log Levels | Level | When to Use | |-------|-------------| | `error` | Failures requiring attention | | `warn` | Degraded state, retry attempted | | `info` | Normal operations (ingestion, s..."
+---
+
 # Neotoma Logging Standard
 *(Log Levels, Schema, and PII Restrictions)*
 ## Log Levels

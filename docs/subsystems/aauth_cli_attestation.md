@@ -1,3 +1,8 @@
+---
+title: AAuth CLI attestation
+summary: "Defines how the Neotoma CLI generates AAuth keypairs, mints `aa-agent+jwt` agent tokens, and attaches a `cnf.attestation` envelope when the operator opts in to hardware-backed signing across macOS, Linux, Windows, and any host with a Yub..."
+---
+
 # AAuth CLI attestation
 
 ## Purpose

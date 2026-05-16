@@ -1,3 +1,8 @@
+---
+title: Neotoma Core Identity
+summary: "**For LLM interpretation**: Model outputs vary (stochastic), but system enforces idempotence through: - Canonicalization (normalize, sort, round) - Hashing (create identity) - Deduplication (prevent duplicates)"
+---
+
 # Neotoma Core Identity
 
 ## What Neotoma Is

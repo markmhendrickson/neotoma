@@ -1,3 +1,8 @@
+---
+title: Vocabulary Conformance Review
+summary: "**Date:** 2025-01-27 **Scope:** Review of `docs/` and `src/services/schema_definitions.ts` against `docs/vocabulary/canonical_terms.md`"
+---
+
 # Vocabulary Conformance Review
 
 **Date:** 2025-01-27  

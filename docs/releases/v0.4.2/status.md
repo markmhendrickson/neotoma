@@ -1,3 +1,8 @@
+---
+title: Release v0.4.2 Status
+summary: "**Status**: deployed"
+---
+
 # Release v0.4.2 Status
 
 **Status**: deployed

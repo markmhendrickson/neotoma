@@ -1,3 +1,8 @@
+---
+title: "Neotoma Interpretations — Versioned Extraction Attempts"
+summary: "**Authoritative Vocabulary:** [`docs/vocabulary/canonical_terms.md`](../vocabulary/canonical_terms.md)"
+---
+
 # Neotoma Interpretations — Versioned Extraction Attempts
 
 **Authoritative Vocabulary:** [`docs/vocabulary/canonical_terms.md`](../vocabulary/canonical_terms.md)

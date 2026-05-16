@@ -1,3 +1,8 @@
+---
+title: Github Release Supplement
+summary: "v0.5.1 started as a verification-follow-up patch to v0.5.0 and also folds in inspector/read-model enrichments that were already in the working tree before tagging. It adds uniform tenant-scoped reads (a `NEOTOMA_USER_ID` env var and miss..."
+---
+
 v0.5.1 started as a verification-follow-up patch to v0.5.0 and also folds in inspector/read-model enrichments that were already in the working tree before tagging. It adds uniform tenant-scoped reads (a `NEOTOMA_USER_ID` env var and missing `--user-id` flags), surfaces store idempotency replays explicitly with a new `replayed` response field, adds a structured upgrade hint when the legacy `attributes`-nested payload shape hits `ERR_STORE_RESOLUTION_FAILED`, lets `neotoma ingest` auto-upload file bytes over remote/tunneled transports, ships a headless production deployment guide in `install.md` plus a one-line CLI advisory so `neotoma api start --env prod` on a source checkout is no longer silent about routing through the tsx watcher, and expands inspector-facing HTTP responses for recent conversations, recent activity, and entity/relationship detail views.
 
 ## What changed for npm package users

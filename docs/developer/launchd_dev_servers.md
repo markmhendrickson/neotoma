@@ -1,3 +1,8 @@
+---
+title: Run Neotoma dev HTTP server at login (macOS)
+summary: "Use a LaunchAgent so `npm run dev:server` starts when you log in and restarts after reboot. This is the HTTP stack only (no tunnel). For remote MCP or HTTPS tunneling, run `npm run dev:server:tunnel` from a terminal when needed."
+---
+
 # Run Neotoma dev HTTP server at login (macOS)
 
 Use a LaunchAgent so `npm run dev:server` starts when you log in and restarts after reboot. This is the HTTP stack only (no tunnel). For remote MCP or HTTPS tunneling, run `npm run dev:server:tunnel` from a terminal when needed.

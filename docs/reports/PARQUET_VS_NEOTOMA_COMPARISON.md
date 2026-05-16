@@ -1,3 +1,8 @@
+---
+title: Parquet vs Neotoma Data Comparison
+summary: "**Date**: 2026-01-14 **Task**: Compare data from `tasks.parquet` file vs stored entities in Neotoma"
+---
+
 # Parquet vs Neotoma Data Comparison
 
 **Date**: 2026-01-14  

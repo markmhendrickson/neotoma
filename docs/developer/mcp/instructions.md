@@ -1,3 +1,8 @@
+---
+title: MCP interaction instructions
+summary: "Instruction text the Neotoma MCP server sends to clients so agents know how to use MCP actions. The server loads this file at runtime and ships the first fenced code block verbatim; edits here take effect without code changes in `src/ser..."
+---
+
 # MCP interaction instructions
 
 ## Scope

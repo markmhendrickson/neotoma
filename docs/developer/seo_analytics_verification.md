@@ -1,3 +1,8 @@
+---
+title: SEO and Analytics Verification Runbook
+summary: Quick checklist for verifying SEO metadata and Umami instrumentation after deployment.
+---
+
 # SEO and Analytics Verification Runbook
 
 Quick checklist for verifying SEO metadata and Umami instrumentation after deployment.

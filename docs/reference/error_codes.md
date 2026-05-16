@@ -1,3 +1,8 @@
+---
+title: Error Codes Reference
+summary: "*(Complete Catalog of Neotoma Error Codes)* ## Scope This document covers: - All canonical error codes and their meanings - HTTP status code mappings - Retry eligibility - Common causes and solutions This document does NOT cover: - Error..."
+---
+
 # Error Codes Reference
 *(Complete Catalog of Neotoma Error Codes)*
 ## Scope

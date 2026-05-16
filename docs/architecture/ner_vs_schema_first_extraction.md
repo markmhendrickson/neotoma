@@ -1,3 +1,8 @@
+---
+title: NER vs Schema-First Extraction in Neotoma
+summary: "This document covers: - Why Neotoma does NOT use traditional Named Entity Recognition (NER) - Schema-first extraction architecture - Architectural constraints against probabilistic NER - How entity resolution works instead - Potential fu..."
+---
+
 # NER vs Schema-First Extraction in Neotoma
 
 ## Scope

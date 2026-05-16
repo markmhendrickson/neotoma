@@ -1,3 +1,8 @@
+---
+title: Neotoma Core Philosophy and Principles
+summary: "A given operation MUST always produce the same final state: - Same file uploaded twice → same record (deduplicated via content_hash) - Same source + same interpretation config → same observations (idempotent, no duplicates) - Same entity..."
+---
+
 # Neotoma Core Philosophy and Principles
 
 ## 5.1 Idempotence Above All (System-Level Determinism)

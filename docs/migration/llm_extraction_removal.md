@@ -1,3 +1,8 @@
+---
+title: "LLM Extraction Removal — Migration to Rule-Based Extraction"
+summary: "**⚠️ OUTDATED DOCUMENT:** This document describes a historical migration and is no longer accurate. The architecture has evolved (v0.2.0+) to allow AI interpretation for unstructured files via the interpretation service with full auditab..."
+---
+
 # LLM Extraction Removal — Migration to Rule-Based Extraction
 
 **⚠️ OUTDATED DOCUMENT:** This document describes a historical migration and is no longer accurate. The architecture has evolved (v0.2.0+) to allow AI interpretation for unstructured files via the interpretation service with full auditability and system-level idempotence. See `docs/architecture/determinism.md` for current extraction approach.

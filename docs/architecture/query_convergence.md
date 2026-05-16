@@ -1,3 +1,8 @@
+---
+title: "Query Convergence — Reducing Query Formulation Nondeterminism"
+summary: "**Reference:** [`docs/architecture/determinism.md`](./determinism.md) — Section 11.3 on query formulation stochasticity"
+---
+
 # Query Convergence — Reducing Query Formulation Nondeterminism
 
 **Reference:** [`docs/architecture/determinism.md`](./determinism.md) — Section 11.3 on query formulation stochasticity

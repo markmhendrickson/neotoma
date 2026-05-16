@@ -1,3 +1,7 @@
+---
+title: Style Guide Implementation Updates
+---
+
 # Style Guide Implementation Updates
 ## Font Configuration
 ### Added Font Imports

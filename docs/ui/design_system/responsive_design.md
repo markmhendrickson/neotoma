@@ -1,3 +1,8 @@
+---
+title: Responsive Design
+summary: "**Priority:** Desktop-first (Tier 1 ICPs primarily use desktop)"
+---
+
 # Responsive Design
 
 ## Breakpoints

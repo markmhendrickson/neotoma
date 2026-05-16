@@ -1,3 +1,8 @@
+---
+title: "Neotoma MCP identity proxy (`neotoma mcp proxy`)"
+summary: "Stdio-only MCP clients (Cursor, Claude Code, Codex) can run **`neotoma mcp proxy`** (with optional **`--aauth`**) to forward JSON-RPC to Neotoma’s **HTTP** **`/mcp`** endpoint, inject `clientInfo`, relay `Mcp-Session-Id`, and optionally ..."
+---
+
 # Neotoma MCP identity proxy (`neotoma mcp proxy`)
 
 Stdio-only MCP clients (Cursor, Claude Code, Codex) can run **`neotoma mcp proxy`** (with optional **`--aauth`**) to forward JSON-RPC to Neotoma’s **HTTP** **`/mcp`** endpoint, inject `clientInfo`, relay `Mcp-Session-Id`, and optionally **RFC 9421 / AAuth**-sign each downstream request.

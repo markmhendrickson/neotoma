@@ -1,3 +1,8 @@
+---
+title: Agent Memory Failure Modes
+summary: Neotoma is designed to prevent high-impact failure modes that are common in agent memory systems. This page summarizes those failures, why they are dangerous, and what Neotoma does to reduce them.
+---
+
 # Agent Memory Failure Modes
 
 Neotoma is designed to prevent high-impact failure modes that are common in agent memory systems.

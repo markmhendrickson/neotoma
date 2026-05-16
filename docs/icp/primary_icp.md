@@ -1,3 +1,8 @@
+---
+title: "Primary ICP: Personal Agentic OS Builders/Operators"
+summary: "The primary ICP: people constructing an operating system for their own AI agents across personal and professional life domains."
+---
+
 # Primary ICP: Personal Agentic OS Builders/Operators
 
 ## Scope

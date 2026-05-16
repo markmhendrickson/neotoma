@@ -1,3 +1,8 @@
+---
+title: BigInt Serialization Error - Debug Analysis
+summary: "**Date**: 2026-01-14 **Status**: ⚠️ **ONGOING** - Error persists after multiple fixes"
+---
+
 # BigInt Serialization Error - Debug Analysis
 
 **Date**: 2026-01-14  

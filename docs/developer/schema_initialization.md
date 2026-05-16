@@ -1,3 +1,8 @@
+---
+title: Schema Initialization
+summary: "Entity schemas defined in `src/services/schema_definitions.ts` should be initialized in the database's `schema_registry` table for transparent, queryable schema management. This is more elegant than using TypeScript code as runtime fallb..."
+---
+
 # Schema Initialization
 
 ## Overview

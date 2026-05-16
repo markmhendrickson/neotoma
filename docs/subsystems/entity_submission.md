@@ -1,3 +1,8 @@
+---
+title: Entity Submission
+summary: Operator-configured pipeline for accepting external (often guest-authenticated) entity submissions and routing them through the standard Neotoma store path, with optional conversation threading, guest read-back tokens, and outbound mirro...
+---
+
 # Entity Submission
 
 Operator-configured pipeline for accepting external (often guest-authenticated) entity submissions and routing them through the standard Neotoma store path, with optional conversation threading, guest read-back tokens, and outbound mirrors to GitHub or arbitrary webhooks.

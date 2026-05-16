@@ -1,3 +1,8 @@
+---
+title: "Neotoma Vector Operations — Embeddings and Similarity Search"
+summary: "*(Embedding Lifecycle and Vector Indexes)* ## Scope **MVP:** Entity semantic search in scope; embeddings on `entity_snapshots`; consistency bounded eventual. Structural retrieval remains primary; semantic search is an optional path when ..."
+---
+
 # Neotoma Vector Operations — Embeddings and Similarity Search
 *(Embedding Lifecycle and Vector Indexes)*
 ## Scope

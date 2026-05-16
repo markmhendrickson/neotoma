@@ -1,3 +1,8 @@
+---
+title: "Why Tests Didn't Catch BigInt Serialization Issue"
+summary: "The automated tests did not catch the BigInt serialization issue because:"
+---
+
 # Why Tests Didn't Catch BigInt Serialization Issue
 
 ## Summary

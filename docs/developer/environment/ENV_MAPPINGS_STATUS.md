@@ -1,3 +1,8 @@
+---
+title: Environment Variable Mappings Status
+summary: "Generated: 2026-01-08"
+---
+
 # Environment Variable Mappings Status
 
 Generated: 2026-01-08

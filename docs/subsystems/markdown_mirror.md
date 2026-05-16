@@ -1,3 +1,8 @@
+---
+title: "Markdown Mirror — Filesystem View of Neotoma Records"
+summary: "This document covers: - Canonical markdown renderer family - The filesystem mirror layout, write-through hooks, and rebuild semantics - Optional git-backed history - Bounded `MEMORY.md` export - Determinism guarantees"
+---
+
 # Markdown Mirror — Filesystem View of Neotoma Records
 
 ## Scope

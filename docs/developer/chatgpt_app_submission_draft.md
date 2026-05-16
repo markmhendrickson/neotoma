@@ -1,3 +1,8 @@
+---
+title: ChatGPT App Submission Draft (Neotoma)
+summary: Use this as starter copy for ChatGPT App submission fields.
+---
+
 # ChatGPT App Submission Draft (Neotoma)
 
 Use this as starter copy for ChatGPT App submission fields.

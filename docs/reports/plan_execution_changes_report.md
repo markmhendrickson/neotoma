@@ -1,3 +1,7 @@
+---
+title: Plan execution changes report
+---
+
 # Plan execution changes report
 ## Scope
 This report lists code, test, and documentation changes produced by executing the MCP CLI action item plans. It does not define new requirements or replace source specifications.

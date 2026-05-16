@@ -1,3 +1,8 @@
+---
+title: Github Release Supplement
+summary: "v0.5.0 strengthens entity identity end-to-end: every schema now declares how its entities are identified, every resolve reports a structured `identity_basis`, and a new read-only duplicate detector surfaces candidate pairs for operator r..."
+---
+
 v0.5.0 strengthens entity identity end-to-end: every schema now declares how its entities are identified, every resolve reports a structured `identity_basis`, and a new read-only duplicate detector surfaces candidate pairs for operator review — while identity resolution itself stays deterministic and the entity hash is unchanged. The release also ships agent-shaped client helpers, MCP server-card introspection, new `--since` query filters, and site/install polish.
 
 ## What changed for npm package users

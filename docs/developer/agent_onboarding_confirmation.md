@@ -1,3 +1,8 @@
+---
+title: Agent onboarding confirmation
+summary: "This document defines the complete agent-driven onboarding flow for Neotoma. The canonical written source for the sequence is [`install.md`](../../install.md); this document expands how activation should work once the user has been evalu..."
+---
+
 # Agent onboarding confirmation
 
 ## Purpose

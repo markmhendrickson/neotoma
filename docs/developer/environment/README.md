@@ -1,3 +1,8 @@
+---
+title: Environment Variable Management
+summary: This directory contains documentation for managing environment variables in the Neotoma project, including 1Password integration and configuration strategies.
+---
+
 # Environment Variable Management
 
 This directory contains documentation for managing environment variables in the Neotoma project, including 1Password integration and configuration strategies.

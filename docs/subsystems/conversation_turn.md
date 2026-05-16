@@ -1,3 +1,8 @@
+---
+title: "Subsystem: conversation_turn"
+summary: Per-turn telemetry entity that captures hook lifecycle events, tool invocations, entity store/retrieve counts, missed steps, and compliance status for a single conversational turn across all harnesses.
+---
+
 # Subsystem: conversation_turn
 
 Per-turn telemetry entity that captures hook lifecycle events, tool invocations, entity store/retrieve counts, missed steps, and compliance status for a single conversational turn across all harnesses.

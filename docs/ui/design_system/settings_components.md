@@ -1,3 +1,8 @@
+---
+title: Settings Components
+summary: "**Layout:**"
+---
+
 # Settings Components
 
 ## Settings Page (FU-306)

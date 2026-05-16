@@ -1,3 +1,8 @@
+---
+title: Proposals
+summary: "This directory contains future work proposals that have been migrated from `.cursor/plans/` for later consideration."
+---
+
 # Proposals
 
 This directory contains future work proposals that have been migrated from `.cursor/plans/` for later consideration.

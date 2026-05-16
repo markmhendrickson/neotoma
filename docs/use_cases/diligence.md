@@ -1,3 +1,8 @@
+---
+title: "M&A and investment diligence"
+summary: "Investment decisions are made on the basis of what was known at a specific moment — yet the underlying data continues to evolve, making it impossible to reconstruct the decision context after the fact using conventional tools. Neotoma en..."
+---
+
 # M&A and investment diligence
 
 Investment decisions are made on the basis of what was known at a specific moment — yet the underlying data continues to evolve, making it impossible to reconstruct the decision context after the fact using conventional tools. Neotoma enables diligence teams to know exactly what was known when a decision was made by versioning every finding, red flag, assessment, and data room artifact as immutable observations with deterministic provenance. When regulators, LPs, or internal committees ask why a deal was approved, the full information state can be reconstructed precisely as it existed at the IC vote.

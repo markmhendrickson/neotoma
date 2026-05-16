@@ -1,3 +1,8 @@
+---
+title: Spec
+summary: "**Alignment**: This release implements [Agent Skills for Context Engineering](https://github.com/muratcankoylan/Agent-Skills-for-Context-Engineering) principles for memory systems, context management, and agent evaluation."
+---
+
 ## Release v0.2.3 — Codebase Metadata Schema Extensions
 
 **Alignment**: This release implements [Agent Skills for Context Engineering](https://github.com/muratcankoylan/Agent-Skills-for-Context-Engineering) principles for memory systems, context management, and agent evaluation.

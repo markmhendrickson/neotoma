@@ -1,3 +1,8 @@
+---
+title: Neotoma hook integrations
+summary: "This directory documents how Neotoma plugs into AI agent harnesses as a set of **lifecycle hooks**, in addition to the existing MCP integration. Hooks are the reliability floor for capture, retrieval injection, compaction awareness, and ..."
+---
+
 # Neotoma hook integrations
 
 This directory documents how Neotoma plugs into AI agent harnesses as a set of **lifecycle hooks**, in addition to the existing MCP integration. Hooks are the reliability floor for capture, retrieval injection, compaction awareness, and persistence safety; MCP remains the quality ceiling for agent-driven, schema-typed writes.

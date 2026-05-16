@@ -1,3 +1,8 @@
+---
+title: File Naming Convention Migration Status
+summary: "**Date:** 2026-01-01 **Status:** Complete (Core violations addressed)"
+---
+
 # File Naming Convention Migration Status
 
 **Date:** 2026-01-01  

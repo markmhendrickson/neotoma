@@ -1,3 +1,8 @@
+---
+title: File Upload Components
+summary: "**States:**"
+---
+
 # File Upload Components
 
 ## Upload Zone (FU-304)

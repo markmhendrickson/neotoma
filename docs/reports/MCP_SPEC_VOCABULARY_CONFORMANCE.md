@@ -1,3 +1,8 @@
+---
+title: MCP Spec Vocabulary Conformance Analysis
+summary: "**Date:** 2025-01-27 **Spec:** `docs/specs/MCP_SPEC.md` **Canonical Terms:** `docs/vocabulary/canonical_terms.md`"
+---
+
 # MCP Spec Vocabulary Conformance Analysis
 
 **Date:** 2025-01-27  

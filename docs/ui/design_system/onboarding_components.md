@@ -1,3 +1,8 @@
+---
+title: Onboarding Components
+summary: "**Layout:**"
+---
+
 # Onboarding Components
 
 ## Welcome Screen (FU-400)

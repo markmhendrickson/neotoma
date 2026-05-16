@@ -1,3 +1,8 @@
+---
+title: "Support & CX operations"
+summary: "Customer support escalations and routing decisions are often opaque — when a ticket is misrouted or an escalation fails, it's difficult to reconstruct why the system made the choices it did. Neotoma provides routing rationale, escalation..."
+---
+
 # Support & CX operations
 
 Customer support escalations and routing decisions are often opaque — when a ticket is misrouted or an escalation fails, it's difficult to reconstruct why the system made the choices it did. Neotoma provides routing rationale, escalation chains, and interaction-level provenance, enabling CX operations teams to audit every routing decision, understand the context that informed agent handoffs, and identify systemic patterns in misroutes. AI support agents can explain their reasoning at any point in the ticket lifecycle, and supervisors can reconstruct the full decision chain that led to any customer outcome.

@@ -1,3 +1,7 @@
+---
+title: GENERAL REQUIREMENTS
+---
+
 ## MVP Ingestion
 - The ingestion pipeline MUST deterministically ingest all user-selected source files in the configured import set and create **Records** with:
   - Extracted properties defined by the active **Schema Types**

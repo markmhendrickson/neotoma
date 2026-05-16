@@ -1,3 +1,8 @@
+---
+title: Common Failure Interactions By Supported Schema
+summary: "This reference lists common \"user asks / agent fails\" interactions for every supported schema. Use it for onboarding prompts, demos, QA scenarios, and incident reviews."
+---
+
 # Common Failure Interactions By Supported Schema
 
 This reference lists common "user asks / agent fails" interactions for every supported schema.

@@ -1,3 +1,8 @@
+---
+title: Implementation Notes
+summary: "Use CSS custom properties for theming:"
+---
+
 # Implementation Notes
 
 ## CSS Variables

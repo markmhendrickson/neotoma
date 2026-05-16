@@ -1,3 +1,8 @@
+---
+title: MCP Server Examples from Cursor Docs
+summary: "This document summarizes MCP server examples from [Cursor's MCP documentation](https://cursor.com/docs/context/mcp#servers) and the mcp-test-servers repo: two structural examples (image/instructions/OAuth repro, pg-mcp-server) and five a..."
+---
+
 # MCP Server Examples from Cursor Docs
 
 This document summarizes MCP server examples from [Cursor's MCP documentation](https://cursor.com/docs/context/mcp#servers) and the mcp-test-servers repo: two structural examples (image/instructions/OAuth repro, pg-mcp-server) and five additional OAuth servers (oauth-ping, oauth-token-refresh, oauth-debug, oauth-edge-case, oauth-callback-test). It describes how they implement server setup, auth, discovery, and initialize behavior, consolidates learnings across all servers (including Notion MCP production example), and adds a **Cursor and OAuth docs summary** drawn from Cursor’s docs, the MCP Authorization specification (2025-03-26), and RFC 8414.

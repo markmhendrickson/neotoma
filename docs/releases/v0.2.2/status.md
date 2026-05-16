@@ -1,3 +1,8 @@
+---
+title: "Release v0.2.2 — Status"
+summary: "**Release ID**: v0.2.2 **Release Name**: list_capabilities MCP Action **Release Type**: Not Marketed **Deployment**: Production (neotoma.io) ## Current Status **Status**: `planning` **Last Updated**: 2025-12-31 **Owner**: Mark Hendrickso..."
+---
+
 # Release v0.2.2 — Status
 **Release ID**: v0.2.2  
 **Release Name**: list_capabilities MCP Action  

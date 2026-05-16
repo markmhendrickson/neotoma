@@ -1,3 +1,8 @@
+---
+title: Secondary ICPs (Adjacent / Later in Dev Release)
+summary: "Secondary ICPs that are adjacent to the developer release but require more API stability or adoption signal before full engagement. For the primary ICP, see [`primary_icp.md`](./primary_icp.md)."
+---
+
 # Secondary ICPs (Adjacent / Later in Dev Release)
 
 ## Scope

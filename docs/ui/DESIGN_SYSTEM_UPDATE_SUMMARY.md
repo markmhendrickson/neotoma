@@ -1,3 +1,8 @@
+---
+title: Design System Update Summary
+summary: "**Date:** 2026-01-23 **Task:** Review shadcn components and update design system to align with canonical terminology"
+---
+
 # Design System Update Summary
 
 **Date:** 2026-01-23  

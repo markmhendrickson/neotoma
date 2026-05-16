@@ -1,3 +1,8 @@
+---
+title: Agent CLI Configuration
+summary: _(User-level settings for Claude Code, OpenAI Codex, and Cursor Agent CLI)_
+---
+
 # Agent CLI Configuration
 
 _(User-level settings for Claude Code, OpenAI Codex, and Cursor Agent CLI)_

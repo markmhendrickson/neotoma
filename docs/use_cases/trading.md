@@ -1,3 +1,8 @@
+---
+title: Autonomous trading agents
+summary: "Multi-agent trading systems make thousands of decisions per day — including decisions NOT to trade — yet most trading infrastructure captures only executed trades, losing the reasoning behind passes, the analyst recommendations that were..."
+---
+
 # Autonomous trading agents
 
 Multi-agent trading systems make thousands of decisions per day — including decisions NOT to trade — yet most trading infrastructure captures only executed trades, losing the reasoning behind passes, the analyst recommendations that were overridden, and the risk state that informed each choice. Neotoma provides reconstructable decision chains for multi-agent trading systems by versioning every trade decision, pass decision, analyst recommendation, risk evaluation, and portfolio snapshot as immutable observations. This enables compliance teams, risk managers, and system operators to replay any decision — including the ones that didn't result in action — with full multi-agent attribution.

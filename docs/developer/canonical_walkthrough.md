@@ -1,3 +1,8 @@
+---
+title: Canonical ingestion walkthrough
+summary: "Expected outcomes: - One source created with `idempotency_key=idem_contact_001` - One observation for the contact - One entity snapshot with `name`, `email`, `role`"
+---
+
 # Canonical ingestion walkthrough
 ## Scope
 This document describes the end to end ingestion flow from MCP or REST input to observations, snapshots, and timeline events. It does not define UI behavior or schema design details.

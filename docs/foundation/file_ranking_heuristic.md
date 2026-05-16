@@ -1,3 +1,8 @@
+---
+title: File ranking heuristic
+summary: When an agent discovers local files during onboarding, it must rank them by likely value for state reconstruction. This document defines the composite scoring model, signal taxonomy, and candidate classification that agents use to select...
+---
+
 # File ranking heuristic
 
 ## Purpose

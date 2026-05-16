@@ -1,3 +1,8 @@
+---
+title: ChatGPT App Readiness Audit
+summary: "This audit maps Neotoma's current MCP/Actions implementation to ChatGPT App requirements and defines a practical MVP scope."
+---
+
 # ChatGPT App Readiness Audit
 
 This audit maps Neotoma's current MCP/Actions implementation to ChatGPT App requirements and defines a practical MVP scope.

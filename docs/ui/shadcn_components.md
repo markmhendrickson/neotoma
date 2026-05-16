@@ -1,3 +1,8 @@
+---
+title: shadcn/ui Components Inventory
+summary: "This document lists all available shadcn/ui components in the Neotoma application and their usage status. ## Available Components ### ✅ Installed and Available #### Core UI Components 1. **Button** (`@/components/ui/button`) - **Status:*..."
+---
+
 # shadcn/ui Components Inventory
 This document lists all available shadcn/ui components in the Neotoma application and their usage status.
 ## Available Components

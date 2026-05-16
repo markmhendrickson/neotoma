@@ -1,3 +1,8 @@
+---
+title: "agent_message — renamed to `conversation_message`"
+summary: "As of Phase 2 of the message entity redesign (April 2026), the canonical entity type for chat turns is [`conversation_message`](../conversation_message/). The `agent_message` entity_type remains a registered alias so pre-v0.6 payloads co..."
+---
+
 # agent_message — renamed to `conversation_message`
 
 As of Phase 2 of the message entity redesign (April 2026), the canonical entity type for chat turns is [`conversation_message`](../conversation_message/). The `agent_message` entity_type remains a registered alias so pre-v0.6 payloads continue to round-trip, but new writes resolve to `conversation_message` via the alias resolver in `src/services/interpretation.ts`.

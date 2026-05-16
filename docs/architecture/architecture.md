@@ -1,3 +1,8 @@
+---
+title: "Neotoma Architecture — Canonical Platform Definition"
+summary: "**Authoritative Vocabulary:** [`docs/vocabulary/canonical_terms.md`](../vocabulary/canonical_terms.md)"
+---
+
 # Neotoma Architecture — Canonical Platform Definition
 
 **Authoritative Vocabulary:** [`docs/vocabulary/canonical_terms.md`](../vocabulary/canonical_terms.md)

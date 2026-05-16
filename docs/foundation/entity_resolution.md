@@ -1,3 +1,7 @@
+---
+title: Entity Resolution Doctrine
+---
+
 # Entity Resolution Doctrine
 ## 15.1 Entity ID Generation (Deterministic)
 ```typescript
