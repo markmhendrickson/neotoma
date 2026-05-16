@@ -2,7 +2,7 @@
 
 This guide explains how to run Neotoma as a ChatGPT App connector using the MCP endpoint.
 
-For Custom GPT Actions (OpenAPI), see `docs/developer/mcp_chatgpt_setup.md`.
+For Custom GPT Actions (OpenAPI), see `docs/developer/chatgpt_actions_setup.md`.
 For auth/security hardening, see `docs/developer/chatgpt_apps_auth_security.md`.
 
 ## Prerequisites

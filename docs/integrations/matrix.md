@@ -22,7 +22,7 @@ MCP is the primary integration protocol. Every host below speaks MCP either over
 | Cursor | stdio, remote HTTP | `neotoma setup --tool cursor --yes` | [mcp_cursor_setup.md](../developer/mcp_cursor_setup.md) | Stable |
 | Claude Code | stdio, remote HTTP | `neotoma setup --tool claude-code --yes` or `npm run sync:mcp` | [mcp_claude_code_setup.md](../developer/mcp_claude_code_setup.md) | Stable |
 | Claude Desktop | local, remote MCP, desktop connector | `neotoma setup --tool claude-desktop --yes` | [neotoma-with-claude-connect-desktop](https://neotoma.io/neotoma-with-claude-connect-desktop), [remote MCP](https://neotoma.io/neotoma-with-claude-connect-remote-mcp) | Stable |
-| ChatGPT | MCP App (connector), Custom GPT Actions (OpenAPI) | Manual HTTPS + OAuth | [chatgpt_apps_setup.md](../developer/chatgpt_apps_setup.md), [mcp_chatgpt_setup.md](../developer/mcp_chatgpt_setup.md) | Stable |
+| ChatGPT | MCP App (connector), Custom GPT Actions (OpenAPI) | Manual HTTPS + OAuth | [chatgpt_apps_setup.md](../developer/chatgpt_apps_setup.md), [chatgpt_actions_setup.md](../developer/chatgpt_actions_setup.md) | Stable |
 | Codex CLI | stdio, remote HTTP (OAuth) | `neotoma setup --tool codex --yes` | [neotoma-with-codex](https://neotoma.io/neotoma-with-codex), [stdio](https://neotoma.io/neotoma-with-codex-connect-local-stdio), [remote](https://neotoma.io/neotoma-with-codex-connect-remote-http-oauth) | Stable |
 | OpenClaw | Native plugin (`kind: memory`) + MCP | `neotoma setup --tool openclaw --yes` | [mcp_openclaw_setup.md](../developer/mcp_openclaw_setup.md), [openclaw.md](openclaw.md) | Stable |
 | IronClaw | MCP | `neotoma setup --tool ironclaw --yes` | [mcp_ironclaw_setup.md](../developer/mcp_ironclaw_setup.md) | Stable |

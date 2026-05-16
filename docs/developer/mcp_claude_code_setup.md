@@ -4,7 +4,7 @@ This guide explains how to connect the Neotoma MCP server to Claude Code for loc
 
 For other integrations, see:
 - [`mcp_cursor_setup.md`](mcp_cursor_setup.md) - Cursor integration
-- [`mcp_chatgpt_setup.md`](mcp_chatgpt_setup.md) - ChatGPT Custom GPT setup
+- [`chatgpt_actions_setup.md`](chatgpt_actions_setup.md) - ChatGPT Custom GPT setup
 
 ## Choose Your Transport: Stdio (Local) vs HTTP (Remote)
 
@@ -487,7 +487,7 @@ All instances will share the same Neotoma database (local SQLite).
 - **MCP Specification:** `docs/specs/MCP_SPEC.md`
 - **Getting Started Guide:** `docs/developer/getting_started.md`
 - **Cursor MCP Setup:** `docs/developer/mcp_cursor_setup.md`
-- **ChatGPT Setup:** `docs/developer/mcp_chatgpt_setup.md`
+- **ChatGPT Setup:** `docs/developer/chatgpt_actions_setup.md`
 - **Claude Code Documentation:** https://docs.anthropic.com/claude-code
 
 ## Quick Reference
