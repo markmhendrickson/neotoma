@@ -204,7 +204,7 @@
     "illustrations:guarantees": "tsx scripts/generate_guarantee_pngs.ts",
     "illustrations:guarantees:sym": "tsx scripts/generate_guarantee_sym_hero_pngs.ts",
     "illustrations:guarantees:sym:square": "tsx scripts/generate_guarantee_sym_square_icp_pngs.ts",
-    "mirror:plans": "node scripts/mirror_plans_from_neotoma.js"
+    "mirror:plans": "echo 'DEPRECATED: Use: neotoma mirror rebuild --profile neotoma-plans' && exit 1"
   },
   "mcpName": "io.github.markmhendrickson/neotoma",
   "keywords": [

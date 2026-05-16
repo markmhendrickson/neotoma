@@ -25,6 +25,7 @@ export interface MirrorRebuildOptions {
   entityType?: string;
   entityId?: string;
   clean?: boolean;
+  profileId?: string;
 }
 
 export interface MirrorEnableOptions {
@@ -96,6 +97,7 @@ export async function runMirrorRebuild(
     entityType: options.entityType,
     entityId: options.entityId,
     clean: Boolean(options.clean),
+    profileId: options.profileId,
   });
   return {
     config: {
@@ -225,6 +227,18 @@ export function formatRebuildReport(result: MirrorRebuildResult): string {
     lines.push(
       `  ${kind.padEnd(12)}  ${String(c.written).padStart(7)}  ${String(c.unchanged).padStart(9)}  ${String(c.removed).padStart(7)}`
     );
+  }
+  const profileEntries = Object.entries(result.report.profiles ?? {});
+  if (profileEntries.length > 0) {
+    lines.push("");
+    lines.push(
+      "Profile         Written  Unchanged  Removed"
+    );
+    for (const [profileId, c] of profileEntries) {
+      lines.push(
+        `  ${profileId.padEnd(14)}  ${String(c.written).padStart(7)}  ${String(c.unchanged).padStart(9)}  ${String(c.removed).padStart(7)}`
+      );
+    }
   }
   return lines.join("\n");
 }

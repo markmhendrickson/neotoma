@@ -61,19 +61,19 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **349**
-- Backend and repo Vitest files: **316**
+- Total automated test files: **352**
+- Backend and repo Vitest files: **319**
 - Frontend Vitest files: **9**
 - Playwright spec files: **24**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 83 |
+| Vitest unit tests | 84 |
 | Vitest service tests | 33 |
 | Source-adjacent tests | 39 |
 | Vitest integration tests | 93 |
-| Vitest CLI tests | 49 |
+| Vitest CLI tests | 51 |
 | Vitest contract tests | 10 |
 | Vitest security tests | 1 |
 | Vitest subscription tests | 3 |
@@ -107,7 +107,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (83):**
+**Files (84):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -163,6 +163,7 @@ flowchart TD
 - `tests/unit/mcp_proxy.test.ts`
 - `tests/unit/mcp_resource_uri.test.ts`
 - `tests/unit/mcp_server_card.test.ts`
+- `tests/unit/mirror_profiles.test.ts`
 - `tests/unit/neotoma_entity_id.test.ts`
 - `tests/unit/observation_reducer_converters.test.ts`
 - `tests/unit/observation_reducer_observation_source.test.ts`
@@ -383,7 +384,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/cli`
 **Requirements:** Basic `.env`; some tests provision temp config homes automatically.
-**Files (49):**
+**Files (51):**
 - `tests/cli/api_client_offline_fallback.test.ts`
 - `tests/cli/backup_verify.test.ts`
 - `tests/cli/cli_access_commands.test.ts`
@@ -425,6 +426,7 @@ flowchart TD
 - `tests/cli/cli_user_id_propagation.test.ts`
 - `tests/cli/config_api_discovery.test.ts`
 - `tests/cli/config.test.ts`
+- `tests/cli/discovery_harness.test.ts`
 - `tests/cli/extract_user_cli_args.test.ts`
 - `tests/cli/issues_message.test.ts`
 - `tests/cli/peers.test.ts`
@@ -433,6 +435,7 @@ flowchart TD
 - `tests/cli/schemas_describe.test.ts`
 - `tests/cli/test_command_detection.test.ts`
 - `tests/cli/test_debug_tty.test.ts`
+- `tests/cli/transcript_parser.test.ts`
 
 ### Vitest contract tests
 **Directory:** `tests/contract/`
