@@ -1,13 +1,16 @@
 ---
-title: "Sources-First Ingestion v10"
-status: "proposal"
+title: "Sources-First Ingestion v10 (archived — shipped)"
+status: "implemented"
 source_plan: "sources-first_ingestion_v10_baef2ba2.plan.md"
 migrated_date: "2026-01-22"
+archived_date: "2026-05-16"
 priority: "p2"
-
+visibility: internal
 ---
 
-# Sources-First Ingestion v10
+# Sources-First Ingestion v10 (archived — shipped)
+
+> **Status:** Implemented. This proposal's design (content-hashed sources, versioned interpretations, immutable observations, deterministic reducer) is the architecture now described canonically in [`docs/subsystems/ingestion/ingestion.md`](../../subsystems/ingestion/ingestion.md) and [`docs/subsystems/sources.md`](../../subsystems/sources.md). Kept in `archived/` for historical reference.
 
 ## Proposal Context
 
