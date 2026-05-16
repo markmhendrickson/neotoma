@@ -372,16 +372,14 @@ Use `neotoma setup --tool <harness> --yes` for the normal greenfield path. Use `
 ### Preflight
 
 - `neotoma preflight`: Check or apply harness permission-file entries for Neotoma.
-  - `--tool <tool>`: Target harness. Supports `claude-code`, `cursor`, `codex`, `openclaw`, `claude-desktop`, `windsurf`, `continue`, `vscode`.
-  - `--apply`: Write the allowlist file(s) directly instead of printing a copy-paste block.
+  - `--tool <tool>`: Target harness. Accepted values: `claude-code`, `cursor`, `codex`, `openclaw`, `claude-desktop`, `windsurf`, `continue`, `vscode`.
+  - `--apply`: Write the allowlist file(s) directly instead of printing a copy-paste block. Only has effect for `claude-code`, `cursor`, and `codex`; other harnesses do not expose a writable allowlist file.
   - `--scope <project|user|both>`: Permission scope for `claude-code` (default: `both` when `--apply` is set).
   - `--dry-run`: Plan the write without modifying files.
 
-Without `--apply`, prints a single copy-paste block describing exactly what to add to the harness config file. This eliminates the multi-prompt back-and-forth of the old setup flow.
+**Allowlist-capable harnesses** (`claude-code`, `cursor`, `codex`): without `--apply`, prints a copy-paste block; with `--apply`, writes the allowlist file(s) directly. `claude-code` writes both project (`.claude/settings.local.json`) and user (`~/.claude/settings.json`) scopes by default. `neotoma setup` calls the same write path, so running preflight before setup is only necessary when you need the allowlist entry in place before `npm install -g neotoma` runs.
 
-With `--apply`, delegates to `writePermissionsForTool()` and writes the allowlist file(s) directly. `claude-code` writes both project (`.claude/settings.local.json`) and user (`~/.claude/settings.json`) scopes by default.
-
-Tools that do not expose a command allowlist (`claude-desktop`, `openclaw`, `windsurf`, `continue`, `vscode`) always return an informational message pointing to `neotoma setup`.
+**MCP-only harnesses** (`claude-desktop`, `openclaw`, `windsurf`, `continue`, `vscode`): these harnesses have no writable command allowlist. Passing `--apply` is accepted but produces no file write; preflight prints a message directing you to `neotoma setup --tool <tool>` to configure the MCP server entry instead.
 
 The structured report includes `tool`, `apply`, `dry_run`, `patches[]`, `already_ok`, `copy_paste_block`, and `overall_ok`.
 

@@ -62,8 +62,9 @@ approvals: `neotoma *` (wildcard) and a one-time `npm install -g neotoma`.
 Neotoma needs one wildcard allow entry so subsequent commands run without
 per-command prompts.
 
-Run `neotoma preflight --tool <current_tool> --apply` to write the entry
-directly. If the user prefers to apply it manually, run
+For **allowlist-capable harnesses** (`claude-code`, `cursor`, `codex`): run
+`neotoma preflight --tool <current_tool> --apply` to write the entry directly.
+If the user prefers to apply it manually, run
 `neotoma preflight --tool <current_tool>` (no `--apply`) to print a single
 copy-paste block.
 
@@ -71,13 +72,20 @@ Harness file locations for manual reference:
 - Claude Code: `.claude/settings.local.json` (project) or `~/.claude/settings.json` (user)
 - Cursor: `.cursor/allowlist.json` (project)
 - Codex: `~/.codex/config.toml` (user)
-- OpenClaw: handled by the native plugin; no allowlist file needed
 
-The `preflight` command is idempotent — re-running it after the entry is
-already present reports `already_ok: true` and makes no changes.
+For **MCP-only harnesses** (`claude-desktop`, `openclaw`, `windsurf`, `continue`,
+`vscode`): these harnesses have no writable command allowlist. Skip this step —
+`neotoma setup` in Step 2.4 configures the MCP server entry, which is the only
+permission surface these harnesses expose.
 
-If `neotoma` is not yet on PATH, skip this step and the install step (Step 2.2)
-will place the binary; then return here.
+The `preflight` command is idempotent — re-running it after the entry is already
+present reports `already_ok: true` and makes no changes. Note that Step 2.4
+(`neotoma setup`) also writes the same allowlist entries, so this step is only
+strictly necessary when the allowlist must be in place before
+`npm install -g neotoma` runs (i.e. when `neotoma` is not yet on PATH).
+
+If `neotoma` is not yet on PATH, skip this step; the install step (Step 2.2)
+will place the binary, then return here.
 
 **Step 2.2 — Install the binary (if needed)**
 
