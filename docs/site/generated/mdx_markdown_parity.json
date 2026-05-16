@@ -1,0 +1,998 @@
+{
+  "total": 87,
+  "covered": 14,
+  "needs_canonical_md": 55,
+  "no_jsx_no_md_needed": 18,
+  "pages": [
+    {
+      "basename": "agent-auth",
+      "source_path": "docs/site/pages/en/agent-auth.mdx",
+      "site_path": "/agent-auth",
+      "imported_components": [
+        "AgentAuthLandingPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "api",
+      "source_path": "docs/site/pages/en/api.mdx",
+      "site_path": "/api",
+      "imported_components": [
+        "ApiReferenceEndpointsTable",
+        "MdxI18nLink"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "auditable-change-log",
+      "source_path": "docs/site/pages/en/auditable-change-log.mdx",
+      "site_path": "/auditable-change-log",
+      "imported_components": [],
+      "has_jsx_usage": false,
+      "supporting_md": null,
+      "status": "no_jsx_no_md_needed"
+    },
+    {
+      "basename": "build-vs-buy",
+      "source_path": "docs/site/pages/en/build-vs-buy.mdx",
+      "site_path": "/build-vs-buy",
+      "imported_components": [
+        "BuildVsBuyPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "building-pipelines",
+      "source_path": "docs/site/pages/en/building-pipelines.mdx",
+      "site_path": "/building-pipelines",
+      "imported_components": [
+        "AgenticSystemsBuildersPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "cases",
+      "source_path": "docs/site/pages/en/cases.mdx",
+      "site_path": "/cases",
+      "imported_components": [
+        "CasesLandingPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "changelog",
+      "source_path": "docs/site/pages/en/changelog.mdx",
+      "site_path": "/changelog",
+      "imported_components": [],
+      "has_jsx_usage": false,
+      "supporting_md": null,
+      "status": "no_jsx_no_md_needed"
+    },
+    {
+      "basename": "cli",
+      "source_path": "docs/site/pages/en/cli.mdx",
+      "site_path": "/cli",
+      "imported_components": [
+        "CliReferenceCommandsTable",
+        "MdxI18nLink"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "compliance",
+      "source_path": "docs/site/pages/en/compliance.mdx",
+      "site_path": "/compliance",
+      "imported_components": [
+        "ComplianceLandingPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "conflicting-facts-risk",
+      "source_path": "docs/site/pages/en/conflicting-facts-risk.mdx",
+      "site_path": "/conflicting-facts-risk",
+      "imported_components": [],
+      "has_jsx_usage": false,
+      "supporting_md": null,
+      "status": "no_jsx_no_md_needed"
+    },
+    {
+      "basename": "contracts",
+      "source_path": "docs/site/pages/en/contracts.mdx",
+      "site_path": "/contracts",
+      "imported_components": [
+        "ContractsLandingPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "crm",
+      "source_path": "docs/site/pages/en/crm.mdx",
+      "site_path": "/crm",
+      "imported_components": [
+        "CrmLandingPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "crypto-engineering",
+      "source_path": "docs/site/pages/en/crypto-engineering.mdx",
+      "site_path": "/crypto-engineering",
+      "imported_components": [
+        "CryptoEngineeringLandingPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "customer-ops",
+      "source_path": "docs/site/pages/en/customer-ops.mdx",
+      "site_path": "/customer-ops",
+      "imported_components": [
+        "CustomerOpsLandingPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "debugging-infrastructure",
+      "source_path": "docs/site/pages/en/debugging-infrastructure.mdx",
+      "site_path": "/debugging-infrastructure",
+      "imported_components": [
+        "AiInfrastructureEngineersPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "deterministic-state-evolution",
+      "source_path": "docs/site/pages/en/deterministic-state-evolution.mdx",
+      "site_path": "/deterministic-state-evolution",
+      "imported_components": [],
+      "has_jsx_usage": false,
+      "supporting_md": null,
+      "status": "no_jsx_no_md_needed"
+    },
+    {
+      "basename": "diligence",
+      "source_path": "docs/site/pages/en/diligence.mdx",
+      "site_path": "/diligence",
+      "imported_components": [
+        "DiligenceLandingPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "direct-human-editability",
+      "source_path": "docs/site/pages/en/direct-human-editability.mdx",
+      "site_path": "/direct-human-editability",
+      "imported_components": [],
+      "has_jsx_usage": false,
+      "supporting_md": null,
+      "status": "no_jsx_no_md_needed"
+    },
+    {
+      "basename": "false-closure-risk",
+      "source_path": "docs/site/pages/en/false-closure-risk.mdx",
+      "site_path": "/false-closure-risk",
+      "imported_components": [],
+      "has_jsx_usage": false,
+      "supporting_md": null,
+      "status": "no_jsx_no_md_needed"
+    },
+    {
+      "basename": "faq",
+      "source_path": "docs/site/pages/en/faq.mdx",
+      "site_path": "/faq",
+      "imported_components": [
+        "FaqQuestions"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "financial-ops",
+      "source_path": "docs/site/pages/en/financial-ops.mdx",
+      "site_path": "/financial-ops",
+      "imported_components": [
+        "FinancialOpsLandingPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "foundation-problem-statement",
+      "source_path": "docs/site/pages/en/foundation-problem-statement.mdx",
+      "site_path": "/foundation/problem-statement",
+      "imported_components": [],
+      "has_jsx_usage": false,
+      "supporting_md": {
+        "repo_path": "docs/foundation/problem_statement.md",
+        "status": "supporting_source",
+        "canonical_site_path": "/foundation/problem-statement"
+      },
+      "status": "covered"
+    },
+    {
+      "basename": "government",
+      "source_path": "docs/site/pages/en/government.mdx",
+      "site_path": "/government",
+      "imported_components": [
+        "GovTechLandingPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "healthcare",
+      "source_path": "docs/site/pages/en/healthcare.mdx",
+      "site_path": "/healthcare",
+      "imported_components": [
+        "HealthcareLandingPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "home",
+      "source_path": "docs/site/pages/en/home.mdx",
+      "site_path": "/",
+      "imported_components": [
+        "SitePage"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "hosted",
+      "source_path": "docs/site/pages/en/hosted.mdx",
+      "site_path": "/hosted",
+      "imported_components": [
+        "HostedLandingPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "human-inspectability",
+      "source_path": "docs/site/pages/en/human-inspectability.mdx",
+      "site_path": "/human-inspectability",
+      "imported_components": [],
+      "has_jsx_usage": false,
+      "supporting_md": null,
+      "status": "no_jsx_no_md_needed"
+    },
+    {
+      "basename": "install",
+      "source_path": "docs/site/pages/en/install.mdx",
+      "site_path": "/install",
+      "imported_components": [
+        "InstallPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "install-docker",
+      "source_path": "docs/site/pages/en/install-docker.mdx",
+      "site_path": "/install/docker",
+      "imported_components": [
+        "InstallDockerPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "install-manual",
+      "source_path": "docs/site/pages/en/install-manual.mdx",
+      "site_path": "/install/manual",
+      "imported_components": [
+        "InstallManualPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "integrations",
+      "source_path": "docs/site/pages/en/integrations.mdx",
+      "site_path": "/integrations",
+      "imported_components": [
+        "MdxI18nLink"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": {
+        "repo_path": "docs/integrations/README.md",
+        "status": "supporting_source",
+        "canonical_site_path": "/integrations"
+      },
+      "status": "covered"
+    },
+    {
+      "basename": "issue-reporting",
+      "source_path": "docs/site/pages/en/issue-reporting.mdx",
+      "site_path": "/issue-reporting",
+      "imported_components": [
+        "DOC_TABLE_SCROLL_OUTER_CLASS",
+        "MdxI18nLink",
+        "TableScrollWrapper"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": {
+        "repo_path": "docs/subsystems/issues.md",
+        "status": "supporting_source",
+        "canonical_site_path": "/issue-reporting"
+      },
+      "status": "covered"
+    },
+    {
+      "basename": "logistics",
+      "source_path": "docs/site/pages/en/logistics.mdx",
+      "site_path": "/logistics",
+      "imported_components": [
+        "LogisticsLandingPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "mcp",
+      "source_path": "docs/site/pages/en/mcp.mdx",
+      "site_path": "/mcp",
+      "imported_components": [
+        "McpCommonActionPatternsSnippet",
+        "McpHttpConfigSnippet",
+        "McpReferenceActionsTable",
+        "McpReferenceIntro",
+        "McpStdioConfigSnippet",
+        "MdxI18nLink"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "memory-guarantees",
+      "source_path": "docs/site/pages/en/memory-guarantees.mdx",
+      "site_path": "/memory-guarantees",
+      "imported_components": [
+        "MemoryGuaranteesPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "neotoma-vs-database",
+      "source_path": "docs/site/pages/en/neotoma-vs-database.mdx",
+      "site_path": "/neotoma-vs-database",
+      "imported_components": [
+        "NeotomaVsDatabasePageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "neotoma-vs-files",
+      "source_path": "docs/site/pages/en/neotoma-vs-files.mdx",
+      "site_path": "/neotoma-vs-files",
+      "imported_components": [
+        "NeotomaVsFilePageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "neotoma-vs-mem0",
+      "source_path": "docs/site/pages/en/neotoma-vs-mem0.mdx",
+      "site_path": "/neotoma-vs-mem0",
+      "imported_components": [
+        "NeotomaVsMem0PageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "neotoma-vs-platform-memory",
+      "source_path": "docs/site/pages/en/neotoma-vs-platform-memory.mdx",
+      "site_path": "/neotoma-vs-platform-memory",
+      "imported_components": [
+        "NeotomaVsPlatformMemoryPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "neotoma-vs-rag",
+      "source_path": "docs/site/pages/en/neotoma-vs-rag.mdx",
+      "site_path": "/neotoma-vs-rag",
+      "imported_components": [
+        "NeotomaVsRagPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "neotoma-vs-zep",
+      "source_path": "docs/site/pages/en/neotoma-vs-zep.mdx",
+      "site_path": "/neotoma-vs-zep",
+      "imported_components": [
+        "NeotomaVsZepPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "neotoma-with-chatgpt",
+      "source_path": "docs/site/pages/en/neotoma-with-chatgpt.mdx",
+      "site_path": "/neotoma-with-chatgpt",
+      "imported_components": [
+        "NeotomaWithChatGPTPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "neotoma-with-chatgpt-connect-custom-gpt",
+      "source_path": "docs/site/pages/en/neotoma-with-chatgpt-connect-custom-gpt.mdx",
+      "site_path": "/neotoma-with-chatgpt-connect-custom-gpt",
+      "imported_components": [
+        "ChatGptConnectCustomGptPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "neotoma-with-chatgpt-connect-remote-mcp",
+      "source_path": "docs/site/pages/en/neotoma-with-chatgpt-connect-remote-mcp.mdx",
+      "site_path": "/neotoma-with-chatgpt-connect-remote-mcp",
+      "imported_components": [
+        "ChatGptConnectRemoteMcpPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "neotoma-with-claude",
+      "source_path": "docs/site/pages/en/neotoma-with-claude.mdx",
+      "site_path": "/neotoma-with-claude",
+      "imported_components": [
+        "NeotomaWithClaudePageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "neotoma-with-claude-agent-sdk",
+      "source_path": "docs/site/pages/en/neotoma-with-claude-agent-sdk.mdx",
+      "site_path": "/neotoma-with-claude-agent-sdk",
+      "imported_components": [
+        "NeotomaWithClaudeAgentSdkPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "neotoma-with-claude-code",
+      "source_path": "docs/site/pages/en/neotoma-with-claude-code.mdx",
+      "site_path": "/neotoma-with-claude-code",
+      "imported_components": [
+        "NeotomaWithClaudeCodePageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "neotoma-with-claude-connect-desktop",
+      "source_path": "docs/site/pages/en/neotoma-with-claude-connect-desktop.mdx",
+      "site_path": "/neotoma-with-claude-connect-desktop",
+      "imported_components": [
+        "ClaudeConnectDesktopPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "neotoma-with-claude-connect-remote-mcp",
+      "source_path": "docs/site/pages/en/neotoma-with-claude-connect-remote-mcp.mdx",
+      "site_path": "/neotoma-with-claude-connect-remote-mcp",
+      "imported_components": [
+        "ClaudeConnectRemoteMcpPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "neotoma-with-codex",
+      "source_path": "docs/site/pages/en/neotoma-with-codex.mdx",
+      "site_path": "/neotoma-with-codex",
+      "imported_components": [
+        "NeotomaWithCodexPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "neotoma-with-codex-connect-local-stdio",
+      "source_path": "docs/site/pages/en/neotoma-with-codex-connect-local-stdio.mdx",
+      "site_path": "/neotoma-with-codex-connect-local-stdio",
+      "imported_components": [
+        "CodexConnectLocalStdioPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "neotoma-with-codex-connect-remote-http-oauth",
+      "source_path": "docs/site/pages/en/neotoma-with-codex-connect-remote-http-oauth.mdx",
+      "site_path": "/neotoma-with-codex-connect-remote-http-oauth",
+      "imported_components": [
+        "CodexConnectRemoteHttpOauthPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "neotoma-with-continue",
+      "source_path": "docs/site/pages/en/neotoma-with-continue.mdx",
+      "site_path": "/neotoma-with-continue",
+      "imported_components": [
+        "MdxI18nLink"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": {
+        "repo_path": "docs/integrations/neotoma_with_continue.md",
+        "status": "supporting_source",
+        "canonical_site_path": "/neotoma-with-continue"
+      },
+      "status": "covered"
+    },
+    {
+      "basename": "neotoma-with-cursor",
+      "source_path": "docs/site/pages/en/neotoma-with-cursor.mdx",
+      "site_path": "/neotoma-with-cursor",
+      "imported_components": [
+        "NeotomaWithCursorPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "neotoma-with-ironclaw",
+      "source_path": "docs/site/pages/en/neotoma-with-ironclaw.mdx",
+      "site_path": "/neotoma-with-ironclaw",
+      "imported_components": [
+        "NeotomaWithIronClawPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "neotoma-with-letta",
+      "source_path": "docs/site/pages/en/neotoma-with-letta.mdx",
+      "site_path": "/neotoma-with-letta",
+      "imported_components": [
+        "MdxI18nLink"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": {
+        "repo_path": "docs/integrations/neotoma_with_letta.md",
+        "status": "supporting_source",
+        "canonical_site_path": "/neotoma-with-letta"
+      },
+      "status": "covered"
+    },
+    {
+      "basename": "neotoma-with-openclaw",
+      "source_path": "docs/site/pages/en/neotoma-with-openclaw.mdx",
+      "site_path": "/neotoma-with-openclaw",
+      "imported_components": [
+        "NeotomaWithOpenClawPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": {
+        "repo_path": "docs/integrations/openclaw.md",
+        "status": "supporting_source",
+        "canonical_site_path": "/neotoma-with-openclaw"
+      },
+      "status": "covered"
+    },
+    {
+      "basename": "neotoma-with-openclaw-connect-local-stdio",
+      "source_path": "docs/site/pages/en/neotoma-with-openclaw-connect-local-stdio.mdx",
+      "site_path": "/neotoma-with-openclaw-connect-local-stdio",
+      "imported_components": [
+        "OpenClawConnectLocalStdioPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "neotoma-with-openclaw-connect-remote-http",
+      "source_path": "docs/site/pages/en/neotoma-with-openclaw-connect-remote-http.mdx",
+      "site_path": "/neotoma-with-openclaw-connect-remote-http",
+      "imported_components": [
+        "OpenClawConnectRemoteHttpPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "neotoma-with-opencode",
+      "source_path": "docs/site/pages/en/neotoma-with-opencode.mdx",
+      "site_path": "/neotoma-with-opencode",
+      "imported_components": [
+        "NeotomaWithOpenCodePageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "neotoma-with-vscode",
+      "source_path": "docs/site/pages/en/neotoma-with-vscode.mdx",
+      "site_path": "/neotoma-with-vscode",
+      "imported_components": [
+        "MdxI18nLink"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": {
+        "repo_path": "docs/integrations/neotoma_with_vscode.md",
+        "status": "supporting_source",
+        "canonical_site_path": "/neotoma-with-vscode"
+      },
+      "status": "covered"
+    },
+    {
+      "basename": "neotoma-with-windsurf",
+      "source_path": "docs/site/pages/en/neotoma-with-windsurf.mdx",
+      "site_path": "/neotoma-with-windsurf",
+      "imported_components": [
+        "MdxI18nLink"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": {
+        "repo_path": "docs/integrations/neotoma_with_windsurf.md",
+        "status": "supporting_source",
+        "canonical_site_path": "/neotoma-with-windsurf"
+      },
+      "status": "covered"
+    },
+    {
+      "basename": "non-destructive-testing",
+      "source_path": "docs/site/pages/en/non-destructive-testing.mdx",
+      "site_path": "/non-destructive-testing",
+      "imported_components": [
+        "MdxI18nLink"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": {
+        "repo_path": "docs/guides/non_destructive_testing.md",
+        "status": "supporting_source",
+        "canonical_site_path": "/non-destructive-testing"
+      },
+      "status": "covered"
+    },
+    {
+      "basename": "operating",
+      "source_path": "docs/site/pages/en/operating.mdx",
+      "site_path": "/operating",
+      "imported_components": [
+        "AiNativeOperatorsPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "peer-sync",
+      "source_path": "docs/site/pages/en/peer-sync.mdx",
+      "site_path": "/peer-sync",
+      "imported_components": [
+        "DOC_TABLE_SCROLL_OUTER_CLASS",
+        "MdxI18nLink",
+        "TableScrollWrapper"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": {
+        "repo_path": "docs/subsystems/peer_sync.md",
+        "status": "supporting_source",
+        "canonical_site_path": "/peer-sync"
+      },
+      "status": "covered"
+    },
+    {
+      "basename": "personal-data",
+      "source_path": "docs/site/pages/en/personal-data.mdx",
+      "site_path": "/personal-data",
+      "imported_components": [
+        "PersonalDataLandingPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "portfolio",
+      "source_path": "docs/site/pages/en/portfolio.mdx",
+      "site_path": "/portfolio",
+      "imported_components": [
+        "PortfolioLandingPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "primitives",
+      "source_path": "docs/site/pages/en/primitives.mdx",
+      "site_path": "/primitives",
+      "imported_components": [
+        "PrimitivesIndexPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "privacy",
+      "source_path": "docs/site/pages/en/privacy.mdx",
+      "site_path": "/privacy",
+      "imported_components": [
+        "LEGAL_PAGE_LINK_CLASS"
+      ],
+      "has_jsx_usage": false,
+      "supporting_md": {
+        "repo_path": "docs/legal/site_privacy_notice.md",
+        "status": "supporting_source",
+        "canonical_site_path": "/privacy"
+      },
+      "status": "covered"
+    },
+    {
+      "basename": "procurement",
+      "source_path": "docs/site/pages/en/procurement.mdx",
+      "site_path": "/procurement",
+      "imported_components": [
+        "ProcurementLandingPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "replayable-timeline",
+      "source_path": "docs/site/pages/en/replayable-timeline.mdx",
+      "site_path": "/replayable-timeline",
+      "imported_components": [],
+      "has_jsx_usage": false,
+      "supporting_md": null,
+      "status": "no_jsx_no_md_needed"
+    },
+    {
+      "basename": "reproducible-state-reconstruction",
+      "source_path": "docs/site/pages/en/reproducible-state-reconstruction.mdx",
+      "site_path": "/reproducible-state-reconstruction",
+      "imported_components": [],
+      "has_jsx_usage": false,
+      "supporting_md": null,
+      "status": "no_jsx_no_md_needed"
+    },
+    {
+      "basename": "sandbox",
+      "source_path": "docs/site/pages/en/sandbox.mdx",
+      "site_path": "/sandbox",
+      "imported_components": [
+        "SandboxLandingPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "schema-constraints",
+      "source_path": "docs/site/pages/en/schema-constraints.mdx",
+      "site_path": "/schema-constraints",
+      "imported_components": [],
+      "has_jsx_usage": false,
+      "supporting_md": null,
+      "status": "no_jsx_no_md_needed"
+    },
+    {
+      "basename": "schema-management",
+      "source_path": "docs/site/pages/en/schema-management.mdx",
+      "site_path": "/schema-management",
+      "imported_components": [],
+      "has_jsx_usage": false,
+      "supporting_md": null,
+      "status": "no_jsx_no_md_needed"
+    },
+    {
+      "basename": "schemas",
+      "source_path": "docs/site/pages/en/schemas.mdx",
+      "site_path": "/schemas",
+      "imported_components": [
+        "SchemasIndexPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "security-hardening",
+      "source_path": "docs/site/pages/en/security-hardening.mdx",
+      "site_path": "/security-hardening",
+      "imported_components": [
+        "DOC_TABLE_SCROLL_OUTER_CLASS",
+        "MdxI18nLink",
+        "TableScrollWrapper"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": {
+        "repo_path": "docs/developer/mcp/proxy.md",
+        "status": "supporting_source",
+        "canonical_site_path": "/security-hardening"
+      },
+      "status": "covered"
+    },
+    {
+      "basename": "semantic-similarity-search",
+      "source_path": "docs/site/pages/en/semantic-similarity-search.mdx",
+      "site_path": "/semantic-similarity-search",
+      "imported_components": [],
+      "has_jsx_usage": false,
+      "supporting_md": null,
+      "status": "no_jsx_no_md_needed"
+    },
+    {
+      "basename": "silent-mutation-risk",
+      "source_path": "docs/site/pages/en/silent-mutation-risk.mdx",
+      "site_path": "/silent-mutation-risk",
+      "imported_components": [],
+      "has_jsx_usage": false,
+      "supporting_md": null,
+      "status": "no_jsx_no_md_needed"
+    },
+    {
+      "basename": "strong-consistency",
+      "source_path": "docs/site/pages/en/strong-consistency.mdx",
+      "site_path": "/strong-consistency",
+      "imported_components": [],
+      "has_jsx_usage": false,
+      "supporting_md": null,
+      "status": "no_jsx_no_md_needed"
+    },
+    {
+      "basename": "subscriptions",
+      "source_path": "docs/site/pages/en/subscriptions.mdx",
+      "site_path": "/subscriptions",
+      "imported_components": [
+        "DOC_TABLE_SCROLL_OUTER_CLASS",
+        "MdxI18nLink",
+        "TableScrollWrapper"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": {
+        "repo_path": "docs/subsystems/subscriptions.md",
+        "status": "supporting_source",
+        "canonical_site_path": "/subscriptions"
+      },
+      "status": "covered"
+    },
+    {
+      "basename": "terms",
+      "source_path": "docs/site/pages/en/terms.mdx",
+      "site_path": "/terms",
+      "imported_components": [
+        "LEGAL_PAGE_LINK_CLASS"
+      ],
+      "has_jsx_usage": false,
+      "supporting_md": {
+        "repo_path": "docs/legal/site_terms_of_use.md",
+        "status": "supporting_source",
+        "canonical_site_path": "/terms"
+      },
+      "status": "covered"
+    },
+    {
+      "basename": "trading",
+      "source_path": "docs/site/pages/en/trading.mdx",
+      "site_path": "/trading",
+      "imported_components": [
+        "TradingLandingPageBody"
+      ],
+      "has_jsx_usage": true,
+      "supporting_md": null,
+      "status": "needs_canonical_md"
+    },
+    {
+      "basename": "transactional-writes",
+      "source_path": "docs/site/pages/en/transactional-writes.mdx",
+      "site_path": "/transactional-writes",
+      "imported_components": [],
+      "has_jsx_usage": false,
+      "supporting_md": null,
+      "status": "no_jsx_no_md_needed"
+    },
+    {
+      "basename": "troubleshooting",
+      "source_path": "docs/site/pages/en/troubleshooting.mdx",
+      "site_path": "/troubleshooting",
+      "imported_components": [],
+      "has_jsx_usage": false,
+      "supporting_md": null,
+      "status": "no_jsx_no_md_needed"
+    },
+    {
+      "basename": "versioned-history",
+      "source_path": "docs/site/pages/en/versioned-history.mdx",
+      "site_path": "/versioned-history",
+      "imported_components": [],
+      "has_jsx_usage": false,
+      "supporting_md": null,
+      "status": "no_jsx_no_md_needed"
+    },
+    {
+      "basename": "zero-setup-onboarding",
+      "source_path": "docs/site/pages/en/zero-setup-onboarding.mdx",
+      "site_path": "/zero-setup-onboarding",
+      "imported_components": [],
+      "has_jsx_usage": false,
+      "supporting_md": null,
+      "status": "no_jsx_no_md_needed"
+    }
+  ]
+}

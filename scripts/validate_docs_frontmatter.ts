@@ -26,7 +26,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
 const docsRoot = path.join(repoRoot, "docs");
 
-const SKIP_DIR_NAMES = new Set(["private", "node_modules", ".git", "archived"]);
+const SKIP_DIR_NAMES = new Set(["private", "node_modules", ".git", "archived", "generated"]);
 
 const KNOWN_FIELDS = new Set([
   "title",

@@ -16,7 +16,7 @@ import path from "node:path";
 import { resolveFrontmatter, type DocFrontmatter } from "./doc_frontmatter.js";
 import { isVisible, type VisibilityEnv } from "./visibility.js";
 
-const SKIP_DIR_NAMES = new Set(["private", "node_modules", ".git", "archived"]);
+const SKIP_DIR_NAMES = new Set(["private", "node_modules", ".git", "archived", "generated"]);
 
 function compareStable(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
