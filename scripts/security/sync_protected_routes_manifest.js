@@ -49,6 +49,8 @@ const OPENAPI_PATH = path.join(repoRoot, "openapi.yaml");
 const RUNTIME_UNAUTH_ROUTES = [
   { method: "GET", path: "/", reason: "Root landing renders public marketing copy when allowed by env." },
   { method: "GET", path: "/favicon.ico", reason: "Static asset." },
+  { method: "GET", path: "/docs", reason: "Public docs index: read-only render of repo docs/**.md with visibility filtering." },
+  { method: "GET", path: "/docs/*", reason: "Public docs page: read-only render of a single docs/**.md with visibility filtering and slug sanitization." },
   { method: "POST", path: "/sandbox/session/new", reason: "Public sandbox onboarding (rate-limited)." },
   { method: "POST", path: "/sandbox/session/redeem", reason: "Public sandbox onboarding (rate-limited)." },
   { method: "GET", path: "/sandbox/session", reason: "Sandbox session probe." },

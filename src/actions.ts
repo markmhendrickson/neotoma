@@ -109,6 +109,7 @@ import {
   wantsHtml as acceptWantsHtml,
   wantsMarkdown as acceptWantsMarkdown,
 } from "./services/root_landing/index.js";
+import { mountDocsRoutes } from "./services/docs/index.js";
 import { installInspectorMount } from "./services/inspector_mount.js";
 import { getSandboxTermsResponse } from "./services/sandbox/terms.js";
 import { resolveSandboxReportTransport } from "./services/sandbox/transport.js";
@@ -551,6 +552,14 @@ app.get("/robots.txt", (req, res) => {
     return res.status(500).type("text/plain").send("# error rendering robots.txt\n");
   }
 });
+
+// ============================================================================
+// /docs — server-rendered markdown documentation index (no-auth, read-only)
+// ============================================================================
+// Reads markdown from the repo `docs/` directory at request time, applies
+// frontmatter inference + visibility filtering, and renders categorized HTML.
+// See src/services/docs/index.ts for the canonical implementation.
+mountDocsRoutes(app);
 
 // Smithery / MCP registry static metadata when automatic scan cannot finish (same host as /mcp)
 app.get("/.well-known/mcp/server-card.json", (_req, res) => {
