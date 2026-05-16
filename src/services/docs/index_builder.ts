@@ -16,7 +16,7 @@ import path from "node:path";
 import { resolveFrontmatter, type DocFrontmatter } from "./doc_frontmatter.js";
 import { isVisible, type VisibilityEnv } from "./visibility.js";
 
-const SKIP_DIR_NAMES = new Set(["private", "node_modules", ".git", "archived"]);
+const SKIP_DIR_NAMES = new Set(["private", "node_modules", ".git", "archived", "generated"]);
 
 export interface DocsManifestSubcategory {
   key: string;

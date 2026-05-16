@@ -1,0 +1,98 @@
+---
+title: Neotoma with VS Code
+summary: VS Code supports MCP servers in GitHub Copilot Chat's Agent Mode (VS Code 1.99+). MCP server configuration lives in `.vscode/mcp.json` at the workspace root, which Neotoma's project-level scanner detects and writes automatically.
+audience: user
+---
+
+# Neotoma with VS Code
+
+VS Code supports MCP servers in GitHub Copilot Chat's Agent Mode (VS Code 1.99+). MCP server configuration lives in `.vscode/mcp.json` at the workspace root, which Neotoma's project-level scanner detects and writes automatically.
+
+## Requirements
+
+- VS Code 1.99 or later
+- GitHub Copilot Chat extension with a Copilot subscription
+- Copilot Chat in **Agent Mode** (the default for `@workspace` interactions)
+
+## Install Neotoma
+
+```bash
+npm install -g neotoma
+neotoma init
+neotoma auth login
+```
+
+## Auto-configure with neotoma setup
+
+From your project directory:
+
+```bash
+neotoma setup --tool vscode --yes
+```
+
+This creates or updates `.vscode/mcp.json` with the Neotoma MCP server entry. VS Code picks up the change on file save without a restart.
+
+## Manual configuration
+
+Create `.vscode/mcp.json` in your workspace root:
+
+```json
+{
+  "servers": {
+    "neotoma": {
+      "type": "stdio",
+      "command": "neotoma",
+      "args": ["mcp", "stdio"]
+    }
+  }
+}
+```
+
+Use the absolute path to `neotoma` if the binary is not on `PATH` from VS Code's terminal environment (`which neotoma` to find it).
+
+## Remote access
+
+To connect VS Code to a remote or tunneled Neotoma instance:
+
+```bash
+neotoma api start --env prod --tunnel
+```
+
+Add the SSE transport entry to `.vscode/mcp.json`:
+
+```json
+{
+  "servers": {
+    "neotoma": {
+      "type": "sse",
+      "url": "https://<tunnel-host>/mcp",
+      "headers": {
+        "Authorization": "Bearer ${input:neotomaToken}"
+      }
+    }
+  }
+}
+```
+
+`${input:neotomaToken}` prompts VS Code for the token on first use and stores it in the VS Code secrets store.
+
+See [tunnel](/tunnel) for the full tunnel setup guide.
+
+## Using Neotoma tools in Copilot Chat
+
+MCP tools registered in `.vscode/mcp.json` are available in Copilot Chat **Agent Mode** only:
+
+1. Open Copilot Chat (`Ctrl+Shift+I` / `Cmd+Shift+I`)
+2. Switch to Agent Mode (sparkle icon or the model selector)
+3. Click the tools icon — Neotoma tools (`store`, `retrieve_entities`, etc.) appear in the list
+4. Type `#neotoma` to insert a tool call directly
+
+## Verify the connection
+
+Ask Copilot Chat in Agent Mode to call `retrieve_entities` with entity type `task`. A response with an empty array (not an error) confirms the connection is working.
+
+## Related
+
+- [MCP reference](/mcp) — protocol details, transport modes, authentication
+- [Install](/install) — full Neotoma install guide
+- [Integrations](/integrations) — all supported hosts
