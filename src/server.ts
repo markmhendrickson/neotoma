@@ -4655,6 +4655,18 @@ export class NeotomaServer {
         unknownFields,
       });
 
+      // If this store produced unknown fields, lazily check whether any of them
+      // are already declared in the active schema — a sign of schema-lag misrouting
+      // (issue #142). Queue a background repair job if so (best-effort, non-blocking).
+      if (unknownFieldsCount > 0 && schema) {
+        const declaredFields = new Set(Object.keys(schema.schema_definition.fields ?? {}));
+        const hasMisfiled = Object.keys(unknownFields).some((k) => declaredFields.has(k));
+        if (hasMisfiled) {
+          const { queueSchemaLagRepair } = await import("./services/schema_lag_repair.js");
+          queueSchemaLagRepair(entityType, userId).catch(() => {/* best-effort */});
+        }
+      }
+
       // Create observation directly (no interpretation_id).
       // Use fieldsForObservation so date-like unknowns are in the observation and thus
       // in the snapshot and timeline, even when not in the schema yet.

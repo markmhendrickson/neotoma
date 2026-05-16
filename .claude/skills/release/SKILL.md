@@ -138,6 +138,32 @@ If any pre-release commit is added after Step 3.5 runs, rerun Step 3.5 before an
 
 Re-render the GitHub Release preview (`npm run -s release-notes:render`) so the supplement diff is reflected; STOP and re-confirm if the supplement changed materially.
 
+### Step 3.6: Test coverage review lane
+
+Run after Step 3.5 passes, before Step 4. Symmetric in role to the security review lane: a structured audit of whether new user-facing surfaces actually have tests that would catch the failure modes a user would hit. Sources: `docs/testing/testing_standard.md`, the supplement's "What changed for npm package users" section.
+
+**Why this lane exists:** Tests-exist is not the same as tests-cover-the-thing-users-will-do. A surface can ship with a named test file that exercises only the happy path of an internal helper, leaving destructive operations, external-file-shape parsing, or new CLI commands effectively unverified. The v0.13.0 audit found 5 such gaps after the supplement was confirmed; this lane catches them before execute.
+
+1. **Walk the supplement's user-facing surfaces** (from "New CLI commands", "New CLI flags on existing commands", "Behavior changes in existing commands", "API surface & contracts"). For each, locate the test file(s) and read what they assert. Note specifically:
+
+   **Surfaces that need a regression test before shipping:**
+   - **Destructive or data-mutating operations** (encryption migrations, schema migrations, repair commands, anything that writes to the user's database or filesystem at rest). Required: a real round-trip test against a real file, not in-memory stubs. Encrypt→decrypt identity, dry-run non-mutation, idempotency on re-run, NULL preservation.
+   - **External file-shape parsers** (harness transcripts, exports, third-party config files). Required: at least one fixture per supported format that exercises the *actual* parsing code path (not just `detectSource`). For SQLite-backed formats, build the SQLite file in the test and parse it.
+   - **New CLI commands or flags** (`neotoma <new-command>`, new flag on existing command). Required: a test that spawns or invokes the command with the flag and asserts the user-observable effect (file written, output emitted, exit code).
+   - **Discovery / detection / parser pairs** that must agree on file layout. Required: a roundtrip test that asserts paths emitted by discovery are parseable by the parser.
+   - **HTTP server runtime configuration** (timeouts, headers, connection behavior) that fails silently. Required: a test that asserts the *runtime* behavior, not just the source string. For timeouts, read the response header or socket behavior.
+
+2. **For each surface, classify the existing test coverage as one of:**
+   - **Covers user-observable behavior end-to-end** → no action needed.
+   - **Covers a helper function only** → flag as a gap. The helper test does not prove the command/parser/migration works for users.
+   - **No test** → flag as BLOCKING.
+
+3. **Write `docs/releases/in_progress/vX.Y.Z/test_coverage_review.md`** with one section per surface, the classification above, and either a link to the satisfying test or a description of the test that needs to be added before execute.
+
+**Hard gate before Step 4:** Any surface classified BLOCKING must be either tested before execute or explicitly deferred to a follow-up patch release with the user's approval recorded in the review file. Trust-but-verify: read the actual test bodies; do not accept "the test file exists" as evidence of coverage.
+
+If new commits are added to satisfy this lane, rerun Step 3.5 (Security review lane) against the final HEAD before Step 4.
+
 ### Step 4: Execute
 
 After user confirms, run **every** step below in order through **npm publish and sandbox deployment**. Stopping after `gh release create` or `npm publish` is a failed full `/release` unless the user confirmed a GitHub-only / no-registry / no-sandbox scope.

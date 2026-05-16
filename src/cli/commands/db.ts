@@ -83,8 +83,17 @@ function migrateColumn(
   let skipped = 0;
   let errors = 0;
 
-  const rows = db.prepare(`SELECT rowid, ${column} FROM ${table}`).all() as Array<{
-    rowid: number;
+  // Alias rowid to a stable name. SQLite's bare `rowid` keyword is rewritten
+  // to the declared primary-key column name when a table has an INTEGER
+  // PRIMARY KEY (which aliases rowid), causing `row.rowid` to be undefined
+  // and the UPDATE below to match no rows — a silent corruption mode. Today's
+  // production schemas use TEXT PRIMARY KEY so rowid is always present, but
+  // the explicit alias here makes the migration robust to future schema
+  // changes. Regression test: tests/cli/db_migrate_encryption.test.ts.
+  const rows = db
+    .prepare(`SELECT rowid AS _migration_rowid, ${column} FROM ${table}`)
+    .all() as Array<{
+    _migration_rowid: number;
     [col: string]: unknown;
   }>;
 
@@ -111,7 +120,7 @@ function migrateColumn(
           continue;
         }
         const encrypted = encryptColumn(str, key);
-        if (!dryRun) update!.run(encrypted, row.rowid);
+        if (!dryRun) update!.run(encrypted, row._migration_rowid);
         processed++;
       } else {
         if (!isEncryptedColumn(str)) {
@@ -119,7 +128,7 @@ function migrateColumn(
           continue;
         }
         const decrypted = decryptColumn(str, key);
-        if (!dryRun) update!.run(decrypted, row.rowid);
+        if (!dryRun) update!.run(decrypted, row._migration_rowid);
         processed++;
       }
     } catch {
@@ -189,6 +198,87 @@ export type DbCliHooks = {
 
 export function registerDbCommand(program: Command, hooks: DbCliHooks): void {
   const dbCommand = program.command("db").description("Database maintenance commands");
+
+  dbCommand
+    .command("repair-schema-lag")
+    .description(
+      "Audit and repair raw_fragments rows misrouted by the schema-projection-lag bug (issue #142). " +
+        "Fields that landed in raw_fragments instead of observations are promoted back to observations " +
+        "and snapshots are recomputed. Safe to re-run — uses deterministic observation IDs. " +
+        "Pass --rollback <run_id> to undo a prior run."
+    )
+    .option("--dry-run", "Report affected entity types without writing any rows", false)
+    .option(
+      "--types <entity_types>",
+      "Comma-separated list of entity types to limit the repair (default: all)"
+    )
+    .option("--rollback <run_id>", "Roll back a prior repair run by its run_id")
+    .action(
+      async (opts: { dryRun?: boolean; types?: string; rollback?: string }) => {
+        const { auditAll, repairAll, rollbackRun } = await import(
+          "../../services/schema_lag_repair.js"
+        );
+
+        if (opts.rollback) {
+          process.stdout.write(`Rolling back run: ${opts.rollback}\n`);
+          const result = await rollbackRun(opts.rollback);
+          if (result.deleted_observations === 0) {
+            process.stdout.write("No observations found for that run_id. Nothing rolled back.\n");
+          } else {
+            process.stdout.write(
+              `Deleted ${result.deleted_observations} observation(s), recomputed ${result.recomputed_snapshots} snapshot(s).\n`
+            );
+          }
+          return;
+        }
+
+        const filterTypes = opts.types
+          ? opts.types.split(",").map((s) => s.trim()).filter(Boolean)
+          : undefined;
+
+        if (filterTypes) {
+          process.stdout.write(`Limiting to entity types: ${filterTypes.join(", ")}\n`);
+        }
+
+        process.stdout.write("Auditing raw_fragments for schema-lag misfiles...\n\n");
+        const hits = await auditAll();
+        const filtered = filterTypes ? hits.filter((h) => filterTypes.includes(h.entity_type)) : hits;
+
+        if (filtered.length === 0) {
+          process.stdout.write("✅ No misfiled raw_fragments found. Nothing to repair.\n");
+          return;
+        }
+
+        for (const h of filtered) {
+          process.stdout.write(
+            `  ⚠️  ${h.entity_type} — ${h.misfiled_fields.length} field(s), ${h.fragment_count} fragment(s)\n`
+          );
+          process.stdout.write(`      fields: ${h.misfiled_fields.join(", ")}\n`);
+        }
+        process.stdout.write(`\n${filtered.length} entity type(s) affected.\n`);
+
+        if (opts.dryRun) {
+          process.stdout.write("\n[dry-run] No changes written. Re-run without --dry-run to repair.\n");
+          return;
+        }
+
+        process.stdout.write("\nRepairing...\n");
+        const result = await repairAll(filterTypes);
+
+        process.stdout.write(`\n✅ Repair complete.\n`);
+        process.stdout.write(`   Entity types repaired : ${result.repaired_entity_types}\n`);
+        process.stdout.write(`   Observations inserted : ${result.inserted_observations}\n`);
+        process.stdout.write(`   Snapshots recomputed  : ${result.recomputed_snapshots}\n`);
+        process.stdout.write(`   run_id                : ${result.run_id}\n`);
+        if (result.errors.length > 0) {
+          process.stdout.write(`\n   Errors (${result.errors.length}):\n`);
+          for (const e of result.errors) process.stdout.write(`     - ${e}\n`);
+        }
+        process.stdout.write(
+          `\nTo roll back: neotoma db repair-schema-lag --rollback "${result.run_id}"\n`
+        );
+      }
+    );
 
   dbCommand
     .command("migrate-encryption <direction>")

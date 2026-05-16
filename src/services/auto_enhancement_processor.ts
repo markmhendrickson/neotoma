@@ -17,6 +17,7 @@ export interface QueueItem {
   user_id: string | null;
   frequency_count: number | null;
   retry_count: number;
+  job_type?: string | null;
 }
 
 /**
@@ -62,6 +63,44 @@ export async function processAutoEnhancementQueue(): Promise<{
           .from("auto_enhancement_queue")
           .update({ status: "processing" })
           .eq("id", item.id);
+
+        // Schema-lag repair jobs take a separate path from auto-enhancement.
+        if (item.job_type === "schema_lag_repair") {
+          const { auditEntityType, repairEntityType } = await import("./schema_lag_repair.js");
+          const audit = await auditEntityType(item.entity_type, item.user_id);
+          const runId = `schema_lag_bg_${new Date().toISOString()}`;
+
+          if (!audit || audit.misfiled_fields.length === 0) {
+            await db
+              .from("auto_enhancement_queue")
+              .update({ status: "completed", processed_at: new Date().toISOString(), error_message: "no misfiled fragments found" })
+              .eq("id", item.id);
+            skipped++;
+            continue;
+          }
+
+          const { inserted, recomputed, errors } = await repairEntityType(
+            item.entity_type,
+            item.user_id,
+            runId,
+            audit.misfiled_fields
+          );
+
+          await db
+            .from("auto_enhancement_queue")
+            .update({
+              status: errors.length > 0 && inserted === 0 ? "failed" : "completed",
+              processed_at: new Date().toISOString(),
+              error_message: errors.length > 0 ? errors.join("; ") : null,
+            })
+            .eq("id", item.id);
+
+          logger.error(
+            `[AUTO_ENHANCE_QUEUE] schema_lag_repair ${item.entity_type}: inserted=${inserted}, recomputed=${recomputed}, errors=${errors.length}`
+          );
+          succeeded++;
+          continue;
+        }
 
         // Check eligibility
         // Pass user_id as-is (could be UUID string or null)

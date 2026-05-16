@@ -9,7 +9,8 @@ v0.13.0 is a substantial feature release. The headline additions are **schema-le
 ### New CLI commands
 
 - **`neotoma preflight [--tool <harness>] [--apply] [--scope project|user|both] [--dry-run]`** — prints a copy-paste allowlist block for the specified harness or writes it directly with `--apply`. Allowlist writes are supported for `claude-code`, `cursor`, and `codex`; for MCP-only harnesses (`claude-desktop`, `openclaw`, `windsurf`, `continue`, `vscode`) the command prints a redirect to `neotoma setup` since those harnesses have no writable command allowlist file. For `claude-code`, `--scope` selects project (`.claude/settings.local.json`), user (`~/.claude/settings.json`), or both. `neotoma setup` calls the same write path, so preflight is only strictly necessary when the allowlist must be in place before `npm install -g neotoma` runs. Replaces the multi-prompt manual setup that previously plagued the onboarding flow.
-- **`neotoma db migrate-encryption <encrypt|decrypt>`** — bidirectional bulk column encryption migration that operates directly on the SQLite file (no running server). Migrates `observations.fields`, `entity_snapshots.snapshot/provenance`, `relationship_snapshots.snapshot/provenance`, `raw_fragments.fragment_value/fragment_envelope`, and `schema_recommendations.fields_*`/`converters_to_add`. Uses the same key configuration as the runtime (`NEOTOMA_KEY_FILE_PATH` or `NEOTOMA_MNEMONIC` + optional `NEOTOMA_MNEMONIC_PASSPHRASE`).
+- **`neotoma db migrate-encryption <encrypt|decrypt>`** — bidirectional bulk column encryption migration that operates directly on the SQLite file (no running server). Migrates `observations.fields`, `entity_snapshots.snapshot/provenance`, `relationship_snapshots.snapshot/provenance`, `raw_fragments.fragment_value/fragment_envelope`, and `schema_recommendations.fields_*`/`converters_to_add`. Uses the same key configuration as the runtime (`NEOTOMA_KEY_FILE_PATH` or `NEOTOMA_MNEMONIC` + optional `NEOTOMA_MNEMONIC_PASSPHRASE`). Covered by `tests/cli/db_migrate_encryption.test.ts` (encrypt→decrypt identity, idempotency, dry-run non-mutation, NULL preservation, missing-table skip, wrong-key per-row failure).
+- **`neotoma db repair-schema-lag [--dry-run] [--types <entity_types>] [--rollback <run_id>]`** — audit and repair `raw_fragments` rows that were misrouted due to the schema-projection-lag bug (issue #142). Rows in `raw_fragments` whose `fragment_key` now matches a declared field in the active schema for their entity type are promoted to observations and affected entity snapshots are recomputed. Every inserted observation carries a `_migration_run_id` field so runs are fully rollback-safe. Covered by `tests/cli/db_repair_schema_lag.test.ts`.
 
 ### New CLI flags on existing commands
 
@@ -63,7 +64,7 @@ v0.13.0 is a substantial feature release. The headline additions are **schema-le
 - **Pre-release checklist** and **tunnel auth audit matrix** added under `docs/developer/`.
 - **Cloud-fronted caller auth section** added to the tunnel guide with an advisory operational note (covers Cloudflare Tunnel topology).
 - **`install.md` updated** — Step 2.1 now calls `neotoma preflight --tool <tool> --apply`; harness transcript detection block added.
-- **`docs/developer/cli_reference.md` updated** with `preflight`, `db migrate-encryption`, `discover --harness-transcripts`, and `ingest-transcript --harness`.
+- **`docs/developer/cli_reference.md` updated** with `preflight`, `db migrate-encryption`, `db repair-schema-lag`, `discover --harness-transcripts`, and `ingest-transcript --harness`.
 - **`SECURITY.md`** — Supported Versions table updated (`0.13.x` Yes, `0.12.x` Yes, `< 0.12` No).
 - **CI: Claude PR review GitHub Action** triggers on every push to open non-draft PRs (#111, #119); pre-review reading list wired in.
 - **CI: baseline job isolates integration test DB state** to eliminate shared-state flakiness (#126).
@@ -77,7 +78,11 @@ v0.13.0 is a substantial feature release. The headline additions are **schema-le
 
 - **`src/cli/preflight.ts`** (new, 167 lines) — implements the standalone permission-file writer described above.
 - **`src/cli/discovery.ts`** (new, 222 lines) — harness transcript detection (Claude Code JSONL, Codex JSONL, Cursor SQLite `store.db`) with sample-title extraction and date-range estimation.
-- **`src/cli/commands/db.ts`** (new, 269 lines) — `db migrate-encryption` implementation operating directly on the SQLite file.
+- **`src/cli/commands/db.ts`** (expanded) — adds `db migrate-encryption` (bulk column encryption migration, operates on closed SQLite file) and `db repair-schema-lag` (audit and repair raw_fragments misrouted by the schema-projection-lag bug with full rollback support).
+- **`src/services/schema_lag_repair.ts`** (new, 431 lines) — implements `auditEntityType`, `repairEntityType`, `auditAll`, `repairAll`, and `rollbackRun` for the schema-lag repair command. Uses deterministic observation IDs (SHA-256 of `entity_id:run_id`) so re-runs are safe.
+- **`src/server.ts`** — wires `queueSchemaLagRepair` on server startup so users who had data affected by #142 are automatically offered the repair path.
+- **`src/repositories/sqlite/sqlite_client.ts`** — minor extension to support repair service queries.
+- **`src/services/auto_enhancement_processor.ts`** — schema-lag repair integration: repair-candidate fragments are bypassed from auto-enhancement queue to avoid processing data that will be migrated.
 - **`src/cli/transcript_parser.ts`** — major expansion (+355 lines). Adds `conversation_id` field to extracted conversation entities; broadened harness parsing.
 - **`src/services/schema_definitions.ts`** — adds `gist`, `neotoma_repair`, `external_link` seeded types and extends existing definitions.
 - **`src/services/schema_registry.ts`** — validates and persists `SchemaDefinition.agent_instructions`.
@@ -105,12 +110,13 @@ v0.13.0 is a substantial feature release. The headline additions are **schema-le
 - **Site wordmark** included in `site_pages` build output (#122).
 - **Issue access reset-issue-policy** correctly writes default to disk (#40, #89).
 - **Schema-projection lag for recurring events** (#37, #115) — fields now project into the snapshot.
-- **Multiple-active-schema rows causing raw_fragments misrouting** (#142) — when `registerSchema` was called with `activate: true`, prior active rows for the same `entity_type` + scope were not deactivated. `loadGlobalSchema` / `loadUserSpecificSchema` use `.single()`, so a second active row caused the `.single()` call to error; new observations were silently routed to `raw_fragments` instead of being applied to the snapshot. Fixed in `src/services/schema_registry.ts` by explicitly deactivating all prior active versions before returning the newly registered row. Regression test: `tests/unit/schema_projection_lag.test.ts` (+242).
+- **Multiple-active-schema rows causing raw_fragments misrouting** (#142) — when `registerSchema` was called with `activate: true`, prior active rows for the same `entity_type` + scope were not deactivated. `loadGlobalSchema` / `loadUserSpecificSchema` use `.single()`, so a second active row caused the `.single()` call to error; new observations were silently routed to `raw_fragments` instead of being applied to the snapshot. Fixed in `src/services/schema_registry.ts` by explicitly deactivating all prior active versions before returning the newly registered row. Regression test: `tests/unit/schema_projection_lag.test.ts` (+242). Deployments that ingested data while the bug was active can recover misrouted rows using the new `neotoma db repair-schema-lag` command.
+- **`db migrate-encryption` rowid-aliasing latent bug** — the migration used `SELECT rowid, <col> FROM <table>` and `UPDATE … WHERE rowid = ?`. SQLite rewrites `rowid` to the declared primary-key column name when a table has an `INTEGER PRIMARY KEY` (which aliases rowid), so `row.rowid` would be `undefined` and the UPDATE would match no rows — silently, while still incrementing the `processed` counter. Today's production schemas all use `TEXT PRIMARY KEY` so the bug was a no-op in v0.12.x, but a future schema migration could trigger silent data loss. Fixed in `src/cli/commands/db.ts` by aliasing `rowid AS _migration_rowid` in the SELECT so the column name is stable regardless of the table's primary-key declaration. Regression test: `tests/cli/db_migrate_encryption.test.ts` includes an explicit `INTEGER PRIMARY KEY` schema case that fails without the alias.
 - **Vendored `neotoma-client` in cursor-hooks plugin** — removed hardcoded dev-local token from the published artifact (security hardening for the published hooks plugin).
 
 ## Tests and validation
 
-- **2882 / 2882 unit tests pass** on `HEAD` (full `npm test` lane; 14 skipped are integration-only tests, 3 todo are scaffolded future assertions).
+- **2917 / 2917 unit tests pass** on `HEAD` (full `npm test` lane; 14 skipped are integration-only tests, 3 todo are scaffolded future assertions).
 - **G2 (`security:lint`)**: 0 errors, 110 warnings (pre-existing patterns, no new gating findings).
 - **G3 (`security:manifest:check` + `test:security:auth-matrix`)**: manifest in sync (106 routes), auth matrix 16/16 pass.
 - New test files added in this release range:
@@ -129,6 +135,12 @@ v0.13.0 is a substantial feature release. The headline additions are **schema-le
   - `tests/unit/observation_reducer_projection.test.ts` (+330)
   - `tests/unit/schema_agent_instructions.test.ts` (+208)
   - `tests/unit/schema_projection_lag.test.ts` (+242)
+  - `tests/cli/db_migrate_encryption.test.ts` (+340) — round-trip integration test for `db migrate-encryption` operating on a real closed SQLite file: encrypt→decrypt identity across all 5 covered tables, idempotency, `--dry-run` non-mutation, NULL preservation, missing-table skip, wrong-key per-row failure with errors reported, missing-key-source clear error, plus an explicit `INTEGER PRIMARY KEY` schema case that pins the rowid-aliasing fix (without the fix, the migration silently writes nothing while reporting `processed: N`).
+  - `tests/cli/transcript_parser.test.ts` cursor section (+10 tests) — Cursor `state.vscdb` and per-workspace `store.db` SQLite parsing covering hex-encoded and raw-buffer blobs, structured content blocks, malformed JSON skip, missing-table fallback, corrupt-file fallback.
+  - `tests/cli/cursor_hooks_global.test.ts` (+175) — `packages/cursor-hooks/scripts/install.mjs --global`: writes to `$HOME/.cursor/hooks.json` (not cwd), creates parent dir, inserts all 5 expected event hooks, preserves foreign hooks on merge, `--uninstall --global` removes only Neotoma entries, idempotent re-install.
+  - `tests/cli/discover_to_parse_roundtrip.test.ts` (+170) — paths emitted by `discoverHarnessTranscripts` always parse via `parseTranscript`: claude-code JSONL, codex JSONL, cursor store.db, and a combined three-harness `$HOME`.
+  - `tests/unit/keepalive_timeout.test.ts` (+60) — asserts the running server's `Keep-Alive: timeout=N` response header timeout is ≥ 60 s (default is 120 s), guarding against regression to Node's 5 s default behind reverse proxies.
+  - `tests/cli/db_repair_schema_lag.test.ts` (+75) — behavioral tests for `db repair-schema-lag`: empty-database audit returns no hits, `repairAll` with a nonexistent entity type filter writes zero observations, result shape guarantees (run_id non-empty, errors array always present).
 
 ## Security hardening
 

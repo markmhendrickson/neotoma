@@ -93,6 +93,9 @@ These rules sit between subsystems. Each canonical doc covers its own surface; o
 16. Authority over loopback / proxy / `X-Forwarded-For` trust lives in `src/actions.ts` (`isLocalRequest`, `forwardedForValues`, `isProductionEnvironment`) and the matching helpers in `src/services/root_landing/**`. Any new code that needs to know "is this request local?" MUST consume those exports — not a bare `req.socket.remoteAddress` check, not a `Host` header read, not an inlined fork (`docs/security/threat_model.md`). Treat the v0.11.1 advisory shape as a regression class, not a one-off.
 17. Every new Express route MUST land in `scripts/security/protected_routes_manifest.json` (auth-required) or in the runtime allow-list with a stated `reason`. Run `npm run security:manifest:write` in the same change; CI's `security_gates` job runs `--check` and rejects drift.
 18. Every release that the diff classifier (`scripts/security/classify_diff.js`) labels `sensitive=true` MUST land with a filled `docs/releases/in_progress/<TAG>/security_review.md` and a supplement `Security hardening` section linking it. `none` provider mode is acceptable, manual fill is mandatory.
+19. Every new **destructive or data-mutating operation** (DB migration, encryption migration, repair command, bulk-rewrite over user data) MUST ship with a real round-trip integration test that operates on a real file, not in-memory stubs. The test MUST cover: identity (forward→inverse leaves the data unchanged), dry-run non-mutation, idempotency on re-run, and NULL preservation. See `docs/testing/testing_standard.md` § Destructive operations.
+20. Every new **external-file-shape parser** (harness transcripts, SQLite imports, third-party config formats) MUST ship with a test that exercises the actual parsing path against a fixture file in the supported format. Detection-only tests (asserting `detectSource` returns the right tag) are not coverage of parsing.
+21. Every new **HTTP server runtime-config knob** (timeouts, connection behavior, header policy) MUST ship with a test that asserts the *runtime* behavior — a response header value, a socket lifetime, an observable connection property — not just the source string. A constant declared in code with no runtime assertion regresses silently.
 
 ### MUST NOT
 
@@ -149,6 +152,11 @@ Before opening a PR that touches any surface in the Touchpoint Matrix, confirm:
 - [ ] `npm run security:classify-diff` recorded; if `sensitive=true`, `npm run security:lint` is clean, `npm run security:manifest:check` passes, `npm run test:security:auth-matrix` passes, and `docs/releases/in_progress/<TAG>/security_review.md` exists with a sign-off verdict.
 - [ ] New Express routes registered in `protected_routes_manifest.json` (or runtime unauth allow-list with a `reason`); manifest regenerated via `npm run security:manifest:write` when needed.
 - [ ] No bare `req.socket.remoteAddress`, `X-Forwarded-For`, or `Host` reads outside `src/actions.ts` / `src/services/root_landing/**`; auth-local fallbacks (`!auth && isLocalRequest`) gated through `assertExplicitlyTrusted`.
+- [ ] **User-facing-surface coverage**: any new CLI command, new CLI flag, new destructive/data-mutating operation, new external-file-shape parser, or new HTTP runtime-config knob has a test that exercises the **user-observable behavior end-to-end**, not just a helper function. A test file with the right name that only covers an internal helper is not coverage. Required regression tests by surface class:
+  - Destructive operations (DB migrations, encryption migrations, repair commands): real round-trip test against a real file — encrypt→decrypt identity, dry-run non-mutation, idempotency on re-run, NULL preservation.
+  - External-file-shape parsers (harness transcripts, SQLite imports, third-party config): at least one fixture per supported format that exercises the actual parser path, not just `detectSource`.
+  - Discovery / detection / parser pairs: a roundtrip test asserting paths emitted by discovery are parseable by the parser.
+  - HTTP runtime config (timeouts, headers, keep-alive): a test that asserts the *runtime* behavior (response header, socket lifetime), not just the source string.
 
 ## Canonical doc index
 

@@ -381,6 +381,7 @@ function ensureSchema(db: SqliteDatabase): void {
     addColumnIfMissing(db, "auto_enhancement_queue", "processed_at", "TEXT");
     addColumnIfMissing(db, "auto_enhancement_queue", "last_retry_at", "TEXT");
     addColumnIfMissing(db, "auto_enhancement_queue", "error_message", "TEXT");
+    addColumnIfMissing(db, "auto_enhancement_queue", "job_type", "TEXT DEFAULT 'auto_enhance'");
 
     addColumnIfMissing(db, "local_auth_users", "is_ephemeral", "INTEGER NOT NULL DEFAULT 0");
 

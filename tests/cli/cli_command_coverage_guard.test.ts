@@ -49,6 +49,7 @@ describe("CLI command coverage guard", () => {
       "plans",
       "preflight",
       "upload",
+      "db", // subcommands covered by db_migrate_encryption.test.ts (migrate-encryption) and db_repair_schema_lag.test.ts (repair-schema-lag)
     ]);
 
     // Commands intentionally help-only due interactivity or generic dispatch.
@@ -64,7 +65,6 @@ describe("CLI command coverage guard", () => {
       "agents", // namespace dispatcher; subcommands (e.g. `agents grants import`) are covered by their own integration tests
       "inspector", // UI launcher namespace; behavior is covered by inspector/server integration flows
       "compat", // remote version probe; exercised by API compatibility tests and manual release checks
-      "db", // bulk encryption migration; requires live SQLite file, covered by column_encryption unit tests and manual migration flows
     ]);
 
     const uncovered = commandNames.filter(

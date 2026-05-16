@@ -123,6 +123,56 @@ See `docs/testing/automated_test_catalog.md` for the canonical repo-wide invento
 - When test commands, CI lanes, or default-vs-optional execution modes change, update both the catalog and this policy doc in the same change.
 - `npm run validate:test-catalog` must pass before merge.
 
+## High-risk surface classes (mandatory coverage)
+
+Some change classes routinely ship with named-but-shallow tests that exercise an internal helper while leaving the user-observable behavior unverified. These classes MUST have a test that proves the *user-visible* behavior works, not just that an internal function returns the expected value.
+
+### Destructive or data-mutating operations
+
+Examples: DB migrations, encryption / decryption migrations, repair commands, bulk-rewrite over user data.
+
+**Required tests** (write all of them; each catches a different failure mode):
+
+1. **Round-trip identity** — apply the operation and its inverse against a real file with seeded plaintext. Read the data back and assert it matches the original byte-for-byte. This is the test that would have caught the v0.13.0 `db migrate-encryption` rowid-aliasing bug: the migration reported `processed: N` while silently writing nothing because `UPDATE ... WHERE rowid = ?` matched no rows.
+2. **Dry-run non-mutation** — assert `--dry-run` produces the same report counts as a real run, but the file on disk is byte-equal to its pre-run state.
+3. **Idempotency** — run the operation twice. Second run should report 0 processed, N skipped, with the file byte-equal to the post-first-run state.
+4. **NULL / absent-value preservation** — a row with a NULL in the target column must remain NULL after the operation, never converted to a string `"null"` or empty string.
+5. **Wrong-key / unauthorized failure** — if the operation requires authentication or a key, supplying the wrong one must fail per-row without partial corruption.
+
+**Why a real file** — in-memory stubs miss SQLite-specific behavior like rowid aliasing, foreign-key enforcement, journal modes, and pragma side effects. The migration runs against a real file in production; the test should too.
+
+### External-file-shape parsers
+
+Examples: harness transcripts (Claude Code JSONL, Codex JSONL, Cursor SQLite `store.db` and `state.vscdb`), third-party export formats, SQLite imports from external tools.
+
+**Required tests**:
+
+1. **Parser path coverage**, not detection coverage. A test that asserts `detectSource("/path/to/store.db")` returns `"cursor"` does not prove the parser can read the database. Build the file in the test fixture using the same format the source tool emits (JSONL with the expected event shape, SQLite with the expected table layout) and parse it.
+2. **Per-format fixture** — when one harness has multiple formats (Cursor's `state.vscdb` vs. per-workspace `store.db`; hex-encoded vs. raw-buffer blobs), every format gets its own fixture.
+3. **Malformed-input resilience** — assert the parser skips a malformed entry without aborting the run.
+4. **Missing-table / missing-column fallback** — assert the parser returns an empty result (not throws) when the expected tables aren't present.
+
+### Discovery / detection / parser pairs
+
+When one subsystem emits paths and another subsystem consumes them, write a roundtrip test that asserts the contract between them.
+
+**Required test**: a fixture `$HOME` containing the expected harness directory layout for each supported source. Call discovery, then call the parser on every emitted path. Every path must yield a non-empty result.
+
+This is what would have caught a hypothetical regression where discovery starts scanning `~/.codex/sessions/` while the parser still expects `~/.codex/archived_sessions/`. No unit test on either side would surface the drift.
+
+### HTTP server runtime-config knobs
+
+Examples: `keepAliveTimeout`, `headersTimeout`, `Connection` header policy, request size limits.
+
+**Required test**: assert the **runtime** behavior, not the source string. For timeouts, read the `Keep-Alive: timeout=N` response header against the actually-running server. For size limits, send a request at the boundary and assert the response code. Constants declared in code with no runtime assertion regress silently when an unrelated change moves the assignment or overrides it via env var.
+
+### New CLI commands or flags
+
+Every new top-level command (or new flag on an existing command) MUST have:
+
+1. An entry in `tests/cli/cli_command_coverage_guard.test.ts` (already enforced by [change_guardrails_rules.md](../../.claude/rules/change_guardrails_rules.md)).
+2. A test that spawns or invokes the command and asserts the **user-observable effect** — a file written, an output line emitted, an exit code. Asserting that an internal helper function returns the right value is not enough.
+
 ## Integration Test Quality
 
 **See `foundation/conventions/testing_conventions.md` for generic principles.**

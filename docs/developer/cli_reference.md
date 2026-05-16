@@ -860,6 +860,21 @@ neotoma snapshots export --entity-types agent_task,agent_attempt --out ./neotoma
 neotoma snapshots diff --neotoma ./neotoma.json --external ./fleet.json --parser json
 ```
 
+### Database maintenance
+
+- `neotoma db migrate-encryption [--direction encrypt|decrypt] [--dry-run]`: Bulk-encrypt or bulk-decrypt all sensitive columns in the local SQLite database. Operates on the closed database file directly (server must not be running). Safe to re-run — idempotent.
+  - `--direction encrypt` (default): Encrypt all plaintext values in covered columns across `observations`, `entity_snapshots`, `relationship_snapshots`, `raw_fragments`, `schema_recommendations`, and `auto_enhancement_queue`.
+  - `--direction decrypt`: Reverse the encryption on all covered columns.
+  - `--dry-run`: Report how many rows would be processed without writing any changes.
+  - Requires `NEOTOMA_KEY_FILE_PATH` or `NEOTOMA_MNEMONIC` to be set.
+
+- `neotoma db repair-schema-lag [--dry-run] [--types <entity_types>] [--rollback <run_id>]`: Audit and repair `raw_fragments` rows that were misrouted due to the schema-projection-lag bug (issue #142). Rows in `raw_fragments` whose `fragment_key` now matches a declared field in the active schema for their entity type are promoted to observations, and affected entity snapshots are recomputed. Safe to re-run — uses deterministic observation IDs.
+  - `--dry-run`: Report affected entity types and fragment counts without writing any rows.
+  - `--types <entity_types>`: Comma-separated list of entity types to limit the repair scope (default: all).
+  - `--rollback <run_id>`: Roll back a prior repair run by its `run_id`. Deletes the observations inserted by that run and recomputes affected snapshots.
+  - Every observation inserted by `repair-schema-lag` carries a `_migration_run_id` field in its `fields` JSON, making runs fully rollback-safe.
+  - After a repair, the command prints the `run_id` with a copy-paste rollback hint.
+
 ### Backup and restore
 
 - `neotoma backup create`: Create a backup of the local database, sources, and logs.
