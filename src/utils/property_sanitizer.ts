@@ -26,7 +26,7 @@ function sanitizePrimitive(value: Primitive): SanitizedPrimitiveResult {
     (_, label: string, url: string) => {
       removedUrls.push(url);
       return label;
-    },
+    }
   );
 
   cleaned = cleaned.replace(
@@ -34,7 +34,7 @@ function sanitizePrimitive(value: Primitive): SanitizedPrimitiveResult {
     (_, url: string) => {
       removedUrls.push(url);
       return " ";
-    },
+    }
   );
 
   cleaned = cleaned.replace(/\s+/g, " ").trim();
@@ -61,7 +61,7 @@ function mergeUrlValue(
   target: Record<string, unknown>,
   key: string,
   urls: string[],
-  plural: boolean,
+  plural: boolean
 ): void {
   if (!urls.length) return;
   const needsPlural = plural || urls.length > 1;
@@ -81,7 +81,7 @@ function mergeUrlValue(
 }
 
 export function sanitizeRecordProperties(
-  properties: Record<string, unknown>,
+  properties: Record<string, unknown>
 ): Record<string, unknown> {
   const sanitized: Record<string, unknown> = {};
 
@@ -99,14 +99,8 @@ export function sanitizeRecordProperties(
           collectedUrls.push(...result.removedUrls);
         } else if (Array.isArray(item)) {
           sanitizedItems.push(item);
-        } else if (
-          typeof item === "object" &&
-          item !== null &&
-          !(item instanceof Date)
-        ) {
-          sanitizedItems.push(
-            sanitizeRecordProperties(item as Record<string, unknown>),
-          );
+        } else if (typeof item === "object" && item !== null && !(item instanceof Date)) {
+          sanitizedItems.push(sanitizeRecordProperties(item as Record<string, unknown>));
         } else if (item !== undefined) {
           sanitizedItems.push(item);
         }
@@ -114,14 +108,8 @@ export function sanitizeRecordProperties(
 
       sanitized[key] = sanitizedItems;
       mergeUrlValue(sanitized, key, collectedUrls, true);
-    } else if (
-      typeof value === "object" &&
-      value !== null &&
-      !(value instanceof Date)
-    ) {
-      sanitized[key] = sanitizeRecordProperties(
-        value as Record<string, unknown>,
-      );
+    } else if (typeof value === "object" && value !== null && !(value instanceof Date)) {
+      sanitized[key] = sanitizeRecordProperties(value as Record<string, unknown>);
     } else {
       const result = sanitizePrimitive(value as Primitive);
       if (result.value !== undefined) {

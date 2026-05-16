@@ -47,9 +47,7 @@ export async function runPreflight(config: ProxyConfig): Promise<PreflightResult
   } catch (err) {
     log(`Preflight /session unreachable at ${url}: ${String(err)}`);
     if (config.failClosed) {
-      process.stderr.write(
-        `[neotoma-mcp-proxy] fail-closed: /session unreachable at ${url}\n`,
-      );
+      process.stderr.write(`[neotoma-mcp-proxy] fail-closed: /session unreachable at ${url}\n`);
       process.exit(1);
     }
     return null;
@@ -59,9 +57,7 @@ export async function runPreflight(config: ProxyConfig): Promise<PreflightResult
     const bodyText = await resp.text();
     log(`Preflight /session returned status=${resp.status} body=${bodyText.slice(0, 200)}`);
     if (config.failClosed) {
-      process.stderr.write(
-        `[neotoma-mcp-proxy] fail-closed: /session status ${resp.status}\n`,
-      );
+      process.stderr.write(`[neotoma-mcp-proxy] fail-closed: /session status ${resp.status}\n`);
       process.exit(1);
     }
     return null;
@@ -69,7 +65,7 @@ export async function runPreflight(config: ProxyConfig): Promise<PreflightResult
 
   let payload: Record<string, unknown>;
   try {
-    payload = await resp.json() as Record<string, unknown>;
+    payload = (await resp.json()) as Record<string, unknown>;
   } catch {
     log(`Preflight /session returned non-JSON body`);
     return null;
@@ -81,12 +77,12 @@ export async function runPreflight(config: ProxyConfig): Promise<PreflightResult
   const eligible = payload.eligible_for_trusted_writes as boolean | undefined;
 
   log(
-    `Preflight /session: tier=${tier} thumbprint=${thumbprint ?? "<none>"} eligible_for_trusted_writes=${String(eligible)}`,
+    `Preflight /session: tier=${tier} thumbprint=${thumbprint ?? "<none>"} eligible_for_trusted_writes=${String(eligible)}`
   );
 
   if (config.failClosed && tier === "anonymous") {
     process.stderr.write(
-      `[neotoma-mcp-proxy] fail-closed: Neotoma resolved anonymous attribution\n`,
+      `[neotoma-mcp-proxy] fail-closed: Neotoma resolved anonymous attribution\n`
     );
     process.exit(1);
   }

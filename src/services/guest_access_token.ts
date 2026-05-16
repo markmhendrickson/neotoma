@@ -39,7 +39,10 @@ function getGuestTokenTtlSeconds(): number {
     : DEFAULT_GUEST_TOKEN_TTL_SECONDS;
 }
 
-function parseObservationPayload(obs: { fields?: unknown; payload?: unknown }): Record<string, unknown> | null {
+function parseObservationPayload(obs: {
+  fields?: unknown;
+  payload?: unknown;
+}): Record<string, unknown> | null {
   try {
     const payload =
       typeof obs.fields === "string"
@@ -78,7 +81,9 @@ export async function generateGuestAccessToken(params: {
     updated_at: now,
   });
   if (entityError && !/exists|duplicate|unique/i.test(entityError.message ?? "")) {
-    throw new Error(`Failed to persist guest access token entity: ${entityError.message ?? entityError}`);
+    throw new Error(
+      `Failed to persist guest access token entity: ${entityError.message ?? entityError}`
+    );
   }
   const { error: observationError } = await db.from("observations").insert({
     id: randomUUID(),
@@ -97,7 +102,9 @@ export async function generateGuestAccessToken(params: {
     source_priority: 100,
   });
   if (observationError) {
-    throw new Error(`Failed to persist guest access token observation: ${observationError.message ?? observationError}`);
+    throw new Error(
+      `Failed to persist guest access token observation: ${observationError.message ?? observationError}`
+    );
   }
 
   return token;

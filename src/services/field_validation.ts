@@ -87,7 +87,7 @@ export function validateFieldWithConverters(
 
   // Try each converter in order
   const valueType = getValueType(value);
-  
+
   for (const converterDef of fieldDef.converters) {
     // Check if converter matches the value's type
     if (converterDef.from !== valueType) {
@@ -104,7 +104,7 @@ export function validateFieldWithConverters(
     try {
       // Apply converter
       const converted = converterFn(value);
-      
+
       // Check if conversion succeeded and result matches field type
       if (converted !== null && converted !== undefined && isValidType(converted, fieldDef.type)) {
         return {

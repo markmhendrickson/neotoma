@@ -166,7 +166,8 @@ export function classifyNeotomaProcess(args: string): string | null {
     if (a.includes("/repos/neotoma/")) return "api_watcher";
     return "tsx_watcher";
   }
-  if (lower.includes("tsc") && lower.includes("watch") && a.includes("/repos/neotoma/")) return "tsc_watch";
+  if (lower.includes("tsc") && lower.includes("watch") && a.includes("/repos/neotoma/"))
+    return "tsc_watch";
   if (lower.includes("esbuild") && a.includes("/repos/neotoma/")) return "esbuild_ping";
   if (lower.includes("cursor-hooks") && a.includes("repos/neotoma")) return "cursor_hook";
   if (lower.includes("opencode") && a.includes("repos/neotoma/tmp")) return "opencode_smoke";
@@ -177,7 +178,8 @@ export function classifyNeotomaProcess(args: string): string | null {
   ) {
     return "api_watcher";
   }
-  if (lower.includes("run-neotoma-api-node-watch.sh") && a.includes("neotoma")) return "run_dev_task";
+  if (lower.includes("run-neotoma-api-node-watch.sh") && a.includes("neotoma"))
+    return "run_dev_task";
   if (lower.includes("src/actions.ts") && a.includes("neotoma")) return "actions_worker";
   // Prod server chain: cross-env NEOTOMA_ENV + start:server, or node dist/actions.js
   if (/\bneotoma_env=/i.test(a) && /\bstart:server\b/.test(lower)) return "prod_server";
@@ -248,7 +250,8 @@ export function inferProcessEnvHint(command: string, ports: readonly number[]): 
     prodScore += 2;
   if (lower.includes("run_watch_full_prod_launchd")) prodScore += 3;
 
-  if (lower.includes("run_dev_servers_launchd") || lower.includes("dev:server:tunnel")) devScore += 3;
+  if (lower.includes("run_dev_servers_launchd") || lower.includes("dev:server:tunnel"))
+    devScore += 3;
   if (lower.includes("dev:server:tunnel:types")) devScore += 2;
   if (lower.includes("tunnel_noninteractive")) devScore += 1;
   if (lower.includes("setup-https-tunnel")) devScore += 2;
@@ -294,9 +297,7 @@ function readPsSnapshot(): string {
     throw new Error("neotoma processes is not supported on Windows (no portable ps parser).");
   }
   const args =
-    platform === "darwin"
-      ? ["-ax", "-o", "pid=,ppid=,args="]
-      : ["-eo", "pid=,ppid=,args="];
+    platform === "darwin" ? ["-ax", "-o", "pid=,ppid=,args="] : ["-eo", "pid=,ppid=,args="];
   return execFileSync("ps", args, { encoding: "utf-8", maxBuffer: 20 * 1024 * 1024 });
 }
 
@@ -496,11 +497,7 @@ export function shortNeotomaEnvLabel(raw: string | undefined): string | undefine
  * macOS launchd hint: direct child of PID 1, LaunchAgents/Daemons paths, or known launchd entry scripts.
  * On non-macOS returns `-`.
  */
-export function inferLaunchdCell(
-  platform: NodeJS.Platform,
-  ppid: number,
-  command: string
-): string {
+export function inferLaunchdCell(platform: NodeJS.Platform, ppid: number, command: string): string {
   if (platform !== "darwin") return "-";
   if (ppid === 1) return "yes";
   const lower = command.toLowerCase();
@@ -588,7 +585,8 @@ export function inferIsProductionForLogs(
   ports: readonly number[]
 ): boolean {
   const raw =
-    envMap?.get("NEOTOMA_ENV")?.trim() || extractInlineEnvAssignment(command, "NEOTOMA_ENV")?.trim();
+    envMap?.get("NEOTOMA_ENV")?.trim() ||
+    extractInlineEnvAssignment(command, "NEOTOMA_ENV")?.trim();
   if (raw) {
     const l = raw.toLowerCase();
     if (l === "production" || l === "prod") return true;
@@ -745,17 +743,13 @@ function connectedServerPids(
 }
 
 function pickClusterEnv(meta: readonly ServerRowMeta[]): string {
-  const explicit = [...new Set(meta.map((m) => m.explicitEnv).filter((v): v is string => Boolean(v)))];
+  const explicit = [
+    ...new Set(meta.map((m) => m.explicitEnv).filter((v): v is string => Boolean(v))),
+  ];
   if (explicit.length === 1) return explicit[0];
   if (explicit.length > 1) return "mix";
 
-  const hinted = [
-    ...new Set(
-      meta
-        .map((m) => m.row.env_hint)
-        .filter((v) => v && v !== "?")
-    ),
-  ];
+  const hinted = [...new Set(meta.map((m) => m.row.env_hint).filter((v) => v && v !== "?"))];
   if (hinted.length === 1) return hinted[0];
   if (hinted.length > 1) return "mix";
   return "?";
@@ -767,7 +761,9 @@ function pickClusterDataDir(meta: readonly ServerRowMeta[]): string {
   return dirs.sort((a, b) => a.localeCompare(b))[0];
 }
 
-function buildServerContextByPid(rows: readonly NeotomaProcessRow[]): Map<number, ServerRowContext> {
+function buildServerContextByPid(
+  rows: readonly NeotomaProcessRow[]
+): Map<number, ServerRowContext> {
   const candidates = rows.filter(
     (row) => row.categories.includes("server") || row.categories.includes("orchestrator")
   );
@@ -844,12 +840,17 @@ export function buildNeotomaServerSummaries(
     const envMap = readProcEnviron(representative.pid);
     const neotoma_env = stackContext?.neotoma_env ?? representative.env_hint;
     const fromProcDd = envMap?.get("NEOTOMA_DATA_DIR")?.trim();
-    const fromArgvDd = extractInlineEnvAssignment(representative.command, "NEOTOMA_DATA_DIR")?.trim();
+    const fromArgvDd = extractInlineEnvAssignment(
+      representative.command,
+      "NEOTOMA_DATA_DIR"
+    )?.trim();
     let data_dir = "-";
     if (fromProcDd && fromProcDd.length > 0) data_dir = fromProcDd;
     else if (fromArgvDd && fromArgvDd.length > 0) data_dir = fromArgvDd;
-    else if (stackContext?.data_dir && stackContext.data_dir !== "-") data_dir = stackContext.data_dir;
-    const ports = stackContext && stackContext.ports.length > 0 ? stackContext.ports : representative.ports;
+    else if (stackContext?.data_dir && stackContext.data_dir !== "-")
+      data_dir = stackContext.data_dir;
+    const ports =
+      stackContext && stackContext.ports.length > 0 ? stackContext.ports : representative.ports;
     const log_paths = resolveNeotomaServerLogPaths({
       envMap,
       command: representative.command,
@@ -861,7 +862,13 @@ export function buildNeotomaServerSummaries(
       pid: representative.pid,
       neotoma_env,
       port: formatListenPortsForServers(ports),
-      launchagent: inferLaunchAgentLabel(platform, representative.pid, representative.ppid, representative.command, psIndex),
+      launchagent: inferLaunchAgentLabel(
+        platform,
+        representative.pid,
+        representative.ppid,
+        representative.command,
+        psIndex
+      ),
       data_dir,
       log_paths,
     });
@@ -886,8 +893,7 @@ function formatServersTable(summaries: NeotomaServerProcessSummary[]): string {
   const logIndent = " ".repeat(prefixLen);
   const logColW = Math.max(24, termW - logIndent.length - logLabel.length - 2);
   const lines: string[] = [];
-  const hdr =
-    `${"PID".padStart(pidW)}  ${"ENV".padEnd(envW)}  ${"PORT".padEnd(portW)}  ${"LAUNCHAGENT".padEnd(agentW)}  DATA_DIR`;
+  const hdr = `${"PID".padStart(pidW)}  ${"ENV".padEnd(envW)}  ${"PORT".padEnd(portW)}  ${"LAUNCHAGENT".padEnd(agentW)}  DATA_DIR`;
   lines.push(hdr);
   lines.push("-".repeat(Math.min(termW, Math.max(hdr.length, prefixLen + dirColW))));
   for (const s of summaries) {
@@ -929,12 +935,17 @@ export function parseWatchIntervalMs(
 
 function formatWatchIntervalLabel(intervalMs: number): string {
   const seconds = intervalMs / 1000;
-  const rounded = Number.isInteger(seconds) ? String(seconds) : seconds.toFixed(1).replace(/\.0$/, "");
+  const rounded = Number.isInteger(seconds)
+    ? String(seconds)
+    : seconds.toFixed(1).replace(/\.0$/, "");
   return `${rounded}s`;
 }
 
 function watchTimestampLabel(refreshedAt: Date): string {
-  return refreshedAt.toISOString().replace("T", " ").replace(/\.\d{3}Z$/, "Z");
+  return refreshedAt
+    .toISOString()
+    .replace("T", " ")
+    .replace(/\.\d{3}Z$/, "Z");
 }
 
 export function formatServersWatchSnapshot(
@@ -964,7 +975,9 @@ async function runServersWatchLoop(options: {
     const refreshedAt = new Date();
     const summaries = buildNeotomaServerSummaries(scanNeotomaProcesses());
     if (outputMode === "json") {
-      process.stdout.write(JSON.stringify({ refreshed_at: refreshedAt.toISOString(), servers: summaries }) + "\n");
+      process.stdout.write(
+        JSON.stringify({ refreshed_at: refreshedAt.toISOString(), servers: summaries }) + "\n"
+      );
       return;
     }
     if (useTtyRedraw) {
@@ -1065,8 +1078,7 @@ function formatTable(rows: NeotomaProcessRow[]): string {
   const termW = getTerminalWidth(0);
   const commandColW = Math.max(16, termW - prefixLen);
   const lines: string[] = [];
-  const hdr =
-    `${"PID".padStart(pidW)}  ${"PPID".padStart(ppidW)}  ${"ENV".padEnd(envW)}  ${"CAT".padEnd(catW)}  ${"LABEL".padEnd(labelW)}  ${"PORTS".padEnd(portW)}  COMMAND`;
+  const hdr = `${"PID".padStart(pidW)}  ${"PPID".padStart(ppidW)}  ${"ENV".padEnd(envW)}  ${"CAT".padEnd(catW)}  ${"LABEL".padEnd(labelW)}  ${"PORTS".padEnd(portW)}  COMMAND`;
   lines.push(hdr);
   lines.push("-".repeat(Math.min(termW, Math.max(hdr.length, prefixLen + commandColW))));
   const contIndent = " ".repeat(prefixLen);
@@ -1193,10 +1205,7 @@ export function registerProcessesCommands(program: Command, hooks: ProcessesCliH
     .option("--force", "Skip confirmation prompt on a TTY", false)
     .option("--signal <name>", "SIGTERM or SIGKILL (default SIGTERM)", "SIGTERM")
     .action(
-      async (
-        pidsParts: string[],
-        opts: { dryRun?: boolean; force?: boolean; signal: string }
-      ) => {
+      async (pidsParts: string[], opts: { dryRun?: boolean; force?: boolean; signal: string }) => {
         const outputMode = hooks.resolveOutputMode();
         try {
           const want = parsePidList(pidsParts.join(" "));
@@ -1233,16 +1242,12 @@ export function registerProcessesCommands(program: Command, hooks: ProcessesCliH
             if (outputMode === "json") {
               hooks.writeOutput(payload, outputMode);
             } else {
-              process.stdout.write(
-                `Dry run: would send ${sig} to PIDs: ${targets.join(", ")}\n`
-              );
+              process.stdout.write(`Dry run: would send ${sig} to PIDs: ${targets.join(", ")}\n`);
             }
             return;
           }
           if (process.stdin.isTTY && !opts.force) {
-            const ok = await promptYesNo(
-              `Send ${sig} to PIDs ${targets.join(", ")}? [y/N] `
-            );
+            const ok = await promptYesNo(`Send ${sig} to PIDs ${targets.join(", ")}? [y/N] `);
             if (!ok) {
               process.stdout.write("Aborted.\n");
               return;

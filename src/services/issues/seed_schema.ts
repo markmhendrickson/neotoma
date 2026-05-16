@@ -52,36 +52,85 @@ const ISSUE_FIELDS: FieldSpec = [
   { name: "title", type: "string", required: true, description: "Issue title" },
   { name: "body", type: "string", description: "Issue body (first message)" },
   { name: "status", type: "string", required: true, description: "open | closed" },
-  { name: "labels", type: "array", reducer: "merge_array", description: "Issue labels (e.g. bug, doc_gap, enhancement)" },
+  {
+    name: "labels",
+    type: "array",
+    reducer: "merge_array",
+    description: "Issue labels (e.g. bug, doc_gap, enhancement)",
+  },
   { name: "github_number", type: "number", required: true, description: "GitHub issue number" },
   { name: "github_url", type: "string", description: "Full GitHub issue URL" },
-  { name: "local_issue_id", type: "string", description: "Stable local issue id for Neotoma-only issues" },
+  {
+    name: "local_issue_id",
+    type: "string",
+    description: "Stable local issue id for Neotoma-only issues",
+  },
   { name: "repo", type: "string", required: true, description: "GitHub repo (owner/name)" },
   { name: "visibility", type: "string", description: "public | private" },
   { name: "author", type: "string", description: "GitHub username of issue creator" },
-  { name: "github_actor", type: "object", description: "Structured GitHub actor identity: { login, id, type }" },
+  {
+    name: "github_actor",
+    type: "object",
+    description: "Structured GitHub actor identity: { login, id, type }",
+  },
   { name: "created_at", type: "date", description: "Issue creation timestamp" },
   { name: "closed_at", type: "date", description: "Issue close timestamp (null if open)" },
-  { name: "last_synced_at", type: "date", description: "Last time this issue was synced from GitHub" },
+  {
+    name: "last_synced_at",
+    type: "date",
+    description: "Last time this issue was synced from GitHub",
+  },
   { name: "last_message_at", type: "date", description: "Most recent thread-message timestamp" },
-  { name: "last_message_author", type: "string", description: "Author of the most recent thread message" },
-  { name: "sync_pending", type: "boolean", description: "True if local changes have not been pushed to GitHub" },
-  { name: "remote_instance_url", type: "string", description: "Operator Neotoma instance URL for submitted issues" },
-  { name: "remote_entity_id", type: "string", description: "Issue entity id on the remote/operator Neotoma instance" },
-  { name: "remote_conversation_id", type: "string", description: "Issue conversation id on the remote/operator Neotoma instance" },
+  {
+    name: "last_message_author",
+    type: "string",
+    description: "Author of the most recent thread message",
+  },
+  {
+    name: "sync_pending",
+    type: "boolean",
+    description: "True if local changes have not been pushed to GitHub",
+  },
+  {
+    name: "remote_instance_url",
+    type: "string",
+    description: "Operator Neotoma instance URL for submitted issues",
+  },
+  {
+    name: "remote_entity_id",
+    type: "string",
+    description: "Issue entity id on the remote/operator Neotoma instance",
+  },
+  {
+    name: "remote_conversation_id",
+    type: "string",
+    description: "Issue conversation id on the remote/operator Neotoma instance",
+  },
   {
     name: "guest_access_token",
     type: "string",
     description:
       "Guest-scoped token for this issue row (e.g. from remote /store guest_access_token). Sensitive; optional.",
   },
-  { name: "data_source", type: "string", description: "Provenance — e.g. 'github issues api markmhendrickson/neotoma #42 2026-05-06'" },
-  { name: "reporter_git_sha", type: "string", description: "Reporter git HEAD at submission (daemon contract)" },
+  {
+    name: "data_source",
+    type: "string",
+    description: "Provenance — e.g. 'github issues api markmhendrickson/neotoma #42 2026-05-06'",
+  },
+  {
+    name: "reporter_git_sha",
+    type: "string",
+    description: "Reporter git HEAD at submission (daemon contract)",
+  },
   { name: "reporter_git_ref", type: "string", description: "Reporter branch or ref name" },
   { name: "reporter_channel", type: "string", description: "Reporter channel (e.g. ci, local)" },
   { name: "reporter_app_version", type: "string", description: "Reporter app or CLI version" },
   { name: "reporter_ci_run_id", type: "string", description: "CI or workflow run identifier" },
-  { name: "reporter_patch_source_id", type: "string", description: "Source id for reporter patch artifact when applicable" },
+  {
+    name: "reporter_patch_source_id",
+    type: "string",
+    description: "Source id for reporter patch artifact when applicable",
+  },
 ];
 
 function buildSchemaDefinition(): SchemaDefinition {
@@ -136,16 +185,12 @@ function needsSchemaDefinitionR2Repair(def: SchemaDefinition): boolean {
   return !Array.isArray(rules) || rules.length === 0;
 }
 
-function issueMetadataWithGuestAccessDefault(
-  metadata?: SchemaMetadata | null,
-): SchemaMetadata {
+function issueMetadataWithGuestAccessDefault(metadata?: SchemaMetadata | null): SchemaMetadata {
   const existingPolicy = metadata?.guest_access_policy;
   return {
     ...ISSUE_METADATA_DEFAULTS,
     ...(metadata ?? {}),
-    guest_access_policy: VALID_GUEST_ACCESS_POLICIES.has(
-      existingPolicy as GuestAccessPolicyMode,
-    )
+    guest_access_policy: VALID_GUEST_ACCESS_POLICIES.has(existingPolicy as GuestAccessPolicyMode)
       ? existingPolicy
       : ISSUE_GUEST_ACCESS_POLICY,
   };
@@ -160,7 +205,7 @@ async function backfillIssueGuestAccessPolicyMetadata(): Promise<void> {
 
   if (error) {
     throw new Error(
-      `[Issues] failed to inspect active issue schemas for access policy repair: ${error.message}`,
+      `[Issues] failed to inspect active issue schemas for access policy repair: ${error.message}`
     );
   }
 
@@ -179,7 +224,7 @@ async function backfillIssueGuestAccessPolicyMetadata(): Promise<void> {
 
     if (updateError) {
       throw new Error(
-        `[Issues] failed to repair issue schema access policy metadata for ${schema.id}: ${updateError.message}`,
+        `[Issues] failed to repair issue schema access policy metadata for ${schema.id}: ${updateError.message}`
       );
     }
   }
@@ -229,8 +274,7 @@ export async function seedIssueSchema(options?: {
       ...existing.schema_definition,
       fields: { ...definition.fields, ...existing.schema_definition.fields },
       canonical_name_fields: definition.canonical_name_fields,
-      temporal_fields:
-        definition.temporal_fields ?? existing.schema_definition.temporal_fields,
+      temporal_fields: definition.temporal_fields ?? existing.schema_definition.temporal_fields,
     };
     const mergedReducer: ReducerConfig = {
       merge_policies: {
@@ -252,14 +296,12 @@ export async function seedIssueSchema(options?: {
     existing = await registry.loadGlobalSchema(ISSUE_ENTITY_TYPE);
     if (!existing) {
       throw new Error(
-        `[Issues] expected global ${ISSUE_ENTITY_TYPE} schema after R2 metadata repair`,
+        `[Issues] expected global ${ISSUE_ENTITY_TYPE} schema after R2 metadata repair`
       );
     }
   }
 
-  const existingFieldNames = new Set(
-    Object.keys(existing.schema_definition.fields ?? {}),
-  );
+  const existingFieldNames = new Set(Object.keys(existing.schema_definition.fields ?? {}));
   const missing = ISSUE_FIELDS.filter((spec) => !existingFieldNames.has(spec.name));
   if (missing.length === 0) return existing;
 

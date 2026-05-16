@@ -65,7 +65,7 @@ async function postWebhookOnce(
   url: string,
   secret: string,
   event: SubstrateEvent,
-  subscriptionId: string,
+  subscriptionId: string
 ): Promise<{ ok: boolean; status?: number }> {
   const delivery_id = randomUUID();
   const payload = {
@@ -101,10 +101,7 @@ async function postWebhookOnce(
   }
 }
 
-async function bumpFailures(
-  sub: SubscriptionRecord,
-  nextCount: number,
-): Promise<void> {
+async function bumpFailures(sub: SubscriptionRecord, nextCount: number): Promise<void> {
   await createCorrection({
     entity_id: sub.entity_id,
     entity_type: SUBSCRIPTION_ENTITY_TYPE,
@@ -127,9 +124,7 @@ async function markSuccess(sub: SubscriptionRecord): Promise<void> {
     value: 0,
     schema_version: "1.0",
     user_id: sub.user_id,
-    idempotency_key: createHash("sha256")
-      .update(`sub-ok-fail:${sub.entity_id}:0`)
-      .digest("hex"),
+    idempotency_key: createHash("sha256").update(`sub-ok-fail:${sub.entity_id}:0`).digest("hex"),
   });
   await createCorrection({
     entity_id: sub.entity_id,
@@ -175,7 +170,10 @@ export function queueWebhookDelivery(sub: SubscriptionRecord, event: SubstrateEv
   });
 }
 
-async function deliverWebhookWithRetries(sub: SubscriptionRecord, event: SubstrateEvent): Promise<void> {
+async function deliverWebhookWithRetries(
+  sub: SubscriptionRecord,
+  event: SubstrateEvent
+): Promise<void> {
   let failures = sub.consecutive_failures ?? 0;
   const maxFailures = sub.max_failures ?? 10;
   const { refreshSubscriptionInIndex } = await import("./subscription_index.js");
@@ -184,7 +182,12 @@ async function deliverWebhookWithRetries(sub: SubscriptionRecord, event: Substra
     if (i > 0) {
       await new Promise((r) => setTimeout(r, RETRY_DELAYS_MS[i - 1]!));
     }
-    const result = await postWebhookOnce(sub.webhook_url!, sub.webhook_secret!, event, sub.subscription_id);
+    const result = await postWebhookOnce(
+      sub.webhook_url!,
+      sub.webhook_secret!,
+      event,
+      sub.subscription_id
+    );
     if (result.ok) {
       await markSuccess(sub);
       await refreshSubscriptionInIndex(sub.entity_id);

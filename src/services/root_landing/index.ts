@@ -75,7 +75,7 @@ function resolveUnsignedStdioDevShimMcpScriptPath(): string | null {
     const script = path.join(
       config.projectRoot,
       "scripts",
-      "run_neotoma_mcp_unsigned_stdio_dev_shim.sh",
+      "run_neotoma_mcp_unsigned_stdio_dev_shim.sh"
     );
     return existsSync(script) ? script : null;
   } catch {
@@ -146,7 +146,7 @@ export function readNeotomaConfigEnvironment(env: NodeJS.ProcessEnv = process.en
  */
 export function resolveLandingMode(
   req: express.Request,
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv = process.env
 ): LandingMode {
   const explicit = readEnvMode(env);
   if (explicit) return explicit;
@@ -185,12 +185,7 @@ function readPackageVersion(): string {
 }
 
 function readGitSha(env: NodeJS.ProcessEnv = process.env): string | null {
-  const candidates = [
-    env.NEOTOMA_GIT_SHA,
-    env.GIT_SHA,
-    env.SOURCE_COMMIT,
-    env.FLY_MACHINE_VERSION,
-  ];
+  const candidates = [env.NEOTOMA_GIT_SHA, env.GIT_SHA, env.SOURCE_COMMIT, env.FLY_MACHINE_VERSION];
   for (const value of candidates) {
     if (value && value.trim().length) return value.trim();
   }
@@ -217,14 +212,13 @@ function buildEndpointsMap(mode: LandingMode): Record<string, string> {
   return base;
 }
 
-
 export function parseCookieBearer(req: express.Request): string | null {
   return (req.cookies?.[SESSION_COOKIE_NAME] as string | undefined) ?? null;
 }
 
 export function buildLandingContext(
   req: express.Request,
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv = process.env
 ): RootLandingContext {
   const mode = resolveLandingMode(req, env);
   const configEnvironment = readNeotomaConfigEnvironment(env);
@@ -305,9 +299,10 @@ export function buildRootLandingJson(ctx: RootLandingContext): Record<string, un
         href: resolveNavHref(item.href, ctx.publicDocsUrl),
       })),
     })),
-    sandbox_packs: ctx.mode === "sandbox"
-      ? ctx.sandboxPacks.map((p) => ({ id: p.id, kind: p.kind, label: p.label }))
-      : undefined,
+    sandbox_packs:
+      ctx.mode === "sandbox"
+        ? ctx.sandboxPacks.map((p) => ({ id: p.id, kind: p.kind, label: p.label }))
+        : undefined,
     sandbox_default_pack_id: ctx.mode === "sandbox" ? ctx.sandboxDefaultPackId : undefined,
   };
 }

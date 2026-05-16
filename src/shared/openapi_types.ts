@@ -4,6182 +4,6506 @@
  */
 
 export interface paths {
-    "/get_file_url": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get signed file URL
-         * @description Provide a storage path like "files/<source_id>/<filename>".
-         */
-        get: operations["getFileUrl"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+  "/get_file_url": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/health": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Health check */
-        get: operations["healthCheck"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /**
+     * Get signed file URL
+     * @description Provide a storage path like "files/<source_id>/<filename>".
+     */
+    get: operations["getFileUrl"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/health": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/openapi.yaml": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get OpenAPI specification */
-        get: operations["getOpenApiSpec"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** Health check */
+    get: operations["healthCheck"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/openapi.yaml": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/server-info": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get server info */
-        get: operations["getServerInfo"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** Get OpenAPI specification */
+    get: operations["getOpenApiSpec"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/server-info": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/mcp/oauth/initiate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Initiate MCP OAuth flow */
-        post: operations["mcpOAuthInitiate"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** Get server info */
+    get: operations["getServerInfo"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/mcp/oauth/initiate": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/mcp/oauth/authorize": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** OAuth authorization endpoint */
-        get: operations["mcpOAuthAuthorize"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** Initiate MCP OAuth flow */
+    post: operations["mcpOAuthInitiate"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/mcp/oauth/authorize": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/mcp/oauth/token": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** OAuth token exchange */
-        post: operations["mcpOAuthToken"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** OAuth authorization endpoint */
+    get: operations["mcpOAuthAuthorize"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/mcp/oauth/token": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/me": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get current authenticated user */
-        get: operations["getMe"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** OAuth token exchange */
+    post: operations["mcpOAuthToken"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/me": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/mcp/oauth/status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get OAuth connection status */
-        get: operations["mcpOAuthStatus"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** Get current authenticated user */
+    get: operations["getMe"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/mcp/oauth/status": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/mcp/oauth/connections": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List OAuth connections */
-        get: operations["mcpOAuthListConnections"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** Get OAuth connection status */
+    get: operations["mcpOAuthStatus"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/mcp/oauth/connections": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/mcp/oauth/connections/{connection_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Revoke OAuth connection */
-        delete: operations["mcpOAuthRevokeConnection"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** List OAuth connections */
+    get: operations["mcpOAuthListConnections"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/mcp/oauth/connections/{connection_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/.well-known/oauth-authorization-server": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** OAuth 2.0 Authorization Server Metadata (RFC 8414) */
-        get: operations["oauthServerMetadata"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    post?: never;
+    /** Revoke OAuth connection */
+    delete: operations["mcpOAuthRevokeConnection"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/.well-known/oauth-authorization-server": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/.well-known/oauth-protected-resource": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** OAuth 2.0 Protected Resource Metadata */
-        get: operations["oauthProtectedResource"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** OAuth 2.0 Authorization Server Metadata (RFC 8414) */
+    get: operations["oauthServerMetadata"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/.well-known/oauth-protected-resource": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/mcp/oauth/callback": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** OAuth callback endpoint */
-        get: operations["mcpOAuthCallback"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** OAuth 2.0 Protected Resource Metadata */
+    get: operations["oauthProtectedResource"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/mcp/oauth/callback": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/mcp/oauth/key-auth": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Key-based authorization page (GET) */
-        get: operations["mcpOAuthKeyAuthGet"];
-        put?: never;
-        /** Key-based authorization submission (POST) */
-        post: operations["mcpOAuthKeyAuthPost"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** OAuth callback endpoint */
+    get: operations["mcpOAuthCallback"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/mcp/oauth/key-auth": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/mcp/oauth/local-login": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Local login for development (auto-creates dev user) */
-        get: operations["mcpOAuthLocalLogin"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** Key-based authorization page (GET) */
+    get: operations["mcpOAuthKeyAuthGet"];
+    put?: never;
+    /** Key-based authorization submission (POST) */
+    post: operations["mcpOAuthKeyAuthPost"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/mcp/oauth/local-login": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/mcp/oauth/register": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Dynamic Client Registration (RFC 7591) */
-        post: operations["mcpOAuthRegister"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** Local login for development (auto-creates dev user) */
+    get: operations["mcpOAuthLocalLogin"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/mcp/oauth/register": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/mcp/oauth/authorization-details": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Authorization details proxy */
-        get: operations["mcpOAuthAuthorizationDetails"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** Dynamic Client Registration (RFC 7591) */
+    post: operations["mcpOAuthRegister"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/mcp/oauth/authorization-details": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/auth/dev-signin": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Dev-only sign-in endpoint (development mode only) */
-        post: operations["devSignIn"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** Authorization details proxy */
+    get: operations["mcpOAuthAuthorizationDetails"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/auth/dev-signin": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/entities/query": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Query entities */
-        post: operations["queryEntities"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** Dev-only sign-in endpoint (development mode only) */
+    post: operations["devSignIn"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/entities/query": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/entities/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get entity by ID
-         * @description Returns an entity snapshot for the authenticated user. Also accepts a scoped guest capability (`access_token` query parameter or AAuth submitter identity) for entity types whose guest access policy permits reads.
-         */
-        get: operations["getEntityById"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** Query entities */
+    post: operations["queryEntities"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/entities/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/entities/{id}/observations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List observations for entity */
-        get: operations["getEntityObservations"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /**
+     * Get entity by ID
+     * @description Returns an entity snapshot for the authenticated user. Also accepts a scoped guest capability (`access_token` query parameter or AAuth submitter identity) for entity types whose guest access policy permits reads.
+     */
+    get: operations["getEntityById"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/entities/{id}/observations": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/entities/{id}/relationships": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List relationships for entity */
-        get: operations["getEntityRelationships"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** List observations for entity */
+    get: operations["getEntityObservations"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/entities/{id}/relationships": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/entities/duplicates": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List potential duplicate entities for a given entity_type (R5).
-         * @description Read-only fuzzy duplicate detector. Surfaces candidate pairs for operator or agent review and hands off to `/entities/merge`. Never auto-merges. Per-schema thresholds and fields may be declared via `duplicate_detection_threshold` and `duplicate_detection_fields` on the schema definition; callers may override `threshold` per call.
-         */
-        get: operations["listPotentialDuplicates"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** List relationships for entity */
+    get: operations["getEntityRelationships"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/entities/duplicates": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/entities/merge": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Merge duplicate entities */
-        post: operations["mergeEntities"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /**
+     * List potential duplicate entities for a given entity_type (R5).
+     * @description Read-only fuzzy duplicate detector. Surfaces candidate pairs for operator or agent review and hands off to `/entities/merge`. Never auto-merges. Per-schema thresholds and fields may be declared via `duplicate_detection_threshold` and `duplicate_detection_fields` on the schema definition; callers may override `threshold` per call.
+     */
+    get: operations["listPotentialDuplicates"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/entities/merge": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/entities/split": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Split a subset of an entity's observations onto a new entity (R5). Inverse
-         *     of `/entities/merge`: repairs over-merges (typically from pre-v1.2
-         *     heuristic `name_key:title` resolution on session-scoped schemas) by
-         *     re-pointing the `entity_id` foreign key on matching observations
-         *     without modifying any observation content.
-         * @description Symmetric with the merge flow documented in
-         *     `docs/subsystems/entity_merge.md` § 4.3. Exactly one split per
-         *     `(user_id, idempotency_key)` — reuse of the key with a different
-         *     predicate returns `ERR_IDEMPOTENCY_MISMATCH`. The server:
-         *     1. Validates the source entity exists and is not already merged-away.
-         *     2. Selects observations matching `predicate` (schema-agnostic —
-         *        predicate reads columns every observation row carries).
-         *     3. Re-points the `entity_id` FK on matched observations to
-         *        `new_entity.target_entity_id` when supplied, otherwise to a
-         *        deterministic new id derived from
-         *        `(new_entity.entity_type, new_entity.canonical_name)`.
-         *     4. Invalidates both source + new snapshots and recomputes from the
-         *        reduced observation sets.
-         *     5. Inserts a `entity_splits` audit row for auditability.
-         *
-         *     No observation content (`fields`, `observed_at`, `source_id`,
-         *     `interpretation_id`) is ever modified — the immutability guarantee
-         *     consumers rely on is preserved. Typed relationships remain bound to
-         *     the source entity; callers are responsible for rebuilding edges onto
-         *     the new entity via `create_relationship`.
-         */
-        post: operations["splitEntity"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** Merge duplicate entities */
+    post: operations["mergeEntities"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/entities/split": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/sources": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List sources */
-        get: operations["listSources"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /**
+     * Split a subset of an entity's observations onto a new entity (R5). Inverse
+     *     of `/entities/merge`: repairs over-merges (typically from pre-v1.2
+     *     heuristic `name_key:title` resolution on session-scoped schemas) by
+     *     re-pointing the `entity_id` foreign key on matching observations
+     *     without modifying any observation content.
+     * @description Symmetric with the merge flow documented in
+     *     `docs/subsystems/entity_merge.md` § 4.3. Exactly one split per
+     *     `(user_id, idempotency_key)` — reuse of the key with a different
+     *     predicate returns `ERR_IDEMPOTENCY_MISMATCH`. The server:
+     *     1. Validates the source entity exists and is not already merged-away.
+     *     2. Selects observations matching `predicate` (schema-agnostic —
+     *        predicate reads columns every observation row carries).
+     *     3. Re-points the `entity_id` FK on matched observations to
+     *        `new_entity.target_entity_id` when supplied, otherwise to a
+     *        deterministic new id derived from
+     *        `(new_entity.entity_type, new_entity.canonical_name)`.
+     *     4. Invalidates both source + new snapshots and recomputes from the
+     *        reduced observation sets.
+     *     5. Inserts a `entity_splits` audit row for auditability.
+     *
+     *     No observation content (`fields`, `observed_at`, `source_id`,
+     *     `interpretation_id`) is ever modified — the immutability guarantee
+     *     consumers rely on is preserved. Typed relationships remain bound to
+     *     the source entity; callers are responsible for rebuilding edges onto
+     *     the new entity via `create_relationship`.
+     */
+    post: operations["splitEntity"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/sources": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/sources/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get source by ID */
-        get: operations["getSourceById"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** List sources */
+    get: operations["listSources"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/sources/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/sources/{id}/relationships": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List relationships tied to a source
-         * @description Returns relationship snapshots where either (a) a relationship_observation row was stamped with this source_id, or (b) the relationship touches an entity that has an observation from this source.
-         */
-        get: operations["getSourceRelationships"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** Get source by ID */
+    get: operations["getSourceById"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/sources/{id}/relationships": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/observations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List observations */
-        get: operations["listObservations"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /**
+     * List relationships tied to a source
+     * @description Returns relationship snapshots where either (a) a relationship_observation row was stamped with this source_id, or (b) the relationship touches an entity that has an observation from this source.
+     */
+    get: operations["getSourceRelationships"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/observations": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/observations/query": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Query observations */
-        post: operations["queryObservations"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** List observations */
+    get: operations["listObservations"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/observations/query": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/record_activity": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Recent cross-table record activity
-         * @description Lists the most recently changed records across core Neotoma tables
-         *     (entities, sources, observations, interpretations, relationships,
-         *     timeline_events) for the authenticated user, ordered by latest
-         *     created/updated timestamp available on each table.         Powers the
-         *     Inspector's "Activity" panel and the MCP `list_recent_changes`
-         *     tool.
-         */
-        get: operations["getRecordActivity"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** Query observations */
+    post: operations["queryObservations"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/record_activity": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/admin/compliance/scorecard": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Compliance scorecard (conversation_turn aggregates)
-         * @description Aggregates `conversation_turn` / legacy `turn_compliance` / `turn_activity`
-         *     rows from SQLite for the authenticated user into per-cell backfill rates.
-         *     Powers the Inspector compliance dashboard.
-         */
-        get: operations["getComplianceScorecard"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /**
+     * Recent cross-table record activity
+     * @description Lists the most recently changed records across core Neotoma tables
+     *     (entities, sources, observations, interpretations, relationships,
+     *     timeline_events) for the authenticated user, ordered by latest
+     *     created/updated timestamp available on each table.         Powers the
+     *     Inspector's "Activity" panel and the MCP `list_recent_changes`
+     *     tool.
+     */
+    get: operations["getRecordActivity"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/admin/compliance/scorecard": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/agents": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    /**
+     * Compliance scorecard (conversation_turn aggregates)
+     * @description Aggregates `conversation_turn` / legacy `turn_compliance` / `turn_activity`
+     *     rows from SQLite for the authenticated user into per-cell backfill rates.
+     *     Powers the Inspector compliance dashboard.
+     */
+    get: operations["getComplianceScorecard"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/agents": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List agents (writers) seen across the write-path tables
+     * @description Returns distinct agents identified from the `AgentAttribution`
+     *     provenance stamped by the AAuth middleware and the MCP
+     *     `initialize.clientInfo` fallback. Agents are aggregated across
+     *     observations, sources, timeline events, interpretations, and
+     *     relationship observations. The `agent_key` is stable across
+     *     calls and may be used for the `/agents/{key}` lookup.
+     */
+    get: {
+      parameters: {
+        query?: {
+          user_id?: string;
         };
-        /**
-         * List agents (writers) seen across the write-path tables
-         * @description Returns distinct agents identified from the `AgentAttribution`
-         *     provenance stamped by the AAuth middleware and the MCP
-         *     `initialize.clientInfo` fallback. Agents are aggregated across
-         *     observations, sources, timeline events, interpretations, and
-         *     relationship observations. The `agent_key` is stable across
-         *     calls and may be used for the `/agents/{key}` lookup.
-         */
-        get: {
-            parameters: {
-                query?: {
-                    user_id?: string;
-                };
-                header?: never;
-                path?: never;
-                cookie?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Agent directory */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              agents?: components["schemas"]["AgentDirectoryEntry"][];
+              total?: number;
             };
-            requestBody?: never;
-            responses: {
-                /** @description Agent directory */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            agents?: components["schemas"]["AgentDirectoryEntry"][];
-                            total?: number;
-                        };
-                    };
-                };
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/agents/grants": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List agent grants for the authenticated user
+     * @description Returns the user's `agent_grant` entities. Grants gate AAuth
+     *     admission: a request signed by an agent identity that matches an
+     *     `active` grant authenticates as the grant's owning user, with the
+     *     capabilities listed on the grant. Suspended and revoked grants
+     *     are returned for inspection but never admit a request.
+     */
+    get: operations["listAgentGrants"];
+    put?: never;
+    /**
+     * Create an agent grant
+     * @description Creates a new `agent_grant` for the authenticated user. At least
+     *     one of `match_sub` or `match_thumbprint` must be supplied. The
+     *     grant's `capabilities` follow the same shape used by the
+     *     admitted-request authorization check.
+     */
+    post: operations["createAgentGrant"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/agents/grants/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get one agent grant */
+    get: operations["getAgentGrant"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * Update editable fields on an agent grant
+     * @description Patches `label`, `capabilities`, `notes`, or any of the
+     *     `match_*` identity fields. Status transitions go through the
+     *     dedicated `suspend`, `revoke`, and `restore` endpoints.
+     */
+    patch: operations["updateAgentGrant"];
+    trace?: never;
+  };
+  "/agents/grants/{id}/suspend": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Suspend an agent grant
+     * @description Sets the grant's `status` to `suspended`. Suspended grants do
+     *     not admit requests, but can be restored later.
+     */
+    post: operations["suspendAgentGrant"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/agents/grants/{id}/revoke": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Revoke an agent grant
+     * @description Sets the grant's `status` to `revoked`. Revoked grants stay in
+     *     history for audit but never admit a request.
+     */
+    post: operations["revokeAgentGrant"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/agents/grants/{id}/restore": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Restore an agent grant to active
+     * @description Transitions a `suspended` or `revoked` grant back to `active`.
+     */
+    post: operations["restoreAgentGrant"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/agents/{key}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get one agent's directory entry */
+    get: {
+      parameters: {
+        query?: {
+          user_id?: string;
+        };
+        header?: never;
+        path: {
+          /**
+           * @description URL-encoded `agent_key` returned by `/agents`. Format:
+           *     `thumb:<thumbprint>`, `sub:<subject>`, `name:<client>[@version]`,
+           *     or `anonymous`.
+           */
+          key: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Agent details */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              agent?: components["schemas"]["AgentDirectoryEntry"];
             };
+          };
         };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+        /** @description Unknown agent key */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content?: never;
+        };
+      };
     };
-    "/agents/grants": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List agent grants for the authenticated user
-         * @description Returns the user's `agent_grant` entities. Grants gate AAuth
-         *     admission: a request signed by an agent identity that matches an
-         *     `active` grant authenticates as the grant's owning user, with the
-         *     capabilities listed on the grant. Suspended and revoked grants
-         *     are returned for inspection but never admit a request.
-         */
-        get: operations["listAgentGrants"];
-        put?: never;
-        /**
-         * Create an agent grant
-         * @description Creates a new `agent_grant` for the authenticated user. At least
-         *     one of `match_sub` or `match_thumbprint` must be supplied. The
-         *     grant's `capabilities` follow the same shape used by the
-         *     admitted-request authorization check.
-         */
-        post: operations["createAgentGrant"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/agents/{key}/records": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/agents/grants/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    /**
+     * Records written by a specific agent
+     * @description Returns observations, sources, interpretations, timeline events,
+     *     and relationship observations that carry this agent's provenance.
+     *     The shape matches `/record_activity` so clients can reuse the
+     *     same activity feed renderer.
+     */
+    get: {
+      parameters: {
+        query?: {
+          user_id?: string;
+          limit?: number;
+          offset?: number;
         };
-        /** Get one agent grant */
-        get: operations["getAgentGrant"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /**
-         * Update editable fields on an agent grant
-         * @description Patches `label`, `capabilities`, `notes`, or any of the
-         *     `match_*` identity fields. Status transitions go through the
-         *     dedicated `suspend`, `revoke`, and `restore` endpoints.
-         */
-        patch: operations["updateAgentGrant"];
-        trace?: never;
-    };
-    "/agents/grants/{id}/suspend": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+        header?: never;
+        path: {
+          key: string;
         };
-        get?: never;
-        put?: never;
-        /**
-         * Suspend an agent grant
-         * @description Sets the grant's `status` to `suspended`. Suspended grants do
-         *     not admit requests, but can be restored later.
-         */
-        post: operations["suspendAgentGrant"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/agents/grants/{id}/revoke": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Revoke an agent grant
-         * @description Sets the grant's `status` to `revoked`. Revoked grants stay in
-         *     history for audit but never admit a request.
-         */
-        post: operations["revokeAgentGrant"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/agents/grants/{id}/restore": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Restore an agent grant to active
-         * @description Transitions a `suspended` or `revoked` grant back to `active`.
-         */
-        post: operations["restoreAgentGrant"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/agents/{key}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get one agent's directory entry */
-        get: {
-            parameters: {
-                query?: {
-                    user_id?: string;
-                };
-                header?: never;
-                path: {
-                    /**
-                     * @description URL-encoded `agent_key` returned by `/agents`. Format:
-                     *     `thumb:<thumbprint>`, `sub:<subject>`, `name:<client>[@version]`,
-                     *     or `anonymous`.
-                     */
-                    key: string;
-                };
-                cookie?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Records scoped to this agent */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": {
+              items?: Record<string, never>[];
+              has_more?: boolean;
+              limit?: number;
+              offset?: number;
             };
-            requestBody?: never;
-            responses: {
-                /** @description Agent details */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            agent?: components["schemas"]["AgentDirectoryEntry"];
-                        };
-                    };
-                };
-                /** @description Unknown agent key */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
+          };
         };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+      };
     };
-    "/agents/{key}/records": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Records written by a specific agent
-         * @description Returns observations, sources, interpretations, timeline events,
-         *     and relationship observations that carry this agent's provenance.
-         *     The shape matches `/record_activity` so clients can reuse the
-         *     same activity feed renderer.
-         */
-        get: {
-            parameters: {
-                query?: {
-                    user_id?: string;
-                    limit?: number;
-                    offset?: number;
-                };
-                header?: never;
-                path: {
-                    key: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Records scoped to this agent */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            items?: Record<string, never>[];
-                            has_more?: boolean;
-                            limit?: number;
-                            offset?: number;
-                        };
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/recent_conversations": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/recent_conversations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Recent conversations with nested messages
-         * @description Lists `conversation` entities for the authenticated user ordered by
-         *     their latest activity (conversation-level activity or the latest
-         *     activity of any `conversation_message` — or legacy `agent_message` —
-         *     that is `PART_OF` that conversation). Each conversation includes its
-         *     messages in reverse chronological order, and each message includes
-         *     non-`PART_OF` entities linked from that message.
-         *     Powers the Inspector recent conversations view and dashboard widget.
-         */
-        get: operations["getRecentConversations"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /**
+     * Recent conversations with nested messages
+     * @description Lists `conversation` entities for the authenticated user ordered by
+     *     their latest activity (conversation-level activity or the latest
+     *     activity of any `conversation_message` — or legacy `agent_message` —
+     *     that is `PART_OF` that conversation). Each conversation includes its
+     *     messages in reverse chronological order, and each message includes
+     *     non-`PART_OF` entities linked from that message.
+     *     Powers the Inspector recent conversations view and dashboard widget.
+     */
+    get: operations["getRecentConversations"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/recent_conversations/{conversation_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/recent_conversations/{conversation_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get one conversation with nested messages
-         * @description Returns the same payload shape as a single element of `GET /recent_conversations` `items`,
-         *     including all `PART_OF` messages, non-`PART_OF` related entities per message, and optional
-         *     per-turn hook summaries. Used by the Inspector conversation detail view.
-         */
-        get: operations["getRecentConversation"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /**
+     * Get one conversation with nested messages
+     * @description Returns the same payload shape as a single element of `GET /recent_conversations` `items`,
+     *     including all `PART_OF` messages, non-`PART_OF` related entities per message, and optional
+     *     per-turn hook summaries. Used by the Inspector conversation detail view.
+     */
+    get: operations["getRecentConversation"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/observations/create": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/observations/create": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Create observation */
-        post: operations["createObservation"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** Create observation */
+    post: operations["createObservation"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/relationships": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/relationships": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List relationships */
-        get: operations["listRelationships"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** List relationships */
+    get: operations["listRelationships"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/relationships/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/relationships/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get relationship by ID */
-        get: operations["getRelationshipById"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** Get relationship by ID */
+    get: operations["getRelationshipById"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/relationships/snapshot": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/relationships/snapshot": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Get relationship snapshot with provenance */
-        post: operations["getRelationshipSnapshot"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** Get relationship snapshot with provenance */
+    post: operations["getRelationshipSnapshot"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/timeline": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/timeline": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List timeline events */
-        get: operations["listTimeline"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** List timeline events */
+    get: operations["listTimeline"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/timeline/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/timeline/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get timeline event by ID */
-        get: operations["getTimelineById"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** Get timeline event by ID */
+    get: operations["getTimelineById"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/schemas": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/schemas": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List entity schemas */
-        get: operations["listSchemas"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** List entity schemas */
+    get: operations["listSchemas"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/schemas/{entity_type}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/schemas/{entity_type}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get schema by entity type */
-        get: operations["getSchemaByEntityType"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** Get schema by entity type */
+    get: operations["getSchemaByEntityType"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/interpretations": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/interpretations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List interpretations */
-        get: operations["listInterpretations"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** List interpretations */
+    get: operations["listInterpretations"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/interpretations/create": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/interpretations/create": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Create an interpretation from agent-extracted entities */
-        post: operations["createInterpretation"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** Create an interpretation from agent-extracted entities */
+    post: operations["createInterpretation"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/stats": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/stats": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get dashboard stats */
-        get: operations["getStats"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** Get dashboard stats */
+    get: operations["getStats"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/access_policies": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/access_policies": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List effective guest access policies for all entity types
-         * @description Returns the effective resolved guest access policy for every entity type
-         *     that has a non-default (non-closed) policy, plus the default mode.
-         *     Resolution precedence per type: env var > SchemaMetadata > config file > closed.
-         */
-        get: operations["getAccessPolicies"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /**
+     * List effective guest access policies for all entity types
+     * @description Returns the effective resolved guest access policy for every entity type
+     *     that has a non-default (non-closed) policy, plus the default mode.
+     *     Resolution precedence per type: env var > SchemaMetadata > config file > closed.
+     */
+    get: operations["getAccessPolicies"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/store": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/store": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Store structured entities, unstructured files, or both */
-        post: operations["store"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** Store structured entities, unstructured files, or both */
+    post: operations["store"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/get_entity_snapshot": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/get_entity_snapshot": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Get entity snapshot with provenance */
-        post: operations["getEntitySnapshot"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** Get entity snapshot with provenance */
+    post: operations["getEntitySnapshot"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/list_observations": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/list_observations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** List observations for entity */
-        post: operations["listObservationsForEntity"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** List observations for entity */
+    post: operations["listObservationsForEntity"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/get_field_provenance": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/get_field_provenance": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Get field provenance */
-        post: operations["getFieldProvenance"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** Get field provenance */
+    post: operations["getFieldProvenance"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/create_relationship": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/create_relationship": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Create relationship */
-        post: operations["createRelationship"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** Create relationship */
+    post: operations["createRelationship"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/create_relationships": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/create_relationships": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Create relationships */
-        post: operations["createRelationships"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** Create relationships */
+    post: operations["createRelationships"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/list_relationships": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/list_relationships": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** List relationships */
-        post: operations["listRelationshipsForEntity"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** List relationships */
+    post: operations["listRelationshipsForEntity"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/retrieve_entity_by_identifier": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/retrieve_entity_by_identifier": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Retrieve entity by identifier
-         * @description Search for entity by name, email, or other identifier
-         */
-        post: operations["retrieveEntityByIdentifier"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /**
+     * Retrieve entity by identifier
+     * @description Search for entity by name, email, or other identifier
+     */
+    post: operations["retrieveEntityByIdentifier"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/retrieve_related_entities": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/retrieve_related_entities": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Retrieve related entities
-         * @description Get entities connected via relationships with n-hop traversal support
-         */
-        post: operations["retrieveRelatedEntities"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /**
+     * Retrieve related entities
+     * @description Get entities connected via relationships with n-hop traversal support
+     */
+    post: operations["retrieveRelatedEntities"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/retrieve_graph_neighborhood": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/retrieve_graph_neighborhood": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Retrieve graph neighborhood
-         * @description Get complete graph neighborhood including entities, relationships, sources, and events
-         */
-        post: operations["retrieveGraphNeighborhood"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /**
+     * Retrieve graph neighborhood
+     * @description Get complete graph neighborhood including entities, relationships, sources, and events
+     */
+    post: operations["retrieveGraphNeighborhood"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/issues/bulk_close": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/issues/bulk_close": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Bulk close issues
-         * @description For each `issue` entity id owned by the caller, closes the GitHub issue when `github_number` is linked, then records `status: closed` in Neotoma.
-         */
-        post: operations["bulkCloseIssues"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /**
+     * Bulk close issues
+     * @description For each `issue` entity id owned by the caller, closes the GitHub issue when `github_number` is linked, then records `status: closed` in Neotoma.
+     */
+    post: operations["bulkCloseIssues"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/issues/bulk_remove": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/issues/bulk_remove": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Bulk remove issues from Neotoma
-         * @description Soft-deletes each `issue` entity. When the issue is still open and linked to GitHub (`github_number` > 0), closes the GitHub issue first.
-         */
-        post: operations["bulkRemoveIssues"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /**
+     * Bulk remove issues from Neotoma
+     * @description Soft-deletes each `issue` entity. When the issue is still open and linked to GitHub (`github_number` > 0), closes the GitHub issue first.
+     */
+    post: operations["bulkRemoveIssues"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/issues/add_message": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/issues/add_message": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Add message to issue thread
-         * @description Appends a conversation_message to the issue thread (same flow as MCP add_issue_message). May submit to the configured operator Neotoma instance and post a GitHub comment when the issue is linked. Authenticated users can append to their scoped issues; scoped guest callers can append with `guest_access_token` or submitter AAuth identity.
-         */
-        post: operations["issuesAddMessage"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /**
+     * Add message to issue thread
+     * @description Appends a conversation_message to the issue thread (same flow as MCP add_issue_message). May submit to the configured operator Neotoma instance and post a GitHub comment when the issue is linked. Authenticated users can append to their scoped issues; scoped guest callers can append with `guest_access_token` or submitter AAuth identity.
+     */
+    post: operations["issuesAddMessage"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/issues/submit": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/issues/submit": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Submit issue
-         * @description Creates a local `issue` row, optional GitHub mirror for public visibility, and optional forward
-         *     to the configured operator instance (same flow as MCP submit_issue).
-         *     Authenticated users use the normal user scope. AAuth-signed guest
-         *     submitters may create operator-side issues when the `issue`,
-         *     `conversation`, and `conversation_message` guest access policies allow
-         *     writes; the response includes a guest read-back token.
-         *
-         *     **Reporter environment is required.** Callers MUST supply at least
-         *     one of `reporter_git_sha` or `reporter_app_version`. Submissions
-         *     missing both are rejected with `error_code: ERR_REPORTER_ENVIRONMENT_REQUIRED`.
-         *     See `docs/subsystems/issues.md` § Reporter provenance.
-         */
-        post: operations["issuesSubmit"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /**
+     * Submit issue
+     * @description Creates a local `issue` row, optional GitHub mirror for public visibility, and optional forward
+     *     to the configured operator instance (same flow as MCP submit_issue).
+     *     Authenticated users use the normal user scope. AAuth-signed guest
+     *     submitters may create operator-side issues when the `issue`,
+     *     `conversation`, and `conversation_message` guest access policies allow
+     *     writes; the response includes a guest read-back token.
+     *
+     *     **Reporter environment is required.** Callers MUST supply at least
+     *     one of `reporter_git_sha` or `reporter_app_version`. Submissions
+     *     missing both are rejected with `error_code: ERR_REPORTER_ENVIRONMENT_REQUIRED`.
+     *     See `docs/subsystems/issues.md` § Reporter provenance.
+     */
+    post: operations["issuesSubmit"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/issues/status": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/issues/status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Get issue status
-         * @description Returns issue snapshot and thread messages; may sync from GitHub when stale and read through to the operator instance when the local row mirrors remote (MCP get_issue_status parity). Authenticated users read within their user scope. Scoped guest callers can read with `guest_access_token` or submitter AAuth identity.
-         */
-        post: operations["issuesGetStatus"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /**
+     * Get issue status
+     * @description Returns issue snapshot and thread messages; may sync from GitHub when stale and read through to the operator instance when the local row mirrors remote (MCP get_issue_status parity). Authenticated users read within their user scope. Scoped guest callers can read with `guest_access_token` or submitter AAuth identity.
+     */
+    post: operations["issuesGetStatus"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/issues/sync": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/issues/sync": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Sync issues from GitHub
-         * @description Pulls issues and comments from the configured GitHub repo into local Neotoma (MCP sync_issues parity).
-         */
-        post: operations["issuesSync"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /**
+     * Sync issues from GitHub
+     * @description Pulls issues and comments from the configured GitHub repo into local Neotoma (MCP sync_issues parity).
+     */
+    post: operations["issuesSync"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/delete_entity": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/delete_entity": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Delete entity
-         * @description Soft delete entity (creates deletion observation, reversible)
-         */
-        post: operations["deleteEntity"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /**
+     * Delete entity
+     * @description Soft delete entity (creates deletion observation, reversible)
+     */
+    post: operations["deleteEntity"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/restore_entity": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/restore_entity": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Restore entity
-         * @description Restore a soft-deleted entity
-         */
-        post: operations["restoreEntity"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /**
+     * Restore entity
+     * @description Restore a soft-deleted entity
+     */
+    post: operations["restoreEntity"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/delete_relationship": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/delete_relationship": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Delete relationship
-         * @description Soft delete relationship (creates deletion observation, reversible)
-         */
-        post: operations["deleteRelationship"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /**
+     * Delete relationship
+     * @description Soft delete relationship (creates deletion observation, reversible)
+     */
+    post: operations["deleteRelationship"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/restore_relationship": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/restore_relationship": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Restore relationship
-         * @description Restore a soft-deleted relationship
-         */
-        post: operations["restoreRelationship"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /**
+     * Restore relationship
+     * @description Restore a soft-deleted relationship
+     */
+    post: operations["restoreRelationship"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/analyze_schema_candidates": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/analyze_schema_candidates": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Analyze schema candidates
-         * @description Analyze raw_fragments to identify fields for schema promotion
-         */
-        post: operations["analyzeSchemaCandidates"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /**
+     * Analyze schema candidates
+     * @description Analyze raw_fragments to identify fields for schema promotion
+     */
+    post: operations["analyzeSchemaCandidates"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/get_schema_recommendations": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/get_schema_recommendations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Get schema recommendations
-         * @description Get schema update recommendations from raw_fragments analysis
-         */
-        post: operations["getSchemaRecommendations"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /**
+     * Get schema recommendations
+     * @description Get schema update recommendations from raw_fragments analysis
+     */
+    post: operations["getSchemaRecommendations"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/update_schema_incremental": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/update_schema_incremental": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Update schema incrementally
-         * @description Add new fields to existing schema
-         */
-        post: operations["updateSchemaIncremental"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /**
+     * Update schema incrementally
+     * @description Add new fields to existing schema
+     */
+    post: operations["updateSchemaIncremental"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/register_schema": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/register_schema": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Register schema
-         * @description Register a new schema or schema version
-         */
-        post: operations["registerSchema"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /**
+     * Register schema
+     * @description Register a new schema or schema version
+     */
+    post: operations["registerSchema"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/correct": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/correct": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Create correction
-         * @description Create high-priority correction observation
-         */
-        post: operations["correct"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /**
+     * Create correction
+     * @description Create high-priority correction observation
+     */
+    post: operations["correct"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/get_authenticated_user": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/get_authenticated_user": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Get authenticated user
-         * @description Get authenticated user ID for current session
-         */
-        post: operations["getAuthenticatedUser"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /**
+     * Get authenticated user
+     * @description Get authenticated user ID for current session
+     */
+    post: operations["getAuthenticatedUser"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/session": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/session": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Resolved session attribution
-         * @description Read-only preflight that returns the resolved attribution tier and
-         *     identity fields for the current request along with the active
-         *     anonymous-write policy. Local proxies and operators use this as a
-         *     health check before enabling writes. MUST NOT create rows or emit
-         *     telemetry; see `src/services/session_info.ts` and
-         *     `docs/subsystems/agent_attribution_integration.md`.
-         */
-        get: operations["getSessionInfo"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /**
+     * Resolved session attribution
+     * @description Read-only preflight that returns the resolved attribution tier and
+     *     identity fields for the current request along with the active
+     *     anonymous-write policy. Local proxies and operators use this as a
+     *     health check before enabling writes. MUST NOT create rows or emit
+     *     telemetry; see `src/services/session_info.ts` and
+     *     `docs/subsystems/agent_attribution_integration.md`.
+     */
+    get: operations["getSessionInfo"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/health_check_snapshots": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/health_check_snapshots": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Health check snapshots
-         * @description Check for stale entity snapshots
-         */
-        post: operations["healthCheckSnapshots"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /**
+     * Health check snapshots
+     * @description Check for stale entity snapshots
+     */
+    post: operations["healthCheckSnapshots"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/subscribe": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/subscribe": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Create a substrate event subscription (webhook or SSE) */
-        post: operations["subscribe"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** Create a substrate event subscription (webhook or SSE) */
+    post: operations["subscribe"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/unsubscribe": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/unsubscribe": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Deactivate a subscription */
-        post: operations["unsubscribe"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** Deactivate a subscription */
+    post: operations["unsubscribe"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/list_subscriptions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/list_subscriptions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** List active subscriptions for the current user */
-        post: operations["listSubscriptions"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** List active subscriptions for the current user */
+    post: operations["listSubscriptions"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/get_subscription_status": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/get_subscription_status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Get subscription delivery status */
-        post: operations["getSubscriptionStatus"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** Get subscription delivery status */
+    post: operations["getSubscriptionStatus"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/events/stream": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/events/stream": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Server-sent events stream for a subscription */
-        get: operations["eventsStream"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** Server-sent events stream for a subscription */
+    get: operations["eventsStream"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/peers": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/peers": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List configured Neotoma peers for the authenticated user */
-        get: operations["listPeers"];
-        put?: never;
-        /** Add a Neotoma peer configuration */
-        post: operations["addPeer"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** List configured Neotoma peers for the authenticated user */
+    get: operations["listPeers"];
+    put?: never;
+    /** Add a Neotoma peer configuration */
+    post: operations["addPeer"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/peers/{peer_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/peers/{peer_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get one peer configuration (secret redacted) plus remote /health probe and semver compat vs this server */
-        get: operations["getPeerStatus"];
-        put?: never;
-        post?: never;
-        /** Deactivate a peer configuration */
-        delete: operations["removePeer"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** Get one peer configuration (secret redacted) plus remote /health probe and semver compat vs this server */
+    get: operations["getPeerStatus"];
+    put?: never;
+    post?: never;
+    /** Deactivate a peer configuration */
+    delete: operations["removePeer"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/peers/{peer_id}/sync": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/peers/{peer_id}/sync": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Bounded outbound peer sync (POST signed /sync/webhook per observation) */
-        post: operations["syncPeer"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** Bounded outbound peer sync (POST signed /sync/webhook per observation) */
+    post: operations["syncPeer"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/peers/resolve_sync_conflict": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/peers/resolve_sync_conflict": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Resolve a sync conflict (prefer_remote re-fetches remote guest snapshot; prefer_local is a no-op with guidance) */
-        post: operations["resolveSyncConflict"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** Resolve a sync conflict (prefer_remote re-fetches remote guest snapshot; prefer_local is a no-op with guidance) */
+    post: operations["resolveSyncConflict"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/sync/webhook": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/sync/webhook": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Apply one inbound cross-instance sync notification */
-        post: operations["applySyncWebhook"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** Apply one inbound cross-instance sync notification */
+    post: operations["applySyncWebhook"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/sync/entities": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/sync/entities": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** List local entity snapshots for an authenticated peer sync pull */
-        post: operations["listSyncEntities"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
+    get?: never;
+    put?: never;
+    /** List local entity snapshots for an authenticated peer sync pull */
+    post: operations["listSyncEntities"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
-    schemas: {
-        FileUrlResponse: {
-            /** @description Signed URL for accessing the file */
-            url?: string;
-        };
-        Error: {
-            error?: string;
-        };
-        ErrorEnvelope: {
-            error_code?: string;
-            message?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-            trace_id?: string;
-            /** Format: date-time */
-            timestamp?: string;
-        };
-        RecentConversationRelatedEntity: {
-            entity_id?: string;
-            entity_type?: string | null;
-            canonical_name?: string | null;
-            title?: string | null;
-            relationship_type?: string;
-        };
-        ConversationTurnHookSummary: {
-            hook_event_count?: number;
-            tool_invocation_count?: number;
-            store_structured_calls?: number;
-            retrieve_calls?: number;
-            retrieved_entity_count?: number;
-            stored_entity_count?: number;
-            neotoma_tool_failures?: number;
-        };
-        RecentConversationMessage: {
-            message_id?: string;
-            canonical_name?: string | null;
-            role?: string | null;
-            sender_kind?: string | null;
-            content?: string | null;
-            turn_key?: string | null;
-            activity_at?: string;
-            related_entities?: components["schemas"]["RecentConversationRelatedEntity"][];
-            hook_summary?: null | components["schemas"]["ConversationTurnHookSummary"];
-        };
-        RecentConversationItem: {
-            conversation_id?: string;
-            canonical_name?: string | null;
-            title?: string | null;
-            activity_at?: string;
-            message_count?: number;
-            latest_write_provenance?: {
-                [key: string]: unknown;
-            } | null;
-            messages?: components["schemas"]["RecentConversationMessage"][];
-        };
-        /**
-         * @description A single per-observation failure inside an
-         *     `ERR_STORE_RESOLUTION_FAILED` response.
-         */
-        StoreResolutionIssue: {
-            /** @description Index of the offending entity in the request `entities` array. */
-            observation_index?: number;
-            entity_type?: string;
-            /** @enum {string} */
-            code?: "ERR_CANONICAL_NAME_UNRESOLVED" | "ERR_MERGE_REFUSED" | "ERR_CONVERSATION_MESSAGE_ROLE_CONFLICT" | "ERR_RELATIONSHIP_ENTITY_ID_FORMAT";
-            message?: string;
-            /**
-             * @description Code-specific context (e.g. `seen_fields`, `attempted_value`,
-             *     `entity_id`, `canonical_name`, `resolver_path`).
-             */
-            details?: {
-                [key: string]: unknown;
-            };
-            /**
-             * @description Optional structured upgrade guidance. Populated when the server can
-             *     detect a common caller mistake (e.g. wrapping fields inside
-             *     `attributes`) or when a schema with `name_collision_policy: reject`
-             *     refuses a heuristic merge (R4 — then `required_identity_fields`
-             *     carries the schema-derived identity key list). PII-free by
-             *     construction. Consumers MAY display `text` verbatim to end users
-             *     and MAY key on `required_identity_fields` programmatically to
-             *     compose a corrected payload without parsing prose.
-             */
-            hint?: string | {
-                /**
-                 * @description Short, actionable instruction for the caller (e.g. "Declare
-                 *     `conversation_id` on entity_type \"conversation\"…"). PII-free.
-                 */
-                text: string;
-                required_identity_fields?: components["schemas"]["RequiredIdentityFields"];
-            };
-        };
-        /**
-         * @description R4: schema-derived minimum identity payload for an `entity_type`.
-         *     Surfaced inside `StoreResolutionIssue.hint.required_identity_fields`
-         *     when a schema `name_collision_policy: reject` refuses a heuristic
-         *     merge, and exposed by the MCP tool surface so agents can compose
-         *     deterministic writes without per-type knowledge. Generated from
-         *     `SchemaDefinition.canonical_name_fields` — adding a new reject-policy
-         *     schema automatically extends the contract.
-         */
-        RequiredIdentityFields: {
-            entity_type: string;
-            /**
-             * @description `true` when the schema declares `name_collision_policy: "reject"`.
-             *     When `false`, the fields are informational — the caller MAY still
-             *     benefit from supplying them to avoid heuristic matching warnings.
-             */
-            required: boolean;
-            /**
-             * @description Single-field canonical rules. Supplying ANY one of these on the
-             *     payload is sufficient to satisfy the schema-level identity rule.
-             */
-            any_of_fields: string[];
-            /**
-             * @description Composite canonical rules. EVERY field in at least ONE composite
-             *     group must be present to satisfy that group.
-             */
-            composite_fields: string[][];
-        };
-        /**
-         * @description 400 response shape for `ERR_STORE_RESOLUTION_FAILED`. Distinct from the
-         *     generic `ErrorEnvelope` because it carries a per-observation `issues`
-         *     array rather than a free-form `details` object.
-         */
-        StoreResolutionErrorEnvelope: {
-            error?: {
-                /** @enum {string} */
-                code?: "ERR_STORE_RESOLUTION_FAILED";
-                message?: string;
-                issues?: components["schemas"]["StoreResolutionIssue"][];
-            };
-        };
-        /**
-         * @description R5: declarative predicate describing which observations of the source
-         *     entity should be re-pointed onto the new entity. Every form reads a
-         *     column every observation row carries so the predicate surface is
-         *     schema-agnostic. At least one form MUST be supplied.
-         */
-        SplitPredicate: {
-            /**
-             * Format: date-time
-             * @description Match observations whose `observed_at` is >= this ISO-8601
-             *     timestamp. Primary use case: "move every observation from this
-             *     session forward onto a new entity".
-             */
-            observed_at_gte?: string;
-            /**
-             * @description Match observations whose `source_id` is one of the listed
-             *     sources. Useful when a single over-merged entity collected
-             *     observations from distinct sources that should live on separate
-             *     entities.
-             */
-            source_id_in?: string[];
-            observation_field_equals?: {
-                /** @description Observation `fields.<field>` to compare. */
-                field: string;
-                /** @description String-equals comparison (no type coercion). */
-                value?: string;
-                /** @description String-prefix comparison (no type coercion). */
-                value_starts_with?: string;
-            };
-        };
-        SplitEntityRequest: {
-            source_entity_id: string;
-            predicate: components["schemas"]["SplitPredicate"];
-            new_entity: {
-                entity_type: string;
-                canonical_name: string;
-                /**
-                 * @description Optional — re-point matched observations onto a pre-existing
-                 *     entity id instead of deriving a new deterministic id.
-                 */
-                target_entity_id?: string;
-            };
-            /**
-             * @description Required per MUST #11. Reuse with a different predicate returns
-             *     `ERR_IDEMPOTENCY_MISMATCH`; reuse with the same predicate returns
-             *     the original split result (`replayed: true`).
-             */
-            idempotency_key: string;
-            /** @description Free-text rationale recorded on the audit row. */
-            reason?: string;
-            user_id?: string;
-        };
-        SplitEntityResponse: {
-            split_id: string;
-            source_entity_id: string;
-            new_entity_id: string;
-            /** @description Number of observations whose `entity_id` was re-pointed. */
-            observations_moved: number;
-            /** Format: date-time */
-            split_at: string;
-            /**
-             * @description `true` when the response is an idempotent replay of a prior
-             *     identical split (same `user_id` + `idempotency_key` + predicate).
-             */
-            replayed: boolean;
-        };
-        /**
-         * @description Agent-identity provenance recorded on every durable write-path record
-         *     (observations, relationships, sources, interpretations, timeline
-         *     events). Fields are stamped additively into the existing provenance
-         *     JSON blob on each record so no schema migration was required; the
-         *     shape below documents the keys consumers can rely on.
-         *
-         *     When AAuth is active the `agent_*` keys carry the cryptographically
-         *     verified identity; `client_name`/`client_version` come from the MCP
-         *     `initialize.clientInfo` fallback and are self-reported. Every field
-         *     is optional; callers MUST treat a missing key as "no evidence at
-         *     that tier" and rely on `attribution_tier` for the trust signal.
-         */
-        AgentAttribution: {
-            /** @description Raw JWK-serialised public key used for the HTTP signature. */
-            agent_public_key?: string;
-            /** @description RFC 7638 JWK thumbprint of `agent_public_key`; stable across sessions. */
-            agent_thumbprint?: string;
-            /** @description HTTP Message Signature algorithm (`ES256`, `EdDSA`, …). */
-            agent_algorithm?: string;
-            /** @description `sub` claim of the `aa-agent+jwt` agent token. */
-            agent_sub?: string;
-            /** @description `iss` claim (issuer URL) of the agent token. */
-            agent_iss?: string;
-            /** @description Self-reported MCP `initialize.clientInfo.name`. NOT verified. */
-            client_name?: string;
-            /** @description Self-reported MCP `initialize.clientInfo.version`. */
-            client_version?: string;
-            /** @description Existing OAuth connection id when the request is OAuth-authenticated. */
-            connection_id?: string;
-            /**
-             * @description Derived trust tier; see `src/crypto/agent_identity.ts`.
-             * @enum {string}
-             */
-            attribution_tier?: "hardware" | "operator_attested" | "software" | "unverified_client" | "anonymous";
-            /**
-             * Format: date-time
-             * @description ISO-8601 timestamp when the attribution block was stamped.
-             */
-            attributed_at?: string;
-        };
-        /**
-         * @description Active attribution policy for the Neotoma instance. Governs how
-         *     anonymous (unattributed) and sub-tier writes are handled on each
-         *     write path. Ships defaults that preserve historical behaviour
-         *     (`anonymous_writes: allow`, no `min_tier`).
-         */
-        AttributionPolicySnapshot: {
-            /**
-             * @description Global policy mode applied to writes whose resolved
-             *     `attribution_tier` is `anonymous`.
-             * @enum {string}
-             */
-            anonymous_writes: "allow" | "warn" | "reject";
-            /**
-             * @description Optional floor tier; writes with a resolved tier below this
-             *     floor are rejected with `ATTRIBUTION_REQUIRED`.
-             * @enum {string}
-             */
-            min_tier?: "hardware" | "operator_attested" | "software" | "unverified_client";
-            /**
-             * @description Optional per-write-path overrides keyed by canonical write
-             *     path (`observations`, `relationships`, `sources`,
-             *     `interpretations`, `timeline_events`, `corrections`).
-             */
-            per_path?: {
-                [key: string]: "allow" | "warn" | "reject";
-            };
-        };
-        /**
-         * @description Diagnostic summary of the most recent AAuth / `clientInfo`
-         *     resolution decision. Safe to mirror to clients; never contains
-         *     signatures or public keys. Present only when the server has a
-         *     decision to surface.
-         */
-        SessionAttributionDecision: {
-            signature_present: boolean;
-            signature_verified: boolean;
-            signature_error_code?: string;
-            client_info_raw_name?: string;
-            /** @enum {string} */
-            client_info_normalised_to_null_reason?: "too_generic" | "empty" | "not_a_string";
-            /** @enum {string} */
-            resolved_tier: "hardware" | "operator_attested" | "software" | "unverified_client" | "anonymous";
-            /**
-             * @description Outcome of the `cnf.attestation` envelope verifier. Always
-             *     present on AAuth-verified requests (with `verified: false,
-             *     format: "unknown", reason: "not_present"` when no envelope
-             *     was supplied) and absent on unsigned requests.
-             */
-            attestation?: {
-                verified: boolean;
-                /** @enum {string} */
-                format: "apple-secure-enclave" | "webauthn-packed" | "tpm2" | "unknown";
-                /**
-                 * @description Failure reason; only present when `verified=false`.
-                 * @enum {string}
-                 */
-                reason?: "not_present" | "unsupported_format" | "key_binding_failed" | "challenge_mismatch" | "chain_invalid" | "signature_invalid" | "aaguid_not_trusted" | "pubarea_mismatch" | "not_implemented" | "malformed";
-            } | null;
-            /**
-             * @description Set when the operator allowlist promoted the request to
-             *     `operator_attested`. `"issuer"` means a hit on
-             *     `NEOTOMA_OPERATOR_ATTESTED_ISSUERS`; `"issuer_subject"` means
-             *     a hit on `NEOTOMA_OPERATOR_ATTESTED_SUBS`.
-             * @enum {string}
-             */
-            operator_allowlist_source?: "issuer" | "issuer_subject";
-        };
-        /**
-         * @description Resolved attribution and policy for the current session. Returned
-         *     by `GET /session` and the MCP `get_session_identity` tool.
-         */
-        SessionInfo: {
-            user_id: string;
-            attribution: {
-                /** @enum {string} */
-                tier: "hardware" | "operator_attested" | "software" | "unverified_client" | "anonymous";
-                agent_thumbprint?: string;
-                agent_sub?: string;
-                agent_iss?: string;
-                agent_algorithm?: string;
-                agent_public_key?: string;
-                client_name?: string;
-                client_version?: string;
-                connection_id?: string;
-                decision?: components["schemas"]["SessionAttributionDecision"] | null;
-            };
-            /**
-             * @description AAuth admission summary. Verified means the request carried a
-             *     verified AAuth signature. Admitted means Neotoma resolved
-             *     that signature to one of this user's `agent_grant` entities
-             *     and is treating the caller as authenticated. The two are
-             *     independent: a verified-but-unmatched signature stays
-             *     attribution-only and `admitted` is `false`.
-             */
-            aauth: {
-                verified: boolean;
-                admitted: boolean;
-                grant_id: string | null;
-                /** @enum {string|null} */
-                admission_reason: "admitted" | "no_grants_for_user" | "no_match" | "grant_revoked" | "grant_suspended" | "strict_rejected" | "aauth_disabled" | "not_signed" | null;
-                agent_label?: string;
-            };
-            policy: components["schemas"]["AttributionPolicySnapshot"];
-            /**
-             * @description Convenience flag mirroring the check
-             *     `enforceAttributionPolicy('observations', identity)` would
-             *     make on the default write path. Admission alone does NOT
-             *     override this — admitted callers still need a tier that
-             *     satisfies the active write attribution policy.
-             */
-            eligible_for_trusted_writes: boolean;
-        };
-        /**
-         * @description One row returned by `/agents`. Aggregates a distinct agent's
-         *     writes across observations, sources, timeline events,
-         *     interpretations, and relationship observations.
-         */
-        AgentDirectoryEntry: {
-            /**
-             * @description Stable identifier: `thumb:<thumbprint>` |
-             *     `sub:<subject>` | `name:<client>[@version]` | `anonymous`.
-             */
-            agent_key: string;
-            /** @description Short human-readable label for display. */
-            label: string;
-            /** @enum {string} */
-            tier: "hardware" | "operator_attested" | "software" | "unverified_client" | "anonymous";
-            agent_thumbprint?: string | null;
-            agent_public_key?: string | null;
-            agent_algorithm?: string | null;
-            agent_sub?: string | null;
-            agent_iss?: string | null;
-            client_name?: string | null;
-            client_version?: string | null;
-            first_seen_at: string | null;
-            last_seen_at: string | null;
-            total_records: number;
-            /**
-             * @description Per record-type count (`observation`, `source`,
-             *     `interpretation`, `timeline_event`, `relationship`).
-             *     Missing buckets mean zero.
-             */
-            record_counts: {
-                [key: string]: number;
-            };
-            /**
-             * @description For each distinct agent, counts of **observation** rows grouped
-             *     by the target entity's `entity_type` (join `entities` on
-             *     `observations.entity_id`). Surfaces who submitted
-             *     `issue` reports, who touched protected `agent_grant` rows,
-             *     `issue` sync traffic, etc. Omitted when no typed observations
-             *     exist for that agent.
-             */
-            observation_entity_type_counts?: {
-                [key: string]: number;
-            };
-        };
-        AgentCapabilityEntry: {
-            /** @enum {string} */
-            op: "store" | "store_structured" | "create_relationship" | "correct" | "retrieve";
-            /**
-             * @description Allowed entity types for this op. The single string `*` widens
-             *     to any entity_type that is not protected (see
-             *     `protected_entity_types`).
-             */
-            entity_types: string[];
-        };
-        /**
-         * @description First-class persistent grant that admits a verified AAuth
-         *     identity as the owning user, with the listed capabilities. See
-         *     `docs/subsystems/agent_attribution_integration.md` for the
-         *     admission flow.
-         */
-        AgentGrant: {
-            grant_id: string;
-            user_id: string;
-            label: string;
-            capabilities: components["schemas"]["AgentCapabilityEntry"][];
-            /** @enum {string} */
-            status: "active" | "suspended" | "revoked";
-            match_sub?: string | null;
-            match_iss?: string | null;
-            match_thumbprint?: string | null;
-            notes?: string | null;
-            last_used_at?: string | null;
-            /**
-             * @description Provenance marker (e.g. `env_config`) when the grant was
-             *     backfilled from legacy capability configuration via the
-             *     `neotoma agents grants import` CLI.
-             */
-            import_source?: string | null;
-            created_at?: string | null;
-            last_observation_at?: string | null;
-        };
-        AgentGrantCreate: {
-            label: string;
-            capabilities: components["schemas"]["AgentCapabilityEntry"][];
-            /**
-             * @default active
-             * @enum {string}
-             */
-            status?: "active" | "suspended" | "revoked";
-            match_sub?: string | null;
-            match_iss?: string | null;
-            match_thumbprint?: string | null;
-            notes?: string | null;
-            /**
-             * @description Optional owner override; only honoured when the caller is
-             *     authenticated as that user (or the local-dev override is
-             *     active). Admitted AAuth requests cannot pivot owners.
-             */
-            user_id?: string | null;
-        };
-        AgentGrantUpdate: {
-            label?: string;
-            capabilities?: components["schemas"]["AgentCapabilityEntry"][];
-            notes?: string | null;
-            match_sub?: string | null;
-            match_iss?: string | null;
-            match_thumbprint?: string | null;
-        };
-        Entity: {
-            id?: string;
-            entity_type?: string;
-            canonical_name?: string;
-            user_id?: string;
-            merged_to_entity_id?: string | null;
-            /** Format: date-time */
-            merged_at?: string | null;
-        };
-        EntitySnapshot: {
-            entity_id?: string;
-            entity_type?: string;
-            schema_version?: string;
-            snapshot?: {
-                [key: string]: unknown;
-            };
-            raw_fragments?: {
-                [key: string]: unknown;
-            };
-            /**
-             * @description Reducer provenance: a `field → observation_id` map that records
-             *     which contributing observation produced each snapshot field.
-             *     NOT agent-identity attribution; see `AgentAttribution` and the
-             *     `provenance` field on the contributing `Observation` rows for
-             *     the agent that wrote each observation.
-             */
-            provenance?: {
-                [key: string]: unknown;
-            };
-            /** Format: date-time */
-            computed_at?: string;
-            observation_count?: number;
-            /** Format: date-time */
-            last_observation_at?: string;
-            canonical_name?: string | null;
-            merged_to_entity_id?: string | null;
-            /** Format: date-time */
-            merged_at?: string | null;
-            /** Format: date-time */
-            created_at?: string | null;
-            /** @description Optional schema-derived display label for `entity_type` from `SchemaMetadata.label`. */
-            entity_type_label?: string | null;
-            /** @description Optional ordered list of the most important snapshot fields for overview display. */
-            primary_fields?: string[] | null;
-            /**
-             * @description Markdown instructions from the entity's schema definition. Injected into agent context
-             *     when this entity is retrieved. Agents MUST treat this as behavioral context for the
-             *     entity type and apply it to the current turn. Sourced from
-             *     `SchemaDefinition.agent_instructions` on the registered schema.
-             */
-            schema_instructions?: string | null;
-            /**
-             * @description Markdown instructions stored on this specific entity (from the entity's snapshot
-             *     `agent_instructions` field). Extends or overrides `schema_instructions` for this
-             *     individual entity. Agents MUST treat this as behavioral context and apply it to the
-             *     current turn.
-             */
-            entity_instructions?: string | null;
-        };
-        Source: {
-            id?: string;
-            content_hash?: string;
-            mime_type?: string;
-            storage_url?: string;
-            /** @description Local storage only — absolute path to raw file on disk (sources bucket under raw storage dir). */
-            filesystem_absolute_path?: string;
-            file_size?: number;
-            original_filename?: string;
-            /** Format: date-time */
-            created_at?: string;
-            user_id?: string;
-            /**
-             * @description Source provenance. Carries agent-identity keys (see
-             *     `AgentAttribution`) for the agent that uploaded or synthesised
-             *     this source, alongside any free-form metadata keys supplied by
-             *     the ingestion pipeline.
-             */
-            provenance?: {
-                [key: string]: unknown;
-            } & components["schemas"]["AgentAttribution"];
-        };
-        Observation: {
-            id?: string;
-            entity_id?: string;
-            entity_type?: string;
-            schema_version?: string;
-            source_id?: string | null;
-            interpretation_id?: string | null;
-            /** Format: date-time */
-            observed_at?: string;
-            specificity_score?: number;
-            source_priority?: number;
-            /**
-             * @description Classifies the *kind* of write that produced this observation,
-             *     orthogonal to `source_priority` (numeric ranking) and to
-             *     `provenance`/AAuth (which agent wrote it). One of:
-             *
-             *     - `sensor` — ground-truth emission from a tool, hook, webhook,
-             *       runtime telemetry, file watcher, or scheduled probe. Not
-             *       authored by an LLM.
-             *     - `llm_summary` — content authored by an LLM (summaries,
-             *       extractions, inferences, generated notes).
-             *     - `workflow_state` — deterministic state-machine transitions
-             *       (task status advances, node exits, pipeline step outcomes).
-             *     - `human` — direct human write (acceptance of a suggestion,
-             *       Inspector edit, `entities correct`, manual annotation).
-             *     - `import` — batch ingestion / ETL / scheduled imports.
-             *     - `sync` — cross-instance replication from a configured Neotoma peer.
-             *
-             *     Null / missing for legacy rows written before the field
-             *     existed; writes default to `llm_summary` when unspecified
-             *     because MCP callers are LLM-driven by construction.
-             * @enum {string|null}
-             */
-            observation_source?: "sensor" | "llm_summary" | "workflow_state" | "human" | "import" | "sync" | null;
-            fields?: {
-                [key: string]: unknown;
-            };
-            user_id?: string;
-            /** @description Human-readable source label attached by `attachSourceLabelsToObservations`. */
-            source?: string | null;
-            /**
-             * @description Write-time agent attribution for this observation. Carries the
-             *     `AgentAttribution` keys stamped by the AAuth middleware and
-             *     MCP `initialize.clientInfo` fallback. Coexists with any
-             *     free-form provenance keys supplied at write time.
-             */
-            provenance?: {
-                [key: string]: unknown;
-            } & components["schemas"]["AgentAttribution"];
-        };
-        RelationshipSnapshot: {
-            relationship_key?: string;
-            relationship_type?: string;
-            source_entity_id?: string;
-            target_entity_id?: string;
-            schema_version?: string;
-            snapshot?: {
-                [key: string]: unknown;
-            };
-            /** Format: date-time */
-            computed_at?: string;
-            observation_count?: number;
-            /** Format: date-time */
-            last_observation_at?: string;
-            /**
-             * @description Reducer provenance for the relationship snapshot: a
-             *     `field → observation_id` map. NOT agent attribution; use
-             *     `agent_attribution` on the snapshot (and `provenance` on
-             *     individual contributing relationship observations) to identify
-             *     the writing agent.
-             */
-            provenance?: {
-                [key: string]: unknown;
-            };
-            /**
-             * @description Latest agent-identity attribution for the relationship, derived
-             *     from the most recent contributing `relationship_observations.provenance`
-             *     row. `null` when no contributing observation carried
-             *     attribution keys.
-             */
-            agent_attribution?: components["schemas"]["AgentAttribution"] | null;
-            user_id?: string;
-            /** @description Canonical name of the source entity. Populated when `expand_entities=true`. */
-            source_entity_name?: string | null;
-            source_entity_type?: string | null;
-            source_entity_type_label?: string | null;
-            /** @description Canonical name of the target entity. Populated when `expand_entities=true`. */
-            target_entity_name?: string | null;
-            target_entity_type?: string | null;
-            target_entity_type_label?: string | null;
-        };
-        TimelineEvent: {
-            id?: string;
-            event_type?: string;
-            /** Format: date-time */
-            event_timestamp?: string;
-            event_date?: string;
-            source_id?: string;
-            source_field?: string;
-            entity_id?: string;
-            /** Format: date-time */
-            created_at?: string;
-            user_id?: string;
-            /** @description Optional; not populated by all transports. Prefer entity_id. */
-            entity_ids?: string[];
-            properties?: {
-                [key: string]: unknown;
-            };
-            /**
-             * @description Write-time agent attribution for this timeline event. Carries
-             *     the `AgentAttribution` keys stamped by the AAuth middleware.
-             */
-            provenance?: {
-                [key: string]: unknown;
-            } & components["schemas"]["AgentAttribution"];
-        };
-        EntitySchema: {
-            entity_type?: string;
-            schema_version?: string;
-            field_names?: string[];
-            field_summary?: {
-                [key: string]: unknown;
-            };
-        };
-        Interpretation: {
-            id?: string;
-            source_id?: string;
-            status?: string;
-            /** Format: date-time */
-            created_at?: string;
-            /** Format: date-time */
-            completed_at?: string;
-            /**
-             * @description Write-time agent attribution for the interpretation run. Carries
-             *     the `AgentAttribution` keys stamped by the AAuth middleware.
-             */
-            provenance?: {
-                [key: string]: unknown;
-            } & components["schemas"]["AgentAttribution"];
-        };
-        /**
-         * @description Audit configuration for a parser or agent-authored interpretation run.
-         *     Callers may include extractor_type, extractor_version, model,
-         *     prompt_hash, schema_version, agent_notes, and other provenance fields
-         *     needed to explain how extracted observations were produced.
-         */
-        InterpretationConfig: {
-            extractor_type?: string;
-            extractor_version?: string;
-            model?: string;
-            prompt_hash?: string;
-            schema_version?: string;
-            agent_notes?: string;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * @description Optional interpretation provenance for source-derived structured
-         *     extraction. Supplying this creates an interpretation row and links new
-         *     observations to it. Omit for ordinary already-structured/chat-native
-         *     facts, which keep observations.interpretation_id NULL.
-         */
-        StoreInterpretationInput: {
-            /** @description Existing source to interpret. */
-            source_id?: string;
-            /**
-             * @description Source created by this store request. Use `unstructured` for the raw
-             *     file source in combined file+entities requests, or `structured`
-             *     for the generated JSON source.
-             * @enum {string}
-             */
-            source_ref?: "structured" | "unstructured";
-            interpretation_config?: components["schemas"]["InterpretationConfig"];
-        };
-        CreateInterpretationRequest: {
-            source_id: string;
-            entities: {
-                [key: string]: unknown;
-            }[];
-            interpretation_config?: components["schemas"]["InterpretationConfig"];
-            relationships?: components["schemas"]["StoreRelationshipInput"][];
-            idempotency_key?: string;
-            user_id?: string;
-        };
-        CreateInterpretationResponse: {
-            success?: boolean;
-            interpretation_id?: string;
-            source_id?: string;
-            entities?: {
-                [key: string]: unknown;
-            }[];
-            observations_created?: number;
-            unknown_fields_count?: number;
-            relationships_created?: {
-                [key: string]: unknown;
-            }[];
-        };
-        Stats: {
-            entities?: number;
-            sources?: number;
-            observations?: number;
-            relationships?: number;
-            timeline_events?: number;
-            sources_count?: number;
-            entities_by_type?: {
-                [key: string]: number;
-            };
-            total_entities?: number;
-            total_relationships?: number;
-            total_events?: number;
-            total_observations?: number;
-            total_interpretations?: number;
-            /**
-             * @description R4 telemetry: count of observations per structured identity basis.
-             *     Keys are `schema_rule`, `heuristic_name`, `heuristic_fallback`,
-             *     `target_id`, or `unclassified` for rows written before the
-             *     `identity_basis` column existed.
-             */
-            observations_by_identity_basis?: {
-                [key: string]: number;
-            };
-            /**
-             * @description R4 telemetry: count of observations per identity basis, keyed by
-             *     entity_type (outer) then basis (inner).
-             */
-            observations_by_identity_basis_by_type?: {
-                [key: string]: {
-                    [key: string]: number;
-                };
-            };
-            last_updated?: string;
-        };
-        StoreRelationshipInput: {
-            /** @enum {string} */
-            relationship_type: "PART_OF" | "CORRECTS" | "REFERS_TO" | "SETTLES" | "DUPLICATE_OF" | "DEPENDS_ON" | "SUPERSEDES" | "EMBEDS" | "works_at" | "owns" | "manages" | "part_of" | "related_to" | "depends_on" | "references" | "transacted_with" | "member_of" | "reports_to" | "located_at" | "created_by" | "funded_by" | "acquired_by" | "subsidiary_of" | "partner_of" | "competitor_of" | "supplies_to" | "contracted_with" | "invested_in";
-            /** @description Index into the entities array for the source entity. */
-            source_index: number;
-            /** @description Index into the entities array for the target entity. */
-            target_index: number;
-            metadata?: {
-                [key: string]: unknown;
-            };
-        } | {
-            /** @enum {string} */
-            relationship_type: "PART_OF" | "CORRECTS" | "REFERS_TO" | "SETTLES" | "DUPLICATE_OF" | "DEPENDS_ON" | "SUPERSEDES" | "EMBEDS" | "works_at" | "owns" | "manages" | "part_of" | "related_to" | "depends_on" | "references" | "transacted_with" | "member_of" | "reports_to" | "located_at" | "created_by" | "funded_by" | "acquired_by" | "subsidiary_of" | "partner_of" | "competitor_of" | "supplies_to" | "contracted_with" | "invested_in";
-            /** @description Index into the entities array for the source entity. */
-            source_index: number;
-            /** @description Existing target entity ID. */
-            target_entity_id: string;
-            metadata?: {
-                [key: string]: unknown;
-            };
-        } | {
-            /** @enum {string} */
-            relationship_type: "PART_OF" | "CORRECTS" | "REFERS_TO" | "SETTLES" | "DUPLICATE_OF" | "DEPENDS_ON" | "SUPERSEDES" | "EMBEDS" | "works_at" | "owns" | "manages" | "part_of" | "related_to" | "depends_on" | "references" | "transacted_with" | "member_of" | "reports_to" | "located_at" | "created_by" | "funded_by" | "acquired_by" | "subsidiary_of" | "partner_of" | "competitor_of" | "supplies_to" | "contracted_with" | "invested_in";
-            /** @description Existing source entity ID. */
-            source_entity_id: string;
-            /** @description Index into the entities array for the target entity. */
-            target_index: number;
-            metadata?: {
-                [key: string]: unknown;
-            };
-        } | {
-            /** @enum {string} */
-            relationship_type: "PART_OF" | "CORRECTS" | "REFERS_TO" | "SETTLES" | "DUPLICATE_OF" | "DEPENDS_ON" | "SUPERSEDES" | "EMBEDS" | "works_at" | "owns" | "manages" | "part_of" | "related_to" | "depends_on" | "references" | "transacted_with" | "member_of" | "reports_to" | "located_at" | "created_by" | "funded_by" | "acquired_by" | "subsidiary_of" | "partner_of" | "competitor_of" | "supplies_to" | "contracted_with" | "invested_in";
-            /** @description Existing source entity ID. */
-            source_entity_id: string;
-            /** @description Existing target entity ID. */
-            target_entity_id: string;
-            metadata?: {
-                [key: string]: unknown;
-            };
-        };
-        /**
-         * @description Upstream artifact author (e.g. GitHub user) stamped into observation
-         *     provenance alongside AAuth agent attribution. Matches
-         *     `ExternalActorInputSchema` in `action_schemas.ts`.
-         */
-        ExternalActorInput: {
-            /** @enum {string} */
-            provider: "github";
-            login: string;
-            id: number;
-            /**
-             * @default User
-             * @enum {string}
-             */
-            type?: "User" | "Bot" | "Organization";
-            /**
-             * @default claim
-             * @enum {string}
-             */
-            verified_via?: "claim" | "linked_attestation" | "oauth_link" | "webhook_signature";
-            delivery_id?: string;
-            event_type?: string;
-            repository?: string;
-            event_id?: number;
-            comment_id?: number;
-        };
-        /**
-         * @description Unified store payload. Supports structured only, unstructured only, or
-         *     both in one request. Top-level field set is closed: unknown request
-         *     fields are rejected with `ERR_UNKNOWN_FIELD` (see
-         *     `docs/subsystems/errors.md`). Entity-level fields inside `entities[]`
-         *     remain intentionally open so schema-driven fields flow through.
-         */
-        StoreRequest: {
-            entities?: {
-                [key: string]: unknown;
-            }[];
-            /**
-             * @description Optional. Create relationships between entities in this request.
-             *     Use `source_index` or `target_index` for entities in this request,
-             *     and `source_entity_id` or `target_entity_id` for existing entities.
-             *     Index and id endpoints may be mixed in one relationship.
-             */
-            relationships?: components["schemas"]["StoreRelationshipInput"][];
-            interpretation?: components["schemas"]["StoreInterpretationInput"];
-            source_priority?: number;
-            /**
-             * @description Classifies the *kind* of write being performed, orthogonal to
-             *     `source_priority`. See `Observation.observation_source` for
-             *     the full semantic contract. Defaults to `llm_summary` when
-             *     unspecified. Applies to every observation created by this
-             *     request.
-             * @enum {string}
-             */
-            observation_source?: "sensor" | "llm_summary" | "workflow_state" | "human" | "import" | "sync";
-            /**
-             * @description Optional upstream author (e.g. GitHub user for issue submission).
-             *     Stamped into observation provenance; must align with
-             *     `ExternalActorInputSchema` (strict — no extra keys).
-             */
-            external_actor?: components["schemas"]["ExternalActorInput"];
-            /** @description Required for structured path, optional for unstructured-only path. */
-            idempotency_key?: string;
-            /** @description Optional idempotency key for file path when sending structured + unstructured in one call. */
-            file_idempotency_key?: string;
-            /** @description Base64-encoded file content (unstructured path) */
-            file_content?: string;
-            /** @description Local file path for server-local environments */
-            file_path?: string;
-            /** @description Required with file_content, optional with file_path */
-            mime_type?: string;
-            original_filename?: string;
-            user_id?: string;
-            /**
-             * @description When false, runs in plan/dry-run mode: resolves entities and returns
-             *     planned actions ("would_create" / "would_match_existing") without
-             *     persisting observations or source rows. Useful for previewing a
-             *     structured store before committing.
-             * @default true
-             */
-            commit?: boolean;
-            /**
-             * @description When true, refuse silent merges: only match an existing entity when
-             *     the entity's schema declares canonical_name_fields that the request
-             *     matches, or when target_id is supplied. Prevents accidental
-             *     coalescing into a pre-existing record.
-             * @default false
-             */
-            strict?: boolean;
-            /**
-             * @description Optional Neotoma peer id to stamp on observations for cross-instance
-             *     sync loop prevention (Phase 5). Requires `observation_source: sync` in practice.
-             */
-            source_peer_id?: string;
-        };
-        StoreResponse: {
-            structured?: components["schemas"]["StoreStructuredResponse"];
-            unstructured?: components["schemas"]["StoreUnstructuredResponse"];
-        };
-        /**
-         * @description Structured-only store payload. Top-level field set is closed; unknown
-         *     request fields are rejected with `ERR_UNKNOWN_FIELD`. Entity-level
-         *     fields inside `entities[]` remain intentionally open so
-         *     schema-driven fields flow through (see description on `entities[]`).
-         */
-        StoreStructuredRequest: {
-            entities: {
-                [key: string]: unknown;
-            }[];
-            /**
-             * @description Optional. Create relationships between entities in this request.
-             *     Use `source_index` or `target_index` for entities in this request,
-             *     and `source_entity_id` or `target_entity_id` for existing entities.
-             *     Index and id endpoints may be mixed in one relationship.
-             *     Enables one-call chat persistence: store [conversation, conversation_message] with relationships [{ relationship_type: "PART_OF", source_index: 1, target_index: 0 }]. (`agent_message` remains accepted as a legacy alias for pre-v0.6 clients.)
-             */
-            relationships?: components["schemas"]["StoreRelationshipInput"][];
-            interpretation?: components["schemas"]["StoreInterpretationInput"];
-            source_priority?: number;
-            /**
-             * @description Classifies the *kind* of write being performed, orthogonal to
-             *     `source_priority`. See `Observation.observation_source` for
-             *     the full semantic contract. Defaults to `llm_summary` when
-             *     unspecified. Applies to every observation created by this
-             *     request.
-             * @enum {string}
-             */
-            observation_source?: "sensor" | "llm_summary" | "workflow_state" | "human" | "import" | "sync";
-            idempotency_key: string;
-            user_id?: string;
-            /**
-             * @description Optional. For agent-provided structured data, omit so the source has no filename (null).
-             *     Pass only when mirroring a real file name or when a display label is desired.
-             */
-            original_filename?: string;
-            /**
-             * @description When false, runs in plan/dry-run mode: resolves entities and returns
-             *     planned actions ("would_create" / "would_match_existing") without
-             *     persisting observations or source rows. Useful for previewing a
-             *     structured store before committing.
-             * @default true
-             */
-            commit?: boolean;
-            /**
-             * @description When true, refuse silent merges: only match an existing entity when
-             *     the entity's schema declares canonical_name_fields that the request
-             *     matches, or when target_id is supplied. Prevents accidental
-             *     coalescing into a pre-existing record.
-             * @default false
-             */
-            strict?: boolean;
-            /** @description Optional peer id stamped on observations for sync loop prevention. */
-            source_peer_id?: string;
-        };
-        StoreStructuredResponse: {
-            success?: boolean;
-            /**
-             * @description True when the response is an idempotency replay (no new observations
-             *     or entities were written for this request). Consumers can use this
-             *     to distinguish a genuine fresh commit from a replayed earlier result
-             *     when `entities_created_count` is 0.
-             */
-            replayed?: boolean;
-            entities?: {
-                entity_id?: string;
-                entity_type?: string;
-                observation_id?: string;
-                canonical_name?: string;
-                resolver_path?: string[];
-                /**
-                 * @description R4 telemetry: how the entity's identity was resolved. One of
-                 *     `schema_rule`, `heuristic_name`, `heuristic_fallback`,
-                 *     `target_id`.
-                 * @enum {string}
-                 */
-                identity_basis?: "schema_rule" | "schema_lookup" | "heuristic_name" | "heuristic_fallback" | "target_id";
-                /**
-                 * @description Human-readable label for the rule that produced the
-                 *     canonical_name (e.g. `email`,
-                 *     `composite:full_name+employer`, `first_string_field:name`).
-                 */
-                identity_rule?: string;
-                action?: string;
-                /**
-                 * @description R3 non-fatal resolver warnings for this observation. Present
-                 *     when the entity's active schema declares
-                 *     `name_collision_policy: "warn"` and resolution landed on an
-                 *     existing entity via a heuristic path. PII-free by construction
-                 *     (never embeds canonical_name content or extracted field
-                 *     values). See
-                 *     `.cursor/plans/conversation_entity_collision_fix_aef8ba0d.plan.md`.
-                 */
-                warnings?: components["schemas"]["ResolverWarning"][];
-            }[];
-            /**
-             * @description Batch-aggregated non-fatal resolver warnings (R3). Mirrors each
-             *     entity's `entities[].warnings` with `observation_index` and
-             *     `entity_id` attached so callers can audit identity quality without
-             *     walking every entity trace.
-             */
-            warnings?: (components["schemas"]["ResolverWarning"] & {
-                observation_index?: number;
-                entity_id?: string;
-            })[];
-            /** @description Interpretation row linked to observations when the request supplied an explicit interpretation block. */
-            interpretation_id?: string | null;
-        };
-        /**
-         * @description Non-fatal warning emitted by entity resolution when a schema declares
-         *     `name_collision_policy: "warn"` and the caller's payload matched an
-         *     existing entity via a heuristic (non `schema_rule`) path. Shape is
-         *     intentionally PII-free so it can be forwarded to dashboards, logs, and
-         *     downstream agents without redaction.
-         */
-        ResolverWarning: {
-            /** @enum {string} */
-            code: "HEURISTIC_MERGE";
-            /** @enum {string} */
-            policy: "warn";
-            entity_type: string;
-            /** @enum {string} */
-            identity_basis: "schema_rule" | "schema_lookup" | "heuristic_name" | "heuristic_fallback" | "target_id";
-            identity_rule: string;
-        };
-        /**
-         * @description Unstructured-only store payload. Closed shape; unknown top-level
-         *     fields are rejected with `ERR_UNKNOWN_FIELD`.
-         */
-        StoreUnstructuredRequest: {
-            /** @description Base64-encoded file content */
-            file_content: string;
-            /** @description MIME type of the file */
-            mime_type: string;
-            /** @description Optional idempotency key; if omitted, content hash is used */
-            idempotency_key?: string;
-            /** @description Run AI interpretation after store */
-            original_filename?: string;
-            /** Format: uuid */
-            user_id?: string;
-        };
-        StoreUnstructuredResponse: {
-            source_id?: string;
-            content_hash?: string;
-            file_size?: number;
-            deduplicated?: boolean;
-            interpretation?: {
-                [key: string]: unknown;
-            };
-            entity_ids?: string[];
-        };
-        GetRelationshipSnapshotRequest: {
-            /** @enum {string} */
-            relationship_type: "PART_OF" | "CORRECTS" | "REFERS_TO" | "SETTLES" | "DUPLICATE_OF" | "DEPENDS_ON" | "SUPERSEDES" | "EMBEDS" | "works_at" | "owns" | "manages" | "part_of" | "related_to" | "depends_on" | "references" | "transacted_with" | "member_of" | "reports_to" | "located_at" | "created_by" | "funded_by" | "acquired_by" | "subsidiary_of" | "partner_of" | "competitor_of" | "supplies_to" | "contracted_with" | "invested_in";
-            source_entity_id: string;
-            target_entity_id: string;
-            /** @description Optional tenant override for read-scope endpoints. Usual auth precedence applies; see docs/subsystems/auth.md. */
-            user_id?: string;
-        };
-        GetRelationshipSnapshotResponse: {
-            snapshot: components["schemas"]["RelationshipSnapshot"];
-            observations: {
-                id?: string;
-                source_id?: string;
-                observed_at?: string;
-                specificity_score?: number;
-                source_priority?: number;
-                metadata?: Record<string, never>;
-            }[];
-        };
-        OAuthInitiateRequest: {
-            connection_id: string;
-            client_name?: string;
-            redirect_uri?: string;
-        };
-        OAuthInitiateResponse: {
-            auth_url?: string;
-            connection_id?: string;
-            /** Format: date-time */
-            expires_at?: string;
-        };
-        OAuthStatusResponse: {
-            status?: string;
-            connection_id?: string;
-        };
+  schemas: {
+    FileUrlResponse: {
+      /** @description Signed URL for accessing the file */
+      url?: string;
     };
-    responses: never;
-    parameters: never;
-    requestBodies: never;
-    headers: never;
-    pathItems: never;
+    Error: {
+      error?: string;
+    };
+    ErrorEnvelope: {
+      error_code?: string;
+      message?: string;
+      details?: {
+        [key: string]: unknown;
+      };
+      trace_id?: string;
+      /** Format: date-time */
+      timestamp?: string;
+    };
+    RecentConversationRelatedEntity: {
+      entity_id?: string;
+      entity_type?: string | null;
+      canonical_name?: string | null;
+      title?: string | null;
+      relationship_type?: string;
+    };
+    ConversationTurnHookSummary: {
+      hook_event_count?: number;
+      tool_invocation_count?: number;
+      store_structured_calls?: number;
+      retrieve_calls?: number;
+      retrieved_entity_count?: number;
+      stored_entity_count?: number;
+      neotoma_tool_failures?: number;
+    };
+    RecentConversationMessage: {
+      message_id?: string;
+      canonical_name?: string | null;
+      role?: string | null;
+      sender_kind?: string | null;
+      content?: string | null;
+      turn_key?: string | null;
+      activity_at?: string;
+      related_entities?: components["schemas"]["RecentConversationRelatedEntity"][];
+      hook_summary?: null | components["schemas"]["ConversationTurnHookSummary"];
+    };
+    RecentConversationItem: {
+      conversation_id?: string;
+      canonical_name?: string | null;
+      title?: string | null;
+      activity_at?: string;
+      message_count?: number;
+      latest_write_provenance?: {
+        [key: string]: unknown;
+      } | null;
+      messages?: components["schemas"]["RecentConversationMessage"][];
+    };
+    /**
+     * @description A single per-observation failure inside an
+     *     `ERR_STORE_RESOLUTION_FAILED` response.
+     */
+    StoreResolutionIssue: {
+      /** @description Index of the offending entity in the request `entities` array. */
+      observation_index?: number;
+      entity_type?: string;
+      /** @enum {string} */
+      code?:
+        | "ERR_CANONICAL_NAME_UNRESOLVED"
+        | "ERR_MERGE_REFUSED"
+        | "ERR_CONVERSATION_MESSAGE_ROLE_CONFLICT"
+        | "ERR_RELATIONSHIP_ENTITY_ID_FORMAT";
+      message?: string;
+      /**
+       * @description Code-specific context (e.g. `seen_fields`, `attempted_value`,
+       *     `entity_id`, `canonical_name`, `resolver_path`).
+       */
+      details?: {
+        [key: string]: unknown;
+      };
+      /**
+       * @description Optional structured upgrade guidance. Populated when the server can
+       *     detect a common caller mistake (e.g. wrapping fields inside
+       *     `attributes`) or when a schema with `name_collision_policy: reject`
+       *     refuses a heuristic merge (R4 — then `required_identity_fields`
+       *     carries the schema-derived identity key list). PII-free by
+       *     construction. Consumers MAY display `text` verbatim to end users
+       *     and MAY key on `required_identity_fields` programmatically to
+       *     compose a corrected payload without parsing prose.
+       */
+      hint?:
+        | string
+        | {
+            /**
+             * @description Short, actionable instruction for the caller (e.g. "Declare
+             *     `conversation_id` on entity_type \"conversation\"…"). PII-free.
+             */
+            text: string;
+            required_identity_fields?: components["schemas"]["RequiredIdentityFields"];
+          };
+    };
+    /**
+     * @description R4: schema-derived minimum identity payload for an `entity_type`.
+     *     Surfaced inside `StoreResolutionIssue.hint.required_identity_fields`
+     *     when a schema `name_collision_policy: reject` refuses a heuristic
+     *     merge, and exposed by the MCP tool surface so agents can compose
+     *     deterministic writes without per-type knowledge. Generated from
+     *     `SchemaDefinition.canonical_name_fields` — adding a new reject-policy
+     *     schema automatically extends the contract.
+     */
+    RequiredIdentityFields: {
+      entity_type: string;
+      /**
+       * @description `true` when the schema declares `name_collision_policy: "reject"`.
+       *     When `false`, the fields are informational — the caller MAY still
+       *     benefit from supplying them to avoid heuristic matching warnings.
+       */
+      required: boolean;
+      /**
+       * @description Single-field canonical rules. Supplying ANY one of these on the
+       *     payload is sufficient to satisfy the schema-level identity rule.
+       */
+      any_of_fields: string[];
+      /**
+       * @description Composite canonical rules. EVERY field in at least ONE composite
+       *     group must be present to satisfy that group.
+       */
+      composite_fields: string[][];
+    };
+    /**
+     * @description 400 response shape for `ERR_STORE_RESOLUTION_FAILED`. Distinct from the
+     *     generic `ErrorEnvelope` because it carries a per-observation `issues`
+     *     array rather than a free-form `details` object.
+     */
+    StoreResolutionErrorEnvelope: {
+      error?: {
+        /** @enum {string} */
+        code?: "ERR_STORE_RESOLUTION_FAILED";
+        message?: string;
+        issues?: components["schemas"]["StoreResolutionIssue"][];
+      };
+    };
+    /**
+     * @description R5: declarative predicate describing which observations of the source
+     *     entity should be re-pointed onto the new entity. Every form reads a
+     *     column every observation row carries so the predicate surface is
+     *     schema-agnostic. At least one form MUST be supplied.
+     */
+    SplitPredicate: {
+      /**
+       * Format: date-time
+       * @description Match observations whose `observed_at` is >= this ISO-8601
+       *     timestamp. Primary use case: "move every observation from this
+       *     session forward onto a new entity".
+       */
+      observed_at_gte?: string;
+      /**
+       * @description Match observations whose `source_id` is one of the listed
+       *     sources. Useful when a single over-merged entity collected
+       *     observations from distinct sources that should live on separate
+       *     entities.
+       */
+      source_id_in?: string[];
+      observation_field_equals?: {
+        /** @description Observation `fields.<field>` to compare. */
+        field: string;
+        /** @description String-equals comparison (no type coercion). */
+        value?: string;
+        /** @description String-prefix comparison (no type coercion). */
+        value_starts_with?: string;
+      };
+    };
+    SplitEntityRequest: {
+      source_entity_id: string;
+      predicate: components["schemas"]["SplitPredicate"];
+      new_entity: {
+        entity_type: string;
+        canonical_name: string;
+        /**
+         * @description Optional — re-point matched observations onto a pre-existing
+         *     entity id instead of deriving a new deterministic id.
+         */
+        target_entity_id?: string;
+      };
+      /**
+       * @description Required per MUST #11. Reuse with a different predicate returns
+       *     `ERR_IDEMPOTENCY_MISMATCH`; reuse with the same predicate returns
+       *     the original split result (`replayed: true`).
+       */
+      idempotency_key: string;
+      /** @description Free-text rationale recorded on the audit row. */
+      reason?: string;
+      user_id?: string;
+    };
+    SplitEntityResponse: {
+      split_id: string;
+      source_entity_id: string;
+      new_entity_id: string;
+      /** @description Number of observations whose `entity_id` was re-pointed. */
+      observations_moved: number;
+      /** Format: date-time */
+      split_at: string;
+      /**
+       * @description `true` when the response is an idempotent replay of a prior
+       *     identical split (same `user_id` + `idempotency_key` + predicate).
+       */
+      replayed: boolean;
+    };
+    /**
+     * @description Agent-identity provenance recorded on every durable write-path record
+     *     (observations, relationships, sources, interpretations, timeline
+     *     events). Fields are stamped additively into the existing provenance
+     *     JSON blob on each record so no schema migration was required; the
+     *     shape below documents the keys consumers can rely on.
+     *
+     *     When AAuth is active the `agent_*` keys carry the cryptographically
+     *     verified identity; `client_name`/`client_version` come from the MCP
+     *     `initialize.clientInfo` fallback and are self-reported. Every field
+     *     is optional; callers MUST treat a missing key as "no evidence at
+     *     that tier" and rely on `attribution_tier` for the trust signal.
+     */
+    AgentAttribution: {
+      /** @description Raw JWK-serialised public key used for the HTTP signature. */
+      agent_public_key?: string;
+      /** @description RFC 7638 JWK thumbprint of `agent_public_key`; stable across sessions. */
+      agent_thumbprint?: string;
+      /** @description HTTP Message Signature algorithm (`ES256`, `EdDSA`, …). */
+      agent_algorithm?: string;
+      /** @description `sub` claim of the `aa-agent+jwt` agent token. */
+      agent_sub?: string;
+      /** @description `iss` claim (issuer URL) of the agent token. */
+      agent_iss?: string;
+      /** @description Self-reported MCP `initialize.clientInfo.name`. NOT verified. */
+      client_name?: string;
+      /** @description Self-reported MCP `initialize.clientInfo.version`. */
+      client_version?: string;
+      /** @description Existing OAuth connection id when the request is OAuth-authenticated. */
+      connection_id?: string;
+      /**
+       * @description Derived trust tier; see `src/crypto/agent_identity.ts`.
+       * @enum {string}
+       */
+      attribution_tier?:
+        | "hardware"
+        | "operator_attested"
+        | "software"
+        | "unverified_client"
+        | "anonymous";
+      /**
+       * Format: date-time
+       * @description ISO-8601 timestamp when the attribution block was stamped.
+       */
+      attributed_at?: string;
+    };
+    /**
+     * @description Active attribution policy for the Neotoma instance. Governs how
+     *     anonymous (unattributed) and sub-tier writes are handled on each
+     *     write path. Ships defaults that preserve historical behaviour
+     *     (`anonymous_writes: allow`, no `min_tier`).
+     */
+    AttributionPolicySnapshot: {
+      /**
+       * @description Global policy mode applied to writes whose resolved
+       *     `attribution_tier` is `anonymous`.
+       * @enum {string}
+       */
+      anonymous_writes: "allow" | "warn" | "reject";
+      /**
+       * @description Optional floor tier; writes with a resolved tier below this
+       *     floor are rejected with `ATTRIBUTION_REQUIRED`.
+       * @enum {string}
+       */
+      min_tier?: "hardware" | "operator_attested" | "software" | "unverified_client";
+      /**
+       * @description Optional per-write-path overrides keyed by canonical write
+       *     path (`observations`, `relationships`, `sources`,
+       *     `interpretations`, `timeline_events`, `corrections`).
+       */
+      per_path?: {
+        [key: string]: "allow" | "warn" | "reject";
+      };
+    };
+    /**
+     * @description Diagnostic summary of the most recent AAuth / `clientInfo`
+     *     resolution decision. Safe to mirror to clients; never contains
+     *     signatures or public keys. Present only when the server has a
+     *     decision to surface.
+     */
+    SessionAttributionDecision: {
+      signature_present: boolean;
+      signature_verified: boolean;
+      signature_error_code?: string;
+      client_info_raw_name?: string;
+      /** @enum {string} */
+      client_info_normalised_to_null_reason?: "too_generic" | "empty" | "not_a_string";
+      /** @enum {string} */
+      resolved_tier:
+        | "hardware"
+        | "operator_attested"
+        | "software"
+        | "unverified_client"
+        | "anonymous";
+      /**
+       * @description Outcome of the `cnf.attestation` envelope verifier. Always
+       *     present on AAuth-verified requests (with `verified: false,
+       *     format: "unknown", reason: "not_present"` when no envelope
+       *     was supplied) and absent on unsigned requests.
+       */
+      attestation?: {
+        verified: boolean;
+        /** @enum {string} */
+        format: "apple-secure-enclave" | "webauthn-packed" | "tpm2" | "unknown";
+        /**
+         * @description Failure reason; only present when `verified=false`.
+         * @enum {string}
+         */
+        reason?:
+          | "not_present"
+          | "unsupported_format"
+          | "key_binding_failed"
+          | "challenge_mismatch"
+          | "chain_invalid"
+          | "signature_invalid"
+          | "aaguid_not_trusted"
+          | "pubarea_mismatch"
+          | "not_implemented"
+          | "malformed";
+      } | null;
+      /**
+       * @description Set when the operator allowlist promoted the request to
+       *     `operator_attested`. `"issuer"` means a hit on
+       *     `NEOTOMA_OPERATOR_ATTESTED_ISSUERS`; `"issuer_subject"` means
+       *     a hit on `NEOTOMA_OPERATOR_ATTESTED_SUBS`.
+       * @enum {string}
+       */
+      operator_allowlist_source?: "issuer" | "issuer_subject";
+    };
+    /**
+     * @description Resolved attribution and policy for the current session. Returned
+     *     by `GET /session` and the MCP `get_session_identity` tool.
+     */
+    SessionInfo: {
+      user_id: string;
+      attribution: {
+        /** @enum {string} */
+        tier: "hardware" | "operator_attested" | "software" | "unverified_client" | "anonymous";
+        agent_thumbprint?: string;
+        agent_sub?: string;
+        agent_iss?: string;
+        agent_algorithm?: string;
+        agent_public_key?: string;
+        client_name?: string;
+        client_version?: string;
+        connection_id?: string;
+        decision?: components["schemas"]["SessionAttributionDecision"] | null;
+      };
+      /**
+       * @description AAuth admission summary. Verified means the request carried a
+       *     verified AAuth signature. Admitted means Neotoma resolved
+       *     that signature to one of this user's `agent_grant` entities
+       *     and is treating the caller as authenticated. The two are
+       *     independent: a verified-but-unmatched signature stays
+       *     attribution-only and `admitted` is `false`.
+       */
+      aauth: {
+        verified: boolean;
+        admitted: boolean;
+        grant_id: string | null;
+        /** @enum {string|null} */
+        admission_reason:
+          | "admitted"
+          | "no_grants_for_user"
+          | "no_match"
+          | "grant_revoked"
+          | "grant_suspended"
+          | "strict_rejected"
+          | "aauth_disabled"
+          | "not_signed"
+          | null;
+        agent_label?: string;
+      };
+      policy: components["schemas"]["AttributionPolicySnapshot"];
+      /**
+       * @description Convenience flag mirroring the check
+       *     `enforceAttributionPolicy('observations', identity)` would
+       *     make on the default write path. Admission alone does NOT
+       *     override this — admitted callers still need a tier that
+       *     satisfies the active write attribution policy.
+       */
+      eligible_for_trusted_writes: boolean;
+    };
+    /**
+     * @description One row returned by `/agents`. Aggregates a distinct agent's
+     *     writes across observations, sources, timeline events,
+     *     interpretations, and relationship observations.
+     */
+    AgentDirectoryEntry: {
+      /**
+       * @description Stable identifier: `thumb:<thumbprint>` |
+       *     `sub:<subject>` | `name:<client>[@version]` | `anonymous`.
+       */
+      agent_key: string;
+      /** @description Short human-readable label for display. */
+      label: string;
+      /** @enum {string} */
+      tier: "hardware" | "operator_attested" | "software" | "unverified_client" | "anonymous";
+      agent_thumbprint?: string | null;
+      agent_public_key?: string | null;
+      agent_algorithm?: string | null;
+      agent_sub?: string | null;
+      agent_iss?: string | null;
+      client_name?: string | null;
+      client_version?: string | null;
+      first_seen_at: string | null;
+      last_seen_at: string | null;
+      total_records: number;
+      /**
+       * @description Per record-type count (`observation`, `source`,
+       *     `interpretation`, `timeline_event`, `relationship`).
+       *     Missing buckets mean zero.
+       */
+      record_counts: {
+        [key: string]: number;
+      };
+      /**
+       * @description For each distinct agent, counts of **observation** rows grouped
+       *     by the target entity's `entity_type` (join `entities` on
+       *     `observations.entity_id`). Surfaces who submitted
+       *     `issue` reports, who touched protected `agent_grant` rows,
+       *     `issue` sync traffic, etc. Omitted when no typed observations
+       *     exist for that agent.
+       */
+      observation_entity_type_counts?: {
+        [key: string]: number;
+      };
+    };
+    AgentCapabilityEntry: {
+      /** @enum {string} */
+      op: "store" | "store_structured" | "create_relationship" | "correct" | "retrieve";
+      /**
+       * @description Allowed entity types for this op. The single string `*` widens
+       *     to any entity_type that is not protected (see
+       *     `protected_entity_types`).
+       */
+      entity_types: string[];
+    };
+    /**
+     * @description First-class persistent grant that admits a verified AAuth
+     *     identity as the owning user, with the listed capabilities. See
+     *     `docs/subsystems/agent_attribution_integration.md` for the
+     *     admission flow.
+     */
+    AgentGrant: {
+      grant_id: string;
+      user_id: string;
+      label: string;
+      capabilities: components["schemas"]["AgentCapabilityEntry"][];
+      /** @enum {string} */
+      status: "active" | "suspended" | "revoked";
+      match_sub?: string | null;
+      match_iss?: string | null;
+      match_thumbprint?: string | null;
+      notes?: string | null;
+      last_used_at?: string | null;
+      /**
+       * @description Provenance marker (e.g. `env_config`) when the grant was
+       *     backfilled from legacy capability configuration via the
+       *     `neotoma agents grants import` CLI.
+       */
+      import_source?: string | null;
+      created_at?: string | null;
+      last_observation_at?: string | null;
+    };
+    AgentGrantCreate: {
+      label: string;
+      capabilities: components["schemas"]["AgentCapabilityEntry"][];
+      /**
+       * @default active
+       * @enum {string}
+       */
+      status?: "active" | "suspended" | "revoked";
+      match_sub?: string | null;
+      match_iss?: string | null;
+      match_thumbprint?: string | null;
+      notes?: string | null;
+      /**
+       * @description Optional owner override; only honoured when the caller is
+       *     authenticated as that user (or the local-dev override is
+       *     active). Admitted AAuth requests cannot pivot owners.
+       */
+      user_id?: string | null;
+    };
+    AgentGrantUpdate: {
+      label?: string;
+      capabilities?: components["schemas"]["AgentCapabilityEntry"][];
+      notes?: string | null;
+      match_sub?: string | null;
+      match_iss?: string | null;
+      match_thumbprint?: string | null;
+    };
+    Entity: {
+      id?: string;
+      entity_type?: string;
+      canonical_name?: string;
+      user_id?: string;
+      merged_to_entity_id?: string | null;
+      /** Format: date-time */
+      merged_at?: string | null;
+    };
+    EntitySnapshot: {
+      entity_id?: string;
+      entity_type?: string;
+      schema_version?: string;
+      snapshot?: {
+        [key: string]: unknown;
+      };
+      raw_fragments?: {
+        [key: string]: unknown;
+      };
+      /**
+       * @description Reducer provenance: a `field → observation_id` map that records
+       *     which contributing observation produced each snapshot field.
+       *     NOT agent-identity attribution; see `AgentAttribution` and the
+       *     `provenance` field on the contributing `Observation` rows for
+       *     the agent that wrote each observation.
+       */
+      provenance?: {
+        [key: string]: unknown;
+      };
+      /** Format: date-time */
+      computed_at?: string;
+      observation_count?: number;
+      /** Format: date-time */
+      last_observation_at?: string;
+      canonical_name?: string | null;
+      merged_to_entity_id?: string | null;
+      /** Format: date-time */
+      merged_at?: string | null;
+      /** Format: date-time */
+      created_at?: string | null;
+      /** @description Optional schema-derived display label for `entity_type` from `SchemaMetadata.label`. */
+      entity_type_label?: string | null;
+      /** @description Optional ordered list of the most important snapshot fields for overview display. */
+      primary_fields?: string[] | null;
+      /**
+       * @description Markdown instructions from the entity's schema definition. Injected into agent context
+       *     when this entity is retrieved. Agents MUST treat this as behavioral context for the
+       *     entity type and apply it to the current turn. Sourced from
+       *     `SchemaDefinition.agent_instructions` on the registered schema.
+       */
+      schema_instructions?: string | null;
+      /**
+       * @description Markdown instructions stored on this specific entity (from the entity's snapshot
+       *     `agent_instructions` field). Extends or overrides `schema_instructions` for this
+       *     individual entity. Agents MUST treat this as behavioral context and apply it to the
+       *     current turn.
+       */
+      entity_instructions?: string | null;
+    };
+    Source: {
+      id?: string;
+      content_hash?: string;
+      mime_type?: string;
+      storage_url?: string;
+      /** @description Local storage only — absolute path to raw file on disk (sources bucket under raw storage dir). */
+      filesystem_absolute_path?: string;
+      file_size?: number;
+      original_filename?: string;
+      /** Format: date-time */
+      created_at?: string;
+      user_id?: string;
+      /**
+       * @description Source provenance. Carries agent-identity keys (see
+       *     `AgentAttribution`) for the agent that uploaded or synthesised
+       *     this source, alongside any free-form metadata keys supplied by
+       *     the ingestion pipeline.
+       */
+      provenance?: {
+        [key: string]: unknown;
+      } & components["schemas"]["AgentAttribution"];
+    };
+    Observation: {
+      id?: string;
+      entity_id?: string;
+      entity_type?: string;
+      schema_version?: string;
+      source_id?: string | null;
+      interpretation_id?: string | null;
+      /** Format: date-time */
+      observed_at?: string;
+      specificity_score?: number;
+      source_priority?: number;
+      /**
+       * @description Classifies the *kind* of write that produced this observation,
+       *     orthogonal to `source_priority` (numeric ranking) and to
+       *     `provenance`/AAuth (which agent wrote it). One of:
+       *
+       *     - `sensor` — ground-truth emission from a tool, hook, webhook,
+       *       runtime telemetry, file watcher, or scheduled probe. Not
+       *       authored by an LLM.
+       *     - `llm_summary` — content authored by an LLM (summaries,
+       *       extractions, inferences, generated notes).
+       *     - `workflow_state` — deterministic state-machine transitions
+       *       (task status advances, node exits, pipeline step outcomes).
+       *     - `human` — direct human write (acceptance of a suggestion,
+       *       Inspector edit, `entities correct`, manual annotation).
+       *     - `import` — batch ingestion / ETL / scheduled imports.
+       *     - `sync` — cross-instance replication from a configured Neotoma peer.
+       *
+       *     Null / missing for legacy rows written before the field
+       *     existed; writes default to `llm_summary` when unspecified
+       *     because MCP callers are LLM-driven by construction.
+       * @enum {string|null}
+       */
+      observation_source?:
+        | "sensor"
+        | "llm_summary"
+        | "workflow_state"
+        | "human"
+        | "import"
+        | "sync"
+        | null;
+      fields?: {
+        [key: string]: unknown;
+      };
+      user_id?: string;
+      /** @description Human-readable source label attached by `attachSourceLabelsToObservations`. */
+      source?: string | null;
+      /**
+       * @description Write-time agent attribution for this observation. Carries the
+       *     `AgentAttribution` keys stamped by the AAuth middleware and
+       *     MCP `initialize.clientInfo` fallback. Coexists with any
+       *     free-form provenance keys supplied at write time.
+       */
+      provenance?: {
+        [key: string]: unknown;
+      } & components["schemas"]["AgentAttribution"];
+    };
+    RelationshipSnapshot: {
+      relationship_key?: string;
+      relationship_type?: string;
+      source_entity_id?: string;
+      target_entity_id?: string;
+      schema_version?: string;
+      snapshot?: {
+        [key: string]: unknown;
+      };
+      /** Format: date-time */
+      computed_at?: string;
+      observation_count?: number;
+      /** Format: date-time */
+      last_observation_at?: string;
+      /**
+       * @description Reducer provenance for the relationship snapshot: a
+       *     `field → observation_id` map. NOT agent attribution; use
+       *     `agent_attribution` on the snapshot (and `provenance` on
+       *     individual contributing relationship observations) to identify
+       *     the writing agent.
+       */
+      provenance?: {
+        [key: string]: unknown;
+      };
+      /**
+       * @description Latest agent-identity attribution for the relationship, derived
+       *     from the most recent contributing `relationship_observations.provenance`
+       *     row. `null` when no contributing observation carried
+       *     attribution keys.
+       */
+      agent_attribution?: components["schemas"]["AgentAttribution"] | null;
+      user_id?: string;
+      /** @description Canonical name of the source entity. Populated when `expand_entities=true`. */
+      source_entity_name?: string | null;
+      source_entity_type?: string | null;
+      source_entity_type_label?: string | null;
+      /** @description Canonical name of the target entity. Populated when `expand_entities=true`. */
+      target_entity_name?: string | null;
+      target_entity_type?: string | null;
+      target_entity_type_label?: string | null;
+    };
+    TimelineEvent: {
+      id?: string;
+      event_type?: string;
+      /** Format: date-time */
+      event_timestamp?: string;
+      event_date?: string;
+      source_id?: string;
+      source_field?: string;
+      entity_id?: string;
+      /** Format: date-time */
+      created_at?: string;
+      user_id?: string;
+      /** @description Optional; not populated by all transports. Prefer entity_id. */
+      entity_ids?: string[];
+      properties?: {
+        [key: string]: unknown;
+      };
+      /**
+       * @description Write-time agent attribution for this timeline event. Carries
+       *     the `AgentAttribution` keys stamped by the AAuth middleware.
+       */
+      provenance?: {
+        [key: string]: unknown;
+      } & components["schemas"]["AgentAttribution"];
+    };
+    EntitySchema: {
+      entity_type?: string;
+      schema_version?: string;
+      field_names?: string[];
+      field_summary?: {
+        [key: string]: unknown;
+      };
+    };
+    Interpretation: {
+      id?: string;
+      source_id?: string;
+      status?: string;
+      /** Format: date-time */
+      created_at?: string;
+      /** Format: date-time */
+      completed_at?: string;
+      /**
+       * @description Write-time agent attribution for the interpretation run. Carries
+       *     the `AgentAttribution` keys stamped by the AAuth middleware.
+       */
+      provenance?: {
+        [key: string]: unknown;
+      } & components["schemas"]["AgentAttribution"];
+    };
+    /**
+     * @description Audit configuration for a parser or agent-authored interpretation run.
+     *     Callers may include extractor_type, extractor_version, model,
+     *     prompt_hash, schema_version, agent_notes, and other provenance fields
+     *     needed to explain how extracted observations were produced.
+     */
+    InterpretationConfig: {
+      extractor_type?: string;
+      extractor_version?: string;
+      model?: string;
+      prompt_hash?: string;
+      schema_version?: string;
+      agent_notes?: string;
+    } & {
+      [key: string]: unknown;
+    };
+    /**
+     * @description Optional interpretation provenance for source-derived structured
+     *     extraction. Supplying this creates an interpretation row and links new
+     *     observations to it. Omit for ordinary already-structured/chat-native
+     *     facts, which keep observations.interpretation_id NULL.
+     */
+    StoreInterpretationInput: {
+      /** @description Existing source to interpret. */
+      source_id?: string;
+      /**
+       * @description Source created by this store request. Use `unstructured` for the raw
+       *     file source in combined file+entities requests, or `structured`
+       *     for the generated JSON source.
+       * @enum {string}
+       */
+      source_ref?: "structured" | "unstructured";
+      interpretation_config?: components["schemas"]["InterpretationConfig"];
+    };
+    CreateInterpretationRequest: {
+      source_id: string;
+      entities: {
+        [key: string]: unknown;
+      }[];
+      interpretation_config?: components["schemas"]["InterpretationConfig"];
+      relationships?: components["schemas"]["StoreRelationshipInput"][];
+      idempotency_key?: string;
+      user_id?: string;
+    };
+    CreateInterpretationResponse: {
+      success?: boolean;
+      interpretation_id?: string;
+      source_id?: string;
+      entities?: {
+        [key: string]: unknown;
+      }[];
+      observations_created?: number;
+      unknown_fields_count?: number;
+      relationships_created?: {
+        [key: string]: unknown;
+      }[];
+    };
+    Stats: {
+      entities?: number;
+      sources?: number;
+      observations?: number;
+      relationships?: number;
+      timeline_events?: number;
+      sources_count?: number;
+      entities_by_type?: {
+        [key: string]: number;
+      };
+      total_entities?: number;
+      total_relationships?: number;
+      total_events?: number;
+      total_observations?: number;
+      total_interpretations?: number;
+      /**
+       * @description R4 telemetry: count of observations per structured identity basis.
+       *     Keys are `schema_rule`, `heuristic_name`, `heuristic_fallback`,
+       *     `target_id`, or `unclassified` for rows written before the
+       *     `identity_basis` column existed.
+       */
+      observations_by_identity_basis?: {
+        [key: string]: number;
+      };
+      /**
+       * @description R4 telemetry: count of observations per identity basis, keyed by
+       *     entity_type (outer) then basis (inner).
+       */
+      observations_by_identity_basis_by_type?: {
+        [key: string]: {
+          [key: string]: number;
+        };
+      };
+      last_updated?: string;
+    };
+    StoreRelationshipInput:
+      | {
+          /** @enum {string} */
+          relationship_type:
+            | "PART_OF"
+            | "CORRECTS"
+            | "REFERS_TO"
+            | "SETTLES"
+            | "DUPLICATE_OF"
+            | "DEPENDS_ON"
+            | "SUPERSEDES"
+            | "EMBEDS"
+            | "works_at"
+            | "owns"
+            | "manages"
+            | "part_of"
+            | "related_to"
+            | "depends_on"
+            | "references"
+            | "transacted_with"
+            | "member_of"
+            | "reports_to"
+            | "located_at"
+            | "created_by"
+            | "funded_by"
+            | "acquired_by"
+            | "subsidiary_of"
+            | "partner_of"
+            | "competitor_of"
+            | "supplies_to"
+            | "contracted_with"
+            | "invested_in";
+          /** @description Index into the entities array for the source entity. */
+          source_index: number;
+          /** @description Index into the entities array for the target entity. */
+          target_index: number;
+          metadata?: {
+            [key: string]: unknown;
+          };
+        }
+      | {
+          /** @enum {string} */
+          relationship_type:
+            | "PART_OF"
+            | "CORRECTS"
+            | "REFERS_TO"
+            | "SETTLES"
+            | "DUPLICATE_OF"
+            | "DEPENDS_ON"
+            | "SUPERSEDES"
+            | "EMBEDS"
+            | "works_at"
+            | "owns"
+            | "manages"
+            | "part_of"
+            | "related_to"
+            | "depends_on"
+            | "references"
+            | "transacted_with"
+            | "member_of"
+            | "reports_to"
+            | "located_at"
+            | "created_by"
+            | "funded_by"
+            | "acquired_by"
+            | "subsidiary_of"
+            | "partner_of"
+            | "competitor_of"
+            | "supplies_to"
+            | "contracted_with"
+            | "invested_in";
+          /** @description Index into the entities array for the source entity. */
+          source_index: number;
+          /** @description Existing target entity ID. */
+          target_entity_id: string;
+          metadata?: {
+            [key: string]: unknown;
+          };
+        }
+      | {
+          /** @enum {string} */
+          relationship_type:
+            | "PART_OF"
+            | "CORRECTS"
+            | "REFERS_TO"
+            | "SETTLES"
+            | "DUPLICATE_OF"
+            | "DEPENDS_ON"
+            | "SUPERSEDES"
+            | "EMBEDS"
+            | "works_at"
+            | "owns"
+            | "manages"
+            | "part_of"
+            | "related_to"
+            | "depends_on"
+            | "references"
+            | "transacted_with"
+            | "member_of"
+            | "reports_to"
+            | "located_at"
+            | "created_by"
+            | "funded_by"
+            | "acquired_by"
+            | "subsidiary_of"
+            | "partner_of"
+            | "competitor_of"
+            | "supplies_to"
+            | "contracted_with"
+            | "invested_in";
+          /** @description Existing source entity ID. */
+          source_entity_id: string;
+          /** @description Index into the entities array for the target entity. */
+          target_index: number;
+          metadata?: {
+            [key: string]: unknown;
+          };
+        }
+      | {
+          /** @enum {string} */
+          relationship_type:
+            | "PART_OF"
+            | "CORRECTS"
+            | "REFERS_TO"
+            | "SETTLES"
+            | "DUPLICATE_OF"
+            | "DEPENDS_ON"
+            | "SUPERSEDES"
+            | "EMBEDS"
+            | "works_at"
+            | "owns"
+            | "manages"
+            | "part_of"
+            | "related_to"
+            | "depends_on"
+            | "references"
+            | "transacted_with"
+            | "member_of"
+            | "reports_to"
+            | "located_at"
+            | "created_by"
+            | "funded_by"
+            | "acquired_by"
+            | "subsidiary_of"
+            | "partner_of"
+            | "competitor_of"
+            | "supplies_to"
+            | "contracted_with"
+            | "invested_in";
+          /** @description Existing source entity ID. */
+          source_entity_id: string;
+          /** @description Existing target entity ID. */
+          target_entity_id: string;
+          metadata?: {
+            [key: string]: unknown;
+          };
+        };
+    /**
+     * @description Upstream artifact author (e.g. GitHub user) stamped into observation
+     *     provenance alongside AAuth agent attribution. Matches
+     *     `ExternalActorInputSchema` in `action_schemas.ts`.
+     */
+    ExternalActorInput: {
+      /** @enum {string} */
+      provider: "github";
+      login: string;
+      id: number;
+      /**
+       * @default User
+       * @enum {string}
+       */
+      type?: "User" | "Bot" | "Organization";
+      /**
+       * @default claim
+       * @enum {string}
+       */
+      verified_via?: "claim" | "linked_attestation" | "oauth_link" | "webhook_signature";
+      delivery_id?: string;
+      event_type?: string;
+      repository?: string;
+      event_id?: number;
+      comment_id?: number;
+    };
+    /**
+     * @description Unified store payload. Supports structured only, unstructured only, or
+     *     both in one request. Top-level field set is closed: unknown request
+     *     fields are rejected with `ERR_UNKNOWN_FIELD` (see
+     *     `docs/subsystems/errors.md`). Entity-level fields inside `entities[]`
+     *     remain intentionally open so schema-driven fields flow through.
+     */
+    StoreRequest: {
+      entities?: {
+        [key: string]: unknown;
+      }[];
+      /**
+       * @description Optional. Create relationships between entities in this request.
+       *     Use `source_index` or `target_index` for entities in this request,
+       *     and `source_entity_id` or `target_entity_id` for existing entities.
+       *     Index and id endpoints may be mixed in one relationship.
+       */
+      relationships?: components["schemas"]["StoreRelationshipInput"][];
+      interpretation?: components["schemas"]["StoreInterpretationInput"];
+      source_priority?: number;
+      /**
+       * @description Classifies the *kind* of write being performed, orthogonal to
+       *     `source_priority`. See `Observation.observation_source` for
+       *     the full semantic contract. Defaults to `llm_summary` when
+       *     unspecified. Applies to every observation created by this
+       *     request.
+       * @enum {string}
+       */
+      observation_source?:
+        | "sensor"
+        | "llm_summary"
+        | "workflow_state"
+        | "human"
+        | "import"
+        | "sync";
+      /**
+       * @description Optional upstream author (e.g. GitHub user for issue submission).
+       *     Stamped into observation provenance; must align with
+       *     `ExternalActorInputSchema` (strict — no extra keys).
+       */
+      external_actor?: components["schemas"]["ExternalActorInput"];
+      /** @description Required for structured path, optional for unstructured-only path. */
+      idempotency_key?: string;
+      /** @description Optional idempotency key for file path when sending structured + unstructured in one call. */
+      file_idempotency_key?: string;
+      /** @description Base64-encoded file content (unstructured path) */
+      file_content?: string;
+      /** @description Local file path for server-local environments */
+      file_path?: string;
+      /** @description Required with file_content, optional with file_path */
+      mime_type?: string;
+      original_filename?: string;
+      user_id?: string;
+      /**
+       * @description When false, runs in plan/dry-run mode: resolves entities and returns
+       *     planned actions ("would_create" / "would_match_existing") without
+       *     persisting observations or source rows. Useful for previewing a
+       *     structured store before committing.
+       * @default true
+       */
+      commit?: boolean;
+      /**
+       * @description When true, refuse silent merges: only match an existing entity when
+       *     the entity's schema declares canonical_name_fields that the request
+       *     matches, or when target_id is supplied. Prevents accidental
+       *     coalescing into a pre-existing record.
+       * @default false
+       */
+      strict?: boolean;
+      /**
+       * @description Optional Neotoma peer id to stamp on observations for cross-instance
+       *     sync loop prevention (Phase 5). Requires `observation_source: sync` in practice.
+       */
+      source_peer_id?: string;
+    };
+    StoreResponse: {
+      structured?: components["schemas"]["StoreStructuredResponse"];
+      unstructured?: components["schemas"]["StoreUnstructuredResponse"];
+    };
+    /**
+     * @description Structured-only store payload. Top-level field set is closed; unknown
+     *     request fields are rejected with `ERR_UNKNOWN_FIELD`. Entity-level
+     *     fields inside `entities[]` remain intentionally open so
+     *     schema-driven fields flow through (see description on `entities[]`).
+     */
+    StoreStructuredRequest: {
+      entities: {
+        [key: string]: unknown;
+      }[];
+      /**
+       * @description Optional. Create relationships between entities in this request.
+       *     Use `source_index` or `target_index` for entities in this request,
+       *     and `source_entity_id` or `target_entity_id` for existing entities.
+       *     Index and id endpoints may be mixed in one relationship.
+       *     Enables one-call chat persistence: store [conversation, conversation_message] with relationships [{ relationship_type: "PART_OF", source_index: 1, target_index: 0 }]. (`agent_message` remains accepted as a legacy alias for pre-v0.6 clients.)
+       */
+      relationships?: components["schemas"]["StoreRelationshipInput"][];
+      interpretation?: components["schemas"]["StoreInterpretationInput"];
+      source_priority?: number;
+      /**
+       * @description Classifies the *kind* of write being performed, orthogonal to
+       *     `source_priority`. See `Observation.observation_source` for
+       *     the full semantic contract. Defaults to `llm_summary` when
+       *     unspecified. Applies to every observation created by this
+       *     request.
+       * @enum {string}
+       */
+      observation_source?:
+        | "sensor"
+        | "llm_summary"
+        | "workflow_state"
+        | "human"
+        | "import"
+        | "sync";
+      idempotency_key: string;
+      user_id?: string;
+      /**
+       * @description Optional. For agent-provided structured data, omit so the source has no filename (null).
+       *     Pass only when mirroring a real file name or when a display label is desired.
+       */
+      original_filename?: string;
+      /**
+       * @description When false, runs in plan/dry-run mode: resolves entities and returns
+       *     planned actions ("would_create" / "would_match_existing") without
+       *     persisting observations or source rows. Useful for previewing a
+       *     structured store before committing.
+       * @default true
+       */
+      commit?: boolean;
+      /**
+       * @description When true, refuse silent merges: only match an existing entity when
+       *     the entity's schema declares canonical_name_fields that the request
+       *     matches, or when target_id is supplied. Prevents accidental
+       *     coalescing into a pre-existing record.
+       * @default false
+       */
+      strict?: boolean;
+      /** @description Optional peer id stamped on observations for sync loop prevention. */
+      source_peer_id?: string;
+    };
+    StoreStructuredResponse: {
+      success?: boolean;
+      /**
+       * @description True when the response is an idempotency replay (no new observations
+       *     or entities were written for this request). Consumers can use this
+       *     to distinguish a genuine fresh commit from a replayed earlier result
+       *     when `entities_created_count` is 0.
+       */
+      replayed?: boolean;
+      entities?: {
+        entity_id?: string;
+        entity_type?: string;
+        observation_id?: string;
+        canonical_name?: string;
+        resolver_path?: string[];
+        /**
+         * @description R4 telemetry: how the entity's identity was resolved. One of
+         *     `schema_rule`, `heuristic_name`, `heuristic_fallback`,
+         *     `target_id`.
+         * @enum {string}
+         */
+        identity_basis?:
+          | "schema_rule"
+          | "schema_lookup"
+          | "heuristic_name"
+          | "heuristic_fallback"
+          | "target_id";
+        /**
+         * @description Human-readable label for the rule that produced the
+         *     canonical_name (e.g. `email`,
+         *     `composite:full_name+employer`, `first_string_field:name`).
+         */
+        identity_rule?: string;
+        action?: string;
+        /**
+         * @description R3 non-fatal resolver warnings for this observation. Present
+         *     when the entity's active schema declares
+         *     `name_collision_policy: "warn"` and resolution landed on an
+         *     existing entity via a heuristic path. PII-free by construction
+         *     (never embeds canonical_name content or extracted field
+         *     values). See
+         *     `.cursor/plans/conversation_entity_collision_fix_aef8ba0d.plan.md`.
+         */
+        warnings?: components["schemas"]["ResolverWarning"][];
+      }[];
+      /**
+       * @description Batch-aggregated non-fatal resolver warnings (R3). Mirrors each
+       *     entity's `entities[].warnings` with `observation_index` and
+       *     `entity_id` attached so callers can audit identity quality without
+       *     walking every entity trace.
+       */
+      warnings?: (components["schemas"]["ResolverWarning"] & {
+        observation_index?: number;
+        entity_id?: string;
+      })[];
+      /** @description Interpretation row linked to observations when the request supplied an explicit interpretation block. */
+      interpretation_id?: string | null;
+    };
+    /**
+     * @description Non-fatal warning emitted by entity resolution when a schema declares
+     *     `name_collision_policy: "warn"` and the caller's payload matched an
+     *     existing entity via a heuristic (non `schema_rule`) path. Shape is
+     *     intentionally PII-free so it can be forwarded to dashboards, logs, and
+     *     downstream agents without redaction.
+     */
+    ResolverWarning: {
+      /** @enum {string} */
+      code: "HEURISTIC_MERGE";
+      /** @enum {string} */
+      policy: "warn";
+      entity_type: string;
+      /** @enum {string} */
+      identity_basis:
+        | "schema_rule"
+        | "schema_lookup"
+        | "heuristic_name"
+        | "heuristic_fallback"
+        | "target_id";
+      identity_rule: string;
+    };
+    /**
+     * @description Unstructured-only store payload. Closed shape; unknown top-level
+     *     fields are rejected with `ERR_UNKNOWN_FIELD`.
+     */
+    StoreUnstructuredRequest: {
+      /** @description Base64-encoded file content */
+      file_content: string;
+      /** @description MIME type of the file */
+      mime_type: string;
+      /** @description Optional idempotency key; if omitted, content hash is used */
+      idempotency_key?: string;
+      /** @description Run AI interpretation after store */
+      original_filename?: string;
+      /** Format: uuid */
+      user_id?: string;
+    };
+    StoreUnstructuredResponse: {
+      source_id?: string;
+      content_hash?: string;
+      file_size?: number;
+      deduplicated?: boolean;
+      interpretation?: {
+        [key: string]: unknown;
+      };
+      entity_ids?: string[];
+    };
+    GetRelationshipSnapshotRequest: {
+      /** @enum {string} */
+      relationship_type:
+        | "PART_OF"
+        | "CORRECTS"
+        | "REFERS_TO"
+        | "SETTLES"
+        | "DUPLICATE_OF"
+        | "DEPENDS_ON"
+        | "SUPERSEDES"
+        | "EMBEDS"
+        | "works_at"
+        | "owns"
+        | "manages"
+        | "part_of"
+        | "related_to"
+        | "depends_on"
+        | "references"
+        | "transacted_with"
+        | "member_of"
+        | "reports_to"
+        | "located_at"
+        | "created_by"
+        | "funded_by"
+        | "acquired_by"
+        | "subsidiary_of"
+        | "partner_of"
+        | "competitor_of"
+        | "supplies_to"
+        | "contracted_with"
+        | "invested_in";
+      source_entity_id: string;
+      target_entity_id: string;
+      /** @description Optional tenant override for read-scope endpoints. Usual auth precedence applies; see docs/subsystems/auth.md. */
+      user_id?: string;
+    };
+    GetRelationshipSnapshotResponse: {
+      snapshot: components["schemas"]["RelationshipSnapshot"];
+      observations: {
+        id?: string;
+        source_id?: string;
+        observed_at?: string;
+        specificity_score?: number;
+        source_priority?: number;
+        metadata?: Record<string, never>;
+      }[];
+    };
+    OAuthInitiateRequest: {
+      connection_id: string;
+      client_name?: string;
+      redirect_uri?: string;
+    };
+    OAuthInitiateResponse: {
+      auth_url?: string;
+      connection_id?: string;
+      /** Format: date-time */
+      expires_at?: string;
+    };
+    OAuthStatusResponse: {
+      status?: string;
+      connection_id?: string;
+    };
+  };
+  responses: never;
+  parameters: never;
+  requestBodies: never;
+  headers: never;
+  pathItems: never;
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    getFileUrl: {
-        parameters: {
-            query: {
-                file_path: string;
-                expires_in?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Signed URL */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FileUrlResponse"];
-                };
-            };
-            /** @description Invalid parameters */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Missing or invalid bearer token */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
+  getFileUrl: {
+    parameters: {
+      query: {
+        file_path: string;
+        expires_in?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    healthCheck: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Signed URL */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Server is healthy */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        ok?: boolean;
-                    };
-                };
-            };
+        content: {
+          "application/json": components["schemas"]["FileUrlResponse"];
         };
+      };
+      /** @description Invalid parameters */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description Missing or invalid bearer token */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
     };
-    getOpenApiSpec: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OpenAPI specification in YAML */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/yaml": string;
-                };
-            };
-        };
+  };
+  healthCheck: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    getServerInfo: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Server is healthy */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Server info */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @description Resolved NEOTOMA_ENV for this process (development or production). */
-                        neotoma_env?: string;
-                    } & {
-                        [key: string]: unknown;
-                    };
-                };
-            };
+        content: {
+          "application/json": {
+            ok?: boolean;
+          };
         };
+      };
     };
-    mcpOAuthInitiate: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["OAuthInitiateRequest"];
-            };
-        };
-        responses: {
-            /** @description OAuth initiation result */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OAuthInitiateResponse"];
-                };
-            };
-            /** @description Invalid request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-        };
+  };
+  getOpenApiSpec: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    mcpOAuthAuthorize: {
-        parameters: {
-            query: {
-                redirect_uri: string;
-                state: string;
-                code_challenge: string;
-                code_challenge_method: string;
-                client_id?: string;
-                dev_stub?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description OpenAPI specification in YAML */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Redirect to authorization URL */
-            302: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
+        content: {
+          "application/yaml": string;
         };
+      };
     };
-    mcpOAuthToken: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/x-www-form-urlencoded": {
-                    grant_type?: string;
-                    code?: string;
-                };
-            };
-        };
-        responses: {
-            /** @description OAuth token response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        access_token?: string;
-                        token_type?: string;
-                        expires_in?: number;
-                    };
-                };
-            };
-            /** @description Token exchange error */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
+  };
+  getServerInfo: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    getMe: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Server info */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Current user details */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        user_id?: string;
-                        email?: string;
-                        storage?: {
-                            /** @enum {string} */
-                            storage_backend?: "local";
-                            data_dir?: string;
-                            sqlite_db?: string;
-                        };
-                    };
-                };
-            };
-            /** @description Not authenticated */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
+        content: {
+          "application/json": {
+            /** @description Resolved NEOTOMA_ENV for this process (development or production). */
+            neotoma_env?: string;
+          } & {
+            [key: string]: unknown;
+          };
         };
+      };
     };
-    mcpOAuthStatus: {
-        parameters: {
-            query: {
-                connection_id: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Connection status */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OAuthStatusResponse"];
-                };
-            };
-            /** @description Invalid request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-        };
+  };
+  mcpOAuthInitiate: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    mcpOAuthListConnections: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Connection list */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        connections?: {
-                            [key: string]: unknown;
-                        }[];
-                    };
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["OAuthInitiateRequest"];
+      };
     };
-    mcpOAuthRevokeConnection: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                connection_id: string;
-            };
-            cookie?: never;
+    responses: {
+      /** @description OAuth initiation result */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Revoked */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        success?: boolean;
-                    };
-                };
-            };
+        content: {
+          "application/json": components["schemas"]["OAuthInitiateResponse"];
         };
+      };
+      /** @description Invalid request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
     };
-    oauthServerMetadata: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Authorization server metadata */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": Record<string, never>;
-                };
-            };
-        };
+  };
+  mcpOAuthAuthorize: {
+    parameters: {
+      query: {
+        redirect_uri: string;
+        state: string;
+        code_challenge: string;
+        code_challenge_method: string;
+        client_id?: string;
+        dev_stub?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    oauthProtectedResource: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Redirect to authorization URL */
+      302: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Protected resource metadata */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": Record<string, never>;
-                };
-            };
-        };
+        content?: never;
+      };
     };
-    mcpOAuthCallback: {
-        parameters: {
-            query?: {
-                code?: string;
-                state?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Redirect after OAuth callback */
-            302: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
+  };
+  mcpOAuthToken: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    mcpOAuthKeyAuthGet: {
-        parameters: {
-            query?: {
-                next?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody: {
+      content: {
+        "application/x-www-form-urlencoded": {
+          grant_type?: string;
+          code?: string;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Key auth HTML page */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/html": string;
-                };
-            };
-        };
+      };
     };
-    mcpOAuthKeyAuthPost: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    responses: {
+      /** @description OAuth token response */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: {
-            content: {
-                "application/x-www-form-urlencoded": {
-                    next?: string;
-                    key?: string;
-                };
-            };
+        content: {
+          "application/json": {
+            access_token?: string;
+            token_type?: string;
+            expires_in?: number;
+          };
         };
-        responses: {
-            /** @description Redirect after key auth */
-            302: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
+      };
+      /** @description Token exchange error */
+      400: {
+        headers: {
+          [name: string]: unknown;
         };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
     };
-    mcpOAuthLocalLogin: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Redirect after local login */
-            302: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
+  };
+  getMe: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    mcpOAuthRegister: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Current user details */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "application/json": {
-                    client_name?: string;
-                    redirect_uris?: string[];
-                };
+        content: {
+          "application/json": {
+            user_id?: string;
+            email?: string;
+            storage?: {
+              /** @enum {string} */
+              storage_backend?: "local";
+              data_dir?: string;
+              sqlite_db?: string;
             };
+          };
         };
-        responses: {
-            /** @description Client registered */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": Record<string, never>;
-                };
-            };
+      };
+      /** @description Not authenticated */
+      401: {
+        headers: {
+          [name: string]: unknown;
         };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
     };
-    mcpOAuthAuthorizationDetails: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Authorization details */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": Record<string, never>;
-                };
-            };
-        };
+  };
+  mcpOAuthStatus: {
+    parameters: {
+      query: {
+        connection_id: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    devSignIn: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Connection status */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    email?: string;
-                    user_id?: string;
-                };
-            };
+        content: {
+          "application/json": components["schemas"]["OAuthStatusResponse"];
         };
-        responses: {
-            /** @description Signed in */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": Record<string, never>;
-                };
-            };
+      };
+      /** @description Invalid request */
+      400: {
+        headers: {
+          [name: string]: unknown;
         };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
     };
-    queryEntities: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    entity_type?: string;
-                    /** @description Canonical free-text query parameter for retrieval relevance. */
-                    search?: string;
-                    /** @description Compatibility alias for `search`. */
-                    query?: string;
-                    /** @description Compatibility alias for `search`. */
-                    search_query?: string;
-                    limit?: number;
-                    offset?: number;
-                    /**
-                     * @description Non-default values cannot be combined with `search`.
-                     *     `submitted_at` orders by `snapshot.created_at` (ISO string), e.g. GitHub issue opened time.
-                     * @enum {string}
-                     */
-                    sort_by?: "entity_id" | "canonical_name" | "observation_count" | "last_observation_at" | "submitted_at";
-                    /**
-                     * @description `desc` cannot be combined with `search`.
-                     * @enum {string}
-                     */
-                    sort_order?: "asc" | "desc";
-                    /** @description Cannot be combined with `search`. */
-                    published?: boolean;
-                    /** @description Inclusive lower bound for snapshot.published_date (ISO date or datetime string). Cannot be combined with `search`. */
-                    published_after?: string;
-                    /** @description Inclusive upper bound for snapshot.published_date (ISO date or datetime string). Cannot be combined with `search`. */
-                    published_before?: string;
-                    /** @description When false, omit snapshot/provenance/raw_fragments payloads for lighter responses. */
-                    include_snapshots?: boolean;
-                    include_merged?: boolean;
-                    user_id?: string;
-                    /**
-                     * @description ISO 8601 timestamp. Return only entities whose
-                     *     updated_at is greater than or equal to this value.
-                     */
-                    updated_since?: string;
-                    /**
-                     * @description ISO 8601 timestamp. Return only entities whose
-                     *     created_at is greater than or equal to this value.
-                     */
-                    created_since?: string;
-                    /**
-                     * @description R3: return only entities that have at least one
-                     *     observation resolved with the given `identity_basis`.
-                     *     Primary use case is the Inspector "ambiguous / heuristic
-                     *     resolution" filter so operators can audit entities that
-                     *     were matched by name/title rather than by a schema rule.
-                     * @enum {string}
-                     */
-                    identity_basis?: "schema_rule" | "schema_lookup" | "heuristic_name" | "heuristic_fallback" | "target_id";
-                };
-            };
-        };
-        responses: {
-            /** @description Entity list */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        entities?: components["schemas"]["EntitySnapshot"][];
-                        total?: number;
-                        limit?: number;
-                        offset?: number;
-                    };
-                };
-            };
-        };
+  };
+  mcpOAuthListConnections: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    getEntityById: {
-        parameters: {
-            query?: {
-                /** @description Optional user scope. When omitted the authenticated user is used. */
-                user_id?: string;
-                /** @description Optional guest read-back token scoped to this entity. */
-                access_token?: string;
-            };
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Connection list */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Entity */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EntitySnapshot"];
-                };
-            };
-            /** @description Entity not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
+        content: {
+          "application/json": {
+            connections?: {
+              [key: string]: unknown;
+            }[];
+          };
         };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
     };
-    getEntityObservations: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Observations */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        observations?: components["schemas"]["Observation"][];
-                    };
-                };
-            };
-        };
+  };
+  mcpOAuthRevokeConnection: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        connection_id: string;
+      };
+      cookie?: never;
     };
-    getEntityRelationships: {
-        parameters: {
-            query?: {
-                /** @description When `true`, the response includes `related_entities` keyed by entity_id and decorates each relationship row with convenience top-level fields (`source_entity_name`, `target_entity_name`, `source_entity_type`, `target_entity_type`, and their labels). */
-                expand_entities?: boolean;
-            };
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Revoked */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Relationships */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        outgoing?: components["schemas"]["RelationshipSnapshot"][];
-                        incoming?: components["schemas"]["RelationshipSnapshot"][];
-                        relationships?: components["schemas"]["RelationshipSnapshot"][];
-                        /** @description Keyed by entity_id; present when `expand_entities=true` and related entities were found. */
-                        related_entities?: {
-                            [key: string]: {
-                                entity_id?: string;
-                                entity_type?: string | null;
-                                canonical_name?: string | null;
-                                snapshot?: {
-                                    [key: string]: unknown;
-                                };
-                                entity_type_label?: string | null;
-                            };
-                        } | null;
-                    };
-                };
-            };
+        content: {
+          "application/json": {
+            success?: boolean;
+          };
         };
+      };
     };
-    listPotentialDuplicates: {
-        parameters: {
-            query: {
-                entity_type: string;
-                user_id?: string;
-                /** @description Similarity threshold in (0, 1]. Defaults to the schema's `duplicate_detection_threshold` or 0.85. */
-                threshold?: number;
-                limit?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Ranked list of candidate duplicate pairs. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        candidates?: {
-                            entity_a?: {
-                                id?: string;
-                                canonical_name?: string;
-                                snapshot_fields?: {
-                                    [key: string]: unknown;
-                                };
-                            };
-                            entity_b?: {
-                                id?: string;
-                                canonical_name?: string;
-                                snapshot_fields?: {
-                                    [key: string]: unknown;
-                                };
-                            };
-                            score?: number;
-                            matched_fields?: string[];
-                            entity_type?: string;
-                        }[];
-                        entity_type?: string;
-                        threshold?: number;
-                    };
-                };
-            };
-        };
+  };
+  oauthServerMetadata: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    mergeEntities: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Authorization server metadata */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "application/json": {
-                    from_entity_id?: string;
-                    to_entity_id?: string;
-                    merge_reason?: string;
-                    user_id?: string;
-                };
-            };
+        content: {
+          "application/json": Record<string, never>;
         };
-        responses: {
-            /** @description Merge result */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        observations_moved?: number;
-                        /** Format: date-time */
-                        merged_at?: string;
-                    };
-                };
-            };
-        };
+      };
     };
-    splitEntity: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SplitEntityRequest"];
-            };
-        };
-        responses: {
-            /** @description Split result (or idempotent replay). */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SplitEntityResponse"];
-                };
-            };
-            /**
-             * @description Invalid predicate, idempotency mismatch, or the predicate matched
-             *     zero / all observations.
-             */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description Source entity not found. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-        };
+  };
+  oauthProtectedResource: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    listSources: {
-        parameters: {
-            query?: {
-                user_id?: string;
-                search?: string;
-                mime_type?: string;
-                source_type?: string;
-                limit?: number;
-                offset?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Protected resource metadata */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Sources */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        sources?: components["schemas"]["Source"][];
-                    };
-                };
-            };
+        content: {
+          "application/json": Record<string, never>;
         };
+      };
     };
-    getSourceById: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Source */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Source"];
-                };
-            };
-        };
+  };
+  mcpOAuthCallback: {
+    parameters: {
+      query?: {
+        code?: string;
+        state?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    getSourceRelationships: {
-        parameters: {
-            query?: {
-                expand_entities?: boolean;
-                user_id?: string;
-            };
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Redirect after OAuth callback */
+      302: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Relationships and optional related entity expansions */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        relationships?: components["schemas"]["RelationshipSnapshot"][];
-                        related_entities?: {
-                            [key: string]: unknown;
-                        };
-                    };
-                };
-            };
-        };
+        content?: never;
+      };
     };
-    listObservations: {
-        parameters: {
-            query?: {
-                user_id?: string;
-                source_id?: string;
+  };
+  mcpOAuthKeyAuthGet: {
+    parameters: {
+      query?: {
+        next?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Key auth HTML page */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "text/html": string;
+        };
+      };
+    };
+  };
+  mcpOAuthKeyAuthPost: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/x-www-form-urlencoded": {
+          next?: string;
+          key?: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Redirect after key auth */
+      302: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  mcpOAuthLocalLogin: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Redirect after local login */
+      302: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  mcpOAuthRegister: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          client_name?: string;
+          redirect_uris?: string[];
+        };
+      };
+    };
+    responses: {
+      /** @description Client registered */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": Record<string, never>;
+        };
+      };
+    };
+  };
+  mcpOAuthAuthorizationDetails: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Authorization details */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": Record<string, never>;
+        };
+      };
+    };
+  };
+  devSignIn: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": {
+          email?: string;
+          user_id?: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Signed in */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": Record<string, never>;
+        };
+      };
+    };
+  };
+  queryEntities: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          entity_type?: string;
+          /** @description Canonical free-text query parameter for retrieval relevance. */
+          search?: string;
+          /** @description Compatibility alias for `search`. */
+          query?: string;
+          /** @description Compatibility alias for `search`. */
+          search_query?: string;
+          limit?: number;
+          offset?: number;
+          /**
+           * @description Non-default values cannot be combined with `search`.
+           *     `submitted_at` orders by `snapshot.created_at` (ISO string), e.g. GitHub issue opened time.
+           * @enum {string}
+           */
+          sort_by?:
+            | "entity_id"
+            | "canonical_name"
+            | "observation_count"
+            | "last_observation_at"
+            | "submitted_at";
+          /**
+           * @description `desc` cannot be combined with `search`.
+           * @enum {string}
+           */
+          sort_order?: "asc" | "desc";
+          /** @description Cannot be combined with `search`. */
+          published?: boolean;
+          /** @description Inclusive lower bound for snapshot.published_date (ISO date or datetime string). Cannot be combined with `search`. */
+          published_after?: string;
+          /** @description Inclusive upper bound for snapshot.published_date (ISO date or datetime string). Cannot be combined with `search`. */
+          published_before?: string;
+          /** @description When false, omit snapshot/provenance/raw_fragments payloads for lighter responses. */
+          include_snapshots?: boolean;
+          include_merged?: boolean;
+          user_id?: string;
+          /**
+           * @description ISO 8601 timestamp. Return only entities whose
+           *     updated_at is greater than or equal to this value.
+           */
+          updated_since?: string;
+          /**
+           * @description ISO 8601 timestamp. Return only entities whose
+           *     created_at is greater than or equal to this value.
+           */
+          created_since?: string;
+          /**
+           * @description R3: return only entities that have at least one
+           *     observation resolved with the given `identity_basis`.
+           *     Primary use case is the Inspector "ambiguous / heuristic
+           *     resolution" filter so operators can audit entities that
+           *     were matched by name/title rather than by a schema rule.
+           * @enum {string}
+           */
+          identity_basis?:
+            | "schema_rule"
+            | "schema_lookup"
+            | "heuristic_name"
+            | "heuristic_fallback"
+            | "target_id";
+        };
+      };
+    };
+    responses: {
+      /** @description Entity list */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            entities?: components["schemas"]["EntitySnapshot"][];
+            total?: number;
+            limit?: number;
+            offset?: number;
+          };
+        };
+      };
+    };
+  };
+  getEntityById: {
+    parameters: {
+      query?: {
+        /** @description Optional user scope. When omitted the authenticated user is used. */
+        user_id?: string;
+        /** @description Optional guest read-back token scoped to this entity. */
+        access_token?: string;
+      };
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Entity */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["EntitySnapshot"];
+        };
+      };
+      /** @description Entity not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  getEntityObservations: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Observations */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            observations?: components["schemas"]["Observation"][];
+          };
+        };
+      };
+    };
+  };
+  getEntityRelationships: {
+    parameters: {
+      query?: {
+        /** @description When `true`, the response includes `related_entities` keyed by entity_id and decorates each relationship row with convenience top-level fields (`source_entity_name`, `target_entity_name`, `source_entity_type`, `target_entity_type`, and their labels). */
+        expand_entities?: boolean;
+      };
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Relationships */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            outgoing?: components["schemas"]["RelationshipSnapshot"][];
+            incoming?: components["schemas"]["RelationshipSnapshot"][];
+            relationships?: components["schemas"]["RelationshipSnapshot"][];
+            /** @description Keyed by entity_id; present when `expand_entities=true` and related entities were found. */
+            related_entities?: {
+              [key: string]: {
                 entity_id?: string;
-                limit?: number;
-                offset?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Observations */
-            200: {
-                headers: {
-                    [name: string]: unknown;
+                entity_type?: string | null;
+                canonical_name?: string | null;
+                snapshot?: {
+                  [key: string]: unknown;
                 };
-                content: {
-                    "application/json": {
-                        observations?: components["schemas"]["Observation"][];
-                    };
-                };
-            };
+                entity_type_label?: string | null;
+              };
+            } | null;
+          };
         };
+      };
     };
-    queryObservations: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    entity_id?: string;
-                    entity_type?: string;
-                    limit?: number;
-                    offset?: number;
-                    user_id?: string;
-                    /**
-                     * @description ISO 8601 timestamp. Return only observations whose
-                     *     observed_at is greater than or equal to this value.
-                     *     (Observations are immutable, so updated_since and
-                     *     created_since both filter observed_at.)
-                     */
-                    updated_since?: string;
-                    /**
-                     * @description ISO 8601 timestamp. Return only observations whose
-                     *     observed_at is greater than or equal to this value.
-                     */
-                    created_since?: string;
-                };
-            };
-        };
-        responses: {
-            /** @description Observations */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        observations?: components["schemas"]["Observation"][];
-                        total?: number;
-                        limit?: number;
-                        offset?: number;
-                    };
-                };
-            };
-        };
+  };
+  listPotentialDuplicates: {
+    parameters: {
+      query: {
+        entity_type: string;
+        user_id?: string;
+        /** @description Similarity threshold in (0, 1]. Defaults to the schema's `duplicate_detection_threshold` or 0.85. */
+        threshold?: number;
+        limit?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    getRecordActivity: {
-        parameters: {
-            query?: {
-                user_id?: string;
-                /** @description Comma-separated subset of record_type values to include. Omit for all types. */
-                record_types?: string;
-                limit?: number;
-                offset?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Ranked list of candidate duplicate pairs. */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Recent record activity */
-            200: {
-                headers: {
-                    [name: string]: unknown;
+        content: {
+          "application/json": {
+            candidates?: {
+              entity_a?: {
+                id?: string;
+                canonical_name?: string;
+                snapshot_fields?: {
+                  [key: string]: unknown;
                 };
-                content: {
-                    "application/json": {
-                        items?: {
-                            /** @enum {string} */
-                            record_type?: "entity" | "source" | "observation" | "interpretation" | "timeline_event" | "relationship";
-                            id?: string;
-                            activity_at?: string;
-                            title?: string;
-                            subtitle?: string | null;
-                            entity_id?: string | null;
-                            entity_name?: string | null;
-                            entity_type?: string | null;
-                            source_id?: string | null;
-                            source_filename?: string | null;
-                            source_type?: string | null;
-                            source_entity_id?: string | null;
-                            source_entity_name?: string | null;
-                            target_entity_id?: string | null;
-                            target_entity_name?: string | null;
-                            relationship_type?: string | null;
-                            event_type?: string | null;
-                            status?: string | null;
-                            turn_key?: string | null;
-                            group_key?: string | null;
-                            /**
-                             * @description Derived agent trust tier for this record, pulled
-                             *     from the row-level `AgentAttribution` provenance.
-                             *     Null when the record type does not carry
-                             *     attribution or predates AAuth.
-                             * @enum {string|null}
-                             */
-                            attribution_tier?: "hardware" | "operator_attested" | "software" | "unverified_client" | "anonymous" | null;
-                            /**
-                             * @description Best-effort human-readable agent label. Priority:
-                             *     `client_name` (+ `client_version`) → `agent_sub` →
-                             *     shortened `agent_thumbprint`.
-                             */
-                            agent_label?: string | null;
-                        }[];
-                        has_more?: boolean;
-                        limit?: number;
-                        offset?: number;
-                    };
+              };
+              entity_b?: {
+                id?: string;
+                canonical_name?: string;
+                snapshot_fields?: {
+                  [key: string]: unknown;
                 };
-            };
+              };
+              score?: number;
+              matched_fields?: string[];
+              entity_type?: string;
+            }[];
+            entity_type?: string;
+            threshold?: number;
+          };
         };
+      };
     };
-    getComplianceScorecard: {
-        parameters: {
-            query?: {
-                user_id?: string;
-                /** @description ISO timestamp/date or relative window (`24h`, `7d`, `30d`, `90d`) */
-                since?: string;
-                until?: string;
-                group_by?: "model+harness" | "model" | "harness" | "profile" | "model+harness+profile";
-                min_turns?: number;
-                min_backfill_rate?: number;
-                top_missed_steps?: number;
-                include_synthetic?: boolean;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Scorecard JSON */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
+  };
+  mergeEntities: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    listAgentGrants: {
-        parameters: {
-            query?: {
-                user_id?: string;
-                status?: "active" | "suspended" | "revoked" | "all";
-                /** @description Substring filter against `label`, `match_sub`, or `match_thumbprint`. */
-                q?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody: {
+      content: {
+        "application/json": {
+          from_entity_id?: string;
+          to_entity_id?: string;
+          merge_reason?: string;
+          user_id?: string;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Grant list */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        grants?: components["schemas"]["AgentGrant"][];
-                    };
-                };
-            };
-        };
+      };
     };
-    createAgentGrant: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    responses: {
+      /** @description Merge result */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AgentGrantCreate"];
-            };
+        content: {
+          "application/json": {
+            observations_moved?: number;
+            /** Format: date-time */
+            merged_at?: string;
+          };
         };
-        responses: {
-            /** @description Created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        grant?: components["schemas"]["AgentGrant"];
-                    };
-                };
-            };
-            /** @description Validation error (e.g. `agent_grant_invalid`) */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Identity already mapped to another grant for this user */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
+      };
     };
-    getAgentGrant: {
-        parameters: {
-            query?: {
-                user_id?: string;
-            };
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Grant detail */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        grant?: components["schemas"]["AgentGrant"];
-                    };
-                };
-            };
-            /** @description Grant not found for this user */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
+  };
+  splitEntity: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    updateAgentGrant: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AgentGrantUpdate"];
-            };
-        };
-        responses: {
-            /** @description Updated */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        grant?: components["schemas"]["AgentGrant"];
-                    };
-                };
-            };
-            /** @description Validation error */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Grant not found for this user */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SplitEntityRequest"];
+      };
     };
-    suspendAgentGrant: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
+    responses: {
+      /** @description Split result (or idempotent replay). */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Suspended */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        grant?: components["schemas"]["AgentGrant"];
-                    };
-                };
-            };
+        content: {
+          "application/json": components["schemas"]["SplitEntityResponse"];
         };
+      };
+      /**
+       * @description Invalid predicate, idempotency mismatch, or the predicate matched
+       *     zero / all observations.
+       */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Source entity not found. */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
     };
-    revokeAgentGrant: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Revoked */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        grant?: components["schemas"]["AgentGrant"];
-                    };
-                };
-            };
-        };
+  };
+  listSources: {
+    parameters: {
+      query?: {
+        user_id?: string;
+        search?: string;
+        mime_type?: string;
+        source_type?: string;
+        limit?: number;
+        offset?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    restoreAgentGrant: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Sources */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Restored */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        grant?: components["schemas"]["AgentGrant"];
-                    };
-                };
-            };
+        content: {
+          "application/json": {
+            sources?: components["schemas"]["Source"][];
+          };
         };
+      };
     };
-    getRecentConversations: {
-        parameters: {
-            query?: {
-                user_id?: string;
-                limit?: number;
-                offset?: number;
-                /** @description Inclusive lower bound on conversation activity (ISO 8601) */
-                activity_after?: string;
-                /** @description Inclusive upper bound on conversation activity (ISO 8601) */
-                activity_before?: string;
-                /** @description Filter by latest observation attribution key (same as GET /agents `agent_key`) */
-                agent_key?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Recent conversations */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        items?: {
-                            conversation_id?: string;
-                            canonical_name?: string | null;
-                            title?: string | null;
-                            activity_at?: string;
-                            message_count?: number;
-                            latest_write_provenance?: {
-                                [key: string]: unknown;
-                            } | null;
-                            messages?: {
-                                message_id?: string;
-                                canonical_name?: string | null;
-                                role?: string | null;
-                                sender_kind?: string | null;
-                                content?: string | null;
-                                turn_key?: string | null;
-                                activity_at?: string;
-                                related_entities?: {
-                                    entity_id?: string;
-                                    entity_type?: string | null;
-                                    canonical_name?: string | null;
-                                    title?: string | null;
-                                    relationship_type?: string;
-                                }[];
-                            }[];
-                        }[];
-                        has_more?: boolean;
-                        limit?: number;
-                        offset?: number;
-                    };
-                };
-            };
-        };
+  };
+  getSourceById: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
     };
-    getRecentConversation: {
-        parameters: {
-            query?: {
-                user_id?: string;
-            };
-            header?: never;
-            path: {
-                conversation_id: string;
-            };
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Source */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Conversation with nested messages */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RecentConversationItem"];
-                };
-            };
-            /** @description Conversation not found or not visible to the caller */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
+        content: {
+          "application/json": components["schemas"]["Source"];
         };
+      };
     };
-    createObservation: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
-            };
-        };
-        responses: {
-            /** @description Observation created */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
+  };
+  getSourceRelationships: {
+    parameters: {
+      query?: {
+        expand_entities?: boolean;
+        user_id?: string;
+      };
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
     };
-    listRelationships: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Relationships and optional related entity expansions */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Relationships */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        relationships?: components["schemas"]["RelationshipSnapshot"][];
-                    };
-                };
+        content: {
+          "application/json": {
+            relationships?: components["schemas"]["RelationshipSnapshot"][];
+            related_entities?: {
+              [key: string]: unknown;
             };
+          };
         };
+      };
     };
-    getRelationshipById: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Relationship */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RelationshipSnapshot"];
-                };
-            };
-        };
+  };
+  listObservations: {
+    parameters: {
+      query?: {
+        user_id?: string;
+        source_id?: string;
+        entity_id?: string;
+        limit?: number;
+        offset?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    getRelationshipSnapshot: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Observations */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["GetRelationshipSnapshotRequest"];
-            };
+        content: {
+          "application/json": {
+            observations?: components["schemas"]["Observation"][];
+          };
         };
-        responses: {
-            /** @description Relationship snapshot and observations */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["GetRelationshipSnapshotResponse"];
-                };
-            };
-        };
+      };
     };
-    listTimeline: {
-        parameters: {
-            query?: {
-                start_date?: string;
-                end_date?: string;
-                event_type?: string;
-                user_id?: string;
-                limit?: number;
-                offset?: number;
-                /** @description Sort column descending. event_timestamp = dates from extracted data; created_at = when the timeline row was written (better for "recent activity"). */
-                order_by?: "event_timestamp" | "created_at";
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Timeline events */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        events?: components["schemas"]["TimelineEvent"][];
-                    };
-                };
-            };
-        };
+  };
+  queryObservations: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    getTimelineById: {
-        parameters: {
-            query?: {
-                user_id?: string;
-            };
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
+    requestBody: {
+      content: {
+        "application/json": {
+          entity_id?: string;
+          entity_type?: string;
+          limit?: number;
+          offset?: number;
+          user_id?: string;
+          /**
+           * @description ISO 8601 timestamp. Return only observations whose
+           *     observed_at is greater than or equal to this value.
+           *     (Observations are immutable, so updated_since and
+           *     created_since both filter observed_at.)
+           */
+          updated_since?: string;
+          /**
+           * @description ISO 8601 timestamp. Return only observations whose
+           *     observed_at is greater than or equal to this value.
+           */
+          created_since?: string;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Timeline event */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        event?: components["schemas"]["TimelineEvent"];
-                    };
-                };
-            };
-        };
+      };
     };
-    listSchemas: {
-        parameters: {
-            query?: {
-                user_id?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
+    responses: {
+      /** @description Observations */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Schemas */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        schemas?: components["schemas"]["EntitySchema"][];
-                    };
-                };
-            };
+        content: {
+          "application/json": {
+            observations?: components["schemas"]["Observation"][];
+            total?: number;
+            limit?: number;
+            offset?: number;
+          };
         };
+      };
     };
-    getSchemaByEntityType: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                entity_type: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Schema */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EntitySchema"];
-                };
-            };
-        };
+  };
+  getRecordActivity: {
+    parameters: {
+      query?: {
+        user_id?: string;
+        /** @description Comma-separated subset of record_type values to include. Omit for all types. */
+        record_types?: string;
+        limit?: number;
+        offset?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    listInterpretations: {
-        parameters: {
-            query?: {
-                user_id?: string;
-                source_id?: string;
-                limit?: number;
-                offset?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Recent record activity */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Interpretations */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        interpretations?: components["schemas"]["Interpretation"][];
-                    };
-                };
-            };
+        content: {
+          "application/json": {
+            items?: {
+              /** @enum {string} */
+              record_type?:
+                | "entity"
+                | "source"
+                | "observation"
+                | "interpretation"
+                | "timeline_event"
+                | "relationship";
+              id?: string;
+              activity_at?: string;
+              title?: string;
+              subtitle?: string | null;
+              entity_id?: string | null;
+              entity_name?: string | null;
+              entity_type?: string | null;
+              source_id?: string | null;
+              source_filename?: string | null;
+              source_type?: string | null;
+              source_entity_id?: string | null;
+              source_entity_name?: string | null;
+              target_entity_id?: string | null;
+              target_entity_name?: string | null;
+              relationship_type?: string | null;
+              event_type?: string | null;
+              status?: string | null;
+              turn_key?: string | null;
+              group_key?: string | null;
+              /**
+               * @description Derived agent trust tier for this record, pulled
+               *     from the row-level `AgentAttribution` provenance.
+               *     Null when the record type does not carry
+               *     attribution or predates AAuth.
+               * @enum {string|null}
+               */
+              attribution_tier?:
+                | "hardware"
+                | "operator_attested"
+                | "software"
+                | "unverified_client"
+                | "anonymous"
+                | null;
+              /**
+               * @description Best-effort human-readable agent label. Priority:
+               *     `client_name` (+ `client_version`) → `agent_sub` →
+               *     shortened `agent_thumbprint`.
+               */
+              agent_label?: string | null;
+            }[];
+            has_more?: boolean;
+            limit?: number;
+            offset?: number;
+          };
         };
+      };
     };
-    createInterpretation: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateInterpretationRequest"];
-            };
-        };
-        responses: {
-            /** @description Interpretation result */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CreateInterpretationResponse"];
-                };
-            };
-        };
+  };
+  getComplianceScorecard: {
+    parameters: {
+      query?: {
+        user_id?: string;
+        /** @description ISO timestamp/date or relative window (`24h`, `7d`, `30d`, `90d`) */
+        since?: string;
+        until?: string;
+        group_by?: "model+harness" | "model" | "harness" | "profile" | "model+harness+profile";
+        min_turns?: number;
+        min_backfill_rate?: number;
+        top_missed_steps?: number;
+        include_synthetic?: boolean;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    getStats: {
-        parameters: {
-            query?: {
-                user_id?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Scorecard JSON */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Stats */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Stats"];
-                };
-            };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
         };
+      };
     };
-    getAccessPolicies: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Map of entity types to their effective guest access policy mode */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @description Entity type to effective policy mode */
-                        policies: {
-                            [key: string]: "closed" | "read_only" | "submit_only" | "submitter_scoped" | "open";
-                        };
-                        /**
-                         * @description Default mode for entity types not in the policies map
-                         * @enum {string}
-                         */
-                        default_mode: "closed" | "read_only" | "submit_only" | "submitter_scoped" | "open";
-                    };
-                };
-            };
-        };
+  };
+  listAgentGrants: {
+    parameters: {
+      query?: {
+        user_id?: string;
+        status?: "active" | "suspended" | "revoked" | "all";
+        /** @description Substring filter against `label`, `match_sub`, or `match_thumbprint`. */
+        q?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    store: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Grant list */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["StoreRequest"];
-            };
+        content: {
+          "application/json": {
+            grants?: components["schemas"]["AgentGrant"][];
+          };
         };
-        responses: {
-            /** @description Store result */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["StoreStructuredResponse"] | components["schemas"]["StoreUnstructuredResponse"] | components["schemas"]["StoreResponse"];
-                };
+      };
+    };
+  };
+  createAgentGrant: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AgentGrantCreate"];
+      };
+    };
+    responses: {
+      /** @description Created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            grant?: components["schemas"]["AgentGrant"];
+          };
+        };
+      };
+      /** @description Validation error (e.g. `agent_grant_invalid`) */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Identity already mapped to another grant for this user */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  getAgentGrant: {
+    parameters: {
+      query?: {
+        user_id?: string;
+      };
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Grant detail */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            grant?: components["schemas"]["AgentGrant"];
+          };
+        };
+      };
+      /** @description Grant not found for this user */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  updateAgentGrant: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AgentGrantUpdate"];
+      };
+    };
+    responses: {
+      /** @description Updated */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            grant?: components["schemas"]["AgentGrant"];
+          };
+        };
+      };
+      /** @description Validation error */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Grant not found for this user */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  suspendAgentGrant: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Suspended */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            grant?: components["schemas"]["AgentGrant"];
+          };
+        };
+      };
+    };
+  };
+  revokeAgentGrant: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Revoked */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            grant?: components["schemas"]["AgentGrant"];
+          };
+        };
+      };
+    };
+  };
+  restoreAgentGrant: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Restored */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            grant?: components["schemas"]["AgentGrant"];
+          };
+        };
+      };
+    };
+  };
+  getRecentConversations: {
+    parameters: {
+      query?: {
+        user_id?: string;
+        limit?: number;
+        offset?: number;
+        /** @description Inclusive lower bound on conversation activity (ISO 8601) */
+        activity_after?: string;
+        /** @description Inclusive upper bound on conversation activity (ISO 8601) */
+        activity_before?: string;
+        /** @description Filter by latest observation attribution key (same as GET /agents `agent_key`) */
+        agent_key?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Recent conversations */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            items?: {
+              conversation_id?: string;
+              canonical_name?: string | null;
+              title?: string | null;
+              activity_at?: string;
+              message_count?: number;
+              latest_write_provenance?: {
+                [key: string]: unknown;
+              } | null;
+              messages?: {
+                message_id?: string;
+                canonical_name?: string | null;
+                role?: string | null;
+                sender_kind?: string | null;
+                content?: string | null;
+                turn_key?: string | null;
+                activity_at?: string;
+                related_entities?: {
+                  entity_id?: string;
+                  entity_type?: string | null;
+                  canonical_name?: string | null;
+                  title?: string | null;
+                  relationship_type?: string;
+                }[];
+              }[];
+            }[];
+            has_more?: boolean;
+            limit?: number;
+            offset?: number;
+          };
+        };
+      };
+    };
+  };
+  getRecentConversation: {
+    parameters: {
+      query?: {
+        user_id?: string;
+      };
+      header?: never;
+      path: {
+        conversation_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Conversation with nested messages */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RecentConversationItem"];
+        };
+      };
+      /** @description Conversation not found or not visible to the caller */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  createObservation: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          [key: string]: unknown;
+        };
+      };
+    };
+    responses: {
+      /** @description Observation created */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  listRelationships: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Relationships */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            relationships?: components["schemas"]["RelationshipSnapshot"][];
+          };
+        };
+      };
+    };
+  };
+  getRelationshipById: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Relationship */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RelationshipSnapshot"];
+        };
+      };
+    };
+  };
+  getRelationshipSnapshot: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["GetRelationshipSnapshotRequest"];
+      };
+    };
+    responses: {
+      /** @description Relationship snapshot and observations */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GetRelationshipSnapshotResponse"];
+        };
+      };
+    };
+  };
+  listTimeline: {
+    parameters: {
+      query?: {
+        start_date?: string;
+        end_date?: string;
+        event_type?: string;
+        user_id?: string;
+        limit?: number;
+        offset?: number;
+        /** @description Sort column descending. event_timestamp = dates from extracted data; created_at = when the timeline row was written (better for "recent activity"). */
+        order_by?: "event_timestamp" | "created_at";
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Timeline events */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            events?: components["schemas"]["TimelineEvent"][];
+          };
+        };
+      };
+    };
+  };
+  getTimelineById: {
+    parameters: {
+      query?: {
+        user_id?: string;
+      };
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Timeline event */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            event?: components["schemas"]["TimelineEvent"];
+          };
+        };
+      };
+    };
+  };
+  listSchemas: {
+    parameters: {
+      query?: {
+        user_id?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Schemas */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            schemas?: components["schemas"]["EntitySchema"][];
+          };
+        };
+      };
+    };
+  };
+  getSchemaByEntityType: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        entity_type: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Schema */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["EntitySchema"];
+        };
+      };
+    };
+  };
+  listInterpretations: {
+    parameters: {
+      query?: {
+        user_id?: string;
+        source_id?: string;
+        limit?: number;
+        offset?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Interpretations */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            interpretations?: components["schemas"]["Interpretation"][];
+          };
+        };
+      };
+    };
+  };
+  createInterpretation: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateInterpretationRequest"];
+      };
+    };
+    responses: {
+      /** @description Interpretation result */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CreateInterpretationResponse"];
+        };
+      };
+    };
+  };
+  getStats: {
+    parameters: {
+      query?: {
+        user_id?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Stats */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Stats"];
+        };
+      };
+    };
+  };
+  getAccessPolicies: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Map of entity types to their effective guest access policy mode */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            /** @description Entity type to effective policy mode */
+            policies: {
+              [key: string]: "closed" | "read_only" | "submit_only" | "submitter_scoped" | "open";
             };
             /**
-             * @description Request rejected. `ERR_STORE_RESOLUTION_FAILED` uses the richer
-             *     `StoreResolutionErrorEnvelope` shape; other validation errors fall
-             *     back to the generic `ErrorEnvelope`.
+             * @description Default mode for entity types not in the policies map
+             * @enum {string}
              */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["StoreResolutionErrorEnvelope"] | components["schemas"]["ErrorEnvelope"];
-                };
-            };
+            default_mode: "closed" | "read_only" | "submit_only" | "submitter_scoped" | "open";
+          };
         };
+      };
     };
-    getEntitySnapshot: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    entity_id?: string;
-                    /** @description ISO 8601 timestamp for historical snapshot reconstruction */
-                    at?: string;
-                    /**
-                     * @description Response text format. `markdown` (default for MCP) returns canonical deterministic markdown for KV-cache stability. `json` returns the raw snapshot payload for programmatic callers.
-                     * @enum {string}
-                     */
-                    format?: "markdown" | "json";
-                };
-            };
-        };
-        responses: {
-            /** @description Entity snapshot */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EntitySnapshot"];
-                };
-            };
-        };
+  };
+  store: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    listObservationsForEntity: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    entity_id?: string;
-                    limit?: number;
-                    offset?: number;
-                    /**
-                     * @description ISO 8601 timestamp. Return only observations whose
-                     *     observed_at is greater than or equal to this value.
-                     */
-                    updated_since?: string;
-                    /**
-                     * @description ISO 8601 timestamp. Return only observations whose
-                     *     observed_at is greater than or equal to this value.
-                     */
-                    created_since?: string;
-                };
-            };
-        };
-        responses: {
-            /** @description Observations */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        observations?: components["schemas"]["Observation"][];
-                    };
-                };
-            };
-        };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["StoreRequest"];
+      };
     };
-    getFieldProvenance: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    responses: {
+      /** @description Store result */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "application/json": {
-                    entity_id?: string;
-                    field?: string;
-                };
-            };
+        content: {
+          "application/json":
+            | components["schemas"]["StoreStructuredResponse"]
+            | components["schemas"]["StoreUnstructuredResponse"]
+            | components["schemas"]["StoreResponse"];
         };
-        responses: {
-            /** @description Provenance */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
+      };
+      /**
+       * @description Request rejected. `ERR_STORE_RESOLUTION_FAILED` uses the richer
+       *     `StoreResolutionErrorEnvelope` shape; other validation errors fall
+       *     back to the generic `ErrorEnvelope`.
+       */
+      400: {
+        headers: {
+          [name: string]: unknown;
         };
+        content: {
+          "application/json":
+            | components["schemas"]["StoreResolutionErrorEnvelope"]
+            | components["schemas"]["ErrorEnvelope"];
+        };
+      };
     };
-    createRelationship: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
-            };
-        };
-        responses: {
-            /** @description Relationship created */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RelationshipSnapshot"];
-                };
-            };
-        };
+  };
+  getEntitySnapshot: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    createRelationships: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody: {
+      content: {
+        "application/json": {
+          entity_id?: string;
+          /** @description ISO 8601 timestamp for historical snapshot reconstruction */
+          at?: string;
+          /**
+           * @description Response text format. `markdown` (default for MCP) returns canonical deterministic markdown for KV-cache stability. `json` returns the raw snapshot payload for programmatic callers.
+           * @enum {string}
+           */
+          format?: "markdown" | "json";
         };
-        requestBody: {
-            content: {
-                "application/json": {
-                    relationships: {
-                        /** @enum {string} */
-                        relationship_type: "PART_OF" | "CORRECTS" | "REFERS_TO" | "SETTLES" | "DUPLICATE_OF" | "DEPENDS_ON" | "SUPERSEDES" | "EMBEDS" | "works_at" | "owns" | "manages" | "part_of" | "related_to" | "depends_on" | "references" | "transacted_with" | "member_of" | "reports_to" | "located_at" | "created_by" | "funded_by" | "acquired_by" | "subsidiary_of" | "partner_of" | "competitor_of" | "supplies_to" | "contracted_with" | "invested_in";
-                        source_entity_id: string;
-                        target_entity_id: string;
-                        source_id?: string;
-                        metadata?: {
-                            [key: string]: unknown;
-                        };
-                    }[];
-                    source_id?: string;
-                    user_id?: string;
-                };
-            };
-        };
-        responses: {
-            /** @description Relationships created */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        success?: boolean;
-                        requested?: number;
-                        created_count?: number;
-                        error_count?: number;
-                        relationships?: components["schemas"]["RelationshipSnapshot"][];
-                        errors?: {
-                            [key: string]: unknown;
-                        }[];
-                    };
-                };
-            };
-        };
+      };
     };
-    listRelationshipsForEntity: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    responses: {
+      /** @description Entity snapshot */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
-            };
+        content: {
+          "application/json": components["schemas"]["EntitySnapshot"];
         };
-        responses: {
-            /** @description Relationships */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        relationships?: components["schemas"]["RelationshipSnapshot"][];
-                    };
-                };
-            };
-        };
+      };
     };
-    retrieveEntityByIdentifier: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    /** @description Identifier to search for (name, email, etc.) */
-                    identifier: string;
-                    /** @description Optional entity type to limit search */
-                    entity_type?: string;
-                    /** @description Optional user_id override (scoped to callers with privilege to query on behalf of another user). */
-                    user_id?: string;
-                    /**
-                     * @description Restrict snapshot-field matching to a single field
-                     *     (e.g. "email", "domain", "company"). When omitted, a
-                     *     default identity-bearing set is checked
-                     *     (name, full_name, title, email, domain, company).
-                     */
-                    by?: string;
-                    /** @description Maximum number of matching entities to return (default 100). */
-                    limit?: number;
-                    /**
-                     * @description When true, attach recent observations to each matched entity
-                     *     (ordered by observed_at descending). Useful for collapsing
-                     *     identify → snapshot → list_observations into a single call.
-                     * @default false
-                     */
-                    include_observations?: boolean;
-                    /**
-                     * @description Maximum observations to attach per entity when
-                     *     include_observations is true. Ignored otherwise.
-                     * @default 20
-                     */
-                    observations_limit?: number;
-                };
-            };
-        };
-        responses: {
-            /** @description Entity search results */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        entities?: (components["schemas"]["Entity"] & {
-                            /**
-                             * @description Present only when the request set
-                             *     include_observations = true. Ordered by
-                             *     observed_at descending, capped by
-                             *     observations_limit.
-                             */
-                            observations?: {
-                                [key: string]: unknown;
-                            }[];
-                        })[];
-                        total?: number;
-                    };
-                };
-            };
-            /** @description Invalid request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-        };
+  };
+  listObservationsForEntity: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    retrieveRelatedEntities: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody: {
+      content: {
+        "application/json": {
+          entity_id?: string;
+          limit?: number;
+          offset?: number;
+          /**
+           * @description ISO 8601 timestamp. Return only observations whose
+           *     observed_at is greater than or equal to this value.
+           */
+          updated_since?: string;
+          /**
+           * @description ISO 8601 timestamp. Return only observations whose
+           *     observed_at is greater than or equal to this value.
+           */
+          created_since?: string;
         };
-        requestBody: {
-            content: {
-                "application/json": {
-                    entity_id: string;
-                    relationship_types?: string[];
-                    /**
-                     * @default both
-                     * @enum {string}
-                     */
-                    direction?: "inbound" | "outbound" | "both";
-                    /** @default 1 */
-                    max_hops?: number;
-                    /** @default true */
-                    include_entities?: boolean;
-                };
-            };
-        };
-        responses: {
-            /** @description Related entities */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
+      };
     };
-    retrieveGraphNeighborhood: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    responses: {
+      /** @description Observations */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "application/json": {
-                    node_id: string;
-                    /**
-                     * @default entity
-                     * @enum {string}
-                     */
-                    node_type?: "entity" | "source";
-                    /** @default true */
-                    include_relationships?: boolean;
-                    /** @default true */
-                    include_sources?: boolean;
-                    /** @default true */
-                    include_events?: boolean;
-                    /** @default false */
-                    include_observations?: boolean;
-                };
-            };
+        content: {
+          "application/json": {
+            observations?: components["schemas"]["Observation"][];
+          };
         };
-        responses: {
-            /** @description Graph neighborhood */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
+      };
     };
-    bulkCloseIssues: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    entity_ids: string[];
-                    user_id?: string;
-                };
-            };
-        };
-        responses: {
-            /** @description Per-entity outcomes */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        results: {
-                            [key: string]: unknown;
-                        }[];
-                    };
-                };
-            };
-        };
+  };
+  getFieldProvenance: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    bulkRemoveIssues: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody: {
+      content: {
+        "application/json": {
+          entity_id?: string;
+          field?: string;
         };
-        requestBody: {
-            content: {
-                "application/json": {
-                    entity_ids: string[];
-                    user_id?: string;
-                };
-            };
-        };
-        responses: {
-            /** @description Per-entity outcomes */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        results: {
-                            [key: string]: unknown;
-                        }[];
-                    };
-                };
-            };
-        };
+      };
     };
-    issuesAddMessage: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    responses: {
+      /** @description Provenance */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "application/json": {
-                    /** @description Neotoma issue entity id (preferred for Inspector deep links). */
-                    entity_id?: string;
-                    /** @description GitHub issue number in the configured repo (MCP parity). */
-                    issue_number?: number;
-                    /** @description Markdown message body. */
-                    body: string;
-                    /** @description Optional guest token for operator Neotoma read-through / remote append when the local issue mirrors a remote instance. If omitted, guest_access_token on the issue snapshot is used. */
-                    guest_access_token?: string;
-                    /**
-                     * @description Soft requirement on public issue threads (server emits a warning when both
-                     *     `reporter_git_sha` and `reporter_app_version` are missing). Persisted on the
-                     *     `conversation_message` row so debugging steps stay correlated with the build under test.
-                     */
-                    reporter_git_sha?: string;
-                    reporter_git_ref?: string;
-                    reporter_channel?: string;
-                    /**
-                     * @description Soft requirement on public issue threads (server emits a warning when both
-                     *     `reporter_git_sha` and `reporter_app_version` are missing).
-                     */
-                    reporter_app_version?: string;
-                    /** @description Entity IDs to link to the issue entity via REFERS_TO relationships. Created server-side in the same operation as the message is stored. */
-                    entity_ids_to_link?: string[];
-                    user_id?: string;
-                };
-            };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
         };
-        responses: {
-            /** @description Message stored; flags indicate GitHub / remote submission outcomes. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        github_comment_id: string | null;
-                        message_entity_id: string;
-                        pushed_to_github: boolean;
-                        submitted_to_neotoma: boolean;
-                        /** @description Non-null when remote Neotoma append was attempted but failed after local and/or GitHub side effects were recorded. */
-                        remote_submission_error: string | null;
-                    };
-                };
-            };
-        };
+      };
     };
-    issuesSubmit: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    title: string;
-                    body: string;
-                    labels?: string[];
-                    /** @enum {string} */
-                    visibility?: "public" | "private";
-                    /**
-                     * @description Required (this OR `reporter_app_version`). Git SHA the reporter is reproducing against
-                     *     (`git rev-parse HEAD`).
-                     */
-                    reporter_git_sha?: string;
-                    reporter_git_ref?: string;
-                    reporter_channel?: string;
-                    /** @description Required (this OR `reporter_git_sha`). App / CLI version (semver) the reporter is using. */
-                    reporter_app_version?: string;
-                    reporter_ci_run_id?: string;
-                    reporter_patch_source_id?: string;
-                    /** @description Guest submitter compatibility field for an already-created GitHub issue URL. */
-                    github_url?: string;
-                    /** @description Guest submitter compatibility field for an already-created GitHub issue number. */
-                    github_number?: number;
-                    /** @description Guest submitter display author stored on the issue and first thread message. */
-                    author?: string;
-                    /** @description Guest submitter deterministic local issue id for non-GitHub-backed threads. */
-                    local_issue_id?: string;
-                    /** @description Guest submitter timestamp used for deterministic local thread identity. */
-                    submission_timestamp?: string;
-                    /** @description Entity IDs to link to this issue via REFERS_TO relationships. Created server-side in the same operation as issue creation. */
-                    entity_ids_to_link?: string[];
-                    user_id?: string;
-                };
-            };
-        };
-        responses: {
-            /** @description Issue created */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        issue_number: number;
-                        github_url: string;
-                        entity_id: string;
-                        /** @description Alias for `entity_id` returned for guest submitter compatibility. */
-                        issue_entity_id?: string;
-                        conversation_id: string;
-                        remote_entity_id: string;
-                        pushed_to_github: boolean;
-                        submitted_to_neotoma: boolean;
-                        /** @description Guest token returned by the operator instance for remote read-back and append. */
-                        guest_access_token?: string;
-                        /** @description Entity ids written by the guest submitter flow. */
-                        entity_ids?: string[];
-                        github_mirror_guidance: string | null;
-                    };
-                };
-            };
-            /**
-             * @description Validation error. `error_code: ERR_REPORTER_ENVIRONMENT_REQUIRED`
-             *     is returned when neither `reporter_git_sha` nor
-             *     `reporter_app_version` is provided. `details.acceptable_field_groups`
-             *     lists the alternatives the caller can supply.
-             */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-        };
+  };
+  createRelationship: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    issuesGetStatus: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody: {
+      content: {
+        "application/json": {
+          [key: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "application/json": {
-                    entity_id?: string;
-                    issue_number?: number;
-                    skip_sync?: boolean;
-                    guest_access_token?: string;
-                    user_id?: string;
-                };
-            };
-        };
-        responses: {
-            /** @description Issue status payload */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
+      };
     };
-    issuesSync: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    responses: {
+      /** @description Relationship created */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "application/json": {
-                    since?: string;
-                    /** @enum {string} */
-                    state?: "open" | "closed" | "all";
-                    labels?: string[];
-                    user_id?: string;
-                };
-            };
+        content: {
+          "application/json": components["schemas"]["RelationshipSnapshot"];
         };
-        responses: {
-            /** @description Sync counts and errors */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        issues_synced: number;
-                        messages_synced: number;
-                        errors: string[];
-                    };
-                };
-            };
-        };
+      };
     };
-    deleteEntity: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    entity_id: string;
-                    entity_type: string;
-                    reason?: string;
-                    user_id?: string;
-                };
-            };
-        };
-        responses: {
-            /** @description Entity deleted */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
+  };
+  createRelationships: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    restoreEntity: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    entity_id: string;
-                    entity_type: string;
-                    reason?: string;
-                    user_id?: string;
-                };
+    requestBody: {
+      content: {
+        "application/json": {
+          relationships: {
+            /** @enum {string} */
+            relationship_type:
+              | "PART_OF"
+              | "CORRECTS"
+              | "REFERS_TO"
+              | "SETTLES"
+              | "DUPLICATE_OF"
+              | "DEPENDS_ON"
+              | "SUPERSEDES"
+              | "EMBEDS"
+              | "works_at"
+              | "owns"
+              | "manages"
+              | "part_of"
+              | "related_to"
+              | "depends_on"
+              | "references"
+              | "transacted_with"
+              | "member_of"
+              | "reports_to"
+              | "located_at"
+              | "created_by"
+              | "funded_by"
+              | "acquired_by"
+              | "subsidiary_of"
+              | "partner_of"
+              | "competitor_of"
+              | "supplies_to"
+              | "contracted_with"
+              | "invested_in";
+            source_entity_id: string;
+            target_entity_id: string;
+            source_id?: string;
+            metadata?: {
+              [key: string]: unknown;
             };
+          }[];
+          source_id?: string;
+          user_id?: string;
         };
-        responses: {
-            /** @description Entity restored */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
+      };
     };
-    deleteRelationship: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    responses: {
+      /** @description Relationships created */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "application/json": {
-                    /** @enum {string} */
-                    relationship_type: "PART_OF" | "CORRECTS" | "REFERS_TO" | "SETTLES" | "DUPLICATE_OF" | "DEPENDS_ON" | "SUPERSEDES" | "EMBEDS" | "works_at" | "owns" | "manages" | "part_of" | "related_to" | "depends_on" | "references" | "transacted_with" | "member_of" | "reports_to" | "located_at" | "created_by" | "funded_by" | "acquired_by" | "subsidiary_of" | "partner_of" | "competitor_of" | "supplies_to" | "contracted_with" | "invested_in";
-                    source_entity_id: string;
-                    target_entity_id: string;
-                    reason?: string;
-                    user_id?: string;
-                };
-            };
+        content: {
+          "application/json": {
+            success?: boolean;
+            requested?: number;
+            created_count?: number;
+            error_count?: number;
+            relationships?: components["schemas"]["RelationshipSnapshot"][];
+            errors?: {
+              [key: string]: unknown;
+            }[];
+          };
         };
-        responses: {
-            /** @description Relationship deleted */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
+      };
     };
-    restoreRelationship: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    /** @enum {string} */
-                    relationship_type: "PART_OF" | "CORRECTS" | "REFERS_TO" | "SETTLES" | "DUPLICATE_OF" | "DEPENDS_ON" | "SUPERSEDES" | "EMBEDS" | "works_at" | "owns" | "manages" | "part_of" | "related_to" | "depends_on" | "references" | "transacted_with" | "member_of" | "reports_to" | "located_at" | "created_by" | "funded_by" | "acquired_by" | "subsidiary_of" | "partner_of" | "competitor_of" | "supplies_to" | "contracted_with" | "invested_in";
-                    source_entity_id: string;
-                    target_entity_id: string;
-                    reason?: string;
-                    user_id?: string;
-                };
-            };
-        };
-        responses: {
-            /** @description Relationship restored */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
+  };
+  listRelationshipsForEntity: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    analyzeSchemaCandidates: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody: {
+      content: {
+        "application/json": {
+          [key: string]: unknown;
         };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    entity_type?: string;
-                    user_id?: string;
-                    /** @default 5 */
-                    min_frequency?: number;
-                    /** @default 0.8 */
-                    min_confidence?: number;
-                };
-            };
-        };
-        responses: {
-            /** @description Schema candidates */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
+      };
     };
-    getSchemaRecommendations: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    responses: {
+      /** @description Relationships */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "application/json": {
-                    entity_type: string;
-                    user_id?: string;
-                    /** @enum {string} */
-                    source?: "raw_fragments" | "agent" | "inference" | "all";
-                    /** @enum {string} */
-                    status?: "pending" | "approved" | "rejected";
-                };
-            };
+        content: {
+          "application/json": {
+            relationships?: components["schemas"]["RelationshipSnapshot"][];
+          };
         };
-        responses: {
-            /** @description Schema recommendations */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
+      };
     };
-    updateSchemaIncremental: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    entity_type: string;
-                    fields_to_add: {
-                        field_name: string;
-                        /** @enum {string} */
-                        field_type: "string" | "number" | "date" | "boolean" | "array" | "object";
-                        /** @default false */
-                        required?: boolean;
-                        /** @enum {string} */
-                        reducer_strategy?: "last_write" | "highest_priority" | "most_specific" | "merge_array";
-                    }[];
-                    schema_version?: string;
-                    /** @default false */
-                    user_specific?: boolean;
-                    user_id?: string;
-                    /** @default true */
-                    activate?: boolean;
-                    /** @default false */
-                    migrate_existing?: boolean;
-                };
-            };
-        };
-        responses: {
-            /** @description Schema updated */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
+  };
+  retrieveEntityByIdentifier: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    registerSchema: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody: {
+      content: {
+        "application/json": {
+          /** @description Identifier to search for (name, email, etc.) */
+          identifier: string;
+          /** @description Optional entity type to limit search */
+          entity_type?: string;
+          /** @description Optional user_id override (scoped to callers with privilege to query on behalf of another user). */
+          user_id?: string;
+          /**
+           * @description Restrict snapshot-field matching to a single field
+           *     (e.g. "email", "domain", "company"). When omitted, a
+           *     default identity-bearing set is checked
+           *     (name, full_name, title, email, domain, company).
+           */
+          by?: string;
+          /** @description Maximum number of matching entities to return (default 100). */
+          limit?: number;
+          /**
+           * @description When true, attach recent observations to each matched entity
+           *     (ordered by observed_at descending). Useful for collapsing
+           *     identify → snapshot → list_observations into a single call.
+           * @default false
+           */
+          include_observations?: boolean;
+          /**
+           * @description Maximum observations to attach per entity when
+           *     include_observations is true. Ignored otherwise.
+           * @default 20
+           */
+          observations_limit?: number;
         };
-        requestBody: {
-            content: {
-                "application/json": {
-                    entity_type: string;
-                    schema_definition: {
-                        [key: string]: unknown;
-                    };
-                    reducer_config: {
-                        [key: string]: unknown;
-                    };
-                    /** @default 1.0 */
-                    schema_version?: string;
-                    /** @default false */
-                    user_specific?: boolean;
-                    user_id?: string;
-                    /** @default false */
-                    activate?: boolean;
-                };
-            };
-        };
-        responses: {
-            /** @description Schema registered */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
+      };
     };
-    correct: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    responses: {
+      /** @description Entity search results */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "application/json": {
-                    entity_id: string;
-                    entity_type: string;
-                    field: string;
-                    value: unknown;
-                    idempotency_key: string;
-                    user_id?: string;
-                };
-            };
+        content: {
+          "application/json": {
+            entities?: (components["schemas"]["Entity"] & {
+              /**
+               * @description Present only when the request set
+               *     include_observations = true. Ordered by
+               *     observed_at descending, capped by
+               *     observations_limit.
+               */
+              observations?: {
+                [key: string]: unknown;
+              }[];
+            })[];
+            total?: number;
+          };
         };
-        responses: {
-            /** @description Correction created */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
+      };
+      /** @description Invalid request */
+      400: {
+        headers: {
+          [name: string]: unknown;
         };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
     };
-    getAuthenticatedUser: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": Record<string, never>;
-            };
-        };
-        responses: {
-            /** @description User ID */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        user_id?: string;
-                        storage?: {
-                            /** @enum {string} */
-                            storage_backend?: "local";
-                            data_dir?: string;
-                            sqlite_db?: string;
-                        };
-                    };
-                };
-            };
-        };
+  };
+  retrieveRelatedEntities: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    getSessionInfo: {
-        parameters: {
-            query?: {
-                user_id?: string;
-                /**
-                 * @description Optional fallback `clientInfo.name` when the caller is not an
-                 *     MCP client with an established `initialize` handshake. Subject
-                 *     to generic-name normalisation.
-                 */
-                client_name?: string;
-                client_version?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody: {
+      content: {
+        "application/json": {
+          entity_id: string;
+          relationship_types?: string[];
+          /**
+           * @default both
+           * @enum {string}
+           */
+          direction?: "inbound" | "outbound" | "both";
+          /** @default 1 */
+          max_hops?: number;
+          /** @default true */
+          include_entities?: boolean;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Session attribution + policy */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SessionInfo"];
-                };
-            };
-        };
+      };
     };
-    healthCheckSnapshots: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    responses: {
+      /** @description Related entities */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    /** @default false */
-                    auto_fix?: boolean;
-                };
-            };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
         };
-        responses: {
-            /** @description Health check results */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
+      };
     };
-    subscribe: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    entity_types?: string[];
-                    entity_ids?: string[];
-                    event_types?: string[];
-                    /** @enum {string} */
-                    delivery_method: "webhook" | "sse";
-                    webhook_url?: string;
-                    webhook_secret?: string;
-                    max_failures?: number;
-                    /**
-                     * @description When set, webhook deliveries skip substrate events whose
-                     *     `source_peer_id` equals this value (prevents notifying a peer
-                     *     about changes that originated from that peer).
-                     */
-                    sync_peer_id?: string;
-                };
-            };
-        };
-        responses: {
-            /** @description Subscription created */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        subscription_id?: string;
-                        entity_id?: string;
-                        webhook_secret?: string;
-                    } & {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
+  };
+  retrieveGraphNeighborhood: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    unsubscribe: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody: {
+      content: {
+        "application/json": {
+          node_id: string;
+          /**
+           * @default entity
+           * @enum {string}
+           */
+          node_type?: "entity" | "source";
+          /** @default true */
+          include_relationships?: boolean;
+          /** @default true */
+          include_sources?: boolean;
+          /** @default true */
+          include_events?: boolean;
+          /** @default false */
+          include_observations?: boolean;
         };
-        requestBody: {
-            content: {
-                "application/json": {
-                    subscription_id: string;
-                };
-            };
-        };
-        responses: {
-            /** @description Subscription deactivated */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
+      };
     };
-    listSubscriptions: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    responses: {
+      /** @description Graph neighborhood */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: {
-            content: {
-                "application/json": Record<string, never>;
-            };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
         };
-        responses: {
-            /** @description Active subscriptions */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
+      };
     };
-    getSubscriptionStatus: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    subscription_id: string;
-                };
-            };
-        };
-        responses: {
-            /** @description Subscription status */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
+  };
+  bulkCloseIssues: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    eventsStream: {
-        parameters: {
-            query: {
-                subscription_id: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody: {
+      content: {
+        "application/json": {
+          entity_ids: string[];
+          user_id?: string;
         };
-        requestBody?: never;
-        responses: {
-            /** @description text/event-stream */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
+      };
     };
-    listPeers: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    responses: {
+      /** @description Per-entity outcomes */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Peer rows (shared_secret omitted) */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
+        content: {
+          "application/json": {
+            results: {
+              [key: string]: unknown;
+            }[];
+          };
         };
+      };
     };
-    addPeer: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    peer_id: string;
-                    peer_name: string;
-                    peer_url: string;
-                    /** @enum {string} */
-                    direction: "push" | "pull" | "bidirectional";
-                    entity_types: string[];
-                    /** @enum {string} */
-                    sync_scope: "all" | "tagged";
-                    /** @enum {string} */
-                    auth_method: "aauth" | "shared_secret";
-                    /** @enum {string} */
-                    conflict_strategy: "last_write_wins" | "source_priority" | "manual";
-                    /** @description Optional; generated when auth_method is shared_secret and omitted. */
-                    shared_secret?: string;
-                    /** @description Optional AAuth public-key thumbprint expected from this peer when auth_method is aauth. */
-                    peer_public_key_thumbprint?: string;
-                    /**
-                     * Format: uuid
-                     * @description Optional. Authenticated user_id on the peer instance for outbound POST /sync/webhook target_user_id.
-                     */
-                    sync_target_user_id?: string;
-                };
-            };
-        };
-        responses: {
-            /** @description Peer created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
+  };
+  bulkRemoveIssues: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    getPeerStatus: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                peer_id: string;
-            };
-            cookie?: never;
+    requestBody: {
+      content: {
+        "application/json": {
+          entity_ids: string[];
+          user_id?: string;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Peer snapshot with remote health and local API version */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @description This Neotoma instance package version (same source as GET /health) */
-                        local_api_version: string;
-                        peer: {
-                            [key: string]: unknown;
-                        };
-                        remote_health: {
-                            reachable: boolean;
-                            /** @description Present when reachable; true when /health returned ok true */
-                            ok?: boolean;
-                            /** @description Peer /health version string or unknown */
-                            version: string;
-                            /** @description Semver compat vs local_api_version (same rules as neotoma compat); false when unreachable or /health not ok */
-                            compatible: boolean;
-                            warning?: string | null;
-                            error?: string | null;
-                        };
-                    };
-                };
-            };
-        };
+      };
     };
-    removePeer: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                peer_id: string;
-            };
-            cookie?: never;
+    responses: {
+      /** @description Per-entity outcomes */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Peer deactivated */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
+        content: {
+          "application/json": {
+            results: {
+              [key: string]: unknown;
+            }[];
+          };
         };
+      };
     };
-    syncPeer: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                peer_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    /** @description Max observations to consider this run (default 200) */
-                    limit?: number;
-                };
-            };
-        };
-        responses: {
-            /** @description Sync acknowledgement */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
+  };
+  issuesAddMessage: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    resolveSyncConflict: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody: {
+      content: {
+        "application/json": {
+          /** @description Neotoma issue entity id (preferred for Inspector deep links). */
+          entity_id?: string;
+          /** @description GitHub issue number in the configured repo (MCP parity). */
+          issue_number?: number;
+          /** @description Markdown message body. */
+          body: string;
+          /** @description Optional guest token for operator Neotoma read-through / remote append when the local issue mirrors a remote instance. If omitted, guest_access_token on the issue snapshot is used. */
+          guest_access_token?: string;
+          /**
+           * @description Soft requirement on public issue threads (server emits a warning when both
+           *     `reporter_git_sha` and `reporter_app_version` are missing). Persisted on the
+           *     `conversation_message` row so debugging steps stay correlated with the build under test.
+           */
+          reporter_git_sha?: string;
+          reporter_git_ref?: string;
+          reporter_channel?: string;
+          /**
+           * @description Soft requirement on public issue threads (server emits a warning when both
+           *     `reporter_git_sha` and `reporter_app_version` are missing).
+           */
+          reporter_app_version?: string;
+          /** @description Entity IDs to link to the issue entity via REFERS_TO relationships. Created server-side in the same operation as the message is stored. */
+          entity_ids_to_link?: string[];
+          user_id?: string;
         };
-        requestBody: {
-            content: {
-                "application/json": {
-                    entity_id: string;
-                    /** @enum {string} */
-                    strategy: "prefer_local" | "prefer_remote" | "last_write_wins" | "source_priority" | "manual";
-                    /** @description Required for prefer_remote — remote Neotoma base URL (GET /entities/{entity_id}) */
-                    sender_peer_url?: string;
-                    /** @description Optional query access_token for guest read on the remote instance */
-                    guest_access_token?: string;
-                };
-            };
-        };
-        responses: {
-            /** @description Resolution result */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
+      };
     };
-    applySyncWebhook: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    responses: {
+      /** @description Message stored; flags indicate GitHub / remote submission outcomes. */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "application/json": {
-                    sender_peer_id: string;
-                    sender_peer_url: string;
-                    /** Format: uuid */
-                    target_user_id: string;
-                    entity_id: string;
-                    source_observation_id: string;
-                    guest_access_token?: string;
-                };
-            };
+        content: {
+          "application/json": {
+            github_comment_id: string | null;
+            message_entity_id: string;
+            pushed_to_github: boolean;
+            submitted_to_neotoma: boolean;
+            /** @description Non-null when remote Neotoma append was attempted but failed after local and/or GitHub side effects were recorded. */
+            remote_submission_error: string | null;
+          };
         };
-        responses: {
-            /** @description Sync notification applied */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
+      };
     };
-    listSyncEntities: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    sender_peer_id: string;
-                    /** Format: uuid */
-                    target_user_id: string;
-                    entity_types: string[];
-                    /** Format: date-time */
-                    observed_after?: string;
-                    limit?: number;
-                };
-            };
-        };
-        responses: {
-            /** @description Entity snapshots available to the peer */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
+  };
+  issuesSubmit: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
+    requestBody: {
+      content: {
+        "application/json": {
+          title: string;
+          body: string;
+          labels?: string[];
+          /** @enum {string} */
+          visibility?: "public" | "private";
+          /**
+           * @description Required (this OR `reporter_app_version`). Git SHA the reporter is reproducing against
+           *     (`git rev-parse HEAD`).
+           */
+          reporter_git_sha?: string;
+          reporter_git_ref?: string;
+          reporter_channel?: string;
+          /** @description Required (this OR `reporter_git_sha`). App / CLI version (semver) the reporter is using. */
+          reporter_app_version?: string;
+          reporter_ci_run_id?: string;
+          reporter_patch_source_id?: string;
+          /** @description Guest submitter compatibility field for an already-created GitHub issue URL. */
+          github_url?: string;
+          /** @description Guest submitter compatibility field for an already-created GitHub issue number. */
+          github_number?: number;
+          /** @description Guest submitter display author stored on the issue and first thread message. */
+          author?: string;
+          /** @description Guest submitter deterministic local issue id for non-GitHub-backed threads. */
+          local_issue_id?: string;
+          /** @description Guest submitter timestamp used for deterministic local thread identity. */
+          submission_timestamp?: string;
+          /** @description Entity IDs to link to this issue via REFERS_TO relationships. Created server-side in the same operation as issue creation. */
+          entity_ids_to_link?: string[];
+          user_id?: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Issue created */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            issue_number: number;
+            github_url: string;
+            entity_id: string;
+            /** @description Alias for `entity_id` returned for guest submitter compatibility. */
+            issue_entity_id?: string;
+            conversation_id: string;
+            remote_entity_id: string;
+            pushed_to_github: boolean;
+            submitted_to_neotoma: boolean;
+            /** @description Guest token returned by the operator instance for remote read-back and append. */
+            guest_access_token?: string;
+            /** @description Entity ids written by the guest submitter flow. */
+            entity_ids?: string[];
+            github_mirror_guidance: string | null;
+          };
+        };
+      };
+      /**
+       * @description Validation error. `error_code: ERR_REPORTER_ENVIRONMENT_REQUIRED`
+       *     is returned when neither `reporter_git_sha` nor
+       *     `reporter_app_version` is provided. `details.acceptable_field_groups`
+       *     lists the alternatives the caller can supply.
+       */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  issuesGetStatus: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          entity_id?: string;
+          issue_number?: number;
+          skip_sync?: boolean;
+          guest_access_token?: string;
+          user_id?: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Issue status payload */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  issuesSync: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          since?: string;
+          /** @enum {string} */
+          state?: "open" | "closed" | "all";
+          labels?: string[];
+          user_id?: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Sync counts and errors */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            issues_synced: number;
+            messages_synced: number;
+            errors: string[];
+          };
+        };
+      };
+    };
+  };
+  deleteEntity: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          entity_id: string;
+          entity_type: string;
+          reason?: string;
+          user_id?: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Entity deleted */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  restoreEntity: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          entity_id: string;
+          entity_type: string;
+          reason?: string;
+          user_id?: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Entity restored */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  deleteRelationship: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          /** @enum {string} */
+          relationship_type:
+            | "PART_OF"
+            | "CORRECTS"
+            | "REFERS_TO"
+            | "SETTLES"
+            | "DUPLICATE_OF"
+            | "DEPENDS_ON"
+            | "SUPERSEDES"
+            | "EMBEDS"
+            | "works_at"
+            | "owns"
+            | "manages"
+            | "part_of"
+            | "related_to"
+            | "depends_on"
+            | "references"
+            | "transacted_with"
+            | "member_of"
+            | "reports_to"
+            | "located_at"
+            | "created_by"
+            | "funded_by"
+            | "acquired_by"
+            | "subsidiary_of"
+            | "partner_of"
+            | "competitor_of"
+            | "supplies_to"
+            | "contracted_with"
+            | "invested_in";
+          source_entity_id: string;
+          target_entity_id: string;
+          reason?: string;
+          user_id?: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Relationship deleted */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  restoreRelationship: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          /** @enum {string} */
+          relationship_type:
+            | "PART_OF"
+            | "CORRECTS"
+            | "REFERS_TO"
+            | "SETTLES"
+            | "DUPLICATE_OF"
+            | "DEPENDS_ON"
+            | "SUPERSEDES"
+            | "EMBEDS"
+            | "works_at"
+            | "owns"
+            | "manages"
+            | "part_of"
+            | "related_to"
+            | "depends_on"
+            | "references"
+            | "transacted_with"
+            | "member_of"
+            | "reports_to"
+            | "located_at"
+            | "created_by"
+            | "funded_by"
+            | "acquired_by"
+            | "subsidiary_of"
+            | "partner_of"
+            | "competitor_of"
+            | "supplies_to"
+            | "contracted_with"
+            | "invested_in";
+          source_entity_id: string;
+          target_entity_id: string;
+          reason?: string;
+          user_id?: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Relationship restored */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  analyzeSchemaCandidates: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": {
+          entity_type?: string;
+          user_id?: string;
+          /** @default 5 */
+          min_frequency?: number;
+          /** @default 0.8 */
+          min_confidence?: number;
+        };
+      };
+    };
+    responses: {
+      /** @description Schema candidates */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  getSchemaRecommendations: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          entity_type: string;
+          user_id?: string;
+          /** @enum {string} */
+          source?: "raw_fragments" | "agent" | "inference" | "all";
+          /** @enum {string} */
+          status?: "pending" | "approved" | "rejected";
+        };
+      };
+    };
+    responses: {
+      /** @description Schema recommendations */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  updateSchemaIncremental: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          entity_type: string;
+          fields_to_add: {
+            field_name: string;
+            /** @enum {string} */
+            field_type: "string" | "number" | "date" | "boolean" | "array" | "object";
+            /** @default false */
+            required?: boolean;
+            /** @enum {string} */
+            reducer_strategy?: "last_write" | "highest_priority" | "most_specific" | "merge_array";
+          }[];
+          schema_version?: string;
+          /** @default false */
+          user_specific?: boolean;
+          user_id?: string;
+          /** @default true */
+          activate?: boolean;
+          /** @default false */
+          migrate_existing?: boolean;
+        };
+      };
+    };
+    responses: {
+      /** @description Schema updated */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  registerSchema: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          entity_type: string;
+          schema_definition: {
+            [key: string]: unknown;
+          };
+          reducer_config: {
+            [key: string]: unknown;
+          };
+          /** @default 1.0 */
+          schema_version?: string;
+          /** @default false */
+          user_specific?: boolean;
+          user_id?: string;
+          /** @default false */
+          activate?: boolean;
+        };
+      };
+    };
+    responses: {
+      /** @description Schema registered */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  correct: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          entity_id: string;
+          entity_type: string;
+          field: string;
+          value: unknown;
+          idempotency_key: string;
+          user_id?: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Correction created */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  getAuthenticatedUser: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": Record<string, never>;
+      };
+    };
+    responses: {
+      /** @description User ID */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            user_id?: string;
+            storage?: {
+              /** @enum {string} */
+              storage_backend?: "local";
+              data_dir?: string;
+              sqlite_db?: string;
+            };
+          };
+        };
+      };
+    };
+  };
+  getSessionInfo: {
+    parameters: {
+      query?: {
+        user_id?: string;
+        /**
+         * @description Optional fallback `clientInfo.name` when the caller is not an
+         *     MCP client with an established `initialize` handshake. Subject
+         *     to generic-name normalisation.
+         */
+        client_name?: string;
+        client_version?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Session attribution + policy */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SessionInfo"];
+        };
+      };
+    };
+  };
+  healthCheckSnapshots: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": {
+          /** @default false */
+          auto_fix?: boolean;
+        };
+      };
+    };
+    responses: {
+      /** @description Health check results */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  subscribe: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          entity_types?: string[];
+          entity_ids?: string[];
+          event_types?: string[];
+          /** @enum {string} */
+          delivery_method: "webhook" | "sse";
+          webhook_url?: string;
+          webhook_secret?: string;
+          max_failures?: number;
+          /**
+           * @description When set, webhook deliveries skip substrate events whose
+           *     `source_peer_id` equals this value (prevents notifying a peer
+           *     about changes that originated from that peer).
+           */
+          sync_peer_id?: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Subscription created */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            subscription_id?: string;
+            entity_id?: string;
+            webhook_secret?: string;
+          } & {
+            [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  unsubscribe: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          subscription_id: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Subscription deactivated */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  listSubscriptions: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": Record<string, never>;
+      };
+    };
+    responses: {
+      /** @description Active subscriptions */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  getSubscriptionStatus: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          subscription_id: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Subscription status */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  eventsStream: {
+    parameters: {
+      query: {
+        subscription_id: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description text/event-stream */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  listPeers: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Peer rows (shared_secret omitted) */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  addPeer: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          peer_id: string;
+          peer_name: string;
+          peer_url: string;
+          /** @enum {string} */
+          direction: "push" | "pull" | "bidirectional";
+          entity_types: string[];
+          /** @enum {string} */
+          sync_scope: "all" | "tagged";
+          /** @enum {string} */
+          auth_method: "aauth" | "shared_secret";
+          /** @enum {string} */
+          conflict_strategy: "last_write_wins" | "source_priority" | "manual";
+          /** @description Optional; generated when auth_method is shared_secret and omitted. */
+          shared_secret?: string;
+          /** @description Optional AAuth public-key thumbprint expected from this peer when auth_method is aauth. */
+          peer_public_key_thumbprint?: string;
+          /**
+           * Format: uuid
+           * @description Optional. Authenticated user_id on the peer instance for outbound POST /sync/webhook target_user_id.
+           */
+          sync_target_user_id?: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Peer created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  getPeerStatus: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        peer_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Peer snapshot with remote health and local API version */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            /** @description This Neotoma instance package version (same source as GET /health) */
+            local_api_version: string;
+            peer: {
+              [key: string]: unknown;
+            };
+            remote_health: {
+              reachable: boolean;
+              /** @description Present when reachable; true when /health returned ok true */
+              ok?: boolean;
+              /** @description Peer /health version string or unknown */
+              version: string;
+              /** @description Semver compat vs local_api_version (same rules as neotoma compat); false when unreachable or /health not ok */
+              compatible: boolean;
+              warning?: string | null;
+              error?: string | null;
+            };
+          };
+        };
+      };
+    };
+  };
+  removePeer: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        peer_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Peer deactivated */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  syncPeer: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        peer_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": {
+          /** @description Max observations to consider this run (default 200) */
+          limit?: number;
+        };
+      };
+    };
+    responses: {
+      /** @description Sync acknowledgement */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  resolveSyncConflict: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          entity_id: string;
+          /** @enum {string} */
+          strategy:
+            | "prefer_local"
+            | "prefer_remote"
+            | "last_write_wins"
+            | "source_priority"
+            | "manual";
+          /** @description Required for prefer_remote — remote Neotoma base URL (GET /entities/{entity_id}) */
+          sender_peer_url?: string;
+          /** @description Optional query access_token for guest read on the remote instance */
+          guest_access_token?: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Resolution result */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  applySyncWebhook: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          sender_peer_id: string;
+          sender_peer_url: string;
+          /** Format: uuid */
+          target_user_id: string;
+          entity_id: string;
+          source_observation_id: string;
+          guest_access_token?: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Sync notification applied */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  listSyncEntities: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          sender_peer_id: string;
+          /** Format: uuid */
+          target_user_id: string;
+          entity_types: string[];
+          /** Format: date-time */
+          observed_after?: string;
+          limit?: number;
+        };
+      };
+    };
+    responses: {
+      /** @description Entity snapshots available to the peer */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
 }

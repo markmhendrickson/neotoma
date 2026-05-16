@@ -169,10 +169,7 @@ describe("canonical_mirror_git", () => {
         expect(first.initialized).toBe(true);
         const gitDirStat = await fsp.stat(path.join(tmpRoot, ".git"));
         expect(gitDirStat.isDirectory()).toBe(true);
-        const gitignore = await fsp.readFile(
-          path.join(tmpRoot, ".gitignore"),
-          "utf8"
-        );
+        const gitignore = await fsp.readFile(path.join(tmpRoot, ".gitignore"), "utf8");
         expect(gitignore).toContain(".DS_Store");
 
         const second = await initMirrorRepo(mirrorConfig());
@@ -204,7 +201,7 @@ describe("canonical_mirror_git", () => {
             entities: [{ entity_type: "contact", slug: "world-123", field_count: 1 }],
             observations: [{ observation_id: "obs_world" }],
           },
-          mirrorConfig(),
+          mirrorConfig()
         );
         expect(batch.committed).toBe(true);
         expect(batch.file_count).toBeGreaterThanOrEqual(1);
@@ -219,17 +216,14 @@ describe("canonical_mirror_git", () => {
       }
     );
 
-    it.skipIf(!gitAvailable())(
-      "skips the batch commit when there is no diff",
-      async () => {
-        await initMirrorRepo(mirrorConfig());
-        await fsp.writeFile(path.join(tmpRoot, "a.md"), "x\n", "utf8");
-        await ensureInitialCommit(mirrorConfig());
+    it.skipIf(!gitAvailable())("skips the batch commit when there is no diff", async () => {
+      await initMirrorRepo(mirrorConfig());
+      await fsp.writeFile(path.join(tmpRoot, "a.md"), "x\n", "utf8");
+      await ensureInitialCommit(mirrorConfig());
 
-        const res = await commitMirrorBatch({ trigger: "store" }, mirrorConfig());
-        expect(res.committed).toBe(false);
-        expect(res.reason).toBe("empty_diff");
-      }
-    );
+      const res = await commitMirrorBatch({ trigger: "store" }, mirrorConfig());
+      expect(res.committed).toBe(false);
+      expect(res.reason).toBe("empty_diff");
+    });
   });
 });

@@ -348,23 +348,17 @@ function getDominantType(typeCounts: Map<string, number>): string {
 /**
  * Calculate overall confidence based on type consistency across samples
  */
-function calculateTypeConfidence(
-  fieldTypes: Map<string, Map<string, number>>
-): number {
+function calculateTypeConfidence(fieldTypes: Map<string, Map<string, number>>): number {
   let totalConsistency = 0;
   let fieldCount = 0;
 
   for (const typeCounts of fieldTypes.values()) {
-    const totalSamples = Array.from(typeCounts.values()).reduce(
-      (sum, count) => sum + count,
-      0
-    );
+    const totalSamples = Array.from(typeCounts.values()).reduce((sum, count) => sum + count, 0);
     const dominantCount = Math.max(...Array.from(typeCounts.values()));
 
     // Calculate consistency for this field (excluding null from denominator)
     const nonNullSamples = totalSamples - (typeCounts.get("null") || 0);
-    const consistency =
-      nonNullSamples > 0 ? dominantCount / nonNullSamples : 0;
+    const consistency = nonNullSamples > 0 ? dominantCount / nonNullSamples : 0;
 
     totalConsistency += consistency;
     fieldCount++;

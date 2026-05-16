@@ -91,7 +91,12 @@ function output(data: unknown, json: boolean): void {
 
 export async function issuesCreate(opts: IssuesCreateOpts, api: NeotomaApiClient): Promise<void> {
   const { mergeNeotomaToolingIssueLabels } = await import("../services/issues/github_client.js");
-  const parsedLabels = opts.labels ? opts.labels.split(",").map((l) => l.trim()).filter(Boolean) : undefined;
+  const parsedLabels = opts.labels
+    ? opts.labels
+        .split(",")
+        .map((l) => l.trim())
+        .filter(Boolean)
+    : undefined;
   const labels = mergeNeotomaToolingIssueLabels(parsedLabels);
   const visibility = opts.advisory === true ? "private" : (opts.visibility ?? "public");
 
@@ -119,14 +124,16 @@ export async function issuesCreate(opts: IssuesCreateOpts, api: NeotomaApiClient
     return;
   }
 
-  const row = data as {
-    issue_number?: number;
-    github_url?: string;
-    entity_id?: string;
-    pushed_to_github?: boolean;
-    github_mirror_guidance?: string | null;
-    guest_access_token?: string;
-  } | undefined;
+  const row = data as
+    | {
+        issue_number?: number;
+        github_url?: string;
+        entity_id?: string;
+        pushed_to_github?: boolean;
+        github_mirror_guidance?: string | null;
+        guest_access_token?: string;
+      }
+    | undefined;
 
   const issueNumber = row?.issue_number ?? 0;
   const githubUrl = row?.github_url ?? "";
@@ -143,20 +150,22 @@ export async function issuesCreate(opts: IssuesCreateOpts, api: NeotomaApiClient
         guest_access_token: row?.guest_access_token,
         github_mirror_guidance: row?.github_mirror_guidance ?? null,
       },
-      true,
+      true
     );
   } else {
     if (pushedToGithub && issueNumber > 0) {
       process.stdout.write(`Created issue #${issueNumber}: ${githubUrl}\n`);
     } else {
-      process.stdout.write(`Issue stored locally (GitHub push pending or private). Entity: ${entityId}\n`);
+      process.stdout.write(
+        `Issue stored locally (GitHub push pending or private). Entity: ${entityId}\n`
+      );
       if (row?.github_mirror_guidance) {
         process.stdout.write(`${row.github_mirror_guidance}\n`);
       }
     }
     if (row?.guest_access_token) {
       process.stdout.write(
-        "Guest access token returned. Treat it as a credential; pass it to issues status/message when needed.\n",
+        "Guest access token returned. Treat it as a credential; pass it to issues status/message when needed.\n"
       );
     }
   }
@@ -166,9 +175,12 @@ export async function issuesMessage(opts: IssuesMessageOpts, api: NeotomaApiClie
   const entityId = opts.entity_id?.trim();
   const issueNumber = opts.issue_number;
   const hasEntity = typeof entityId === "string" && entityId.length > 0;
-  const hasNumber = typeof issueNumber === "number" && Number.isFinite(issueNumber) && issueNumber > 0;
+  const hasNumber =
+    typeof issueNumber === "number" && Number.isFinite(issueNumber) && issueNumber > 0;
   if (!hasEntity && !hasNumber) {
-    process.stderr.write("Error: provide a GitHub issue number as the command argument or --entity-id\n");
+    process.stderr.write(
+      "Error: provide a GitHub issue number as the command argument or --entity-id\n"
+    );
     process.exitCode = 1;
     return;
   }
@@ -195,13 +207,15 @@ export async function issuesMessage(opts: IssuesMessageOpts, api: NeotomaApiClie
     return;
   }
 
-  const row = data as {
-    github_comment_id?: string | null;
-    message_entity_id?: string;
-    pushed_to_github?: boolean;
-    submitted_to_neotoma?: boolean;
-    remote_submission_error?: string | null;
-  } | undefined;
+  const row = data as
+    | {
+        github_comment_id?: string | null;
+        message_entity_id?: string;
+        pushed_to_github?: boolean;
+        submitted_to_neotoma?: boolean;
+        remote_submission_error?: string | null;
+      }
+    | undefined;
 
   if (opts.json) {
     output(
@@ -212,12 +226,12 @@ export async function issuesMessage(opts: IssuesMessageOpts, api: NeotomaApiClie
         submitted_to_neotoma: Boolean(row?.submitted_to_neotoma),
         remote_submission_error: row?.remote_submission_error ?? null,
       },
-      true,
+      true
     );
   } else {
     if (row?.pushed_to_github) {
       process.stdout.write(
-        `Message added${hasNumber ? ` to issue #${issueNumber}` : ""}${row.github_comment_id ? ` (comment ${row.github_comment_id})` : ""}\n`,
+        `Message added${hasNumber ? ` to issue #${issueNumber}` : ""}${row.github_comment_id ? ` (comment ${row.github_comment_id})` : ""}\n`
       );
     } else {
       process.stdout.write(`Message stored locally (GitHub push pending or private thread)\n`);
@@ -232,7 +246,8 @@ export async function issuesStatus(opts: IssuesStatusOpts, api: NeotomaApiClient
   const entityId = opts.entity_id?.trim();
   const issueNumber = opts.issue_number;
   const hasEntity = typeof entityId === "string" && entityId.length > 0;
-  const hasNumber = typeof issueNumber === "number" && Number.isFinite(issueNumber) && issueNumber > 0;
+  const hasNumber =
+    typeof issueNumber === "number" && Number.isFinite(issueNumber) && issueNumber > 0;
   if (!hasEntity && !hasNumber) {
     process.stderr.write("Error: provide --entity-id or --issue-number\n");
     process.exitCode = 1;
@@ -261,14 +276,16 @@ export async function issuesStatus(opts: IssuesStatusOpts, api: NeotomaApiClient
     return;
   }
 
-  const row = data as {
-    title?: string;
-    status?: string;
-    issue_number?: number;
-    github_url?: string;
-    messages?: Array<{ author: string; body: string; created_at: string }>;
-    synced?: boolean;
-  } | undefined;
+  const row = data as
+    | {
+        title?: string;
+        status?: string;
+        issue_number?: number;
+        github_url?: string;
+        messages?: Array<{ author: string; body: string; created_at: string }>;
+        synced?: boolean;
+      }
+    | undefined;
   process.stdout.write(`${row?.title ?? ""} [${row?.status ?? ""}]`);
   if (row?.issue_number) process.stdout.write(` #${row.issue_number}`);
   process.stdout.write("\n");
@@ -291,14 +308,17 @@ export async function issuesList(opts: IssuesListOpts, api: NeotomaApiClient): P
       });
       // Display directly from GitHub
       if (opts.json) {
-        output(ghIssues.map((i) => ({
-          number: i.number,
-          title: i.title,
-          status: i.state,
-          labels: i.labels.map((l) => l.name),
-          author: i.user?.login ?? "unknown",
-          url: i.html_url,
-        })), true);
+        output(
+          ghIssues.map((i) => ({
+            number: i.number,
+            title: i.title,
+            status: i.state,
+            labels: i.labels.map((l) => l.name),
+            author: i.user?.login ?? "unknown",
+            url: i.html_url,
+          })),
+          true
+        );
       } else {
         if (ghIssues.length === 0) {
           process.stdout.write("No issues found.\n");
@@ -308,15 +328,13 @@ export async function issuesList(opts: IssuesListOpts, api: NeotomaApiClient): P
           const labelStr = issue.labels.length
             ? ` [${issue.labels.map((l) => l.name).join(", ")}]`
             : "";
-          process.stdout.write(
-            `#${issue.number} [${issue.state}] ${issue.title}${labelStr}\n`,
-          );
+          process.stdout.write(`#${issue.number} [${issue.state}] ${issue.title}${labelStr}\n`);
         }
       }
       return;
     } catch (err) {
       process.stderr.write(
-        `Warning: sync from GitHub failed, showing local data: ${(err as Error).message}\n`,
+        `Warning: sync from GitHub failed, showing local data: ${(err as Error).message}\n`
       );
     }
   }
@@ -330,7 +348,10 @@ export async function issuesList(opts: IssuesListOpts, api: NeotomaApiClient): P
 
 export async function issuesSync(opts: IssuesSyncOpts, api: NeotomaApiClient): Promise<void> {
   const labelArr = opts.labels
-    ? opts.labels.split(",").map((l) => l.trim()).filter(Boolean)
+    ? opts.labels
+        .split(",")
+        .map((l) => l.trim())
+        .filter(Boolean)
     : undefined;
 
   const { data, error } = await api.POST("/issues/sync", {
@@ -347,11 +368,13 @@ export async function issuesSync(opts: IssuesSyncOpts, api: NeotomaApiClient): P
     return;
   }
 
-  const row = data as {
-    issues_synced?: number;
-    messages_synced?: number;
-    errors?: string[];
-  } | undefined;
+  const row = data as
+    | {
+        issues_synced?: number;
+        messages_synced?: number;
+        errors?: string[];
+      }
+    | undefined;
 
   const issuesSynced = row?.issues_synced ?? 0;
   const messagesSynced = row?.messages_synced ?? 0;
@@ -405,9 +428,8 @@ export async function issuesConfig(opts: IssuesConfigOpts): Promise<void> {
 }
 
 export async function issuesAuth(opts: { json?: boolean }): Promise<void> {
-  const { isGhInstalled, isGhAuthenticated, verifyGhAuth } = await import(
-    "../services/issues/gh_auth.js"
-  );
+  const { isGhInstalled, isGhAuthenticated, verifyGhAuth } =
+    await import("../services/issues/gh_auth.js");
   const { updateIssuesConfig } = await import("../services/issues/config.js");
 
   const installed = await isGhInstalled();

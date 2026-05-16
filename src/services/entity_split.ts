@@ -18,15 +18,9 @@
 
 import { randomUUID } from "node:crypto";
 import { db } from "../db.js";
-import {
-  deleteSnapshot,
-  recomputeSnapshot,
-} from "./snapshot_computation.js";
+import { deleteSnapshot, recomputeSnapshot } from "./snapshot_computation.js";
 import { generateEntityId } from "./entity_resolution.js";
-import {
-  emitEntityLifecycle,
-  emitEntitySnapshotChange,
-} from "../events/substrate_store_emit.js";
+import { emitEntityLifecycle, emitEntitySnapshotChange } from "../events/substrate_store_emit.js";
 
 /**
  * Declarative predicate describing which observations of the source entity
@@ -141,10 +135,7 @@ function isObservationRow(value: unknown): value is ObservationRow {
   );
 }
 
-function observationMatchesPredicate(
-  obs: ObservationRow,
-  predicate: SplitPredicate,
-): boolean {
+function observationMatchesPredicate(obs: ObservationRow, predicate: SplitPredicate): boolean {
   if (predicate.observed_at_gte) {
     const observedAt = obs.observed_at;
     if (!observedAt || observedAt < predicate.observed_at_gte) return false;
@@ -191,15 +182,7 @@ function canonicalizePredicate(predicate: SplitPredicate): string {
 }
 
 export async function splitEntity(params: SplitEntityParams): Promise<SplitResult> {
-  const {
-    sourceEntityId,
-    userId,
-    predicate,
-    newEntity,
-    idempotencyKey,
-    reason,
-    splitBy,
-  } = params;
+  const { sourceEntityId, userId, predicate, newEntity, idempotencyKey, reason, splitBy } = params;
 
   const canonicalPredicate = canonicalizePredicate(predicate);
 
@@ -213,13 +196,14 @@ export async function splitEntity(params: SplitEntityParams): Promise<SplitResul
     .single();
 
   if (existingSplit) {
-    const storedPredicate = typeof (existingSplit as { predicate?: unknown }).predicate === "string"
-      ? ((existingSplit as { predicate: string }).predicate)
-      : JSON.stringify((existingSplit as { predicate: unknown }).predicate);
+    const storedPredicate =
+      typeof (existingSplit as { predicate?: unknown }).predicate === "string"
+        ? (existingSplit as { predicate: string }).predicate
+        : JSON.stringify((existingSplit as { predicate: unknown }).predicate);
     if (storedPredicate !== canonicalPredicate) {
       throw new IdempotencyMismatchError(
         `idempotency_key "${idempotencyKey}" reused with a different predicate. ` +
-          "Provide a new idempotency_key for a new split, or re-send the original predicate.",
+          "Provide a new idempotency_key for a new split, or re-send the original predicate."
       );
     }
     return {
@@ -245,7 +229,7 @@ export async function splitEntity(params: SplitEntityParams): Promise<SplitResul
   }
   if ((sourceEntity as { merged_to_entity_id?: string | null }).merged_to_entity_id) {
     throw new EntityAlreadyMergedError(
-      "Source entity is already merged; unmerge or split the merge target instead.",
+      "Source entity is already merged; unmerge or split the merge target instead."
     );
   }
 
@@ -254,11 +238,10 @@ export async function splitEntity(params: SplitEntityParams): Promise<SplitResul
   // target_entity_id support lets operators split INTO an existing entity
   // when the over-merge can be repaired by re-pointing to a pre-existing row.
   const newEntityId =
-    newEntity.target_entity_id ??
-    generateEntityId(newEntity.entity_type, newEntity.canonical_name);
+    newEntity.target_entity_id ?? generateEntityId(newEntity.entity_type, newEntity.canonical_name);
   if (newEntityId === sourceEntityId) {
     throw new Error(
-      "split_entity: new_entity_id is identical to source_entity_id; split would be a no-op.",
+      "split_entity: new_entity_id is identical to source_entity_id; split would be a no-op."
     );
   }
 
@@ -277,19 +260,17 @@ export async function splitEntity(params: SplitEntityParams): Promise<SplitResul
 
   const rawRows: unknown[] = observations ?? [];
   const allRows: ObservationRow[] = rawRows.filter(isObservationRow);
-  const matched = allRows.filter((o: ObservationRow) =>
-    observationMatchesPredicate(o, predicate),
-  );
+  const matched = allRows.filter((o: ObservationRow) => observationMatchesPredicate(o, predicate));
 
   if (matched.length === 0) {
     throw new SplitPredicateMatchedNothingError(
-      "Split predicate matched zero observations on the source entity.",
+      "Split predicate matched zero observations on the source entity."
     );
   }
   if (matched.length === allRows.length) {
     throw new SplitPredicateMatchedAllError(
       "Split predicate matched every observation on the source entity; " +
-        "a split that leaves the source empty is a rename — use correct or merge instead.",
+        "a split that leaves the source empty is a rename — use correct or merge instead."
     );
   }
 

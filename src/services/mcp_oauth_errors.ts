@@ -49,18 +49,13 @@ export const createOAuthError = {
     // If it looks like a state token (short base64url), use default message
     // Otherwise treat as custom error message
     const isStateToken = /^[a-zA-Z0-9_-]{10,256}$/.test(stateOrMessage);
-    const message = isStateToken
-      ? "Invalid or missing OAuth state token"
-      : stateOrMessage;
+    const message = isStateToken ? "Invalid or missing OAuth state token" : stateOrMessage;
     const stateDetails = isStateToken ? { state: stateOrMessage } : {};
-    
-    return new OAuthError(
-      OAuthErrorCode.STATE_INVALID,
-      message,
-      400,
-      false,
-      { ...stateDetails, ...details }
-    );
+
+    return new OAuthError(OAuthErrorCode.STATE_INVALID, message, 400, false, {
+      ...stateDetails,
+      ...details,
+    });
   },
 
   stateExpired: (state: string) =>
@@ -88,13 +83,9 @@ export const createOAuthError = {
     ),
 
   connectionRevoked: (connectionId: string) =>
-    new OAuthError(
-      OAuthErrorCode.CONNECTION_REVOKED,
-      "Connection has been revoked",
-      403,
-      false,
-      { connectionId }
-    ),
+    new OAuthError(OAuthErrorCode.CONNECTION_REVOKED, "Connection has been revoked", 403, false, {
+      connectionId,
+    }),
 
   encryptionKeyMissing: () =>
     new OAuthError(
@@ -113,13 +104,9 @@ export const createOAuthError = {
     ),
 
   invalidRedirectUri: (uri: string) =>
-    new OAuthError(
-      OAuthErrorCode.INVALID_REDIRECT_URI,
-      "Invalid redirect URI format",
-      400,
-      false,
-      { uri }
-    ),
+    new OAuthError(OAuthErrorCode.INVALID_REDIRECT_URI, "Invalid redirect URI format", 400, false, {
+      uri,
+    }),
 
   decryptionFailed: (reason: string) =>
     new OAuthError(

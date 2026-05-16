@@ -135,17 +135,11 @@ export interface RevocationFetcher {
  * environment. Unknown values fall back to `disabled` to preserve the
  * v0.10.x posture until operators opt in.
  */
-export function readRevocationMode(
-  env: NodeJS.ProcessEnv = process.env,
-): RevocationMode {
+export function readRevocationMode(env: NodeJS.ProcessEnv = process.env): RevocationMode {
   const raw = env.NEOTOMA_AAUTH_REVOCATION_MODE;
   if (raw === undefined || raw === null) return "disabled";
   const normalised = String(raw).trim().toLowerCase();
-  if (
-    normalised === "disabled" ||
-    normalised === "log_only" ||
-    normalised === "enforce"
-  ) {
+  if (normalised === "disabled" || normalised === "log_only" || normalised === "enforce") {
     return normalised;
   }
   return "disabled";
@@ -156,9 +150,7 @@ export function readRevocationMode(
  * non-finite values reset to the default so a typo cannot disable the
  * cache implicitly.
  */
-export function readCacheTtlMs(
-  env: NodeJS.ProcessEnv = process.env,
-): number {
+export function readCacheTtlMs(env: NodeJS.ProcessEnv = process.env): number {
   const raw = env.NEOTOMA_AAUTH_REVOCATION_CACHE_TTL_SECONDS;
   if (raw === undefined || raw === null || raw === "") {
     return 60 * 60 * 1000;
@@ -173,9 +165,7 @@ export function readCacheTtlMs(
  * 1500ms. Floors at 100ms so a misconfiguration cannot effectively
  * disable the service.
  */
-export function readTimeoutMs(
-  env: NodeJS.ProcessEnv = process.env,
-): number {
+export function readTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
   const raw = env.NEOTOMA_AAUTH_REVOCATION_TIMEOUT_MS;
   if (raw === undefined || raw === null || raw === "") return 1500;
   const parsed = Number(raw);
@@ -189,9 +179,7 @@ export function readTimeoutMs(
  * treated as `good` for tier-resolution purposes; when `false`,
  * `unknown` is treated as `revoked` in `enforce` mode.
  */
-export function readFailOpen(
-  env: NodeJS.ProcessEnv = process.env,
-): boolean {
+export function readFailOpen(env: NodeJS.ProcessEnv = process.env): boolean {
   const raw = env.NEOTOMA_AAUTH_REVOCATION_FAIL_OPEN;
   if (raw === undefined || raw === null || raw === "") return true;
   const normalised = String(raw).trim().toLowerCase();
@@ -251,12 +239,7 @@ function readCache(key: string, now: number): RevocationOutcome | null {
   return { ...entry.outcome, source: "cache", cached_at: entry.outcome.cached_at };
 }
 
-function writeCache(
-  key: string,
-  outcome: RevocationOutcome,
-  now: number,
-  ttlMs: number,
-): void {
+function writeCache(key: string, outcome: RevocationOutcome, now: number, ttlMs: number): void {
   if (cache.size >= CACHE_MAX_ENTRIES) {
     // Evict least-recently used (first inserted in iteration order).
     const oldestKey = cache.keys().next().value;
@@ -272,9 +255,7 @@ function writeCache(
  * Top-level entry point. Idempotent and safe to call from any format
  * verifier; honours the operational mode and cache.
  */
-export async function checkRevocation(
-  ctx: RevocationCheckContext,
-): Promise<RevocationOutcome> {
+export async function checkRevocation(ctx: RevocationCheckContext): Promise<RevocationOutcome> {
   const mode = ctx.modeOverride ?? readRevocationMode();
   if (mode === "disabled") {
     return { status: "good", source: "disabled" };
@@ -361,10 +342,7 @@ async function checkAppleRevocation(input: {
     process.env.NEOTOMA_AAUTH_APPLE_REVOCATION_URL ??
     "https://data.appattest.apple.com/v1/revoked-list";
   const serialHex = input.leaf.serialNumber.toLowerCase();
-  const body = Buffer.from(
-    JSON.stringify({ serial_numbers: [serialHex] }),
-    "utf8",
-  );
+  const body = Buffer.from(JSON.stringify({ serial_numbers: [serialHex] }), "utf8");
   const response = await input.fetcher.fetch({
     url: endpoint,
     method: "POST",
@@ -581,9 +559,7 @@ function extractOcspUrl(leaf: X509Certificate): string | null {
   const text = leaf.toString();
   // node:crypto's `X509Certificate.toString()` includes the textual
   // dump of extensions including AIA. We parse defensively by line.
-  const aiaMatch = text.match(
-    /OCSP\s*-\s*URI:\s*(https?:\/\/\S+)/i,
-  );
+  const aiaMatch = text.match(/OCSP\s*-\s*URI:\s*(https?:\/\/\S+)/i);
   if (!aiaMatch || !aiaMatch[1]) return null;
   return aiaMatch[1].trim();
 }
@@ -595,9 +571,7 @@ function extractOcspUrl(leaf: X509Certificate): string | null {
  */
 function extractCrlUrl(leaf: X509Certificate): string | null {
   const text = leaf.toString();
-  const cdpMatch = text.match(
-    /(?:CRL Distribution Points?:[^\n]*\n)?\s*URI:(https?:\/\/\S+)/i,
-  );
+  const cdpMatch = text.match(/(?:CRL Distribution Points?:[^\n]*\n)?\s*URI:(https?:\/\/\S+)/i);
   // Above regex is tolerant of multiline X.509 dumps.
   if (!cdpMatch || !cdpMatch[1]) return null;
   return cdpMatch[1].trim();
@@ -608,16 +582,9 @@ function extractCrlUrl(leaf: X509Certificate): string | null {
  * issuerNameHash and issuerKeyHash use SHA-1 per the RFC default; a
  * fuller implementation would negotiate hashes against the responder.
  */
-function buildOcspRequest(
-  leaf: X509Certificate,
-  issuer: X509Certificate,
-): Buffer {
-  const issuerKeyHash = createHash("sha1")
-    .update(extractSubjectPublicKeyBytes(issuer))
-    .digest();
-  const issuerNameHash = createHash("sha1")
-    .update(extractSubjectBytes(issuer))
-    .digest();
+function buildOcspRequest(leaf: X509Certificate, issuer: X509Certificate): Buffer {
+  const issuerKeyHash = createHash("sha1").update(extractSubjectPublicKeyBytes(issuer)).digest();
+  const issuerNameHash = createHash("sha1").update(extractSubjectBytes(issuer)).digest();
   const serialBytes = serialNumberToDerInteger(leaf.serialNumber);
 
   // CertID ::= SEQUENCE {
@@ -626,10 +593,7 @@ function buildOcspRequest(
   //   issuerKeyHash   OCTET STRING,
   //   serialNumber    INTEGER }
   const sha1AlgorithmId = derSequence(
-    Buffer.concat([
-      derObjectIdentifier("1.3.14.3.2.26"),
-      derNull(),
-    ]),
+    Buffer.concat([derObjectIdentifier("1.3.14.3.2.26"), derNull()])
   );
   const certId = derSequence(
     Buffer.concat([
@@ -637,7 +601,7 @@ function buildOcspRequest(
       derOctetString(issuerNameHash),
       derOctetString(issuerKeyHash),
       serialBytes,
-    ]),
+    ])
   );
 
   const request = derSequence(certId);
@@ -713,10 +677,7 @@ function parseOcspResponse(body: Buffer): RevocationOutcome {
  * found, `false` when the CRL parsed cleanly but did not list the
  * serial, and `null` on parse error.
  */
-function crlContainsSerial(
-  body: Buffer,
-  serialDecimalOrHex: string,
-): boolean | null {
+function crlContainsSerial(body: Buffer, serialDecimalOrHex: string): boolean | null {
   if (body.length < 4 || body[0] !== 0x30) return null;
   const target = normaliseSerial(serialDecimalOrHex);
   // Naive scan: find every INTEGER (tag 0x02) in the blob and compare
@@ -817,11 +778,7 @@ function derObjectIdentifier(oid: string): Buffer {
     }
     while (stack.length > 0) body.push(stack.pop()!);
   }
-  return Buffer.concat([
-    Buffer.from([0x06]),
-    derLength(body.length),
-    Buffer.from(body),
-  ]);
+  return Buffer.concat([Buffer.from([0x06]), derLength(body.length), Buffer.from(body)]);
 }
 
 function derLength(length: number): Buffer {
@@ -923,7 +880,7 @@ async function performHttpFetch(input: {
             error: describeError(err),
           });
         });
-      },
+      }
     );
     req.setTimeout(timeoutMs, () => {
       req.destroy(new Error("timeout"));

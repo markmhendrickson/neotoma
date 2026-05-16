@@ -50,7 +50,7 @@ export function isDestructiveSandboxRoute(path: string): boolean {
 export function sandboxHeaderMiddleware(
   _req: express.Request,
   res: express.Response,
-  next: express.NextFunction,
+  next: express.NextFunction
 ): void {
   res.setHeader("X-Neotoma-Sandbox", "1");
   next();
@@ -63,7 +63,7 @@ export function sandboxHeaderMiddleware(
 export function sandboxDestructiveGuard(
   req: express.Request,
   res: express.Response,
-  next: express.NextFunction,
+  next: express.NextFunction
 ): void {
   if (!isSandboxMode()) {
     return next();

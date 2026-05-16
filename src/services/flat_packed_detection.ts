@@ -27,9 +27,7 @@ export interface FlatPackedDetection {
 
 const FLAT_PACKED_KEY = /^([a-z][a-z0-9_]*?)_(\d+)_([a-z0-9_]+)$/i;
 
-export function detectFlatPackedRows(
-  fields: Record<string, unknown>,
-): FlatPackedDetection {
+export function detectFlatPackedRows(fields: Record<string, unknown>): FlatPackedDetection {
   if (!fields || typeof fields !== "object") {
     return { detected: false };
   }
@@ -104,7 +102,7 @@ export class FlatPackedRowsError extends Error {
     super(
       `Detected ${count} flat-packed ${prefix} rows in a single entity payload. ` +
         `Keys like "${(detection.exampleKeys ?? []).join(", ")}" indicate that a tabular dataset was smuggled ` +
-        `into one entity. Split into ${count} distinct entities (one per row) and retry.`,
+        `into one entity. Split into ${count} distinct entities (one per row) and retry.`
     );
     this.name = "FlatPackedRowsError";
     this.detection = detection;

@@ -11,7 +11,7 @@ export function registerPeersCommand(
     resolveOutputMode: () => OutputMode;
     writeOutput: (value: unknown, mode: OutputMode) => void;
     formatApiError: (error: unknown) => string;
-  },
+  }
 ): void {
   const peersCommand = program.command("peers").description("Peer sync commands");
 
@@ -28,7 +28,7 @@ export function registerPeersCommand(
     .option(
       "--conflict-strategy <strategy>",
       "last_write_wins | source_priority | manual",
-      "last_write_wins",
+      "last_write_wins"
     )
     .option("--shared-secret <secret>", "Shared secret for HMAC peer sync")
     .option("--target-user-id <id>", "Receiver user_id on the peer instance")

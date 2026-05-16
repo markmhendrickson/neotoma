@@ -241,9 +241,10 @@ export async function applyBatchCorrection(
     };
   }
 
-  let schema:
-    | { schema_version: string; schema_definition?: { fields?: Record<string, { type?: string; enum?: unknown[] }> } }
-    | null = null;
+  let schema: {
+    schema_version: string;
+    schema_definition?: { fields?: Record<string, { type?: string; enum?: unknown[] }> };
+  } | null = null;
   try {
     schema = await schemaRegistry.loadActiveSchema(entity_type, user_id);
   } catch {

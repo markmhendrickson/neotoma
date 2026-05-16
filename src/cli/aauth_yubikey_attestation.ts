@@ -107,9 +107,7 @@ function loadYubikeyBinding(): YubikeyBindingShape | null {
   if (cachedBinding) return cachedBinding;
   if (cachedLoadError) return null;
   try {
-    const required = requireFromHere(
-      YUBIKEY_PACKAGE_NAME,
-    ) as YubikeyBindingShape;
+    const required = requireFromHere(YUBIKEY_PACKAGE_NAME) as YubikeyBindingShape;
     cachedBinding = required;
     return cachedBinding;
   } catch (err) {
@@ -123,9 +121,7 @@ function loadYubikeyBinding(): YubikeyBindingShape | null {
  * this hook so they can exercise the helper without requiring the
  * real native package or a YubiKey.
  */
-export function __setYubikeyBindingForTesting(
-  binding: YubikeyBindingShape | null,
-): void {
+export function __setYubikeyBindingForTesting(binding: YubikeyBindingShape | null): void {
   cachedBinding = binding;
   cachedLoadError = null;
 }
@@ -145,16 +141,17 @@ export function __setYubikeyBindingForTesting(
  * win32 and `libykcs11` ships for all three. The only platform check
  * is whether the optional native package is installed.
  */
-export function isYubikeyBackendAvailable(opts: {
-  pkcs11Path?: string;
-} = {}): YubikeyBackendProbe {
+export function isYubikeyBackendAvailable(
+  opts: {
+    pkcs11Path?: string;
+  } = {}
+): YubikeyBackendProbe {
   const binding = loadYubikeyBinding();
   if (!binding) {
     return {
       supported: false,
       reason:
-        cachedLoadError?.message ??
-        `optional native package ${YUBIKEY_PACKAGE_NAME} not installed`,
+        cachedLoadError?.message ?? `optional native package ${YUBIKEY_PACKAGE_NAME} not installed`,
     };
   }
   try {
@@ -257,13 +254,11 @@ export interface YubikeyAttestationEnvelope {
  * this hoisted field when the cert lacks the extension.
  */
 export function buildYubikeyAttestationEnvelope(
-  args: BuildYubikeyEnvelopeArgs,
+  args: BuildYubikeyEnvelopeArgs
 ): YubikeyAttestationEnvelope {
   const slot = args.slot ?? "9c";
   if (slot !== "9c") {
-    const err = new Error(
-      `aauth-yubikey: unsupported PIV slot ${slot} (only 9c is supported)`,
-    );
+    const err = new Error(`aauth-yubikey: unsupported PIV slot ${slot} (only 9c is supported)`);
     (err as { code?: string }).code = "YUBIKEY_SLOT_UNSUPPORTED";
     throw err;
   }
@@ -273,9 +268,7 @@ export function buildYubikeyAttestationEnvelope(
   }
   const binding = loadYubikeyBinding();
   if (!binding) {
-    throw new YubikeyBackendUnavailableError(
-      cachedLoadError?.message ?? "binding load failed",
-    );
+    throw new YubikeyBackendUnavailableError(cachedLoadError?.message ?? "binding load failed");
   }
   const challenge = computeAttestationChallenge({
     iss: args.iss,
@@ -292,18 +285,16 @@ export function buildYubikeyAttestationEnvelope(
   });
   if (result.format !== "packed") {
     throw new Error(
-      `aauth-yubikey: unexpected attest() format=${String(result.format)} (expected "packed")`,
+      `aauth-yubikey: unexpected attest() format=${String(result.format)} (expected "packed")`
     );
   }
   if (typeof result.alg !== "number") {
     throw new Error(
-      `aauth-yubikey: unexpected attest() alg=${String(result.alg)} (expected number)`,
+      `aauth-yubikey: unexpected attest() alg=${String(result.alg)} (expected number)`
     );
   }
   if (!Array.isArray(result.x5c) || result.x5c.length === 0) {
-    throw new Error(
-      `aauth-yubikey: attest() returned empty or non-array x5c chain`,
-    );
+    throw new Error(`aauth-yubikey: attest() returned empty or non-array x5c chain`);
   }
   if (typeof result.sig !== "string" || result.sig.length === 0) {
     throw new Error(`aauth-yubikey: attest() returned empty signature`);

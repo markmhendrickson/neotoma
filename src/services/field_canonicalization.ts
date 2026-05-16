@@ -1,6 +1,6 @@
 /**
  * Field Canonicalization Service
- * 
+ *
  * Canonicalizes validated fields to ensure same semantic content produces same canonical form.
  * This is the core of the idempotence pattern - enforcing determinism post-generation.
  */
@@ -19,20 +19,20 @@ export interface CanonicalizationOptions {
  * Used as fallback when field definition doesn't specify preserveCase
  */
 const PRESERVE_CASE_PATTERNS = [
-  /_name$/,           // Fields ending in _name (e.g., vendor_name, company_name)
-  /_title$/,          // Fields ending in _title
-  /^title$/,         // Exact match: title
-  /^name$/,          // Exact match: name
-  /^subject$/,       // Exact match: subject
-  /^address$/,       // Exact match: address
-  /^city$/,          // Exact match: city
-  /^state$/,         // Exact match: state
-  /^country$/,       // Exact match: country
-  /^location$/,      // Exact match: location
-  /^venue$/,         // Exact match: venue
-  /^brand$/,         // Exact match: brand
-  /^tagline$/,       // Exact match: tagline
-  /^slogan$/,        // Exact match: slogan
+  /_name$/, // Fields ending in _name (e.g., vendor_name, company_name)
+  /_title$/, // Fields ending in _title
+  /^title$/, // Exact match: title
+  /^name$/, // Exact match: name
+  /^subject$/, // Exact match: subject
+  /^address$/, // Exact match: address
+  /^city$/, // Exact match: city
+  /^state$/, // Exact match: state
+  /^country$/, // Exact match: country
+  /^location$/, // Exact match: location
+  /^venue$/, // Exact match: venue
+  /^brand$/, // Exact match: brand
+  /^tagline$/, // Exact match: tagline
+  /^slogan$/, // Exact match: slogan
 ];
 
 /**
@@ -57,12 +57,12 @@ const PRESERVE_CASE_FIELDS = new Set([
   "essay",
   "paper",
   "document",
-  
+
   // Titles and subjects
   "title",
   "subject",
   "headline",
-  
+
   // Names (people, companies, products)
   "name",
   "first_name",
@@ -81,7 +81,7 @@ const PRESERVE_CASE_FIELDS = new Set([
   "manufacturer",
   "organization",
   "institution",
-  
+
   // Addresses and locations
   "address",
   "street",
@@ -93,7 +93,7 @@ const PRESERVE_CASE_FIELDS = new Set([
   "location",
   "place",
   "venue",
-  
+
   // Other fields where capitalization matters
   "tagline",
   "slogan",
@@ -104,13 +104,13 @@ const PRESERVE_CASE_FIELDS = new Set([
 /**
  * Canonicalize fields based on schema definition
  * Ensures same semantic content produces same canonical form
- * 
+ *
  * Case Preservation Priority (for string fields):
  * 1. Global preserveCase option (explicit override)
  * 2. Field definition metadata (preserveCase: true in schema) - RECOMMENDED for new fields
  * 3. Hardcoded PRESERVE_CASE_FIELDS list (backward compatibility)
  * 4. Heuristic patterns (automatic detection for common naming patterns)
- * 
+ *
  * To preserve case for new fields in schemas:
  * - Add preserveCase: true to the field definition in schema_registry
  * - Or rely on heuristics (fields ending in _name, _title, etc. are auto-detected)
@@ -122,19 +122,19 @@ export function canonicalizeFields(
   options: CanonicalizationOptions = {}
 ): Record<string, unknown> {
   const canonical: Record<string, unknown> = {};
-  
+
   // Sort keys alphabetically for consistent output
   const sortedKeys = Object.keys(fields).sort();
-  
+
   for (const key of sortedKeys) {
     const value = fields[key];
     const fieldDef = schema.fields[key];
-    
+
     if (!fieldDef) {
       // Unknown field - should not happen after validation, but handle it
       continue;
     }
-    
+
     // Determine if this field should preserve case
     // Priority order:
     // 1. Explicit preserveCase option (global override)
@@ -142,7 +142,7 @@ export function canonicalizeFields(
     // 3. Hardcoded list (known fields) - backward compatibility
     // 4. Heuristic patterns (common naming patterns) - automatic detection for new fields
     let shouldPreserveCase = options.preserveCase;
-    
+
     if (!shouldPreserveCase) {
       // Check field definition metadata first (schema-driven, most explicit)
       if (fieldDef.preserveCase !== undefined) {
@@ -154,16 +154,16 @@ export function canonicalizeFields(
       }
       // Finally check heuristic patterns (automatic detection for new fields)
       else {
-        shouldPreserveCase = PRESERVE_CASE_PATTERNS.some(pattern => pattern.test(key));
+        shouldPreserveCase = PRESERVE_CASE_PATTERNS.some((pattern) => pattern.test(key));
       }
     }
-    
+
     const fieldOptions = { ...options, preserveCase: shouldPreserveCase };
-    
+
     // Canonicalize based on field type
     canonical[key] = canonicalizeValue(value, fieldDef.type, fieldOptions);
   }
-  
+
   return canonical;
 }
 
@@ -179,26 +179,26 @@ function canonicalizeValue(
   if (value === null || value === undefined) {
     return null;
   }
-  
+
   switch (type) {
     case "string":
       return canonicalizeString(value, options);
-    
+
     case "number":
       return canonicalizeNumber(value, options);
-    
+
     case "date":
       return canonicalizeDate(value, options);
-    
+
     case "boolean":
       return Boolean(value);
-    
+
     case "array":
       return canonicalizeArray(value, options);
-    
+
     case "object":
       return canonicalizeObject(value, options);
-    
+
     default:
       return value;
   }
@@ -207,43 +207,37 @@ function canonicalizeValue(
 /**
  * Canonicalize string value
  */
-function canonicalizeString(
-  value: unknown,
-  options: CanonicalizationOptions
-): string {
+function canonicalizeString(value: unknown, options: CanonicalizationOptions): string {
   if (typeof value !== "string") {
     return String(value);
   }
-  
+
   let normalized = value;
-  
+
   // Trim whitespace
   normalized = normalized.trim();
-  
+
   // Normalize line endings
   normalized = normalized.replace(/\r\n/g, "\n");
-  
+
   // Normalize multiple spaces to single space
   normalized = normalized.replace(/\s+/g, " ");
-  
+
   // Remove trailing spaces
   normalized = normalized.trimEnd();
-  
+
   // Lowercase (unless preserveCase is true)
   if (!options.preserveCase) {
     normalized = normalized.toLowerCase();
   }
-  
+
   return normalized;
 }
 
 /**
  * Canonicalize number value
  */
-function canonicalizeNumber(
-  value: unknown,
-  options: CanonicalizationOptions
-): number {
+function canonicalizeNumber(value: unknown, options: CanonicalizationOptions): number {
   if (typeof value !== "number") {
     const parsed = Number(value);
     if (isNaN(parsed)) {
@@ -251,24 +245,21 @@ function canonicalizeNumber(
     }
     return parsed;
   }
-  
+
   const precision = options.numberPrecision ?? 2;
-  
+
   // Round to specified precision
   const rounded = Math.round(value * Math.pow(10, precision)) / Math.pow(10, precision);
-  
+
   return rounded;
 }
 
 /**
  * Canonicalize date value
  */
-function canonicalizeDate(
-  value: unknown,
-  options: CanonicalizationOptions
-): string {
+function canonicalizeDate(value: unknown, options: CanonicalizationOptions): string {
   let date: Date;
-  
+
   if (value instanceof Date) {
     date = value;
   } else if (typeof value === "string") {
@@ -277,19 +268,19 @@ function canonicalizeDate(
     // Invalid date - return ISO string of epoch
     return new Date(0).toISOString();
   }
-  
+
   // Check if date is valid
   if (isNaN(date.getTime())) {
     return new Date(0).toISOString();
   }
-  
+
   const format = options.dateFormat ?? "iso";
-  
+
   if (format === "date-only") {
     // Return date-only (YYYY-MM-DD)
     return date.toISOString().split("T")[0];
   }
-  
+
   // Return full ISO 8601 timestamp (UTC)
   return date.toISOString();
 }
@@ -297,14 +288,11 @@ function canonicalizeDate(
 /**
  * Canonicalize array value
  */
-function canonicalizeArray(
-  value: unknown,
-  options: CanonicalizationOptions
-): unknown[] {
+function canonicalizeArray(value: unknown, options: CanonicalizationOptions): unknown[] {
   if (!Array.isArray(value)) {
     return [];
   }
-  
+
   // Canonicalize each item recursively
   const canonicalized = value.map((item) => {
     if (typeof item === "string") {
@@ -320,7 +308,7 @@ function canonicalizeArray(
     }
     return item;
   });
-  
+
   // Sort array by deterministic key
   return sortArray(canonicalized);
 }
@@ -347,22 +335,22 @@ function canonicalizeObject(
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return {};
   }
-  
+
   const obj = value as Record<string, unknown>;
   const canonical: Record<string, unknown> = {};
-  
+
   // Sort keys alphabetically
   const sortedKeys = Object.keys(obj).sort();
-  
+
   for (const key of sortedKeys) {
     const val = obj[key];
-    
+
     // Skip null/undefined
     if (val === null || val === undefined) {
       canonical[key] = null;
       continue;
     }
-    
+
     // Recursively canonicalize based on type
     if (typeof val === "string") {
       canonical[key] = canonicalizeString(val, options);
@@ -378,7 +366,7 @@ function canonicalizeObject(
       canonical[key] = val;
     }
   }
-  
+
   return canonical;
 }
 
@@ -386,8 +374,6 @@ function canonicalizeObject(
  * Compute hash of canonical fields (for fixed-point convergence)
  */
 export function hashCanonicalFields(canonicalFields: Record<string, unknown>): string {
-  const hash = createHash("sha256")
-    .update(JSON.stringify(canonicalFields))
-    .digest("hex");
+  const hash = createHash("sha256").update(JSON.stringify(canonicalFields)).digest("hex");
   return hash;
 }

@@ -72,10 +72,14 @@ export function modeCopy(mode: LandingMode): { title: string; subtitle: string; 
 function renderHarnessSection(h: HarnessSnippetResult): string {
   const humanBlock = `<h4>Human-driven</h4>
 <p class="muted">Format: <code>${escapeHtml(h.human.format)}</code></p>
-${h.preflight ? `<details class="inner"><summary>${escapeHtml(h.preflight.title)}</summary>
+${
+  h.preflight
+    ? `<details class="inner"><summary>${escapeHtml(h.preflight.title)}</summary>
 <p class="muted">Format: <code>${escapeHtml(h.preflight.format)}</code></p>
 <pre><button class="copy" type="button" aria-label="Copy preflight snippet">Copy</button><span class="pre-scroll"><code>${escapeHtml(h.preflight.code)}</code></span></pre>
-</details>` : ""}
+</details>`
+    : ""
+}
 <pre><button class="copy" type="button" aria-label="Copy config snippet">Copy</button><span class="pre-scroll"><code>${escapeHtml(h.human.code)}</code></span></pre>`;
 
   const agentBlock = `<h4>Agent-driven</h4>
@@ -344,7 +348,9 @@ function renderPackPicker(ctx: LandingHtmlContext): string {
   const options = [
     `<optgroup label="Starter">\n${starterOpts}\n</optgroup>`,
     useCaseOpts ? `<optgroup label="Use cases">\n${useCaseOpts}\n</optgroup>` : "",
-  ].filter(Boolean).join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
   return `
 <section>
 <h2>Start a sandbox session</h2>
@@ -402,7 +408,9 @@ export function renderLandingHtml(ctx: LandingHtmlContext): string {
     `<span class="badge"><strong>version</strong> ${escapeHtml(ctx.version)}</span>`,
   ];
   if (ctx.gitSha) {
-    badges.push(`<span class="badge"><strong>git</strong> ${escapeHtml(ctx.gitSha.slice(0, 7))}</span>`);
+    badges.push(
+      `<span class="badge"><strong>git</strong> ${escapeHtml(ctx.gitSha.slice(0, 7))}</span>`
+    );
   }
 
   const sandboxEndpointsNote =
@@ -421,11 +429,12 @@ export function renderLandingHtml(ctx: LandingHtmlContext): string {
 
   const connectHarnessCliNote = `<p class="muted">With the Neotoma CLI installed: <code>neotoma setup</code> wires MCP entries and agent instruction files; use <code>neotoma mcp config</code> or <code>neotoma cli config</code> to update one layer only. For read-only help, run <code>neotoma mcp guide</code> or <code>neotoma cli guide</code>.</p>`;
 
-  const title = ctx.mode === "sandbox"
-    ? "Neotoma sandbox"
-    : ctx.mode === "local"
-      ? "Neotoma (local)"
-      : "Neotoma MCP server";
+  const title =
+    ctx.mode === "sandbox"
+      ? "Neotoma sandbox"
+      : ctx.mode === "local"
+        ? "Neotoma (local)"
+        : "Neotoma MCP server";
 
   return `<!doctype html>
 <html lang="en">
@@ -451,7 +460,10 @@ ${copy.banner ? `<div class="banner">${escapeHtml(copy.banner)}</div>` : ""}
 <ul class="endpoints">
 <li><code>${escapeHtml(ctx.mcpUrl)}</code> <span class="muted">— MCP endpoint</span></li>
 ${Object.entries(ctx.endpoints)
-  .map(([label, path]) => `<li><code>${escapeHtml(path)}</code> <span class="muted">— <a href="${escapeHtml(ctx.base)}${escapeHtml(path)}">${escapeHtml(label.replace(/_/g, " "))}</a></span></li>`)
+  .map(
+    ([label, path]) =>
+      `<li><code>${escapeHtml(path)}</code> <span class="muted">— <a href="${escapeHtml(ctx.base)}${escapeHtml(path)}">${escapeHtml(label.replace(/_/g, " "))}</a></span></li>`
+  )
   .join("\n")}
 </ul>
 ${inspectorNote}
