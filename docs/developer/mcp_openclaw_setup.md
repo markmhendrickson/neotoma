@@ -1,12 +1,13 @@
 # OpenClaw MCP Setup Guide
 
-This guide covers connecting OpenClaw to Neotoma using MCP when OpenClaw is running on the same machine as Neotoma, and fallback options when MCP is not available in your OpenClaw environment.
+This guide covers connecting OpenClaw to Neotoma through MCP. OpenClaw is a first-class harness target for `neotoma setup` and uses a native plugin for permissions rather than a command allowlist.
 
 ## Compatibility status
 
 - Neotoma installation is client-agnostic (`npm install -g neotoma`, `neotoma init`)
-- OpenClaw is compatible when it can connect to an MCP server (stdio or HTTP)
-- If MCP is unavailable, use Neotoma CLI commands directly from the same machine
+- `neotoma setup --tool openclaw --yes` auto-installs the MCP server entry and the published skills under `.openclaw/skills/`
+- Both stdio and HTTP MCP transports are supported; stdio is recommended for local installs
+- Permissions are managed by the OpenClaw native plugin, not by a CLI-managed allowlist (Neotoma's `setup` step skips the allowlist patch for OpenClaw on purpose)
 
 ## Prerequisites
 
@@ -20,28 +21,51 @@ neotoma init
 - Node.js available on PATH
 - OpenClaw environment with MCP client support
 
-## Option A: Local stdio MCP (recommended on same machine)
+## Option A: Auto-install via neotoma setup (recommended)
 
-Use stdio when OpenClaw and Neotoma run on the same machine.
+```bash
+neotoma setup --tool openclaw --yes
+```
 
-Example MCP server entry:
+This installs the Neotoma MCP server entry and the published skills into `.openclaw/skills/`. Permissions are not patched (OpenClaw uses its native plugin instead).
+
+Alternatively, run the MCP config command directly:
+
+```bash
+neotoma mcp config --user-level --yes
+```
+
+## Option B: Manual — stdio (local install)
+
+If your OpenClaw environment cannot spawn `neotoma setup`, configure the MCP server entry manually. OpenClaw reads the same `mcpServers` JSON format as Cursor:
+
+```json
+{
+  "mcpServers": {
+    "neotoma": {
+      "command": "neotoma",
+      "args": ["mcp", "stdio"],
+      "env": {}
+    }
+  }
+}
+```
+
+If `neotoma` is not on `PATH` from OpenClaw's launch environment, use the absolute path (run `which neotoma` to find it) or the launcher script:
 
 ```json
 {
   "mcpServers": {
     "neotoma": {
       "command": "/absolute/path/to/neotoma/scripts/run_neotoma_mcp_stdio_prod.sh"
-    },
-    "neotoma-dev": {
-      "command": "/absolute/path/to/neotoma/scripts/run_neotoma_mcp_stdio.sh"
     }
   }
 }
 ```
 
-Use absolute paths and run `npm run build:server` once after cloning the repo.
+Run `npm run build:server` once after cloning the repo if you use the launcher script.
 
-## Option B: HTTP MCP (remote or containerized)
+## Option C: HTTP MCP (remote or containerized)
 
 Use HTTP when OpenClaw cannot spawn local stdio processes or when Neotoma runs remotely.
 
@@ -51,9 +75,8 @@ Use HTTP when OpenClaw cannot spawn local stdio processes or when Neotoma runs r
 
 For remote transport and auth details, see:
 
-- `docs/developer/mcp_cursor_setup.md`
-- `docs/developer/mcp_chatgpt_setup.md`
-- `docs/developer/mcp_authentication_summary.md`
+- [`mcp_cursor_setup.md`](mcp_cursor_setup.md)
+- [`mcp_authentication_summary.md`](mcp_authentication_summary.md)
 
 ## CLI fallback
 

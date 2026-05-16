@@ -29,17 +29,32 @@ For local development and agents running in the repo, the CLI is the recommended
 
 See setup guides for config examples and comparison table.
 
-## Canonical MCP documentation
-- **MCP specification**: `docs/specs/MCP_SPEC.md`
-- **MCP server instructions** (loaded at runtime): `docs/developer/mcp/` — `instructions.md`, `unauthenticated.md`, `tool_descriptions.yaml`
-- **Cursor setup**: `docs/developer/mcp_cursor_setup.md`
-- **ChatGPT setup**: `docs/developer/mcp_chatgpt_setup.md`
-- **Claude Code setup**: `docs/developer/mcp_claude_code_setup.md`
-- **OpenClaw setup**: `docs/developer/mcp_openclaw_setup.md`
-- **IronClaw setup**: `docs/developer/mcp_ironclaw_setup.md`
-- **Agent CLI config** (unified MCP for Cursor, Claude Code, Codex): `docs/developer/agent_cli_configuration.md`
-- **OAuth implementation**: `docs/developer/mcp_oauth_implementation.md`
-- **Authentication summary**: `docs/developer/mcp_authentication_summary.md`
+## Setup guides by harness
+
+The table below lists every supported harness with its setup guide and whether `neotoma setup --tool <name>` auto-installs the MCP server entry. `neotoma setup` recognizes: `claude-code`, `claude-desktop`, `cursor`, `codex`, `openclaw`, `windsurf`, `continue`, `vscode` (see `toolFromString` in [`src/cli/permissions.ts`](../../src/cli/permissions.ts)). Other harnesses use their native MCP-add command or a manual config file.
+
+| Harness | Guide | Auto-install | Transport | Notes |
+|---------|-------|--------------|-----------|-------|
+| Cursor | [`mcp_cursor_setup.md`](mcp_cursor_setup.md) | `neotoma setup --tool cursor` | stdio (local) or HTTP | Source of truth for `.cursor/mcp.json`; sync to other clients via `npm run sync:mcp` |
+| Claude Code | [`mcp_claude_code_setup.md`](mcp_claude_code_setup.md) | `neotoma setup --tool claude-code` | stdio (local) or HTTP | OAuth supported; writes user + project scopes |
+| Codex CLI | [`agent_cli_configuration.md`](agent_cli_configuration.md) | `neotoma setup --tool codex` | stdio | Synced from `.cursor/mcp.json` via `npm run sync:mcp` |
+| Claude Desktop | [`mcp_claude_code_setup.md`](mcp_claude_code_setup.md) | `neotoma setup --tool claude-desktop` | stdio | Native plugin manages permissions; allowlist patch is skipped |
+| Windsurf | [`mcp_windsurf_setup.md`](mcp_windsurf_setup.md) | `neotoma setup --tool windsurf` | stdio (local) or HTTP | Writes `~/.codeium/windsurf/mcp_config.json` |
+| Continue | [`mcp_continue_setup.md`](mcp_continue_setup.md) | `neotoma setup --tool continue` | stdio (local) or HTTP | Writes Continue's `config.json` |
+| VS Code | [`mcp_vscode_setup.md`](mcp_vscode_setup.md) | `neotoma setup --tool vscode` | stdio (local) or HTTP | Copilot Chat MCP integration |
+| OpenClaw | [`mcp_openclaw_setup.md`](mcp_openclaw_setup.md) | `neotoma setup --tool openclaw` | stdio (local) or HTTP | Native plugin manages permissions; allowlist patch is skipped; installs skills under `.openclaw/skills/` |
+| IronClaw | [`mcp_ironclaw_setup.md`](mcp_ironclaw_setup.md) | use `ironclaw mcp add` | HTTP recommended | No `neotoma setup --tool ironclaw`; configured via IronClaw's own MCP commands |
+| Letta | [`mcp_letta_setup.md`](mcp_letta_setup.md) | manual | streamable HTTP, SSE, or stdio | TypeScript SDK or HTTP endpoint; no `neotoma setup` integration |
+| ChatGPT Apps connector | [`chatgpt_apps_setup.md`](chatgpt_apps_setup.md) | manual | HTTP (MCP endpoint) | Public HTTPS required; ChatGPT Developer Mode |
+| ChatGPT Custom GPT Actions | [`chatgpt_actions_setup.md`](chatgpt_actions_setup.md) | manual | HTTP (OpenAPI, not MCP) | Uses `openapi.yaml` as the action schema; distinct from MCP |
+| Mobile (iOS/Android) | [`mcp/mobile_setup.md`](mcp/mobile_setup.md) | manual | HTTP | Tunnel-backed; no native auto-install |
+
+## Other canonical references
+- **MCP specification**: [`docs/specs/MCP_SPEC.md`](../specs/MCP_SPEC.md)
+- **MCP server instructions** (loaded at runtime): [`docs/developer/mcp/`](mcp/) — `instructions.md`, `unauthenticated.md`, `tool_descriptions.yaml`
+- **Agent CLI config** (unified MCP for Cursor, Claude Code, Codex): [`agent_cli_configuration.md`](agent_cli_configuration.md)
+- **OAuth implementation**: [`mcp_oauth_implementation.md`](mcp_oauth_implementation.md)
+- **Authentication summary**: [`mcp_authentication_summary.md`](mcp_authentication_summary.md)
 
 ## What MCP provides
 MCP exposes structured actions for:
