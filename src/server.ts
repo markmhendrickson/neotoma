@@ -988,6 +988,13 @@ export class NeotomaServer {
     const { createOperations } = await import("./core/operations.js");
     const ops = createOperations({ server: this, userId });
 
+    // Auto-populate reporter_app_version from the running server version when
+    // the caller did not provide it (closes #182). Agents in claude.ai sessions
+    // have no terminal access to run `neotoma --version`, so the server fills in
+    // the version automatically so they don't need the npm_check_update workaround.
+    const effectiveReporterAppVersion =
+      parsed.reporter_app_version ?? this.getInstalledPackageMetadata().currentVersion;
+
     try {
       const result = await submitIssue(ops, {
         title: parsed.title,
@@ -997,7 +1004,7 @@ export class NeotomaServer {
         reporter_git_sha: parsed.reporter_git_sha,
         reporter_git_ref: parsed.reporter_git_ref,
         reporter_channel: parsed.reporter_channel,
-        reporter_app_version: parsed.reporter_app_version,
+        reporter_app_version: effectiveReporterAppVersion,
         reporter_ci_run_id: parsed.reporter_ci_run_id,
         reporter_patch_source_id: parsed.reporter_patch_source_id,
         ...(parsed.entity_ids_to_link ? { entity_ids_to_link: parsed.entity_ids_to_link } : {}),
@@ -1181,6 +1188,10 @@ export class NeotomaServer {
     const { createOperations } = await import("./core/operations.js");
     const ops = createOperations({ server: this, userId });
 
+    // Auto-populate reporter_app_version when not provided by the caller (closes #182).
+    const effectiveReporterAppVersionMsg =
+      parsed.reporter_app_version ?? this.getInstalledPackageMetadata().currentVersion;
+
     try {
       const result = await addIssueMessage(ops, {
         entity_id: parsed.entity_id?.trim() || undefined,
@@ -1192,9 +1203,7 @@ export class NeotomaServer {
         ...(parsed.reporter_git_sha ? { reporter_git_sha: parsed.reporter_git_sha } : {}),
         ...(parsed.reporter_git_ref ? { reporter_git_ref: parsed.reporter_git_ref } : {}),
         ...(parsed.reporter_channel ? { reporter_channel: parsed.reporter_channel } : {}),
-        ...(parsed.reporter_app_version
-          ? { reporter_app_version: parsed.reporter_app_version }
-          : {}),
+        reporter_app_version: effectiveReporterAppVersionMsg,
         ...(parsed.entity_ids_to_link ? { entity_ids_to_link: parsed.entity_ids_to_link } : {}),
       });
       return this.buildTextResponse(result);
