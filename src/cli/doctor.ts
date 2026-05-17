@@ -96,6 +96,10 @@ export interface DoctorReport {
   data: {
     config_dir: string;
     data_dir: string;
+    /** Fix #170: source that resolved data_dir — env var, project-local .env, or global default. */
+    data_dir_source: "env" | "project_local" | "global_default";
+    /** Fix #170: the global default path when data_dir_source is NOT global_default; null otherwise. */
+    global_default_data_dir: string | null;
     db_exists: boolean;
     initialized: boolean;
     risks: DataDirRisk[];
@@ -477,9 +481,42 @@ export async function runDoctor(opts: RunDoctorOptions = {}): Promise<DoctorRepo
   const version = detectVersion(runtime.global_package_dir);
   const installed = runtime.neotoma_on_path || runtime.global_package_dir !== null;
 
-  // Data/init status
+  // Data/init status — Fix #170: distinguish env, project-local .env, global default
   const configDir = path.join(os.homedir(), ".config", "neotoma");
-  const dataDir = process.env.NEOTOMA_DATA_DIR ?? path.join(os.homedir(), "neotoma", "data");
+  const globalDefaultDataDir = path.join(os.homedir(), "neotoma", "data");
+
+  // Check for a project-local .env in cwd that sets NEOTOMA_DATA_DIR
+  let projectLocalDataDir: string | null = null;
+  try {
+    const cwdEnvPath = path.join(cwd, ".env");
+    if (existsSync(cwdEnvPath)) {
+      const raw = readFileSync(cwdEnvPath, "utf8");
+      const match = /^NEOTOMA_DATA_DIR=(.+)$/m.exec(raw);
+      if (match?.[1]?.trim()) {
+        projectLocalDataDir = match[1].trim().replace(/^["']|["']$/g, "");
+      }
+    }
+  } catch {
+    // ignore read errors
+  }
+
+  let dataDir: string;
+  let dataDirSource: "env" | "project_local" | "global_default";
+  const envDataDir = process.env.NEOTOMA_DATA_DIR?.trim();
+  if (envDataDir) {
+    dataDir = envDataDir;
+    // If the env var value matches the project-local .env value, classify as project_local
+    dataDirSource =
+      projectLocalDataDir && path.resolve(envDataDir) === path.resolve(projectLocalDataDir)
+        ? "project_local"
+        : "env";
+  } else if (projectLocalDataDir) {
+    dataDir = projectLocalDataDir;
+    dataDirSource = "project_local";
+  } else {
+    dataDir = globalDefaultDataDir;
+    dataDirSource = "global_default";
+  }
   const dbCandidates = [path.join(dataDir, "neotoma.db"), path.join(dataDir, "neotoma.prod.db")];
   const dbExists = dbCandidates.some((p) => existsSync(p));
   const initialized = dbExists && existsSync(configDir);
@@ -586,6 +623,8 @@ export async function runDoctor(opts: RunDoctorOptions = {}): Promise<DoctorRepo
     data: {
       config_dir: configDir,
       data_dir: dataDir,
+      data_dir_source: dataDirSource,
+      global_default_data_dir: dataDirSource !== "global_default" ? globalDefaultDataDir : null,
       db_exists: dbExists,
       initialized,
       risks,
