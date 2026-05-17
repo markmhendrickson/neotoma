@@ -901,7 +901,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
 
   conversation: {
     entity_type: "conversation",
-    schema_version: "1.3",
+    schema_version: "1.4",
     metadata: {
       label: "Conversation",
       description: "Chat conversation container entity.",
@@ -934,6 +934,13 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         repository_root: { type: "string", required: false },
         repository_remote: { type: "string", required: false },
         scope_summary: { type: "string", required: false, preserveCase: true },
+        // v1.4: session UUID bridge. In Claude Code contexts the SessionStart
+        // hook creates a conversation entity keyed by the session UUID while
+        // the MCP agent creates a slug-keyed entity. Storing the raw session
+        // UUID here cross-references both entities so timeline events and
+        // observations can be correlated without server-side coalescing.
+        // Optional — only populated in Claude Code / hook-aware contexts.
+        session_uuid: { type: "string", required: false },
       },
       // v1.2+: session-scoped identity via caller-supplied `conversation_id`.
       // When absent, resolution falls through to the heuristic path; the
@@ -954,6 +961,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         repository_root: { strategy: "last_write" },
         repository_remote: { strategy: "last_write" },
         scope_summary: { strategy: "last_write" },
+        session_uuid: { strategy: "last_write" },
       },
     },
   },
