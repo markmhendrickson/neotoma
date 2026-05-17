@@ -202,6 +202,40 @@ export function isRecoverableSqliteConnectionError(error: unknown): boolean {
   );
 }
 
+/**
+ * Returns true for transient lock/busy errors that warrant a retry with backoff.
+ * better-sqlite3 surfaces these as SQLITE_BUSY or SQLITE_LOCKED error codes, or
+ * via error messages that include "database is locked" / "database table is locked".
+ */
+export function isSqliteLockError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const e = error as { code?: string; message?: string };
+  const code = (e.code || "").toUpperCase();
+  const message = (e.message || "").toLowerCase();
+  return (
+    code === "SQLITE_BUSY" ||
+    code === "SQLITE_LOCKED" ||
+    code.startsWith("SQLITE_BUSY_") ||
+    code.startsWith("SQLITE_LOCKED_") ||
+    message.includes("database is locked") ||
+    message.includes("database table is locked")
+  );
+}
+
+/** Maximum number of lock-retry attempts before giving up. */
+const SQLITE_LOCK_MAX_RETRIES = 5;
+
+/** Base delay in ms for exponential backoff on lock errors. */
+const SQLITE_LOCK_BASE_DELAY_MS = 50;
+
+/**
+ * Awaitable sleep helper. Using a promise-based sleep avoids blocking the
+ * Node.js event loop while still keeping the retry logic straightforward.
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function fromDbRow(table: string, row: Record<string, unknown>): Record<string, unknown> {
   const result: Record<string, unknown> = { ...row };
   const booleanColumns = BOOLEAN_COLUMNS[table];
@@ -652,6 +686,7 @@ class LocalQueryBuilder {
 
     const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
 
+    for (let lockRetry = 0; lockRetry < SQLITE_LOCK_MAX_RETRIES; lockRetry += 1) {
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const db = getSqliteDb();
       try {
@@ -895,13 +930,25 @@ class LocalQueryBuilder {
           clearSqliteCache();
           continue;
         }
+        if (isSqliteLockError(error)) {
+          // Break out of the connection-retry inner loop; the outer lock-retry
+          // loop will sleep and try again.
+          break;
+        }
         const msg = error.message || String(error);
         const code = mapSqliteErrorToPostgres(error);
         return { data: null, error: { message: msg, ...(code ? { code } : {}) } };
       }
     }
+    // If we reach here inside the lock-retry loop, a lock error occurred.
+    // Sleep with exponential backoff before the next attempt.
+    if (lockRetry < SQLITE_LOCK_MAX_RETRIES - 1) {
+      const delay = SQLITE_LOCK_BASE_DELAY_MS * Math.pow(2, lockRetry);
+      await sleep(delay);
+    }
+    } // end lock-retry loop
 
-    return { data: null, error: { message: "SQLite recovery retry exhausted" } };
+    return { data: null, error: { message: "SQLite database is locked: maximum retries exceeded" } };
   }
 
   then<TResult1 = QueryResult<any>, TResult2 = never>(
