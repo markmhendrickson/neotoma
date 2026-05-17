@@ -2671,6 +2671,21 @@ export interface components {
       }[];
       observations_created?: number;
       unknown_fields_count?: number;
+      /**
+       * @description Names of fields that were dropped because they are not declared in
+       *     the entity's active schema. Present when `unknown_fields_count > 0`.
+       *     Use `update_schema_incremental` or `register_schema` to add these
+       *     fields before re-storing.
+       */
+      unknown_fields?: string[];
+      /**
+       * @description Actionable guidance when fields were dropped to `raw_fragments`.
+       *     Present only when `unknown_fields_count > 0`. Directs the caller
+       *     to use `update_schema_incremental` with `migrate_existing: true`
+       *     to promote the unknown fields into the schema and backfill existing
+       *     data.
+       */
+      hint?: string;
       relationships_created?: {
         [key: string]: unknown;
       }[];
@@ -3094,6 +3109,13 @@ export interface components {
       /** @description Interpretation row linked to observations when the request supplied an explicit interpretation block. */
       interpretation_id?: string | null;
       /**
+       * @description Names of fields that were dropped because they are not declared in
+       *     the entity's active schema. Present when `unknown_fields_count > 0`.
+       *     Use `update_schema_incremental` or `register_schema` to add these
+       *     fields before re-storing.
+       */
+      unknown_fields?: string[];
+      /**
        * @description Entity types whose payloads were routed to raw_fragments because no
        *     schema could be found or auto-registered. Each element is a distinct
        *     entity_type string. An empty array (or absent field) means all entity
@@ -3102,6 +3124,20 @@ export interface components {
        *     so future ingestion produces observations instead of fragments.
        */
       no_schema_entity_types?: string[];
+      /**
+       * @description Number of entity fields that were dropped because they are not
+       *     declared in the entity's active schema. These fields were stored in
+       *     `raw_fragments` and can be recovered.
+       */
+      unknown_fields_count?: number;
+      /**
+       * @description Actionable guidance when fields were dropped to `raw_fragments`.
+       *     Present only when `unknown_fields_count > 0`. Directs the caller
+       *     to use `update_schema_incremental` with `migrate_existing: true`
+       *     to promote the unknown fields into the schema and backfill existing
+       *     data.
+       */
+      hint?: string;
     };
     /**
      * @description Non-fatal warning emitted by entity resolution when a schema declares

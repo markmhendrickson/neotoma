@@ -1221,6 +1221,14 @@ components:
             the entity's active schema. Present when `unknown_fields_count > 0`.
             Use `update_schema_incremental` or `register_schema` to add these
             fields before re-storing.
+        hint:
+          type: string
+          description: |
+            Actionable guidance when fields were dropped to `raw_fragments`.
+            Present only when `unknown_fields_count > 0`. Directs the caller
+            to use `update_schema_incremental` with `migrate_existing: true`
+            to promote the unknown fields into the schema and backfill existing
+            data.
         relationships_created:
           type: array
           items:
@@ -1654,6 +1662,20 @@ components:
             types had an active schema and were processed normally. When this list
             is non-empty, run `register_schema` for each type to create a schema
             so future ingestion produces observations instead of fragments.
+        unknown_fields_count:
+          type: integer
+          description: |
+            Number of entity fields that were dropped because they are not
+            declared in the entity's active schema. These fields were stored in
+            `raw_fragments` and can be recovered.
+        hint:
+          type: string
+          description: |
+            Actionable guidance when fields were dropped to `raw_fragments`.
+            Present only when `unknown_fields_count > 0`. Directs the caller
+            to use `update_schema_incremental` with `migrate_existing: true`
+            to promote the unknown fields into the schema and backfill existing
+            data.
     ResolverWarning:
       type: object
       description: |

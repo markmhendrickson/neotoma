@@ -3719,6 +3719,7 @@ export class NeotomaServer {
       observations_created: result.observationsCreated,
       unknown_fields_count: result.unknownFieldsCount,
       unknown_fields: result.unknownFieldNames,
+      ...(result.hint ? { hint: result.hint } : {}),
       relationships_created: relationshipsCreated,
       ...(result.noSchemaEntityTypes && result.noSchemaEntityTypes.length > 0
         ? { no_schema_entity_types: result.noSchemaEntityTypes }
@@ -4419,6 +4420,7 @@ export class NeotomaServer {
         ...(result.noSchemaEntityTypes && result.noSchemaEntityTypes.length > 0
           ? { no_schema_entity_types: result.noSchemaEntityTypes }
           : {}),
+        ...(result.hint ? { hint: result.hint } : {}),
       });
     }
 
@@ -5126,6 +5128,14 @@ export class NeotomaServer {
       })),
       unknown_fields_count: unknownFieldsCount,
       unknown_fields: Array.from(unknownFieldNamesSet).sort(),
+      ...(unknownFieldsCount > 0
+        ? {
+            hint:
+              "Unknown fields were stored in raw_fragments. " +
+              "Call update_schema_incremental to promote them to schema fields, " +
+              "then set migrate_existing: true to backfill existing data.",
+          }
+        : {}),
       related_entities: relatedData.entities,
       related_relationships: relatedData.relationships,
       ...(schemaStoreWarnings.length > 0 ? { store_warnings: schemaStoreWarnings } : {}),
