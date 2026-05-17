@@ -500,6 +500,9 @@ export async function runInterpretation(
         if (!noSchemaEntityTypes.includes(entityType)) {
           noSchemaEntityTypes.push(entityType);
         }
+        for (const k of Object.keys(currentEntityData)) {
+          unknownFieldNames.add(k);
+        }
         continue;
       }
 

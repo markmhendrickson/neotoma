@@ -3685,6 +3685,9 @@ export class NeotomaServer {
       })),
       observations_created: result.observationsCreated,
       unknown_fields_count: result.unknownFieldsCount,
+      ...(result.unknownFields && result.unknownFields.length > 0
+        ? { unknown_fields: result.unknownFields }
+        : {}),
       relationships_created: relationshipsCreated,
       ...(result.noSchemaEntityTypes && result.noSchemaEntityTypes.length > 0
         ? { no_schema_entity_types: result.noSchemaEntityTypes }
