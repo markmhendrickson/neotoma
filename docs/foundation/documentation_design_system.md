@@ -1,3 +1,8 @@
+---
+title: Documentation Design System
+summary: _(Design Principles and Patterns for Documentation Websites)_
+---
+
 # Documentation Design System
 
 _(Design Principles and Patterns for Documentation Websites)_

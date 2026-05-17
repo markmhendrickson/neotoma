@@ -1,3 +1,8 @@
+---
+title: Subscriptions
+summary: "Substrate event subscriptions deliver write-path notifications to external consumers via webhook (`POST` with HMAC signature) or Server-Sent Events (long-lived `GET /events/stream?subscription_id=<id>`). Subscriptions are first-class `su..."
+---
+
 # Subscriptions
 
 Substrate event subscriptions deliver write-path notifications to external consumers via webhook (`POST` with HMAC signature) or Server-Sent Events (long-lived `GET /events/stream?subscription_id=<id>`). Subscriptions are first-class `subscription` entities so their config, history, and provenance live in the same SQLite + reducer model as any other Neotoma record.

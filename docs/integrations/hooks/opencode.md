@@ -1,3 +1,8 @@
+---
+title: "Neotoma + OpenCode (plugin)"
+summary: "For the npm plugin path, add the package to `opencode.json`:"
+---
+
 # Neotoma + OpenCode (plugin)
 
 ## Install

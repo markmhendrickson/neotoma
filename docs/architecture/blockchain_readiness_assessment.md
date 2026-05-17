@@ -1,3 +1,7 @@
+---
+title: Neotoma MVP Blockchain Readiness Assessment
+---
+
 # Neotoma MVP Blockchain Readiness Assessment
 ## Executive Summary
 Assessment of Neotoma MVP plans against blockchain-ready, decentralized architecture criteria. **Revised recommendation: Incorporate foundational patterns into MVP** to avoid expensive post-MVP refactoring.

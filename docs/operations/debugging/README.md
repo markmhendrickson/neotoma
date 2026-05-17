@@ -1,3 +1,8 @@
+---
+title: Debugging and Error Management
+summary: This directory contains documentation for debugging and error management in the Neotoma project.
+---
+
 # Debugging and Error Management
 
 This directory contains documentation for debugging and error management in the Neotoma project.

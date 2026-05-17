@@ -1,3 +1,8 @@
+---
+title: Resolved Blockers for Release Build
+summary: "This document tracks blockers that have been resolved for cloud agent execution. ## Blocker 1: CSV Fixture Loader ✅ RESOLVED **Issue**: Playwright specs couldn't import `.csv` fixtures directly - Vite/Playwright tried to parse `frontend/..."
+---
+
 # Resolved Blockers for Release Build
 This document tracks blockers that have been resolved for cloud agent execution.
 ## Blocker 1: CSV Fixture Loader ✅ RESOLVED

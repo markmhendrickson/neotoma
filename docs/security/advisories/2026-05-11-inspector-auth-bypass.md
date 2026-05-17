@@ -1,3 +1,8 @@
+---
+title: Inspector / API auth bypass behind a reverse proxy (v0.11.1 fix)
+summary: "- **Date disclosed:** 2026-05-11 - **GHSA:** [GHSA-5cvp-p7p4-mcx9](https://github.com/markmhendrickson/neotoma/security/advisories/GHSA-5cvp-p7p4-mcx9) - **CVE:** _requested_ - **Severity:** High — pre-authentication exposure of the Insp..."
+---
+
 # Inspector / API auth bypass behind a reverse proxy (v0.11.1 fix)
 
 - **Date disclosed:** 2026-05-11

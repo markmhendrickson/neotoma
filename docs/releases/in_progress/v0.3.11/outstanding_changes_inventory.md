@@ -1,3 +1,8 @@
+---
+title: "Release v0.3.11 — Outstanding Changes Inventory"
+summary: "- Snapshot command: `git status --porcelain=v1 --untracked-files=all` - Total outstanding paths: **556** - By status: - ` M`: **464** - `??`: **91** - ` D`: **1**"
+---
+
 # Release v0.3.11 — Outstanding Changes Inventory
 
 ## Inventory Snapshot

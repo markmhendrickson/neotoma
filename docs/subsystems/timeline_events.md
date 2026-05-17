@@ -1,3 +1,8 @@
+---
+title: "Neotoma Timeline Events — Source-Anchored Temporal Records"
+summary: "**Authoritative Vocabulary:** [`docs/vocabulary/canonical_terms.md`](../vocabulary/canonical_terms.md)"
+---
+
 # Neotoma Timeline Events — Source-Anchored Temporal Records
 
 **Authoritative Vocabulary:** [`docs/vocabulary/canonical_terms.md`](../vocabulary/canonical_terms.md)

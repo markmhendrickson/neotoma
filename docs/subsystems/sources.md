@@ -1,3 +1,8 @@
+---
+title: Neotoma Source Architecture
+summary: "This document covers: - `sources` table structure and semantics (stores [source](../vocabulary/canonical_terms.md#source)) - `interpretations` table structure and semantics - Content-addressed storage with SHA-256 hashing - Deduplication..."
+---
+
 # Neotoma Source Architecture
 
 ## Scope

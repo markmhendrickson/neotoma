@@ -1,3 +1,8 @@
+---
+title: "UI Pattern: Dashboard"
+summary: "*(Overview with Metrics and Widgets)* ## Purpose Dashboard pattern for displaying aggregate metrics and summaries. ## When to Use - Home/overview page - Stats summary - Recent activity feed ## DSL Example ```yaml component_type: dashboar..."
+---
+
 # UI Pattern: Dashboard
 *(Overview with Metrics and Widgets)*
 ## Purpose

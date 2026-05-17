@@ -1,3 +1,8 @@
+---
+title: Substrate Events
+summary: "In-process bus for post-write substrate events. Acts as the \"nervous system\" between the immutable storage layer (`src/services/observation_storage.ts`, `src/services/relationships.ts`, `src/services/deletion.ts`, `src/services/entity_me..."
+---
+
 # Substrate Events
 
 In-process bus for post-write substrate events. Acts as the "nervous system" between the immutable storage layer (`src/services/observation_storage.ts`, `src/services/relationships.ts`, `src/services/deletion.ts`, `src/services/entity_merge.ts`, `src/services/entity_split.ts`) and downstream fan-out (subscription delivery, peer sync, observability).

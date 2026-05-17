@@ -1,3 +1,8 @@
+---
+title: "Neotoma Record Types — Canonical Type Catalog"
+summary: "This document does NOT cover: - **Primitive (system) record types** — `source`, `interpretation`, `observation`, `relationship`, `timeline_event`, `entity`, `entity_snapshot`. Those are documented in their own dedicated subsystem referen..."
+---
+
 # Neotoma Record Types — Canonical Type Catalog
 ## Scope
 This document covers:

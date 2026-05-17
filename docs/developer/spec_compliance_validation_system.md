@@ -1,3 +1,8 @@
+---
+title: Spec Compliance Validation System
+summary: "Feature Unit FU-100 was marked \"complete\" but was missing required schema validation and field partitioning logic. The release process lacked automated checks to verify implementation matches spec requirements."
+---
+
 # Spec Compliance Validation System
 
 ## Problem Statement

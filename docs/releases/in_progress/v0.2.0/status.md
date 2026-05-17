@@ -1,3 +1,8 @@
+---
+title: "Release v0.2.0 — Status"
+summary: "**Release**: Sources-First Ingestion Architecture **Release Type**: Not Marketed **Deployment**: Production (neotoma.io) **Status**: `planning` **Last Updated**: 2024-12-18 ## Phase Status | Phase | Status | Progress | | ----------------..."
+---
+
 # Release v0.2.0 — Status
 **Release**: Sources-First Ingestion Architecture  
 **Release Type**: Not Marketed  

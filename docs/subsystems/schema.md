@@ -1,3 +1,8 @@
+---
+title: "Neotoma Schema — Canonical Data Models and Evolution Rules"
+summary: "**Local/SQLite schema additions for entity semantic search (when sqlite-vec loaded):** - `entity_embeddings_vec`: vec0 virtual table, `embedding float[1536]`. Stores embeddings for KNN similarity search. - `entity_embedding_rows`: Maps v..."
+---
+
 # Neotoma Schema — Canonical Data Models and Evolution Rules
 ## Scope
 This document covers:

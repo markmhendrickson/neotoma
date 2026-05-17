@@ -1,3 +1,8 @@
+---
+title: Generic Illustration Generator
+summary: "This project includes a reusable illustration generation CLI:"
+---
+
 # Generic Illustration Generator
 
 This project includes a reusable illustration generation CLI:

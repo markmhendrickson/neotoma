@@ -1,3 +1,8 @@
+---
+title: Feature Unit Error Protocol
+summary: "*(Error Classification and Remediation)* ## Error Classes ### Class 1: Specification Errors **When:** Spec incomplete or incorrect before implementation. **Examples:** - Missing required sections in spec - Contradicts foundational docs -..."
+---
+
 # Feature Unit Error Protocol
 *(Error Classification and Remediation)*
 ## Error Classes

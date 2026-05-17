@@ -1,3 +1,8 @@
+---
+title: "Observation Architecture Documentation Integration — v0.1.0 Release"
+summary: "name: Observation Architecture Documentation Integration overview: \"Documentation-only plan: Integrate 4-layer observation architecture (Document→Entity→Observation→Snapshot) into Neotoma documentation system and v0.1.0 release documenta..."
+---
+
 name: Observation Architecture Documentation Integration
 overview: "Documentation-only plan: Integrate 4-layer observation architecture (Document→Entity→Observation→Snapshot) into Neotoma documentation system and v0.1.0 release documentation. Updates existing docs to reflect architectural decisions, adds new architectural decisions document, and updates release manifests. NO CODE IMPLEMENTATION—documentation only."
 todos:

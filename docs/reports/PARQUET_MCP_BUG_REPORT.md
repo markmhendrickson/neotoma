@@ -1,3 +1,8 @@
+---
+title: Parquet MCP Tool Bug Report
+summary: "**Date**: 2026-01-14 **Issue**: Unexpected file writing behavior and massive output file generation"
+---
+
 # Parquet MCP Tool Bug Report
 
 **Date**: 2026-01-14  

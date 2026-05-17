@@ -1,3 +1,8 @@
+---
+title: "Schema Extension: agent_decision"
+summary: "- **Entity Type**: `agent_decision` - **Version**: `v1` - **Status**: Proposed - **Purpose**: Track technical decisions made by agents in Neotoma"
+---
+
 # Schema Extension: agent_decision
 
 ## Overview

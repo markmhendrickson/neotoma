@@ -1,3 +1,8 @@
+---
+title: MCP Actions Summary
+summary: "**Date:** 2025-01-27 **Total Actions:** 15 (1 deprecated in spec, not implemented)"
+---
+
 # MCP Actions Summary
 
 **Date:** 2025-01-27  

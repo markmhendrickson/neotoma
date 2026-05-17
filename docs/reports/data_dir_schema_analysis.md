@@ -1,3 +1,8 @@
+---
+title: DATA_DIR Schema Analysis Report
+summary: "Generated: 2026-01-22T12:05:59.703Z"
+---
+
 # DATA_DIR Schema Analysis Report
 
 Generated: 2026-01-22T12:05:59.703Z

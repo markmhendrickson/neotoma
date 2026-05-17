@@ -1,3 +1,8 @@
+---
+title: Neotoma CLI overview
+summary: "After installation, the `neotoma` command is available globally. Run `neotoma --help` to see available commands. From a Neotoma source checkout, running `neotoma` with no arguments starts an interactive session and both dev and prod API ..."
+---
+
 # Neotoma CLI overview
 ## Scope
 This document covers user-facing CLI usage, authentication, and common workflows. It does not cover MCP usage, server implementation details, or non CLI API clients.

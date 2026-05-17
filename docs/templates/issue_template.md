@@ -1,3 +1,7 @@
+---
+title: Issue Template
+---
+
 # Issue Template
 ## Issue Type
 - [ ] Bug

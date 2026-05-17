@@ -1,3 +1,8 @@
+---
+title: Deletion Subsystem
+summary: "_(Subsystem Documentation: GDPR Compliance with Immutability)_"
+---
+
 # Deletion Subsystem
 
 _(Subsystem Documentation: GDPR Compliance with Immutability)_

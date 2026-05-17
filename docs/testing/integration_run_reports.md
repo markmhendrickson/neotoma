@@ -1,3 +1,8 @@
+---
+title: Integration test Markdown run reports
+summary: "When `WRITE_TEST_RUN_REPORT=1`, Vitest registers [`vitest.markdown_reporter.ts`](../../vitest.markdown_reporter.ts) and writes a human-readable Markdown summary after the run completes."
+---
+
 # Integration test Markdown run reports
 
 When `WRITE_TEST_RUN_REPORT=1`, Vitest registers [`vitest.markdown_reporter.ts`](../../vitest.markdown_reporter.ts) and writes a human-readable Markdown summary after the run completes.

@@ -1,3 +1,8 @@
+---
+title: "Neotoma Entity Record Type — Canonical Record Primitive"
+summary: "**Authoritative Vocabulary:** [`docs/vocabulary/canonical_terms.md`](../vocabulary/canonical_terms.md)"
+---
+
 # Neotoma Entity Record Type — Canonical Record Primitive
 
 **Authoritative Vocabulary:** [`docs/vocabulary/canonical_terms.md`](../vocabulary/canonical_terms.md)

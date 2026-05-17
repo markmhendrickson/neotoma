@@ -1,3 +1,8 @@
+---
+title: Parquet MCP Storage - Complete Summary
+summary: "**Date**: 2026-01-14 **Task**: Store 1 parquet file from $DATA_DIR via MCP and compare results **Status**: ✅ **COMPLETE**"
+---
+
 # Parquet MCP Storage - Complete Summary
 
 **Date**: 2026-01-14  

@@ -1,3 +1,8 @@
+---
+title: v0.2.3 Enhancements Summary
+summary: All enhancements identified in the Agent Skills alignment review have been implemented, improving alignment from 8.6/10 to 9.5/10.
+---
+
 # v0.2.3 Enhancements Summary
 
 ## Overview

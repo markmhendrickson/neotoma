@@ -1,3 +1,8 @@
+---
+title: "Release v0.2.2 — Integration Tests"
+summary: "**Release ID**: v0.2.2 **Release Name**: list_capabilities MCP Action **Release Type**: Not Marketed **Deployment**: Production (neotoma.io) ## Test Execution Tests are executed automatically by the release orchestrator after batch compl..."
+---
+
 # Release v0.2.2 — Integration Tests
 **Release ID**: v0.2.2  
 **Release Name**: list_capabilities MCP Action  

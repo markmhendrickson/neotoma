@@ -1,3 +1,8 @@
+---
+title: REST API Reference
+summary: _(HTTP Endpoints for Frontend and External Clients)_
+---
+
 # REST API Reference
 
 _(HTTP Endpoints for Frontend and External Clients)_

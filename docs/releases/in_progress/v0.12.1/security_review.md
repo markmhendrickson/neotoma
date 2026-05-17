@@ -1,3 +1,8 @@
+---
+title: v0.12.1 security review
+summary: "Pre-release security review for v0.12.1. Covers Step 3.5 of the release skill (`.cursor/skills/release/SKILL.md` G1–G4)."
+---
+
 # v0.12.1 security review
 
 Pre-release security review for v0.12.1. Covers Step 3.5 of the release skill (`.cursor/skills/release/SKILL.md` G1–G4).

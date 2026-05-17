@@ -1,3 +1,8 @@
+---
+title: Plan Migration Report
+summary: "Generated: 2026-01-22T13:05:42.054Z"
+---
+
 # Plan Migration Report
 
 Generated: 2026-01-22T13:05:42.054Z

@@ -1,3 +1,8 @@
+---
+title: Multi-Agent Orchestration for Release Execution
+summary: "if (batch.fus.length > availableSlots) { // Split batch into sub-batches respecting limits const subBatches = splitBatch(batch, availableSlots); await executeSubBatchesSequentially(subBatches); } else { // Spawn agents for all FUs in bat..."
+---
+
 # Multi-Agent Orchestration for Release Execution
 ## Overview
 ### Architecture

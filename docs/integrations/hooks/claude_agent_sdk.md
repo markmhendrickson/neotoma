@@ -1,3 +1,8 @@
+---
+title: "Neotoma + Claude Agent SDK (reference adapter)"
+summary: "`@neotoma/claude-agent-sdk-adapter` returns ready-to-mount hook callbacks for agents built on the [Claude Agent SDK](https://docs.anthropic.com/en/docs/claude-code/sdk)."
+---
+
 # Neotoma + Claude Agent SDK (reference adapter)
 
 `@neotoma/claude-agent-sdk-adapter` returns ready-to-mount hook callbacks for agents built on the [Claude Agent SDK](https://docs.anthropic.com/en/docs/claude-code/sdk).

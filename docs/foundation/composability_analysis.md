@@ -1,3 +1,7 @@
+---
+title: "Composability as a Core Principle: Analysis and Recommendation"
+---
+
 # Composability as a Core Principle: Analysis and Recommendation
 ## 1. How Composability Manifests in Neotoma
 ### 1.1 Architectural Composability

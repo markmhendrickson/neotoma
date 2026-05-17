@@ -1,3 +1,7 @@
+---
+title: Neotoma UI Specification
+---
+
 # Neotoma UI Specification
 ## Purpose
 Consolidates UI specifications from design system, patterns, and accessibility/i18n requirements.

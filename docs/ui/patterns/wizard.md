@@ -1,3 +1,8 @@
+---
+title: "UI Pattern: Wizard"
+summary: "*(Multi-Step Flows)* ## Purpose Wizard pattern for multi-step processes (onboarding, setup). ## When to Use - User onboarding - Complex forms - Multi-step configuration ## DSL Example ```yaml component_type: wizard steps: - id: upload ti..."
+---
+
 # UI Pattern: Wizard
 *(Multi-Step Flows)*
 ## Purpose

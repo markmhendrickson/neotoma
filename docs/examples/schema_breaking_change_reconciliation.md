@@ -1,3 +1,8 @@
+---
+title: Schema Breaking Change Reconciliation Example
+summary: This example demonstrates how an entity snapshot is reconciled when a breaking schema change removes a field.
+---
+
 # Schema Breaking Change Reconciliation Example
 
 ## Scenario: Removing a Field (Breaking Change)

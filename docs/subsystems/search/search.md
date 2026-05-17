@@ -1,3 +1,8 @@
+---
+title: "Neotoma Search — Query Models and Ranking"
+summary: "*(Structured Search with Deterministic Ranking)* ## Scope MVP: Entity semantic search in scope for `retrieve_entities` and `retrieve_entity_by_identifier` when text query provided; structural search remains primary for set queries, relat..."
+---
+
 # Neotoma Search — Query Models and Ranking
 *(Structured Search with Deterministic Ranking)*
 ## Scope

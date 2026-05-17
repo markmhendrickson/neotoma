@@ -1,3 +1,8 @@
+---
+title: Deployment Guide
+summary: "*(Fly.io Deployment and Production Setup)* ## Scope This document covers: - Fly.io account setup and CLI installation - Application creation and configuration - Environment variable configuration - Deployment procedures - Post-deployment..."
+---
+
 # Deployment Guide
 *(Fly.io Deployment and Production Setup)*
 ## Scope

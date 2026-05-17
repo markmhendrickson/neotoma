@@ -1,3 +1,8 @@
+---
+title: MCP Action Names Review Against Canonical Terms
+summary: "**Date:** 2026-01-08 **Reference:** [`docs/vocabulary/canonical_terms.md`](../vocabulary/canonical_terms.md)"
+---
+
 # MCP Action Names Review Against Canonical Terms
 
 **Date:** 2026-01-08  

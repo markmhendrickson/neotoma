@@ -1,3 +1,8 @@
+---
+title: Discovery Process
+summary: "This process applies to **all releases**, with emphasis on comprehensive discovery for early releases (MVP, v1.1). ## Discovery Principles (Cagan) ### 1. Discovery Before Delivery **Validate assumptions before building:** - Test value pr..."
+---
+
 # Discovery Process
 ## Scope
 This document covers:

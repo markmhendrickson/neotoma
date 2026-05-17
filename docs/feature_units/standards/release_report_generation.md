@@ -1,3 +1,8 @@
+---
+title: Release Report Generation Guide
+summary: "**Purpose:** Step-by-step guide for generating release build reports using documentation-driven approach. **Related Documents:** - [`release_report_spec.md`](./release_report_spec.md) — Report specification and rules - [`release_report_t..."
+---
+
 # Release Report Generation Guide
 **Purpose:** Step-by-step guide for generating release build reports using documentation-driven approach.
 **Related Documents:**

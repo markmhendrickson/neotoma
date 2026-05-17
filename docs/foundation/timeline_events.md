@@ -1,3 +1,8 @@
+---
+title: Timeline and Event Doctrine
+summary: "This document captures the high-level invariants that govern Neotoma's user-facing **timeline events** record type. It is the doctrinal counterpart to the architectural reference in [`docs/subsystems/timeline_events.md`](../subsystems/ti..."
+---
+
 # Timeline and Event Doctrine
 
 This document captures the high-level invariants that govern Neotoma's user-facing **timeline events** record type. It is the doctrinal counterpart to the architectural reference in [`docs/subsystems/timeline_events.md`](../subsystems/timeline_events.md), which describes the schema, derivation logic, and read paths in detail. For the unrelated observability event stream, see [`docs/subsystems/events.md`](../subsystems/events.md).

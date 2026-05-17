@@ -1,3 +1,8 @@
+---
+title: "Neotoma Error Handling — Error Codes and Propagation"
+summary: "*(Structured Error Envelope and Canonical Error Codes)*"
+---
+
 # Neotoma Error Handling — Error Codes and Propagation
 *(Structured Error Envelope and Canonical Error Codes)*
 

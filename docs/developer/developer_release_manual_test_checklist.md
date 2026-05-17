@@ -1,3 +1,8 @@
+---
+title: Developer Release Manual Test Checklist
+summary: _(Manual validation before releasing a developer-facing release)_
+---
+
 # Developer Release Manual Test Checklist
 
 _(Manual validation before releasing a developer-facing release)_

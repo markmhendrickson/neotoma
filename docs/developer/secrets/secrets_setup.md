@@ -1,3 +1,8 @@
+---
+title: Secrets Manager Setup
+summary: This project uses an encrypted file-based secrets manager for storing sensitive credentials.
+---
+
 # Secrets Manager Setup
 
 This project uses an encrypted file-based secrets manager for storing sensitive credentials.

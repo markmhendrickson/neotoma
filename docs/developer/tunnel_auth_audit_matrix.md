@@ -1,3 +1,8 @@
+---
+title: "Tunnel + Auth Audit Matrix"
+summary: Generated as part of the tunnel/OAuth/bearer-token audit. Maps each critical flow step to implementation code, documentation, and test coverage.
+---
+
 # Tunnel + Auth Audit Matrix
 
 Generated as part of the tunnel/OAuth/bearer-token audit. Maps each critical flow step to implementation code, documentation, and test coverage.

@@ -1,3 +1,8 @@
+---
+title: Developer preview launch checklist
+summary: This checklist consolidates criteria for releasing Neotoma as a developer preview. It is derived from the ateles developer-preview criteria assessment and announcement framing. Use it to verify readiness before announcing or promoting th...
+---
+
 # Developer preview launch checklist
 
 ## Scope

@@ -1,3 +1,7 @@
+---
+title: MCP Actions Status Across Releases
+---
+
 # MCP Actions Status Across Releases
 ## Complete MCP Action Catalog
 ### ✅ v0.1.0 (Internal MCP Release) — 13 Actions

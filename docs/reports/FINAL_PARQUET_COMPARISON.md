@@ -1,3 +1,8 @@
+---
+title: Final Parquet vs Neotoma Comparison
+summary: "**Date**: 2026-01-14 **Status**: ✅ COMPLETE"
+---
+
 # Final Parquet vs Neotoma Comparison
 
 **Date**: 2026-01-14  

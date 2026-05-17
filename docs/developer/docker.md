@@ -1,3 +1,8 @@
+---
+title: Run with Docker
+summary: Run the full Neotoma stack (API server, CLI, and MCP server) in a container.
+---
+
 # Run with Docker
 
 Run the full Neotoma stack (API server, CLI, and MCP server) in a container.

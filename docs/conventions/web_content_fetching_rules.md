@@ -1,3 +1,8 @@
+---
+title: Web Content Fetching Rules
+summary: Ensure agents use the web scraper MCP for URLs from sites that require authenticated or JavaScript-rendered scraping, instead of relying on basic fetch tools that return empty or login-gated pages.
+---
+
 # Web Content Fetching Rules
 
 ## Purpose

@@ -1,3 +1,7 @@
+---
+title: Release Plan
+---
+
 ## Release v0.1.0 — Internal MCP Release
 ### 1. Release Overview
 - **Release ID**: `v0.1.0`

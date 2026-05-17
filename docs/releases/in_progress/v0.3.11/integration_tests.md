@@ -1,3 +1,8 @@
+---
+title: "Release v0.3.11 — Integration Tests"
+summary: "- [ ] `npm run build:server` - [ ] IT-001 through IT-005 pass - [ ] IT-006 executed and reviewed - [ ] Any failing non-release-critical tests triaged with explicit decision log entry"
+---
+
 # Release v0.3.11 — Integration Tests
 
 ## Test Catalog

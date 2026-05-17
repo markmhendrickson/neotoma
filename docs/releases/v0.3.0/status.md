@@ -1,3 +1,8 @@
+---
+title: "Release v0.3.0 — Status"
+summary: "**Release**: Reconciliation Release **Release Type**: Internal / Not Marketed **Deployment**: Documentation Only **Status**: `completed` **Date**: 2025-02-05"
+---
+
 # Release v0.3.0 — Status
 
 **Release**: Reconciliation Release  

@@ -1,3 +1,8 @@
+---
+title: "Feature Unit: FU-053 Cryptographic Schema Fields"
+summary: "**Status:** Draft **Priority:** P0 (Critical) **Risk Level:** Low **Target Release:** v0.1.0 **Owner:** Engineering Team **Reviewers:** Tech Lead **Created:** 2025-01-XX **Last Updated:** 2025-01-XX ## Overview **Brief Description:** Add..."
+---
+
 # Feature Unit: FU-053 Cryptographic Schema Fields
 **Status:** Draft
 **Priority:** P0 (Critical)

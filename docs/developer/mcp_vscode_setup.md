@@ -1,3 +1,8 @@
+---
+title: VS Code (GitHub Copilot Chat MCP) Setup Guide
+summary: "This guide covers connecting VS Code's GitHub Copilot Chat to Neotoma through MCP. VS Code reads `.vscode/mcp.json` in the workspace (project-level) for MCP server configuration, which Neotoma's project-level scanner detects automatically."
+---
+
 # VS Code (GitHub Copilot Chat MCP) Setup Guide
 
 This guide covers connecting VS Code's GitHub Copilot Chat to Neotoma through MCP. VS Code reads `.vscode/mcp.json` in the workspace (project-level) for MCP server configuration, which Neotoma's project-level scanner detects automatically.

@@ -1,3 +1,8 @@
+---
+title: "Neotoma Schema Registry — Config-Driven Schema Evolution"
+summary: "**Authoritative Vocabulary:** [`docs/vocabulary/canonical_terms.md`](../vocabulary/canonical_terms.md)"
+---
+
 # Neotoma Schema Registry — Config-Driven Schema Evolution
 
 **Authoritative Vocabulary:** [`docs/vocabulary/canonical_terms.md`](../vocabulary/canonical_terms.md)

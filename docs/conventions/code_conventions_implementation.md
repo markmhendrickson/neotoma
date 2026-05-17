@@ -1,3 +1,7 @@
+---
+title: Code Conventions Implementation Summary
+---
+
 # Code Conventions Implementation Summary
 ## Overview
 Successfully implemented code conventions across the Neotoma codebase per `docs/conventions/code_conventions.md`.

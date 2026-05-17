@@ -1,3 +1,8 @@
+---
+title: "Implementation Decision Log: FU-050"
+summary: "**Generated:** 2025-12-14T06:22:41.908Z ## Overview This log documents implementation decisions made for FU-050 and how each requirement from the specification was addressed. ## Implementation Decisions ### Decision 1: Events MUST be app..."
+---
+
 # Implementation Decision Log: FU-050
 **Generated:** 2025-12-14T06:22:41.908Z
 ## Overview

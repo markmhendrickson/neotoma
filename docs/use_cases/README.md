@@ -1,3 +1,8 @@
+---
+title: Use cases
+summary: Canonical reference for Neotoma use cases. Each file describes a vertical application of the deterministic state layer and maps it to activation skills.
+---
+
 # Use cases
 
 Canonical reference for Neotoma use cases. Each file describes a vertical application of the deterministic state layer and maps it to activation skills.

@@ -1,3 +1,8 @@
+---
+title: Github Release Supplement
+summary: "v0.10.1 fills the last gap in the v0.8.0 attestation roadmap's hardware-key story: portable, USB-attached hardware. After v0.10.1, `neotoma auth keygen --hardware --backend yubikey` mints a key inside a YubiKey 5 (or compatible PIV-capab..."
+---
+
 v0.10.1 fills the last gap in the v0.8.0 attestation roadmap's hardware-key story: portable, USB-attached hardware. After v0.10.1, `neotoma auth keygen --hardware --backend yubikey` mints a key inside a YubiKey 5 (or compatible PIV-capable device) and produces a `webauthn-packed` envelope the v0.9.0 server-side verifier admits without modification. This makes hardware-backed AAuth available to agents running on machines that do not themselves have a TPM (laptops without a TPM, CI runners, ephemeral VMs, etc.) by giving the operator a portable hardware root they can carry between hosts.
 
 This release implements one follow-up Feature Unit from the v0.8.0 attestation plan:

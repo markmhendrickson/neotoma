@@ -1,3 +1,8 @@
+---
+title: "Schema Extension: architectural_decision"
+summary: "- **Entity Type**: `architectural_decision` - **Version**: `v1` - **Status**: Proposed - **Purpose**: Track architectural decisions and their rationale in Neotoma"
+---
+
 # Schema Extension: architectural_decision
 
 ## Overview

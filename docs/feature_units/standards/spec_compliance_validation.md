@@ -1,3 +1,7 @@
+---
+title: Spec Compliance Validation Process
+---
+
 # Spec Compliance Validation Process
 ## Overview
 The spec compliance validation system:

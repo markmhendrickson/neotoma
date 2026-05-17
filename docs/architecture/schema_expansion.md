@@ -1,3 +1,8 @@
+---
+title: Automatic Schema Expansion Architecture
+summary: "// Background auto-expansion (non-blocking) if (await getSetting(userId, 'autoExpandSchemas')) { analyzeAndAutoExpandSchemas(userId, record).catch(err => logError('Auto schema expansion failed', err) ); }"
+---
+
 # Automatic Schema Expansion Architecture
 ## Overview
 **Problem:** Users upload files with fields that don't match existing schemas. Currently, these fields are preserved in `extraction_metadata.unknown_fields`, but users must manually create schemas.

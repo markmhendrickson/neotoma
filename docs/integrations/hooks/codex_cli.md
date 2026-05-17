@@ -1,3 +1,8 @@
+---
+title: "Neotoma + OpenAI Codex CLI (hooks)"
+summary: "Codex CLI exposes fewer hook points than Claude Code, so this integration focuses on the highest-leverage moments: session start, notifications, and session end."
+---
+
 # Neotoma + OpenAI Codex CLI (hooks)
 
 Codex CLI exposes fewer hook points than Claude Code, so this integration focuses on the highest-leverage moments: session start, notifications, and session end.

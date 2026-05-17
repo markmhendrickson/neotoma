@@ -1,3 +1,8 @@
+---
+title: Invalid Connection ID Handling
+summary: "Ensures users see a reconnection option when their configured X-Connection-Id is invalid or expired, instead of just showing \"No tools, prompts, or resources\"."
+---
+
 # Invalid Connection ID Handling
 
 ## Purpose

@@ -1,3 +1,7 @@
+---
+title: "Neotoma Consistency Models — System-Wide Consistency Guarantees"
+---
+
 # Neotoma Consistency Models — System-Wide Consistency Guarantees
 ## Scope
 This document covers:

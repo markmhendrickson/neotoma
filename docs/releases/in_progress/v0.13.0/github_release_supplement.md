@@ -1,3 +1,8 @@
+---
+title: v0.13.0 Release Supplement
+summary: "v0.13.0 is a substantial feature release. The headline additions are **schema-level and per-entity agent instructions** (an entity-type can carry behavioral guidance that agents must apply when the entity is retrieved), a **multi-harness..."
+---
+
 # v0.13.0 Release Supplement
 
 ## Summary

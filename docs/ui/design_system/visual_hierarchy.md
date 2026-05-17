@@ -1,3 +1,8 @@
+---
+title: Visual Hierarchy
+summary: "**Principle:** High information density without clutter."
+---
+
 # Visual Hierarchy
 
 ## Information Density

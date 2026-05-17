@@ -1,3 +1,8 @@
+---
+title: Migration to Single Variable Names
+summary: "This document tracks the migration from `DEV_*/PROD_*` prefixed environment variables to single variable names with environment-based selection."
+---
+
 # Migration to Single Variable Names
 
 This document tracks the migration from `DEV_*/PROD_*` prefixed environment variables to single variable names with environment-based selection.

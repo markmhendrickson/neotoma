@@ -1,3 +1,8 @@
+---
+title: Letta MCP Setup Guide
+summary: "This guide covers connecting Letta agents to Neotoma through MCP. Letta registers MCP servers at runtime via its Python or TypeScript SDK — there is no static config file to write."
+---
+
 # Letta MCP Setup Guide
 
 This guide covers connecting Letta agents to Neotoma through MCP. Letta registers MCP servers at runtime via its Python or TypeScript SDK — there is no static config file to write.

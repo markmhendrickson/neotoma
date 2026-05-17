@@ -1,3 +1,8 @@
+---
+title: Operationalizing Agent Evaluation Optimization (AEO) with a long-running agent
+summary: "This document describes how to run Neotoma’s **Agent Evaluation Optimization** program (see [product_positioning.md §7.5](../foundation/product_positioning.md#75-agent-evaluation-optimization-aeo)) using a **long-running agent**: what it..."
+---
+
 # Operationalizing Agent Evaluation Optimization (AEO) with a long-running agent
 
 This document describes how to run Neotoma’s **Agent Evaluation Optimization** program (see [product_positioning.md §7.5](../foundation/product_positioning.md#75-agent-evaluation-optimization-aeo)) using a **long-running agent**: what it owns, what stays human, how state is stored, triggers, skills, guardrails, and a concrete first rollout.

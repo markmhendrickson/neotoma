@@ -1,3 +1,8 @@
+---
+title: AAuth TPM 2.0 on Linux
+summary: "Operator-facing setup guide for the optional `@neotoma/aauth-tpm2` native package (FU-4). When installed and probing successfully on a Linux host, `neotoma auth keygen --hardware` mints a TPM-resident AIK and embeds a WebAuthn-`tpm`-form..."
+---
+
 # AAuth TPM 2.0 on Linux
 
 ## Purpose

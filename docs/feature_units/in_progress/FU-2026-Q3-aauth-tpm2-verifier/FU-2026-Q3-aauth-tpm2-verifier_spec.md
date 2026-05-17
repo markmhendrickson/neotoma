@@ -1,3 +1,8 @@
+---
+title: "Feature Unit: FU-2026-Q3-aauth-tpm2-verifier — TPM 2.0 Server-Side Verifier"
+summary: "**Status:** In Progress **Priority:** P1 (unblocks Linux/Windows hardware-tier coverage) **Risk Level:** Medium (write-path tier resolution, custom binary parser) **Target Release:** v0.9.0 **Owner:** Engineering **Created:** 2026-04-27 ..."
+---
+
 # Feature Unit: FU-2026-Q3-aauth-tpm2-verifier — TPM 2.0 Server-Side Verifier
 
 **Status:** In Progress

@@ -1,3 +1,8 @@
+---
+title: npm script taxonomy
+summary: "`package.json` uses script prefixes by runtime shape:"
+---
+
 # npm script taxonomy
 
 `package.json` uses script prefixes by runtime shape:

@@ -1,3 +1,8 @@
+---
+title: Agentic Portfolio Overview
+summary: "The reasoning style is pure cognition: - State in → Decisions out - Declarative, testable, deterministic ### Core Responsibilities - Define **target allocations** - Encode **risk constraints** and **boundaries** - Define **permissible tr..."
+---
+
 # Agentic Portfolio Overview
 ## Purpose
 The **Agentic Portfolio** is an example **operational system** built on Neotoma's state layer — a financial reasoning system that reads truth from Neotoma, evaluates priorities and constraints, and outputs Decisions + Commands stored back as state.

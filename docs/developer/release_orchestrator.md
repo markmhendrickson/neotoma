@@ -1,3 +1,8 @@
+---
+title: Release Orchestrator
+summary: "How would you like to execute this release build? 1. Single-agent (sequential execution) 2. Multi-agent (parallel execution)"
+---
+
 # Release Orchestrator
 ## Overview
 The Release Orchestrator supports two execution modes:

@@ -1,3 +1,8 @@
+---
+title: "Release v0.3.11 — Execution Schedule"
+summary: "Release is ready when: - Batch 0, 1, and 2 exit criteria are met - rollback plan remains valid for the final commit set - status tracker is updated to `ready_for_deployment`"
+---
+
 # Release v0.3.11 — Execution Schedule
 
 ## Batch Plan

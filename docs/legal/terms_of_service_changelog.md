@@ -1,3 +1,8 @@
+---
+title: Terms of Service Changelog
+summary: "Track all changes to the Terms of Service for compliance and transparency. ## Version History ### Version 1.0 — [Date] **Status:** Draft (Legal Review Required) **Initial Version:** - Terms of Service template created - Covers service de..."
+---
+
 # Terms of Service Changelog
 Track all changes to the Terms of Service for compliance and transparency.
 ## Version History

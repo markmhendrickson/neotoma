@@ -1,3 +1,8 @@
+---
+title: Fleet onboarding quickstart
+summary: "**Audience:** Operators of agent fleets (AIBTC Lumen, LangGraph, OpenClaw, custom runtimes) wiring a deployment into Neotoma for the first time as a verifiable write-integrity backbone."
+---
+
 # Fleet onboarding quickstart
 
 **Audience:** Operators of agent fleets (AIBTC Lumen, LangGraph, OpenClaw, custom runtimes) wiring a deployment into Neotoma for the first time as a verifiable write-integrity backbone.

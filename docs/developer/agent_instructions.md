@@ -1,3 +1,8 @@
+---
+title: Neotoma agent instructions (canonical map)
+summary: "This page is the **index** for where agent-facing Neotoma behavior is defined. Do not duplicate the full contract in consumer repos or in a second long markdown file."
+---
+
 # Neotoma agent instructions (canonical map)
 
 This page is the **index** for where agent-facing Neotoma behavior is defined. Do not duplicate the full contract in consumer repos or in a second long markdown file.

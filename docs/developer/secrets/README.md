@@ -1,3 +1,8 @@
+---
+title: Secrets Management
+summary: This directory contains documentation for the encrypted secrets manager used in the Neotoma project.
+---
+
 # Secrets Management
 
 This directory contains documentation for the encrypted secrets manager used in the Neotoma project.

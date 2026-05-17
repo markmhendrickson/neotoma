@@ -1,3 +1,8 @@
+---
+title: MCP Action Test Coverage Analysis
+summary: "**Date**: 2026-01-14 **Status**: ⚠️ **GAPS IDENTIFIED**"
+---
+
 # MCP Action Test Coverage Analysis
 
 **Date**: 2026-01-14  

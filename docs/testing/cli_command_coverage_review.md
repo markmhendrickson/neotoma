@@ -1,3 +1,8 @@
+---
+title: CLI Command Coverage Review
+summary: "**Last updated:** 2025-02-20 **Status:** All session commands have behavioral coverage or explicit help-only classification."
+---
+
 # CLI Command Coverage Review
 
 **Last updated:** 2025-02-20  

@@ -1,3 +1,8 @@
+---
+title: Parquet Support Implementation Summary
+summary: "**Date**: 2026-01-13 **Status**: ✅ **COMPLETE** - Ready for DATA_DIR ingestion"
+---
+
 # Parquet Support Implementation Summary
 
 **Date**: 2026-01-13  

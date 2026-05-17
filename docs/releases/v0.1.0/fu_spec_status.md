@@ -1,3 +1,8 @@
+---
+title: Feature Unit Specification Status for v0.1.0
+summary: "**Total:** 22 FUs had specs only in the archived MVP planning inventory (20 P0 + 2 optional P1). ## Recommendation ### Option 1: Use Archived MVP Planning as Source of Truth (Recommended for v0.1.0) **Rationale:** - Archived MVP planning..."
+---
+
 # Feature Unit Specification Status for v0.1.0
 ## Specification Status
 ### ✅ FUs with Standalone Specs

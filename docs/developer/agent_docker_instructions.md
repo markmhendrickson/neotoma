@@ -1,3 +1,8 @@
+---
+title: Agent Docker Instructions
+summary: "Execute this sequence exactly:"
+---
+
 # Agent Docker Instructions
 
 Execute this sequence exactly:

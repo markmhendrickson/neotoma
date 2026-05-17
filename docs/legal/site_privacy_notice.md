@@ -1,3 +1,8 @@
+---
+title: Neotoma Site Privacy Notice
+summary: "**Published:** 2026-04-24 **Version:** 1.0 **Live at:** https://neotoma.io/privacy"
+---
+
 # Neotoma Site Privacy Notice
 
 **Published:** 2026-04-24

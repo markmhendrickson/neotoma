@@ -1,3 +1,8 @@
+---
+title: "Feature Unit: FU-2026-Q3-aauth-webauthn-packed-verifier — WebAuthn `packed` Server-Side Verifier"
+summary: "**Status:** In Progress **Priority:** P1 (unblocks broad hardware-attestation coverage) **Risk Level:** Medium (write-path tier resolution, cryptographic verification) **Target Release:** v0.9.0 **Owner:** Engineering **Created:** 2026-0..."
+---
+
 # Feature Unit: FU-2026-Q3-aauth-webauthn-packed-verifier — WebAuthn `packed` Server-Side Verifier
 
 **Status:** In Progress

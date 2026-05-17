@@ -1,3 +1,8 @@
+---
+title: Iconography
+summary: "**Recommended:** Lucide Icons or similar"
+---
+
 # Iconography
 
 ## Icon Style

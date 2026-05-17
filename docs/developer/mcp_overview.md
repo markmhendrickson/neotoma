@@ -1,3 +1,8 @@
+---
+title: MCP overview
+summary: "- **Local (same machine as repo):** Prefer the **Neotoma CLI** for all Neotoma operations. Invoke commands directly (e.g. `neotoma entities list`). The CLI is more reliable locally (no MCP server spawn/sync issues). Use MCP only if the u..."
+---
+
 # MCP overview
 ## Scope
 This document covers a curated overview of Neotoma MCP usage and links to canonical MCP references. It does not replace the full MCP specification or OAuth implementation details.

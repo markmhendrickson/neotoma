@@ -1,3 +1,8 @@
+---
+title: Github Release Supplement
+summary: v0.12.1 hardens the v0.12.0 surface area without changing its shape. It closes a guest-token validation gap on the auth path, restores Codex / OpenAI function-tool compatibility for the issue MCP tools (server-side enforcement is unchang...
+---
+
 v0.12.1 hardens the v0.12.0 surface area without changing its shape. It closes a guest-token validation gap on the auth path, restores Codex / OpenAI function-tool compatibility for the issue MCP tools (server-side enforcement is unchanged), tightens the prepublish Inspector build, and ships the operator-facing v0.12 documentation that the v0.12.0 tag advertised but did not yet include — a Doctor CLI reference, the operator hardening knobs, the LaunchAgent zombie-cleanup flag, the documented `bulk_close_issues` / `bulk_remove_issues` tools, and dedicated site pages for peer sync, substrate subscriptions, issue reporting, and security hardening.
 
 ## Highlights

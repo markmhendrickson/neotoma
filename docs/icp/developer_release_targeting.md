@@ -1,3 +1,8 @@
+---
+title: Developer Release Targeting
+summary: "Release-scoped targeting, activation risks, and status tracking for the developer release. This document is temporal — it will evolve or be replaced as the product moves past the developer release phase."
+---
+
 # Developer Release Targeting
 
 Release-scoped targeting, activation risks, and status tracking for the developer release. This document is temporal — it will evolve or be replaced as the product moves past the developer release phase.

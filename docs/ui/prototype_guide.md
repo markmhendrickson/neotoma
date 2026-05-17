@@ -1,3 +1,7 @@
+---
+title: "Neotoma MVP Interactive Prototype — Guide"
+---
+
 # Neotoma MVP Interactive Prototype — Guide
 ## Overview
 This guide explains the interactive MVP prototype built with static data fixtures for demonstration purposes.

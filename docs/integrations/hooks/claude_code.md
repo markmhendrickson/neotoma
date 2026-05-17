@@ -1,3 +1,8 @@
+---
+title: "Neotoma + Claude Code (hooks)"
+summary: Pairs with the Neotoma MCP server. Hooks provide the reliability floor (guaranteed capture, retrieval injection, compaction markers). MCP provides the quality ceiling (agent-driven structured writes).
+---
+
 # Neotoma + Claude Code (hooks)
 
 Pairs with the Neotoma MCP server. Hooks provide the reliability floor (guaranteed capture, retrieval injection, compaction markers). MCP provides the quality ceiling (agent-driven structured writes).

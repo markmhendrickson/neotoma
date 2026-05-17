@@ -1,3 +1,8 @@
+---
+title: "Neotoma Legal & Compliance Documentation"
+summary: This directory contains legal and compliance documentation for Neotoma operations.
+---
+
 # Neotoma Legal & Compliance Documentation
 This directory contains legal and compliance documentation for Neotoma operations.
 

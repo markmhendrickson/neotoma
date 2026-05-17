@@ -1,3 +1,8 @@
+---
+title: Github Release Supplement
+summary: MCP OAuth connections now support refresh tokens, the docs site adds OpenCode and IronClaw integration guides plus three new operational guides, and the OpenCode plugin adopts the v2 hook API with backward-compatible legacy aliases.
+---
+
 MCP OAuth connections now support refresh tokens, the docs site adds OpenCode and IronClaw integration guides plus three new operational guides, and the OpenCode plugin adopts the v2 hook API with backward-compatible legacy aliases.
 
 ## Highlights

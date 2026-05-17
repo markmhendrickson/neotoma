@@ -1,3 +1,8 @@
+---
+title: Docs markdown audit (generated)
+summary: "Excludes `docs/private` and paths containing `archived`, `releases`, or `in_progress` directory names."
+---
+
 # Docs markdown audit (generated)
 
 Excludes `docs/private` and paths containing `archived`, `releases`, or `in_progress` directory names.

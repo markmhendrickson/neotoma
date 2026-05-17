@@ -1,3 +1,8 @@
+---
+title: ChatGPT integration instructions
+summary: This document provides copy-paste content for integrating Neotoma with ChatGPT custom GPT Actions.
+---
+
 # ChatGPT integration instructions
 
 This document provides copy-paste content for integrating Neotoma with ChatGPT custom GPT Actions.

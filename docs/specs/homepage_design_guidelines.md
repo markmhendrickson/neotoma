@@ -1,3 +1,8 @@
+---
+title: Neotoma Homepage Design
+summary: "This document summarizes the design intent for the **Neotoma homepage**, especially the **hero section**, based on strategic positioning decisions discussed during the developer release phase."
+---
+
 # Neotoma Homepage Design
 
 ## Goals, Principles, and Constraints (with focus on Hero)

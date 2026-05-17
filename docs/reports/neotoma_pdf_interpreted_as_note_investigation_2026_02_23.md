@@ -1,3 +1,8 @@
+---
+title: "Neotoma: PDF interpreted as \"note\" instead of invoice/document — Investigation"
+summary: "**Date:** 2026-02-23 **Purpose:** Root-cause analysis for file interpretation entity typing when an invoice PDF produced a `note` entity populated from the client message instead of an `invoice` (or `document`) with PDF-derived fields."
+---
+
 # Neotoma: PDF interpreted as "note" instead of invoice/document — Investigation
 
 **Date:** 2026-02-23  

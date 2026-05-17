@@ -1,3 +1,8 @@
+---
+title: Test Fixes Summary
+summary: "**Date**: 2026-01-15 **Status**: 8/58 tests still failing (down from 23/58)"
+---
+
 # Test Fixes Summary
 
 **Date**: 2026-01-15  

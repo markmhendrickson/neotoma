@@ -1,3 +1,8 @@
+---
+title: "Data Integrity Check Report: Neotoma vs Parquet"
+summary: "**Date**: 2026-01-19 **Status**: ✅ **PERFECT** - All sample files imported, 100% integrity score, all discrepancies explained"
+---
+
 # Data Integrity Check Report: Neotoma vs Parquet
 
 **Date**: 2026-01-19  

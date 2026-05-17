@@ -1,3 +1,7 @@
+---
+title: "UI Pattern: Settings"
+---
+
 # UI Pattern: Settings
 ## Purpose
 Settings pattern for user preferences and system configuration.

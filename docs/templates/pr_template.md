@@ -1,3 +1,7 @@
+---
+title: Pull Request Template
+---
+
 # Pull Request Template
 ## Feature Unit ID (if applicable)
 `fu_YYYY_MM_NNN` or N/A

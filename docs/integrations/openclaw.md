@@ -1,3 +1,8 @@
+---
+title: OpenClaw native plugin integration
+summary: "> Audience: contributors changing how Neotoma plugs into OpenClaw, and operators reading the wiring before flipping `plugins.slots.memory = \"neotoma\"` in their OpenClaw config."
+---
+
 # OpenClaw native plugin integration
 
 > Audience: contributors changing how Neotoma plugs into OpenClaw, and operators reading the wiring before flipping `plugins.slots.memory = "neotoma"` in their OpenClaw config.
