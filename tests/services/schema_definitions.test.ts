@@ -88,7 +88,12 @@ describe("reject-policy schemas have reachable canonical rules (R1/R2 regression
     expect(msgDef?.name_collision_policy).toBe("reject");
     const convFields = (convDef?.canonical_name_fields ?? []) as unknown[];
     const msgFields = (msgDef?.canonical_name_fields ?? []) as unknown[];
-    expect(convFields.some((f) => f === "conversation_id")).toBe(true);
+    // conversation uses ordered { composite: [...] } rules so each field resolves independently
+    expect(
+      convFields.some((f) =>
+        typeof f === "string" ? f === "conversation_id" : (f as { composite?: string[] }).composite?.includes("conversation_id")
+      )
+    ).toBe(true);
     expect(msgFields.some((f) => f === "turn_key")).toBe(true);
   });
 
@@ -109,7 +114,17 @@ describe("reject-policy schemas have reachable canonical rules (R1/R2 regression
       expect(fields[field]!.required).toBe(false);
     }
 
-    expect(schema!.schema_definition.canonical_name_fields).toEqual(["conversation_id"]);
+    // v1.4: session_id added as an alternate single-field canonical rule (issue #138).
+    // Uses ordered { composite: [...] } form so either field alone resolves without requiring both.
+    const cnf = schema!.schema_definition.canonical_name_fields as unknown[];
+    const hasConversationId = cnf.some(
+      (r) => typeof r === "string" ? r === "conversation_id" : (r as { composite?: string[] }).composite?.includes("conversation_id")
+    );
+    const hasSessionId = cnf.some(
+      (r) => typeof r === "string" ? r === "session_id" : (r as { composite?: string[] }).composite?.includes("session_id")
+    );
+    expect(hasConversationId).toBe(true);
+    expect(hasSessionId).toBe(true);
   });
 
   it("conversation_turn is reject-policy with composite [session_id, turn_id] canonical", () => {
