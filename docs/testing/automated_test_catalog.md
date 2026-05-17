@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **356**
-- Backend and repo Vitest files: **323**
+- Total automated test files: **360**
+- Backend and repo Vitest files: **327**
 - Frontend Vitest files: **9**
 - Playwright spec files: **24**
 
@@ -72,7 +72,7 @@ flowchart TD
 | Vitest unit tests | 84 |
 | Vitest service tests | 33 |
 | Source-adjacent tests | 39 |
-| Vitest integration tests | 93 |
+| Vitest integration tests | 97 |
 | Vitest CLI tests | 55 |
 | Vitest contract tests | 10 |
 | Vitest security tests | 1 |
@@ -284,7 +284,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (93):**
+**Files (97):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_resource_metadata.test.ts`
 - `tests/integration/aauth_revocation_e2e.test.ts`
@@ -318,8 +318,10 @@ flowchart TD
 - `tests/integration/guest_token_isolation.test.ts`
 - `tests/integration/guest_write_rate_limit.test.ts`
 - `tests/integration/hook_failure_hint.test.ts`
+- `tests/integration/idempotency_key_content_mismatch.test.ts`
 - `tests/integration/inspector_bundled_mount.test.ts`
 - `tests/integration/interpretation_store.test.ts`
+- `tests/integration/issue_207_list_timeline_events_unknown_type.test.ts`
 - `tests/integration/issue_37_event_schema_projection.test.ts`
 - `tests/integration/lexical_search.test.ts`
 - `tests/integration/live_issues_tooling.test.ts`
@@ -367,10 +369,12 @@ flowchart TD
 - `tests/integration/session_introspection.test.ts`
 - `tests/integration/store_builtin_identity_opt_out_schemas.test.ts`
 - `tests/integration/store_conversation_message_role_conflict.test.ts`
+- `tests/integration/store_exercise_log_device_schema.test.ts`
 - `tests/integration/store_explicit_canonical_name.test.ts`
 - `tests/integration/store_external_link_schema.test.ts`
 - `tests/integration/store_registered_schema_alias_precedence.test.ts`
 - `tests/integration/store_resolution_attributes_hint.test.ts`
+- `tests/integration/store_unknown_fields_list.test.ts`
 - `tests/integration/submit_issue_advisory_alias.test.ts`
 - `tests/integration/subscription_list.test.ts`
 - `tests/integration/subscription_unsubscribe.test.ts`

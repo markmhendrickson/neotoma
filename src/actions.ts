@@ -5447,6 +5447,7 @@ app.post("/interpretations/create", async (req, res) => {
       })),
       observations_created: interpretationResult.observationsCreated,
       unknown_fields_count: interpretationResult.unknownFieldsCount,
+      unknown_fields: interpretationResult.unknownFieldNames,
       relationships_created: relationshipsCreated,
     });
   } catch (error) {
@@ -5807,9 +5808,20 @@ export async function storeStructuredForApi(params: {
     }
   }
 
+  // Compute hash of incoming content before querying so we can detect
+  // idempotency-key reuse with different content (issue #186).
+  const incomingJsonContent = JSON.stringify(entities, (key, value) => {
+    if (typeof value === "bigint") {
+      return Number(value);
+    }
+    return value;
+  });
+  const { computeContentHash: _computeContentHash } = await import("./services/raw_storage.js");
+  const incomingContentHash = _computeContentHash(Buffer.from(incomingJsonContent, "utf-8"));
+
   const { data: existingSource, error: existingSourceError } = await db
     .from("sources")
-    .select("id")
+    .select("id, content_hash")
     .eq("user_id", userId)
     .eq("idempotency_key", idempotencyKey)
     .maybeSingle();
@@ -5819,6 +5831,21 @@ export async function storeStructuredForApi(params: {
   }
 
   if (existingSource) {
+    // If content hash differs, the caller reused an idempotency_key with
+    // materially different content. Reject with a clear error rather than
+    // silently skipping the write. See docs/architecture/idempotence_pattern.md.
+    if (existingSource.content_hash && existingSource.content_hash !== incomingContentHash) {
+      const mismatchErr = new Error(
+        `Idempotency key "${idempotencyKey}" was already used with different content. ` +
+          "Use a new idempotency_key for a different payload."
+      ) as Error & { code: string; hint: string };
+      mismatchErr.code = "ERR_IDEMPOTENCY_MISMATCH";
+      mismatchErr.hint =
+        "Each unique payload must use a unique idempotency_key. " +
+        "To update an entity, omit the idempotency_key or use a new one.";
+      throw mismatchErr;
+    }
+
     const { listObservationsForSource } = await import("./services/observation_storage.js");
     const existingObs = await listObservationsForSource(existingSource.id, userId);
 
@@ -5829,9 +5856,10 @@ export async function storeStructuredForApi(params: {
     }));
 
     // Idempotency replay: the source row already exists for
-    // (user_id, idempotency_key). No new observations or entities were
-    // written. Callers distinguish this from a zero-commit fresh write via the
-    // `replayed: true` flag (v0.5.1+). See docs/architecture/idempotence_pattern.md.
+    // (user_id, idempotency_key) with identical content. No new observations
+    // or entities were written. Callers distinguish this from a zero-commit
+    // fresh write via the `replayed: true` flag (v0.5.1+).
+    // See docs/architecture/idempotence_pattern.md.
     return {
       success: true,
       replayed: true,
@@ -5844,12 +5872,7 @@ export async function storeStructuredForApi(params: {
 
   const { createObservation } = await import("./services/observation_storage.js");
 
-  const jsonContent = JSON.stringify(entities, (key, value) => {
-    if (typeof value === "bigint") {
-      return Number(value);
-    }
-    return value;
-  });
+  const jsonContent = incomingJsonContent;
   const filenameForStorage = originalFilename?.trim() || undefined;
   const storageResult = await storeRawContent({
     userId,
@@ -6661,6 +6684,18 @@ async function handleStorePost(
       const message = error instanceof Error ? error.message : String(error);
       logWarn("EntityTypeGuardError:store", req, { code: errCode, message });
       return sendError(res, 400, errCode, message);
+    }
+    if (errCode === "ERR_IDEMPOTENCY_MISMATCH") {
+      const message = error instanceof Error ? error.message : "Idempotency key mismatch";
+      const hint = (error as { hint?: string }).hint;
+      logWarn("IdempotencyMismatch:store", req, { message });
+      return res.status(400).json({
+        error: {
+          code: "ERR_IDEMPOTENCY_MISMATCH",
+          message,
+          hint: hint ?? "Use a new idempotency_key for a different payload.",
+        },
+      });
     }
     if (error && typeof error === "object" && errCode === "ERR_STORE_RESOLUTION_FAILED") {
       const err = error as {

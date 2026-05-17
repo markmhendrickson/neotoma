@@ -198,7 +198,7 @@ export async function storeUnknownFields(params: {
   entityType: string;
   schemaVersion: string;
   unknownFields: Record<string, unknown>;
-}): Promise<number> {
+}): Promise<{ count: number; fields: string[] }> {
   const { sourceId, userId, entityId, entityType, schemaVersion, unknownFields } = params;
 
   const nonNullEntries = Object.entries(unknownFields).filter(
@@ -211,7 +211,7 @@ export async function storeUnknownFields(params: {
     );
   }
 
-  let count = 0;
+  const storedFields: string[] = [];
   for (const [key, value] of nonNullEntries) {
     const stored = await storeFragment({
       sourceId,
@@ -223,8 +223,8 @@ export async function storeUnknownFields(params: {
       value,
       reason: "unknown_field",
     });
-    if (stored) count++;
+    if (stored) storedFields.push(key);
   }
 
-  return count;
+  return { count: storedFields.length, fields: storedFields };
 }

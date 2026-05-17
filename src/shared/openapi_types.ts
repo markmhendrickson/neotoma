@@ -2867,9 +2867,12 @@ export interface components {
             success?: boolean;
             /**
              * @description True when the response is an idempotency replay (no new observations
-             *     or entities were written for this request). Consumers can use this
-             *     to distinguish a genuine fresh commit from a replayed earlier result
-             *     when `entities_created_count` is 0.
+             *     or entities were written for this request). The key was already used
+             *     with identical content so the original result is returned. Consumers
+             *     can use this to distinguish a genuine fresh commit from a replayed
+             *     earlier result when `entities_created_count` is 0. If the same key
+             *     is reused with *different* content the request is rejected with
+             *     `ERR_IDEMPOTENCY_MISMATCH` (HTTP 400).
              */
             replayed?: boolean;
             entities?: {
@@ -4730,8 +4733,10 @@ export interface operations {
             };
             /**
              * @description Request rejected. `ERR_STORE_RESOLUTION_FAILED` uses the richer
-             *     `StoreResolutionErrorEnvelope` shape; other validation errors fall
-             *     back to the generic `ErrorEnvelope`.
+             *     `StoreResolutionErrorEnvelope` shape. `ERR_IDEMPOTENCY_MISMATCH` is
+             *     returned when the same `idempotency_key` is reused with materially
+             *     different content — use a new key for a different payload. Other
+             *     validation errors fall back to the generic `ErrorEnvelope`.
              */
             400: {
                 headers: {

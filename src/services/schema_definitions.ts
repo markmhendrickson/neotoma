@@ -1465,6 +1465,52 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
     },
   },
 
+  exercise_log: {
+    entity_type: "exercise_log",
+    schema_version: "1.0",
+    metadata: {
+      label: "Exercise Log",
+      description:
+        "A single logged exercise set — one atomic entry in a workout (e.g. Bench Press, Set 1, 60 kg × 10 reps, 2026-05-16).",
+      category: "health",
+      aliases: ["exercise_set", "workout_set", "exercise_entry"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        exercise: { type: "string", required: true },
+        date: { type: "date", required: true },
+        set_number: { type: "number", required: false },
+        set_type: { type: "string", required: false },
+        reps: { type: "number", required: false },
+        weight_kg: { type: "number", required: false },
+        weight_lbs: { type: "number", required: false },
+        duration_seconds: { type: "number", required: false },
+        distance_meters: { type: "number", required: false },
+        notes: { type: "string", required: false },
+        import_date: { type: "date", required: false },
+        import_source_file: { type: "string", required: false },
+      },
+      // Composite identity: exercise name + date + set_number uniquely identifies
+      // a single logged set. Falls back to exercise + date when set_number is absent
+      // (e.g. for cardio or untimed drills with no per-set breakdown).
+      canonical_name_fields: [
+        { composite: ["exercise", "date", "set_number"] },
+        { composite: ["exercise", "date"] },
+      ],
+    },
+    reducer_config: {
+      merge_policies: {
+        date: { strategy: "last_write" },
+        reps: { strategy: "last_write" },
+        weight_kg: { strategy: "last_write" },
+        weight_lbs: { strategy: "last_write" },
+        duration_seconds: { strategy: "last_write" },
+        distance_meters: { strategy: "last_write" },
+      },
+    },
+  },
+
   meal: {
     entity_type: "meal",
     schema_version: "1.0",
@@ -2812,6 +2858,52 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         applied_fix: { strategy: "last_write" },
         proactive_remediation_required: { strategy: "last_write" },
         remediation_status: { strategy: "last_write" },
+      },
+    },
+  },
+
+  device: {
+    entity_type: "device",
+    schema_version: "1.0",
+    metadata: {
+      label: "Device",
+      description:
+        "A hardware device or IoT/smart-home unit (compute hardware, sensors, appliances). Identified by name; additional metadata such as brand, protocol, and location can be stored as optional fields.",
+      category: "knowledge",
+      aliases: ["hardware", "iot_device", "smart_device", "appliance"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        name: { type: "string", required: true },
+        brand: { type: "string", required: false },
+        device_type: { type: "string", required: false },
+        model: { type: "string", required: false },
+        protocol: { type: "string", required: false },
+        location_in_home: { type: "string", required: false },
+        floor: { type: "string", required: false },
+        local_api_available: { type: "boolean", required: false },
+        cloud_dependent: { type: "boolean", required: false },
+        cpu_cores: { type: "number", required: false },
+        gpu_cores: { type: "number", required: false },
+        memory_gb: { type: "number", required: false },
+        notes: { type: "string", required: false },
+        import_date: { type: "date", required: false },
+        import_source_file: { type: "string", required: false },
+      },
+      // Devices are identified by name — "Nest Thermostat", "MacBook Pro", etc.
+      canonical_name_fields: ["name"],
+    },
+    reducer_config: {
+      merge_policies: {
+        brand: { strategy: "last_write" },
+        device_type: { strategy: "last_write" },
+        model: { strategy: "last_write" },
+        protocol: { strategy: "last_write" },
+        location_in_home: { strategy: "last_write" },
+        floor: { strategy: "last_write" },
+        local_api_available: { strategy: "last_write" },
+        cloud_dependent: { strategy: "last_write" },
       },
     },
   },
