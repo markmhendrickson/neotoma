@@ -30,9 +30,7 @@ vi.mock("../../db.js", () => ({
 
 import { seedIssueSchema } from "./seed_schema.js";
 
-function existingIssueSchema(
-  metadata: SchemaRegistryEntry["metadata"] = {},
-): SchemaRegistryEntry {
+function existingIssueSchema(metadata: SchemaRegistryEntry["metadata"] = {}): SchemaRegistryEntry {
   return {
     id: "schema-global-issue",
     entity_type: "issue",
@@ -72,7 +70,7 @@ describe("seedIssueSchema", () => {
     mockRows.push(
       { id: "global-issue", metadata: { icon } },
       { id: "user-issue", metadata: null },
-      { id: "operator-closed", metadata: { guest_access_policy: "closed" } },
+      { id: "operator-closed", metadata: { guest_access_policy: "closed" } }
     );
 
     const registry = {
@@ -83,12 +81,12 @@ describe("seedIssueSchema", () => {
           existingIssueSchema({
             icon,
             guest_access_policy: "submitter_scoped",
-          }),
+          })
         ),
       register: vi.fn(),
       activate: vi.fn(),
       updateSchemaIncremental: vi.fn(async () =>
-        existingIssueSchema({ guest_access_policy: "submitter_scoped" }),
+        existingIssueSchema({ guest_access_policy: "submitter_scoped" })
       ),
     };
 

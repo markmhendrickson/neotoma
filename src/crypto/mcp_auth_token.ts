@@ -5,11 +5,7 @@
 
 import { readFileSync } from "fs";
 import { config } from "../config.js";
-import {
-  deriveMcpAuthToken,
-  hexToKey,
-  mnemonicToSeed,
-} from "./key_derivation.js";
+import { deriveMcpAuthToken, hexToKey, mnemonicToSeed } from "./key_derivation.js";
 
 /**
  * Derive the MCP auth token from the same key source as data encryption.
@@ -28,7 +24,7 @@ export function getMcpAuthToken(): string | null {
   if (config.encryption.mnemonic) {
     const seed = mnemonicToSeed(
       config.encryption.mnemonic,
-      config.encryption.mnemonicPassphrase || "",
+      config.encryption.mnemonicPassphrase || ""
     );
     return deriveMcpAuthToken(seed);
   }

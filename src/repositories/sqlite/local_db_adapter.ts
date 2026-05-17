@@ -7,7 +7,11 @@ import { config } from "../../config.js";
 import { encryptColumn, decryptColumn, isEncryptedColumn } from "../../crypto/column_encryption.js";
 import { deriveKeys, deriveKeysFromMnemonic, hexToKey } from "../../crypto/key_derivation.js";
 
-type QueryResult<T> = { data: T | null; error: { message: string; code?: string } | null; count?: number };
+type QueryResult<T> = {
+  data: T | null;
+  error: { message: string; code?: string } | null;
+  count?: number;
+};
 
 /** Columns stored as 0/1 in SQLite that should be returned as boolean */
 const BOOLEAN_COLUMNS: Record<string, Set<string>> = {
@@ -25,7 +29,12 @@ const JSON_COLUMNS: Record<string, Set<string>> = {
   relationship_snapshots: new Set(["snapshot", "provenance"]),
   raw_fragments: new Set(["fragment_value", "fragment_envelope"]),
   schema_registry: new Set(["schema_definition", "reducer_config", "metadata"]),
-  schema_recommendations: new Set(["fields_to_add", "fields_to_remove", "fields_to_modify", "converters_to_add"]),
+  schema_recommendations: new Set([
+    "fields_to_add",
+    "fields_to_remove",
+    "fields_to_modify",
+    "converters_to_add",
+  ]),
   auto_enhancement_queue: new Set(["payload"]),
 };
 
@@ -39,7 +48,12 @@ const ENCRYPTED_COLUMNS: Record<string, Set<string>> = {
   entity_snapshots: new Set(["snapshot", "provenance"]),
   relationship_snapshots: new Set(["snapshot", "provenance"]),
   raw_fragments: new Set(["fragment_value", "fragment_envelope"]),
-  schema_recommendations: new Set(["fields_to_add", "fields_to_remove", "fields_to_modify", "converters_to_add"]),
+  schema_recommendations: new Set([
+    "fields_to_add",
+    "fields_to_remove",
+    "fields_to_modify",
+    "converters_to_add",
+  ]),
   auto_enhancement_queue: new Set(["payload"]),
 };
 
@@ -70,7 +84,7 @@ function getDataKey(): Uint8Array | null {
   if (config.encryption.mnemonic) {
     const derived = deriveKeysFromMnemonic(
       config.encryption.mnemonic,
-      config.encryption.mnemonicPassphrase,
+      config.encryption.mnemonicPassphrase
     );
     cachedDataKey = derived.dataKey;
     return cachedDataKey;
@@ -78,7 +92,7 @@ function getDataKey(): Uint8Array | null {
 
   throw new Error(
     "Encryption is enabled but no key source configured. " +
-    "Set NEOTOMA_KEY_FILE_PATH or NEOTOMA_MNEMONIC."
+      "Set NEOTOMA_KEY_FILE_PATH or NEOTOMA_MNEMONIC."
   );
 }
 
@@ -155,7 +169,11 @@ function toDbValue(table: string, column: string, value: unknown): unknown {
 }
 
 /** Map SQLite constraint errors to PostgreSQL error codes for compatibility */
-function mapSqliteErrorToPostgres(error: { errno?: number; code?: string; message?: string }): string | undefined {
+function mapSqliteErrorToPostgres(error: {
+  errno?: number;
+  code?: string;
+  message?: string;
+}): string | undefined {
   const code = error.code || "";
   const msg = (error.message || "").toLowerCase();
   const errno = error.errno;
@@ -304,7 +322,8 @@ async function ensureEntityRowForSnapshot(
   db: ReturnType<typeof getSqliteDb>,
   snapshotRow: Record<string, unknown>
 ): Promise<void> {
-  const entityId = typeof snapshotRow["entity_id"] === "string" ? (snapshotRow["entity_id"] as string) : null;
+  const entityId =
+    typeof snapshotRow["entity_id"] === "string" ? (snapshotRow["entity_id"] as string) : null;
   const entityType =
     typeof snapshotRow["entity_type"] === "string" ? (snapshotRow["entity_type"] as string) : null;
   if (!entityId || !entityType) return;
@@ -336,9 +355,10 @@ async function recomputeEntitySnapshot(
   const { ObservationReducer } = await import("../../reducers/observation_reducer.js");
   const reducer = new ObservationReducer();
 
-  const rows = db
-    .prepare("SELECT * FROM observations WHERE entity_id = ?")
-    .all(entityId) as Record<string, unknown>[];
+  const rows = db.prepare("SELECT * FROM observations WHERE entity_id = ?").all(entityId) as Record<
+    string,
+    unknown
+  >[];
   const observations = rows.map((r) => fromDbRow("observations", r)) as any[];
   if (observations.length === 0) {
     db.prepare("DELETE FROM entity_snapshots WHERE entity_id = ?").run(entityId);
@@ -377,7 +397,9 @@ async function recomputeRelationshipSnapshot(
     .all(relationshipKey) as Record<string, unknown>[];
   const observations = rows.map((r) => fromDbRow("relationship_observations", r)) as any[];
   if (observations.length === 0) {
-    db.prepare("DELETE FROM relationship_snapshots WHERE relationship_key = ?").run(relationshipKey);
+    db.prepare("DELETE FROM relationship_snapshots WHERE relationship_key = ?").run(
+      relationshipKey
+    );
     return;
   }
 
@@ -392,7 +414,6 @@ async function recomputeRelationshipSnapshot(
     `INSERT OR REPLACE INTO relationship_snapshots (${columns.join(", ")}) VALUES (${placeholders})`
   ).run(values);
 }
-
 
 class LocalQueryBuilder {
   private table: string;
@@ -439,7 +460,10 @@ class LocalQueryBuilder {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  upsert(payload: Record<string, unknown> | Record<string, unknown>[], _options?: { onConflict?: string }): this {
+  upsert(
+    payload: Record<string, unknown> | Record<string, unknown>[],
+    _options?: { onConflict?: string }
+  ): this {
     this.operation = "upsert";
     this.upsertPayload = Array.isArray(payload) ? payload : [payload];
     return this;
@@ -557,7 +581,10 @@ class LocalQueryBuilder {
   }
 
   or(conditions: string): this {
-    const parts = conditions.split(",").map((p) => p.trim()).filter(Boolean);
+    const parts = conditions
+      .split(",")
+      .map((p) => p.trim())
+      .filter(Boolean);
     const clauses: string[] = [];
     const values: unknown[] = [];
 
@@ -566,8 +593,7 @@ class LocalQueryBuilder {
     // into the `or(...)` clause (e.g. `mime_type.ilike.${userNeedle}`) could
     // inject arbitrary SQL into the identifier position. See docs/reports/
     // security_audit_2026_04_22.md S-3.
-    const IDENT_RE =
-      /^[A-Za-z_][A-Za-z0-9_]*(->>[A-Za-z_][A-Za-z0-9_]*)?$/;
+    const IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*(->>[A-Za-z_][A-Za-z0-9_]*)?$/;
     for (const part of parts) {
       const dotIdx = part.indexOf(".");
       if (dotIdx < 0) continue;
@@ -631,7 +657,9 @@ class LocalQueryBuilder {
       try {
         if (this.operation === "select") {
           const countRow = this.countExact
-            ? db.prepare(`SELECT COUNT(*) as count FROM ${this.table} ${whereSql}`).get(values) as { count: number } | undefined
+            ? (db.prepare(`SELECT COUNT(*) as count FROM ${this.table} ${whereSql}`).get(values) as
+                | { count: number }
+                | undefined)
             : undefined;
           const count = countRow?.count;
 
@@ -648,15 +676,17 @@ class LocalQueryBuilder {
           const limitSql = this.limitValue !== null ? `LIMIT ${this.limitValue}` : "";
           const offsetSql = this.offsetValue !== null ? `OFFSET ${this.offsetValue}` : "";
 
-          const sql = `SELECT ${this.selectColumns || "*"} FROM ${this.table} ${whereSql} ${orderSql} ${limitSql} ${offsetSql}`.trim();
-          const rows = db.prepare(sql).all(values).map((row: any) => fromDbRow(this.table, row));
+          const sql =
+            `SELECT ${this.selectColumns || "*"} FROM ${this.table} ${whereSql} ${orderSql} ${limitSql} ${offsetSql}`.trim();
+          const rows = db
+            .prepare(sql)
+            .all(values)
+            .map((row: any) => fromDbRow(this.table, row));
 
           if (this.expectSingle) {
             const row = rows[0] || null;
             if (!row && !this.allowNullSingle) {
-              const detail =
-                whereSql ||
-                "no filter applied";
+              const detail = whereSql || "no filter applied";
               return {
                 data: null,
                 error: {
@@ -676,85 +706,103 @@ class LocalQueryBuilder {
           for (const item of this.insertPayload) {
             const payload = { ...item };
 
-          // Compatibility: observations.priority -> observations.source_priority
-          if (
-            this.table === "observations" &&
-            "priority" in payload &&
-            !("source_priority" in payload)
-          ) {
-            payload["source_priority"] = payload["priority"];
-            delete payload["priority"];
-          }
-
-          // Parity with Postgres: supply required observation columns when omitted by tests/helpers.
-          if (this.table === "observations") {
-            // Compatibility: some tests use observations.id as entity identifier.
-            if (!("entity_id" in payload) && typeof payload["id"] === "string" && /^ent_/i.test(payload["id"] as string)) {
-              payload["entity_id"] = payload["id"];
+            // Compatibility: observations.priority -> observations.source_priority
+            if (
+              this.table === "observations" &&
+              "priority" in payload &&
+              !("source_priority" in payload)
+            ) {
+              payload["source_priority"] = payload["priority"];
+              delete payload["priority"];
             }
-            if (!("schema_version" in payload)) payload["schema_version"] = "1.0";
-            if (!("observed_at" in payload)) payload["observed_at"] = new Date().toISOString();
-          }
 
-          // Parity with Postgres: derive relationship_key when omitted.
-          if (this.table === "relationship_observations") {
-            const hasKey = typeof payload["relationship_key"] === "string" && payload["relationship_key"];
-            if (!hasKey) {
-              const rt = typeof payload["relationship_type"] === "string" ? payload["relationship_type"] : "";
-              const se = typeof payload["source_entity_id"] === "string" ? payload["source_entity_id"] : "";
-              const te = typeof payload["target_entity_id"] === "string" ? payload["target_entity_id"] : "";
-              if (rt && se && te) {
-                payload["relationship_key"] = `${rt}:${se}:${te}`;
+            // Parity with Postgres: supply required observation columns when omitted by tests/helpers.
+            if (this.table === "observations") {
+              // Compatibility: some tests use observations.id as entity identifier.
+              if (
+                !("entity_id" in payload) &&
+                typeof payload["id"] === "string" &&
+                /^ent_/i.test(payload["id"] as string)
+              ) {
+                payload["entity_id"] = payload["id"];
+              }
+              if (!("schema_version" in payload)) payload["schema_version"] = "1.0";
+              if (!("observed_at" in payload)) payload["observed_at"] = new Date().toISOString();
+            }
+
+            // Parity with Postgres: derive relationship_key when omitted.
+            if (this.table === "relationship_observations") {
+              const hasKey =
+                typeof payload["relationship_key"] === "string" && payload["relationship_key"];
+              if (!hasKey) {
+                const rt =
+                  typeof payload["relationship_type"] === "string"
+                    ? payload["relationship_type"]
+                    : "";
+                const se =
+                  typeof payload["source_entity_id"] === "string"
+                    ? payload["source_entity_id"]
+                    : "";
+                const te =
+                  typeof payload["target_entity_id"] === "string"
+                    ? payload["target_entity_id"]
+                    : "";
+                if (rt && se && te) {
+                  payload["relationship_key"] = `${rt}:${se}:${te}`;
+                }
+              }
+              if (!("observed_at" in payload)) payload["observed_at"] = new Date().toISOString();
+              if (!("source_priority" in payload)) payload["source_priority"] = 0;
+              if (!("metadata" in payload)) payload["metadata"] = {};
+            }
+
+            // Parity: entity_snapshots.canonical_name column for filtering.
+            if (this.table === "entity_snapshots" && !("canonical_name" in payload)) {
+              const derived = deriveCanonicalNameFromObject(payload["snapshot"]);
+              if (derived) payload["canonical_name"] = derived;
+            }
+
+            if (TABLES_WITH_ID.has(this.table) && !payload.id) {
+              if (DETERMINISTIC_ID_TABLES.has(this.table)) {
+                console.warn(
+                  `[DETERMINISM] Missing ID for ${this.table} insert; falling back to randomUUID. Callers should provide deterministic IDs for domain tables.`
+                );
+              }
+              payload.id = crypto.randomUUID();
+            }
+            // Only add created_at for tables that have this column
+            // entity_snapshots and relationship_snapshots don't have created_at
+            const TABLES_WITHOUT_CREATED_AT = new Set([
+              "entity_snapshots",
+              "relationship_snapshots",
+            ]);
+            if ("created_at" in payload === false && !TABLES_WITHOUT_CREATED_AT.has(this.table)) {
+              payload.created_at = new Date().toISOString();
+            }
+            const columns = Object.keys(payload);
+            const values = columns.map((column) => toDbValue(this.table, column, payload[column]));
+            const placeholders = columns.map(() => "?").join(", ");
+            db.prepare(
+              `INSERT INTO ${this.table} (${columns.join(", ")}) VALUES (${placeholders})`
+            ).run(values);
+            inserted.push(payload);
+
+            // Local backend parity: inserts can materialize related state (entities + snapshots).
+            if (this.table === "observations") {
+              await ensureEntityRowForObservation(db, payload);
+              if (typeof payload["entity_id"] === "string") {
+                await recomputeEntitySnapshot(db, payload["entity_id"] as string);
               }
             }
-            if (!("observed_at" in payload)) payload["observed_at"] = new Date().toISOString();
-            if (!("source_priority" in payload)) payload["source_priority"] = 0;
-            if (!("metadata" in payload)) payload["metadata"] = {};
-          }
-
-          // Parity: entity_snapshots.canonical_name column for filtering.
-          if (this.table === "entity_snapshots" && !("canonical_name" in payload)) {
-            const derived = deriveCanonicalNameFromObject(payload["snapshot"]);
-            if (derived) payload["canonical_name"] = derived;
-          }
-
-          if (TABLES_WITH_ID.has(this.table) && !payload.id) {
-            if (DETERMINISTIC_ID_TABLES.has(this.table)) {
-              console.warn(
-                `[DETERMINISM] Missing ID for ${this.table} insert; falling back to randomUUID. Callers should provide deterministic IDs for domain tables.`
-              );
+            if (this.table === "entity_snapshots") {
+              await ensureEntityRowForSnapshot(db, payload);
             }
-            payload.id = crypto.randomUUID();
-          }
-          // Only add created_at for tables that have this column
-          // entity_snapshots and relationship_snapshots don't have created_at
-          const TABLES_WITHOUT_CREATED_AT = new Set(["entity_snapshots", "relationship_snapshots"]);
-          if ("created_at" in payload === false && !TABLES_WITHOUT_CREATED_AT.has(this.table)) {
-            payload.created_at = new Date().toISOString();
-          }
-          const columns = Object.keys(payload);
-          const values = columns.map((column) => toDbValue(this.table, column, payload[column]));
-          const placeholders = columns.map(() => "?").join(", ");
-          db.prepare(`INSERT INTO ${this.table} (${columns.join(", ")}) VALUES (${placeholders})`).run(values);
-          inserted.push(payload);
-
-          // Local backend parity: inserts can materialize related state (entities + snapshots).
-          if (this.table === "observations") {
-            await ensureEntityRowForObservation(db, payload);
-            if (typeof payload["entity_id"] === "string") {
-              await recomputeEntitySnapshot(db, payload["entity_id"] as string);
+            if (this.table === "relationship_observations") {
+              const rk = payload["relationship_key"];
+              if (typeof rk === "string" && rk) {
+                await recomputeRelationshipSnapshot(db, rk);
+              }
             }
-          }
-          if (this.table === "entity_snapshots") {
-            await ensureEntityRowForSnapshot(db, payload);
-          }
-          if (this.table === "relationship_observations") {
-            const rk = payload["relationship_key"];
-            if (typeof rk === "string" && rk) {
-              await recomputeRelationshipSnapshot(db, rk);
-            }
-          }
-
           }
 
           if (this.selectColumns) {
@@ -766,19 +814,25 @@ class LocalQueryBuilder {
         if (this.operation === "update" && this.updatePayload) {
           const payload = { ...this.updatePayload };
           const columns = Object.keys(payload);
-          const updateValues = columns.map((column) => toDbValue(this.table, column, payload[column]));
+          const updateValues = columns.map((column) =>
+            toDbValue(this.table, column, payload[column])
+          );
           const updateSql = columns.map((column) => `${column} = ?`).join(", ");
 
-          db.prepare(`UPDATE ${this.table} SET ${updateSql} ${whereSql}`).run([...updateValues, ...values]);
+          db.prepare(`UPDATE ${this.table} SET ${updateSql} ${whereSql}`).run([
+            ...updateValues,
+            ...values,
+          ]);
 
           if (this.selectColumns) {
-            const rows = db.prepare(`SELECT ${this.selectColumns} FROM ${this.table} ${whereSql}`).all(values).map((row: any) => fromDbRow(this.table, row));
+            const rows = db
+              .prepare(`SELECT ${this.selectColumns} FROM ${this.table} ${whereSql}`)
+              .all(values)
+              .map((row: any) => fromDbRow(this.table, row));
             if (this.expectSingle) {
               const row = rows[0] || null;
               if (!row && !this.allowNullSingle) {
-                const detail =
-                  whereSql ||
-                  "no filter applied";
+                const detail = whereSql || "no filter applied";
                 return {
                   data: null,
                   error: {
@@ -799,28 +853,30 @@ class LocalQueryBuilder {
           for (const item of this.upsertPayload) {
             const payload = { ...item };
 
-          if (this.table === "entity_snapshots" && !("canonical_name" in payload)) {
-            const derived = deriveCanonicalNameFromObject(payload["snapshot"]);
-            if (derived) payload["canonical_name"] = derived;
-          }
-
-          if (TABLES_WITH_ID.has(this.table) && !payload.id) {
-            if (DETERMINISTIC_ID_TABLES.has(this.table)) {
-              console.warn(
-                `[DETERMINISM] Missing ID for ${this.table} upsert; falling back to randomUUID. Callers should provide deterministic IDs for domain tables.`
-              );
+            if (this.table === "entity_snapshots" && !("canonical_name" in payload)) {
+              const derived = deriveCanonicalNameFromObject(payload["snapshot"]);
+              if (derived) payload["canonical_name"] = derived;
             }
-            payload.id = crypto.randomUUID();
-          }
-          const columns = Object.keys(payload);
-          const values = columns.map((column) => toDbValue(this.table, column, payload[column]));
-          const placeholders = columns.map(() => "?").join(", ");
-          db.prepare(`INSERT OR REPLACE INTO ${this.table} (${columns.join(", ")}) VALUES (${placeholders})`).run(values);
-          inserted.push(payload);
 
-          if (this.table === "entity_snapshots") {
-            await ensureEntityRowForSnapshot(db, payload);
-          }
+            if (TABLES_WITH_ID.has(this.table) && !payload.id) {
+              if (DETERMINISTIC_ID_TABLES.has(this.table)) {
+                console.warn(
+                  `[DETERMINISM] Missing ID for ${this.table} upsert; falling back to randomUUID. Callers should provide deterministic IDs for domain tables.`
+                );
+              }
+              payload.id = crypto.randomUUID();
+            }
+            const columns = Object.keys(payload);
+            const values = columns.map((column) => toDbValue(this.table, column, payload[column]));
+            const placeholders = columns.map(() => "?").join(", ");
+            db.prepare(
+              `INSERT OR REPLACE INTO ${this.table} (${columns.join(", ")}) VALUES (${placeholders})`
+            ).run(values);
+            inserted.push(payload);
+
+            if (this.table === "entity_snapshots") {
+              await ensureEntityRowForSnapshot(db, payload);
+            }
           }
           if (this.selectColumns) {
             return { data: this.expectSingle ? inserted[0] : inserted, error: null };
@@ -887,7 +943,11 @@ class LocalStorageBucket {
     return resolved;
   }
 
-  async upload(objectPath: string, data: Buffer, options?: { upsert?: boolean; contentType?: string }): Promise<QueryResult<null>> {
+  async upload(
+    objectPath: string,
+    data: Buffer,
+    options?: { upsert?: boolean; contentType?: string }
+  ): Promise<QueryResult<null>> {
     const targetPath = this.resolvePath(objectPath);
     const dir = path.dirname(targetPath);
     mkdirSync(dir, { recursive: true });
@@ -896,7 +956,10 @@ class LocalStorageBucket {
       if (!options?.upsert) {
         try {
           await fs.access(targetPath);
-          return { data: null, error: { message: "File already exists", code: "STORAGE_FILE_EXISTS" } };
+          return {
+            data: null,
+            error: { message: "File already exists", code: "STORAGE_FILE_EXISTS" },
+          };
         } catch {
           // continue
         }
@@ -908,13 +971,16 @@ class LocalStorageBucket {
     }
   }
 
-  async download(objectPath: string): Promise<QueryResult<{ arrayBuffer: () => Promise<ArrayBuffer> }>> {
+  async download(
+    objectPath: string
+  ): Promise<QueryResult<{ arrayBuffer: () => Promise<ArrayBuffer> }>> {
     const targetPath = this.resolvePath(objectPath);
     try {
       const file = await fs.readFile(targetPath);
       return {
         data: {
-          arrayBuffer: async () => file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength),
+          arrayBuffer: async () =>
+            file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength),
         },
         error: null,
       };
@@ -924,7 +990,10 @@ class LocalStorageBucket {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async createSignedUrl(objectPath: string, _expiresIn: number): Promise<QueryResult<{ signedUrl: string }>> {
+  async createSignedUrl(
+    objectPath: string,
+    _expiresIn: number
+  ): Promise<QueryResult<{ signedUrl: string }>> {
     const targetPath = this.resolvePath(objectPath);
     const signedUrl = `file://${targetPath}`;
     return { data: { signedUrl }, error: null };
@@ -938,16 +1007,24 @@ class LocalStorageClient {
 }
 
 class LocalAuthAdmin {
-  async getUserById(userId: string): Promise<QueryResult<{ user: { id: string; email?: string | null } | null }>> {
+  async getUserById(
+    userId: string
+  ): Promise<QueryResult<{ user: { id: string; email?: string | null } | null }>> {
     const db = getSqliteDb();
-    const user = db.prepare("SELECT id, email FROM auth_users WHERE id = ?").get(userId) as { id: string; email?: string | null } | undefined;
+    const user = db.prepare("SELECT id, email FROM auth_users WHERE id = ?").get(userId) as
+      | { id: string; email?: string | null }
+      | undefined;
     if (!user) {
       return { data: null, error: { message: "User not found", code: "PGRST116" } };
     }
     return { data: { user }, error: null };
   }
 
-  async createUser(payload: { id?: string; email?: string; email_confirm?: boolean }): Promise<QueryResult<{ user: { id: string; email?: string | null } }>> {
+  async createUser(payload: {
+    id?: string;
+    email?: string;
+    email_confirm?: boolean;
+  }): Promise<QueryResult<{ user: { id: string; email?: string | null } }>> {
     const db = getSqliteDb();
     const id = payload.id || crypto.randomUUID();
     const email = payload.email || null;
@@ -965,9 +1042,15 @@ class LocalAuthAdmin {
     return { data: { users: users as any }, error: null };
   }
 
-  async generateLink(payload: { type: string; email: string; options?: { redirectTo?: string } }): Promise<QueryResult<{ properties: { action_link: string } }>> {
+  async generateLink(payload: {
+    type: string;
+    email: string;
+    options?: { redirectTo?: string };
+  }): Promise<QueryResult<{ properties: { action_link: string } }>> {
     const db = getSqliteDb();
-    const user = db.prepare("SELECT id, email FROM auth_users WHERE email = ?").get(payload.email) as { id: string; email?: string } | undefined;
+    const user = db
+      .prepare("SELECT id, email FROM auth_users WHERE email = ?")
+      .get(payload.email) as { id: string; email?: string } | undefined;
     if (!user) {
       return { data: null, error: { message: "User not found", code: "PGRST116" } };
     }
@@ -999,16 +1082,22 @@ class LocalAuthClient {
     };
   }
 
-  async getUser(token: string): Promise<QueryResult<{ user: { id: string; email?: string | null } }>> {
+  async getUser(
+    token: string
+  ): Promise<QueryResult<{ user: { id: string; email?: string | null } }>> {
     const db = getSqliteDb();
-    const session = db.prepare("SELECT user_id, access_token, expires_at FROM auth_sessions WHERE access_token = ?").get(token) as { user_id: string; expires_at: string | null } | undefined;
+    const session = db
+      .prepare("SELECT user_id, access_token, expires_at FROM auth_sessions WHERE access_token = ?")
+      .get(token) as { user_id: string; expires_at: string | null } | undefined;
     if (!session) {
       return { data: null, error: { message: "Invalid token", code: "AUTH_INVALID" } };
     }
     if (session.expires_at && new Date(session.expires_at).getTime() < Date.now()) {
       return { data: null, error: { message: "Token expired", code: "AUTH_EXPIRED" } };
     }
-    const user = db.prepare("SELECT id, email FROM auth_users WHERE id = ?").get(session.user_id) as { id: string; email?: string | null } | undefined;
+    const user = db
+      .prepare("SELECT id, email FROM auth_users WHERE id = ?")
+      .get(session.user_id) as { id: string; email?: string | null } | undefined;
     if (!user) {
       return { data: null, error: { message: "User not found", code: "PGRST116" } };
     }

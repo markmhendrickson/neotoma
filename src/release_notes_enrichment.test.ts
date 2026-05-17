@@ -9,20 +9,21 @@ import {
 describe("npmPackageVersionUrl", () => {
   it("builds npmjs version URL", () => {
     expect(npmPackageVersionUrl("neotoma", "0.11.0")).toBe(
-      "https://www.npmjs.com/package/neotoma/v/0.11.0",
+      "https://www.npmjs.com/package/neotoma/v/0.11.0"
     );
   });
 });
 
 describe("parseGithubRepoFromNpmMetadata", () => {
   it("parses git+https URL", () => {
-    expect(
-      parseGithubRepoFromNpmMetadata("git+https://github.com/foo/bar.git"),
-    ).toEqual({ owner: "foo", repo: "bar" });
+    expect(parseGithubRepoFromNpmMetadata("git+https://github.com/foo/bar.git")).toEqual({
+      owner: "foo",
+      repo: "bar",
+    });
   });
   it("parses object url", () => {
     expect(
-      parseGithubRepoFromNpmMetadata({ type: "git", url: "https://github.com/acme/pkg" }),
+      parseGithubRepoFromNpmMetadata({ type: "git", url: "https://github.com/acme/pkg" })
     ).toEqual({ owner: "acme", repo: "pkg" });
   });
   it("returns null for non-github", () => {

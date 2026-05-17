@@ -274,7 +274,7 @@ function scoreFile(filePath: string, stat: { mtimeMs: number; size: number }): S
 async function scanDirectory(
   dirPath: string,
   currentDepth: number,
-  maxDepth: number,
+  maxDepth: number
 ): Promise<ScoredFile[]> {
   const results: ScoredFile[] = [];
 
@@ -385,7 +385,7 @@ async function globFiles(pattern: string): Promise<string[]> {
           results.push(full);
         }
       }
-    }
+    };
 
     try {
       await walk(baseDir);
@@ -449,15 +449,17 @@ async function findCursorStoreDbs(homeDir: string): Promise<string[]> {
   return results;
 }
 
-export async function discoverHarnessTranscripts(homeDir: string): Promise<HarnessTranscriptSummary[]> {
+export async function discoverHarnessTranscripts(
+  homeDir: string
+): Promise<HarnessTranscriptSummary[]> {
   const summaries: HarnessTranscriptSummary[] = [];
 
   // Claude Code
-  const claudeCodeFiles = await globFiles(path.join(homeDir, ".claude", "projects", "**", "*.jsonl"));
+  const claudeCodeFiles = await globFiles(
+    path.join(homeDir, ".claude", "projects", "**", "*.jsonl")
+  );
   if (claudeCodeFiles.length > 0) {
-    const stats = await Promise.all(
-      claudeCodeFiles.map((f) => fs.stat(f).catch(() => null)),
-    );
+    const stats = await Promise.all(claudeCodeFiles.map((f) => fs.stat(f).catch(() => null)));
     const mtimes = stats.filter(Boolean).map((s) => s!.mtime);
     const sorted = [...mtimes].sort((a, b) => a.getTime() - b.getTime());
 
@@ -465,21 +467,18 @@ export async function discoverHarnessTranscripts(homeDir: string): Promise<Harne
       harness: "claude-code",
       paths: claudeCodeFiles,
       fileCount: claudeCodeFiles.length,
-      estimatedDateRange: sorted.length > 0
-        ? { earliest: sorted[0], latest: sorted[sorted.length - 1] }
-        : null,
-      sampleTitles: claudeCodeFiles.slice(0, 3).map((f) =>
-        path.basename(path.dirname(f)) + "/" + path.basename(f),
-      ),
+      estimatedDateRange:
+        sorted.length > 0 ? { earliest: sorted[0], latest: sorted[sorted.length - 1] } : null,
+      sampleTitles: claudeCodeFiles
+        .slice(0, 3)
+        .map((f) => path.basename(path.dirname(f)) + "/" + path.basename(f)),
     });
   }
 
   // Codex
   const codexFiles = await globFiles(path.join(homeDir, ".codex", "archived_sessions", "*.jsonl"));
   if (codexFiles.length > 0) {
-    const stats = await Promise.all(
-      codexFiles.map((f) => fs.stat(f).catch(() => null)),
-    );
+    const stats = await Promise.all(codexFiles.map((f) => fs.stat(f).catch(() => null)));
     const mtimes = stats.filter(Boolean).map((s) => s!.mtime);
     const sorted = [...mtimes].sort((a, b) => a.getTime() - b.getTime());
 
@@ -487,9 +486,8 @@ export async function discoverHarnessTranscripts(homeDir: string): Promise<Harne
       harness: "codex",
       paths: codexFiles,
       fileCount: codexFiles.length,
-      estimatedDateRange: sorted.length > 0
-        ? { earliest: sorted[0], latest: sorted[sorted.length - 1] }
-        : null,
+      estimatedDateRange:
+        sorted.length > 0 ? { earliest: sorted[0], latest: sorted[sorted.length - 1] } : null,
       sampleTitles: codexFiles.slice(0, 3).map((f) => path.basename(f, ".jsonl")),
     });
   }
@@ -503,16 +501,17 @@ export async function discoverHarnessTranscripts(homeDir: string): Promise<Harne
     "Cursor",
     "User",
     "globalStorage",
-    "state.vscdb",
+    "state.vscdb"
   );
 
-  const stateVscdbExists = await fs.stat(cursorStateVscdb).then(() => true).catch(() => false);
+  const stateVscdbExists = await fs
+    .stat(cursorStateVscdb)
+    .then(() => true)
+    .catch(() => false);
   const cursorPaths = [...cursorStoreDbs, ...(stateVscdbExists ? [cursorStateVscdb] : [])];
 
   if (cursorPaths.length > 0) {
-    const stats = await Promise.all(
-      cursorPaths.map((f) => fs.stat(f).catch(() => null)),
-    );
+    const stats = await Promise.all(cursorPaths.map((f) => fs.stat(f).catch(() => null)));
     const mtimes = stats.filter(Boolean).map((s) => s!.mtime);
     const sorted = [...mtimes].sort((a, b) => a.getTime() - b.getTime());
 
@@ -520,12 +519,9 @@ export async function discoverHarnessTranscripts(homeDir: string): Promise<Harne
       harness: "cursor",
       paths: cursorPaths,
       fileCount: cursorPaths.length,
-      estimatedDateRange: sorted.length > 0
-        ? { earliest: sorted[0], latest: sorted[sorted.length - 1] }
-        : null,
-      sampleTitles: cursorStoreDbs.slice(0, 3).map((f) =>
-        path.basename(path.dirname(f)),
-      ),
+      estimatedDateRange:
+        sorted.length > 0 ? { earliest: sorted[0], latest: sorted[sorted.length - 1] } : null,
+      sampleTitles: cursorStoreDbs.slice(0, 3).map((f) => path.basename(path.dirname(f))),
       requiresSqlite: true,
     });
   }
@@ -583,7 +579,7 @@ export function formatDiscoveryOutput(result: DiscoveryResult): string {
 
   const lines: string[] = [];
   lines.push(
-    `Detected ${result.clusters.length} likely high-value domain${result.clusters.length === 1 ? "" : "s"}:\n`,
+    `Detected ${result.clusters.length} likely high-value domain${result.clusters.length === 1 ? "" : "s"}:\n`
   );
 
   for (let i = 0; i < result.clusters.length; i++) {
@@ -591,7 +587,9 @@ export function formatDiscoveryOutput(result: DiscoveryResult): string {
     const homeDir = process.env.HOME ?? process.env.USERPROFILE ?? "";
     const displayPath = homeDir ? cluster.rootPath.replace(homeDir, "~") : cluster.rootPath;
 
-    lines.push(`${i + 1}. ${cluster.name} (${displayPath}) -- ${cluster.files.length} file${cluster.files.length === 1 ? "" : "s"}`);
+    lines.push(
+      `${i + 1}. ${cluster.name} (${displayPath}) -- ${cluster.files.length} file${cluster.files.length === 1 ? "" : "s"}`
+    );
     lines.push(`   ${cluster.explanation}`);
 
     for (const file of cluster.files.slice(0, 5)) {
@@ -608,7 +606,7 @@ export function formatDiscoveryOutput(result: DiscoveryResult): string {
   }
 
   lines.push(
-    `Scanned ${result.totalFilesScanned} files, found ${result.totalCandidates} candidates.`,
+    `Scanned ${result.totalFilesScanned} files, found ${result.totalCandidates} candidates.`
   );
 
   if (result.harnessTranscripts && result.harnessTranscripts.length > 0) {
@@ -619,9 +617,10 @@ export function formatDiscoveryOutput(result: DiscoveryResult): string {
       const dateRange = h.estimatedDateRange
         ? ` (${h.estimatedDateRange.earliest.toISOString().slice(0, 7)} → ${h.estimatedDateRange.latest.toISOString().slice(0, 7)})`
         : "";
-      const countLabel = h.harness === "cursor" && h.fileCount === 1
-        ? "1 db"
-        : `${h.fileCount} ${h.harness === "cursor" ? "db" + (h.fileCount > 1 ? "s" : "") : "file" + (h.fileCount > 1 ? "s" : "")}`;
+      const countLabel =
+        h.harness === "cursor" && h.fileCount === 1
+          ? "1 db"
+          : `${h.fileCount} ${h.harness === "cursor" ? "db" + (h.fileCount > 1 ? "s" : "") : "file" + (h.fileCount > 1 ? "s" : "")}`;
       const sampleDir = h.paths[0] ? path.dirname(h.paths[0]).replace(homeDir, "~") : "";
       lines.push(`  ${h.harness}: ${countLabel}${dateRange}, ${sampleDir}`);
     }
@@ -669,6 +668,6 @@ export function formatDiscoveryJson(result: DiscoveryResult): string {
       })),
     },
     null,
-    2,
+    2
   );
 }

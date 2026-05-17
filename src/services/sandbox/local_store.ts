@@ -14,10 +14,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import type {
-  SandboxReportReason,
-  SandboxReportStatus,
-} from "./types.js";
+import type { SandboxReportReason, SandboxReportStatus } from "./types.js";
 
 export interface LocalSandboxReportRecord {
   id: string;

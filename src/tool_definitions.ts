@@ -32,76 +32,67 @@ const RELATIONSHIP_TYPE_ENUM = [
  */
 export function buildToolDefinitions(
   descriptionOverrides?: Map<string, string>,
-  timelineWidgetResourceUri?: string,
+  timelineWidgetResourceUri?: string
 ): ToolDefinition[] {
   const desc = (name: string, fallback: string): string =>
     descriptionOverrides?.get(name) ?? fallback;
 
   const storeBaseSchema = getOpenApiInputSchemaOrThrow("store");
-  const storeBaseProperties = ((storeBaseSchema as any).properties ?? {}) as Record<string, unknown>;
+  const storeBaseProperties = ((storeBaseSchema as any).properties ?? {}) as Record<
+    string,
+    unknown
+  >;
 
   const tools: ToolDefinition[] = [
     {
       name: "retrieve_file_url",
-      description: desc(
-        "retrieve_file_url",
-        "Retrieve a signed URL for accessing a file",
-      ),
+      description: desc("retrieve_file_url", "Retrieve a signed URL for accessing a file"),
       inputSchema: getOpenApiInputSchemaOrThrow("retrieve_file_url"),
     },
     {
       name: "retrieve_entity_snapshot",
       description: desc(
         "retrieve_entity_snapshot",
-        "Retrieve the current snapshot of an entity with provenance information. Supports historical snapshots via 'at' parameter.",
+        "Retrieve the current snapshot of an entity with provenance information. Supports historical snapshots via 'at' parameter."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("retrieve_entity_snapshot"),
     },
     {
       name: "list_observations",
-      description: desc(
-        "list_observations",
-        "List all observations for a given entity",
-      ),
+      description: desc("list_observations", "List all observations for a given entity"),
       inputSchema: getOpenApiInputSchemaOrThrow("list_observations"),
     },
     {
       name: "retrieve_field_provenance",
       description: desc(
         "retrieve_field_provenance",
-        "Retrieve the provenance chain for a specific field in an entity snapshot",
+        "Retrieve the provenance chain for a specific field in an entity snapshot"
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("retrieve_field_provenance"),
     },
     {
       name: "create_relationship",
-      description: desc(
-        "create_relationship",
-        "Create a typed relationship between two entities",
-      ),
+      description: desc("create_relationship", "Create a typed relationship between two entities"),
       inputSchema: getOpenApiInputSchemaOrThrow("create_relationship"),
     },
     {
       name: "create_relationships",
       description: desc(
         "create_relationships",
-        "Create multiple typed relationships between existing entities in one batch",
+        "Create multiple typed relationships between existing entities in one batch"
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("create_relationships"),
     },
     {
       name: "list_relationships",
-      description: desc(
-        "list_relationships",
-        "List relationships for an entity",
-      ),
+      description: desc("list_relationships", "List relationships for an entity"),
       inputSchema: getOpenApiInputSchemaOrThrow("list_relationships"),
     },
     {
       name: "get_relationship_snapshot",
       description: desc(
         "get_relationship_snapshot",
-        "Get the current snapshot of a specific relationship with provenance",
+        "Get the current snapshot of a specific relationship with provenance"
       ),
       inputSchema: {
         type: "object",
@@ -127,7 +118,7 @@ export function buildToolDefinitions(
       name: "retrieve_entities",
       description: desc(
         "retrieve_entities",
-        "Query entities with filters (type, pagination). Returns entities with their snapshots.",
+        "Query entities with filters (type, pagination). Returns entities with their snapshots."
       ),
       inputSchema: {
         type: "object",
@@ -234,7 +225,7 @@ export function buildToolDefinitions(
       name: "retrieve_entity_by_identifier",
       description: desc(
         "retrieve_entity_by_identifier",
-        "Retrieve entity by identifier (name, email, etc.) across entity types or specific type. Set include_observations=true to hydrate each match with recent observations in the same call (useful for collapsing resolve/snapshot/list sequences).",
+        "Retrieve entity by identifier (name, email, etc.) across entity types or specific type. Set include_observations=true to hydrate each match with recent observations in the same call (useful for collapsing resolve/snapshot/list sequences)."
       ),
       inputSchema: {
         type: "object",
@@ -281,7 +272,7 @@ export function buildToolDefinitions(
       name: "retrieve_related_entities",
       description: desc(
         "retrieve_related_entities",
-        "Retrieve entities connected to a given entity via relationships. Supports n-hop traversal.",
+        "Retrieve entities connected to a given entity via relationships. Supports n-hop traversal."
       ),
       inputSchema: {
         type: "object",
@@ -320,7 +311,7 @@ export function buildToolDefinitions(
       name: "retrieve_graph_neighborhood",
       description: desc(
         "retrieve_graph_neighborhood",
-        "Retrieve complete graph neighborhood around a node (entity or source): related entities, relationships, sources, and events.",
+        "Retrieve complete graph neighborhood around a node (entity or source): related entities, relationships, sources, and events."
       ),
       inputSchema: {
         type: "object",
@@ -363,7 +354,7 @@ export function buildToolDefinitions(
       name: "store",
       description: desc(
         "store",
-        "Unified storing for both file-backed and structured sources. For files: provide EITHER file_content (base64-encoded) + mime_type OR file_path. For structured data: provide entities array. File inputs are stored raw with content-addressed SHA-256 deduplication per user. Agents should parse and extract entities before storing when they need structured data from a file; include an explicit interpretation block only when those entities are source-derived and should create a Source -> Interpretation -> Observation provenance link. Ordinary structured/chat-native stores omit interpretation and keep observations.interpretation_id null. IMPORTANT FOR STRUCTURED DATA: When storing structured entities with an unregistered entity_type, the system automatically infers and creates a user-specific schema from the data structure. Agents must include ALL fields from the source data, not just fields that match the entity schema. Schema fields are stored in observations (validated), while non-schema fields are automatically stored in raw_fragments.",
+        "Unified storing for both file-backed and structured sources. For files: provide EITHER file_content (base64-encoded) + mime_type OR file_path. For structured data: provide entities array. File inputs are stored raw with content-addressed SHA-256 deduplication per user. Agents should parse and extract entities before storing when they need structured data from a file; include an explicit interpretation block only when those entities are source-derived and should create a Source -> Interpretation -> Observation provenance link. Ordinary structured/chat-native stores omit interpretation and keep observations.interpretation_id null. IMPORTANT FOR STRUCTURED DATA: When storing structured entities with an unregistered entity_type, the system automatically infers and creates a user-specific schema from the data structure. Agents must include ALL fields from the source data, not just fields that match the entity schema. Schema fields are stored in observations (validated), while non-schema fields are automatically stored in raw_fragments."
       ),
       inputSchema: {
         ...storeBaseSchema,
@@ -397,7 +388,7 @@ export function buildToolDefinitions(
       name: "parse_file",
       description: desc(
         "parse_file",
-        "Parse local or base64-encoded files into agent-readable text and page images without storing anything. Use for PDFs or other files you need to inspect before structured storing.",
+        "Parse local or base64-encoded files into agent-readable text and page images without storing anything. Use for PDFs or other files you need to inspect before structured storing."
       ),
       inputSchema: {
         type: "object",
@@ -450,8 +441,7 @@ export function buildToolDefinitions(
           },
           idempotency_key: {
             type: "string",
-            description:
-              "Required. Client-provided idempotency key for replay-safe corrections.",
+            description: "Required. Client-provided idempotency key for replay-safe corrections.",
           },
         },
         required: ["entity_id", "entity_type", "field", "value", "idempotency_key"],
@@ -461,7 +451,7 @@ export function buildToolDefinitions(
       name: "merge_entities",
       description: desc(
         "merge_entities",
-        "Merge duplicate entities. Rewrites observations from source entity to target entity and marks source as merged.",
+        "Merge duplicate entities. Rewrites observations from source entity to target entity and marks source as merged."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("merge_entities"),
     },
@@ -469,7 +459,7 @@ export function buildToolDefinitions(
       name: "split_entity",
       description: desc(
         "split_entity",
-        "Inverse of merge_entities (R5). Re-point a predicate-selected subset of an entity's observations onto a new or pre-existing entity to repair over-merges. Schema-agnostic predicate; observation content is never modified. Idempotent via (user_id, idempotency_key).",
+        "Inverse of merge_entities (R5). Re-point a predicate-selected subset of an entity's observations onto a new or pre-existing entity to repair over-merges. Schema-agnostic predicate; observation content is never modified. Idempotent via (user_id, idempotency_key)."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("split_entity"),
     },
@@ -477,7 +467,7 @@ export function buildToolDefinitions(
       name: "list_potential_duplicates",
       description: desc(
         "list_potential_duplicates",
-        "List candidate duplicate entity pairs for an entity_type. Read-only; never auto-merges. Hand off confirmed pairs to merge_entities.",
+        "List candidate duplicate entity pairs for an entity_type. Read-only; never auto-merges. Hand off confirmed pairs to merge_entities."
       ),
       inputSchema: {
         type: "object",
@@ -490,7 +480,8 @@ export function buildToolDefinitions(
             type: "number",
             minimum: 0,
             maximum: 1,
-            description: "Similarity threshold in (0, 1]. Defaults to the schema's duplicate_detection_threshold or 0.85.",
+            description:
+              "Similarity threshold in (0, 1]. Defaults to the schema's duplicate_detection_threshold or 0.85.",
           },
           limit: {
             type: "integer",
@@ -510,7 +501,7 @@ export function buildToolDefinitions(
       name: "delete_entity",
       description: desc(
         "delete_entity",
-        "Delete an entity. Creates a deletion observation so the entity is excluded from snapshots and queries. Immutable and reversible for audit; use for user-initiated or GDPR-style removal from active use.",
+        "Delete an entity. Creates a deletion observation so the entity is excluded from snapshots and queries. Immutable and reversible for audit; use for user-initiated or GDPR-style removal from active use."
       ),
       inputSchema: {
         type: "object",
@@ -539,7 +530,7 @@ export function buildToolDefinitions(
       name: "delete_relationship",
       description: desc(
         "delete_relationship",
-        "Delete a relationship. Creates a deletion observation so the relationship is excluded from snapshots and queries. Immutable and reversible for audit.",
+        "Delete a relationship. Creates a deletion observation so the relationship is excluded from snapshots and queries. Immutable and reversible for audit."
       ),
       inputSchema: {
         type: "object",
@@ -573,7 +564,7 @@ export function buildToolDefinitions(
       name: "restore_entity",
       description: desc(
         "restore_entity",
-        "Restore a deleted entity. Creates a restoration observation (priority 1001) that overrides the deletion. Entity becomes visible in snapshots and queries again. Immutable restoration for audit.",
+        "Restore a deleted entity. Creates a restoration observation (priority 1001) that overrides the deletion. Entity becomes visible in snapshots and queries again. Immutable restoration for audit."
       ),
       inputSchema: {
         type: "object",
@@ -602,7 +593,7 @@ export function buildToolDefinitions(
       name: "restore_relationship",
       description: desc(
         "restore_relationship",
-        "Restore a deleted relationship. Creates a restoration observation (priority 1001) that overrides the deletion. Relationship becomes visible in snapshots and queries again. Immutable restoration for audit.",
+        "Restore a deleted relationship. Creates a restoration observation (priority 1001) that overrides the deletion. Relationship becomes visible in snapshots and queries again. Immutable restoration for audit."
       ),
       inputSchema: {
         type: "object",
@@ -636,7 +627,7 @@ export function buildToolDefinitions(
       name: "get_entity_type_counts",
       description: desc(
         "get_entity_type_counts",
-        "Return canonical entity counts by entity_type for the authenticated user, sorted by count descending. Use this when you need row counts by type; do not infer counts from list_entity_types field_count.",
+        "Return canonical entity counts by entity_type for the authenticated user, sorted by count descending. Use this when you need row counts by type; do not infer counts from list_entity_types field_count."
       ),
       inputSchema: {
         type: "object",
@@ -653,7 +644,7 @@ export function buildToolDefinitions(
       name: "list_entity_types",
       description: desc(
         "list_entity_types",
-        "List all available entity types with their schema information. Optionally filter by keyword to find entity types relevant to your data. Uses hybrid search: keyword matching first (deterministic), then vector semantic search (semantic similarity). Use this action before storing structured data to determine the correct entity_type.",
+        "List all available entity types with their schema information. Optionally filter by keyword to find entity types relevant to your data. Uses hybrid search: keyword matching first (deterministic), then vector semantic search (semantic similarity). Use this action before storing structured data to determine the correct entity_type."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("list_entity_types"),
     },
@@ -661,7 +652,7 @@ export function buildToolDefinitions(
       name: "analyze_schema_candidates",
       description: desc(
         "analyze_schema_candidates",
-        "Analyze raw_fragments to identify fields that should be promoted to schema fields. Returns recommendations with confidence scores based on frequency and type consistency.",
+        "Analyze raw_fragments to identify fields that should be promoted to schema fields. Returns recommendations with confidence scores based on frequency and type consistency."
       ),
       inputSchema: {
         type: "object",
@@ -721,7 +712,7 @@ export function buildToolDefinitions(
       name: "update_schema_incremental",
       description: desc(
         "update_schema_incremental",
-        "Incrementally update a schema by adding or removing fields. Adding fields creates a minor version bump; removing fields creates a major version bump. Removed fields are excluded from future snapshots via schema-projection filtering, but all observation data is preserved and can be restored by re-adding the field. Optionally migrates existing raw_fragments to observations for historical data backfill.",
+        "Incrementally update a schema by adding or removing fields. Adding fields creates a minor version bump; removing fields creates a major version bump. Removed fields are excluded from future snapshots via schema-projection filtering, but all observation data is preserved and can be restored by re-adding the field. Optionally migrates existing raw_fragments to observations for historical data backfill."
       ),
       inputSchema: {
         type: "object",
@@ -789,7 +780,7 @@ export function buildToolDefinitions(
       name: "register_schema",
       description: desc(
         "register_schema",
-        "Register a new schema or schema version. Supports both global and user-specific schemas.",
+        "Register a new schema or schema version. Supports both global and user-specific schemas."
       ),
       inputSchema: {
         type: "object",
@@ -818,7 +809,7 @@ export function buildToolDefinitions(
       name: "create_interpretation",
       description: desc(
         "create_interpretation",
-        "Create an interpretation row for an existing source from agent-extracted flat entities. Observations produced by this tool are linked to both source_id and interpretation_id. Use **`store`** with an interpretation block when the source-derived extraction can be batched in one store call.",
+        "Create an interpretation row for an existing source from agent-extracted flat entities. Observations produced by this tool are linked to both source_id and interpretation_id. Use **`store`** with an interpretation block when the source-derived extraction can be batched in one store call."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("create_interpretation"),
     },
@@ -826,7 +817,7 @@ export function buildToolDefinitions(
       name: "list_interpretations",
       description: desc(
         "list_interpretations",
-        "List interpretation runs for the authenticated user, optionally filtered by source_id.",
+        "List interpretation runs for the authenticated user, optionally filtered by source_id."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("list_interpretations"),
     },
@@ -854,7 +845,7 @@ export function buildToolDefinitions(
       name: "health_check_snapshots",
       description: desc(
         "health_check_snapshots",
-        "Check for stale entity snapshots (snapshots with observation_count=0 but observations exist). Returns health status and count of stale snapshots.",
+        "Check for stale entity snapshots (snapshots with observation_count=0 but observations exist). Returns health status and count of stale snapshots."
       ),
       inputSchema: {
         type: "object",
@@ -872,7 +863,7 @@ export function buildToolDefinitions(
       name: "list_recent_changes",
       description: desc(
         "list_recent_changes",
-        "List the most recently changed records across core Neotoma tables (entities, sources, observations, interpretations, relationships, timeline_events) for the authenticated user. Returns items ordered by latest activity_at.",
+        "List the most recently changed records across core Neotoma tables (entities, sources, observations, interpretations, relationships, timeline_events) for the authenticated user. Returns items ordered by latest activity_at."
       ),
       inputSchema: {
         type: "object",
@@ -897,20 +888,26 @@ export function buildToolDefinitions(
       name: "submit_entity",
       description: desc(
         "submit_entity",
-        "Generic config-driven entity submission. Requires an active submission_config row for the target entity_type (operator-seeded; repo does not seed default submission_config rows). Creates the primary entity and, when configured, a linked conversation + initial message and optional guest_access_token. Does not run the GitHub-first issue mirror — use submit_issue for issues with GitHub discoverability.",
+        "Generic config-driven entity submission. Requires an active submission_config row for the target entity_type (operator-seeded; repo does not seed default submission_config rows). Creates the primary entity and, when configured, a linked conversation + initial message and optional guest_access_token. Does not run the GitHub-first issue mirror — use submit_issue for issues with GitHub discoverability."
       ),
       inputSchema: {
         type: "object",
         properties: {
-          entity_type: { type: "string", description: "Target entity type (must match an active submission_config target_entity_type)." },
+          entity_type: {
+            type: "string",
+            description:
+              "Target entity type (must match an active submission_config target_entity_type).",
+          },
           fields: {
             type: "object",
             additionalProperties: true,
-            description: "Payload merged into the primary entity row (schema-required fields must be present).",
+            description:
+              "Payload merged into the primary entity row (schema-required fields must be present).",
           },
           initial_message: {
             type: "string",
-            description: "When conversation threading is enabled, overrides the first message body (defaults to fields.body or fields.content when omitted).",
+            description:
+              "When conversation threading is enabled, overrides the first message body (defaults to fields.body or fields.content when omitted).",
           },
         },
         required: ["entity_type", "fields"],
@@ -920,7 +917,7 @@ export function buildToolDefinitions(
       name: "add_entity_message",
       description: desc(
         "add_entity_message",
-        "Append a conversation_message to the thread linked to a submitted entity (RESolves conversation via REFERS_TO from the root entity, or creates one).",
+        "Append a conversation_message to the thread linked to a submitted entity (RESolves conversation via REFERS_TO from the root entity, or creates one)."
       ),
       inputSchema: {
         type: "object",
@@ -935,7 +932,7 @@ export function buildToolDefinitions(
       name: "get_entity_submission_status",
       description: desc(
         "get_entity_submission_status",
-        "Return retrieve_entity_snapshot (JSON) for a submitted entity. Pass guest_access_token when using submit-time token read-back.",
+        "Return retrieve_entity_snapshot (JSON) for a submitted entity. Pass guest_access_token when using submit-time token read-back."
       ),
       inputSchema: {
         type: "object",
@@ -951,7 +948,7 @@ export function buildToolDefinitions(
       name: "list_entity_submissions",
       description: desc(
         "list_entity_submissions",
-        "List entities of a given type for the authenticated user (retrieve_entities wrapper).",
+        "List entities of a given type for the authenticated user (retrieve_entities wrapper)."
       ),
       inputSchema: {
         type: "object",
@@ -968,7 +965,7 @@ export function buildToolDefinitions(
       name: "sync_entity_submissions",
       description: desc(
         "sync_entity_submissions",
-        "Sync external mirrors for submissions. entity_type issue delegates to GitHub issue sync; other types return a no-op payload until additional providers exist.",
+        "Sync external mirrors for submissions. entity_type issue delegates to GitHub issue sync; other types return a no-op payload until additional providers exist."
       ),
       inputSchema: {
         type: "object",
@@ -990,7 +987,7 @@ export function buildToolDefinitions(
           "When a non-empty target URL is configured, the tool fails (MCP error) if that remote store is unreachable or rejects the request; a local row with sync_pending may still be written first. " +
           "When the operator accepts the issue, the response includes guest_access_token for token-scoped get_issue_status / add_issue_message read-back when the local snapshot does not already carry the token. " +
           "When `pushed_to_github` is false for a public issue, read `github_mirror_guidance` for recommended auth + manual GitHub create + entity update steps. " +
-          "Reporter environment is REQUIRED: callers MUST provide at least one of `reporter_git_sha` or `reporter_app_version` (the SHA you reproduced against and/or the CLI/app version). Submissions missing both are rejected with `error_code: ERR_REPORTER_ENVIRONMENT_REQUIRED`.",
+          "Reporter environment is REQUIRED: callers MUST provide at least one of `reporter_git_sha` or `reporter_app_version` (the SHA you reproduced against and/or the CLI/app version). Submissions missing both are rejected with `error_code: ERR_REPORTER_ENVIRONMENT_REQUIRED`."
       ),
       inputSchema: {
         type: "object",
@@ -1005,20 +1002,32 @@ export function buildToolDefinitions(
           visibility: {
             type: "string",
             enum: ["public", "private"],
-            description: "Use 'private' for PII-sensitive issues (Neotoma only, no GitHub mirror). Default: 'public'.",
+            description:
+              "Use 'private' for PII-sensitive issues (Neotoma only, no GitHub mirror). Default: 'public'.",
           },
           reporter_git_sha: {
             type: "string",
-            description: "Required (this OR reporter_app_version). Reporter git SHA (`git rev-parse HEAD`).",
+            description:
+              "Required (this OR reporter_app_version). Reporter git SHA (`git rev-parse HEAD`).",
           },
-          reporter_git_ref: { type: "string", description: "Optional reporter git ref / branch name." },
-          reporter_channel: { type: "string", description: "Optional reporter channel (e.g. ci, local)." },
+          reporter_git_ref: {
+            type: "string",
+            description: "Optional reporter git ref / branch name.",
+          },
+          reporter_channel: {
+            type: "string",
+            description: "Optional reporter channel (e.g. ci, local).",
+          },
           reporter_app_version: {
             type: "string",
-            description: "Required (this OR reporter_git_sha). Reporter app / CLI version (semver).",
+            description:
+              "Required (this OR reporter_git_sha). Reporter app / CLI version (semver).",
           },
           reporter_ci_run_id: { type: "string", description: "Optional CI or workflow run id." },
-          reporter_patch_source_id: { type: "string", description: "Optional source id for reporter patch artifact." },
+          reporter_patch_source_id: {
+            type: "string",
+            description: "Optional source id for reporter patch artifact.",
+          },
         },
         required: ["title", "body"],
         // Keep the top-level schema to a plain object for Codex/OpenAI
@@ -1035,7 +1044,7 @@ export function buildToolDefinitions(
           "If the issue snapshot already stores guest_access_token you may omit it here; the server reads it automatically. " +
           "If add_issue_message returns AUTH_REQUIRED, it means neither path is satisfied: check that guest_access_token from submit_issue was preserved on the local entity, or ask the operator to configure an agent_grant via Inspector → Agents → Grants. " +
           "If the remote Neotoma append fails after local and/or GitHub side effects are recorded, the response includes `remote_submission_error` instead of throwing so callers do not create duplicate fallback comments. " +
-          "On public issue threads, pass at least one of `reporter_git_sha` / `reporter_app_version` so each message records the environment it was authored against. Missing both emits a server-side warning; the message still persists.",
+          "On public issue threads, pass at least one of `reporter_git_sha` / `reporter_app_version` so each message records the environment it was authored against. Missing both emits a server-side warning; the message still persists."
       ),
       inputSchema: {
         type: "object",
@@ -1048,7 +1057,8 @@ export function buildToolDefinitions(
           issue_number: {
             type: "integer",
             minimum: 1,
-            description: "GitHub issue number in the configured repo; use entity_id for private/local issues.",
+            description:
+              "GitHub issue number in the configured repo; use entity_id for private/local issues.",
           },
           body: { type: "string", description: "Message body in markdown." },
           guest_access_token: {
@@ -1061,8 +1071,14 @@ export function buildToolDefinitions(
             description:
               "Reporter git SHA (`git rev-parse HEAD`) the message author is testing against. Soft requirement on public issue threads.",
           },
-          reporter_git_ref: { type: "string", description: "Optional reporter git ref / branch name." },
-          reporter_channel: { type: "string", description: "Optional reporter channel (e.g. ci, local)." },
+          reporter_git_ref: {
+            type: "string",
+            description: "Optional reporter git ref / branch name.",
+          },
+          reporter_channel: {
+            type: "string",
+            description: "Optional reporter channel (e.g. ci, local).",
+          },
           reporter_app_version: {
             type: "string",
             description:
@@ -1082,7 +1098,7 @@ export function buildToolDefinitions(
         "Get the current status of an issue including its conversation messages. Pass Neotoma `issue` entity_id (from submit_issue or Inspector). " +
           "When the local row mirrors an operator issue (remote_entity_id + issues.target_url), fetches the latest status and thread from that target instance first. " +
           "Pass guest_access_token when the mirror requires a guest token and it is not stored on the local issue snapshot. " +
-          "When the issue has a GitHub mirror, implicitly syncs from GitHub if local data is stale (>5min). Pass skip_sync=true to skip only the GitHub refresh.",
+          "When the issue has a GitHub mirror, implicitly syncs from GitHub if local data is stale (>5min). Pass skip_sync=true to skip only the GitHub refresh."
       ),
       inputSchema: {
         type: "object",
@@ -1095,7 +1111,8 @@ export function buildToolDefinitions(
           issue_number: {
             type: "integer",
             minimum: 1,
-            description: "GitHub issue number in the configured repo; use entity_id for private/local issues.",
+            description:
+              "GitHub issue number in the configured repo; use entity_id for private/local issues.",
           },
           skip_sync: {
             type: "boolean",
@@ -1121,7 +1138,7 @@ export function buildToolDefinitions(
         "sync_issues",
         "Full sync of issues from the configured GitHub repo into local Neotoma. " +
           "Pulls all issues and their messages, creating/updating local entities. " +
-          "Supports filtering by state, labels, and since date.",
+          "Supports filtering by state, labels, and since date."
       ),
       inputSchema: {
         type: "object",
@@ -1147,7 +1164,7 @@ export function buildToolDefinitions(
       name: "subscribe",
       description: desc(
         "subscribe",
-        "Create a substrate event subscription (webhook or SSE). Requires at least one of entity_types, entity_ids, or event_types. Webhook delivery requires webhook_url (HTTPS in production).",
+        "Create a substrate event subscription (webhook or SSE). Requires at least one of entity_types, entity_ids, or event_types. Webhook delivery requires webhook_url (HTTPS in production)."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("subscribe"),
     },
@@ -1155,7 +1172,7 @@ export function buildToolDefinitions(
       name: "unsubscribe",
       description: desc(
         "unsubscribe",
-        "Deactivate a subscription by subscription_id (soft delete via correction).",
+        "Deactivate a subscription by subscription_id (soft delete via correction)."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("unsubscribe"),
     },
@@ -1163,7 +1180,7 @@ export function buildToolDefinitions(
       name: "list_subscriptions",
       description: desc(
         "list_subscriptions",
-        "List active substrate event subscriptions for the current user (webhook secrets omitted).",
+        "List active substrate event subscriptions for the current user (webhook secrets omitted)."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("list_subscriptions"),
     },
@@ -1171,7 +1188,7 @@ export function buildToolDefinitions(
       name: "get_subscription_status",
       description: desc(
         "get_subscription_status",
-        "Get current snapshot for one subscription by subscription_id (webhook secret omitted).",
+        "Get current snapshot for one subscription by subscription_id (webhook secret omitted)."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("get_subscription_status"),
     },
@@ -1179,7 +1196,7 @@ export function buildToolDefinitions(
       name: "add_peer",
       description: desc(
         "add_peer",
-        "Register a Neotoma peer for cross-instance sync (Phase 5). Stores a peer_config entity; returns shared_secret when auth_method is shared_secret and none was supplied.",
+        "Register a Neotoma peer for cross-instance sync (Phase 5). Stores a peer_config entity; returns shared_secret when auth_method is shared_secret and none was supplied."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("add_peer"),
     },
@@ -1187,7 +1204,7 @@ export function buildToolDefinitions(
       name: "remove_peer",
       description: desc(
         "remove_peer",
-        "Deactivate a peer_config row by peer_id (soft delete via correction).",
+        "Deactivate a peer_config row by peer_id (soft delete via correction)."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("remove_peer"),
     },
@@ -1195,7 +1212,7 @@ export function buildToolDefinitions(
       name: "list_peers",
       description: desc(
         "list_peers",
-        "List configured Neotoma peers for the current user (shared_secret redacted).",
+        "List configured Neotoma peers for the current user (shared_secret redacted)."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("list_peers"),
     },
@@ -1203,7 +1220,7 @@ export function buildToolDefinitions(
       name: "get_peer_status",
       description: desc(
         "get_peer_status",
-        "Return one peer_config snapshot by peer_id (secret redacted).",
+        "Return one peer_config snapshot by peer_id (secret redacted)."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("get_peer_status"),
     },
@@ -1211,7 +1228,7 @@ export function buildToolDefinitions(
       name: "sync_peer",
       description: desc(
         "sync_peer",
-        "Run bounded peer sync: push eligible local observations to the peer and pull eligible remote snapshots for bilateral catch-up.",
+        "Run bounded peer sync: push eligible local observations to the peer and pull eligible remote snapshots for bilateral catch-up."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("sync_peer"),
     },
@@ -1219,7 +1236,7 @@ export function buildToolDefinitions(
       name: "resolve_sync_conflict",
       description: desc(
         "resolve_sync_conflict",
-        "Resolve a sync conflict using prefer_local, prefer_remote, last_write_wins, source_priority, or manual. prefer_remote requires sender_peer_url.",
+        "Resolve a sync conflict using prefer_local, prefer_remote, last_write_wins, source_priority, or manual. prefer_remote requires sender_peer_url."
       ),
       inputSchema: getOpenApiInputSchemaOrThrow("resolve_sync_conflict"),
     },
@@ -1227,7 +1244,7 @@ export function buildToolDefinitions(
       name: "npm_check_update",
       description: desc(
         "npm_check_update",
-        "Check if a newer npm version is available. Returns updateAvailable, message, and suggestedCommand. Call at session start to encourage user to upgrade.",
+        "Check if a newer npm version is available. Returns updateAvailable, message, and suggestedCommand. Call at session start to encourage user to upgrade."
       ),
       inputSchema: {
         type: "object",

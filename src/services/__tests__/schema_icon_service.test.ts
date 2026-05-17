@@ -3,10 +3,10 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { 
-  generateIconForEntityType, 
+import {
+  generateIconForEntityType,
   isIconGenerationAvailable,
-  clearIconCache 
+  clearIconCache,
 } from "../schema_icon_service.js";
 
 // Mock OpenAI
@@ -66,7 +66,7 @@ describe("Schema Icon Service", () => {
         description: "Description A",
         category: "finance",
       });
-      
+
       const result2 = await generateIconForEntityType("custom_type", {
         description: "Description B",
         category: "finance",
@@ -120,7 +120,7 @@ describe("Schema Icon Service", () => {
   describe("pattern matching", () => {
     it("should match financial entity types", async () => {
       const types = ["invoice", "receipt", "transaction", "payment"];
-      
+
       for (const type of types) {
         const result = await generateIconForEntityType(type);
         expect(result.icon_type).toBe("lucide");
@@ -130,7 +130,7 @@ describe("Schema Icon Service", () => {
 
     it("should match people entity types", async () => {
       const types = ["person", "contact", "company"];
-      
+
       for (const type of types) {
         const result = await generateIconForEntityType(type);
         expect(result.icon_type).toBe("lucide");
@@ -140,7 +140,7 @@ describe("Schema Icon Service", () => {
 
     it("should match productivity entity types", async () => {
       const types = ["task", "project", "event"];
-      
+
       for (const type of types) {
         const result = await generateIconForEntityType(type);
         expect(result.icon_type).toBe("lucide");

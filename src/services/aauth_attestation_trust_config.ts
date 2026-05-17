@@ -42,7 +42,7 @@ let cachedConfig: AttestationTrustConfig | null = null;
  * caches the result; pass `{ refresh: true }` from tests to rebuild.
  */
 export function loadAttestationTrustConfig(
-  options: { refresh?: boolean } = {},
+  options: { refresh?: boolean } = {}
 ): AttestationTrustConfig {
   if (cachedConfig && !options.refresh) return cachedConfig;
   const config = buildConfig();
@@ -68,14 +68,14 @@ function buildConfig(): AttestationTrustConfig {
     const certs = parsePemCertificates(pem);
     if (certs.length === 0) {
       diagnostics.push(
-        `attestation_trust: bundled apple root parsed but produced no certificates (${bundledPath})`,
+        `attestation_trust: bundled apple root parsed but produced no certificates (${bundledPath})`
       );
     } else {
       roots.push(...certs);
     }
   } catch (err) {
     diagnostics.push(
-      `attestation_trust: failed to load bundled apple root from ${bundledPath}: ${describe(err)}`,
+      `attestation_trust: failed to load bundled apple root from ${bundledPath}: ${describe(err)}`
     );
   }
 
@@ -90,7 +90,7 @@ function buildConfig(): AttestationTrustConfig {
       }
     } catch (err) {
       diagnostics.push(
-        `attestation_trust: failed to load bundled TPM roots from ${tpmRootsPath}: ${describe(err)}`,
+        `attestation_trust: failed to load bundled TPM roots from ${tpmRootsPath}: ${describe(err)}`
       );
     }
   }
@@ -101,7 +101,7 @@ function buildConfig(): AttestationTrustConfig {
       const operatorCerts = loadOperatorCAs(operatorPath.trim());
       if (operatorCerts.length === 0) {
         diagnostics.push(
-          `attestation_trust: NEOTOMA_AAUTH_ATTESTATION_CA_PATH=${operatorPath} produced no certificates`,
+          `attestation_trust: NEOTOMA_AAUTH_ATTESTATION_CA_PATH=${operatorPath} produced no certificates`
         );
       }
       for (const cert of operatorCerts) {
@@ -111,7 +111,7 @@ function buildConfig(): AttestationTrustConfig {
       }
     } catch (err) {
       diagnostics.push(
-        `attestation_trust: failed to load operator CAs from ${operatorPath}: ${describe(err)}`,
+        `attestation_trust: failed to load operator CAs from ${operatorPath}: ${describe(err)}`
       );
     }
   }
@@ -123,17 +123,15 @@ function buildConfig(): AttestationTrustConfig {
       const raw = readFileSync(aaguidPath.trim(), "utf8");
       const parsed = JSON.parse(raw) as unknown;
       if (Array.isArray(parsed) && parsed.every((v) => typeof v === "string")) {
-        webauthnAaguidAllowlist = (parsed as string[]).map((v) =>
-          v.trim().toLowerCase(),
-        );
+        webauthnAaguidAllowlist = (parsed as string[]).map((v) => v.trim().toLowerCase());
       } else {
         diagnostics.push(
-          `attestation_trust: NEOTOMA_AAUTH_AAGUID_TRUST_LIST_PATH=${aaguidPath} did not contain a JSON array of strings`,
+          `attestation_trust: NEOTOMA_AAUTH_AAGUID_TRUST_LIST_PATH=${aaguidPath} did not contain a JSON array of strings`
         );
       }
     } catch (err) {
       diagnostics.push(
-        `attestation_trust: failed to load AAGUID allowlist from ${aaguidPath}: ${describe(err)}`,
+        `attestation_trust: failed to load AAGUID allowlist from ${aaguidPath}: ${describe(err)}`
       );
     }
   }
@@ -247,9 +245,7 @@ function loadOperatorCAs(rawPath: string): X509Certificate[] {
 
 function parsePemCertificates(pem: string): X509Certificate[] {
   const certs: X509Certificate[] = [];
-  const blocks = pem.match(
-    /-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/g,
-  );
+  const blocks = pem.match(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/g);
   if (!blocks) return certs;
   for (const block of blocks) {
     try {
@@ -261,10 +257,7 @@ function parsePemCertificates(pem: string): X509Certificate[] {
   return certs;
 }
 
-function alreadyTrusted(
-  pool: X509Certificate[],
-  candidate: X509Certificate,
-): boolean {
+function alreadyTrusted(pool: X509Certificate[], candidate: X509Certificate): boolean {
   return pool.some((cert) => cert.fingerprint256 === candidate.fingerprint256);
 }
 

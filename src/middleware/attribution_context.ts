@@ -32,9 +32,7 @@ import {
   getAgentIdentityFromRequest,
   normaliseClientName,
 } from "../crypto/agent_identity.js";
-import {
-  getAttributionDecisionFromRequest,
-} from "./aauth_verify.js";
+import { getAttributionDecisionFromRequest } from "./aauth_verify.js";
 import { runWithRequestContext } from "../services/request_context.js";
 
 function headerString(req: Request, name: string): string | null {
@@ -85,7 +83,7 @@ function buildExternalActorFromTokenClaims(req: Request): ExternalActor | null {
   if (!aauth?.verified || !aauth.externalActorClaims?.length) return null;
 
   const githubClaim = aauth.externalActorClaims.find(
-    (c) => c.provider === "github" && typeof c.login === "string" && typeof c.id === "number",
+    (c) => c.provider === "github" && typeof c.login === "string" && typeof c.id === "number"
   );
   if (!githubClaim) return null;
 
@@ -101,8 +99,7 @@ function buildExternalActorFromTokenClaims(req: Request): ExternalActor | null {
 
 export function attributionContext(): RequestHandler {
   return (req: Request, res: Response, next: NextFunction): void => {
-    const { clientName, clientVersion, connectionId } =
-      extractClientInfoFromHeaders(req);
+    const { clientName, clientVersion, connectionId } = extractClientInfoFromHeaders(req);
     const identity = getAgentIdentityFromRequest(req, {
       clientName: normaliseClientName(clientName),
       clientVersion,
@@ -118,7 +115,7 @@ export function attributionContext(): RequestHandler {
       },
       () => {
         next();
-      },
+      }
     );
   };
 }

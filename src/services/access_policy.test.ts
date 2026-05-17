@@ -5,10 +5,13 @@ const schemaRegistryMockState = vi.hoisted(() => ({
     entity_type: string;
     metadata?: { guest_access_policy?: string };
   }>,
-  globalSchemas: new Map<string, {
-    entity_type: string;
-    metadata?: { guest_access_policy?: string };
-  }>(),
+  globalSchemas: new Map<
+    string,
+    {
+      entity_type: string;
+      metadata?: { guest_access_policy?: string };
+    }
+  >(),
 }));
 
 vi.mock("../services/schema_registry.js", () => ({
@@ -263,22 +266,20 @@ describe("Access Policy Service", () => {
     const guestId: GuestIdentity = { thumbprint: "test-thumbprint" };
 
     it("throws AccessPolicyError for closed types", async () => {
-      await expect(
-        assertGuestWriteAllowed(["closed_type"], guestId),
-      ).rejects.toBeInstanceOf(AccessPolicyError);
+      await expect(assertGuestWriteAllowed(["closed_type"], guestId)).rejects.toBeInstanceOf(
+        AccessPolicyError
+      );
     });
 
     it("does not throw for open types", async () => {
       process.env.NEOTOMA_ACCESS_POLICY_OPEN_TYPE = "open";
-      await expect(
-        assertGuestWriteAllowed(["open_type"], guestId),
-      ).resolves.toBeUndefined();
+      await expect(assertGuestWriteAllowed(["open_type"], guestId)).resolves.toBeUndefined();
     });
 
     it("throws if ANY type in batch is closed", async () => {
       process.env.NEOTOMA_ACCESS_POLICY_ISSUE = "submitter_scoped";
       await expect(
-        assertGuestWriteAllowed(["issue", "secret_type"], guestId),
+        assertGuestWriteAllowed(["issue", "secret_type"], guestId)
       ).rejects.toBeInstanceOf(AccessPolicyError);
     });
   });
@@ -317,7 +318,11 @@ describe("Access Policy Service", () => {
 
   describe("ISSUE_SUBMISSION_ENTITY_TYPES", () => {
     it("contains the expected types", () => {
-      expect(ISSUE_SUBMISSION_ENTITY_TYPES).toEqual(["issue", "conversation", "conversation_message"]);
+      expect(ISSUE_SUBMISSION_ENTITY_TYPES).toEqual([
+        "issue",
+        "conversation",
+        "conversation_message",
+      ]);
     });
   });
 

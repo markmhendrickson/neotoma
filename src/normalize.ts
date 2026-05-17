@@ -6,19 +6,13 @@ export function levenshtein(a: string, b: string): number {
   const t = b.toLowerCase();
   const m = s.length;
   const n = t.length;
-  const d: number[][] = Array.from({ length: m + 1 }, () =>
-    Array(n + 1).fill(0),
-  );
+  const d: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
   for (let i = 0; i <= m; i++) d[i][0] = i;
   for (let j = 0; j <= n; j++) d[0][j] = j;
   for (let i = 1; i <= m; i++) {
     for (let j = 1; j <= n; j++) {
       const cost = s[i - 1] === t[j - 1] ? 0 : 1;
-      d[i][j] = Math.min(
-        d[i - 1][j] + 1,
-        d[i][j - 1] + 1,
-        d[i - 1][j - 1] + cost,
-      );
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
     }
   }
   return d[m][n];
@@ -40,7 +34,7 @@ export function detectDateFields(row: Record<string, unknown>): string[] {
 export function normalizeRow(
   raw: Record<string, unknown>,
   existingTypes: string[],
-  explicitType?: string,
+  explicitType?: string
 ): {
   type: string;
   properties: Record<string, unknown>;
@@ -51,12 +45,7 @@ export function normalizeRow(
   const props: Record<string, unknown> = { ...raw };
 
   // Extract type from explicit or common columns
-  let type = (
-    explicitType ||
-    (props.type as string) ||
-    (props.category as string) ||
-    ""
-  )
+  let type = (explicitType || (props.type as string) || (props.category as string) || "")
     .toString()
     .trim();
   delete props.type;
@@ -69,11 +58,7 @@ export function normalizeRow(
   const dateFields = detectDateFields(raw);
   for (const key of dateFields) {
     const v = raw[key];
-    if (
-      v !== undefined &&
-      v !== null &&
-      (typeof v === "string" || typeof v === "number")
-    ) {
+    if (v !== undefined && v !== null && (typeof v === "string" || typeof v === "number")) {
       const d = new Date(v as any);
       if (!isNaN(d.getTime())) {
         props[key] = d.toISOString();
@@ -91,9 +76,7 @@ export function normalizeRow(
   };
 }
 
-export function inferTypeFromHeaders(
-  row: Record<string, unknown>,
-): string | undefined {
+export function inferTypeFromHeaders(row: Record<string, unknown>): string | undefined {
   const keys = Object.keys(row).map((k) => k.toLowerCase());
   const values = Object.values(row).map((v) => String(v).toLowerCase());
 
@@ -103,7 +86,7 @@ export function inferTypeFromHeaders(
       (k) =>
         k.includes("transaction") ||
         k.includes("merchant") ||
-        (k.includes("amount") && keys.some((k2) => k2.includes("date"))),
+        (k.includes("amount") && keys.some((k2) => k2.includes("date")))
     )
   ) {
     return "transaction";
@@ -111,9 +94,7 @@ export function inferTypeFromHeaders(
   if (
     keys.some(
       (k) =>
-        k.includes("invoice") ||
-        k.includes("bill") ||
-        (k.includes("amount") && k.includes("due")),
+        k.includes("invoice") || k.includes("bill") || (k.includes("amount") && k.includes("due"))
     )
   ) {
     return "invoice";
@@ -121,8 +102,7 @@ export function inferTypeFromHeaders(
   if (
     keys.some(
       (k) =>
-        k.includes("receipt") ||
-        (k.includes("merchant") && keys.some((k2) => k2.includes("total"))),
+        k.includes("receipt") || (k.includes("merchant") && keys.some((k2) => k2.includes("total")))
     )
   ) {
     return "receipt";
@@ -131,17 +111,13 @@ export function inferTypeFromHeaders(
     keys.some(
       (k) =>
         k.includes("statement") ||
-        (k.includes("balance") && keys.some((k2) => k2.includes("period"))),
+        (k.includes("balance") && keys.some((k2) => k2.includes("period")))
     )
   ) {
     return "statement";
   }
   if (
-    keys.some(
-      (k) =>
-        k.includes("account") &&
-        (k.includes("balance") || k.includes("institution")),
-    )
+    keys.some((k) => k.includes("account") && (k.includes("balance") || k.includes("institution")))
   ) {
     return "account";
   }
@@ -150,17 +126,12 @@ export function inferTypeFromHeaders(
       (k) =>
         k.includes("subscription") ||
         k.includes("recurring") ||
-        (k.includes("renewal") && k.includes("date")),
+        (k.includes("renewal") && k.includes("date"))
     )
   ) {
     return "subscription";
   }
-  if (
-    keys.some(
-      (k) =>
-        k.includes("budget") || (k.includes("spending") && k.includes("plan")),
-    )
-  ) {
+  if (keys.some((k) => k.includes("budget") || (k.includes("spending") && k.includes("plan")))) {
     return "budget";
   }
 
@@ -173,7 +144,7 @@ export function inferTypeFromHeaders(
         k.includes("repetitions") ||
         k.includes("reps") ||
         k.includes("sets") ||
-        k.includes("rpe"),
+        k.includes("rpe")
     )
   ) {
     return "exercise";
@@ -184,17 +155,12 @@ export function inferTypeFromHeaders(
         k.includes("meal") ||
         k.includes("food") ||
         k.includes("calories") ||
-        k.includes("nutrition"),
+        k.includes("nutrition")
     )
   ) {
     return "meal";
   }
-  if (
-    keys.some(
-      (k) =>
-        k.includes("sleep") || (k.includes("bedtime") && k.includes("wake")),
-    )
-  ) {
+  if (keys.some((k) => k.includes("sleep") || (k.includes("bedtime") && k.includes("wake")))) {
     return "sleep_session";
   }
   if (
@@ -202,7 +168,7 @@ export function inferTypeFromHeaders(
       (k) =>
         k.includes("measurement") ||
         k.includes("biometric") ||
-        (k.includes("weight") && k.includes("height")),
+        (k.includes("weight") && k.includes("height"))
     )
   ) {
     return "measurement";
@@ -214,7 +180,7 @@ export function inferTypeFromHeaders(
       (k) =>
         k.includes("task") ||
         k.includes("todo") ||
-        (k.includes("status") && keys.some((k2) => k2.includes("due"))),
+        (k.includes("status") && keys.some((k2) => k2.includes("due")))
     )
   ) {
     return "task";
@@ -224,16 +190,12 @@ export function inferTypeFromHeaders(
       (k) =>
         k.includes("project") ||
         k.includes("initiative") ||
-        (k.includes("owner") && keys.some((k2) => k2.includes("start"))),
+        (k.includes("owner") && keys.some((k2) => k2.includes("start")))
     )
   ) {
     return "project";
   }
-  if (
-    keys.some(
-      (k) => k.includes("goal") || k.includes("objective") || k.includes("okr"),
-    )
-  ) {
+  if (keys.some((k) => k.includes("goal") || k.includes("objective") || k.includes("okr"))) {
     return "goal";
   }
   if (
@@ -242,9 +204,7 @@ export function inferTypeFromHeaders(
         k.includes("event") ||
         k.includes("meeting") ||
         k.includes("appointment") ||
-        (k.includes("start") &&
-          k.includes("time") &&
-          keys.some((k2) => k2.includes("location"))),
+        (k.includes("start") && k.includes("time") && keys.some((k2) => k2.includes("location")))
     )
   ) {
     return "event";
@@ -255,7 +215,7 @@ export function inferTypeFromHeaders(
         k.includes("note") ||
         k.includes("memo") ||
         k.includes("journal") ||
-        (k.includes("content") && keys.some((k2) => k2.includes("title"))),
+        (k.includes("content") && keys.some((k2) => k2.includes("title")))
     )
   ) {
     return "note";
@@ -267,7 +227,7 @@ export function inferTypeFromHeaders(
       (k) =>
         k.includes("contact") ||
         k.includes("person") ||
-        (k.includes("email") && keys.some((k2) => k2.includes("phone"))),
+        (k.includes("email") && keys.some((k2) => k2.includes("phone")))
     )
   ) {
     return "contact";
@@ -278,7 +238,7 @@ export function inferTypeFromHeaders(
         k.includes("message") ||
         k.includes("email") ||
         k.includes("dm") ||
-        (k.includes("sender") && keys.some((k2) => k2.includes("recipient"))),
+        (k.includes("sender") && keys.some((k2) => k2.includes("recipient")))
     )
   ) {
     return "message";
@@ -288,35 +248,26 @@ export function inferTypeFromHeaders(
       (k) =>
         k.includes("document") ||
         k.includes("pdf") ||
-        (k.includes("title") && keys.some((k2) => k2.includes("link"))),
+        (k.includes("title") && keys.some((k2) => k2.includes("link")))
     )
   ) {
     return "document";
   }
 
   // Fallback: check for common patterns in values
-  if (values.some((v) => v.includes("exercise") || v.includes("workout")))
-    return "exercise";
-  if (values.some((v) => v.includes("transaction") || v.includes("purchase")))
-    return "transaction";
-  if (values.some((v) => v.includes("task") || v.includes("todo")))
-    return "task";
-  if (values.some((v) => v.includes("note") || v.includes("memo")))
-    return "note";
+  if (values.some((v) => v.includes("exercise") || v.includes("workout"))) return "exercise";
+  if (values.some((v) => v.includes("transaction") || v.includes("purchase"))) return "transaction";
+  if (values.some((v) => v.includes("task") || v.includes("todo"))) return "task";
+  if (values.some((v) => v.includes("note") || v.includes("memo"))) return "note";
 
   return undefined;
 }
 
-export function standardizeType(
-  input: string,
-  existingTypes: string[],
-): string {
+export function standardizeType(input: string, existingTypes: string[]): string {
   const resolution = normalizeRecordType(input);
   const candidate = resolution.type || "unknown";
 
-  const exact = existingTypes.find(
-    (t) => t.toLowerCase() === candidate.toLowerCase(),
-  );
+  const exact = existingTypes.find((t) => t.toLowerCase() === candidate.toLowerCase());
   if (exact) return exact;
 
   // If normalized type is not in allowed list, prefer an allowed type that has it as alias (e.g. workout -> exercise).
@@ -327,9 +278,7 @@ export function standardizeType(
     const allowedAsAlias = existingTypes.find((t) => {
       const schema = ENTITY_SCHEMAS[t as keyof typeof ENTITY_SCHEMAS];
       const aliases = schema?.metadata?.aliases ?? [];
-      return aliases.some(
-        (a) => String(a).toLowerCase() === candidate.toLowerCase(),
-      );
+      return aliases.some((a) => String(a).toLowerCase() === candidate.toLowerCase());
     });
     if (allowedAsAlias) return allowedAsAlias;
   }

@@ -12,10 +12,18 @@
  * schema `turn_key` (see `github_thread_keys.ts` — not `github_comment_id` alone).
  */
 
-import type { Operations, StoreEntityInput, StoreInput, StoreResult } from "../../core/operations.js";
+import type {
+  Operations,
+  StoreEntityInput,
+  StoreInput,
+  StoreResult,
+} from "../../core/operations.js";
 import { runWithExternalActor } from "../request_context.js";
 import { loadIssuesConfig } from "./config.js";
-import { buildExternalActorFromGithubComment, buildExternalActorFromGithubIssue } from "./external_actor_builder.js";
+import {
+  buildExternalActorFromGithubComment,
+  buildExternalActorFromGithubIssue,
+} from "./external_actor_builder.js";
 import * as github from "./github_client.js";
 import { githubIssueThreadConversationId } from "./github_issue_thread.js";
 import { githubIssueBodyTurnKey, githubIssueCommentTurnKey } from "./github_thread_keys.js";
@@ -34,7 +42,7 @@ export interface SyncResult {
  */
 export async function syncIssuesFromGitHub(
   ops: Operations,
-  params?: IssueSyncParams,
+  params?: IssueSyncParams
 ): Promise<SyncResult> {
   const config = await loadIssuesConfig();
   const result: SyncResult = { issues_synced: 0, messages_synced: 0, errors: [] };
@@ -76,7 +84,7 @@ export async function syncIssuesFromGitHub(
 async function syncSingleIssue(
   ops: Operations,
   issue: GitHubIssue,
-  repo: string,
+  repo: string
 ): Promise<StoreResult> {
   const now = new Date().toISOString();
   const threadConversationId = githubIssueThreadConversationId(repo, issue.number);
@@ -130,7 +138,7 @@ async function syncSingleIssue(
       entities,
       relationships,
       idempotency_key: `issue-sync-${repo}-${issue.number}`,
-    }),
+    })
   ) as Promise<StoreResult>;
 }
 
@@ -142,7 +150,7 @@ async function syncSingleComment(
   ops: Operations,
   comment: GitHubComment,
   issue: GitHubIssue,
-  repo: string,
+  repo: string
 ): Promise<StoreResult> {
   const now = new Date().toISOString();
   const threadConversationId = githubIssueThreadConversationId(repo, issue.number);
@@ -161,7 +169,9 @@ async function syncSingleComment(
       repo,
       visibility: "public",
       author: issue.user?.login ?? "unknown",
-      github_actor: issueActor ? { login: issueActor.login, id: issueActor.id, type: issueActor.type } : undefined,
+      github_actor: issueActor
+        ? { login: issueActor.login, id: issueActor.id, type: issueActor.type }
+        : undefined,
       created_at: issue.created_at,
       closed_at: issue.closed_at,
       last_synced_at: now,
@@ -180,7 +190,9 @@ async function syncSingleComment(
       sender_kind: "user",
       content: comment.body,
       author: comment.user?.login ?? "unknown",
-      github_actor: commentActor ? { login: commentActor.login, id: commentActor.id, type: commentActor.type } : undefined,
+      github_actor: commentActor
+        ? { login: commentActor.login, id: commentActor.id, type: commentActor.type }
+        : undefined,
       github_comment_id: String(comment.id),
       turn_key: githubIssueCommentTurnKey(repo, issue.number, String(comment.id)),
       created_at: comment.created_at,
@@ -197,7 +209,7 @@ async function syncSingleComment(
       entities,
       relationships,
       idempotency_key: `issue-comment-sync-${repo}-${issue.number}-${comment.id}`,
-    }),
+    })
   ) as Promise<StoreResult>;
 }
 
@@ -217,7 +229,7 @@ export async function isSyncStale(lastSyncedAt: string | null): Promise<boolean>
 export async function syncIssueIfStale(
   ops: Operations,
   issueNumber: number,
-  lastSyncedAt: string | null,
+  lastSyncedAt: string | null
 ): Promise<boolean> {
   const stale = await isSyncStale(lastSyncedAt);
   if (!stale) return false;

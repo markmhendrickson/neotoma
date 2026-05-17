@@ -16,11 +16,7 @@ export type SandboxReportReason =
   | "bug"
   | "other";
 
-export type SandboxReportStatus =
-  | "received"
-  | "reviewing"
-  | "resolved"
-  | "rejected";
+export type SandboxReportStatus = "received" | "reviewing" | "resolved" | "rejected";
 
 export interface SubmitSandboxReportArgs {
   reason: SandboxReportReason;
@@ -55,17 +51,14 @@ export interface SandboxReportStatusResponse {
 }
 
 export interface SandboxReportTransport {
-  submit(
-    args: SubmitSandboxReportArgs,
-    submitterIp: string,
-  ): Promise<SandboxReportSubmitResponse>;
+  submit(args: SubmitSandboxReportArgs, submitterIp: string): Promise<SandboxReportSubmitResponse>;
   status(accessToken: string): Promise<SandboxReportStatusResponse>;
 }
 
 export type SandboxReportTransportKind = "local" | "http";
 
 export function resolveSandboxReportTransportKind(
-  env: Record<string, string | undefined> = process.env,
+  env: Record<string, string | undefined> = process.env
 ): SandboxReportTransportKind {
   const explicit = (env.NEOTOMA_SANDBOX_REPORT_TRANSPORT ?? "").toLowerCase();
   if (explicit === "local" || explicit === "http") return explicit;

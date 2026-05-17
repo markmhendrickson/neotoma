@@ -3,11 +3,7 @@ import {
   scanAgentInstructions,
   type CliInstructionsScope,
 } from "./agent_instructions_scan.js";
-import {
-  offerInstall,
-  scanForMcpConfigs,
-  type McpTransportChoice,
-} from "./mcp_config_scan.js";
+import { offerInstall, scanForMcpConfigs, type McpTransportChoice } from "./mcp_config_scan.js";
 
 export type HarnessInstallScope = "project" | "user" | "both";
 export type HarnessMcpEnv = "dev" | "prod" | "both";

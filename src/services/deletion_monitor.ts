@@ -42,9 +42,7 @@ export async function checkDeletionDeadlines(
 
   for (const request of requests || []) {
     const deadline = new Date(request.deadline);
-    const daysRemaining = Math.floor(
-      (deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
-    );
+    const daysRemaining = Math.floor((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 
     // Check if approaching deadline (within threshold)
     if (daysRemaining >= 0 && daysRemaining <= alertThresholdDays) {
@@ -102,9 +100,7 @@ export async function processOverdueRequests(
       .single();
 
     if (!request) {
-      results.errors.push(
-        `Deletion request ${alert.deletion_request_id} not found`
-      );
+      results.errors.push(`Deletion request ${alert.deletion_request_id} not found`);
       continue;
     }
 
@@ -151,10 +147,7 @@ async function escalateDeletionRequest(
     .eq("id", deletionRequestId);
 
   if (error) {
-    console.error(
-      `Failed to update escalation for ${deletionRequestId}:`,
-      error.message
-    );
+    console.error(`Failed to update escalation for ${deletionRequestId}:`, error.message);
   }
 }
 
@@ -190,9 +183,7 @@ export async function checkRetentionExpirations(): Promise<{
   for (const request of requests || []) {
     const softDeletedAt = new Date(request.soft_deleted_at);
     const expirationDate = new Date(softDeletedAt);
-    expirationDate.setDate(
-      expirationDate.getDate() + (request.retention_period_days || 0)
-    );
+    expirationDate.setDate(expirationDate.getDate() + (request.retention_period_days || 0));
 
     if (now >= expirationDate) {
       // Retention period expired - trigger hard deletion
@@ -240,7 +231,8 @@ export async function generateMonitoringReport(): Promise<{
     .select("status")
     .in("status", ["pending", "in_progress", "completed"]);
 
-  const pending = statusCounts?.filter((s: { status: string }) => s.status === "pending").length || 0;
+  const pending =
+    statusCounts?.filter((s: { status: string }) => s.status === "pending").length || 0;
   const inProgress =
     statusCounts?.filter((s: { status: string }) => s.status === "in_progress").length || 0;
   const completed =
@@ -263,9 +255,7 @@ export async function generateMonitoringReport(): Promise<{
     retentionRequests?.filter((r: { soft_deleted_at: string; retention_period_days: number }) => {
       const softDeletedAt = new Date(r.soft_deleted_at);
       const expirationDate = new Date(softDeletedAt);
-      expirationDate.setDate(
-        expirationDate.getDate() + (r.retention_period_days || 0)
-      );
+      expirationDate.setDate(expirationDate.getDate() + (r.retention_period_days || 0));
       return now >= expirationDate;
     }).length || 0;
 
@@ -288,9 +278,7 @@ export async function generateMonitoringReport(): Promise<{
  * @param autoProcessOverdue - Automatically process overdue requests (default true for automated environments)
  * @returns Cron job results
  */
-export async function dailyCronJob(
-  autoProcessOverdue: boolean = true
-): Promise<{
+export async function dailyCronJob(autoProcessOverdue: boolean = true): Promise<{
   report: Awaited<ReturnType<typeof generateMonitoringReport>>;
   overdue_processing: Awaited<ReturnType<typeof processOverdueRequests>>;
   retention_processing: Awaited<ReturnType<typeof checkRetentionExpirations>>;

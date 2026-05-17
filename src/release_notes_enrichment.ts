@@ -19,7 +19,9 @@ export function npmPackageVersionUrl(packageName: string, version: string): stri
 }
 
 /** Parse owner/repo from npm repository field (string URL or {url}). */
-export function parseGithubRepoFromNpmMetadata(repository: unknown): { owner: string; repo: string } | null {
+export function parseGithubRepoFromNpmMetadata(
+  repository: unknown
+): { owner: string; repo: string } | null {
   let urlStr: string | null = null;
   if (typeof repository === "string") {
     urlStr = repository;
@@ -80,7 +82,7 @@ async function fetchJson(url: string, headers: Record<string, string>): Promise<
  */
 export async function fetchNpmVersionDocument(
   packageName: string,
-  version: string,
+  version: string
 ): Promise<Record<string, unknown> | null> {
   const url = `${NPM_REGISTRY_VERSION}/${encodeURIComponent(packageName)}/${encodeURIComponent(version)}`;
   const data = await fetchJson(url, { accept: "application/json" });
@@ -93,7 +95,10 @@ export async function fetchGithubReleaseBody(params: {
   version: string;
 }): Promise<{ body: string | null; html_url: string | null; error: string | null }> {
   const token = process.env.GITHUB_TOKEN?.trim();
-  const tagCandidates = [params.version.startsWith("v") ? params.version : `v${params.version}`, params.version];
+  const tagCandidates = [
+    params.version.startsWith("v") ? params.version : `v${params.version}`,
+    params.version,
+  ];
   const headers: Record<string, string> = {
     accept: "application/vnd.github+json",
     "User-Agent": "neotoma-npm-check-update",

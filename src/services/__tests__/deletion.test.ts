@@ -92,7 +92,7 @@ describe("Deletion Service", () => {
 
       expect(result1.success).toBe(true);
       expect(result1.observation_id).toBeDefined();
-      
+
       // Verify only one deletion observation exists
       const { data: observations } = await db
         .from("observations")
@@ -283,12 +283,12 @@ describe("Deletion Service", () => {
       const relationshipKey = `${relationshipType}:${sourceEntityId}:${targetEntityId}`;
 
       // Create regular relationship observation
-      const canonicalHash = createHash("sha256")
-        .update(JSON.stringify({}))
-        .digest("hex");
+      const canonicalHash = createHash("sha256").update(JSON.stringify({})).digest("hex");
 
       await db.from("relationship_observations").insert({
-        id: createHash("sha256").update(`${relationshipKey}:${new Date().toISOString()}`).digest("hex"),
+        id: createHash("sha256")
+          .update(`${relationshipKey}:${new Date().toISOString()}`)
+          .digest("hex"),
         relationship_key: relationshipKey,
         source_entity_id: sourceEntityId,
         target_entity_id: targetEntityId,

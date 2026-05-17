@@ -348,8 +348,7 @@ export async function fetchRemoteIssueThread(params: {
       message:
         `Remote issue read-through failed for ${params.issueEntityId} at ${targetUrl}; ` +
         "refusing incomplete local fallback for an operator-backed issue thread.",
-      hint:
-        "Check operator availability, guest_access_token validity, and issues.target_url configuration.",
+      hint: "Check operator availability, guest_access_token validity, and issues.target_url configuration.",
       extra: {
         target_url: targetUrl,
         issue_entity_id: params.issueEntityId,

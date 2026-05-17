@@ -241,7 +241,7 @@ export async function mintCliAgentTokenJwt(
   options?: {
     /** When provided, embedded as `https://neotoma.io/external_actors` custom claim. */
     externalActors?: ExternalActorClaim[];
-  },
+  }
 ): Promise<string> {
   const alg = resolveAlg(config.privateJwk);
   const key = await importJWK(config.privateJwk as Parameters<typeof importJWK>[0], alg);

@@ -110,8 +110,7 @@ export const StoreRelationshipInputSchema = z
     if (typeof rel.source_entity_id === "string" && !isNeotomaEntityId(rel.source_entity_id)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message:
-          `${RELATIONSHIP_ENTITY_ID_FORMAT_HINT}: source_entity_id must be a Neotoma entity id (ent_ followed by 24 lowercase hex digits, matching generateEntityId)`,
+        message: `${RELATIONSHIP_ENTITY_ID_FORMAT_HINT}: source_entity_id must be a Neotoma entity id (ent_ followed by 24 lowercase hex digits, matching generateEntityId)`,
         path: ["source_entity_id"],
         params: {
           code: RELATIONSHIP_ENTITY_ID_FORMAT_ISSUE_CODE,
@@ -122,8 +121,7 @@ export const StoreRelationshipInputSchema = z
     if (typeof rel.target_entity_id === "string" && !isNeotomaEntityId(rel.target_entity_id)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message:
-          `${RELATIONSHIP_ENTITY_ID_FORMAT_HINT}: target_entity_id must be a Neotoma entity id (ent_ followed by 24 lowercase hex digits, matching generateEntityId)`,
+        message: `${RELATIONSHIP_ENTITY_ID_FORMAT_HINT}: target_entity_id must be a Neotoma entity id (ent_ followed by 24 lowercase hex digits, matching generateEntityId)`,
         path: ["target_entity_id"],
         params: {
           code: RELATIONSHIP_ENTITY_ID_FORMAT_ISSUE_CODE,
@@ -247,13 +245,7 @@ const EntitiesQueryRequestBaseSchema = z
      * `src/services/entity_resolution.ts#IdentityBasis`.
      */
     identity_basis: z
-      .enum([
-        "schema_rule",
-        "schema_lookup",
-        "heuristic_name",
-        "heuristic_fallback",
-        "target_id",
-      ])
+      .enum(["schema_rule", "schema_lookup", "heuristic_name", "heuristic_fallback", "target_id"])
       .optional(),
   })
   .superRefine(validateEntityQueryCombinations);
@@ -343,13 +335,15 @@ export const ObservationSourceSchema = z.enum(OBSERVATION_SOURCE_VALUES);
 
 export type ObservationSource = z.infer<typeof ObservationSourceSchema>;
 
-export const StoreInterpretationInputSchema = z.object({
-  source_id: z.string().min(1).optional(),
-  source_ref: z.enum(["structured", "unstructured"]).optional(),
-  interpretation_config: z.record(z.unknown()).optional(),
-}).refine((data) => Boolean(data.source_id || data.source_ref), {
-  message: "interpretation requires source_id or source_ref",
-});
+export const StoreInterpretationInputSchema = z
+  .object({
+    source_id: z.string().min(1).optional(),
+    source_ref: z.enum(["structured", "unstructured"]).optional(),
+    interpretation_config: z.record(z.unknown()).optional(),
+  })
+  .refine((data) => Boolean(data.source_id || data.source_ref), {
+    message: "interpretation requires source_id or source_ref",
+  });
 
 export type StoreInterpretationInput = z.infer<typeof StoreInterpretationInputSchema>;
 
@@ -364,9 +358,7 @@ export const CreateInterpretationRequestSchema = z.object({
 
 export const StoreStructuredRequestSchema = z.object({
   entities: z.array(z.record(z.unknown())),
-  relationships: z
-    .array(StoreRelationshipInputSchema)
-    .optional(),
+  relationships: z.array(StoreRelationshipInputSchema).optional(),
   interpretation: StoreInterpretationInputSchema.optional(),
   source_priority: z.number().optional().default(100),
   observation_source: ObservationSourceSchema.optional(),
@@ -386,26 +378,29 @@ export const StoreUnstructuredRequestSchema = z.object({
   user_id: z.string().optional(),
 });
 
-export const ExternalActorInputSchema = z.object({
-  provider: z.literal("github"),
-  login: z.string().min(1),
-  id: z.number(),
-  type: z.enum(["User", "Bot", "Organization"]).optional().default("User"),
-  verified_via: z.enum(["claim", "linked_attestation", "oauth_link", "webhook_signature"]).optional().default("claim"),
-  delivery_id: z.string().optional(),
-  event_type: z.string().optional(),
-  repository: z.string().optional(),
-  event_id: z.number().optional(),
-  comment_id: z.number().optional(),
-}).strict();
+export const ExternalActorInputSchema = z
+  .object({
+    provider: z.literal("github"),
+    login: z.string().min(1),
+    id: z.number(),
+    type: z.enum(["User", "Bot", "Organization"]).optional().default("User"),
+    verified_via: z
+      .enum(["claim", "linked_attestation", "oauth_link", "webhook_signature"])
+      .optional()
+      .default("claim"),
+    delivery_id: z.string().optional(),
+    event_type: z.string().optional(),
+    repository: z.string().optional(),
+    event_id: z.number().optional(),
+    comment_id: z.number().optional(),
+  })
+  .strict();
 
 export const StoreRequestSchema = z
   .object({
     user_id: z.string().optional(),
     entities: z.array(z.record(z.unknown())).optional(),
-    relationships: z
-      .array(StoreRelationshipInputSchema)
-      .optional(),
+    relationships: z.array(StoreRelationshipInputSchema).optional(),
     interpretation: StoreInterpretationInputSchema.optional(),
     source_priority: z.number().optional().default(100),
     observation_source: ObservationSourceSchema.optional(),
@@ -457,13 +452,9 @@ export const SplitPredicateSchema = z
         value: z.string().optional(),
         value_starts_with: z.string().optional(),
       })
-      .refine(
-        (v) => v.value !== undefined || v.value_starts_with !== undefined,
-        {
-          message:
-            "observation_field_equals requires either `value` or `value_starts_with`",
-        },
-      )
+      .refine((v) => v.value !== undefined || v.value_starts_with !== undefined, {
+        message: "observation_field_equals requires either `value` or `value_starts_with`",
+      })
       .optional(),
   })
   .refine(
@@ -474,7 +465,7 @@ export const SplitPredicateSchema = z
     {
       message:
         "Split predicate must declare at least one of observed_at_gte, source_id_in, observation_field_equals",
-    },
+    }
   );
 
 export const SplitEntityRequestSchema = z.object({
@@ -652,7 +643,7 @@ export const IssuesAddMessageRequestSchema = z
     (v) =>
       (typeof v.entity_id === "string" && v.entity_id.trim().length > 0) ||
       (typeof v.issue_number === "number" && v.issue_number > 0),
-    { message: "Provide entity_id or issue_number" },
+    { message: "Provide entity_id or issue_number" }
   );
 
 /** Create issue (HTTP + CLI parity with MCP submit_issue). */
@@ -689,7 +680,7 @@ export const IssuesGetStatusRequestSchema = z
     (v) =>
       (typeof v.entity_id === "string" && v.entity_id.trim().length > 0) ||
       (typeof v.issue_number === "number" && v.issue_number > 0),
-    { message: "Provide entity_id or issue_number" },
+    { message: "Provide entity_id or issue_number" }
   );
 
 /** GitHub mirror ingest (HTTP + CLI parity with MCP sync_issues). */

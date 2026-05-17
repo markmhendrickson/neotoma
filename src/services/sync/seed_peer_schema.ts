@@ -22,9 +22,19 @@ type FieldSpec = Array<{
 }>;
 
 const PEER_FIELDS: FieldSpec = [
-  { name: "peer_id", type: "string", required: true, description: "Stable id this peer uses when signing sync webhooks" },
+  {
+    name: "peer_id",
+    type: "string",
+    required: true,
+    description: "Stable id this peer uses when signing sync webhooks",
+  },
   { name: "peer_name", type: "string", required: true, description: "Human label" },
-  { name: "peer_url", type: "string", required: true, description: "Base URL of the peer Neotoma instance" },
+  {
+    name: "peer_url",
+    type: "string",
+    required: true,
+    description: "Base URL of the peer Neotoma instance",
+  },
   {
     name: "direction",
     type: "string",

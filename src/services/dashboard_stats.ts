@@ -1,6 +1,6 @@
 /**
  * Dashboard Statistics Service (FU-305)
- * 
+ *
  * Provides aggregate statistics for main objects (not deprecated records)
  */
 
@@ -48,14 +48,12 @@ export async function getDashboardStats(userId?: string): Promise<DashboardStats
   };
 
   // Get source count
-  let sourcesQuery = db
-    .from("sources")
-    .select("*", { count: "exact", head: true });
-  
+  let sourcesQuery = db.from("sources").select("*", { count: "exact", head: true });
+
   if (userId) {
     sourcesQuery = sourcesQuery.eq("user_id", userId);
   }
-  
+
   const { count: sourcesCount } = await sourcesQuery;
   stats.sources_count = sourcesCount || 0;
 
@@ -64,13 +62,13 @@ export async function getDashboardStats(userId?: string): Promise<DashboardStats
     .from("entities")
     .select("entity_type", { count: "exact" })
     .is("merged_to_entity_id", null); // Exclude merged entities
-  
+
   if (userId) {
     entitiesQuery = entitiesQuery.eq("user_id", userId);
   }
-  
+
   const { data: entities, error: entitiesError } = await entitiesQuery;
-  
+
   if (!entitiesError && entities) {
     // Count entities by type
     const typeCounts = new Map<string, number>();
@@ -78,7 +76,7 @@ export async function getDashboardStats(userId?: string): Promise<DashboardStats
       const type = entity.entity_type;
       typeCounts.set(type, (typeCounts.get(type) || 0) + 1);
     }
-    
+
     stats.entities_by_type = Object.fromEntries(typeCounts);
     stats.total_entities = entities.length;
   }
@@ -93,23 +91,19 @@ export async function getDashboardStats(userId?: string): Promise<DashboardStats
   stats.total_events = eventsCount || 0;
 
   // Get total observations count
-  let observationsQuery = db
-    .from("observations")
-    .select("*", { count: "exact", head: true });
-  
+  let observationsQuery = db.from("observations").select("*", { count: "exact", head: true });
+
   if (userId) {
     observationsQuery = observationsQuery.eq("user_id", userId);
   }
-  
+
   const { count: observationsCount } = await observationsQuery;
   stats.total_observations = observationsCount || 0;
 
   // R4: observations bucketed by identity_basis (and by entity_type for
   // per-schema triage). Rows written before this column existed are
   // bucketed as "unclassified" so operators can see coverage grow over time.
-  let basisQuery = db
-    .from("observations")
-    .select("entity_type, identity_basis");
+  let basisQuery = db.from("observations").select("entity_type, identity_basis");
   if (userId) {
     basisQuery = basisQuery.eq("user_id", userId);
   }
@@ -134,7 +128,7 @@ export async function getDashboardStats(userId?: string): Promise<DashboardStats
     }
     stats.observations_by_identity_basis = Object.fromEntries(totals);
     stats.observations_by_identity_basis_by_type = Object.fromEntries(
-      Array.from(byType.entries()).map(([t, m]) => [t, Object.fromEntries(m)]),
+      Array.from(byType.entries()).map(([t, m]) => [t, Object.fromEntries(m)])
     );
   }
 
@@ -149,14 +143,12 @@ export async function getDashboardStats(userId?: string): Promise<DashboardStats
   stats.total_relationships = relationshipsCount || 0;
 
   // Get total interpretations count
-  let interpretationsQuery = db
-    .from("interpretations")
-    .select("*", { count: "exact", head: true });
-  
+  let interpretationsQuery = db.from("interpretations").select("*", { count: "exact", head: true });
+
   if (userId) {
     interpretationsQuery = interpretationsQuery.eq("user_id", userId);
   }
-  
+
   const { count: interpretationsCount } = await interpretationsQuery;
   stats.total_interpretations = interpretationsCount || 0;
 

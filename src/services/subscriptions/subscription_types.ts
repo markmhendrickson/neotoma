@@ -25,7 +25,7 @@ export interface SubscriptionRecord {
 export function parseSubscriptionSnapshot(
   entityId: string,
   userId: string,
-  snapshot: Record<string, unknown>,
+  snapshot: Record<string, unknown>
 ): SubscriptionRecord | null {
   const subscription_id = snapshot.subscription_id;
   if (typeof subscription_id !== "string" || !subscription_id) return null;
@@ -43,11 +43,13 @@ export function parseSubscriptionSnapshot(
     watch_event_types: toStrArray(snapshot.watch_event_types) as SubstrateEventType[] | undefined,
     delivery_method,
     webhook_url: typeof snapshot.webhook_url === "string" ? snapshot.webhook_url : undefined,
-    webhook_secret: typeof snapshot.webhook_secret === "string" ? snapshot.webhook_secret : undefined,
+    webhook_secret:
+      typeof snapshot.webhook_secret === "string" ? snapshot.webhook_secret : undefined,
     sync_peer_id: typeof snapshot.sync_peer_id === "string" ? snapshot.sync_peer_id : undefined,
     active,
     created_at: typeof snapshot.created_at === "string" ? snapshot.created_at : undefined,
-    last_delivered_at: typeof snapshot.last_delivered_at === "string" ? snapshot.last_delivered_at : undefined,
+    last_delivered_at:
+      typeof snapshot.last_delivered_at === "string" ? snapshot.last_delivered_at : undefined,
     consecutive_failures:
       typeof snapshot.consecutive_failures === "number" ? snapshot.consecutive_failures : 0,
     max_failures: typeof snapshot.max_failures === "number" ? snapshot.max_failures : 10,

@@ -110,9 +110,7 @@ function coerceAgents(parsed: unknown): AgentCapabilityAgent[] {
     return agents.filter((a): a is AgentCapabilityAgent => Boolean(a && a.match));
   }
   if (agents && typeof agents === "object") {
-    return Object.values(agents).filter(
-      (a): a is AgentCapabilityAgent => Boolean(a && a.match),
-    );
+    return Object.values(agents).filter((a): a is AgentCapabilityAgent => Boolean(a && a.match));
   }
   return [];
 }
@@ -131,8 +129,8 @@ function normalizeCapabilities(input: unknown): AgentCapabilityEntry[] {
       new Set(
         types
           .filter((t): t is string => typeof t === "string" && t.trim().length > 0)
-          .map((t) => t.trim()),
-      ),
+          .map((t) => t.trim())
+      )
     );
     if (normalized.length === 0) continue;
     out.push({ op: op as AgentCapabilityOp, entity_types: normalized });
@@ -149,7 +147,7 @@ function deriveLabel(name: string | undefined, agent: AgentCapabilityAgent): str
 
 function findExistingGrant(
   grants: AgentGrant[],
-  agent: AgentCapabilityAgent,
+  agent: AgentCapabilityAgent
 ): AgentGrant | undefined {
   const sub = agent.match.sub?.trim() || null;
   const iss = agent.match.iss?.trim() || null;
@@ -167,10 +165,7 @@ function findExistingGrant(
   });
 }
 
-function capabilitiesEqual(
-  a: AgentCapabilityEntry[],
-  b: AgentCapabilityEntry[],
-): boolean {
+function capabilitiesEqual(a: AgentCapabilityEntry[], b: AgentCapabilityEntry[]): boolean {
   if (a.length !== b.length) return false;
   const stringify = (cap: AgentCapabilityEntry) =>
     JSON.stringify({ op: cap.op, entity_types: [...cap.entity_types].sort() });
@@ -189,9 +184,7 @@ export interface ImportOptions {
  * `ownerUserId` exists; we treat the value as opaque to avoid a heavy
  * users-table dependency from the CLI.
  */
-export async function runAgentsGrantsImport(
-  options: ImportOptions,
-): Promise<ImportResult> {
+export async function runAgentsGrantsImport(options: ImportOptions): Promise<ImportResult> {
   const ownerUserId = options.ownerUserId.trim();
   if (!ownerUserId) {
     throw new Error("--owner-user-id is required");
@@ -214,7 +207,7 @@ export async function runAgentsGrantsImport(
     parsed = JSON.parse(loaded.raw);
   } catch (err) {
     throw new Error(
-      `Failed to parse capability registry from ${loaded.source_detail}: ${(err as Error).message}`,
+      `Failed to parse capability registry from ${loaded.source_detail}: ${(err as Error).message}`
     );
   }
   const agentsByName = (() => {
@@ -318,21 +311,23 @@ export function formatImportResult(result: ImportResult): string {
   const lines: string[] = [];
   if (result.source === "none") {
     lines.push("No legacy capability registry was found.");
-    lines.push("Checked: NEOTOMA_AGENT_CAPABILITIES_JSON, NEOTOMA_AGENT_CAPABILITIES_FILE, config/agent_capabilities.default.json.");
+    lines.push(
+      "Checked: NEOTOMA_AGENT_CAPABILITIES_JSON, NEOTOMA_AGENT_CAPABILITIES_FILE, config/agent_capabilities.default.json."
+    );
     return lines.join("\n");
   }
   lines.push(
-    `Loaded registry from ${result.source}${result.source_detail ? ` (${result.source_detail})` : ""}.`,
+    `Loaded registry from ${result.source}${result.source_detail ? ` (${result.source_detail})` : ""}.`
   );
   lines.push(
-    `Total: ${result.total}  Created: ${result.created}  Updated: ${result.updated}  Skipped: ${result.skipped}`,
+    `Total: ${result.total}  Created: ${result.created}  Updated: ${result.updated}  Skipped: ${result.skipped}`
   );
   for (const outcome of result.outcomes) {
     if (outcome.kind === "created") {
       lines.push(`  + created  ${outcome.label}  → ${outcome.grant.grant_id}`);
     } else if (outcome.kind === "updated") {
       lines.push(
-        `  ~ updated  ${outcome.label}  (${outcome.changed.join(", ")})  → ${outcome.grant.grant_id}`,
+        `  ~ updated  ${outcome.label}  (${outcome.changed.join(", ")})  → ${outcome.grant.grant_id}`
       );
     } else {
       lines.push(`  - skipped  ${outcome.label}  (${outcome.reason})`);

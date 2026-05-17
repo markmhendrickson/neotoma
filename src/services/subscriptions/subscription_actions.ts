@@ -14,10 +14,8 @@ import { isWebhookUrlAllowed } from "./webhook_delivery.js";
 import { createCorrection } from "../correction.js";
 import { db } from "../../db.js";
 
-const MAX_SUBSCRIPTIONS_PER_USER = parseInt(
-  process.env.NEOTOMA_MAX_SUBSCRIPTIONS_PER_USER ?? "50",
-  10,
-) || 50;
+const MAX_SUBSCRIPTIONS_PER_USER =
+  parseInt(process.env.NEOTOMA_MAX_SUBSCRIPTIONS_PER_USER ?? "50", 10) || 50;
 
 export interface SubscribeInput {
   entity_types?: string[];
@@ -42,7 +40,7 @@ export async function subscribeUser(params: {
     (input.event_types?.length ?? 0) > 0;
   if (!hasFilter) {
     throw new Error(
-      "At least one filter is required: entity_types, entity_ids, or event_types (no firehose subscriptions).",
+      "At least one filter is required: entity_types, entity_ids, or event_types (no firehose subscriptions)."
     );
   }
   if (input.delivery_method === "webhook") {
@@ -50,19 +48,23 @@ export async function subscribeUser(params: {
       throw new Error("webhook_url is required for webhook delivery_method");
     }
     if (!isWebhookUrlAllowed(input.webhook_url)) {
-      throw new Error("webhook_url must be HTTPS in production, or http://localhost / 127.0.0.1 for dev");
+      throw new Error(
+        "webhook_url must be HTTPS in production, or http://localhost / 127.0.0.1 for dev"
+      );
     }
   }
 
   const activeCount = await countActiveSubscriptionsForUser(userId);
   if (activeCount >= MAX_SUBSCRIPTIONS_PER_USER) {
-    throw new Error(`Maximum active subscriptions per user (${MAX_SUBSCRIPTIONS_PER_USER}) reached`);
+    throw new Error(
+      `Maximum active subscriptions per user (${MAX_SUBSCRIPTIONS_PER_USER}) reached`
+    );
   }
 
   const subscription_id = randomUUID();
   const webhook_secret =
     input.delivery_method === "webhook"
-      ? input.webhook_secret ?? randomBytes(32).toString("hex")
+      ? (input.webhook_secret ?? randomBytes(32).toString("hex"))
       : undefined;
 
   const created_at = new Date().toISOString();
@@ -119,7 +121,7 @@ export async function unsubscribeUser(params: {
 
 /** Omit signing secret from API/MCP surfaces (returned only once on subscribe). */
 export function redactSubscriptionForClient(
-  sub: SubscriptionRecord,
+  sub: SubscriptionRecord
 ): Omit<SubscriptionRecord, "webhook_secret"> {
   const { webhook_secret, ...rest } = sub;
   void webhook_secret;
@@ -143,12 +145,16 @@ export async function getSubscriptionStatus(params: {
     .eq("entity_id", row.entity_id)
     .maybeSingle();
   if (!snap?.snapshot) return null;
-  return parseSubscriptionSnapshot(row.entity_id, params.userId, snap.snapshot as Record<string, unknown>);
+  return parseSubscriptionSnapshot(
+    row.entity_id,
+    params.userId,
+    snap.snapshot as Record<string, unknown>
+  );
 }
 
 async function findSubscriptionRow(
   userId: string,
-  subscription_id: string,
+  subscription_id: string
 ): Promise<{ entity_id: string } | null> {
   const { data: snaps } = await db
     .from("entity_snapshots")
@@ -158,7 +164,11 @@ async function findSubscriptionRow(
     const sid = (s as { snapshot: Record<string, unknown> }).snapshot?.subscription_id;
     if (sid !== subscription_id) continue;
     const entityId = (s as { entity_id: string }).entity_id;
-    const { data: ent } = await db.from("entities").select("user_id").eq("id", entityId).maybeSingle();
+    const { data: ent } = await db
+      .from("entities")
+      .select("user_id")
+      .eq("id", entityId)
+      .maybeSingle();
     if (ent?.user_id === userId) {
       return { entity_id: entityId };
     }

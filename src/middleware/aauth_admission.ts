@@ -21,17 +21,11 @@ import type { NextFunction, Request, RequestHandler, Response } from "express";
 import type { AAuthRequestContext } from "../crypto/agent_identity.js";
 import { admitFromAAuthContext } from "../services/aauth_admission.js";
 import { getAAuthContextFromRequest } from "./aauth_verify.js";
-import {
-  getRequestContext,
-  runWithRequestContext,
-} from "../services/request_context.js";
+import { getRequestContext, runWithRequestContext } from "../services/request_context.js";
 import type { AAuthAdmissionContext } from "../services/protected_entity_types.js";
 
 /** Skip admission lookups on cheap public discovery endpoints. */
-const PUBLIC_DISCOVERY_PREFIXES: ReadonlyArray<string> = [
-  "/.well-known/",
-  "/health",
-];
+const PUBLIC_DISCOVERY_PREFIXES: ReadonlyArray<string> = ["/.well-known/", "/health"];
 
 function isPublicDiscovery(req: Request): boolean {
   const path = req.path || req.url || "";
@@ -70,7 +64,7 @@ export function aauthAdmission(): RequestHandler {
         },
         () => {
           next();
-        },
+        }
       );
       return;
     }
@@ -99,7 +93,7 @@ export function aauthAdmission(): RequestHandler {
           },
           () => {
             next();
-          },
+          }
         );
       })
       .catch((err) => {
@@ -120,23 +114,17 @@ export function aauthAdmission(): RequestHandler {
           },
           () => {
             next(err instanceof Error ? undefined : undefined);
-          },
+          }
         );
       });
   };
 }
 
 function stampAdmission(req: Request, admission: AAuthAdmissionContext): void {
-  (req as Request & { aauthAdmission?: AAuthAdmissionContext }).aauthAdmission =
-    admission;
+  (req as Request & { aauthAdmission?: AAuthAdmissionContext }).aauthAdmission = admission;
 }
 
 /** Helper for handlers that want the stamped admission without a context dive. */
-export function getAAuthAdmissionFromRequest(
-  req: Request,
-): AAuthAdmissionContext | null {
-  return (
-    (req as Request & { aauthAdmission?: AAuthAdmissionContext }).aauthAdmission ??
-    null
-  );
+export function getAAuthAdmissionFromRequest(req: Request): AAuthAdmissionContext | null {
+  return (req as Request & { aauthAdmission?: AAuthAdmissionContext }).aauthAdmission ?? null;
 }

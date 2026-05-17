@@ -39,7 +39,7 @@ const BASE_ENTITY: RenderEntityInput = {
 
 describe("canonicalStringify", () => {
   it("sorts keys alphabetically at every depth", () => {
-    const input = { b: 1, a: { z: 1, a: 1 }, c: [ { y: 2, x: 1 } ] };
+    const input = { b: 1, a: { z: 1, a: 1 }, c: [{ y: 2, x: 1 }] };
     const out = canonicalStringify(input, 0);
     expect(out).toBe('{"a":{"a":1,"z":1},"b":1,"c":[{"x":1,"y":2}]}');
   });
@@ -88,11 +88,9 @@ describe("renderEntityMarkdown", () => {
   });
 
   it("orders fields by schema first and alphabetically for the rest", () => {
-    const md = renderEntityMarkdown(
-      BASE_ENTITY,
-      ["name", "email", "notes"],
-      { includeProvenance: false }
-    );
+    const md = renderEntityMarkdown(BASE_ENTITY, ["name", "email", "notes"], {
+      includeProvenance: false,
+    });
     const aaIdx = md.indexOf("## aa_alpha_first");
     const zzIdx = md.indexOf("## zz_alpha_last");
     const nameIdx = md.indexOf("## name");
@@ -130,7 +128,10 @@ describe("renderEntityMarkdown", () => {
 
   it("excludes schema_version and entity_type from body", () => {
     const md = renderEntityMarkdown(
-      { ...BASE_ENTITY, snapshot: { ...BASE_ENTITY.snapshot, schema_version: "1.0", entity_type: "contact" } },
+      {
+        ...BASE_ENTITY,
+        snapshot: { ...BASE_ENTITY.snapshot, schema_version: "1.0", entity_type: "contact" },
+      },
       [],
       {}
     );

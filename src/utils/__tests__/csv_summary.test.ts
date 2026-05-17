@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  summarizeCsvRowRecord,
-  summarizeDatasetRecord,
-} from "../csv_summary.js";
+import { summarizeCsvRowRecord, summarizeDatasetRecord } from "../csv_summary.js";
 
 describe("summarizeCsvRowRecord", () => {
   it("highlights name, date, and numeric fields", () => {

@@ -21,10 +21,7 @@
  * These invariants back the public KV-cache stability claim for Neotoma text
  * output to LLMs.
  */
-import {
-  getEntityDisplayName,
-  type EntityDisplayInput,
-} from "../shared/entity_display_name.js";
+import { getEntityDisplayName, type EntityDisplayInput } from "../shared/entity_display_name.js";
 import { getRecordDisplaySummary } from "../shared/record_display_summary.js";
 
 // ============================================================================
@@ -139,24 +136,12 @@ export function canonicalStringify(value: unknown, indent: 0 | 2 = 0): string {
     for (const [k, vv] of entries) sorted[k] = vv;
     return sorted;
   };
-  return indent === 0
-    ? JSON.stringify(value, replacer)
-    : JSON.stringify(value, replacer, indent);
+  return indent === 0 ? JSON.stringify(value, replacer) : JSON.stringify(value, replacer, indent);
 }
 
-const EXCLUDED_SNAPSHOT_KEYS = new Set([
-  "schema_version",
-  "entity_type",
-  "_deleted",
-]);
+const EXCLUDED_SNAPSHOT_KEYS = new Set(["schema_version", "entity_type", "_deleted"]);
 
-const SPECIAL_FIRST_KEYS = [
-  "title",
-  "name",
-  "canonical_name",
-  "description",
-  "summary",
-];
+const SPECIAL_FIRST_KEYS = ["title", "name", "canonical_name", "description", "summary"];
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return v !== null && typeof v === "object" && !Array.isArray(v);
@@ -214,12 +199,13 @@ function formatFieldValueMarkdown(value: unknown): string {
   }
   if (Array.isArray(value)) {
     if (value.length === 0) return "_(empty)_";
-    const allScalars = value.every(
-      (v) => v === null || typeof v !== "object"
-    );
+    const allScalars = value.every((v) => v === null || typeof v !== "object");
     if (allScalars) {
       return value
-        .map((v) => `- ${v === null || v === undefined ? "_(empty)_" : typeof v === "string" ? v : canonicalStringify(v)}`)
+        .map(
+          (v) =>
+            `- ${v === null || v === undefined ? "_(empty)_" : typeof v === "string" ? v : canonicalStringify(v)}`
+        )
         .join("\n");
     }
     return "```json\n" + canonicalStringify(value, 2) + "\n```";
@@ -279,8 +265,7 @@ export function renderEntityMarkdown(
   const snapshot = entity.snapshot ?? {};
   const displayName = getEntityDisplayName({
     entity_type: entity.entity_type,
-    canonical_name:
-      (snapshot.canonical_name as string | undefined) ?? entity.entity_id,
+    canonical_name: (snapshot.canonical_name as string | undefined) ?? entity.entity_id,
     snapshot,
   });
 
@@ -337,8 +322,7 @@ export function renderEntityCompactText(
   const snapshot = entity.snapshot ?? {};
   const displayName = getEntityDisplayName({
     entity_type: entity.entity_type,
-    canonical_name:
-      (snapshot.canonical_name as string | undefined) ?? entity.entity_id,
+    canonical_name: (snapshot.canonical_name as string | undefined) ?? entity.entity_id,
     snapshot,
   });
   const lines: string[] = [];
@@ -433,10 +417,7 @@ function resolveEntityLabel(entityId: string, opts: RenderOpts): string {
 // Source renderer
 // ============================================================================
 
-export function renderSourceMarkdown(
-  source: RenderSourceInput,
-  opts: RenderOpts = {}
-): string {
+export function renderSourceMarkdown(source: RenderSourceInput, opts: RenderOpts = {}): string {
   const parts: string[] = [];
   if (opts.includeDoNotEditHeader !== false) parts.push(DO_NOT_EDIT_NOTICE);
   parts.push(
@@ -532,10 +513,7 @@ export function renderTimelineDayMarkdown(
 // Schema renderer
 // ============================================================================
 
-export function renderSchemaMarkdown(
-  schema: RenderSchemaInput,
-  opts: RenderOpts = {}
-): string {
+export function renderSchemaMarkdown(schema: RenderSchemaInput, opts: RenderOpts = {}): string {
   const parts: string[] = [];
   if (opts.includeDoNotEditHeader !== false) parts.push(DO_NOT_EDIT_NOTICE);
   parts.push(

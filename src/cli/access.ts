@@ -60,7 +60,7 @@ async function setViaMetadata(entityType: string, mode: AccessPolicyMode): Promi
   } catch {
     process.stderr.write(
       `Warning: Could not update SchemaMetadata for "${entityType}"; ` +
-        `falling back to config file (deprecated).\n`,
+        `falling back to config file (deprecated).\n`
     );
     await setAccessPolicy(entityType, mode);
   }
@@ -84,7 +84,7 @@ async function resetViaMetadata(entityType: string): Promise<AccessPolicyResolut
 export async function accessSet(
   entityType: string,
   mode: string,
-  opts: AccessSetOpts,
+  opts: AccessSetOpts
 ): Promise<void> {
   if (!VALID_MODES.has(mode as AccessPolicyMode)) {
     const msg = `Invalid mode "${mode}". Valid modes: ${Array.from(VALID_MODES).join(", ")}`;
@@ -109,7 +109,7 @@ export async function accessSet(
 export async function accessList(opts: AccessListOpts): Promise<void> {
   const entriesByType = await loadAccessPolicyEntries();
   const policies = Object.fromEntries(
-    Object.entries(entriesByType).map(([entityType, entry]) => [entityType, entry.mode]),
+    Object.entries(entriesByType).map(([entityType, entry]) => [entityType, entry.mode])
   );
 
   if (opts.json) {
@@ -120,7 +120,7 @@ export async function accessList(opts: AccessListOpts): Promise<void> {
   const entries = Object.entries(policies);
   if (entries.length === 0) {
     process.stdout.write(
-      `No access policies configured. All entity types default to "${DEFAULT_MODE}".\n`,
+      `No access policies configured. All entity types default to "${DEFAULT_MODE}".\n`
     );
     return;
   }
@@ -134,29 +134,29 @@ export async function accessList(opts: AccessListOpts): Promise<void> {
   process.stdout.write(`\nUnconfigured types default to "${DEFAULT_MODE}".\n`);
 }
 
-export async function accessReset(
-  entityType: string,
-  opts: AccessResetOpts,
-): Promise<void> {
+export async function accessReset(entityType: string, opts: AccessResetOpts): Promise<void> {
   const effective = await resetViaMetadata(entityType);
 
   if (opts.json) {
-    output({
-      entity_type: entityType,
-      mode: DEFAULT_MODE,
-      status: "reset",
-      effective_mode: effective.mode,
-      effective_source: effective.source,
-    }, true);
+    output(
+      {
+        entity_type: entityType,
+        mode: DEFAULT_MODE,
+        status: "reset",
+        effective_mode: effective.mode,
+        effective_source: effective.source,
+      },
+      true
+    );
   } else {
     if (effective.mode === DEFAULT_MODE) {
       process.stdout.write(
-        `Access policy for "${entityType}" reset to default ("${DEFAULT_MODE}").\n`,
+        `Access policy for "${entityType}" reset to default ("${DEFAULT_MODE}").\n`
       );
     } else {
       process.stdout.write(
         `Access policy for "${entityType}" reset, but effective policy remains ` +
-          `"${effective.mode}" from ${effective.source}.\n`,
+          `"${effective.mode}" from ${effective.source}.\n`
       );
     }
   }
@@ -169,15 +169,18 @@ export async function accessEnableIssues(opts: AccessIssuesOpts): Promise<void> 
   }
 
   if (opts.json) {
-    output({
-      entity_types: [...ISSUE_SUBMISSION_ENTITY_TYPES],
-      mode,
-      status: "set",
-    }, true);
+    output(
+      {
+        entity_types: [...ISSUE_SUBMISSION_ENTITY_TYPES],
+        mode,
+        status: "set",
+      },
+      true
+    );
   } else {
     process.stdout.write(
       `Access policies set to "${mode}" for: ${ISSUE_SUBMISSION_ENTITY_TYPES.join(", ")}.\n` +
-        "External agents can now submit issues to this instance.\n",
+        "External agents can now submit issues to this instance.\n"
     );
   }
 }
@@ -188,15 +191,18 @@ export async function accessDisableIssues(opts: AccessIssuesOpts): Promise<void>
   }
 
   if (opts.json) {
-    output({
-      entity_types: [...ISSUE_SUBMISSION_ENTITY_TYPES],
-      mode: DEFAULT_MODE,
-      status: "reset",
-    }, true);
+    output(
+      {
+        entity_types: [...ISSUE_SUBMISSION_ENTITY_TYPES],
+        mode: DEFAULT_MODE,
+        status: "reset",
+      },
+      true
+    );
   } else {
     process.stdout.write(
       `Access policies reset to "${DEFAULT_MODE}" for: ${ISSUE_SUBMISSION_ENTITY_TYPES.join(", ")}.\n` +
-        "External agents can no longer submit issues to this instance.\n",
+        "External agents can no longer submit issues to this instance.\n"
     );
   }
 }

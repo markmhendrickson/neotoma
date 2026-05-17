@@ -26,7 +26,15 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 /** Tool identifiers used across commands. */
-export type ToolId = "claude-code" | "claude-desktop" | "cursor" | "codex" | "openclaw" | "windsurf" | "continue" | "vscode";
+export type ToolId =
+  | "claude-code"
+  | "claude-desktop"
+  | "cursor"
+  | "codex"
+  | "openclaw"
+  | "windsurf"
+  | "continue"
+  | "vscode";
 
 /** How the `neotoma` binary was located (if at all). */
 export type ResolvedVia = "mise" | "nvm" | "fnm" | "npm" | "path" | "unknown";
@@ -100,7 +108,10 @@ export interface DoctorReport {
     pid: number | null;
     base_url: string | null;
   };
-  mcp_servers_detected: Record<string, { path: string | null; has_neotoma: boolean; has_neotoma_dev: boolean }>;
+  mcp_servers_detected: Record<
+    string,
+    { path: string | null; has_neotoma: boolean; has_neotoma_dev: boolean }
+  >;
   cli_instructions: {
     project: { cursor: boolean; claude: boolean; codex: boolean };
     user: { cursor: boolean; claude: boolean; codex: boolean };
@@ -147,7 +158,8 @@ export function detectDataDirRisks(params: {
     risks.push({
       code: "icloud_drive",
       severity: "warn",
-      message: "Data directory is inside iCloud Drive, which can sync SQLite DB/WAL files while Neotoma writes.",
+      message:
+        "Data directory is inside iCloud Drive, which can sync SQLite DB/WAL files while Neotoma writes.",
       suggested_action: `Move NEOTOMA_DATA_DIR to a local-only path such as ${suggestedDir}.`,
     });
   }
@@ -170,8 +182,10 @@ export function detectDataDirRisks(params: {
     risks.push({
       code: "prior_sqlite_repair_artifacts",
       severity: "warn",
-      message: "Data directory contains prior SQLite repair/swap artifacts, indicating previous corruption or recovery.",
-      suggested_action: "Run neotoma storage recover-db for dev and prod after incidents, and keep DBs on local-only storage.",
+      message:
+        "Data directory contains prior SQLite repair/swap artifacts, indicating previous corruption or recovery.",
+      suggested_action:
+        "Run neotoma storage recover-db for dev and prod after incidents, and keep DBs on local-only storage.",
     });
   }
 
@@ -201,8 +215,17 @@ function safeExec(cmd: string, args: string[]): string | null {
 }
 
 /** Resolve the neotoma binary and detect which shell-manager owns node (mise/nvm/fnm). */
-function detectRuntime(): Pick<DoctorReport["neotoma"],
-  "neotoma_on_path" | "node_on_path" | "resolved_via" | "which_neotoma" | "global_bin" | "npm_global_root" | "global_package_dir" | "path_fix_hint"> {
+function detectRuntime(): Pick<
+  DoctorReport["neotoma"],
+  | "neotoma_on_path"
+  | "node_on_path"
+  | "resolved_via"
+  | "which_neotoma"
+  | "global_bin"
+  | "npm_global_root"
+  | "global_package_dir"
+  | "path_fix_hint"
+> {
   const whichNeotoma = safeExec("which", ["neotoma"]);
   const whichNode = safeExec("which", ["node"]);
   const npmPrefix = safeExec("npm", ["prefix", "-g"]);
@@ -220,7 +243,10 @@ function detectRuntime(): Pick<DoctorReport["neotoma"],
       resolvedVia = "nvm";
     } else if (whichNeotoma.includes("/.fnm/") || whichNeotoma.includes("/fnm/")) {
       resolvedVia = "fnm";
-    } else if (whichNeotoma.includes("/node_modules/") || (globalBin && path.resolve(whichNeotoma) === path.resolve(globalBin))) {
+    } else if (
+      whichNeotoma.includes("/node_modules/") ||
+      (globalBin && path.resolve(whichNeotoma) === path.resolve(globalBin))
+    ) {
       resolvedVia = "npm";
     } else {
       resolvedVia = "path";
@@ -281,7 +307,10 @@ function detectVersion(globalPkgDir: string | null): string | null {
 }
 
 /** Heuristically detect which agent harness invoked the CLI (for `current_tool_hint`). */
-export function detectCurrentToolHint(cwd: string, env: NodeJS.ProcessEnv = process.env): ToolId | null {
+export function detectCurrentToolHint(
+  cwd: string,
+  env: NodeJS.ProcessEnv = process.env
+): ToolId | null {
   if (
     env.OPENAI_CODEX_BUILD ||
     env.CODEX_HOME ||
@@ -317,11 +346,18 @@ async function readClaudePermissions(filePath: string): Promise<PermissionFileSt
     return {
       path: filePath,
       exists: true,
-      has_neotoma_allow: allow.some((s) => /^Bash\(neotoma:\*?\)$/.test(s) || s === "Bash(neotoma:*)"),
+      has_neotoma_allow: allow.some(
+        (s) => /^Bash\(neotoma:\*?\)$/.test(s) || s === "Bash(neotoma:*)"
+      ),
       has_npm_install_allow: allow.some((s) => /npm\s+install\s+-g\s+neotoma/.test(s)),
     };
   } catch {
-    return { path: filePath, exists: false, has_neotoma_allow: false, has_npm_install_allow: false };
+    return {
+      path: filePath,
+      exists: false,
+      has_neotoma_allow: false,
+      has_npm_install_allow: false,
+    };
   }
 }
 
@@ -339,7 +375,12 @@ async function readCursorAllowlist(projectRoot: string): Promise<PermissionFileS
       has_npm_install_allow: allow.some((s) => /npm\s+install\s+-g\s+neotoma/.test(s)),
     };
   } catch {
-    return { path: candidate, exists: false, has_neotoma_allow: false, has_npm_install_allow: false };
+    return {
+      path: candidate,
+      exists: false,
+      has_neotoma_allow: false,
+      has_npm_install_allow: false,
+    };
   }
 }
 
@@ -358,15 +399,24 @@ async function readCodexApprovals(): Promise<PermissionFileStatus> {
       has_npm_install_allow: hasNpmAllow,
     };
   } catch {
-    return { path: candidate, exists: false, has_neotoma_allow: false, has_npm_install_allow: false };
+    return {
+      path: candidate,
+      exists: false,
+      has_neotoma_allow: false,
+      has_npm_install_allow: false,
+    };
   }
 }
 
 /** Suggest the next step based on consolidated state. */
-function suggestNextStep(report: Omit<DoctorReport, "suggested_next_step">): DoctorReport["suggested_next_step"] {
+function suggestNextStep(
+  report: Omit<DoctorReport, "suggested_next_step">
+): DoctorReport["suggested_next_step"] {
   if (!report.neotoma.installed) return "install";
   if (!report.data.initialized) return "init";
-  const mcpConfigured = Object.values(report.mcp_servers_detected).some((c) => c.has_neotoma || c.has_neotoma_dev);
+  const mcpConfigured = Object.values(report.mcp_servers_detected).some(
+    (c) => c.has_neotoma || c.has_neotoma_dev
+  );
   if (!mcpConfigured) return "configure-mcp";
   const cliInstr = report.cli_instructions;
   const hasAnyCliInstr =
@@ -391,9 +441,7 @@ function suggestNextStep(report: Omit<DoctorReport, "suggested_next_step">): Doc
 async function detectMirror(): Promise<MirrorReport> {
   try {
     const { getMirrorConfig } = await import("../services/canonical_mirror.js");
-    const { checkMirrorGitignoreStatus } = await import(
-      "./commands/mirror.js"
-    );
+    const { checkMirrorGitignoreStatus } = await import("./commands/mirror.js");
     const cfg = getMirrorConfig();
     const gitignore = checkMirrorGitignoreStatus(cfg);
     return {
@@ -503,8 +551,12 @@ export async function runDoctor(opts: RunDoctorOptions = {}): Promise<DoctorRepo
 
   // Permission files
   const permissionFiles: DoctorReport["permission_files"] = {
-    claude_code_project: await readClaudePermissions(path.join(cwd, ".claude", "settings.local.json")),
-    claude_code_user: await readClaudePermissions(path.join(os.homedir(), ".claude", "settings.json")),
+    claude_code_project: await readClaudePermissions(
+      path.join(cwd, ".claude", "settings.local.json")
+    ),
+    claude_code_user: await readClaudePermissions(
+      path.join(os.homedir(), ".claude", "settings.json")
+    ),
     cursor_project: await readCursorAllowlist(cwd),
     codex_user: await readCodexApprovals(),
   };
