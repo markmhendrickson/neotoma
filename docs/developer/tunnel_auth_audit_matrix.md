@@ -44,7 +44,7 @@ Code routes use `/mcp/oauth/*`. Documentation previously used `/api/mcp/oauth/*`
 
 | Referenced from | File | Status |
 |----------------|------|--------|
-| `tunnels.md`, `mcp_overview.md`, `mcp_oauth_migration_guide.md`, `mcp_chatgpt_setup.md`, `mcp_claude_code_setup.md`, `agent_cli_configuration.md` | `mcp_cursor_setup.md` | **Created** — Cursor setup guide (stdio + HTTP, OAuth, troubleshooting) |
+| `tunnels.md`, `mcp_overview.md`, `mcp_oauth_migration_guide.md`, `chatgpt_actions_setup.md`, `mcp_claude_code_setup.md`, `agent_cli_configuration.md` | `mcp_cursor_setup.md` | **Created** — Cursor setup guide (stdio + HTTP, OAuth, troubleshooting) |
 | `tunnels.md`, `mcp_overview.md`, `mcp_oauth_migration_guide.md` | `mcp_oauth_implementation.md` | **Created** — OAuth flow details, endpoint table, sequence diagram |
 | `tunnels.md` | `mcp_oauth_troubleshooting.md` | **Created** — Common failure diagnostics and fixes |
 | `mcp_https_testing.md` | `mcp_connect_button_troubleshooting.md` | **Created** — Redirect to `mcp_oauth_troubleshooting.md` |

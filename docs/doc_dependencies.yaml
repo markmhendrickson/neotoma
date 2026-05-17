@@ -224,7 +224,7 @@ docs/specs/MCP_SPEC.md:
     - path: docs/developer/mcp_claude_code_setup.md
       type: explicit
       reason: Setup guide references MCP spec and project instructions
-    - path: docs/developer/mcp_chatgpt_setup.md
+    - path: docs/developer/chatgpt_actions_setup.md
       type: explicit
       reason: Setup guide references MCP spec
     - path: README.md

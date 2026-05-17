@@ -9,6 +9,8 @@ priority: "p2"
 
 # Agent Trust Framework
 
+> **Status (2026-05-16):** Phase 1 (digital signatures & agent identity) is largely **shipped** as the [aauth](../subsystems/aauth.md) subsystem — RFC 9421 HTTP Message Signatures, `aa-agent+jwt` tokens, hardware attestation, and signed-request verification across `/mcp`, `/store`, `/correct`, `/session`. See [`docs/subsystems/aauth.md`](../subsystems/aauth.md), [`docs/subsystems/aauth_attestation.md`](../subsystems/aauth_attestation.md), and the `src/middleware/aauth_*.ts` / `src/proxy/aauth_*.ts` / `src/cli/aauth_*.ts` modules. **Phases 2–4** (hash chains / Merkle trees, consensus, cryptographic timestamping) are **not implemented**; the design below is preserved as a reference for that future work.
+
 ## Proposal Context
 
 This proposal was migrated from `.cursor/plans/agent_trust_framework_eb38ca7d.plan.md` on 2026-01-22.

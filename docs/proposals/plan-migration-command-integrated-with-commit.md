@@ -9,6 +9,8 @@ estimated_effort: ""[if mentioned in plan]""
 
 # Plan Migration Command (Integrated with Commit)
 
+> **Status (2026-05-16):** Partially shipped. The standalone `/migrate_plans` command exists ([`.cursor/commands/migrate_plans.md`](../../.cursor/commands/migrate_plans.md)) and the migration engine lives in [`scripts/migrate_plans.ts`](../../scripts/migrate_plans.ts). The proposal's "integrate into `/commit`" step has **not** shipped — `.cursor/commands/commit.md` does not invoke `migrate_plans`. Treat the standalone-command sections as done and the commit-workflow integration as the remaining work.
+
 ## Proposal Context
 
 This proposal was migrated from `.cursor/plans/plan_migration_command_integrated.plan.md` on 2026-01-22.
