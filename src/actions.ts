@@ -5473,6 +5473,9 @@ app.post("/interpretations/create", async (req, res) => {
       observations_created: interpretationResult.observationsCreated,
       unknown_fields_count: interpretationResult.unknownFieldsCount,
       relationships_created: relationshipsCreated,
+      ...(interpretationResult.noSchemaEntityTypes && interpretationResult.noSchemaEntityTypes.length > 0
+        ? { no_schema_entity_types: interpretationResult.noSchemaEntityTypes }
+        : {}),
     });
   } catch (error) {
     logError("APIError:interpretations_create", req, error);
