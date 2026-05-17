@@ -441,6 +441,31 @@ entries:
     canonical_site_path: /neotoma-with-openclaw
     notes: "Native plugin entry reference: src/openclaw_entry.ts, kind: memory, plugins.slots.memory wiring, session lifecycle hooks. The site /neotoma-with-openclaw page covers end-user setup; this doc covers the plugin contract."
 
+  - repo_path: docs/guides/non_destructive_testing.md
+    status: supporting_source
+    canonical_site_path: /non-destructive-testing
+    notes: "Canonical markdown counterpart authored by scripts/mdx_to_markdown_for_simple_pages.ts; site MDX wraps the same content with i18n links."
+  - repo_path: docs/integrations/README.md
+    status: supporting_source
+    canonical_site_path: /integrations
+    notes: "Canonical markdown counterpart authored by scripts/mdx_to_markdown_for_simple_pages.ts; site MDX wraps the same content with i18n links."
+  - repo_path: docs/integrations/neotoma_with_continue.md
+    status: supporting_source
+    canonical_site_path: /neotoma-with-continue
+    notes: "Canonical markdown counterpart authored by scripts/mdx_to_markdown_for_simple_pages.ts; site MDX wraps the same content with i18n links."
+  - repo_path: docs/integrations/neotoma_with_letta.md
+    status: supporting_source
+    canonical_site_path: /neotoma-with-letta
+    notes: "Canonical markdown counterpart authored by scripts/mdx_to_markdown_for_simple_pages.ts; site MDX wraps the same content with i18n links."
+  - repo_path: docs/integrations/neotoma_with_vscode.md
+    status: supporting_source
+    canonical_site_path: /neotoma-with-vscode
+    notes: "Canonical markdown counterpart authored by scripts/mdx_to_markdown_for_simple_pages.ts; site MDX wraps the same content with i18n links."
+  - repo_path: docs/integrations/neotoma_with_windsurf.md
+    status: supporting_source
+    canonical_site_path: /neotoma-with-windsurf
+    notes: "Canonical markdown counterpart authored by scripts/mdx_to_markdown_for_simple_pages.ts; site MDX wraps the same content with i18n links."
+
 # ============================================================================
 # /docs index — category tree and featured list
 # ============================================================================

@@ -1,0 +1,75 @@
+---
+title: Neotoma with Continue
+summary: Continue is an open-source AI code assistant for VS Code and JetBrains. It supports MCP servers via `~/.continue/config.json`, which makes connecting it to Neotoma straightforward.
+audience: user
+---
+
+# Neotoma with Continue
+
+Continue is an open-source AI code assistant for VS Code and JetBrains. It supports MCP servers via `~/.continue/config.json`, which makes connecting it to Neotoma straightforward.
+
+## Install Neotoma
+
+```bash
+npm install -g neotoma
+neotoma init
+neotoma auth login
+```
+
+## Auto-configure with neotoma setup
+
+```bash
+neotoma setup --tool continue --yes
+```
+
+This writes the Neotoma MCP server entry into `~/.continue/config.json` and verifies the connection. Reload your IDE window after setup completes.
+
+## Manual configuration
+
+If you prefer to configure manually, add to `~/.continue/config.json`:
+
+```json
+{
+  "mcpServers": {
+    "neotoma": {
+      "command": "neotoma",
+      "args": ["mcp", "stdio"],
+      "env": {}
+    }
+  }
+}
+```
+
+Use the absolute path to `neotoma` if the binary is not on `PATH` from your IDE's launch environment (`which neotoma` to find it).
+
+## Remote access
+
+To connect Continue to a remote or tunneled Neotoma instance:
+
+```bash
+neotoma api start --env prod --tunnel
+```
+
+Then use the URL transport in `config.json`:
+
+```json
+{
+  "mcpServers": {
+    "neotoma": {
+      "url": "https://<tunnel-host>/mcp"
+    }
+  }
+}
+```
+
+See [tunnel](/tunnel) for the full tunnel setup guide.
+
+## Verify the connection
+
+After reloading, Neotoma tools (`store`, `retrieve_entities`, `retrieve_entity_by_identifier`) should appear in Continue's Context Providers → MCP section. Ask Continue to call `retrieve_entities` to confirm live access.
+
+## Related
+
+- [MCP reference](/mcp) — protocol details, transport modes, authentication
+- [Install](/install) — full Neotoma install guide
+- [Integrations](/integrations) — all supported hosts
