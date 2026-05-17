@@ -2847,6 +2847,84 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       },
     },
   },
+
+  product_feedback: {
+    entity_type: "product_feedback",
+    schema_version: "1.0",
+    metadata: {
+      label: "Product Feedback",
+      description:
+        "User-reported or internally-filed feedback about product features, bugs, or UX. " +
+        "Use feedback_source to distinguish internal engineering observations from external " +
+        "user reports so they can be queried and triaged independently.",
+      category: "knowledge",
+      aliases: ["feedback", "user_feedback", "feature_request", "bug_report"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: false },
+        // Discriminator — distinguishes internal engineering notes from external user reports.
+        // Allowed values: "internal" | "external"
+        feedback_source: {
+          type: "string",
+          required: false,
+          description: 'Discriminator for feedback origin. Use "internal" for engineering/team ' +
+            'observations and "external" for reports from end users or beta testers.',
+        },
+        title: { type: "string", required: false, preserveCase: true },
+        content: { type: "string", required: false, preserveCase: true },
+        // External-actor identity fields. At least one should be present for external feedback.
+        reporter_email: { type: "string", required: false },
+        reporter_name: { type: "string", required: false },
+        reporter_id: { type: "string", required: false },
+        // Categorisation and routing
+        category: { type: "string", required: false },
+        severity: { type: "string", required: false },
+        status: { type: "string", required: false },
+        product_area: { type: "string", required: false },
+        // Timestamps
+        submitted_at: { type: "date", required: false },
+        resolved_at: { type: "date", required: false },
+      },
+      // R2: feedback items are identified by a combination of reporter and title
+      // when both are present; title alone is the fallback for anonymous submissions.
+      canonical_name_fields: [
+        { composite: ["reporter_email", "title"] },
+        { composite: ["reporter_id", "title"] },
+        { composite: ["reporter_name", "title"] },
+        "title",
+      ],
+      agent_instructions:
+        "product_feedback entities carry a `feedback_source` discriminator field.\n" +
+        '- `"internal"` — filed by the engineering team or internal stakeholders.\n' +
+        '- `"external"` — submitted by an end user or beta tester.\n' +
+        "Always surface `feedback_source` when presenting or summarising feedback so that " +
+        "internal observations are not confused with user-reported issues. " +
+        "For external feedback, also surface `reporter_email`, `reporter_name`, or " +
+        "`reporter_id` when present to preserve attribution.",
+      // Emit a non-blocking warning when feedback is stored without any identity or
+      // source discriminator — this is the most common cause of internal artifacts
+      // being mixed with external user reports in queries (#136 / #137).
+      store_warnings: [
+        {
+          code: "MISSING_IDENTITY_FIELDS",
+          fields: ["feedback_source", "reporter_email", "reporter_name", "reporter_id"],
+          message:
+            "product_feedback stored without identity fields " +
+            "(feedback_source, reporter_email, reporter_name, reporter_id); " +
+            "consider adding at least one to distinguish internal from external feedback",
+        },
+      ],
+    },
+    reducer_config: {
+      merge_policies: {
+        status: { strategy: "last_write" },
+        severity: { strategy: "last_write" },
+        resolved_at: { strategy: "last_write" },
+        content: { strategy: "highest_priority" },
+      },
+    },
+  },
 };
 
 /**
