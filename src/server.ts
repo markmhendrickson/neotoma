@@ -2980,6 +2980,16 @@ export class NeotomaServer {
     const { count, error: countError } = await countQuery;
 
     if (countError) {
+      // When filtering by a specific event_type that yields no matching rows or
+      // a query-level error (e.g. the type string is not indexed / not present),
+      // return an empty result with an informational note rather than a hard error.
+      if (parsed.event_type) {
+        return this.buildTextResponse({
+          events: [],
+          total: 0,
+          message: `No timeline events found for event_type: "${parsed.event_type}". The type may not exist or have no events yet.`,
+        });
+      }
       throw new McpError(
         ErrorCode.InternalError,
         `Failed to count timeline events: ${countError.message}`
@@ -2994,16 +3004,30 @@ export class NeotomaServer {
       .range(parsed.offset, parsed.offset + parsed.limit - 1);
 
     if (error) {
+      // Same graceful fallback: unknown event_type filter → empty result with hint.
+      if (parsed.event_type) {
+        return this.buildTextResponse({
+          events: [],
+          total: 0,
+          message: `No timeline events found for event_type: "${parsed.event_type}". The type may not exist or have no events yet.`,
+        });
+      }
       throw new McpError(
         ErrorCode.InternalError,
         `Failed to list timeline events: ${error.message}`
       );
     }
 
-    return this.buildTextResponse({
-      events: events || [],
-      total: count || 0,
-    });
+    // When the caller filtered by event_type and received zero rows, include an
+    // informational message so agents know the type simply has no events yet.
+    const total = count ?? 0;
+    const eventList = events || [];
+    const result: Record<string, unknown> = { events: eventList, total };
+    if (parsed.event_type && eventList.length === 0) {
+      result.message = `No timeline events found for event_type: "${parsed.event_type}". The type may not exist or have no events yet.`;
+    }
+
+    return this.buildTextResponse(result);
   }
 
   private async retrieveEntityByIdentifier(
