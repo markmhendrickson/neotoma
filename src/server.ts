@@ -4297,18 +4297,33 @@ export class NeotomaServer {
 
     // Omit filename when not provided: agent-provided structured data has no real file origin.
     const filenameForStorage = originalFilename?.trim() || undefined;
-    const storageResult = await storeRawContent({
-      userId,
-      fileBuffer,
-      mimeType: "application/json",
-      originalFilename: filenameForStorage,
-      idempotencyKey,
-      provenance: {
-        upload_method: "mcp_store",
-        client: "mcp",
-        source_priority: sourcePriority,
-      },
-    });
+    let storageResult: Awaited<ReturnType<typeof storeRawContent>>;
+    try {
+      storageResult = await storeRawContent({
+        userId,
+        fileBuffer,
+        mimeType: "application/json",
+        originalFilename: filenameForStorage,
+        idempotencyKey,
+        provenance: {
+          upload_method: "mcp_store",
+          client: "mcp",
+          source_priority: sourcePriority,
+        },
+      });
+    } catch (rawStorageErr) {
+      // Surface idempotency collision as a structured McpError so clients receive
+      // a clear -32602 InvalidParams rather than an opaque internal error.
+      const msg =
+        rawStorageErr instanceof Error ? rawStorageErr.message : String(rawStorageErr);
+      if (msg.includes("Idempotency key reuse detected")) {
+        throw new McpError(
+          ErrorCode.InvalidParams,
+          `ERR_IDEMPOTENCY_COLLISION: ${msg}`
+        );
+      }
+      throw rawStorageErr;
+    }
 
     const resolvedInterpretationSourceId =
       interpretation?.source_id ??

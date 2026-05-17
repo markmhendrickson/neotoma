@@ -5903,6 +5903,7 @@ export async function storeStructuredForApi(params: {
 
   const jsonContent = incomingJsonContent;
   const filenameForStorage = originalFilename?.trim() || undefined;
+
   const storageResult = await storeRawContent({
     userId,
     fileBuffer: Buffer.from(jsonContent, "utf-8"),
@@ -6780,6 +6781,11 @@ async function handleStorePost(
           issues: err.issues ?? [],
         },
       });
+    }
+    if (error && typeof error === "object" && errCode === "ERR_IDEMPOTENCY_COLLISION") {
+      const message = error instanceof Error ? error.message : String(error);
+      logWarn("IdempotencyCollision:store", req, { message });
+      return sendError(res, 409, "ERR_IDEMPOTENCY_COLLISION", message);
     }
     if (error && typeof error === "object" && errCode === "ERR_FLAT_PACKED_ROWS") {
       const err = error as {
