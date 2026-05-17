@@ -1733,6 +1733,8 @@ export class NeotomaServer {
       case "list_interpretations":
         return await this.listInterpretations(args);
       case "store":
+      case "store_structured":
+      case "store_unstructured":
         return await this.store(args);
       case "parse_file":
         return await this.parseFile(args);
