@@ -117,17 +117,17 @@ export interface Operations {
   retrieveEntityByIdentifier(input: RetrieveEntityByIdentifierInput): Promise<unknown>;
 
   /** Snapshot of a single entity. Pass format: "json" for machine-readable payloads (e.g. issue tooling). */
-  retrieveEntitySnapshot(input: { entity_id: string; format?: string; at?: string }): Promise<unknown>;
+  retrieveEntitySnapshot(input: {
+    entity_id: string;
+    format?: string;
+    at?: string;
+  }): Promise<unknown>;
 
   /** List observations for provenance / history. */
   listObservations(input: { entity_id: string; limit?: number }): Promise<unknown>;
 
   /** List timeline events for a time window. */
-  listTimelineEvents(input: {
-    since?: string;
-    until?: string;
-    limit?: number;
-  }): Promise<unknown>;
+  listTimelineEvents(input: { since?: string; until?: string; limit?: number }): Promise<unknown>;
 
   /** Retrieve related entities (graph expansion). */
   retrieveRelatedEntities(input: {

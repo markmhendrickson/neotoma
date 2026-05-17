@@ -97,10 +97,7 @@ export function getCurrentAgentIdentity(): AgentIdentity | null {
  */
 export function getCurrentAttribution(): AttributionProvenance {
   const store = storage.getStore();
-  return toAttributionProvenance(
-    store?.agentIdentity ?? null,
-    store?.externalActor ?? null
-  );
+  return toAttributionProvenance(store?.agentIdentity ?? null, store?.externalActor ?? null);
 }
 
 /**

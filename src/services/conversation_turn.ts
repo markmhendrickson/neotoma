@@ -179,12 +179,19 @@ function buildSummaryFromRow(row: TurnRow): ConversationTurnSummary {
   const snap = safeJson<Record<string, unknown>>(row.snapshot_json) ?? {};
   const hookEvents = Array.isArray(snap.hook_events) ? (snap.hook_events as string[]) : [];
   const missedSteps = Array.isArray(snap.missed_steps) ? (snap.missed_steps as string[]) : [];
-  const storedIds = Array.isArray(snap.stored_entity_ids) ? (snap.stored_entity_ids as string[]) : [];
-  const retrievedIds = Array.isArray(snap.retrieved_entity_ids) ? (snap.retrieved_entity_ids as string[]) : [];
-  const toolInvocationCount = typeof snap.tool_invocation_count === "number" ? snap.tool_invocation_count : 0;
-  const storeStructuredCalls = typeof snap.store_structured_calls === "number" ? snap.store_structured_calls : 0;
+  const storedIds = Array.isArray(snap.stored_entity_ids)
+    ? (snap.stored_entity_ids as string[])
+    : [];
+  const retrievedIds = Array.isArray(snap.retrieved_entity_ids)
+    ? (snap.retrieved_entity_ids as string[])
+    : [];
+  const toolInvocationCount =
+    typeof snap.tool_invocation_count === "number" ? snap.tool_invocation_count : 0;
+  const storeStructuredCalls =
+    typeof snap.store_structured_calls === "number" ? snap.store_structured_calls : 0;
   const retrieveCalls = typeof snap.retrieve_calls === "number" ? snap.retrieve_calls : 0;
-  const neotomaToolFailures = typeof snap.neotoma_tool_failures === "number" ? snap.neotoma_tool_failures : 0;
+  const neotomaToolFailures =
+    typeof snap.neotoma_tool_failures === "number" ? snap.neotoma_tool_failures : 0;
   const cwd = cleanString(snap.cwd as string) ?? cleanString(snap.working_directory as string);
   return {
     entity_id: row.entity_id,
@@ -199,7 +206,9 @@ function buildSummaryFromRow(row: TurnRow): ConversationTurnSummary {
     cwd,
     working_directory: cwd,
     git_branch: cleanString(snap.git_branch as string),
-    active_file_refs: Array.isArray(snap.active_file_refs) ? (snap.active_file_refs as string[]) : [],
+    active_file_refs: Array.isArray(snap.active_file_refs)
+      ? (snap.active_file_refs as string[])
+      : [],
     context_source: cleanString(snap.context_source as string),
     hook_events: hookEvents,
     missed_steps: missedSteps,
@@ -213,15 +222,10 @@ function buildSummaryFromRow(row: TurnRow): ConversationTurnSummary {
       typeof snap.injected_context_chars === "number" ? snap.injected_context_chars : null,
     failure_hint_shown:
       typeof snap.failure_hint_shown === "boolean" ? snap.failure_hint_shown : null,
-    safety_net_used:
-      typeof snap.safety_net_used === "boolean" ? snap.safety_net_used : null,
+    safety_net_used: typeof snap.safety_net_used === "boolean" ? snap.safety_net_used : null,
     started_at: cleanString(snap.started_at as string),
     ended_at: cleanString(snap.ended_at as string),
-    activity_at: latestTs(
-      row.last_observation_at,
-      row.updated_at,
-      row.created_at,
-    ),
+    activity_at: latestTs(row.last_observation_at, row.updated_at, row.created_at),
     latest_write_provenance: safeJson(row.latest_write_provenance_json),
     hook_summary: {
       hook_event_count: hookEvents.length,
@@ -281,7 +285,7 @@ export function listConversationTurns(
   userId: string,
   limit: number,
   offset: number,
-  filters?: ConversationTurnsFilters | null,
+  filters?: ConversationTurnsFilters | null
 ): { items: ConversationTurnSummary[]; has_more: boolean; limit: number; offset: number } {
   const db = getSqliteDb();
   const safeLimit = Math.min(Math.max(limit, 1), 100);
@@ -298,12 +302,16 @@ export function listConversationTurns(
     .all(
       userId,
       userId,
-      harness, harness,
-      status, status,
-      activityAfter, activityAfter,
-      activityBefore, activityBefore,
+      harness,
+      harness,
+      status,
+      status,
+      activityAfter,
+      activityAfter,
+      activityBefore,
+      activityBefore,
       fetchLimit,
-      safeOffset,
+      safeOffset
     ) as TurnRow[];
 
   const hasMore = rows.length > safeLimit;
@@ -341,24 +349,32 @@ LIMIT 1
 
 export function getConversationTurn(
   userId: string,
-  turnKey: string,
+  turnKey: string
 ): ConversationTurnDetail | null {
   const db = getSqliteDb();
   const row = db.prepare(DETAIL_SQL).get(userId, userId, turnKey) as TurnRow | undefined;
   if (!row) return null;
   const summary = buildSummaryFromRow(row);
   const snap = safeJson<Record<string, unknown>>(row.snapshot_json) ?? {};
-  const storedIds = Array.isArray(snap.stored_entity_ids) ? (snap.stored_entity_ids as string[]) : [];
-  const retrievedIds = Array.isArray(snap.retrieved_entity_ids) ? (snap.retrieved_entity_ids as string[]) : [];
+  const storedIds = Array.isArray(snap.stored_entity_ids)
+    ? (snap.stored_entity_ids as string[])
+    : [];
+  const retrievedIds = Array.isArray(snap.retrieved_entity_ids)
+    ? (snap.retrieved_entity_ids as string[])
+    : [];
   const allIds = [...new Set([...storedIds, ...retrievedIds])];
 
   const related: ConversationTurnRelatedEntity[] = [];
   if (allIds.length > 0) {
     const relatedRows = db
       .prepare(
-        `SELECT id, entity_type, canonical_name FROM entities WHERE user_id = ? AND id IN (${placeholders(allIds.length)})`,
+        `SELECT id, entity_type, canonical_name FROM entities WHERE user_id = ? AND id IN (${placeholders(allIds.length)})`
       )
-      .all(userId, ...allIds) as Array<{ id: string; entity_type: string | null; canonical_name: string | null }>;
+      .all(userId, ...allIds) as Array<{
+      id: string;
+      entity_type: string | null;
+      canonical_name: string | null;
+    }>;
     const byId = new Map(relatedRows.map((r) => [r.id, r]));
     for (const id of storedIds) {
       const r = byId.get(id);
@@ -387,13 +403,17 @@ export function getConversationTurn(
     }
   }
 
-  return { ...summary, related_entities: related, messages: listMessagesForTurn(userId, summary.turn_key, summary.hook_summary) };
+  return {
+    ...summary,
+    related_entities: related,
+    messages: listMessagesForTurn(userId, summary.turn_key, summary.hook_summary),
+  };
 }
 
 function listMessagesForTurn(
   userId: string,
   turnKey: string,
-  hookSummary: ConversationTurnHookSummary,
+  hookSummary: ConversationTurnHookSummary
 ): ConversationTurnMessage[] {
   const cleanTurnKey = cleanString(turnKey);
   if (!cleanTurnKey) return [];
@@ -424,7 +444,7 @@ function listMessagesForTurn(
           ifnull(nullif(trim(e.updated_at), ''), '${TS_EPOCH}'),
           ifnull(nullif(trim(e.created_at), ''), '${TS_EPOCH}')
         ) ASC,
-        e.id ASC`,
+        e.id ASC`
     )
     .all(userId, cleanTurnKey, `${cleanTurnKey}:assistant`) as MessageRow[];
 
@@ -466,7 +486,7 @@ function listMessagesForTurn(
       WHERE rs.user_id = ?
         AND rs.source_entity_id IN (${placeholders(messages.length)})
         AND rs.relationship_type != 'PART_OF'
-      ORDER BY rs.last_observation_at DESC, rs.computed_at DESC, te.id`,
+      ORDER BY rs.last_observation_at DESC, rs.computed_at DESC, te.id`
     )
     .all(userId, userId, ...messages.map((message) => message.message_id)) as RelatedEntityRow[];
 
@@ -496,7 +516,7 @@ function listMessagesForTurn(
  */
 export function listHookSummariesByTurnKeys(
   userId: string,
-  turnKeys: string[],
+  turnKeys: string[]
 ): Map<string, ConversationTurnHookSummary> {
   if (turnKeys.length === 0) return new Map();
   const db = getSqliteDb();
@@ -507,7 +527,7 @@ export function listHookSummariesByTurnKeys(
        LEFT JOIN entity_snapshots es ON es.entity_id = e.id
        WHERE e.user_id = ?
          AND e.entity_type IN ('conversation_turn', 'turn_compliance', 'turn_activity')
-         AND e.canonical_name IN (${placeholders(turnKeys.length)})`,
+         AND e.canonical_name IN (${placeholders(turnKeys.length)})`
     )
     .all(userId, ...turnKeys) as Array<{ canonical_name: string; snapshot: string | null }>;
 
@@ -519,12 +539,15 @@ export function listHookSummariesByTurnKeys(
     const retrievedIds = Array.isArray(snap.retrieved_entity_ids) ? snap.retrieved_entity_ids : [];
     result.set(row.canonical_name, {
       hook_event_count: hookEvents.length,
-      tool_invocation_count: typeof snap.tool_invocation_count === "number" ? snap.tool_invocation_count : 0,
-      store_structured_calls: typeof snap.store_structured_calls === "number" ? snap.store_structured_calls : 0,
+      tool_invocation_count:
+        typeof snap.tool_invocation_count === "number" ? snap.tool_invocation_count : 0,
+      store_structured_calls:
+        typeof snap.store_structured_calls === "number" ? snap.store_structured_calls : 0,
       retrieve_calls: typeof snap.retrieve_calls === "number" ? snap.retrieve_calls : 0,
       stored_entity_count: storedIds.length,
       retrieved_entity_count: retrievedIds.length,
-      neotoma_tool_failures: typeof snap.neotoma_tool_failures === "number" ? snap.neotoma_tool_failures : 0,
+      neotoma_tool_failures:
+        typeof snap.neotoma_tool_failures === "number" ? snap.neotoma_tool_failures : 0,
     });
   }
   return result;

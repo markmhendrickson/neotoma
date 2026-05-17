@@ -1,5 +1,8 @@
 import { getSqliteDb } from "../repositories/sqlite/sqlite_client.js";
-import { listHookSummariesByTurnKeys, type ConversationTurnHookSummary } from "./conversation_turn.js";
+import {
+  listHookSummariesByTurnKeys,
+  type ConversationTurnHookSummary,
+} from "./conversation_turn.js";
 
 const TS_EPOCH = "1970-01-01T00:00:00.000Z";
 
@@ -345,7 +348,7 @@ ORDER BY rs.last_observation_at DESC, rs.computed_at DESC, te.id
 
 function assembleConversationItems(
   userId: string,
-  conversationRows: ConversationRow[],
+  conversationRows: ConversationRow[]
 ): RecentConversationItem[] {
   const db = getSqliteDb();
   const conversationIds = conversationRows.map((row) => row.conversation_id);
@@ -372,7 +375,9 @@ function assembleConversationItems(
 
     normalizedMessages.sort((a, b) => {
       if (a.conversation_id !== b.conversation_id) {
-        return conversationIds.indexOf(a.conversation_id) - conversationIds.indexOf(b.conversation_id);
+        return (
+          conversationIds.indexOf(a.conversation_id) - conversationIds.indexOf(b.conversation_id)
+        );
       }
       const byTime = a.item.activity_at.localeCompare(b.item.activity_at);
       if (byTime !== 0) return byTime;
@@ -415,9 +420,10 @@ function assembleConversationItems(
       }
     }
   }
-  const hookSummaries = allTurnKeys.size > 0
-    ? listHookSummariesByTurnKeys(userId, [...allTurnKeys])
-    : new Map<string, ConversationTurnHookSummary>();
+  const hookSummaries =
+    allTurnKeys.size > 0
+      ? listHookSummariesByTurnKeys(userId, [...allTurnKeys])
+      : new Map<string, ConversationTurnHookSummary>();
 
   return conversationRows.map((row) => {
     const messages = messagesByConversation.get(row.conversation_id) ?? [];
@@ -436,7 +442,7 @@ function assembleConversationItems(
         row.latest_message_activity,
         row.last_observation_at,
         row.updated_at,
-        row.created_at,
+        row.created_at
       ),
       message_count: Number(row.message_count ?? messages.length ?? 0),
       latest_write_provenance: parseProvenanceJson(row.latest_write_provenance_json),
@@ -449,7 +455,7 @@ export function listRecentConversations(
   userId: string,
   limit: number,
   offset: number,
-  filters?: RecentConversationsFilters | null,
+  filters?: RecentConversationsFilters | null
 ): { items: RecentConversationItem[]; has_more: boolean; limit: number; offset: number } {
   const db = getSqliteDb();
   const safeLimit = Math.min(Math.max(limit, 1), 100);
@@ -475,7 +481,7 @@ export function listRecentConversations(
       userId,
       agentKey,
       fetchLimit,
-      safeOffset,
+      safeOffset
     ) as ConversationRow[];
 
   const hasMore = conversationRows.length > safeLimit;
@@ -496,14 +502,14 @@ export function listRecentConversations(
  */
 export function getRecentConversationById(
   userId: string,
-  conversationId: string,
+  conversationId: string
 ): RecentConversationItem | null {
   const db = getSqliteDb();
   const id = conversationId.trim();
   if (!id) return null;
-  const row = db
-    .prepare(CONVERSATION_BY_ID_SQL)
-    .get(userId, userId, userId, userId, id) as ConversationRow | undefined;
+  const row = db.prepare(CONVERSATION_BY_ID_SQL).get(userId, userId, userId, userId, id) as
+    | ConversationRow
+    | undefined;
   if (!row) return null;
   const items = assembleConversationItems(userId, [row]);
   return items[0] ?? null;

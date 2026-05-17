@@ -23,7 +23,10 @@ import type { AgentGrant } from "./agent_grants.js";
  */
 export function promoteExternalActorViaGrant(
   actor: ExternalActor,
-  grant: Pick<AgentGrant, "linked_github_user_id" | "linked_github_login" | "user_id"> | null | undefined,
+  grant:
+    | Pick<AgentGrant, "linked_github_user_id" | "linked_github_login" | "user_id">
+    | null
+    | undefined
 ): ExternalActor {
   if (!grant) return actor;
   if (!grant.linked_github_user_id) return actor;

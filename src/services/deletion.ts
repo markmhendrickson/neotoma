@@ -9,10 +9,7 @@
 import { db } from "../db.js";
 import { createHash } from "node:crypto";
 
-import {
-  emitEntityLifecycle,
-  emitRelationshipLifecycle,
-} from "../events/substrate_store_emit.js";
+import { emitEntityLifecycle, emitRelationshipLifecycle } from "../events/substrate_store_emit.js";
 
 export interface DeletionObservation extends Record<string, unknown> {
   id: string;
@@ -191,9 +188,7 @@ export async function softDeleteRelationship(
     deleted_by: userId,
     ...(reason && { deletion_reason: reason }),
   });
-  const canonicalHash = createHash("sha256")
-    .update(metadataString)
-    .digest("hex");
+  const canonicalHash = createHash("sha256").update(metadataString).digest("hex");
 
   const deletionObservation = {
     id: observationId,
@@ -365,9 +360,7 @@ export async function restoreRelationship(
     restored_by: userId,
     ...(reason && { restoration_reason: reason }),
   });
-  const canonicalHash = createHash("sha256")
-    .update(metadataString)
-    .digest("hex");
+  const canonicalHash = createHash("sha256").update(metadataString).digest("hex");
 
   const restorationObservation = {
     id: observationId,
@@ -433,10 +426,7 @@ export async function restoreRelationship(
  * @param userId - User ID (for RLS)
  * @returns True if entity is deleted
  */
-export async function isEntityDeleted(
-  entityId: string,
-  userId: string
-): Promise<boolean> {
+export async function isEntityDeleted(entityId: string, userId: string): Promise<boolean> {
   const { data, error } = await db
     .from("observations")
     .select("fields, source_priority, observed_at")
@@ -509,13 +499,7 @@ export async function batchSoftDeleteEntities(
   const results: DeletionResult[] = [];
 
   for (const entityId of entityIds) {
-    const result = await softDeleteEntity(
-      entityId,
-      entityType,
-      userId,
-      reason,
-      timestamp
-    );
+    const result = await softDeleteEntity(entityId, entityType, userId, reason, timestamp);
     results.push(result);
   }
 

@@ -24,12 +24,51 @@ import {
  */
 const REJECTED_CANONICAL_VALUES = new Set([
   // ISO 4217 currency codes (small high-risk subset)
-  "usd", "eur", "gbp", "jpy", "cny", "inr", "cad", "aud", "chf", "mxn",
-  "brl", "zar", "nzd", "sek", "nok", "dkk", "krw", "sgd", "hkd", "twd",
+  "usd",
+  "eur",
+  "gbp",
+  "jpy",
+  "cny",
+  "inr",
+  "cad",
+  "aud",
+  "chf",
+  "mxn",
+  "brl",
+  "zar",
+  "nzd",
+  "sek",
+  "nok",
+  "dkk",
+  "krw",
+  "sgd",
+  "hkd",
+  "twd",
   // Common status/category tokens
-  "unknown", "null", "none", "n/a", "na", "tbd", "undefined", "other", "misc",
-  "active", "inactive", "pending", "complete", "completed", "cancelled",
-  "draft", "approved", "rejected", "open", "closed", "true", "false", "yes", "no",
+  "unknown",
+  "null",
+  "none",
+  "n/a",
+  "na",
+  "tbd",
+  "undefined",
+  "other",
+  "misc",
+  "active",
+  "inactive",
+  "pending",
+  "complete",
+  "completed",
+  "cancelled",
+  "draft",
+  "approved",
+  "rejected",
+  "open",
+  "closed",
+  "true",
+  "false",
+  "yes",
+  "no",
 ]);
 
 /**
@@ -44,11 +83,7 @@ export class CanonicalNameUnresolvedError extends Error {
   public readonly seenFields: string[];
   public readonly attemptedValue: string | null;
 
-  constructor(params: {
-    entityType: string;
-    seenFields: string[];
-    attemptedValue: string | null;
-  }) {
+  constructor(params: { entityType: string; seenFields: string[]; attemptedValue: string | null }) {
     const preview = params.attemptedValue
       ? ` (derivation landed on "${params.attemptedValue}", a rejected token)`
       : "";
@@ -60,7 +95,7 @@ export class CanonicalNameUnresolvedError extends Error {
         `Declare \`canonical_name_fields\` on the ${params.entityType} schema ` +
         `to make this deterministic, or supply one of: canonical_name, name, ` +
         `full_name, title, email, url. See ` +
-        `docs/foundation/schema_agnostic_design_rules.md.${seen}`,
+        `docs/foundation/schema_agnostic_design_rules.md.${seen}`
     );
     this.name = "CanonicalNameUnresolvedError";
     this.entityType = params.entityType;
@@ -186,14 +221,9 @@ export interface Entity {
  * Generate deterministic entity ID from entity type and name.
  * Validators: {@link isNeotomaEntityId} in `shared/neotoma_entity_id.ts`.
  */
-export function generateEntityId(
-  entityType: string,
-  canonicalName: string,
-): string {
+export function generateEntityId(entityType: string, canonicalName: string): string {
   const normalized = normalizeEntityValue(entityType, canonicalName);
-  const hash = createHash("sha256")
-    .update(`${entityType}:${normalized}`)
-    .digest("hex");
+  const hash = createHash("sha256").update(`${entityType}:${normalized}`).digest("hex");
 
   return `ent_${hash.substring(0, 24)}`;
 }
@@ -220,14 +250,15 @@ export function normalizeEntityValue(entityType: string, raw: string): string {
 
   if (entityType === "company" || entityType === "organization") {
     normalized = normalized
-      .replace(/\s+(inc|llc|ltd|corp|corporation|co|company|limited|plc|gmbh|sa|ag|pty|pvt)\.?$/i, "")
+      .replace(
+        /\s+(inc|llc|ltd|corp|corporation|co|company|limited|plc|gmbh|sa|ag|pty|pvt)\.?$/i,
+        ""
+      )
       .trim();
   }
 
   if (entityType === "person" || entityType === "contact") {
-    normalized = normalized
-      .replace(/\b(mr|mrs|ms|dr|prof|sir|jr|sr|ii|iii|iv)\.?\b/gi, "")
-      .trim();
+    normalized = normalized.replace(/\b(mr|mrs|ms|dr|prof|sir|jr|sr|ii|iii|iv)\.?\b/gi, "").trim();
   }
 
   if (!isIdDerived) {
@@ -246,14 +277,10 @@ export function normalizeEntityValue(entityType: string, raw: string): string {
  * hashes {@link normalizeEntityValue} of this string, so IDs stay stable and
  * case-insensitive.
  */
-export function formatCanonicalNameForStorage(
-  entityType: string,
-  raw: string,
-): string {
+export function formatCanonicalNameForStorage(entityType: string, raw: string): string {
   let s = raw.trim();
   const probe = s.toLowerCase();
-  const isIdDerived =
-    probe.startsWith("id:") || /^\w+:/.test(probe);
+  const isIdDerived = probe.startsWith("id:") || /^\w+:/.test(probe);
 
   if (/\S+@\S+/.test(probe)) {
     return raw.trim().toLowerCase();
@@ -263,15 +290,13 @@ export function formatCanonicalNameForStorage(
     s = s
       .replace(
         /\s+(inc|llc|ltd|corp|corporation|co|company|limited|plc|gmbh|sa|ag|pty|pvt)\.?$/i,
-        "",
+        ""
       )
       .trim();
   }
 
   if (entityType === "person" || entityType === "contact") {
-    s = s
-      .replace(/\b(mr|mrs|ms|dr|prof|sir|jr|sr|ii|iii|iv)\.?\b/gi, "")
-      .trim();
+    s = s.replace(/\b(mr|mrs|ms|dr|prof|sir|jr|sr|ii|iii|iv)\.?\b/gi, "").trim();
   }
 
   if (!isIdDerived) {
@@ -291,9 +316,7 @@ export function formatCanonicalNameForStorage(
  * array containing any `{ composite: [...] }` entry opts into the ordered
  * rules shape.
  */
-function isLegacyCompositeDeclaration(
-  rules: CanonicalNameRule[],
-): rules is string[] {
+function isLegacyCompositeDeclaration(rules: CanonicalNameRule[]): rules is string[] {
   return rules.every((r) => typeof r === "string");
 }
 
@@ -308,7 +331,7 @@ function compositeFieldsForLabel(fields: string[]): string {
 function tryComposite(
   entityType: string,
   fields: Record<string, unknown>,
-  compositeFields: string[],
+  compositeFields: string[]
 ): string | null {
   const parts: string[] = [];
   for (const key of compositeFields) {
@@ -317,16 +340,13 @@ function tryComposite(
     parts.push(String(value).trim());
   }
   if (parts.length === 0) return null;
-  return formatCanonicalNameForStorage(
-    entityType,
-    `${entityType}:${parts.join("|")}`,
-  );
+  return formatCanonicalNameForStorage(entityType, `${entityType}:${parts.join("|")}`);
 }
 
 function deriveCanonicalNameFromSchemaRules(
   entityType: string,
   fields: Record<string, unknown>,
-  schema?: Pick<SchemaDefinition, "canonical_name_fields"> | null,
+  schema?: Pick<SchemaDefinition, "canonical_name_fields"> | null
 ): CanonicalNameDerivation | null {
   const rules = schema?.canonical_name_fields;
   if (!rules || rules.length === 0) return null;
@@ -351,7 +371,7 @@ function deriveCanonicalNameFromSchemaRules(
       if (v == null || String(v).trim() === "") continue;
       const canonical = formatCanonicalNameForStorage(
         entityType,
-        `${entityType}:${String(v).trim()}`,
+        `${entityType}:${String(v).trim()}`
       );
       return {
         canonicalName: canonical,
@@ -394,7 +414,7 @@ function deriveCanonicalNameFromSchemaRules(
 export function deriveCanonicalNameFromFieldsWithTrace(
   entityType: string,
   fields: Record<string, unknown>,
-  schema?: Pick<SchemaDefinition, "canonical_name_fields"> | null,
+  schema?: Pick<SchemaDefinition, "canonical_name_fields"> | null
 ): CanonicalNameDerivation {
   const schemaDerivation = deriveCanonicalNameFromSchemaRules(entityType, fields, schema);
   if (schemaDerivation) return schemaDerivation;
@@ -494,7 +514,7 @@ export function deriveCanonicalNameFromFieldsWithTrace(
       logger.warn(
         `[ENTITY_RESOLUTION] Falling back to heuristic canonical_name for ${entityType} ` +
           `using field "${key}"; declare canonical_name_fields on the schema to make this deterministic. ` +
-          `See docs/foundation/schema_agnostic_design_rules.md.`,
+          `See docs/foundation/schema_agnostic_design_rules.md.`
       );
       break;
     }
@@ -546,7 +566,7 @@ export function deriveCanonicalNameFromFieldsWithTrace(
 export function deriveCanonicalNameFromFields(
   entityType: string,
   fields: Record<string, unknown>,
-  schema?: Pick<SchemaDefinition, "canonical_name_fields"> | null,
+  schema?: Pick<SchemaDefinition, "canonical_name_fields"> | null
 ): string {
   return deriveCanonicalNameFromFieldsWithTrace(entityType, fields, schema).canonicalName;
 }
@@ -632,24 +652,25 @@ export class MergeRefusedError extends Error {
         : params.policy === "reject"
           ? "schema_policy"
           : "strict";
-    const message = reason === "identity_conflict"
-      ? `Identity conflict: target_id ${params.targetEntityId ?? "(unknown)"} for ` +
+    const message =
+      reason === "identity_conflict"
+        ? `Identity conflict: target_id ${params.targetEntityId ?? "(unknown)"} for ` +
           `"${params.entityType}" also declares schema identity fields that resolve ` +
           `to existing entity ${params.entityId} (canonical_name "${params.canonicalName}"). ` +
           `Write to the existing entity, merge the duplicate first, or remove the conflicting ` +
           `identity fields from the target_id update.`
-      : reason === "schema_policy"
-      ? `Schema policy "name_collision_policy: reject": resolution for ` +
-          `"${params.entityType}" landed on existing entity ${params.entityId} ` +
-          `(canonical_name "${params.canonicalName}") via a heuristic path. ` +
-          `Supply a value for the schema's canonical_name_fields to match ` +
-          `deterministically, or pass target_id to extend the existing entity.`
-      : `Strict mode: resolution for "${params.entityType}" landed on existing ` +
-          `entity ${params.entityId} (canonical_name "${params.canonicalName}") ` +
-          `without an explicit target_id or a schema canonical_name_fields ` +
-          `match. Pass target_id to extend the existing entity, declare ` +
-          `canonical_name_fields on the schema, or drop --strict / ` +
-          `intent: "create_new" to allow the merge.`;
+        : reason === "schema_policy"
+          ? `Schema policy "name_collision_policy: reject": resolution for ` +
+            `"${params.entityType}" landed on existing entity ${params.entityId} ` +
+            `(canonical_name "${params.canonicalName}") via a heuristic path. ` +
+            `Supply a value for the schema's canonical_name_fields to match ` +
+            `deterministically, or pass target_id to extend the existing entity.`
+          : `Strict mode: resolution for "${params.entityType}" landed on existing ` +
+            `entity ${params.entityId} (canonical_name "${params.canonicalName}") ` +
+            `without an explicit target_id or a schema canonical_name_fields ` +
+            `match. Pass target_id to extend the existing entity, declare ` +
+            `canonical_name_fields on the schema, or drop --strict / ` +
+            `intent: "create_new" to allow the merge.`;
     super(message);
     this.name = "MergeRefusedError";
     this.entityType = params.entityType;
@@ -673,7 +694,7 @@ export class MergeRefusedError extends Error {
  * identity rule.
  */
 export async function resolveEntityWithTrace(
-  options: ResolveEntityOptions,
+  options: ResolveEntityOptions
 ): Promise<ResolveEntityResult> {
   const { entityType, userId, fields, commit = true, targetId, strict } = options;
 
@@ -688,7 +709,7 @@ export async function resolveEntityWithTrace(
     } catch (err) {
       logger.warn(
         `[ENTITY_RESOLUTION] Failed to load schema for ${entityType}; ` +
-          `falling back to heuristic canonical_name. Error: ${(err as Error).message}`,
+          `falling back to heuristic canonical_name. Error: ${(err as Error).message}`
       );
       schema = null;
     }
@@ -723,11 +744,7 @@ export async function resolveEntityWithTrace(
     // for appending observations without allowing a row to acquire an identity
     // already owned by another deterministic entity.
     if (schema?.canonical_name_fields && schema.canonical_name_fields.length > 0) {
-      const derivation = deriveCanonicalNameFromSchemaRules(
-        entityType,
-        fields,
-        schema,
-      );
+      const derivation = deriveCanonicalNameFromSchemaRules(entityType, fields, schema);
       if (derivation) {
         const canonicalEntityId = generateEntityId(entityType, derivation.canonicalName);
         if (canonicalEntityId !== targetId) {
@@ -763,11 +780,7 @@ export async function resolveEntityWithTrace(
     };
   }
 
-  const derivation = deriveCanonicalNameFromFieldsWithTrace(
-    entityType,
-    fields,
-    schema,
-  );
+  const derivation = deriveCanonicalNameFromFieldsWithTrace(entityType, fields, schema);
   const canonicalName = derivation.canonicalName;
   const path: ResolverPathStep[] = [...derivation.path];
   const identityBasis = derivation.identityBasis;
@@ -775,17 +788,13 @@ export async function resolveEntityWithTrace(
 
   const entityId = generateEntityId(entityType, canonicalName);
 
-  const { data: existing } = await db
-    .from("entities")
-    .select("*")
-    .eq("id", entityId)
-    .maybeSingle();
+  const { data: existing } = await db.from("entities").select("*").eq("id", entityId).maybeSingle();
 
   if (existing) {
     // Strict mode refuses to merge into an existing entity unless the
     // resolution came from a schema-declared composite identity rule.
     const schemaDeterministic = path.some((step) =>
-      step.startsWith("schema:canonical_name_fields"),
+      step.startsWith("schema:canonical_name_fields")
     );
     if (strict && !schemaDeterministic) {
       throw new MergeRefusedError({
@@ -801,8 +810,7 @@ export async function resolveEntityWithTrace(
     // merge proceed but attaches a non-fatal warning to the trace. `merge`
     // (default) preserves legacy behavior.
     const collisionPolicy =
-      (schema as SchemaDefinition | null | undefined)?.name_collision_policy ??
-      "merge";
+      (schema as SchemaDefinition | null | undefined)?.name_collision_policy ?? "merge";
     const warnings: ResolverWarning[] = [];
     if (!schemaDeterministic) {
       if (collisionPolicy === "reject") {
@@ -830,8 +838,7 @@ export async function resolveEntityWithTrace(
       // Default test user ID that should be updated to actual user_id
       const defaultTestUserId = "00000000-0000-0000-0000-000000000000";
       const shouldUpdateUserId =
-        userId &&
-        (existing.user_id === null || existing.user_id === defaultTestUserId);
+        userId && (existing.user_id === null || existing.user_id === defaultTestUserId);
 
       if (shouldUpdateUserId) {
         const { error: updateError } = await db
@@ -842,11 +849,11 @@ export async function resolveEntityWithTrace(
         if (updateError) {
           logger.warn(
             `Failed to update user_id for existing entity ${entityId}:`,
-            updateError.message,
+            updateError.message
           );
         } else {
           logger.info(
-            `Updated user_id for entity ${entityId} from ${existing.user_id} to ${userId}`,
+            `Updated user_id for entity ${entityId} from ${existing.user_id} to ${userId}`
           );
         }
       } else if (existing.user_id && userId && existing.user_id !== userId) {
@@ -854,7 +861,7 @@ export async function resolveEntityWithTrace(
         // This preserves data integrity (entity belongs to another user)
         logger.warn(
           `Entity ${entityId} already has user_id ${existing.user_id}, ` +
-            `but resolution requested with user_id ${userId}. Keeping existing user_id.`,
+            `but resolution requested with user_id ${userId}. Keeping existing user_id.`
         );
       }
     }
@@ -918,10 +925,8 @@ export async function resolveEntityWithTrace(
  * @param options.userId - User ID for user-scoped resolution (optional for backwards compatibility)
  */
 export async function resolveEntity(
-  options:
-    | ResolveEntityOptions
-    | string,
-  rawValue?: string,
+  options: ResolveEntityOptions | string,
+  rawValue?: string
 ): Promise<string> {
   // Support old positional signature for backwards compatibility. This path
   // bypasses derivation (caller provides the raw canonical value directly)
@@ -971,7 +976,7 @@ export async function resolveEntity(
  */
 export function extractEntities(
   properties: Record<string, unknown>,
-  schemaType: string,
+  schemaType: string
 ): Array<{ entity_type: string; raw_value: string }> {
   const entities: Array<{ entity_type: string; raw_value: string }> = [];
 
@@ -983,10 +988,7 @@ export function extractEntities(
         raw_value: properties.vendor_name,
       });
     }
-    if (
-      properties.customer_name &&
-      typeof properties.customer_name === "string"
-    ) {
+    if (properties.customer_name && typeof properties.customer_name === "string") {
       entities.push({
         entity_type: "company",
         raw_value: properties.customer_name,
@@ -1004,19 +1006,13 @@ export function extractEntities(
   }
 
   if (schemaType === "transaction" || schemaType === "bank_statement") {
-    if (
-      properties.merchant_name &&
-      typeof properties.merchant_name === "string"
-    ) {
+    if (properties.merchant_name && typeof properties.merchant_name === "string") {
       entities.push({
         entity_type: "company",
         raw_value: properties.merchant_name,
       });
     }
-    if (
-      properties.counterparty &&
-      typeof properties.counterparty === "string"
-    ) {
+    if (properties.counterparty && typeof properties.counterparty === "string") {
       entities.push({
         entity_type: "company",
         raw_value: properties.counterparty,
@@ -1031,11 +1027,7 @@ export function extractEntities(
  * Get entity by ID
  */
 export async function getEntityById(entityId: string): Promise<Entity | null> {
-  const { data, error } = await db
-    .from("entities")
-    .select("*")
-    .eq("id", entityId)
-    .single();
+  const { data, error } = await db.from("entities").select("*").eq("id", entityId).single();
 
   if (error || !data) {
     return null;
@@ -1063,10 +1055,7 @@ export async function listEntities(filters?: {
   }
 
   if (filters?.offset) {
-    query = query.range(
-      filters.offset,
-      filters.offset + (filters.limit || 10) - 1,
-    );
+    query = query.range(filters.offset, filters.offset + (filters.limit || 10) - 1);
   }
 
   // Order by created_at descending

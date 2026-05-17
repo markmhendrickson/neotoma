@@ -20,7 +20,7 @@ export function convertTimestampNanosToIso(value: unknown): string | null {
     // Convert nanoseconds to milliseconds
     const nanos = typeof value === "bigint" ? value : BigInt(value);
     const millis = Number(nanos / BigInt(1000000));
-    
+
     // Check for valid timestamp range (year 1970-2100)
     if (millis < 0 || millis > 4102444800000) {
       return null;

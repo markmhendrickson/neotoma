@@ -47,15 +47,8 @@ export async function getSnapshot(
   return data as SnapshotRecord | null;
 }
 
-export async function deleteSnapshot(
-  entityId: string,
-  userId: string
-): Promise<void> {
-  await db
-    .from("entity_snapshots")
-    .delete()
-    .eq("entity_id", entityId)
-    .eq("user_id", userId);
+export async function deleteSnapshot(entityId: string, userId: string): Promise<void> {
+  await db.from("entity_snapshots").delete().eq("entity_id", entityId).eq("user_id", userId);
 }
 
 export async function recomputeSnapshot(
@@ -85,14 +78,14 @@ export async function recomputeSnapshot(
 
   const sourceId =
     typeof (observations[0] as { source_id?: string | null }).source_id === "string"
-      ? ((observations[0] as { source_id: string }).source_id || "")
+      ? (observations[0] as { source_id: string }).source_id || ""
       : "";
 
   let schema: SchemaDefinition | null = null;
   try {
     const entry = await schemaRegistry.loadActiveSchema(
       computed.entity_type,
-      computed.user_id || userId,
+      computed.user_id || userId
     );
     schema = entry?.schema_definition ?? null;
   } catch {
@@ -127,7 +120,7 @@ export async function recomputeSnapshot(
   } catch (err) {
     logger.warn(
       `[SNAPSHOT] Failed to re-derive canonical_name for ${entityId}: ` +
-        (err instanceof Error ? err.message : String(err)),
+        (err instanceof Error ? err.message : String(err))
     );
   }
 
@@ -182,7 +175,7 @@ async function maybeRederiveCanonicalName(params: {
     if (collisionById) {
       logger.info(
         `[SNAPSHOT] Skipping canonical_name rename for ${entityId}: ` +
-          `${newCanonicalName} already hashes to ${collisionId}.`,
+          `${newCanonicalName} already hashes to ${collisionId}.`
       );
       return;
     }
@@ -197,15 +190,13 @@ async function maybeRederiveCanonicalName(params: {
   if (Array.isArray(collisionByName) && collisionByName.length > 0) {
     logger.info(
       `[SNAPSHOT] Skipping canonical_name rename for ${entityId}: ` +
-        `another ${entityType} entity already uses "${newCanonicalName}".`,
+        `another ${entityType} entity already uses "${newCanonicalName}".`
     );
     return;
   }
 
   // Preserve the prior name so search by the old identifier still works.
-  const existingAliases = Array.isArray(entityRow.aliases)
-    ? (entityRow.aliases as string[])
-    : [];
+  const existingAliases = Array.isArray(entityRow.aliases) ? (entityRow.aliases as string[]) : [];
   const nextAliases = existingAliases.includes(currentCanonicalName)
     ? existingAliases
     : [...existingAliases, currentCanonicalName];
@@ -221,15 +212,13 @@ async function maybeRederiveCanonicalName(params: {
     .eq("user_id", userId);
 
   if (updateError) {
-    logger.warn(
-      `[SNAPSHOT] canonical_name rename failed for ${entityId}: ${updateError.message}`,
-    );
+    logger.warn(`[SNAPSHOT] canonical_name rename failed for ${entityId}: ${updateError.message}`);
     return;
   }
 
   logger.info(
     `[SNAPSHOT] canonical_name evolved for ${entityId}: ` +
-      `"${currentCanonicalName}" -> "${newCanonicalName}" (prior kept as alias)`,
+      `"${currentCanonicalName}" -> "${newCanonicalName}" (prior kept as alias)`
   );
 }
 

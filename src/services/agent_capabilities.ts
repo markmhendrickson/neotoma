@@ -96,7 +96,7 @@ export class AgentCapabilityError extends Error {
   }) {
     super(
       `Agent "${params.agentLabel}" is not permitted to ${params.op} ` +
-        `entity_type "${params.entityType}".`,
+        `entity_type "${params.entityType}".`
     );
     this.name = "AgentCapabilityError";
     this.op = params.op;
@@ -135,8 +135,7 @@ const LEGACY_CAPABILITY_ENV_VARS = [
 export class LegacyAgentCapabilityEnvError extends Error {
   readonly code = "legacy_agent_capabilities_env" as const;
   readonly variables: string[];
-  readonly migrationCommand =
-    "neotoma agents grants import --owner-user-id <user_id>";
+  readonly migrationCommand = "neotoma agents grants import --owner-user-id <user_id>";
 
   constructor(variables: string[]) {
     super(
@@ -145,7 +144,7 @@ export class LegacyAgentCapabilityEnvError extends Error {
         `Run \`${"neotoma agents grants import --owner-user-id <user_id>"}\` ` +
         "once before this release, then unset these variables: " +
         variables.join(", ") +
-        ".",
+        "."
     );
     this.name = "LegacyAgentCapabilityEnvError";
     this.variables = variables;
@@ -158,9 +157,7 @@ export class LegacyAgentCapabilityEnvError extends Error {
  * during server boot (see {@link assertCapabilityEnvOnBoot} for the
  * Express-friendly wrapper used in `src/server.ts`).
  */
-export function assertNoLegacyCapabilityEnv(
-  env: NodeJS.ProcessEnv = process.env,
-): void {
+export function assertNoLegacyCapabilityEnv(env: NodeJS.ProcessEnv = process.env): void {
   const present = LEGACY_CAPABILITY_ENV_VARS.filter((name) => {
     const value = env[name];
     return typeof value === "string" && value.trim().length > 0;
@@ -187,10 +184,7 @@ export function isAgentDefaultDenyEnabled(): boolean {
 
 /** ---------- Context assembly ---------- */
 
-function agentLabelFor(
-  identity: AgentIdentity | null | undefined,
-  admittedLabel?: string,
-): string {
+function agentLabelFor(identity: AgentIdentity | null | undefined, admittedLabel?: string): string {
   if (admittedLabel && admittedLabel.length > 0) return admittedLabel;
   if (identity?.sub) return identity.sub;
   if (identity?.thumbprint) return `thumb:${identity.thumbprint.slice(0, 12)}`;
@@ -211,7 +205,7 @@ function agentLabelFor(
  * caller is treated as an unrecognised agent.
  */
 export function contextFromAgentIdentity(
-  identity: AgentIdentity | null | undefined,
+  identity: AgentIdentity | null | undefined
 ): AgentCapabilityContext | null {
   if (!identity) return null;
   if (!identity.sub && !identity.thumbprint && !identity.clientName) {
@@ -226,7 +220,7 @@ export function contextFromAgentIdentity(
     iss: identity.iss,
     thumbprint: identity.thumbprint,
     tier: identity.tier,
-    capabilities: admission?.admitted ? admission.capabilities ?? [] : null,
+    capabilities: admission?.admitted ? (admission.capabilities ?? []) : null,
     agentLabel: agentLabelFor(identity, admission?.agent_label),
     admitted: Boolean(admission?.admitted),
   };
@@ -234,7 +228,10 @@ export function contextFromAgentIdentity(
 
 /** ---------- Enforcement ---------- */
 
-function grantOpMatchesRequested(grantOp: AgentCapabilityOp, requestedOp: AgentCapabilityOp): boolean {
+function grantOpMatchesRequested(
+  grantOp: AgentCapabilityOp,
+  requestedOp: AgentCapabilityOp
+): boolean {
   if (grantOp === requestedOp) return true;
   const storeFamily = new Set<AgentCapabilityOp>(["store", "store_structured"]);
   return storeFamily.has(grantOp) && storeFamily.has(requestedOp);
@@ -243,7 +240,7 @@ function grantOpMatchesRequested(grantOp: AgentCapabilityOp, requestedOp: AgentC
 function entryCovers(
   caps: AgentCapabilityEntry[],
   op: AgentCapabilityOp,
-  entityType: string,
+  entityType: string
 ): boolean {
   for (const cap of caps) {
     if (!grantOpMatchesRequested(cap.op, op)) continue;
@@ -270,7 +267,7 @@ function entryCovers(
 export function enforceAgentCapability(
   op: AgentCapabilityOp,
   entityTypes: string[],
-  ctx: AgentCapabilityContext,
+  ctx: AgentCapabilityContext
 ): void {
   if (!entityTypes || entityTypes.length === 0) return;
   const distinctTypes = Array.from(new Set(entityTypes.filter(Boolean)));
@@ -293,9 +290,7 @@ export function enforceAgentCapability(
         `entity_type${denied.length > 1 ? "s" : ""} ` +
         `${denied.map((t) => `"${t}"`).join(", ")}. ` +
         `Edit the grant in Inspector → Agents → Grants and add ` +
-        `{ op: "${op}", entity_types: [${denied
-          .map((t) => `"${t}"`)
-          .join(", ")}] }.`,
+        `{ op: "${op}", entity_types: [${denied.map((t) => `"${t}"`).join(", ")}] }.`,
     });
     logger.warn(
       JSON.stringify({
@@ -305,16 +300,14 @@ export function enforceAgentCapability(
         entity_types: denied,
         agent_label: ctx.agentLabel,
         admitted: true,
-      }),
+      })
     );
     throw err;
   }
 
   // Unadmitted: optionally apply default-deny for verified-signature tiers.
   const enforcedTier =
-    ctx.tier === "hardware" ||
-    ctx.tier === "software" ||
-    ctx.tier === "operator_attested";
+    ctx.tier === "hardware" || ctx.tier === "software" || ctx.tier === "operator_attested";
   if (!enforcedTier) return;
   if (!isAgentDefaultDenyEnabled()) return;
 
@@ -335,7 +328,7 @@ export function enforceAgentCapability(
       entity_types: distinctTypes,
       agent_label: ctx.agentLabel,
       admitted: false,
-    }),
+    })
   );
   throw err;
 }

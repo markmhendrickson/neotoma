@@ -143,14 +143,10 @@ export async function initMirrorRepo(cfg?: MirrorConfig): Promise<{ initialized:
  *   trigger: <store|correct|interpret|relationships|sources|schemas>
  *   author: <agent|user>
  */
-export function buildCommitMessage(
-  batch: MirrorCommitBatch,
-  fileCount: number
-): string {
-  const kinds = (batch.kinds && batch.kinds.length > 0
-    ? batch.kinds
-    : uniqueKindsFromBatch(batch)
-  ).slice().sort();
+export function buildCommitMessage(batch: MirrorCommitBatch, fileCount: number): string {
+  const kinds = (batch.kinds && batch.kinds.length > 0 ? batch.kinds : uniqueKindsFromBatch(batch))
+    .slice()
+    .sort();
 
   const lines: string[] = [];
   lines.push(
@@ -168,8 +164,7 @@ export function buildCommitMessage(
           : a.entity_type.localeCompare(b.entity_type)
       );
     for (const e of sorted) {
-      const suffix =
-        typeof e.field_count === "number" ? ` (${e.field_count} field(s))` : "";
+      const suffix = typeof e.field_count === "number" ? ` (${e.field_count} field(s))` : "";
       lines.push(`  - ${e.entity_type}/${e.slug}${suffix}`);
     }
   }
@@ -245,8 +240,8 @@ export async function commitMirrorBatch(
 
   const message = buildCommitMessage(batch, fileCount);
   const commitOpts: Record<string, string | null> = { ...MIRROR_COMMIT_SAFETY_OPTS };
-  if (batch.author?.name) commitOpts["--author"] =
-    `${batch.author.name} <${batch.author.email ?? "neotoma@localhost"}>`;
+  if (batch.author?.name)
+    commitOpts["--author"] = `${batch.author.name} <${batch.author.email ?? "neotoma@localhost"}>`;
 
   const res = await git.commit(message, undefined, commitOpts);
   return {
@@ -278,10 +273,7 @@ export async function ensureInitialCommit(cfg?: MirrorConfig): Promise<GitCommit
 
   await git.add(["-A"]);
   const status = await git.status();
-  const fileCount =
-    status.staged.length +
-    status.created.length +
-    status.modified.length;
+  const fileCount = status.staged.length + status.created.length + status.modified.length;
   if (fileCount === 0) return { committed: false, reason: "empty_diff" };
 
   const res = await git.commit("Neotoma mirror initialized\n", undefined, {

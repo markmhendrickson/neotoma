@@ -60,10 +60,7 @@ import {
   applyRevocationPolicy,
   computeBoundChallengeDigest,
 } from "./aauth_attestation_verifier.js";
-import type {
-  AttestationContext,
-  AttestationOutcome,
-} from "./aauth_attestation_verifier.js";
+import type { AttestationContext, AttestationOutcome } from "./aauth_attestation_verifier.js";
 import {
   checkRevocation,
   readFailOpen,
@@ -127,7 +124,7 @@ function resolveCoseAlg(alg: number): SupportedAlg | null {
  */
 export async function verifyTpm2Attestation(
   envelope: { statement: unknown; challenge: string; format: string },
-  ctx: AttestationContext,
+  ctx: AttestationContext
 ): Promise<AttestationOutcome> {
   const parsed = parseStatement(envelope.statement);
   if (!parsed) return failure("malformed");
@@ -136,9 +133,7 @@ export async function verifyTpm2Attestation(
 
   let chain: X509Certificate[];
   try {
-    chain = parsed.x5c.map(
-      (b64) => new X509Certificate(base64urlDecode(b64)),
-    );
+    chain = parsed.x5c.map((b64) => new X509Certificate(base64urlDecode(b64)));
   } catch {
     return failure("chain_invalid");
   }
@@ -175,9 +170,7 @@ export async function verifyTpm2Attestation(
   let boundJkt: string;
   try {
     const jwk = await exportJWK(boundKey);
-    boundJkt = await calculateJwkThumbprint(
-      jwk as Parameters<typeof calculateJwkThumbprint>[0],
-    );
+    boundJkt = await calculateJwkThumbprint(jwk as Parameters<typeof calculateJwkThumbprint>[0]);
   } catch {
     return failure("malformed");
   }
@@ -200,17 +193,11 @@ export async function verifyTpm2Attestation(
     return failure("malformed");
   }
 
-  if (
-    attest.type !== TPM_ST_ATTEST_QUOTE &&
-    attest.type !== TPM_ST_ATTEST_CERTIFY
-  ) {
+  if (attest.type !== TPM_ST_ATTEST_QUOTE && attest.type !== TPM_ST_ATTEST_CERTIFY) {
     return failure("unsupported_format");
   }
 
-  const expectedExtra = computeBoundChallengeDigest(
-    envelope.challenge,
-    ctx.boundJkt,
-  );
+  const expectedExtra = computeBoundChallengeDigest(envelope.challenge, ctx.boundJkt);
   if (!constantTimeBufferEquals(attest.extraData, expectedExtra)) {
     return failure("challenge_mismatch");
   }
@@ -238,7 +225,7 @@ export async function verifyTpm2Attestation(
       mode,
       failOpen: readFailOpen(),
       revocation,
-    },
+    }
   );
 }
 
@@ -285,8 +272,7 @@ function tpmtPublicToKeyObject(parsed: TpmtPublicKey): KeyObject {
     };
     return createPublicKey({ key: jwk, format: "jwk" });
   }
-  const componentSize =
-    parsed.curve === "P-256" ? 32 : parsed.curve === "P-384" ? 48 : 66;
+  const componentSize = parsed.curve === "P-256" ? 32 : parsed.curve === "P-384" ? 48 : 66;
   const jwk = {
     kty: "EC",
     crv: parsed.curve,
@@ -306,7 +292,7 @@ function verifySignatureForAlg(
   alg: number,
   publicKey: KeyObject,
   message: Buffer,
-  signature: Buffer,
+  signature: Buffer
 ): boolean {
   const resolved = resolveCoseAlg(alg);
   if (!resolved) return false;
@@ -333,7 +319,7 @@ function verifySignatureForAlg(
           padding: 6, // RSA_PKCS1_PSS_PADDING
           saltLength: 32,
         } as Parameters<typeof v.verify>[0],
-        signature,
+        signature
       );
     }
     return false;
@@ -342,10 +328,7 @@ function verifySignatureForAlg(
   }
 }
 
-function walkChainAgainstTrust(
-  chain: X509Certificate[],
-  ctx: AttestationContext,
-): boolean {
+function walkChainAgainstTrust(chain: X509Certificate[], ctx: AttestationContext): boolean {
   for (let i = 0; i < chain.length - 1; i += 1) {
     const cert = chain[i]!;
     const issuer = chain[i + 1]!;
@@ -405,10 +388,7 @@ function failure(reason: AttestationOutcomeReason): AttestationOutcome {
   return { verified: false, format: TPM2_FORMAT, reason };
 }
 
-type AttestationOutcomeReason = Extract<
-  AttestationOutcome,
-  { verified: false }
->["reason"];
+type AttestationOutcomeReason = Extract<AttestationOutcome, { verified: false }>["reason"];
 
 function base64urlDecode(value: string): Buffer {
   const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
@@ -417,11 +397,7 @@ function base64urlDecode(value: string): Buffer {
 }
 
 function bufferToBase64Url(buf: Buffer): string {
-  return buf
-    .toString("base64")
-    .replace(/=+$/, "")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_");
+  return buf.toString("base64").replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
 }
 
 function constantTimeStringEquals(a: string, b: string): boolean {

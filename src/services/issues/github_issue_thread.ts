@@ -12,7 +12,7 @@
  */
 export function githubIssueThreadConversationId(
   repo: string,
-  githubIssueNumber: number,
+  githubIssueNumber: number
 ): string | undefined {
   const r = repo.trim();
   if (!r || !Number.isFinite(githubIssueNumber) || githubIssueNumber <= 0) {
@@ -23,7 +23,7 @@ export function githubIssueThreadConversationId(
 
 export function localIssueThreadConversationId(
   repo: string,
-  localIssueId: string,
+  localIssueId: string
 ): string | undefined {
   const r = repo.trim();
   const id = localIssueId.trim();

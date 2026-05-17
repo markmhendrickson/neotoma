@@ -76,7 +76,9 @@ class SqliteDatabaseImpl {
     return [];
   }
 
-  transaction<TArgs extends unknown[], TResult>(fn: (...args: TArgs) => TResult): (...args: TArgs) => TResult {
+  transaction<TArgs extends unknown[], TResult>(
+    fn: (...args: TArgs) => TResult
+  ): (...args: TArgs) => TResult {
     if (typeof this.db.transaction === "function" && !hasNativeSqlite) {
       return this.db.transaction(fn) as (...args: TArgs) => TResult;
     }

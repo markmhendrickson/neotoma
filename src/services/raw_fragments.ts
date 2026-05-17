@@ -47,7 +47,18 @@ async function queueAutoEnhancement(
 }
 
 export async function storeFragment(params: StoreFragmentParams): Promise<boolean> {
-  const { sourceId, userId, entityId, entityType, schemaVersion, key, value, reason, convertedTo, interpretationId } = params;
+  const {
+    sourceId,
+    userId,
+    entityId,
+    entityType,
+    schemaVersion,
+    key,
+    value,
+    reason,
+    convertedTo,
+    interpretationId,
+  } = params;
 
   if (value === null || value === undefined) return false;
 
@@ -110,16 +121,11 @@ export async function storeFragment(params: StoreFragmentParams): Promise<boolea
     fragment_envelope: envelope,
   };
 
-  const { error: insertError } = await db
-    .from("raw_fragments")
-    .insert(insertData)
-    .select();
+  const { error: insertError } = await db.from("raw_fragments").insert(insertData).select();
 
   if (insertError) {
     if (insertError.code === "23505") {
-      logger.warn(
-        `[raw_fragments] Race condition for ${entityType}.${key}, retrying as update...`
-      );
+      logger.warn(`[raw_fragments] Race condition for ${entityType}.${key}, retrying as update...`);
       let retryQuery = db
         .from("raw_fragments")
         .select("id, frequency_count")
@@ -170,7 +176,8 @@ export async function storeConvertedOriginals(params: {
   originalValues: Record<string, unknown>;
   validFields: Record<string, unknown>;
 }): Promise<number> {
-  const { sourceId, userId, entityId, entityType, schemaVersion, originalValues, validFields } = params;
+  const { sourceId, userId, entityId, entityType, schemaVersion, originalValues, validFields } =
+    params;
   let count = 0;
 
   for (const [key, value] of Object.entries(originalValues)) {

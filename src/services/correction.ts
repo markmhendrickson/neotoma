@@ -40,9 +40,7 @@ export interface CorrectionResult {
   snapshot?: Record<string, unknown> | null;
 }
 
-export async function createCorrection(
-  params: CreateCorrectionParams
-): Promise<CorrectionResult> {
+export async function createCorrection(params: CreateCorrectionParams): Promise<CorrectionResult> {
   enforceAttributionPolicy("corrections", getCurrentAgentIdentity());
   assertCanWriteProtected({
     entity_type: params.entity_type,
@@ -50,8 +48,7 @@ export async function createCorrection(
     identity: getCurrentAgentIdentity(),
     admission: getCurrentAAuthAdmission(),
   });
-  const { entity_id, entity_type, field, value, schema_version, user_id, idempotency_key } =
-    params;
+  const { entity_id, entity_type, field, value, schema_version, user_id, idempotency_key } = params;
 
   const observationId = generateObservationId(
     null,

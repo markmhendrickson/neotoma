@@ -157,18 +157,13 @@ export async function queryEntities(
   // with any caller-supplied `entityIds` so both filters compose.
   let identityBasisIds: string[] | null = null;
   if (identityBasis) {
-    let obsQuery = db
-      .from("observations")
-      .select("entity_id")
-      .eq("identity_basis", identityBasis);
+    let obsQuery = db.from("observations").select("entity_id").eq("identity_basis", identityBasis);
     if (userId) {
       obsQuery = obsQuery.eq("user_id", userId);
     }
     const { data: obsRows, error: obsErr } = await obsQuery;
     if (obsErr) {
-      throw new Error(
-        `Failed to prefilter entities by identity_basis: ${obsErr.message}`
-      );
+      throw new Error(`Failed to prefilter entities by identity_basis: ${obsErr.message}`);
     }
     const distinct = new Set<string>(
       (obsRows || []).map((r: { entity_id: string }) => r.entity_id)
@@ -301,10 +296,9 @@ export async function queryEntities(
       } else {
         snapshotQuery = snapshotQuery.order("entity_id", { ascending: true });
       }
-      snapshotQuery = snapshotQuery.order("entity_id", { ascending: true }).range(
-        scanOffset,
-        scanOffset + scanChunkSize - 1
-      );
+      snapshotQuery = snapshotQuery
+        .order("entity_id", { ascending: true })
+        .range(scanOffset, scanOffset + scanChunkSize - 1);
 
       const { data: snapshotRows, error: snapshotError } = await snapshotQuery;
       if (snapshotError) {
@@ -426,7 +420,11 @@ export async function queryEntities(
   );
 
   // Get raw_fragments for all entities (batch query)
-  let allObservations: Array<{ entity_id: string; source_id: string | null; user_id: string | null }> = [];
+  let allObservations: Array<{
+    entity_id: string;
+    source_id: string | null;
+    user_id: string | null;
+  }> = [];
   if (includeSnapshots) {
     const { data } = await db
       .from("observations")
@@ -434,13 +432,15 @@ export async function queryEntities(
       .in("entity_id", filteredEntityIds)
       .not("source_id", "is", null)
       .limit(1000); // Reasonable limit for batch
-    allObservations = (data as Array<{ entity_id: string; source_id: string | null; user_id: string | null }>) || [];
+    allObservations =
+      (data as Array<{ entity_id: string; source_id: string | null; user_id: string | null }>) ||
+      [];
   }
 
   // Group observations by entity_id to get source_ids per entity
   const entitySources = new Map<string, Set<string>>();
   const entityUserIds = new Map<string, Set<string>>();
-  
+
   for (const obs of allObservations) {
     if (!entitySources.has(obs.entity_id)) {
       entitySources.set(obs.entity_id, new Set());
@@ -455,32 +455,32 @@ export async function queryEntities(
   }
 
   // Batch query raw_fragments for all entities
-  const allSourceIds = Array.from(new Set(
-    Array.from(entitySources.values()).flatMap(s => Array.from(s))
-  ));
-  
+  const allSourceIds = Array.from(
+    new Set(Array.from(entitySources.values()).flatMap((s) => Array.from(s)))
+  );
+
   const rawFragmentsByEntity = new Map<string, Record<string, unknown>>();
-  
+
   if (allSourceIds.length > 0) {
     // Get entity types for filtering
     const entityTypes = new Set(entities.map((e: any) => e.entity_type));
-    
+
     for (const entityType of entityTypes) {
       const entitiesOfType = entities.filter((e: any) => e.entity_type === entityType);
       const entityIdsOfType = entitiesOfType.map((e: any) => e.id);
-      
+
       // Get source_ids for entities of this type
       const sourceIdsForType = new Set<string>();
       const userIdsForType = new Set<string>();
-      
+
       for (const entityId of entityIdsOfType) {
         const sources = entitySources.get(entityId);
         const userIds = entityUserIds.get(entityId);
         if (sources) {
-          sources.forEach(sid => sourceIdsForType.add(sid));
+          sources.forEach((sid) => sourceIdsForType.add(sid));
         }
         if (userIds) {
-          userIds.forEach(uid => userIdsForType.add(uid));
+          userIds.forEach((uid) => userIdsForType.add(uid));
         }
       }
 
@@ -494,8 +494,10 @@ export async function queryEntities(
 
         // Handle user_id
         if (userIdsForType.size > 0) {
-          const userIdFilters = Array.from(userIdsForType).map((uid: string) => 
-            uid === defaultUserId ? `user_id.eq.${defaultUserId},user_id.is.null` : `user_id.eq.${uid}`
+          const userIdFilters = Array.from(userIdsForType).map((uid: string) =>
+            uid === defaultUserId
+              ? `user_id.eq.${defaultUserId},user_id.is.null`
+              : `user_id.eq.${uid}`
           );
           fragmentQuery = fragmentQuery.or(userIdFilters.join(","));
         } else {
@@ -528,11 +530,7 @@ export async function queryEntities(
             const candidateEntityIds = fragmentEntityId
               ? [fragmentEntityId]
               : legacyEntityCountsBySource.get(fragment.source_id)?.size === 1
-                ? [
-                    Array.from(
-                      legacyEntityCountsBySource.get(fragment.source_id) ?? [],
-                    )[0],
-                  ]
+                ? [Array.from(legacyEntityCountsBySource.get(fragment.source_id) ?? [])[0]]
                 : [];
 
             for (const entityId of candidateEntityIds) {
@@ -543,12 +541,14 @@ export async function queryEntities(
               const entityFragments = rawFragmentsByEntity.get(entityId)!;
               const key = fragment.fragment_key;
               const lastSeen = fragment.last_seen || "";
-              
+
               // Last-write wins (most recent last_seen)
               // Store last_seen separately for comparison
               const lastSeenKey = `__${key}_last_seen`;
-              if (!(key in entityFragments) || 
-                  ((entityFragments as any)[lastSeenKey] || "") < lastSeen) {
+              if (
+                !(key in entityFragments) ||
+                ((entityFragments as any)[lastSeenKey] || "") < lastSeen
+              ) {
                 entityFragments[key] = fragment.fragment_value;
                 (entityFragments as any)[lastSeenKey] = lastSeen; // Track for comparison
               }
@@ -559,11 +559,15 @@ export async function queryEntities(
           for (const [entityId, fragments] of rawFragmentsByEntity.entries()) {
             const snapshot = snapshotMap.get(entityId);
             const snapshotFields = new Set(Object.keys(snapshot?.snapshot || {}));
-            
+
             const cleaned: Record<string, unknown> = {};
             for (const [key, value] of Object.entries(fragments)) {
               // Skip tracking fields and fields already in snapshot
-              if (!key.startsWith("__") && !key.endsWith("_last_seen") && !snapshotFields.has(key)) {
+              if (
+                !key.startsWith("__") &&
+                !key.endsWith("_last_seen") &&
+                !snapshotFields.has(key)
+              ) {
                 cleaned[key] = value;
               }
             }
@@ -599,7 +603,7 @@ export async function queryEntities(
 
 /**
  * Get entity snapshot with full provenance chain
- * 
+ *
  * Returns null if entity is deleted (has deletion observation).
  */
 export async function getEntityWithProvenance(
@@ -650,7 +654,9 @@ export async function getEntityWithProvenance(
 
   let effectiveSnapshot: EntitySnapshotRow | null = snapshot as EntitySnapshotRow | null;
   if (snapshotError && snapshotError.code !== "PGRST116") {
-    console.warn(`Entity ${entityId}: snapshot query failed (${snapshotError.code}): ${snapshotError.message}. Returning entity without snapshot.`);
+    console.warn(
+      `Entity ${entityId}: snapshot query failed (${snapshotError.code}): ${snapshotError.message}. Returning entity without snapshot.`
+    );
     effectiveSnapshot = null;
   }
 
@@ -666,8 +672,16 @@ export async function getEntityWithProvenance(
   const rawFragments: Record<string, unknown> = {};
   if (observations && observations.length > 0) {
     // Get unique source_ids and user_ids
-    const sourceIds = [...new Set(observations.map((o: { source_id?: string }) => o.source_id).filter(Boolean))] as string[];
-    const userIds = [...new Set(observations.map((o: { user_id?: string }) => o.user_id).filter((u: string | undefined): u is string => Boolean(u)))];
+    const sourceIds = [
+      ...new Set(observations.map((o: { source_id?: string }) => o.source_id).filter(Boolean)),
+    ] as string[];
+    const userIds = [
+      ...new Set(
+        observations
+          .map((o: { user_id?: string }) => o.user_id)
+          .filter((u: string | undefined): u is string => Boolean(u))
+      ),
+    ];
     const defaultUserId = "00000000-0000-0000-0000-000000000000";
 
     // Query raw_fragments for these sources with matching entity_type
@@ -679,7 +693,7 @@ export async function getEntityWithProvenance(
 
     // Handle user_id: check both provided user_ids and default UUID
     if (userIds.length > 0) {
-      const userIdFilters = userIds.map((uid) => 
+      const userIdFilters = userIds.map((uid) =>
         uid === defaultUserId ? `user_id.eq.${defaultUserId},user_id.is.null` : `user_id.eq.${uid}`
       );
       fragmentQuery = fragmentQuery.or(userIdFilters.join(","));
@@ -708,7 +722,7 @@ export async function getEntityWithProvenance(
     } else if (fragments && fragments.length > 0) {
       // Merge fragments by fragment_key (last_write: most recent last_seen wins)
       const fragmentMap = new Map<string, { value: unknown; last_seen: string }>();
-      
+
       for (const fragment of fragments) {
         const fragmentEntityId =
           typeof (fragment as { entity_id?: unknown }).entity_id === "string"
@@ -726,9 +740,8 @@ export async function getEntityWithProvenance(
         }
         const key = fragment.fragment_key;
         const lastSeen = fragment.last_seen || fragment.first_seen || "";
-        
-        if (!fragmentMap.has(key) || 
-            (fragmentMap.get(key)!.last_seen < lastSeen)) {
+
+        if (!fragmentMap.has(key) || fragmentMap.get(key)!.last_seen < lastSeen) {
           fragmentMap.set(key, {
             value: fragment.fragment_value,
             last_seen: lastSeen,
@@ -754,10 +767,7 @@ export async function getEntityWithProvenance(
   try {
     const { SchemaRegistryService } = await import("./schema_registry.js");
     const registry = new SchemaRegistryService();
-    const schema = await registry.loadActiveSchema(
-      entity.entity_type,
-      entity.user_id ?? undefined,
-    );
+    const schema = await registry.loadActiveSchema(entity.entity_type, entity.user_id ?? undefined);
     if (schema?.metadata?.label) entityTypeLabel = schema.metadata.label;
     const snapshotObj = effectiveSnapshot?.snapshot ?? {};
     if (snapshotObj && Object.keys(snapshotObj).length > 0) {
@@ -773,7 +783,7 @@ export async function getEntityWithProvenance(
     // Non-fatal: leave enrichments unset.
     console.warn(
       `Failed to compute schema enrichments for entity ${entityId}:`,
-      err instanceof Error ? err.message : err,
+      err instanceof Error ? err.message : err
     );
   }
 
@@ -864,9 +874,7 @@ export async function getObservationProvenance(observationId: string) {
   // Get interpretation run if exists
   if (observation.interpretation_id) {
     try {
-      provenance.interpretation = await getInterpretationMetadata(
-        observation.interpretation_id
-      );
+      provenance.interpretation = await getInterpretationMetadata(observation.interpretation_id);
     } catch (error) {
       console.warn(`Failed to get interpretation run: ${error}`);
     }
@@ -874,4 +882,3 @@ export async function getObservationProvenance(observationId: string) {
 
   return provenance;
 }
-

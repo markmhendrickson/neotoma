@@ -40,10 +40,7 @@ import { IssueTransportError } from "./errors.js";
 type MockIssueApiClient = {
   POST: {
     mock: {
-      calls: Array<[
-        string,
-        { body: Record<string, unknown> },
-      ]>;
+      calls: Array<[string, { body: Record<string, unknown> }]>;
     };
   };
 };
@@ -96,7 +93,8 @@ describe("Neotoma Issue Client", () => {
         githubNumber: 42,
       });
 
-      const mockClient = vi.mocked(createApiClient).mock.results[0]?.value as unknown as MockIssueApiClient;
+      const mockClient = vi.mocked(createApiClient).mock.results[0]
+        ?.value as unknown as MockIssueApiClient;
       expect(mockClient.POST).toBeDefined();
     });
 
@@ -107,7 +105,8 @@ describe("Neotoma Issue Client", () => {
         visibility: "private",
       });
 
-      const mockClient = vi.mocked(createApiClient).mock.results[0]?.value as unknown as MockIssueApiClient;
+      const mockClient = vi.mocked(createApiClient).mock.results[0]
+        ?.value as unknown as MockIssueApiClient;
       const [path, request] = mockClient.POST.mock.calls[0];
 
       expect(path).toBe("/issues/submit");
@@ -116,16 +115,14 @@ describe("Neotoma Issue Client", () => {
     });
 
     it("returns guest token from the guest issue submit endpoint", async () => {
-      const post = vi
-        .fn()
-        .mockResolvedValueOnce({
-          data: {
-            entity_ids: ["issue-entity-1", "conversation-entity-1", "message-entity-1"],
-            issue_entity_id: "issue-entity-1",
-            conversation_id: "conversation-entity-1",
-            guest_access_token: "test-access-token-123",
-          },
-        });
+      const post = vi.fn().mockResolvedValueOnce({
+        data: {
+          entity_ids: ["issue-entity-1", "conversation-entity-1", "message-entity-1"],
+          issue_entity_id: "issue-entity-1",
+          conversation_id: "conversation-entity-1",
+          guest_access_token: "test-access-token-123",
+        },
+      });
       vi.mocked(createApiClient).mockReturnValueOnce({
         POST: post,
         GET: vi.fn(),
@@ -166,7 +163,8 @@ describe("Neotoma Issue Client", () => {
         body: "Token follow-up",
       });
 
-      const mockClient = vi.mocked(createApiClient).mock.results[0]?.value as unknown as MockIssueApiClient;
+      const mockClient = vi.mocked(createApiClient).mock.results[0]
+        ?.value as unknown as MockIssueApiClient;
       expect(mockClient.POST.mock.calls[0][0]).toBe("/issues/add_message");
       expect(mockClient.POST.mock.calls[0][1].body).toMatchObject({
         entity_id: "issue-entity-1",

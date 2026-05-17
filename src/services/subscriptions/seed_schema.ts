@@ -22,7 +22,12 @@ type FieldSpec = Array<{
 }>;
 
 const SUBSCRIPTION_FIELDS: FieldSpec = [
-  { name: "subscription_id", type: "string", required: true, description: "Stable subscription identifier (UUID)" },
+  {
+    name: "subscription_id",
+    type: "string",
+    required: true,
+    description: "Stable subscription identifier (UUID)",
+  },
   {
     name: "watch_entity_types",
     type: "array",
@@ -47,13 +52,30 @@ const SUBSCRIPTION_FIELDS: FieldSpec = [
     required: true,
     description: "webhook | sse",
   },
-  { name: "webhook_url", type: "string", description: "HTTPS callback URL (HTTP allowed for localhost)" },
-  { name: "webhook_secret", type: "string", description: "HMAC secret for X-Neotoma-Signature-256" },
-  { name: "active", type: "boolean", required: true, description: "When false, matcher skips this subscription" },
+  {
+    name: "webhook_url",
+    type: "string",
+    description: "HTTPS callback URL (HTTP allowed for localhost)",
+  },
+  {
+    name: "webhook_secret",
+    type: "string",
+    description: "HMAC secret for X-Neotoma-Signature-256",
+  },
+  {
+    name: "active",
+    type: "boolean",
+    required: true,
+    description: "When false, matcher skips this subscription",
+  },
   { name: "created_at", type: "date", required: true, description: "ISO creation time" },
   { name: "last_delivered_at", type: "date", description: "Last successful webhook delivery" },
   { name: "consecutive_failures", type: "number", description: "Circuit breaker counter" },
-  { name: "max_failures", type: "number", description: "Auto-deactivate after this many consecutive failures" },
+  {
+    name: "max_failures",
+    type: "number",
+    description: "Auto-deactivate after this many consecutive failures",
+  },
   {
     name: "sync_peer_id",
     type: "string",

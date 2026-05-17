@@ -12,17 +12,12 @@ type OpenAIChatMessage =
  * Normalize chat messages (including function responses) so that the OpenAI
  * Chat Completions API receives the full conversation context.
  */
-export function serializeChatMessagesForOpenAI(
-  messages: ChatMessage[],
-): OpenAIChatMessage[] {
+export function serializeChatMessagesForOpenAI(messages: ChatMessage[]): OpenAIChatMessage[] {
   return messages.map((message, index) => {
     if (message.role === "function") {
       return {
         role: "function" as const,
-        name:
-          message.name && message.name.length > 0
-            ? message.name
-            : `function_call_${index}`,
+        name: message.name && message.name.length > 0 ? message.name : `function_call_${index}`,
         content: message.content ?? "",
       };
     }

@@ -10,7 +10,7 @@ import { buildExternalActor } from "../../issues/external_actor_builder.js";
 export function verifyGithubSignature(
   rawBody: Buffer,
   signatureHeader: string,
-  secret: string,
+  secret: string
 ): boolean {
   if (!signatureHeader || !secret) return false;
 
@@ -41,7 +41,7 @@ export interface WebhookStorePayload {
 export function mapGithubWebhookEventToStore(
   event: string,
   payload: Record<string, unknown>,
-  deliveryId: string,
+  deliveryId: string
 ): WebhookStorePayload | null {
   if (event === "issues") {
     return mapIssueEvent(payload, deliveryId);
@@ -64,7 +64,10 @@ function reporterFieldsFromPayload(payload: Record<string, unknown>): Record<str
   return out;
 }
 
-function mapIssueEvent(payload: Record<string, unknown>, deliveryId: string): WebhookStorePayload | null {
+function mapIssueEvent(
+  payload: Record<string, unknown>,
+  deliveryId: string
+): WebhookStorePayload | null {
   const action = payload.action as string;
   if (!["opened", "edited", "closed", "reopened", "labeled", "unlabeled"].includes(action)) {
     return null;
@@ -142,7 +145,10 @@ function mapIssueEvent(payload: Record<string, unknown>, deliveryId: string): We
   };
 }
 
-function mapIssueCommentEvent(payload: Record<string, unknown>, deliveryId: string): WebhookStorePayload | null {
+function mapIssueCommentEvent(
+  payload: Record<string, unknown>,
+  deliveryId: string
+): WebhookStorePayload | null {
   const action = payload.action as string;
   if (!["created", "edited"].includes(action)) {
     return null;

@@ -52,8 +52,7 @@ export function resolveBundledInspectorDir(): string | null {
 
   // Source-checkout fallback: inspector/dist when the submodule is built.
   const submoduleDistDir = path.join(root, "inspector", "dist");
-  if (fs.existsSync(path.join(submoduleDistDir, "index.html")))
-    return submoduleDistDir;
+  if (fs.existsSync(path.join(submoduleDistDir, "index.html"))) return submoduleDistDir;
 
   return null;
 }
@@ -63,12 +62,9 @@ export function resolveBundledInspectorDir(): string | null {
  *
  * Precedence: DISABLE > PUBLIC_INSPECTOR_URL > STATIC_DIR > bundled fallback.
  */
-export function resolveInspectorMount(
-  env: NodeJS.ProcessEnv = process.env,
-): InspectorMountConfig {
+export function resolveInspectorMount(env: NodeJS.ProcessEnv = process.env): InspectorMountConfig {
   const basePath = (
-    (env.NEOTOMA_INSPECTOR_BASE_PATH || DEFAULT_BASE_PATH).trim() ||
-    DEFAULT_BASE_PATH
+    (env.NEOTOMA_INSPECTOR_BASE_PATH || DEFAULT_BASE_PATH).trim() || DEFAULT_BASE_PATH
   ).replace(/\/$/, "");
   const normalizedBase = basePath.startsWith("/") ? basePath : `/${basePath}`;
 
@@ -102,10 +98,7 @@ export function resolveInspectorMount(
  * Inject `<meta name="neotoma-api-base" content="<origin>">` into the
  * Inspector's index.html so the SPA discovers the API origin at runtime.
  */
-export function injectInspectorApiBaseMeta(
-  html: string,
-  origin: string,
-): string {
+export function injectInspectorApiBaseMeta(html: string, origin: string): string {
   const metaTag = `<meta name="neotoma-api-base" content="${origin}">`;
   const headIdx = html.indexOf("</head>");
   if (headIdx === -1) return html;
@@ -161,14 +154,9 @@ export function normalizeInspectorUrlPathname(pathname: string): string {
  * with index.html for these paths: missing chunks would be served as
  * text/html and break strict MIME checks (blank shell + console errors).
  */
-export function isInspectorViteAssetUrlPath(
-  basePath: string,
-  pathname: string,
-): boolean {
+export function isInspectorViteAssetUrlPath(basePath: string, pathname: string): boolean {
   const path = normalizeInspectorUrlPathname(pathname);
-  const normalizedBase = normalizeInspectorUrlPathname(
-    basePath.replace(/\/$/, "") || "",
-  );
+  const normalizedBase = normalizeInspectorUrlPathname(basePath.replace(/\/$/, "") || "");
   return path.startsWith(`${normalizedBase}/assets/`);
 }
 
@@ -227,22 +215,18 @@ function resolveLiveInspectorStaticDir(currentDir: string): string {
 export function installInspectorMount(
   app: express.Application,
   env: NodeJS.ProcessEnv = process.env,
-  logger: { info: (msg: string) => void; warn: (msg: string) => void },
+  logger: { info: (msg: string) => void; warn: (msg: string) => void }
 ): void {
   const cfg = resolveInspectorMount(env);
   const inspectorLiveBuild = isInspectorLiveBuildEnabled(env);
 
   if (cfg.kind === "disabled") {
-    logger.info(
-      "[Inspector] Disabled or no built SPA found; /inspector will not be served.",
-    );
+    logger.info("[Inspector] Disabled or no built SPA found; /inspector will not be served.");
     return;
   }
 
   if (cfg.kind === "external") {
-    logger.info(
-      `[Inspector] External Inspector configured at ${cfg.externalUrl}; no local mount.`,
-    );
+    logger.info(`[Inspector] External Inspector configured at ${cfg.externalUrl}; no local mount.`);
     return;
   }
 
@@ -256,9 +240,7 @@ export function installInspectorMount(
   try {
     const rawHtml = readInspectorIndexHtml(staticDir);
     if (!rawHtml) {
-      logger.warn(
-        `[Inspector] index.html not found in ${staticDir}; skipping mount.`,
-      );
+      logger.warn(`[Inspector] index.html not found in ${staticDir}; skipping mount.`);
       return;
     }
 
@@ -315,7 +297,7 @@ export function installInspectorMount(
 
           res.set("Cache-Control", "no-store");
           res.sendFile(candidate);
-        },
+        }
       );
     }
 
@@ -342,7 +324,7 @@ export function installInspectorMount(
             staticHandlerByDir.set(active, handler);
           }
           handler(req, res, next);
-        },
+        }
       );
     } else {
       app.use(basePath, expressStatic.static(staticDir, staticOptions));
@@ -353,9 +335,7 @@ export function installInspectorMount(
       (req: express.Request, res: express.Response, next: express.NextFunction) => {
         if (req.method !== "GET") return next();
         const pathnameForChecks = normalizeInspectorUrlPathname(
-          (req.originalUrl || req.url || "").split("?")[0]?.split("#")[0] ||
-            req.path ||
-            "",
+          (req.originalUrl || req.url || "").split("?")[0]?.split("#")[0] || req.path || ""
         );
         if (pathnameForChecks.startsWith(`${basePath.replace(/\/$/, "")}/__live`)) {
           return next();
@@ -376,7 +356,7 @@ export function installInspectorMount(
           if (!latest) return next();
           const html = appendInspectorLiveReloadScript(
             injectInspectorApiBaseMeta(latest, origin),
-            buildStampPath,
+            buildStampPath
           );
           res.set("Content-Type", "text/html; charset=utf-8");
           res.set("Cache-Control", "no-store");
@@ -391,7 +371,7 @@ export function installInspectorMount(
         res.set("Content-Type", "text/html; charset=utf-8");
         res.set("Cache-Control", "no-store");
         res.send(html);
-      },
+      }
     );
 
     logger.info(
@@ -399,7 +379,7 @@ export function installInspectorMount(
         inspectorLiveBuild
           ? " (live rebuild: no HTML/asset cache; auto-reload when build output changes)"
           : ""
-      }`,
+      }`
     );
   } catch (err) {
     logger.warn(`[Inspector] Failed to mount SPA: ${(err as Error).message}`);
@@ -415,7 +395,7 @@ export function installInspectorMount(
  */
 export function resolveInspectorLandingUrl(
   base: string,
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv = process.env
 ): string | null {
   const cfg = resolveInspectorMount(env);
   if (cfg.kind === "disabled") return null;

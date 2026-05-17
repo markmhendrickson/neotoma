@@ -8,10 +8,7 @@ import type { SignedMessage } from "./types.js";
 /**
  * Sign a message with Ed25519 private key
  */
-export function signMessage(
-  message: Uint8Array,
-  privateKey: Uint8Array,
-): Uint8Array {
+export function signMessage(message: Uint8Array, privateKey: Uint8Array): Uint8Array {
   return ed25519.sign(message, privateKey);
 }
 
@@ -21,7 +18,7 @@ export function signMessage(
 export function verifySignature(
   message: Uint8Array,
   signature: Uint8Array,
-  publicKey: Uint8Array,
+  publicKey: Uint8Array
 ): boolean {
   return ed25519.verify(signature, message, publicKey);
 }
@@ -32,7 +29,7 @@ export function verifySignature(
 export function createSignedMessage(
   message: Uint8Array,
   privateKey: Uint8Array,
-  publicKey: Uint8Array,
+  publicKey: Uint8Array
 ): SignedMessage {
   const signature = signMessage(message, privateKey);
   return {

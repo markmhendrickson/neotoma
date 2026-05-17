@@ -1,6 +1,6 @@
 /**
  * Observation Identity Service
- * 
+ *
  * Generates deterministic observation IDs and checks for duplicates.
  * Core of the idempotence pattern - ensures same canonical fields produce same observation ID.
  */
@@ -25,9 +25,9 @@ export interface Observation {
 
 /**
  * Generate deterministic observation ID from canonical fields
- * 
+ *
  * Format: UUID v4-like format from SHA-256 hash
- * 
+ *
  * This ensures:
  * - Same source + same interpretation + same entity + same fields → same observation ID
  * - Idempotence: re-running interpretation doesn't create duplicates
@@ -49,14 +49,12 @@ export function generateObservationId(
   if (idempotencyKey) {
     canonical.idempotency_key = idempotencyKey;
   }
-  
+
   // JSON.stringify on canonical object is deterministic because:
   // - canonicalFields has sorted keys
   // - All values are normalized
-  const hash = createHash("sha256")
-    .update(JSON.stringify(canonical))
-    .digest("hex");
-  
+  const hash = createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
+
   // Convert hash to UUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
   // Take first 32 hex characters and format as UUID
   const uuid = [
@@ -66,7 +64,7 @@ export function generateObservationId(
     hash.substring(16, 20),
     hash.substring(20, 32),
   ].join("-");
-  
+
   return uuid;
 }
 
@@ -74,12 +72,8 @@ export function generateObservationId(
  * Compute canonical hash from canonical fields
  * Used for deduplication and fixed-point convergence
  */
-export function computeCanonicalHash(
-  canonicalFields: Record<string, unknown>
-): string {
-  const hash = createHash("sha256")
-    .update(JSON.stringify(canonicalFields))
-    .digest("hex");
+export function computeCanonicalHash(canonicalFields: Record<string, unknown>): string {
+  const hash = createHash("sha256").update(JSON.stringify(canonicalFields)).digest("hex");
   return hash;
 }
 
@@ -96,12 +90,12 @@ export async function checkObservationExists(
     .eq("id", observationId)
     .eq("user_id", userId)
     .maybeSingle();
-  
+
   if (error) {
     console.warn(`Failed to check observation existence: ${error.message}`);
     return false;
   }
-  
+
   return data !== null;
 }
 
@@ -118,7 +112,7 @@ export async function getExistingObservation(
     .eq("id", observationId)
     .eq("user_id", userId)
     .single();
-  
+
   if (error) {
     if (error.code === "PGRST116") {
       // Not found
@@ -127,7 +121,7 @@ export async function getExistingObservation(
     console.warn(`Failed to get existing observation: ${error.message}`);
     return null;
   }
-  
+
   return data as Observation;
 }
 
@@ -151,11 +145,11 @@ export async function checkObservationExistsByHash(
     .eq("canonical_hash", canonicalHash)
     .eq("user_id", userId)
     .maybeSingle();
-  
+
   if (error) {
     console.warn(`Failed to check observation by hash: ${error.message}`);
     return null;
   }
-  
+
   return data as Observation | null;
 }

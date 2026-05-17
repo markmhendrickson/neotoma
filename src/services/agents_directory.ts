@@ -232,10 +232,7 @@ function fetchAgentRows(userId: string): AgentRow[] {
 }
 
 function aggregate(rows: AgentRow[]): Map<string, AgentDirectoryEntry> {
-  const byKey = new Map<
-    string,
-    AgentDirectoryEntry & { _lastTierActivity: string | null }
-  >();
+  const byKey = new Map<string, AgentDirectoryEntry & { _lastTierActivity: string | null }>();
 
   for (const row of rows) {
     const fields = {
@@ -268,8 +265,7 @@ function aggregate(rows: AgentRow[]): Map<string, AgentDirectoryEntry> {
     }
 
     entry.total_records += 1;
-    entry.record_counts[row.record_type] =
-      (entry.record_counts[row.record_type] ?? 0) + 1;
+    entry.record_counts[row.record_type] = (entry.record_counts[row.record_type] ?? 0) + 1;
 
     if (row.record_type === "observation") {
       const et = nonEmpty(row.entity_type);
@@ -294,20 +290,14 @@ function aggregate(rows: AgentRow[]): Map<string, AgentDirectoryEntry> {
     entry.client_version ??= fields.client_version;
 
     // Tier from the most recent row wins.
-    if (
-      activity &&
-      (!entry._lastTierActivity || activity >= entry._lastTierActivity)
-    ) {
+    if (activity && (!entry._lastTierActivity || activity >= entry._lastTierActivity)) {
       entry.tier = tier;
       entry._lastTierActivity = activity;
     }
 
     // If we initially labelled from thumbprint but later saw a client name,
     // upgrade to the friendlier label.
-    if (
-      entry.client_name &&
-      entry.label === shortThumbprint(entry.agent_thumbprint ?? "")
-    ) {
+    if (entry.client_name && entry.label === shortThumbprint(entry.agent_thumbprint ?? "")) {
       entry.label = deriveLabel({
         client_name: entry.client_name,
         client_version: entry.client_version ?? null,
@@ -342,10 +332,7 @@ export function listAgents(userId: string): ListAgentsResult {
 }
 
 /** Fetch a single agent by key; `null` when the key is unknown. */
-export function getAgent(
-  userId: string,
-  agentKey: string
-): AgentDirectoryEntry | null {
+export function getAgent(userId: string, agentKey: string): AgentDirectoryEntry | null {
   const rows = fetchAgentRows(userId).filter(
     (r) =>
       deriveAgentKey({
@@ -353,7 +340,7 @@ export function getAgent(
         agent_sub: r.agent_sub,
         client_name: r.client_name,
         client_version: r.client_version,
-      }) === agentKey,
+      }) === agentKey
   );
   if (rows.length === 0) return null;
   return aggregate(rows).get(agentKey) ?? null;

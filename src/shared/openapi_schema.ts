@@ -74,9 +74,7 @@ function resolveSchema(schema: OpenApiSchema, spec: OpenApiSpec): OpenApiSchema 
         const properties = (resolved.properties ?? {}) as Record<string, unknown>;
         const required = (resolved.required ?? []) as string[];
         merged.properties = { ...(merged.properties as object), ...properties };
-        merged.required = Array.from(
-          new Set([...(merged.required as string[]), ...required])
-        );
+        merged.required = Array.from(new Set([...(merged.required as string[]), ...required]));
       }
     }
     return merged;

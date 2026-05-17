@@ -85,7 +85,10 @@ export interface TpmsAttestCertify {
 }
 
 class Cursor {
-  constructor(private readonly buf: Buffer, private pos = 0) {}
+  constructor(
+    private readonly buf: Buffer,
+    private pos = 0
+  ) {}
 
   remaining(): number {
     return this.buf.length - this.pos;
@@ -211,7 +214,7 @@ export function parseTpmtPublic(buf: Buffer): TpmtPublicKey {
       // require the additional `keyBits` + `mode` fields. We do not support
       // those here and reject explicitly so callers get a clean error.
       throw new TpmStructuresError(
-        `unsupported TPMT_SYM_DEF_OBJECT alg 0x${symmetric.toString(16)}`,
+        `unsupported TPMT_SYM_DEF_OBJECT alg 0x${symmetric.toString(16)}`
       );
     }
     const rsaScheme = cursor.readUInt16();
@@ -222,9 +225,7 @@ export function parseTpmtPublic(buf: Buffer): TpmtPublicKey {
       // attestation typically emits.
       // eslint-disable-next-line no-console
       // (Silently consuming extra bytes here would risk drifting cursor.)
-      throw new TpmStructuresError(
-        `unsupported TPMT_RSA_SCHEME alg 0x${rsaScheme.toString(16)}`,
-      );
+      throw new TpmStructuresError(`unsupported TPMT_RSA_SCHEME alg 0x${rsaScheme.toString(16)}`);
     }
     cursor.readUInt16(); // keyBits — informational, derivable from `n`.
     const rawExponent = cursor.readUInt32();
@@ -250,14 +251,12 @@ export function parseTpmtPublic(buf: Buffer): TpmtPublicKey {
     const symmetric = cursor.readUInt16();
     if (symmetric !== 0x0010) {
       throw new TpmStructuresError(
-        `unsupported TPMT_SYM_DEF_OBJECT alg 0x${symmetric.toString(16)}`,
+        `unsupported TPMT_SYM_DEF_OBJECT alg 0x${symmetric.toString(16)}`
       );
     }
     const eccScheme = cursor.readUInt16();
     if (eccScheme !== 0x0010 && eccScheme !== 0x0018 /* TPM_ALG_ECDSA */) {
-      throw new TpmStructuresError(
-        `unsupported TPMT_ECC_SCHEME alg 0x${eccScheme.toString(16)}`,
-      );
+      throw new TpmStructuresError(`unsupported TPMT_ECC_SCHEME alg 0x${eccScheme.toString(16)}`);
     }
     if (eccScheme === 0x0018) {
       // ECDSA scheme carries a hashAlg.
@@ -266,9 +265,7 @@ export function parseTpmtPublic(buf: Buffer): TpmtPublicKey {
     const curveId = cursor.readUInt16();
     const kdfScheme = cursor.readUInt16();
     if (kdfScheme !== 0x0010) {
-      throw new TpmStructuresError(
-        `unsupported TPMT_KDF_SCHEME alg 0x${kdfScheme.toString(16)}`,
-      );
+      throw new TpmStructuresError(`unsupported TPMT_KDF_SCHEME alg 0x${kdfScheme.toString(16)}`);
     }
     const x = cursor.readSizedBuffer();
     const y = cursor.readSizedBuffer();
@@ -295,9 +292,7 @@ function mapEccCurve(curveId: number): "P-256" | "P-384" | "P-521" {
     case TPM_ECC_NIST_P521:
       return "P-521";
     default:
-      throw new TpmStructuresError(
-        `unsupported TPMI_ECC_CURVE 0x${curveId.toString(16)}`,
-      );
+      throw new TpmStructuresError(`unsupported TPMI_ECC_CURVE 0x${curveId.toString(16)}`);
   }
 }
 
@@ -328,9 +323,7 @@ export function parseTpmsAttest(buf: Buffer): TpmsAttest {
   const cursor = new Cursor(buf);
   const magic = cursor.readUInt32();
   if (magic !== TPM_GENERATED_VALUE) {
-    throw new TpmStructuresError(
-      `TPMS_ATTEST magic mismatch (got 0x${magic.toString(16)})`,
-    );
+    throw new TpmStructuresError(`TPMS_ATTEST magic mismatch (got 0x${magic.toString(16)})`);
   }
   const type = cursor.readUInt16();
   const qualifiedSigner = cursor.readSizedBuffer();
@@ -366,9 +359,7 @@ export function parseTpmsAttest(buf: Buffer): TpmsAttest {
     const qualifiedName = cursor.readSizedBuffer();
     attested = { kind: "certify", name, qualifiedName };
   } else {
-    throw new TpmStructuresError(
-      `unsupported TPMI_ST_ATTEST 0x${type.toString(16)}`,
-    );
+    throw new TpmStructuresError(`unsupported TPMI_ST_ATTEST 0x${type.toString(16)}`);
   }
 
   return {

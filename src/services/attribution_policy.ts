@@ -18,10 +18,7 @@
  * minimum tier.
  */
 
-import type {
-  AgentIdentity,
-  AttributionTier,
-} from "../crypto/agent_identity.js";
+import type { AgentIdentity, AttributionTier } from "../crypto/agent_identity.js";
 import { logger } from "../utils/logger.js";
 
 /**
@@ -52,16 +49,10 @@ const DEFAULT_POLICY: AttributionPolicySnapshot = {
   anonymous_writes: "allow",
 };
 
-function parseAnonymousWriteMode(
-  raw: string | undefined,
-): AnonymousWriteMode | undefined {
+function parseAnonymousWriteMode(raw: string | undefined): AnonymousWriteMode | undefined {
   if (!raw) return undefined;
   const normalised = raw.trim().toLowerCase();
-  if (
-    normalised === "allow" ||
-    normalised === "warn" ||
-    normalised === "reject"
-  ) {
+  if (normalised === "allow" || normalised === "warn" || normalised === "reject") {
     return normalised;
   }
   return undefined;
@@ -81,7 +72,7 @@ function parseMinTier(raw: string | undefined): AttributionTier | undefined {
 }
 
 function parsePerPath(
-  raw: string | undefined,
+  raw: string | undefined
 ): Partial<Record<WritePath, AnonymousWriteMode>> | undefined {
   if (!raw) return undefined;
   try {
@@ -100,9 +91,7 @@ function parsePerPath(
     ]);
     for (const [key, value] of Object.entries(parsed)) {
       if (!allowedPaths.has(key as WritePath)) continue;
-      const mode = parseAnonymousWriteMode(
-        typeof value === "string" ? value : undefined,
-      );
+      const mode = parseAnonymousWriteMode(typeof value === "string" ? value : undefined);
       if (mode) out[key as WritePath] = mode;
     }
     return Object.keys(out).length > 0 ? out : undefined;
@@ -137,7 +126,7 @@ export function getAttributionPolicySnapshot(): AttributionPolicySnapshot {
  */
 export function effectiveAnonymousWriteMode(
   policy: AttributionPolicySnapshot,
-  path: WritePath,
+  path: WritePath
 ): AnonymousWriteMode {
   return policy.per_path?.[path] ?? policy.anonymous_writes;
 }
@@ -174,7 +163,7 @@ export class AttributionPolicyError extends Error {
   }) {
     super(
       `Attribution policy rejected write to "${params.writePath}": ` +
-        `current tier "${params.currentTier}" is below required "${params.minTier}"`,
+        `current tier "${params.currentTier}" is below required "${params.minTier}"`
     );
     this.name = "AttributionPolicyError";
     this.writePath = params.writePath;
@@ -228,7 +217,7 @@ export interface PolicyOutcome {
  */
 export function enforceAttributionPolicy(
   writePath: WritePath,
-  identity: AgentIdentity | null,
+  identity: AgentIdentity | null
 ): PolicyOutcome {
   const policy = getAttributionPolicySnapshot();
   const tier: AttributionTier = identity?.tier ?? "anonymous";
@@ -247,14 +236,13 @@ export function enforceAttributionPolicy(
       });
     }
     if (mode === "warn") {
-      const warning =
-        `write to ${writePath} accepted with anonymous attribution (policy=warn)`;
+      const warning = `write to ${writePath} accepted with anonymous attribution (policy=warn)`;
       logger.warn(
         JSON.stringify({
           event: "attribution_policy_warn",
           write_path: writePath,
           resolved_tier: tier,
-        }),
+        })
       );
       return { action: "warn", warningMessage: warning };
     }
@@ -274,4 +262,3 @@ export function enforceAttributionPolicy(
 
   return { action: "allow" };
 }
-

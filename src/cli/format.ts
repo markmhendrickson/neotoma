@@ -123,13 +123,20 @@ export function displayWidth(s: string): number {
   let w = 0;
   for (let i = 0; i < plain.length; i++) {
     const code = plain.charCodeAt(i);
-    if (code >= 0x3000 && code <= 0x303f) w += 2; // CJK punct, fullwidth space
-    else if (code >= 0x3040 && code <= 0x309f) w += 2; // Hiragana
-    else if (code >= 0x3130 && code <= 0x318f) w += 2; // Hangul Compatibility Jamo (e.g. ㅅ)
-    else if (code >= 0x30a0 && code <= 0x30ff) w += 2; // Katakana
-    else if (code >= 0x4e00 && code <= 0x9fff) w += 2; // CJK unified
-    else if (code >= 0xff00 && code <= 0xffef) w += 2; // Fullwidth forms
-    else if (code >= 0x2600 && code <= 0x27bf) w += 2; // Misc symbols (✓ ✗ ✅ ❌) — terminals render as 2 cols
+    if (code >= 0x3000 && code <= 0x303f)
+      w += 2; // CJK punct, fullwidth space
+    else if (code >= 0x3040 && code <= 0x309f)
+      w += 2; // Hiragana
+    else if (code >= 0x3130 && code <= 0x318f)
+      w += 2; // Hangul Compatibility Jamo (e.g. ㅅ)
+    else if (code >= 0x30a0 && code <= 0x30ff)
+      w += 2; // Katakana
+    else if (code >= 0x4e00 && code <= 0x9fff)
+      w += 2; // CJK unified
+    else if (code >= 0xff00 && code <= 0xffef)
+      w += 2; // Fullwidth forms
+    else if (code >= 0x2600 && code <= 0x27bf)
+      w += 2; // Misc symbols (✓ ✗ ✅ ❌) — terminals render as 2 cols
     else w += 1;
   }
   return w;
@@ -157,10 +164,14 @@ function truncateToDisplayWidth(s: string, maxWidth: number): string {
 }
 
 /** Box-drawing: single-line panel around content. Content is an array of lines; width is max visible length + padding, capped to terminal. */
-export function panel(lines: string[], options: { title?: string; padding?: number; width?: number } = {}): string {
+export function panel(
+  lines: string[],
+  options: { title?: string; padding?: number; width?: number } = {}
+): string {
   const pad = options.padding ?? 2;
   const title = options.title ?? "";
-  const rawContentWidth = options.width ?? Math.max(visibleLength(title), ...lines.map((l) => visibleLength(l)), 44);
+  const rawContentWidth =
+    options.width ?? Math.max(visibleLength(title), ...lines.map((l) => visibleLength(l)), 44);
   const contentWidth = Math.min(rawContentWidth, getTerminalWidth(2 * pad));
   const w = contentWidth + pad * 2;
   const top = "┌" + "─".repeat(w - 2) + "┐";
@@ -273,14 +284,8 @@ export function blackBox(
   const innerWidth =
     options.sessionBoxWidth != null
       ? options.sessionBoxWidth
-      : Math.max(
-          contentWidth,
-          titleLen + 2,
-          (options.minWidth ?? 0) + 2 * pad
-        );
-  const color: BoxBorderColor =
-    options.borderColor ??
-    (options.borderBlack ? "black" : "accent");
+      : Math.max(contentWidth, titleLen + 2, (options.minWidth ?? 0) + 2 * pad);
+  const color: BoxBorderColor = options.borderColor ?? (options.borderBlack ? "black" : "accent");
   const borderStyle = boxBorderStyle(color);
 
   // Reserve space for two borders and left/right padding so the full line does not wrap
@@ -297,16 +302,11 @@ export function blackBox(
     const titleOut = truncateToDisplayWidth(title, cappedInnerWidth);
     const rightDashes = Math.max(0, cappedInnerWidth - displayWidth(titleOut));
     const topLine =
-      BOX_ROUND.topLeft +
-      titleOut +
-      BOX_ROUND.horizontal.repeat(rightDashes) +
-      BOX_ROUND.topRight;
+      BOX_ROUND.topLeft + titleOut + BOX_ROUND.horizontal.repeat(rightDashes) + BOX_ROUND.topRight;
     out.push(borderStyle(topLine));
   } else {
     const topLine =
-      BOX_ROUND.topLeft +
-      BOX_ROUND.horizontal.repeat(cappedInnerWidth) +
-      BOX_ROUND.topRight;
+      BOX_ROUND.topLeft + BOX_ROUND.horizontal.repeat(cappedInnerWidth) + BOX_ROUND.topRight;
     out.push(borderStyle(topLine));
   }
 
@@ -335,9 +335,7 @@ export function blackBox(
 
   // Bottom border
   const bottomLine =
-    BOX_ROUND.bottomLeft +
-    BOX_ROUND.horizontal.repeat(cappedInnerWidth) +
-    BOX_ROUND.bottomRight;
+    BOX_ROUND.bottomLeft + BOX_ROUND.horizontal.repeat(cappedInnerWidth) + BOX_ROUND.bottomRight;
   out.push(borderStyle(bottomLine));
 
   return out.join("\n");

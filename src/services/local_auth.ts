@@ -72,7 +72,9 @@ export function getLocalAuthUserById(userId: string): LocalAuthUser | null {
 
 export function countLocalAuthUsers(): number {
   const db = getSqliteDb();
-  const row = db.prepare("SELECT COUNT(*) as count FROM local_auth_users").get() as { count: number } | undefined;
+  const row = db.prepare("SELECT COUNT(*) as count FROM local_auth_users").get() as
+    | { count: number }
+    | undefined;
   return row?.count ? Number(row.count) : 0;
 }
 
@@ -214,7 +216,10 @@ export function ensureSandboxAauthUser(thumbprint: string): LocalAuthUser {
   if (existing) {
     return existing;
   }
-  const short = thumbprint.replace(/[^a-zA-Z0-9]/g, "").slice(0, 12).toLowerCase();
+  const short = thumbprint
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .slice(0, 12)
+    .toLowerCase();
   const email = `aauth-${short}@sandbox.neotoma.local`;
   const now = new Date().toISOString();
   const { salt, hash } = hashPassword(`sandbox-aauth-no-password:${thumbprint}`);
