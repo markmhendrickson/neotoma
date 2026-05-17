@@ -105,6 +105,176 @@ function validateAgainstSchema(
 }
 
 /**
+ * Write buffered raw_fragments for a single entity after entity resolution and
+ * observation creation have both succeeded (issue #163: do not write fragments
+ * before entity resolution).
+ */
+async function flushPendingFragments(opts: {
+  db: unknown; // unused; kept for call-site symmetry — module-level db is used
+  sourceId: string;
+  interpretationId: string;
+  userId: string;
+  entityType: string;
+  effectiveSchemaVersion: string;
+  validFields: Record<string, unknown>;
+  pendingConvertedFragments: Array<{ key: string; value: unknown }>;
+  pendingUnknownFragments: Array<{ key: string; value: unknown }>;
+}): Promise<void> {
+  const {
+    sourceId, interpretationId, userId, entityType,
+    effectiveSchemaVersion, validFields,
+    pendingConvertedFragments, pendingUnknownFragments,
+  } = opts;
+
+  // Write converted-value originals (preserves zero data loss for converter fields).
+  for (const { key, value } of pendingConvertedFragments) {
+    const { data: existing } = await db
+      .from("raw_fragments")
+      .select("id, frequency_count")
+      .eq("source_id", sourceId)
+      .eq("fragment_key", key)
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (existing) {
+      await db
+        .from("raw_fragments")
+        .update({
+          fragment_value: value,
+          fragment_envelope: {
+            reason: "converted_value_original",
+            entity_type: entityType,
+            schema_version: effectiveSchemaVersion,
+            converted_to: validFields[key],
+          },
+          frequency_count: (existing.frequency_count || 1) + 1,
+          last_seen: new Date().toISOString(),
+        })
+        .eq("id", existing.id);
+    } else {
+      await db.from("raw_fragments").insert({
+        id: randomUUID(),
+        source_id: sourceId,
+        interpretation_id: interpretationId,
+        user_id: userId,
+        entity_type: entityType,
+        fragment_key: key,
+        fragment_value: value,
+        fragment_envelope: {
+          reason: "converted_value_original",
+          entity_type: entityType,
+          schema_version: effectiveSchemaVersion,
+          converted_to: validFields[key],
+        },
+      });
+    }
+  }
+
+  // Write unknown-field fragments.
+  for (const { key, value } of pendingUnknownFragments) {
+    const { data: existing } = await db
+      .from("raw_fragments")
+      .select("id, frequency_count")
+      .eq("source_id", sourceId)
+      .eq("fragment_key", key)
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (existing) {
+      const newFreq = (existing.frequency_count || 1) + 1;
+      await db
+        .from("raw_fragments")
+        .update({
+          fragment_value: value,
+          fragment_envelope: {
+            reason: "unknown_field",
+            entity_type: entityType,
+            schema_version: effectiveSchemaVersion,
+          },
+          frequency_count: newFreq,
+          last_seen: new Date().toISOString(),
+        })
+        .eq("id", existing.id);
+      try {
+        const { schemaRecommendationService } = await import("./schema_recommendation.js");
+        await schemaRecommendationService.queueAutoEnhancementCheck({
+          entity_type: entityType, fragment_key: key, user_id: userId, frequency_count: newFreq,
+        });
+      } catch (queueError: unknown) {
+        logger.warn(
+          `[Interpretation] Failed to queue auto-enhancement for ${entityType}.${key}:`,
+          queueError instanceof Error ? queueError.message : String(queueError)
+        );
+      }
+    } else {
+      const { error: insertError } = await db.from("raw_fragments").insert({
+        id: randomUUID(),
+        source_id: sourceId,
+        interpretation_id: interpretationId,
+        user_id: userId,
+        entity_type: entityType,
+        fragment_key: key,
+        fragment_value: value,
+        fragment_envelope: {
+          reason: "unknown_field",
+          entity_type: entityType,
+          schema_version: effectiveSchemaVersion,
+        },
+      });
+      if (insertError?.code === "23505") {
+        // Race condition: another process inserted the same fragment concurrently.
+        const { data: retryExisting } = await db
+          .from("raw_fragments")
+          .select("id, frequency_count")
+          .eq("source_id", sourceId)
+          .eq("fragment_key", key)
+          .eq("user_id", userId)
+          .maybeSingle();
+        if (retryExisting) {
+          const retryFreq = (retryExisting.frequency_count || 1) + 1;
+          await db
+            .from("raw_fragments")
+            .update({
+              fragment_value: value,
+              fragment_envelope: {
+                reason: "unknown_field",
+                entity_type: entityType,
+                schema_version: effectiveSchemaVersion,
+              },
+              frequency_count: retryFreq,
+              last_seen: new Date().toISOString(),
+            })
+            .eq("id", retryExisting.id);
+          try {
+            const { schemaRecommendationService } = await import("./schema_recommendation.js");
+            await schemaRecommendationService.queueAutoEnhancementCheck({
+              entity_type: entityType, fragment_key: key, user_id: userId, frequency_count: retryFreq,
+            });
+          } catch (queueError: unknown) {
+            logger.warn(
+              `[Interpretation] Failed to queue auto-enhancement for ${entityType}.${key}:`,
+              queueError instanceof Error ? queueError.message : String(queueError)
+            );
+          }
+        }
+      } else if (!insertError) {
+        try {
+          const { schemaRecommendationService } = await import("./schema_recommendation.js");
+          await schemaRecommendationService.queueAutoEnhancementCheck({
+            entity_type: entityType, fragment_key: key, user_id: userId, frequency_count: 1,
+          });
+        } catch (queueError: unknown) {
+          logger.warn(
+            `[Interpretation] Failed to queue auto-enhancement for ${entityType}.${key}:`,
+            queueError instanceof Error ? queueError.message : String(queueError)
+          );
+        }
+      }
+    }
+  }
+}
+
+/**
  * Run interpretation on extracted data
  * Creates interpretation run, validates fields, resolves entities, creates observations
  */
@@ -327,185 +497,19 @@ export async function runInterpretation(
         delete (unknownFields as Record<string, unknown>)["canonical_name"];
       }
 
-      // Store original values in raw_fragments for converted fields (preserves zero data loss)
+      // Buffer fragment writes: collect all raw_fragments for this entity so they
+      // can be written AFTER entity resolution succeeds. If resolution fails the
+      // fragments are discarded and no orphaned rows are created (issue #163).
+      const pendingConvertedFragments: Array<{ key: string; value: unknown }> = [];
       for (const [key, value] of Object.entries(originalValues)) {
-        // Skip null or undefined values (database constraint)
-        if (value === null || value === undefined) {
-          continue;
-        }
-
-        // Check if fragment already exists (for idempotence)
-        const { data: existing } = await db
-          .from("raw_fragments")
-          .select("id, frequency_count")
-          .eq("source_id", sourceId)
-          .eq("fragment_key", key)
-          .eq("user_id", userId)
-          .maybeSingle();
-
-        if (existing) {
-          // Update existing fragment
-          await db
-            .from("raw_fragments")
-            .update({
-              fragment_value: value,
-              fragment_envelope: {
-                reason: "converted_value_original",
-                entity_type: entityType,
-                schema_version: effectiveSchemaVersion,
-                converted_to: validFields[key],
-              },
-              frequency_count: (existing.frequency_count || 1) + 1,
-              last_seen: new Date().toISOString(),
-            })
-            .eq("id", existing.id);
-        } else {
-          // Insert new fragment
-          const fragmentId = randomUUID();
-          await db.from("raw_fragments").insert({
-            id: fragmentId,
-            source_id: sourceId,
-            interpretation_id: interpretationId,
-            user_id: userId,
-            entity_type: entityType,
-            fragment_key: key,
-            fragment_value: value,
-            fragment_envelope: {
-              reason: "converted_value_original",
-              entity_type: entityType,
-              schema_version: effectiveSchemaVersion,
-              converted_to: validFields[key],
-            },
-          });
-        }
+        if (value === null || value === undefined) continue;
+        pendingConvertedFragments.push({ key, value });
       }
 
-      // Store unknown fields in raw_fragments (with idempotence)
-      // Filter out null/undefined values before storing
+      const pendingUnknownFragments: Array<{ key: string; value: unknown }> = [];
       for (const [key, value] of Object.entries(unknownFields)) {
-        // Skip null or undefined values (database constraint)
-        if (value === null || value === undefined) {
-          continue;
-        }
-        // Check if fragment already exists (for idempotence)
-        const { data: existing } = await db
-          .from("raw_fragments")
-          .select("id, frequency_count")
-          .eq("source_id", sourceId)
-          .eq("fragment_key", key)
-          .eq("user_id", userId)
-          .maybeSingle();
-
-        if (existing) {
-          // Update existing fragment (increment frequency, update last_seen)
-          const newFreq = (existing.frequency_count || 1) + 1;
-          await db
-            .from("raw_fragments")
-            .update({
-              fragment_value: value,
-              fragment_envelope: {
-                reason: "unknown_field",
-                entity_type: entityType,
-                schema_version: effectiveSchemaVersion,
-              },
-              frequency_count: newFreq,
-              last_seen: new Date().toISOString(),
-            })
-            .eq("id", existing.id);
-          unknownFieldsCount++;
-          // Queue auto-enhancement so raw_fragments can promote to schema
-          try {
-            const { schemaRecommendationService } = await import("./schema_recommendation.js");
-            await schemaRecommendationService.queueAutoEnhancementCheck({
-              entity_type: entityType,
-              fragment_key: key,
-              user_id: userId,
-              frequency_count: newFreq,
-            });
-          } catch (queueError: unknown) {
-            logger.warn(
-              `[Interpretation] Failed to queue auto-enhancement for ${entityType}.${key}:`,
-              queueError instanceof Error ? queueError.message : String(queueError)
-            );
-          }
-        } else {
-          // Insert new fragment
-          const fragmentId = randomUUID();
-          const { error: insertError } = await db.from("raw_fragments").insert({
-            id: fragmentId,
-            source_id: sourceId,
-            interpretation_id: interpretationId,
-            user_id: userId,
-            entity_type: entityType,
-            fragment_key: key,
-            fragment_value: value,
-            fragment_envelope: {
-              reason: "unknown_field",
-              entity_type: entityType,
-              schema_version: effectiveSchemaVersion,
-            },
-          });
-
-          // Handle race condition (unique constraint violation)
-          if (insertError?.code === "23505") {
-            // Another process inserted it, retry as update
-            const { data: retryExisting } = await db
-              .from("raw_fragments")
-              .select("id, frequency_count")
-              .eq("source_id", sourceId)
-              .eq("fragment_key", key)
-              .eq("user_id", userId)
-              .maybeSingle();
-
-            if (retryExisting) {
-              const retryFreq = (retryExisting.frequency_count || 1) + 1;
-              await db
-                .from("raw_fragments")
-                .update({
-                  fragment_value: value,
-                  fragment_envelope: {
-                    reason: "unknown_field",
-                    entity_type: entityType,
-                    schema_version: effectiveSchemaVersion,
-                  },
-                  frequency_count: retryFreq,
-                  last_seen: new Date().toISOString(),
-                })
-                .eq("id", retryExisting.id);
-              try {
-                const { schemaRecommendationService } = await import("./schema_recommendation.js");
-                await schemaRecommendationService.queueAutoEnhancementCheck({
-                  entity_type: entityType,
-                  fragment_key: key,
-                  user_id: userId,
-                  frequency_count: retryFreq,
-                });
-              } catch (queueError: unknown) {
-                logger.warn(
-                  `[Interpretation] Failed to queue auto-enhancement for ${entityType}.${key}:`,
-                  queueError instanceof Error ? queueError.message : String(queueError)
-                );
-              }
-            }
-          } else if (!insertError) {
-            // New fragment inserted successfully; queue auto-enhancement
-            try {
-              const { schemaRecommendationService } = await import("./schema_recommendation.js");
-              await schemaRecommendationService.queueAutoEnhancementCheck({
-                entity_type: entityType,
-                fragment_key: key,
-                user_id: userId,
-                frequency_count: 1,
-              });
-            } catch (queueError: unknown) {
-              logger.warn(
-                `[Interpretation] Failed to queue auto-enhancement for ${entityType}.${key}:`,
-                queueError instanceof Error ? queueError.message : String(queueError)
-              );
-            }
-          }
-          unknownFieldsCount++;
-        }
+        if (value === null || value === undefined) continue;
+        pendingUnknownFragments.push({ key, value });
       }
 
       const validFieldKeys = Object.keys(validFields).filter((key) => key !== "schema_version");
@@ -567,7 +571,14 @@ export async function runInterpretation(
       );
 
       if (existingObservation) {
-        // Observation already exists - don't create duplicate
+        // Observation already exists - don't create duplicate.
+        // Still flush buffered fragments so they are kept current on replay.
+        await flushPendingFragments({
+          db, sourceId, interpretationId, userId, entityType,
+          effectiveSchemaVersion, validFields,
+          pendingConvertedFragments, pendingUnknownFragments,
+        });
+        unknownFieldsCount += pendingUnknownFragments.length;
         entities.push({
           entityId,
           entityType,
@@ -623,6 +634,15 @@ export async function runInterpretation(
         entityType,
         observationId,
       });
+
+      // Flush buffered raw_fragments now that entity resolution and observation
+      // creation have both succeeded (issue #163).
+      await flushPendingFragments({
+        db, sourceId, interpretationId, userId, entityType,
+        effectiveSchemaVersion, validFields,
+        pendingConvertedFragments, pendingUnknownFragments,
+      });
+      unknownFieldsCount += pendingUnknownFragments.length;
     }
 
     // Compute snapshots for all entities
