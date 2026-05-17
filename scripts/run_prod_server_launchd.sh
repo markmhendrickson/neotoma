@@ -1,18 +1,32 @@
 #!/usr/bin/env bash
-# Run Neotoma production HTTP API for LaunchAgent (build + prod port + NEOTOMA_ENV=production).
-# Used by com.neotoma.prod-server.plist so a built API can start at login and resume after reboot.
+# Run Neotoma production HTTP API for LaunchAgent with hot-reload from source.
+# Used by com.neotoma.prod-server.plist so the server starts at login, restarts
+# after reboot, and picks up source changes automatically via node --watch + tsx.
 #
-# Pre-kills any incumbent on canonical port 3180 so prod always binds 3180 and
-# never drifts via pick-port.js's scan-up fallback. This guarantees the Cursor
-# `neotoma` MCP entry (NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE=prod) and the
-# Cloudflare tunnel for https://neotoma.markmhendrickson.com/ both target the
-# same bound process.
+# Runs `dev:server:prod` (node --watch on src/actions.ts + tsc --watch, prod env,
+# port 3180) instead of the build-once start:server:prod. Pre-kills any incumbent
+# on port 3180 so prod always binds 3180 and never drifts via pick-port.js's
+# scan-up fallback. This guarantees the `neotoma` MCP entry
+# (NEOTOMA_MCP_LOCAL_HTTP_PORT_PROFILE=prod) and the Cloudflare tunnel for
+# https://neotoma.markmhendrickson.com/ both target the same bound process.
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 export PATH="/usr/sbin:/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"
 export TSC_WATCHFILE="${TSC_WATCHFILE:-UseFsEventsWithFallbackDynamicPolling}"
 export TSC_WATCHDIRECTORY="${TSC_WATCHDIRECTORY:-UseFsEventsWithFallbackDynamicPolling}"
+
+run_npm() {
+  if [[ -n "${NEOTOMA_LAUNCHD_NODE:-}" && -n "${NEOTOMA_LAUNCHD_NPM_CLI:-}" && -x "${NEOTOMA_LAUNCHD_NODE}" && -f "${NEOTOMA_LAUNCHD_NPM_CLI}" ]]; then
+    "${NEOTOMA_LAUNCHD_NODE}" "${NEOTOMA_LAUNCHD_NPM_CLI}" "$@"
+    return
+  fi
+  if [[ -n "${NEOTOMA_LAUNCHD_NPM_BIN:-}" && -x "${NEOTOMA_LAUNCHD_NPM_BIN}" ]]; then
+    "${NEOTOMA_LAUNCHD_NPM_BIN}" "$@"
+    return
+  fi
+  npm "$@"
+}
 
 PROD_HTTP_PORT="${NEOTOMA_PROD_HTTP_PORT:-3180}"
 
@@ -44,4 +58,10 @@ for env_file in ".env" ".env.production"; do
     set +a
   fi
 done
-exec npm run start:server:prod
+
+RESTART_DELAY=5
+while true; do
+  run_npm run dev:server:prod || true
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] dev:server:prod exited, restarting in ${RESTART_DELAY}s..."
+  sleep "$RESTART_DELAY"
+done

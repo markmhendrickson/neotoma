@@ -26,6 +26,12 @@
     <string>UseFsEventsWithFallbackDynamicPolling</string>
     <key>TSC_WATCHDIRECTORY</key>
     <string>UseFsEventsWithFallbackDynamicPolling</string>
+    <key>NEOTOMA_LAUNCHD_NODE</key>
+    <string>NEOTOMA_LAUNCHD_NODE_PLACEHOLDER</string>
+    <key>NEOTOMA_LAUNCHD_NPM_CLI</key>
+    <string>NEOTOMA_LAUNCHD_NPM_CLI_PLACEHOLDER</string>
+    <key>NEOTOMA_LAUNCHD_NPM_BIN</key>
+    <string>/usr/local/bin/npm</string>
   </dict>
 </dict>
 </plist>
