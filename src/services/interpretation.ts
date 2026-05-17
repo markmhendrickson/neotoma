@@ -61,6 +61,8 @@ export interface InterpretationResult {
   interpretationId: string;
   observationsCreated: number;
   unknownFieldsCount: number;
+  /** The field names that were not recognized by the schema. */
+  unknownFieldNames: string[];
   observationsDeduplicated?: number; // Count of observations that already existed
   fixedPointReached?: boolean; // Whether fixed-point convergence was achieved
   convergenceIterations?: number; // Number of iterations to reach convergence
@@ -148,6 +150,7 @@ export async function runInterpretation(
   const interpretationId = run.id;
   let observationsCreated = 0;
   let unknownFieldsCount = 0;
+  const unknownFieldNamesSet = new Set<string>();
   const entities: Array<{
     entityId: string;
     entityType: string;
@@ -393,6 +396,7 @@ export async function runInterpretation(
             })
             .eq("id", existing.id);
           unknownFieldsCount++;
+          unknownFieldNamesSet.add(key);
           // Queue auto-enhancement so raw_fragments can promote to schema
           try {
             const { schemaRecommendationService } =
@@ -488,6 +492,7 @@ export async function runInterpretation(
             }
           }
           unknownFieldsCount++;
+          unknownFieldNamesSet.add(key);
         }
       }
 
@@ -750,6 +755,7 @@ export async function runInterpretation(
       interpretationId,
       observationsCreated,
       unknownFieldsCount,
+      unknownFieldNames: Array.from(unknownFieldNamesSet).sort(),
       entities,
       refinement_debug: refinementDebug.length > 0 ? refinementDebug : undefined,
     };

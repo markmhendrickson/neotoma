@@ -4209,15 +4209,19 @@ export class NeotomaServer {
         entities: planEntities,
         entity_snapshots_after: planEntities.map(() => null),
         unknown_fields_count: 0,
+        unknown_fields: [],
         related_entities: [],
         related_relationships: [],
       });
     }
 
     if (idempotencyKey) {
+      const incomingContentHash = createHash("sha256")
+        .update(JSON.stringify(entities, null, 2))
+        .digest("hex");
       const { data: existingSource, error: existingSourceError } = await db
         .from("sources")
-        .select("id")
+        .select("id, content_hash")
         .eq("user_id", userId)
         .eq("idempotency_key", idempotencyKey)
         .maybeSingle();
@@ -4227,6 +4231,15 @@ export class NeotomaServer {
       }
 
       if (existingSource) {
+        if (existingSource.content_hash && existingSource.content_hash !== incomingContentHash) {
+          const mismatchErr = new McpError(
+            ErrorCode.InvalidParams,
+            `ERR_IDEMPOTENCY_MISMATCH: idempotency_key "${idempotencyKey}" was already used with different content. ` +
+            `Use a unique idempotency_key for each distinct write.`
+          );
+          throw mismatchErr;
+        }
+
         const { data: existingObservations, error: obsError } = await db
           .from("observations")
           .select("id, entity_id, entity_type")
@@ -4242,11 +4255,12 @@ export class NeotomaServer {
             (obs: { id: string; entity_id: string; entity_type: string }) => obs.entity_id
           ) ?? [];
         const relatedData = await this.getRelatedEntitiesAndRelationships(existingEntityIds);
-        const { count: unknownFieldsCount } = await db
+        const { data: fragmentRows } = await db
           .from("raw_fragments")
-          .select("id", { count: "exact", head: true })
+          .select("fragment_key")
           .eq("source_id", existingSource.id)
           .eq("user_id", userId);
+        const replayUnknownFieldNames = [...new Set((fragmentRows ?? []).map((r: { fragment_key: string }) => r.fragment_key))].sort();
 
         return this.buildTextResponse({
           source_id: existingSource.id,
@@ -4258,7 +4272,8 @@ export class NeotomaServer {
                 observation_id: obs.id,
               })
             ) ?? [],
-          unknown_fields_count: unknownFieldsCount || 0,
+          unknown_fields_count: replayUnknownFieldNames.length,
+          unknown_fields: replayUnknownFieldNames,
           related_entities: relatedData.entities,
           related_relationships: relatedData.relationships,
         });
@@ -4352,6 +4367,7 @@ export class NeotomaServer {
           observation_id: entity.observationId,
         })),
         unknown_fields_count: result.unknownFieldsCount,
+        unknown_fields: result.unknownFieldNames,
       });
     }
 
@@ -4368,6 +4384,7 @@ export class NeotomaServer {
     }> = [];
     const insertedObservationIds = new Set<string>();
     let unknownFieldsCount = 0;
+    const unknownFieldNamesSet = new Set<string>();
 
     for (const entityData of entities) {
       // Extract entity_type (support both 'entity_type' and 'type' fields)
@@ -4646,7 +4663,7 @@ export class NeotomaServer {
         validFields,
       });
 
-      unknownFieldsCount += await storeUnknownFields({
+      const unknownFieldsResult = await storeUnknownFields({
         sourceId: storageResult.sourceId,
         userId,
         entityId,
@@ -4654,6 +4671,8 @@ export class NeotomaServer {
         schemaVersion: schemaVer,
         unknownFields,
       });
+      unknownFieldsCount += unknownFieldsResult.count;
+      for (const f of unknownFieldsResult.fields) unknownFieldNamesSet.add(f);
 
       // If this store produced unknown fields, lazily check whether any of them
       // are already declared in the active schema — a sign of schema-lag misrouting
@@ -4965,6 +4984,7 @@ export class NeotomaServer {
         entity_snapshot_after: snapshotByEntityId.get(e.entityId) ?? null,
       })),
       unknown_fields_count: unknownFieldsCount,
+      unknown_fields: Array.from(unknownFieldNamesSet).sort(),
       related_entities: relatedData.entities,
       related_relationships: relatedData.relationships,
     });
