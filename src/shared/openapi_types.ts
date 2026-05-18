@@ -1445,8 +1445,8 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * Sync issues from GitHub
-     * @description Pulls issues and comments from the configured GitHub repo into local Neotoma (MCP sync_issues parity).
+     * Sync issues bidirectionally with GitHub
+     * @description Bidirectional sync between local Neotoma and the configured GitHub repo. Push leg (default on): local public issues with no github_number are sanitized (PII stripped) and created on GitHub, then updated locally with the returned number/url. Pull leg: GitHub issues and their comments are pulled into local entities. MCP sync_issues parity.
      */
     post: operations["issuesSync"];
     delete?: never;
@@ -5713,6 +5713,8 @@ export interface operations {
           /** @enum {string} */
           state?: "open" | "closed" | "all";
           labels?: string[];
+          /** @description When false, skip the push leg (local public → GitHub). Default true. */
+          push?: boolean;
           user_id?: string;
         };
       };
@@ -5728,6 +5730,8 @@ export interface operations {
             issues_synced: number;
             messages_synced: number;
             errors: string[];
+            issues_pushed: number;
+            push_errors: string[];
           };
         };
       };

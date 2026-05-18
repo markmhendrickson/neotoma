@@ -688,5 +688,10 @@ export const IssuesSyncRequestSchema = z.object({
   since: z.string().optional(),
   state: z.enum(["open", "closed", "all"]).optional(),
   labels: z.array(z.string()).optional(),
+  /**
+   * When true (default), local public issues with no github_number are pushed to GitHub
+   * before the pull leg runs. Pass false to disable the push leg.
+   */
+  push: z.boolean().optional(),
   user_id: z.string().optional(),
 });

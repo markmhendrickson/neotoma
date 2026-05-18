@@ -1263,6 +1263,7 @@ export class NeotomaServer {
       state: z.enum(["open", "closed", "all"]).optional(),
       labels: z.array(z.string()).optional(),
       since: z.string().optional(),
+      push: z.boolean().optional(),
     });
     const parsed = schema.parse(args ?? {});
 
@@ -1274,6 +1275,7 @@ export class NeotomaServer {
         state: parsed.state,
         labels: parsed.labels,
         since: parsed.since,
+        push: parsed.push,
       });
       return this.buildTextResponse(result);
     } catch (err: any) {

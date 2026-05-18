@@ -8303,10 +8303,13 @@ const handleIssuesSyncHttp: express.RequestHandler = async (req, res) => {
         since: parsed.data.since,
         state: parsed.data.state,
         labels: parsed.data.labels,
+        push: parsed.data.push,
       });
       logDebug("Success:issues_sync", req, {
         issues_synced: result.issues_synced,
         messages_synced: result.messages_synced,
+        issues_pushed: result.issues_pushed,
+        push_errors: result.push_errors,
       });
       return res.json(result);
     } finally {

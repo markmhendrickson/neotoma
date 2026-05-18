@@ -5,6 +5,7 @@ import type { GitHubComment, GitHubIssue } from "../../src/services/issues/types
 
 const mockListIssues = vi.fn();
 const mockListIssueComments = vi.fn();
+const mockCreateIssue = vi.fn();
 
 const { mockLoadIssuesConfig } = vi.hoisted(() => ({
   mockLoadIssuesConfig: vi.fn(),
@@ -17,6 +18,15 @@ vi.mock("../../src/services/issues/config.js", () => ({
 vi.mock("../../src/services/issues/github_client.js", () => ({
   listIssues: (...args: unknown[]) => mockListIssues(...args),
   listIssueComments: (...args: unknown[]) => mockListIssueComments(...args),
+  createIssue: (...args: unknown[]) => mockCreateIssue(...args),
+}));
+
+vi.mock("../../src/services/issues/redaction_guard.js", () => ({
+  runRedactionGuard: (input: { title: string; body: string; mode: string }) => ({
+    title: `[redacted] ${input.title}`,
+    body: `[redacted] ${input.body}`,
+    redacted: false,
+  }),
 }));
 
 import { syncIssuesFromGitHub } from "../../src/services/issues/sync_issues_from_github.js";
@@ -116,7 +126,7 @@ describe("syncIssuesFromGitHub", () => {
     });
     expect(mockListIssueComments).toHaveBeenCalledTimes(2);
     expect(store).toHaveBeenCalledTimes(5);
-    expect(result).toEqual({ issues_synced: 2, messages_synced: 3, errors: [] });
+    expect(result).toMatchObject({ issues_synced: 2, messages_synced: 3, errors: [] });
   });
 
   it("returns a recoverable error result when GitHub listing fails with a 5xx", async () => {
@@ -159,5 +169,208 @@ describe("syncIssuesFromGitHub", () => {
         "issue-comment-sync-test/repo-1-101",
       ]),
     );
+  });
+
+  describe("push leg — local public issues without github_number", () => {
+    function makeEntityList(
+      entities: Array<{ entity_id: string; snapshot: Record<string, unknown> }>,
+    ) {
+      return { entities };
+    }
+
+    beforeEach(() => {
+      mockListIssues.mockResolvedValue([]);
+      mockCreateIssue.mockResolvedValue({
+        number: 42,
+        html_url: "https://github.com/test/repo/issues/42",
+      });
+    });
+
+    it("pushes a public issue with no github_number to GitHub and corrects the entity", async () => {
+      const { ops } = createOps();
+      (ops.retrieveEntities as ReturnType<typeof vi.fn>).mockResolvedValue(
+        makeEntityList([
+          {
+            entity_id: "ent-public-1",
+            snapshot: {
+              visibility: "public",
+              github_number: null,
+              title: "Public bug",
+              body: "Details here",
+              labels: ["bug"],
+            },
+          },
+        ]),
+      );
+
+      const result = await syncIssuesFromGitHub(ops);
+
+      expect(mockCreateIssue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "[redacted] Public bug",
+          body: "[redacted] Details here",
+        }),
+      );
+      expect(ops.correct).toHaveBeenCalledWith(
+        expect.objectContaining({
+          entity_id: "ent-public-1",
+          corrections: expect.objectContaining({
+            github_number: 42,
+            github_url: "https://github.com/test/repo/issues/42",
+            sync_pending: false,
+          }),
+        }),
+      );
+      expect(result.issues_pushed).toBe(1);
+      expect(result.push_errors).toEqual([]);
+    });
+
+    it("skips private issues — does not push them to GitHub", async () => {
+      const { ops } = createOps();
+      (ops.retrieveEntities as ReturnType<typeof vi.fn>).mockResolvedValue(
+        makeEntityList([
+          {
+            entity_id: "ent-private-1",
+            snapshot: {
+              visibility: "private",
+              github_number: null,
+              title: "Private note",
+              body: "Internal",
+              labels: [],
+            },
+          },
+        ]),
+      );
+
+      const result = await syncIssuesFromGitHub(ops);
+
+      expect(mockCreateIssue).not.toHaveBeenCalled();
+      expect(result.issues_pushed).toBe(0);
+    });
+
+    it("skips issues that already have a numeric github_number", async () => {
+      const { ops } = createOps();
+      (ops.retrieveEntities as ReturnType<typeof vi.fn>).mockResolvedValue(
+        makeEntityList([
+          {
+            entity_id: "ent-synced-1",
+            snapshot: {
+              visibility: "public",
+              github_number: 7,
+              title: "Already filed",
+              body: "Nothing to do",
+              labels: [],
+            },
+          },
+        ]),
+      );
+
+      const result = await syncIssuesFromGitHub(ops);
+
+      expect(mockCreateIssue).not.toHaveBeenCalled();
+      expect(result.issues_pushed).toBe(0);
+    });
+
+    it("skips issues that already have a string github_number", async () => {
+      const { ops } = createOps();
+      (ops.retrieveEntities as ReturnType<typeof vi.fn>).mockResolvedValue(
+        makeEntityList([
+          {
+            entity_id: "ent-synced-str",
+            snapshot: {
+              visibility: "public",
+              github_number: "12",
+              title: "Already filed (string id)",
+              body: "Nothing to do",
+              labels: [],
+            },
+          },
+        ]),
+      );
+
+      const result = await syncIssuesFromGitHub(ops);
+
+      expect(mockCreateIssue).not.toHaveBeenCalled();
+      expect(result.issues_pushed).toBe(0);
+    });
+
+    it("accumulates push_errors without aborting the pull leg when createIssue throws", async () => {
+      const { ops } = createOps();
+      (ops.retrieveEntities as ReturnType<typeof vi.fn>).mockResolvedValue(
+        makeEntityList([
+          {
+            entity_id: "ent-fail-1",
+            snapshot: {
+              visibility: "public",
+              github_number: null,
+              title: "Failing push",
+              body: "Details",
+              labels: [],
+            },
+          },
+        ]),
+      );
+      mockCreateIssue.mockRejectedValue(new Error("GitHub 422 Unprocessable"));
+
+      const result = await syncIssuesFromGitHub(ops);
+
+      expect(result.issues_pushed).toBe(0);
+      expect(result.push_errors).toHaveLength(1);
+      expect(result.push_errors[0]).toContain("GitHub 422 Unprocessable");
+      // Pull leg still runs (no errors from pull leg in this test)
+      expect(result.errors).toEqual([]);
+    });
+
+    it("skips the entire push leg when push param is false", async () => {
+      const { ops } = createOps();
+      (ops.retrieveEntities as ReturnType<typeof vi.fn>).mockResolvedValue(
+        makeEntityList([
+          {
+            entity_id: "ent-skipped-1",
+            snapshot: {
+              visibility: "public",
+              github_number: null,
+              title: "Would be pushed",
+              body: "Details",
+              labels: [],
+            },
+          },
+        ]),
+      );
+
+      const result = await syncIssuesFromGitHub(ops, { push: false });
+
+      expect(mockCreateIssue).not.toHaveBeenCalled();
+      expect(ops.retrieveEntities).not.toHaveBeenCalled();
+      expect(result.issues_pushed).toBe(0);
+    });
+
+    it("applies redaction via runRedactionGuard before sending to GitHub", async () => {
+      const { ops } = createOps();
+      (ops.retrieveEntities as ReturnType<typeof vi.fn>).mockResolvedValue(
+        makeEntityList([
+          {
+            entity_id: "ent-redact-1",
+            snapshot: {
+              visibility: "public",
+              github_number: null,
+              title: "Issue with PII name",
+              body: "Contact me at private@example.com",
+              labels: [],
+            },
+          },
+        ]),
+      );
+
+      await syncIssuesFromGitHub(ops);
+
+      // Our mock prepends "[redacted] " to confirm runRedactionGuard was called
+      expect(mockCreateIssue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "[redacted] Issue with PII name",
+          body: "[redacted] Contact me at private@example.com",
+        }),
+      );
+    });
   });
 });
