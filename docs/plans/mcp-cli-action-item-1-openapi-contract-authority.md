@@ -7,45 +7,17 @@ schema_version: 1.7.0
 last_observation_at: 2026-05-14T05:08:58.295Z
 observation_count: 1
 computed_at: 2026-05-14T05:08:58.295Z
+title: MCP-CLI Action Item 1: OpenAPI Contract Authority
+file_path: .cursor/plans/mcp-cli-action-item-01-openapi-core.plan.md
+repository: neotoma
+status: pending
+overview: Select a single contract source of truth for MCP tool schemas and OpenAPI. Define a generator pipeline, update src/server.ts to use generated tool schemas, and add drift tests that compare MCP tool schemas, OpenAPI, and docs for parity.
+priority: medium
+todos_pending: 5
+todos_completed: 0
+tags:
+  - openapi
+  - mcp
+  - contract
+  - tooling
 ---
-
-# MCP-CLI Action Item 1: OpenAPI Contract Authority
-
-## title
-
-MCP-CLI Action Item 1: OpenAPI Contract Authority
-
-## overview
-
-Select a single contract source of truth for MCP tool schemas and OpenAPI. Define a generator pipeline, update src/server.ts to use generated tool schemas, and add drift tests that compare MCP tool schemas, OpenAPI, and docs for parity.
-
-## status
-
-pending
-
-## file_path
-
-.cursor/plans/mcp-cli-action-item-01-openapi-core.plan.md
-
-## priority
-
-medium
-
-## repository
-
-neotoma
-
-## tags
-
-- openapi
-- mcp
-- contract
-- tooling
-
-## todos_completed
-
-0
-
-## todos_pending
-
-5

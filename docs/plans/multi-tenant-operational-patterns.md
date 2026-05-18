@@ -7,16 +7,10 @@ schema_version: 1.0
 last_observation_at: 2026-05-16T12:43:56.453Z
 observation_count: 2
 computed_at: 2026-05-16T12:43:56.453Z
+title: Multi-Tenant Operational Patterns
+status: draft
+repository_name: neotoma
 ---
-
-# Multi-Tenant Operational Patterns
-
-## title
-
-Multi-Tenant Operational Patterns
-
-## body
-
 
 # Multi-Tenant Operational Patterns
 
@@ -111,11 +105,3 @@ Detect when one instance has a schema update that others lack.
 - Alerting: integrate with existing monitoring or standalone?
 - Tenant isolation guarantees at the fleet command level?
 
-
-## status
-
-draft
-
-## repository_name
-
-neotoma

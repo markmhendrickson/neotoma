@@ -7,22 +7,8 @@ schema_version: 1.0
 last_observation_at: 2026-05-14T14:20:33.673Z
 observation_count: 1
 computed_at: 2026-05-14T14:20:33.673Z
+title: Standing rules: long-form essay voice (Human Inversion) + Neotoma email corpus
+status: draft
+plan_kind: standing_rules
+data_source: Cursor agent 2026-05-08; user request recreate standing rules plan; corpus Human Inversion posts + prior Neotoma email corpus note
 ---
-
-# Standing rules: long-form essay voice (Human Inversion) + Neotoma email corpus
-
-## title
-
-Standing rules: long-form essay voice (Human Inversion) + Neotoma email corpus
-
-## plan_kind
-
-standing_rules
-
-## status
-
-draft
-
-## data_source
-
-Cursor agent 2026-05-08; user request recreate standing rules plan; corpus Human Inversion posts + prior Neotoma email corpus note

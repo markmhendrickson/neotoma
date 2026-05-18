@@ -7,39 +7,17 @@ schema_version: 1.7.0
 last_observation_at: 2026-05-14T11:22:38.419Z
 observation_count: 1
 computed_at: 2026-05-14T11:22:38.419Z
+title: Redo Lost Design System Surface Unification
+file_path: .cursor/plans/redo_lost_design_system_6776fda0.plan.md
+repository: neotoma
+status: pending
+overview: Rebuild the lost design-system governance scaffolding (foundation) and the M1-M7 surface unification work on top of it, sequenced so each phase is independently shippable and validated by `npm run validate:design-system`. All implementation happens on a new branch created from up-to-date `main`.
+priority: high
+tags:
+  - design-system
+  - ui
+  - frontend
+  - inspector
+  - tokens
+  - surface-unification
 ---
-
-# Redo Lost Design System Surface Unification
-
-## title
-
-Redo Lost Design System Surface Unification
-
-## overview
-
-Rebuild the lost design-system governance scaffolding (foundation) and the M1-M7 surface unification work on top of it, sequenced so each phase is independently shippable and validated by `npm run validate:design-system`. All implementation happens on a new branch created from up-to-date `main`.
-
-## status
-
-pending
-
-## file_path
-
-.cursor/plans/redo_lost_design_system_6776fda0.plan.md
-
-## priority
-
-high
-
-## repository
-
-neotoma
-
-## tags
-
-- design-system
-- ui
-- frontend
-- inspector
-- tokens
-- surface-unification

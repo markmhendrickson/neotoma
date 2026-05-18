@@ -7,14 +7,6 @@ schema_version: 1.0
 last_observation_at: 2026-05-14T14:19:10.757Z
 observation_count: 1
 computed_at: 2026-05-14T14:19:10.757Z
+title: AEO: Agent Evaluation Optimization — long-running agent operationalization (full)
+data_source: neotoma repo docs/specs 2026-05-14 full plan entity ingest
 ---
-
-# AEO: Agent Evaluation Optimization — long-running agent operationalization (full)
-
-## title
-
-AEO: Agent Evaluation Optimization — long-running agent operationalization (full)
-
-## data_source
-
-neotoma repo docs/specs 2026-05-14 full plan entity ingest

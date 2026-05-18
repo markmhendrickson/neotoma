@@ -7,46 +7,18 @@ schema_version: 1.7.0
 last_observation_at: 2026-05-14T05:08:58.292Z
 observation_count: 1
 computed_at: 2026-05-14T05:08:58.292Z
+title: Plan Migration Command (Integrated with Commit)
+file_path: .cursor/plans/plan_migration_command_integrated.plan.md
+repository: neotoma
+status: pending
+overview: Create a plan migration system that automatically runs during /commit workflow. Reviews all plans in .cursor/plans, determines relevance, and migrates relevant ones to docs/proposals with modifications for future consideration.
+priority: low
+todos_pending: 9
+todos_completed: 0
+tags:
+  - plans
+  - workflow
+  - commit
+  - proposals
+  - migration
 ---
-
-# Plan Migration Command (Integrated with Commit)
-
-## title
-
-Plan Migration Command (Integrated with Commit)
-
-## overview
-
-Create a plan migration system that automatically runs during /commit workflow. Reviews all plans in .cursor/plans, determines relevance, and migrates relevant ones to docs/proposals with modifications for future consideration.
-
-## status
-
-pending
-
-## file_path
-
-.cursor/plans/plan_migration_command_integrated.plan.md
-
-## priority
-
-low
-
-## repository
-
-neotoma
-
-## tags
-
-- plans
-- workflow
-- commit
-- proposals
-- migration
-
-## todos_completed
-
-0
-
-## todos_pending
-
-9

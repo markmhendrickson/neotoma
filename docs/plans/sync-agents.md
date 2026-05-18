@@ -7,24 +7,12 @@ schema_version: 1.7.0
 last_observation_at: 2026-05-14T08:44:10.163Z
 observation_count: 2
 computed_at: 2026-05-14T08:44:10.163Z
+title: Sync Agents
+plan_kind: feature_implementation
+status: draft
+repository_name: neotoma
+overview: Long-running background agents moving data between external sources (Gmail, Notion, Linear, Slack) and Neotoma in both directions. Inbound: scheduled pulls or source change events become observations via reader/writer split. Outbound: substrate subscription events trigger writes back to source. Neotoma ships no per-source connector code — daemons live in separate packages.
 ---
-
-# Sync Agents
-
-## title
-
-Sync Agents
-
-## plan_kind
-
-feature_implementation
-
-## overview
-
-Long-running background agents moving data between external sources (Gmail, Notion, Linear, Slack) and Neotoma in both directions. Inbound: scheduled pulls or source change events become observations via reader/writer split. Outbound: substrate subscription events trigger writes back to source. Neotoma ships no per-source connector code — daemons live in separate packages.
-
-## body
-
 
 # Sync Agents
 
@@ -91,12 +79,3 @@ A sync agent is a long-running local process that:
 - Outbound infinite loops — daemon identity propagation; inbound daemon filters records authored by sibling egress daemon
 - Trust calibration for observation_source:ingest data — extracted task is a proposal, not a confirmed task
 - Daemon proliferation — neotoma daemons CLI surface and Inspector daemon view from the start
-
-
-## status
-
-draft
-
-## repository_name
-
-neotoma

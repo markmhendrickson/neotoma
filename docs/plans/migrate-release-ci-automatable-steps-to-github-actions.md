@@ -7,22 +7,8 @@ schema_version: 1.7.0
 last_observation_at: 2026-05-14T08:36:51.860Z
 observation_count: 1
 computed_at: 2026-05-14T08:36:51.860Z
+title: Migrate /release CI-automatable steps to GitHub Actions
+repository: neotoma
+status: proposed
+priority: medium
 ---
-
-# Migrate /release CI-automatable steps to GitHub Actions
-
-## title
-
-Migrate /release CI-automatable steps to GitHub Actions
-
-## status
-
-proposed
-
-## priority
-
-medium
-
-## repository
-
-neotoma

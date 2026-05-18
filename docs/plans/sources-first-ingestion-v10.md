@@ -7,46 +7,18 @@ schema_version: 1.7.0
 last_observation_at: 2026-05-14T05:08:29.724Z
 observation_count: 1
 computed_at: 2026-05-14T05:08:29.724Z
+title: Sources-First Ingestion v10
+file_path: .cursor/plans/sources-first_ingestion_v10_baef2ba2.plan.md
+repository: neotoma
+status: pending
+overview: Greenfield, production-ready sources-first ingestion with explicit determinism boundaries, schema-valid interpretation output, durable unknown-field preservation via raw_fragments, and a minimal entity-merge mechanism to control duplicate drift.
+priority: medium
+todos_pending: 7
+todos_completed: 0
+tags:
+  - ingestion
+  - sources
+  - determinism
+  - raw-fragments
+  - entity-merge
 ---
-
-# Sources-First Ingestion v10
-
-## title
-
-Sources-First Ingestion v10
-
-## overview
-
-Greenfield, production-ready sources-first ingestion with explicit determinism boundaries, schema-valid interpretation output, durable unknown-field preservation via raw_fragments, and a minimal entity-merge mechanism to control duplicate drift.
-
-## status
-
-pending
-
-## file_path
-
-.cursor/plans/sources-first_ingestion_v10_baef2ba2.plan.md
-
-## priority
-
-medium
-
-## repository
-
-neotoma
-
-## tags
-
-- ingestion
-- sources
-- determinism
-- raw-fragments
-- entity-merge
-
-## todos_completed
-
-0
-
-## todos_pending
-
-7

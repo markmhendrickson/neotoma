@@ -7,24 +7,12 @@ schema_version: 1.7.0
 last_observation_at: 2026-05-14T08:43:35.481Z
 observation_count: 2
 computed_at: 2026-05-14T08:43:35.481Z
+title: Issues Agents
+plan_kind: feature_implementation
+status: draft
+repository_name: neotoma
+overview: Long-running agents handling the Neotoma issue lifecycle on both sides of the thread: a reporter-side agent that submits and triages on behalf of users, and a maintainer-side agent that diagnoses, proposes fixes, opens PRs, and (within policy) auto-merges. Uses reader/writer split per agent as prompt-injection defense. Five phases from triage-only to auto-merge.
 ---
-
-# Issues Agents
-
-## title
-
-Issues Agents
-
-## plan_kind
-
-feature_implementation
-
-## overview
-
-Long-running agents handling the Neotoma issue lifecycle on both sides of the thread: a reporter-side agent that submits and triages on behalf of users, and a maintainer-side agent that diagnoses, proposes fixes, opens PRs, and (within policy) auto-merges. Uses reader/writer split per agent as prompt-injection defense. Five phases from triage-only to auto-merge.
-
-## body
-
 
 # Issues Agents
 
@@ -85,12 +73,3 @@ Long-running agents handling the Neotoma issue lifecycle on both sides of the th
 - Reporter-agent submissions degrading issue quality
 - Auto-merge regression that gates miss
 - Optics: users feel they're talking to a bot
-
-
-## status
-
-draft
-
-## repository_name
-
-neotoma

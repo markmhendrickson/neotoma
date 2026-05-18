@@ -7,45 +7,17 @@ schema_version: 1.7.0
 last_observation_at: 2026-05-14T05:08:29.721Z
 observation_count: 1
 computed_at: 2026-05-14T05:08:29.721Z
+title: Me and get_authenticated_user Response Updates
+file_path: .cursor/plans/me_and_get_authenticated_user_response_updates.plan.md
+repository: neotoma
+status: pending
+overview: Add optional local storage details to GET /me and POST /get_authenticated_user (and MCP get_authenticated_user), keep email as optional, remove frontend auth UI flows (SigninForm, SignupForm, OAuthButtons, etc.), and trim Supabase auth shim stubs.
+priority: medium
+todos_pending: 5
+todos_completed: 0
+tags:
+  - auth
+  - api
+  - supabase-cleanup
+  - frontend
 ---
-
-# Me and get_authenticated_user Response Updates
-
-## title
-
-Me and get_authenticated_user Response Updates
-
-## overview
-
-Add optional local storage details to GET /me and POST /get_authenticated_user (and MCP get_authenticated_user), keep email as optional, remove frontend auth UI flows (SigninForm, SignupForm, OAuthButtons, etc.), and trim Supabase auth shim stubs.
-
-## status
-
-pending
-
-## file_path
-
-.cursor/plans/me_and_get_authenticated_user_response_updates.plan.md
-
-## priority
-
-medium
-
-## repository
-
-neotoma
-
-## tags
-
-- auth
-- api
-- supabase-cleanup
-- frontend
-
-## todos_completed
-
-0
-
-## todos_pending
-
-5

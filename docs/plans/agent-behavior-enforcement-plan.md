@@ -7,40 +7,29 @@ schema_version: 1.7.0
 last_observation_at: 2026-05-14T14:17:38.166Z
 observation_count: 2
 computed_at: 2026-05-14T14:17:38.166Z
+title: Agent Behavior Enforcement Plan
+slug: agent_behavior_enforcement_plan_415c0832
+harness: cursor
+plan_kind: harness_plan
+plan_file_path: /Users/markmhendrickson/.cursor/plans/agent_behavior_enforcement_plan_415c0832.plan.md
+overview: Refine the agent-behavior-enforcement proposal into a plan that builds on what already ships (hooks, MCP instructions, three-tier eval, compliance scorecard) and adds only the genuine gaps (pre-write retrieval gate, auto-drafted issues from failure patterns, and a log-reading auditor) — strictly as operational-layer concerns that consume the substrate, never extend it.
+is_project: false
+todos:
+  - [object Object]
+  - [object Object]
+  - [object Object]
+  - [object Object]
+  - [object Object]
+  - [object Object]
+  - [object Object]
+  - [object Object]
+  - [object Object]
+status: draft
+created_at: 2026-05-10T15:23:11.872Z
+data_source: cursor harness plan file 2026-05-10
+harness_plan_id: 415c0832
+source_message_entity_id: ent_28b12a6491b6ceeaf0b60bc0
 ---
-
-# Agent Behavior Enforcement Plan
-
-## title
-
-Agent Behavior Enforcement Plan
-
-## slug
-
-agent_behavior_enforcement_plan_415c0832
-
-## harness
-
-cursor
-
-## harness_plan_id
-
-415c0832
-
-## plan_file_path
-
-/Users/markmhendrickson/.cursor/plans/agent_behavior_enforcement_plan_415c0832.plan.md
-
-## plan_kind
-
-harness_plan
-
-## overview
-
-Refine the agent-behavior-enforcement proposal into a plan that builds on what already ships (hooks, MCP instructions, three-tier eval, compliance scorecard) and adds only the genuine gaps (pre-write retrieval gate, auto-drafted issues from failure patterns, and a log-reading auditor) — strictly as operational-layer concerns that consume the substrate, never extend it.
-
-## body
-
 
 ---
 name: Agent Behavior Enforcement Plan
@@ -154,76 +143,3 @@ This framing is what makes the auditor strengthen rather than weaken Neotoma's i
 - **Auditor invocation cadence**: scheduled (cron, like Tier 3 alerts), event-driven (subscribe to `turn_complete` substrate signals), or on-demand only? Recommend on-demand + scheduled for v1; event-driven once the substrate signaling primitive is GA.
 - **Review surface for auditor outputs**: Inspector queue (operator-friendly) vs. PRs against `docs/developer/mcp/instructions.md` (engineering-friendly)? Recommend Inspector queue with one-click "open as PR" affordance for accepted instruction diffs.
 - **Should `issues.reporting_mode = proactive` automatically extend to hook-driven auto-drafts**, or require a separate `hooks.auto_issue_mode`? Recommend reusing the existing mode for consistency; flag if separate gating is required for noise control.
-
-
-## is_project
-
-false
-
-## status
-
-draft
-
-## todos
-
-```json
-[
-  {
-    "content": "Write refined doc at docs/private/strategy/agent_behavior_enforcement.md replacing greenfield framing with what-exists / what-is-missing structure",
-    "id": "refined-doc",
-    "status": "pending"
-  },
-  {
-    "content": "Produce gap matrix mapping each observed failure to existing hook, advisory-that-should-block, or missing primitive (Sequencing step 1)",
-    "id": "gap-matrix",
-    "status": "pending"
-  },
-  {
-    "content": "Add PreToolUse retrieval gate to cursor-hooks and claude-code-plugin (warn default, NEOTOMA_HOOK_RETRIEVAL_GATE=block opt-in) plus Tier 1 fixture",
-    "id": "pre-write-retrieval-gate",
-    "status": "pending"
-  },
-  {
-    "content": "Extend hooks _common.{ts,py} to auto-call submit_issue when failure thresholds cross under issues.reporting_mode=proactive; cover with Tier 1 fixture",
-    "id": "auto-issue-drafting",
-    "status": "pending"
-  },
-  {
-    "content": "Create packages/neotoma-auditor/ (operational layer) with offline replay-only mode against existing Tier 1/2 fixtures",
-    "id": "auditor-package",
-    "status": "pending"
-  },
-  {
-    "content": "Register instruction_diff_proposal, hook_suggestion, pattern_report schemas via update_schema_incremental",
-    "id": "auditor-schemas",
-    "status": "pending"
-  },
-  {
-    "content": "Validate auditor outputs against historical conversation_turn samples + Tier 1/2 fixtures; require human review before wiring to live data",
-    "id": "auditor-validation",
-    "status": "pending"
-  },
-  {
-    "content": "Wire auditor into Tier 3 alert-check cron behind NEOTOMA_AUDITOR_ENABLED=1; surface outputs via /inspector/auditor review queue",
-    "id": "auditor-cron-wire",
-    "status": "pending"
-  },
-  {
-    "content": "Add [AUDITOR LOOP] section to docs/developer/mcp/instructions.md describing operator wiring and review flow; enforce via agent_instructions_sync_rules.mdc",
-    "id": "instructions-update",
-    "status": "pending"
-  }
-]
-```
-
-## source_message_entity_id
-
-ent_28b12a6491b6ceeaf0b60bc0
-
-## data_source
-
-cursor harness plan file 2026-05-10
-
-## created_at
-
-2026-05-10T15:23:11.872Z

@@ -7,14 +7,6 @@ schema_version: 1.0
 last_observation_at: 2026-05-11T13:12:55.694Z
 observation_count: 2
 computed_at: 2026-05-11T13:12:55.694Z
+title: Fix issue #40 access reset effective policy mismatch
+status: implemented_in_worktree
 ---
-
-# Fix issue #40 access reset effective policy mismatch
-
-## title
-
-Fix issue #40 access reset effective policy mismatch
-
-## status
-
-implemented_in_worktree

@@ -7,46 +7,18 @@ schema_version: 1.7.0
 last_observation_at: 2026-05-14T05:08:58.289Z
 observation_count: 1
 computed_at: 2026-05-14T05:08:58.289Z
+title: Filesystem Markdown Record Export
+file_path: .cursor/plans/filesystem_markdown_records_9bf09cce.plan.md
+repository: neotoma
+status: pending
+overview: Add a local, filesystem-only markdown export flow for records using SQLite as canonical source of truth. Introduces a focused exporter service, a CLI command to generate/update files, and tests/docs for deterministic output and discoverability. No new API/UI/MCP endpoints.
+priority: low
+todos_pending: 5
+todos_completed: 0
+tags:
+  - export
+  - markdown
+  - cli
+  - filesystem
+  - records
 ---
-
-# Filesystem Markdown Record Export
-
-## title
-
-Filesystem Markdown Record Export
-
-## overview
-
-Add a local, filesystem-only markdown export flow for records using SQLite as canonical source of truth. Introduces a focused exporter service, a CLI command to generate/update files, and tests/docs for deterministic output and discoverability. No new API/UI/MCP endpoints.
-
-## status
-
-pending
-
-## file_path
-
-.cursor/plans/filesystem_markdown_records_9bf09cce.plan.md
-
-## priority
-
-low
-
-## repository
-
-neotoma
-
-## tags
-
-- export
-- markdown
-- cli
-- filesystem
-- records
-
-## todos_completed
-
-0
-
-## todos_pending
-
-5

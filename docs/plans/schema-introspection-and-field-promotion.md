@@ -7,16 +7,10 @@ schema_version: 1.0
 last_observation_at: 2026-05-16T12:44:52.706Z
 observation_count: 2
 computed_at: 2026-05-16T12:44:52.706Z
+title: Schema Introspection and Field Promotion
+status: in_progress
+repository_name: neotoma
 ---
-
-# Schema Introspection and Field Promotion
-
-## title
-
-Schema Introspection and Field Promotion
-
-## body
-
 
 # Schema Introspection and Field Promotion
 
@@ -106,11 +100,3 @@ Expose which fields the reducer will surface for a given entity type:
 - Should field promotion be automatic above a frequency threshold? (Recommendation: manual, with recommendations via `analyze`)
 - Real-time schema drift alerts for fleet operators? (Tie into multi-tenant ops plan)
 
-
-## status
-
-in_progress
-
-## repository_name
-
-neotoma

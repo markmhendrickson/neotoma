@@ -7,40 +7,29 @@ schema_version: 1.7.0
 last_observation_at: 2026-05-14T14:17:33.551Z
 observation_count: 2
 computed_at: 2026-05-14T14:17:33.551Z
+title: Use-case pages recovery
+slug: use-case_pages_recovery_976d9ab2
+harness: cursor
+plan_kind: harness_plan
+plan_file_path: /Users/markmhendrickson/.cursor/plans/use-case_pages_recovery_976d9ab2.plan.md
+overview: Recover and properly implement the use-case pages revamp that was planned in a prior chat but never landed. The work rewrites the 1632-line marketing shell into an activation-focused layout, migrates CRM/Compliance bespoke pages to thin wrappers, wires skill bundles into the UI, and adds a "Use cases" category to the /docs index and sidebar navigation.
+is_project: false
+todos:
+  - [object Object]
+  - [object Object]
+  - [object Object]
+  - [object Object]
+  - [object Object]
+  - [object Object]
+  - [object Object]
+  - [object Object]
+  - [object Object]
+status: draft
+created_at: 2026-04-28T12:12:21.561Z
+data_source: cursor harness plan file 2026-04-28
+harness_plan_id: 976d9ab2
+source_message_entity_id: ent_1c999559c4cfe1b718667b3c
 ---
-
-# Use-case pages recovery
-
-## title
-
-Use-case pages recovery
-
-## slug
-
-use-case_pages_recovery_976d9ab2
-
-## harness
-
-cursor
-
-## harness_plan_id
-
-976d9ab2
-
-## plan_file_path
-
-/Users/markmhendrickson/.cursor/plans/use-case_pages_recovery_976d9ab2.plan.md
-
-## plan_kind
-
-harness_plan
-
-## overview
-
-Recover and properly implement the use-case pages revamp that was planned in a prior chat but never landed. The work rewrites the 1632-line marketing shell into an activation-focused layout, migrates CRM/Compliance bespoke pages to thin wrappers, wires skill bundles into the UI, and adds a "Use cases" category to the /docs index and sidebar navigation.
-
-## body
-
 
 ---
 name: Use-case pages recovery
@@ -209,75 +198,3 @@ Import `VERTICALS_DATA` from `@/data/verticals` in both files.
 
 Add "Use case pages revamp" bullet to [`docs/releases/in_progress/v0.8.0/github_release_supplement.md`](docs/releases/in_progress/v0.8.0/github_release_supplement.md).
 
-
-## is_project
-
-false
-
-## status
-
-draft
-
-## todos
-
-```json
-[
-  {
-    "content": "Create packages/_skill_templates/<vertical>/<skill>.md source files matching generated data",
-    "id": "skill-templates",
-    "status": "pending"
-  },
-  {
-    "content": "Create scripts/generate_frontend_vertical_skills.ts + add npm script to package.json",
-    "id": "skill-generator",
-    "status": "pending"
-  },
-  {
-    "content": "Create frontend/src/components/VerticalSkillBundles.tsx",
-    "id": "skill-component",
-    "status": "pending"
-  },
-  {
-    "content": "Rewrite UseCaseLandingShell.tsx from 1632-line marketing shell to ~580-line activation-focused layout",
-    "id": "shell-rewrite",
-    "status": "pending"
-  },
-  {
-    "content": "Replace CrmLandingPage.tsx and ComplianceLandingPage.tsx with thin UseCaseLandingShell wrappers",
-    "id": "crm-compliance",
-    "status": "pending"
-  },
-  {
-    "content": "Add Use cases category to DOC_CATEGORIES in DocsIndexPage.tsx sourced from VERTICALS_DATA",
-    "id": "docs-index",
-    "status": "pending"
-  },
-  {
-    "content": "Add Use cases category to DOC_NAV_CATEGORIES in site_data.ts sourced from VERTICALS_DATA",
-    "id": "docs-sidebar",
-    "status": "pending"
-  },
-  {
-    "content": "Add vertical_skills_generated.test.ts and docs_use_cases_navigation.test.ts",
-    "id": "tests",
-    "status": "pending"
-  },
-  {
-    "content": "Update v0.8.0 release supplement with use-case pages revamp",
-    "id": "release-notes",
-    "status": "pending"
-  }
-]
-```
-
-## source_message_entity_id
-
-ent_1c999559c4cfe1b718667b3c
-
-## data_source
-
-cursor harness plan file 2026-04-28
-
-## created_at
-
-2026-04-28T12:12:21.561Z

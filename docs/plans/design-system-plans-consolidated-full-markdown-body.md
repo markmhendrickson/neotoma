@@ -7,10 +7,5 @@ schema_version: 1.7.0
 last_observation_at: 2026-05-14T14:16:12.284Z
 observation_count: 1
 computed_at: 2026-05-14T14:16:12.284Z
+title: Design system plans — consolidated (full markdown body)
 ---
-
-# Design system plans — consolidated (full markdown body)
-
-## title
-
-Design system plans — consolidated (full markdown body)

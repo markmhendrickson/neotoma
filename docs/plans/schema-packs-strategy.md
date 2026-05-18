@@ -7,46 +7,18 @@ schema_version: 1.7.0
 last_observation_at: 2026-05-14T05:08:06.715Z
 observation_count: 12
 computed_at: 2026-05-14T05:08:06.715Z
+tags:
+  - data-resilience
+  - snapshots
+  - sync
+  - recovery
+  - cli
+todos_completed: 0
+todos_pending: 6
+priority: high
+repository: neotoma
+file_path: .cursor/plans/data_survival_improvements_1d5687fb.plan.md
+title: Schema Packs Strategy
+status: pending
+overview: Consolidate use cases, schemas, record types, and skills into a four-layer hierarchy delivered via in-repo schema packs. Default install ships only a core pack; additional packs activate on demand via neotoma setup or CLI/MCP, with three lock postures (evolving|guided|locked) and an admin-tier permission boundary.
 ---
-
-# Schema Packs Strategy
-
-## title
-
-Schema Packs Strategy
-
-## overview
-
-Consolidate use cases, schemas, record types, and skills into a four-layer hierarchy delivered via in-repo schema packs. Default install ships only a core pack; additional packs activate on demand via neotoma setup or CLI/MCP, with three lock postures (evolving|guided|locked) and an admin-tier permission boundary.
-
-## status
-
-pending
-
-## file_path
-
-.cursor/plans/data_survival_improvements_1d5687fb.plan.md
-
-## priority
-
-high
-
-## repository
-
-neotoma
-
-## tags
-
-- data-resilience
-- snapshots
-- sync
-- recovery
-- cli
-
-## todos_completed
-
-0
-
-## todos_pending
-
-6

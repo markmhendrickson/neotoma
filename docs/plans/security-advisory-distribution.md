@@ -7,18 +7,7 @@ schema_version: 1.0
 last_observation_at: 2026-05-14T05:08:01.298Z
 observation_count: 1
 computed_at: 2026-05-14T05:08:01.298Z
+title: Security Advisory Distribution
+status: pending
+overview: Track 2 security work: treat GitHub Security Advisories (GHSAs) as canonical vulnerability records, mirror as security_advisory entities, surface affected-version matches to operators via CLI/doctor/MCP, with three-layer resolution and opt-in peer-subscription push during agent onboarding.
 ---
-
-# Security Advisory Distribution
-
-## title
-
-Security Advisory Distribution
-
-## overview
-
-Track 2 security work: treat GitHub Security Advisories (GHSAs) as canonical vulnerability records, mirror as security_advisory entities, surface affected-version matches to operators via CLI/doctor/MCP, with three-layer resolution and opt-in peer-subscription push during agent onboarding.
-
-## status
-
-pending

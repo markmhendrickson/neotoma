@@ -7,36 +7,16 @@ schema_version: 1.0
 last_observation_at: 2026-05-14T14:21:14.040Z
 observation_count: 1
 computed_at: 2026-05-14T14:21:14.040Z
+title: Neotoma Harness & Landing Page: Net Plan
+slug: neotoma_harness_net_plan_private_strategy_full
+harness: human
+plan_kind: research
+status: approved
+plan_file_path: /Users/markmhendrickson/repos/neotoma/docs/private/strategy/neotoma_harness_plan.md
+overview: Full net plan for Neotoma harness and landing (progressive disclosure, browser storage, Neotoma Agent roles) plus Appendix: efficacy analysis vs evaluator feedback and primary ICP.
+data_source: import neotoma_harness_plan.md full body 2026-05-14
+created_at: 2026-05-14T14:21:13.405Z
 ---
-
-# Neotoma Harness & Landing Page: Net Plan
-
-## title
-
-Neotoma Harness & Landing Page: Net Plan
-
-## slug
-
-neotoma_harness_net_plan_private_strategy_full
-
-## harness
-
-human
-
-## plan_file_path
-
-/Users/markmhendrickson/repos/neotoma/docs/private/strategy/neotoma_harness_plan.md
-
-## plan_kind
-
-research
-
-## overview
-
-Full net plan for Neotoma harness and landing (progressive disclosure, browser storage, Neotoma Agent roles) plus Appendix: efficacy analysis vs evaluator feedback and primary ICP.
-
-## body
-
 
 # Neotoma Harness & Landing Page: Net Plan
 
@@ -1488,15 +1468,3 @@ The ICP doc explicitly warns (line 466): "Never correct a user's vocabulary — 
 5. **Surface competitor migration paths** in the evaluator role — the harness should know what the user tried before and why it failed.
 6. **Use escape-from/into framing** in prompt copy rather than pure capability language.
 
-
-## status
-
-approved
-
-## data_source
-
-import neotoma_harness_plan.md full body 2026-05-14
-
-## created_at
-
-2026-05-14T14:21:13.405Z

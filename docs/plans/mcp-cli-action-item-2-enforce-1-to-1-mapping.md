@@ -7,46 +7,18 @@ schema_version: 1.7.0
 last_observation_at: 2026-05-14T05:08:58.296Z
 observation_count: 1
 computed_at: 2026-05-14T05:08:58.296Z
+title: MCP-CLI Action Item 2: Enforce 1-to-1 Mapping
+file_path: .cursor/plans/mcp-cli-action-item-02-openapi-mcp-cli-mapping.plan.md
+repository: neotoma
+status: pending
+overview: Require every MCP tool to map to an OpenAPI operation or CLI command. Classify MCP-only tools, add OpenAPI operations or CLI commands, update contract_mappings.ts, and expand contract mapping tests to fail on unmapped MCP tools.
+priority: medium
+todos_pending: 4
+todos_completed: 0
+tags:
+  - openapi
+  - mcp
+  - cli
+  - contract
+  - mapping
 ---
-
-# MCP-CLI Action Item 2: Enforce 1-to-1 Mapping
-
-## title
-
-MCP-CLI Action Item 2: Enforce 1-to-1 Mapping
-
-## overview
-
-Require every MCP tool to map to an OpenAPI operation or CLI command. Classify MCP-only tools, add OpenAPI operations or CLI commands, update contract_mappings.ts, and expand contract mapping tests to fail on unmapped MCP tools.
-
-## status
-
-pending
-
-## file_path
-
-.cursor/plans/mcp-cli-action-item-02-openapi-mcp-cli-mapping.plan.md
-
-## priority
-
-medium
-
-## repository
-
-neotoma
-
-## tags
-
-- openapi
-- mcp
-- cli
-- contract
-- mapping
-
-## todos_completed
-
-0
-
-## todos_pending
-
-4

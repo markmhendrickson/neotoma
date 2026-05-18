@@ -7,36 +7,28 @@ schema_version: 1.7.0
 last_observation_at: 2026-05-14T13:45:10.415Z
 observation_count: 2
 computed_at: 2026-05-14T13:45:10.415Z
+schema_version: 1.0
+title: neotoma.io: SERP snippet spacing and sitelinks positioning
+slug: neotoma_io_serp_sitelinks_20260514
+harness: agent
+harness_plan_id: neotoma_io_serp_sitelinks_20260514
+plan_kind: research
+status: draft
+overview: Execute SEO recommendations from the SERP review: fix crawler-visible hero copy concatenation, then improve discoverability signals that influence Google sitelinks (cannot be forced directly).
+todos:
+  - [object Object]
+  - [object Object]
+  - [object Object]
+  - [object Object]
+  - [object Object]
+is_project: false
+decision_required: false
+decision_blockers:
+reproduction_environment_kind: not_applicable
+conversation_id: cursor_neotoma_plan_store_20260514
+repository_name: neotoma
+data_source: cursor-agent neotoma repo 2026-05-14 plan=neotoma_io_serp_sitelinks_20260514
 ---
-
-# neotoma.io: SERP snippet spacing and sitelinks positioning
-
-## title
-
-neotoma.io: SERP snippet spacing and sitelinks positioning
-
-## slug
-
-neotoma_io_serp_sitelinks_20260514
-
-## harness
-
-agent
-
-## harness_plan_id
-
-neotoma_io_serp_sitelinks_20260514
-
-## plan_kind
-
-research
-
-## overview
-
-Execute SEO recommendations from the SERP review: fix crawler-visible hero copy concatenation, then improve discoverability signals that influence Google sitelinks (cannot be forced directly).
-
-## body
-
 
 # neotoma.io: SERP snippet spacing and sitelinks
 
@@ -65,67 +57,3 @@ Execute SEO recommendations from the SERP review: fix crawler-visible hero copy 
 ## Out of scope
 - Buying or manipulating sitelinks; Google-only behavior beyond best-practice IA and signals.
 
-
-## is_project
-
-false
-
-## status
-
-draft
-
-## decision_required
-
-false
-
-## decision_blockers
-
-_(empty)_
-
-## todos
-
-```json
-[
-  {
-    "content": "Deploy hero `<h1>` single-block + `<br />` fix and request GSC re-index for homepage",
-    "id": "hero-shipped",
-    "status": "pending"
-  },
-  {
-    "content": "Verify global nav/footer + prerender expose key paths for crawlers",
-    "id": "ia-nav",
-    "status": "pending"
-  },
-  {
-    "content": "Refresh sitemap in Search Console; resolve crawl coverage issues",
-    "id": "sitemap-gsc",
-    "status": "pending"
-  },
-  {
-    "content": "Regenerate static `site_pages/` from current frontend SEO output",
-    "id": "regen-site-pages",
-    "status": "pending"
-  },
-  {
-    "content": "Optional: reconcile homepage meta description across index.html vs seo_metadata vs site_pages",
-    "id": "meta-consistency",
-    "status": "pending"
-  }
-]
-```
-
-## conversation_id
-
-cursor_neotoma_plan_store_20260514
-
-## repository_name
-
-neotoma
-
-## reproduction_environment_kind
-
-not_applicable
-
-## data_source
-
-cursor-agent neotoma repo 2026-05-14 plan=neotoma_io_serp_sitelinks_20260514

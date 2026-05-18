@@ -7,46 +7,18 @@ schema_version: 1.7.0
 last_observation_at: 2026-05-14T05:09:26.304Z
 observation_count: 1
 computed_at: 2026-05-14T05:09:26.304Z
+title: MCP-CLI Action Item 10: Canonical Ingest-to-Replay Walkthrough
+file_path: .cursor/plans/mcp-cli-action-item-10-canonical-walkthrough.plan.md
+repository: neotoma
+status: pending
+overview: Create a standalone walkthrough doc covering ingest, normalize, extract, query, and replay with CLI and MCP examples with deterministic inputs and outputs. Link from docs/context/index_rules.mdc.
+priority: low
+todos_pending: 4
+todos_completed: 0
+tags:
+  - docs
+  - walkthrough
+  - mcp
+  - cli
+  - ingest
 ---
-
-# MCP-CLI Action Item 10: Canonical Ingest-to-Replay Walkthrough
-
-## title
-
-MCP-CLI Action Item 10: Canonical Ingest-to-Replay Walkthrough
-
-## overview
-
-Create a standalone walkthrough doc covering ingest, normalize, extract, query, and replay with CLI and MCP examples with deterministic inputs and outputs. Link from docs/context/index_rules.mdc.
-
-## status
-
-pending
-
-## file_path
-
-.cursor/plans/mcp-cli-action-item-10-canonical-walkthrough.plan.md
-
-## priority
-
-low
-
-## repository
-
-neotoma
-
-## tags
-
-- docs
-- walkthrough
-- mcp
-- cli
-- ingest
-
-## todos_completed
-
-0
-
-## todos_pending
-
-4

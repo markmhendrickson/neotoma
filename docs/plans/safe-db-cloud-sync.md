@@ -7,46 +7,18 @@ schema_version: 1.7.0
 last_observation_at: 2026-05-14T05:08:29.716Z
 observation_count: 1
 computed_at: 2026-05-14T05:08:29.716Z
+title: Safe DB Cloud Sync
+file_path: .cursor/plans/safe_db_cloud_sync_077ba776.plan.md
+repository: neotoma
+status: pending
+overview: Design and implement a cloud-safe synchronization approach by syncing validated snapshots or logical records instead of the live SQLite database file, avoiding corruption/conflict risk from iCloud or similar providers.
+priority: high
+todos_pending: 6
+todos_completed: 0
+tags:
+  - sync
+  - sqlite
+  - cloud
+  - icloud
+  - resilience
 ---
-
-# Safe DB Cloud Sync
-
-## title
-
-Safe DB Cloud Sync
-
-## overview
-
-Design and implement a cloud-safe synchronization approach by syncing validated snapshots or logical records instead of the live SQLite database file, avoiding corruption/conflict risk from iCloud or similar providers.
-
-## status
-
-pending
-
-## file_path
-
-.cursor/plans/safe_db_cloud_sync_077ba776.plan.md
-
-## priority
-
-high
-
-## repository
-
-neotoma
-
-## tags
-
-- sync
-- sqlite
-- cloud
-- icloud
-- resilience
-
-## todos_completed
-
-0
-
-## todos_pending
-
-6

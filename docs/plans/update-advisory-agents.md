@@ -7,24 +7,12 @@ schema_version: 1.7.0
 last_observation_at: 2026-05-14T08:44:48.148Z
 observation_count: 2
 computed_at: 2026-05-14T08:44:48.148Z
+title: Update & Advisory Agents
+plan_kind: feature_implementation
+status: draft
+repository_name: neotoma
+overview: Long-running background agents watching for new Neotoma releases and security advisories, surfacing them with tiered urgency (Tier 0 silent observation through Tier 4 auto-apply), and optionally applying critical security patches automatically under maximalist predicates. Local-first polling model, no telemetry, no central update server.
 ---
-
-# Update & Advisory Agents
-
-## title
-
-Update & Advisory Agents
-
-## plan_kind
-
-feature_implementation
-
-## overview
-
-Long-running background agents watching for new Neotoma releases and security advisories, surfacing them with tiered urgency (Tier 0 silent observation through Tier 4 auto-apply), and optionally applying critical security patches automatically under maximalist predicates. Local-first polling model, no telemetry, no central update server.
-
-## body
-
 
 # Update & Advisory Agents
 
@@ -95,12 +83,3 @@ Long-running background agents watching for new Neotoma releases and security ad
 
 ## Notes on composition
 This is the third agent runtime targeting the same supervisor. After Phase 2, extract docs/subsystems/agent_runtime.md covering shared patterns (daemon supervision, reader/writer split, run-as-observation, autonomy budgets, OS notification tiers). Third runtime is the right moment; second was too early, fourth would be too late.
-
-
-## status
-
-draft
-
-## repository_name
-
-neotoma

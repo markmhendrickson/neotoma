@@ -7,46 +7,18 @@ schema_version: 1.7.0
 last_observation_at: 2026-05-14T05:08:29.722Z
 observation_count: 1
 computed_at: 2026-05-14T05:08:29.722Z
+title: Multi-LLM Provider Support
+file_path: .cursor/plans/multi-llm_provider_support_3fdeb361.plan.md
+repository: neotoma
+status: pending
+overview: Add configuration and an LLM adapter layer so chat completions and optionally embeddings can use providers other than OpenAI (Anthropic, Azure OpenAI, or any OpenAI-compatible endpoint), keeping OPENAI_API_KEY as the default for backward compatibility.
+priority: medium
+todos_pending: 0
+todos_completed: 0
+tags:
+  - llm
+  - openai
+  - anthropic
+  - embeddings
+  - multi-provider
 ---
-
-# Multi-LLM Provider Support
-
-## title
-
-Multi-LLM Provider Support
-
-## overview
-
-Add configuration and an LLM adapter layer so chat completions and optionally embeddings can use providers other than OpenAI (Anthropic, Azure OpenAI, or any OpenAI-compatible endpoint), keeping OPENAI_API_KEY as the default for backward compatibility.
-
-## status
-
-pending
-
-## file_path
-
-.cursor/plans/multi-llm_provider_support_3fdeb361.plan.md
-
-## priority
-
-medium
-
-## repository
-
-neotoma
-
-## tags
-
-- llm
-- openai
-- anthropic
-- embeddings
-- multi-provider
-
-## todos_completed
-
-0
-
-## todos_pending
-
-0

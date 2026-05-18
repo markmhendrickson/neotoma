@@ -7,40 +7,41 @@ schema_version: 1.0
 last_observation_at: 2026-05-14T14:20:29.340Z
 observation_count: 1
 computed_at: 2026-05-14T14:20:29.340Z
+title: Neotoma markdown mirror migration
+slug: neotoma_markdown_mirror_migration_9f208493
+harness: cursor
+plan_kind: harness_plan
+plan_file_path: /Users/markmhendrickson/repos/ateles/.cursor/plans/neotoma_markdown_mirror_migration_9f208493.plan.md
+overview: Migrate durable knowledge markdown out of the ateles repo into Neotoma entities, enable Neotoma's filesystem mirror, and rewire every dependent skill/rule/script to read from the mirror path. `memory/` and the `loop-start` BTC agent daemon are explicitly out of scope per user decision.
+is_project: false
+todos:
+  - [object Object]
+  - [object Object]
+  - [object Object]
+  - [object Object]
+  - [object Object]
+  - [object Object]
+  - [object Object]
+  - [object Object]
+  - [object Object]
+  - [object Object]
+  - [object Object]
+  - [object Object]
+  - [object Object]
+  - [object Object]
+  - [object Object]
+  - [object Object]
+  - [object Object]
+  - [object Object]
+  - [object Object]
+  - [object Object]
+  - [object Object]
+status: draft
+created_at: 2026-05-14T13:57:02.398Z
+data_source: cursor harness plan file 2026-05-14
+harness_plan_id: 9f208493
+source_message_entity_id: ent_45a7d77c3d77eb7ad0272a41
 ---
-
-# Neotoma markdown mirror migration
-
-## title
-
-Neotoma markdown mirror migration
-
-## slug
-
-neotoma_markdown_mirror_migration_9f208493
-
-## harness
-
-cursor
-
-## harness_plan_id
-
-9f208493
-
-## plan_file_path
-
-/Users/markmhendrickson/repos/ateles/.cursor/plans/neotoma_markdown_mirror_migration_9f208493.plan.md
-
-## plan_kind
-
-harness_plan
-
-## overview
-
-Migrate durable knowledge markdown out of the ateles repo into Neotoma entities, enable Neotoma's filesystem mirror, and rewire every dependent skill/rule/script to read from the mirror path. `memory/` and the `loop-start` BTC agent daemon are explicitly out of scope per user decision.
-
-## body
-
 
 # Neotoma Markdown Mirror Migration
 
@@ -354,134 +355,3 @@ Neotoma's `memory_export` regenerates a curated top-N `MEMORY.md` at a fixed rep
 - **Skills/rules frontmatter compatibility**: Part D.2 pilot is designed to de-risk this before bulk migration. If Cursor rejects mirror's frontmatter format, fallback plan ships a Neotoma-side entity_type renderer for `skill`/`rule`.
 
 
-## is_project
-
-false
-
-## status
-
-draft
-
-## todos
-
-```json
-[
-  {
-    "content": "Upgrade installed neotoma CLI from 0.3.10 to 0.4.5+ (via npm link from ~/repos/neotoma, or wait for published release)",
-    "id": "prereq-upgrade",
-    "status": "pending"
-  },
-  {
-    "content": "neotoma mirror enable --git --kinds entities,relationships,sources,timeline,schemas && mirror rebuild && verify status",
-    "id": "mirror-enable",
-    "status": "pending"
-  },
-  {
-    "content": "Add a tiny shared helper (scripts/neotoma_mirror_path.py + shell equivalent) that resolves entity_type + canonical_name to a mirror filesystem path via retrieve_entity_by_identifier",
-    "id": "helper-lib",
-    "status": "pending"
-  },
-  {
-    "content": "Migrate tranche 1: strategy/ + docs/private/ (life_tenets, strategy, person, finance_registry, competitive_analysis, technical_research, report entities)",
-    "id": "tranche1-strategy",
-    "status": "pending"
-  },
-  {
-    "content": "Rewire .cursor/rules/workflow_requirements.mdc, finance_source_material.mdc, decision_framework.mdc, content_style_enforcement.mdc, and finance-related scripts to use mirror paths",
-    "id": "rewire-finance",
-    "status": "pending"
-  },
-  {
-    "content": "Migrate tranche 2: reports/ + reports/drafts/ + plans/ + qualifying docs/*.md (market_research, legal_research, technical_research, post, outreach_plan, architectural_decision)",
-    "id": "tranche2-reports",
-    "status": "pending"
-  },
-  {
-    "content": "Rewire execution/scripts/add_amazon_escalation_task_to_parquet.py, add_report_to_parquet.py, migrate_feedback_to_parquet.py, build_parquet_to_*, linkedin_icp_priority_list.py to store via store_structured + read via mirror",
-    "id": "rewire-research-scripts",
-    "status": "pending"
-  },
-  {
-    "content": "Migrate tranche 3: truth/operations/admin/ (email_draft + operational_guide) and truth/operations/execution-plans/ (execution_guide); link emails to contact entities",
-    "id": "tranche3-truth",
-    "status": "pending"
-  },
-  {
-    "content": "Rewire migrate_processes_to_parquet.py and migrate_execution_plans_to_parquet.py to enumerate via retrieve_entities instead of filesystem globs",
-    "id": "rewire-migration-scripts",
-    "status": "pending"
-  },
-  {
-    "content": "Update .cursor/skills/analyze/SKILL.md (+ foundation duplicate) to resolve strategy templates via mirror and write outputs via store_structured",
-    "id": "rewire-analyze-skill",
-    "status": "pending"
-  },
-  {
-    "content": "Update scripts/linters/*.py error messages and scripts/lint.sh find paths to reflect post-migration structure",
-    "id": "rewire-linters",
-    "status": "pending"
-  },
-  {
-    "content": "Run scripts/lint.sh (updated), execute quarterly-portfolio-review / analyze / content-style workflows end-to-end, spot-check mirror git commits",
-    "id": "validate",
-    "status": "pending"
-  },
-  {
-    "content": "git rm migrated source files; commit each tranche atomically with migration provenance in message",
-    "id": "cleanup",
-    "status": "pending"
-  },
-  {
-    "content": "Review ambiguous candidates with user (neotoma bug reports, asana analyses, ga4 snapshot, data-import-process overlap) and either migrate or keep",
-    "id": "ambiguous-review",
-    "status": "pending"
-  },
-  {
-    "content": "Migrate docs/foundation/*.md (identity stack) as identity_fact / product_positioning entities and symlink mirror paths back into docs/foundation/ so sync_repos and analyze skill keep working without rewrites",
-    "id": "symlink-foundation-docs",
-    "status": "pending"
-  },
-  {
-    "content": "Migrate shared/docs/agent-workflow-requirements.md + agent-mcp-access-policy.md as policy entities and symlink (optional — only if confirmed)",
-    "id": "symlink-shared-docs",
-    "status": "pending"
-  },
-  {
-    "content": "Pilot: migrate ONE low-risk skill (e.g. disk-cleanup or find-technician-slot) as a skill entity, symlink into .cursor/skills/<name>/SKILL.md, verify Cursor still invokes it correctly with mirror's extra frontmatter and warning header",
-    "id": "skills-pilot",
-    "status": "pending"
-  },
-  {
-    "content": "If pilot succeeds: migrate all .cursor/skills/*/SKILL.md in ateles to skill entities, replace each path with a symlink into the mirror",
-    "id": "skills-ateles-migration",
-    "status": "pending"
-  },
-  {
-    "content": "Migrate .cursor/rules/*.mdc in ateles to rule entities and symlink (lower edit frequency than skills, safer second target)",
-    "id": "rules-ateles-migration",
-    "status": "pending"
-  },
-  {
-    "content": "If ateles migration succeeds and cross-repo sharing is desired: migrate foundation/.cursor/skills/ and foundation/.cursor/rules/ to entities and update foundation submodule consumers",
-    "id": "skills-foundation-migration",
-    "status": "pending"
-  },
-  {
-    "content": "Optional: enable Neotoma memory_export so a curated MEMORY.md auto-regenerates at the ateles repo root after each mirror batch",
-    "id": "memory-export-enable",
-    "status": "pending"
-  }
-]
-```
-
-## source_message_entity_id
-
-ent_45a7d77c3d77eb7ad0272a41
-
-## data_source
-
-cursor harness plan file 2026-05-14
-
-## created_at
-
-2026-05-14T13:57:02.398Z

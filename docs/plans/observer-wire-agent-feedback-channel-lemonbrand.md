@@ -7,16 +7,10 @@ schema_version: 1.0
 last_observation_at: 2026-05-16T12:44:48.188Z
 observation_count: 2
 computed_at: 2026-05-16T12:44:48.188Z
+title: Observer Wire / Agent Feedback Channel — Lemonbrand
+status: in_progress
+repository_name: neotoma
 ---
-
-# Observer Wire / Agent Feedback Channel — Lemonbrand
-
-## title
-
-Observer Wire / Agent Feedback Channel — Lemonbrand
-
-## body
-
 
 # Observer Wire / Agent Feedback Channel — Lemonbrand
 
@@ -121,11 +115,3 @@ Option C: **CLI command** — `neotoma report --from-observer <jsonl-path>`
 - Auto-resolution when a fix ships? (Link to release supplement)
 - Cross-instance deduplication? (Same error across 100 tenants = 1 issue or 100?)
 
-
-## status
-
-in_progress
-
-## repository_name
-
-neotoma

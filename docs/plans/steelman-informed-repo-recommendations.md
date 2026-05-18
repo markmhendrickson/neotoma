@@ -7,20 +7,12 @@ schema_version: 1.0
 last_observation_at: 2026-05-14T14:19:05.414Z
 observation_count: 4
 computed_at: 2026-05-14T14:19:05.414Z
+schema_version: 1.0
+title: Steelman-Informed Repo Recommendations
+status: pending
+data_source: Neotoma repo docs/private/strategy/steelman_informed_repo_recommendations_plan_2026_05_14.md + Cursor transcript CreatePlan 2026-05-14
+overview: Prioritized recommendations for the Neotoma repo synthesizing the steelman followup report, 170+ item aggregate feedback corpus, current site state, competitive landscape, and strategic priorities. Focuses on the highest-leverage changes where the steelman analysis reinforces (or challenges) existing feedback signals.
 ---
-
-# Steelman-Informed Repo Recommendations
-
-## title
-
-Steelman-Informed Repo Recommendations
-
-## overview
-
-Prioritized recommendations for the Neotoma repo synthesizing the steelman followup report, 170+ item aggregate feedback corpus, current site state, competitive landscape, and strategic priorities. Focuses on the highest-leverage changes where the steelman analysis reinforces (or challenges) existing feedback signals.
-
-## body
-
 
 # Steelman-Informed Repo Recommendations
 
@@ -211,11 +203,3 @@ The recommendations below are ordered by *convergent signal strength* (how many 
 - [ ] **vocab-alignment**: Tier 4: Demote DPME to internal-only; promote 'source of truth' and 'truth layer'; add cross-tool handoff as #1 trigger in ICP docs
 - [ ] **arch-staleness**: Tier 4: Reconcile architecture.md implementation status and MCP_SPEC.md tool inventory with current repo state
 
-
-## status
-
-pending
-
-## data_source
-
-Neotoma repo docs/private/strategy/steelman_informed_repo_recommendations_plan_2026_05_14.md + Cursor transcript CreatePlan 2026-05-14

@@ -7,45 +7,17 @@ schema_version: 1.7.0
 last_observation_at: 2026-05-14T05:09:26.297Z
 observation_count: 1
 computed_at: 2026-05-14T05:09:26.297Z
+title: MCP-CLI Action Item 3: Log CLI Equivalents for MCP
+file_path: .cursor/plans/mcp-cli-action-item-03-cli-equivalent-logging.plan.md
+repository: neotoma
+status: pending
+overview: Define CLI equivalents for every MCP tool and update buildCliEquivalentInvocation() to return a real command for every tool. Add tests that fail if any CLI equivalent is a placeholder.
+priority: medium
+todos_pending: 4
+todos_completed: 0
+tags:
+  - cli
+  - mcp
+  - logging
+  - contract
 ---
-
-# MCP-CLI Action Item 3: Log CLI Equivalents for MCP
-
-## title
-
-MCP-CLI Action Item 3: Log CLI Equivalents for MCP
-
-## overview
-
-Define CLI equivalents for every MCP tool and update buildCliEquivalentInvocation() to return a real command for every tool. Add tests that fail if any CLI equivalent is a placeholder.
-
-## status
-
-pending
-
-## file_path
-
-.cursor/plans/mcp-cli-action-item-03-cli-equivalent-logging.plan.md
-
-## priority
-
-medium
-
-## repository
-
-neotoma
-
-## tags
-
-- cli
-- mcp
-- logging
-- contract
-
-## todos_completed
-
-0
-
-## todos_pending
-
-4

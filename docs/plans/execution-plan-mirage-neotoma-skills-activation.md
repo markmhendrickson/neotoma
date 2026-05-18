@@ -7,16 +7,10 @@ schema_version: 1.0
 last_observation_at: 2026-05-14T14:18:40.451Z
 observation_count: 3
 computed_at: 2026-05-14T14:18:40.451Z
+schema_version: 1.0
+title: Execution Plan: Mirage + Neotoma Skills & Activation
+status: draft
 ---
-
-# Execution Plan: Mirage + Neotoma Skills & Activation
-
-## title
-
-Execution Plan: Mirage + Neotoma Skills & Activation
-
-## body
-
 
 # Execution Plan: Mirage + Neotoma Skills & Activation
 
@@ -149,7 +143,3 @@ When persisting this plan via `store`:
 - [ ] Link **`REFERS_TO`** from the prompting `conversation_message` to the `plan` entity.
 - [ ] Optionally link **`REFERS_TO`** to existing `Mirage` / `Strukto AI` entities and to any stored analysis artifact for `mirage_skills_activation_strategy.md`.
 
-
-## status
-
-draft

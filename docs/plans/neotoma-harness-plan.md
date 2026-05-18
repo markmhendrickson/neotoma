@@ -7,32 +7,15 @@ schema_version: 1.0
 last_observation_at: 2026-05-14T14:20:06.027Z
 observation_count: 1
 computed_at: 2026-05-14T14:20:06.027Z
+title: neotoma_harness_plan
+slug: neotoma_harness_plan
+harness: other
+plan_kind: harness_plan
+plan_file_path: /Users/markmhendrickson/repos/neotoma/docs/private/strategy/neotoma_harness_plan.md
+status: draft
+created_at: 2026-05-11T17:07:32.765Z
+data_source: other harness plan file 2026-05-11
 ---
-
-# neotoma_harness_plan
-
-## title
-
-neotoma_harness_plan
-
-## slug
-
-neotoma_harness_plan
-
-## harness
-
-other
-
-## plan_file_path
-
-/Users/markmhendrickson/repos/neotoma/docs/private/strategy/neotoma_harness_plan.md
-
-## plan_kind
-
-harness_plan
-
-## body
-
 
 # Neotoma Harness & Landing Page: Net Plan
 
@@ -1484,15 +1467,3 @@ The ICP doc explicitly warns (line 466): "Never correct a user's vocabulary — 
 5. **Surface competitor migration paths** in the evaluator role — the harness should know what the user tried before and why it failed.
 6. **Use escape-from/into framing** in prompt copy rather than pure capability language.
 
-
-## status
-
-draft
-
-## data_source
-
-other harness plan file 2026-05-11
-
-## created_at
-
-2026-05-11T17:07:32.765Z

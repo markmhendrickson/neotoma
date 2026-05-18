@@ -7,46 +7,18 @@ schema_version: 1.7.0
 last_observation_at: 2026-05-14T05:09:26.307Z
 observation_count: 1
 computed_at: 2026-05-14T05:09:26.307Z
+title: Site React/Tailwind Parity
+file_path: .cursor/plans/site-react-tailwind-parity.plan.md
+repository: neotoma
+status: pending
+overview: Build a new site React surface that replaces the current string-template generator in scripts/build_github_pages_onboarding.js. Rename all references from onboarding to site. Deliver to both frontend runtime route and GitHub Pages static artifact.
+priority: low
+todos_pending: 0
+todos_completed: 0
+tags:
+  - frontend
+  - react
+  - tailwind
+  - site
+  - github-pages
 ---
-
-# Site React/Tailwind Parity
-
-## title
-
-Site React/Tailwind Parity
-
-## overview
-
-Build a new site React surface that replaces the current string-template generator in scripts/build_github_pages_onboarding.js. Rename all references from onboarding to site. Deliver to both frontend runtime route and GitHub Pages static artifact.
-
-## status
-
-pending
-
-## file_path
-
-.cursor/plans/site-react-tailwind-parity.plan.md
-
-## priority
-
-low
-
-## repository
-
-neotoma
-
-## tags
-
-- frontend
-- react
-- tailwind
-- site
-- github-pages
-
-## todos_completed
-
-0
-
-## todos_pending
-
-0

@@ -7,18 +7,7 @@ schema_version: 1.0
 last_observation_at: 2026-05-14T05:08:01.300Z
 observation_count: 1
 computed_at: 2026-05-14T05:08:01.300Z
+title: Neotoma Harness Hooks Integration
+status: pending
+overview: Extract Neotoma core operations into an importable client library and build native hook/middleware adapters for programmatic agent frameworks (Claude Agent SDK, OpenAI Agents SDK, Vercel AI SDK, LangChain/LangGraph), replacing MCP as the integration mechanism for these harnesses.
 ---
-
-# Neotoma Harness Hooks Integration
-
-## title
-
-Neotoma Harness Hooks Integration
-
-## overview
-
-Extract Neotoma core operations into an importable client library and build native hook/middleware adapters for programmatic agent frameworks (Claude Agent SDK, OpenAI Agents SDK, Vercel AI SDK, LangChain/LangGraph), replacing MCP as the integration mechanism for these harnesses.
-
-## status
-
-pending

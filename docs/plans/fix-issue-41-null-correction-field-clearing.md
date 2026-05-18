@@ -7,22 +7,8 @@ schema_version: 1.0
 last_observation_at: 2026-05-11T13:11:30.806Z
 observation_count: 2
 computed_at: 2026-05-11T13:11:30.806Z
+title: Fix issue #41 null correction field clearing
+status: implemented_blocked_by_precommit
+worktree_path: /Users/markmhendrickson/repos/neotoma_issue_41_null_correction_clear
+data_source: Process issues workflow outcome for GitHub issue #41 on 2026-05-11
 ---
-
-# Fix issue #41 null correction field clearing
-
-## title
-
-Fix issue #41 null correction field clearing
-
-## status
-
-implemented_blocked_by_precommit
-
-## worktree_path
-
-/Users/markmhendrickson/repos/neotoma_issue_41_null_correction_clear
-
-## data_source
-
-Process issues workflow outcome for GitHub issue #41 on 2026-05-11

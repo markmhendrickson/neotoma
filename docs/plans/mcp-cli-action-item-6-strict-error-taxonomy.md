@@ -7,46 +7,18 @@ schema_version: 1.7.0
 last_observation_at: 2026-05-14T05:09:26.300Z
 observation_count: 1
 computed_at: 2026-05-14T05:09:26.300Z
+title: MCP-CLI Action Item 6: Strict Error Taxonomy
+file_path: .cursor/plans/mcp-cli-action-item-06-error-taxonomy.plan.md
+repository: neotoma
+status: pending
+overview: Introduce a shared error factory emitting ErrorEnvelope with canonical codes, replace string errors in src/actions.ts with ErrorEnvelope responses, align MCP error handling in src/server.ts, and add tests asserting error_code, message, and timestamp fields.
+priority: medium
+todos_pending: 4
+todos_completed: 0
+tags:
+  - errors
+  - mcp
+  - cli
+  - contract
+  - taxonomy
 ---
-
-# MCP-CLI Action Item 6: Strict Error Taxonomy
-
-## title
-
-MCP-CLI Action Item 6: Strict Error Taxonomy
-
-## overview
-
-Introduce a shared error factory emitting ErrorEnvelope with canonical codes, replace string errors in src/actions.ts with ErrorEnvelope responses, align MCP error handling in src/server.ts, and add tests asserting error_code, message, and timestamp fields.
-
-## status
-
-pending
-
-## file_path
-
-.cursor/plans/mcp-cli-action-item-06-error-taxonomy.plan.md
-
-## priority
-
-medium
-
-## repository
-
-neotoma
-
-## tags
-
-- errors
-- mcp
-- cli
-- contract
-- taxonomy
-
-## todos_completed
-
-0
-
-## todos_pending
-
-4

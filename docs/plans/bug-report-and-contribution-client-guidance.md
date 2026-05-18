@@ -7,46 +7,18 @@ schema_version: 1.7.0
 last_observation_at: 2026-05-14T05:08:29.726Z
 observation_count: 1
 computed_at: 2026-05-14T05:08:29.726Z
+title: Bug Report and Contribution Client Guidance
+file_path: .cursor/plans/bug_report_and_contribution_client_guidance.plan.md
+repository: neotoma
+status: pending
+overview: Add structured steps for reporting bugs and contributing fixes to MCP client agent instructions and CLI agent instructions. Encode proactive trigger conditions so the agent applies the flow automatically when errors appear in recent context.
+priority: medium
+todos_pending: 3
+todos_completed: 0
+tags:
+  - docs
+  - agent-instructions
+  - bug-report
+  - mcp
+  - cli
 ---
-
-# Bug Report and Contribution Client Guidance
-
-## title
-
-Bug Report and Contribution Client Guidance
-
-## overview
-
-Add structured steps for reporting bugs and contributing fixes to MCP client agent instructions and CLI agent instructions. Encode proactive trigger conditions so the agent applies the flow automatically when errors appear in recent context.
-
-## status
-
-pending
-
-## file_path
-
-.cursor/plans/bug_report_and_contribution_client_guidance.plan.md
-
-## priority
-
-medium
-
-## repository
-
-neotoma
-
-## tags
-
-- docs
-- agent-instructions
-- bug-report
-- mcp
-- cli
-
-## todos_completed
-
-0
-
-## todos_pending
-
-3

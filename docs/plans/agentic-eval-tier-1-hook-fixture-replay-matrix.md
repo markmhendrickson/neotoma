@@ -7,18 +7,7 @@ schema_version: 1.0
 last_observation_at: 2026-05-14T05:08:01.305Z
 observation_count: 1
 computed_at: 2026-05-14T05:08:01.305Z
+title: Agentic Eval — Tier 1 — Hook Fixture Replay Matrix
+status: pending
+overview: Turn existing per-harness hook-fixture tests into a uniform, matrix-driven Tier-1 eval suite exercising every hook package (cursor, claude-code, opencode, codex, claude-agent-sdk) against scripted scenarios under multiple model regimes without calling a real LLM.
 ---
-
-# Agentic Eval — Tier 1 — Hook Fixture Replay Matrix
-
-## title
-
-Agentic Eval — Tier 1 — Hook Fixture Replay Matrix
-
-## overview
-
-Turn existing per-harness hook-fixture tests into a uniform, matrix-driven Tier-1 eval suite exercising every hook package (cursor, claude-code, opencode, codex, claude-agent-sdk) against scripted scenarios under multiple model regimes without calling a real LLM.
-
-## status
-
-pending

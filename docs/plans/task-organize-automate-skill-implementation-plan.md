@@ -7,32 +7,21 @@ schema_version: 1.0
 last_observation_at: 2026-05-14T14:30:05.383Z
 observation_count: 2
 computed_at: 2026-05-14T14:30:05.383Z
+title: Task Organize & Automate Skill — implementation plan
+slug: task-organize-automate-skill-implementation-plan
+overview: Add a new Cursor skill that helps you organize tasks holistically: surface high-priority tasks, gather clarifying context to enable agent automation, assess and improve the repo automation environment (MCPs, APIs, CLIs), and reprioritize as context is collected.
+plan_kind: implementation
+plan_file_path: /Users/markmhendrickson/.cursor/plans/task_organize_automate_skill_e597ef52.plan.md
+is_project: false
+todos:
+conversation_id: ateles-save-plan-as-plan-entity-2026-05-14
+repository_name: ateles
+source_message_entity_id: ent_6fef5c5fce333b5697669e60
+source_entity_id: ent_711a4641e708e1e493e4659e
+source_entity_type: note
+data_source: Cursor user request + local plan file 2026-05-14 path=/Users/markmhendrickson/.cursor/plans/task_organize_automate_skill_e597ef52.plan.md
+schema_version: 1.11.0
 ---
-
-# Task Organize & Automate Skill — implementation plan
-
-## title
-
-Task Organize & Automate Skill — implementation plan
-
-## slug
-
-task-organize-automate-skill-implementation-plan
-
-## plan_file_path
-
-/Users/markmhendrickson/.cursor/plans/task_organize_automate_skill_e597ef52.plan.md
-
-## plan_kind
-
-implementation
-
-## overview
-
-Add a new Cursor skill that helps you organize tasks holistically: surface high-priority tasks, gather clarifying context to enable agent automation, assess and improve the repo automation environment (MCPs, APIs, CLIs), and reprioritize as context is collected.
-
-## body
-
 
 ---
 name: Task Organize Automate Skill
@@ -175,36 +164,3 @@ flowchart LR
 ## Summary
 
 You get one new skill, **task-organize-automate**, that (1) pulls tasks/plans from MCP, (2) prioritizes and shows top items, (3) asks clarifying questions to enable automation, (4) assesses the repo’s automation environment and suggests improvements, and (5) reprioritizes and proposes/executes automation as context is collected, with all persistence via existing rules and MCP.
-
-
-## is_project
-
-false
-
-## todos
-
-_(empty)_
-
-## source_entity_id
-
-ent_711a4641e708e1e493e4659e
-
-## source_entity_type
-
-note
-
-## source_message_entity_id
-
-ent_6fef5c5fce333b5697669e60
-
-## conversation_id
-
-ateles-save-plan-as-plan-entity-2026-05-14
-
-## repository_name
-
-ateles
-
-## data_source
-
-Cursor user request + local plan file 2026-05-14 path=/Users/markmhendrickson/.cursor/plans/task_organize_automate_skill_e597ef52.plan.md

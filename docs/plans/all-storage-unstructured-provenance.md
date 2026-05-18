@@ -7,45 +7,17 @@ schema_version: 1.7.0
 last_observation_at: 2026-05-14T05:08:58.294Z
 observation_count: 1
 computed_at: 2026-05-14T05:08:58.294Z
+title: All-Storage-Unstructured Provenance
+file_path: .cursor/plans/all-storage-unstructured_provenance_df0b7a8f.plan.md
+repository: neotoma
+status: draft
+overview: Alternative architecture where all storage goes through the unstructured path: agents submit conversation turns as unstructured blobs so Neotoma stores the artifact and runs interpretation internally, capturing full provenance (artifact plus logged interpretation protocol) instead of agent-side structuring.
+priority: low
+todos_pending: 0
+todos_completed: 0
+tags:
+  - ingestion
+  - provenance
+  - unstructured
+  - architecture
 ---
-
-# All-Storage-Unstructured Provenance
-
-## title
-
-All-Storage-Unstructured Provenance
-
-## overview
-
-Alternative architecture where all storage goes through the unstructured path: agents submit conversation turns as unstructured blobs so Neotoma stores the artifact and runs interpretation internally, capturing full provenance (artifact plus logged interpretation protocol) instead of agent-side structuring.
-
-## status
-
-draft
-
-## file_path
-
-.cursor/plans/all-storage-unstructured_provenance_df0b7a8f.plan.md
-
-## priority
-
-low
-
-## repository
-
-neotoma
-
-## tags
-
-- ingestion
-- provenance
-- unstructured
-- architecture
-
-## todos_completed
-
-0
-
-## todos_pending
-
-0

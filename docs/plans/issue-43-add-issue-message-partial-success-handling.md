@@ -7,14 +7,6 @@ schema_version: 1.0
 last_observation_at: 2026-05-11T13:14:13.328Z
 observation_count: 2
 computed_at: 2026-05-11T13:14:13.328Z
+title: Issue #43 add_issue_message partial-success handling
+status: blocked_on_precommit
 ---
-
-# Issue #43 add_issue_message partial-success handling
-
-## title
-
-Issue #43 add_issue_message partial-success handling
-
-## status
-
-blocked_on_precommit

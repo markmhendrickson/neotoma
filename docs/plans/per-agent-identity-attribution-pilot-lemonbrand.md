@@ -7,16 +7,10 @@ schema_version: 1.0
 last_observation_at: 2026-05-16T12:43:48.201Z
 observation_count: 2
 computed_at: 2026-05-16T12:43:48.201Z
+title: Per-Agent Identity Attribution Pilot — Lemonbrand
+status: in_progress
+repository_name: neotoma
 ---
-
-# Per-Agent Identity Attribution Pilot — Lemonbrand
-
-## title
-
-Per-Agent Identity Attribution Pilot — Lemonbrand
-
-## body
-
 
 # Per-Agent Identity Attribution Pilot — Lemonbrand
 
@@ -73,11 +67,3 @@ Lemonbrand operates a fleet of 6+ agents writing to 2 Neotoma instances (Bolden,
 - Should agent identity be per-instance or fleet-wide? (Recommendation: per-instance for maximum auditability)
 - What capability model makes sense for the observer agent? (read-only + issue writes)
 
-
-## status
-
-in_progress
-
-## repository_name
-
-neotoma

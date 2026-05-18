@@ -7,45 +7,17 @@ schema_version: 1.7.0
 last_observation_at: 2026-05-14T05:08:58.285Z
 observation_count: 1
 computed_at: 2026-05-14T05:08:58.285Z
+title: MCP Source-Path Documentation
+file_path: .cursor/plans/mcp_source-path_documentation_5ce48609.plan.md
+repository: neotoma
+status: pending
+overview: Improve MCP instructions and documentation so agents consistently use the structured path for conversation- or tool-sourced data and the unstructured path for file- or resource-sourced data, with clear source-to-path rules and aligned wording everywhere.
+priority: medium
+todos_pending: 0
+todos_completed: 0
+tags:
+  - docs
+  - mcp
+  - ingestion
+  - agent-instructions
 ---
-
-# MCP Source-Path Documentation
-
-## title
-
-MCP Source-Path Documentation
-
-## overview
-
-Improve MCP instructions and documentation so agents consistently use the structured path for conversation- or tool-sourced data and the unstructured path for file- or resource-sourced data, with clear source-to-path rules and aligned wording everywhere.
-
-## status
-
-pending
-
-## file_path
-
-.cursor/plans/mcp_source-path_documentation_5ce48609.plan.md
-
-## priority
-
-medium
-
-## repository
-
-neotoma
-
-## tags
-
-- docs
-- mcp
-- ingestion
-- agent-instructions
-
-## todos_completed
-
-0
-
-## todos_pending
-
-0

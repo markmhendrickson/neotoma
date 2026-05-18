@@ -7,16 +7,11 @@ schema_version: 1.0
 last_observation_at: 2026-05-14T14:22:16.999Z
 observation_count: 1
 computed_at: 2026-05-14T14:22:16.999Z
+schema_version: 1.0
+title: Neotoma-first website preview
+status: draft
+data_source: Cursor user request plan-as-plan entity; source .cursor/plans/neotoma_preview_sync_5c7dda1e.plan.md 2026-05-14
 ---
-
-# Neotoma-first website preview
-
-## title
-
-Neotoma-first website preview
-
-## body
-
 
 ---
 name: Neotoma preview sync
@@ -113,12 +108,3 @@ flowchart LR
 - Neotoma’s **mirror** is read-only (DB → files). `neotoma edit <id>` and the Inspector still edit data via `batch_correct`; they do not turn mirror files into a bidirectional edit surface. For the website loop, the likely work is an **Ateles-side adapter** that parses post markdown and calls `batch_correct` (or `neotoma store` only where appropriate), with optional small Neotoma CLI helpers if you want that packaged in-tree—not because “edit” is missing.
 - Dev and SSR must use the same effective source path to avoid mismatched post content.
 - Locale handling in `Post.tsx` and generated cache files will need an explicit policy so translated cache bodies do not drift from the default-locale markdown editing loop.
-
-
-## status
-
-draft
-
-## data_source
-
-Cursor user request plan-as-plan entity; source .cursor/plans/neotoma_preview_sync_5c7dda1e.plan.md 2026-05-14

@@ -7,36 +7,27 @@ schema_version: 1.0
 last_observation_at: 2026-05-14T14:26:30.325Z
 observation_count: 3
 computed_at: 2026-05-14T14:26:30.325Z
+title: Notification ingestion and triage plan
+schema_version: 1.0
+slug: notification_triage_pipeline_f617d213
+overview: Design a local-first communication ingestion and notification triage system that stores source communications and derived events in Neotoma, uses email as the MVP input path, adds messaging (WhatsApp in-repo, Telegram and Signal where feasible), and sends actionable alerts through an external Onychomys adapter with proposed responses.
+plan_file_path: .cursor/plans/notification_triage_pipeline_f617d213.plan.md
+plan_kind: cursor_agent_plan
+harness: cursor
+is_project: false
+todos:
+  - [object Object]
+  - [object Object]
+  - [object Object]
+  - [object Object]
+  - [object Object]
+  - [object Object]
+  - [object Object]
+repository_name: ateles
+conversation_id: ateles-cursor-plan-full-entity-2026-05-14
+source_message_entity_id: ent_2aced9dd608de44dc9db23c0
+data_source: ateles Cursor plan full body correction 2026-05-14 file=/Users/markmhendrickson/repos/ateles/.cursor/plans/notification_triage_pipeline_f617d213.plan.md
 ---
-
-# Notification ingestion and triage plan
-
-## title
-
-Notification ingestion and triage plan
-
-## slug
-
-notification_triage_pipeline_f617d213
-
-## harness
-
-cursor
-
-## plan_file_path
-
-.cursor/plans/notification_triage_pipeline_f617d213.plan.md
-
-## plan_kind
-
-cursor_agent_plan
-
-## overview
-
-Design a local-first communication ingestion and notification triage system that stores source communications and derived events in Neotoma, uses email as the MVP input path, adds messaging (WhatsApp in-repo, Telegram and Signal where feasible), and sends actionable alerts through an external Onychomys adapter with proposed responses.
-
-## body
-
 
 # Notification ingestion and triage plan
 
@@ -272,65 +263,3 @@ Validate in increasing order:
 - Neotoma also stores **every** agent-visible chat turn (conversation + user + assistant messages and required edges), not only extracted pipeline entities
 - keep all response actions human-approved until the alert quality is proven
 
-
-## is_project
-
-false
-
-## todos
-
-```json
-[
-  {
-    "content": "Map the new ingestion and triage workers onto the existing agent execution stack under execution/scripts/agent_execution and define their launch/scheduling model.",
-    "id": "map-runtime",
-    "status": "pending"
-  },
-  {
-    "content": "Define the initial Neotoma entity model for source communications, derived notifications, provenance fields, dedupe keys, and state transitions.",
-    "id": "define-schema",
-    "status": "pending"
-  },
-  {
-    "content": "Design the email-first connector around Gmail MCP queries, sender rules, classification stages, and attachment/message provenance handling.",
-    "id": "email-mvp",
-    "status": "pending"
-  },
-  {
-    "content": "Specify the Onychomys adapter contract, alert payload shape, and dry-run behavior without coupling to a repo-local implementation.",
-    "id": "notify-adapter",
-    "status": "pending"
-  },
-  {
-    "content": "Specify WhatsApp (mcp/whatsapp), Telegram, and Signal ingestion paths, constraints, unified chat source schema, and dedupe across channels.",
-    "id": "messaging-connectors",
-    "status": "pending"
-  },
-  {
-    "content": "Plan replay tests, live pilot criteria, and operational health checks before expanding to direct-source connectors.",
-    "id": "validation",
-    "status": "pending"
-  },
-  {
-    "content": "Require Neotoma turn lifecycle for any Cursor/agent-assisted connector or triage work (bounded retrieval, user-phase store, closing assistant store, PART_OF and reply-cited edges per harness).",
-    "id": "neotoma-turn-protocol",
-    "status": "pending"
-  }
-]
-```
-
-## source_message_entity_id
-
-ent_2aced9dd608de44dc9db23c0
-
-## conversation_id
-
-ateles-cursor-plan-full-entity-2026-05-14
-
-## repository_name
-
-ateles
-
-## data_source
-
-ateles Cursor plan full body correction 2026-05-14 file=/Users/markmhendrickson/repos/ateles/.cursor/plans/notification_triage_pipeline_f617d213.plan.md

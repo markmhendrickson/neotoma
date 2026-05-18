@@ -7,45 +7,17 @@ schema_version: 1.7.0
 last_observation_at: 2026-05-14T05:09:26.301Z
 observation_count: 1
 computed_at: 2026-05-14T05:09:26.301Z
+title: MCP-CLI Action Item 7: Replayable Fixtures with Expected Graphs
+file_path: .cursor/plans/mcp-cli-action-item-07-fixture-replay-graphs.plan.md
+repository: neotoma
+status: pending
+overview: Define an expected output format for snapshots and relationships, add expected outputs for a starter set of fixtures, and add replay tests that compare reducer output to expected graphs.
+priority: medium
+todos_pending: 4
+todos_completed: 0
+tags:
+  - fixtures
+  - testing
+  - replay
+  - determinism
 ---
-
-# MCP-CLI Action Item 7: Replayable Fixtures with Expected Graphs
-
-## title
-
-MCP-CLI Action Item 7: Replayable Fixtures with Expected Graphs
-
-## overview
-
-Define an expected output format for snapshots and relationships, add expected outputs for a starter set of fixtures, and add replay tests that compare reducer output to expected graphs.
-
-## status
-
-pending
-
-## file_path
-
-.cursor/plans/mcp-cli-action-item-07-fixture-replay-graphs.plan.md
-
-## priority
-
-medium
-
-## repository
-
-neotoma
-
-## tags
-
-- fixtures
-- testing
-- replay
-- determinism
-
-## todos_completed
-
-0
-
-## todos_pending
-
-4

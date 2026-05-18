@@ -7,14 +7,6 @@ schema_version: 1.0
 last_observation_at: 2026-05-13T13:03:04.405Z
 observation_count: 3
 computed_at: 2026-05-13T13:03:04.405Z
+title: Agent Swarm Testing Plan for Neotoma
+status: planning
 ---
-
-# Agent Swarm Testing Plan for Neotoma
-
-## title
-
-Agent Swarm Testing Plan for Neotoma
-
-## status
-
-planning

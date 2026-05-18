@@ -7,16 +7,10 @@ schema_version: 1.0
 last_observation_at: 2026-05-16T12:43:52.331Z
 observation_count: 2
 computed_at: 2026-05-16T12:43:52.331Z
+title: Issues transport full parity (MCP, CLI, HTTP)
+status: completed
+repository_name: neotoma
 ---
-
-# Issues transport full parity (MCP, CLI, HTTP)
-
-## title
-
-Issues transport full parity (MCP, CLI, HTTP)
-
-## body
-
 
 # Issues transport full parity (MCP, CLI, HTTP)
 
@@ -44,11 +38,3 @@ Align **submit**, **thread append**, **status**, and **mirror sync** so MCP, fir
 - `neotoma issues list` remains GitHub-forward (no MCP twin).
 - Bulk Inspector routes unchanged.
 
-
-## status
-
-completed
-
-## repository_name
-
-neotoma

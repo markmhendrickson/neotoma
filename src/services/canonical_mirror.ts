@@ -220,6 +220,8 @@ export function getMirrorConfig(): MirrorConfig {
         filename_template: "{title}.md",
         index_enabled: true,
         allow_git_commit: true,
+        render_mode: "frontmatter_content",
+        content_field: "body",
       },
     ],
   };
