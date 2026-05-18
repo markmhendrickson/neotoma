@@ -2805,6 +2805,61 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       },
     },
   },
+
+  workout_session: {
+    entity_type: "workout_session",
+    schema_version: "1.0",
+    metadata: {
+      label: "Workout Session",
+      description:
+        "A single workout session container. Exercises performed during the session are accumulated incrementally via the `exercises` array field using the merge_array reducer strategy, so each logged exercise observation appends to the consolidated list.",
+      category: "health",
+      aliases: ["training_session", "gym_session", "workout_log"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        // Caller-supplied stable identifier linking all observations in this
+        // session. Required for deterministic identity; callers (e.g. the
+        // Telegram bot) should pass a stable session token each turn.
+        session_id: { type: "string", required: false },
+        name: { type: "string", required: false, preserveCase: true },
+        date: { type: "date", required: false },
+        started_at: { type: "date", required: false },
+        ended_at: { type: "date", required: false },
+        duration_minutes: { type: "number", required: false },
+        // Accumulated list of exercises performed. Each observation may
+        // push one or more exercise objects (name, sets, reps, weight).
+        // The merge_array reducer strategy unions all values across
+        // observations so incremental logging converges into a full list.
+        exercises: { type: "array", required: false },
+        notes: { type: "string", required: false, preserveCase: true },
+        location: { type: "string", required: false },
+        import_date: { type: "date", required: false },
+        import_source_file: { type: "string", required: false },
+      },
+      // session_id is the primary stable identity key. Falls back to
+      // name + date for sessions created without an explicit session_id.
+      canonical_name_fields: [
+        "session_id",
+        { composite: ["name", "date"] },
+      ],
+    },
+    reducer_config: {
+      merge_policies: {
+        // exercises accumulates across observations — each new log appends.
+        exercises: { strategy: "merge_array" },
+        // Scalar fields use last_write so mid-session corrections propagate.
+        name: { strategy: "last_write" },
+        date: { strategy: "last_write" },
+        started_at: { strategy: "last_write" },
+        ended_at: { strategy: "last_write" },
+        duration_minutes: { strategy: "last_write" },
+        notes: { strategy: "last_write" },
+        location: { strategy: "last_write" },
+      },
+    },
+  },
 };
 
 /**

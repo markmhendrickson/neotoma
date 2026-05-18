@@ -193,6 +193,7 @@ flowchart TD
 - `tests/unit/substrate_event_bus.test.ts`
 - `tests/unit/timeline_events.test.ts`
 - `tests/unit/unknown_fields_guard.test.ts`
+- `tests/unit/workout_session_schema.test.ts`
 
 ### Vitest service tests
 **Directory:** `tests/services/`
