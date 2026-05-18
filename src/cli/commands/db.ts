@@ -203,72 +203,74 @@ export function registerDbCommand(program: Command, hooks: DbCliHooks): void {
       "Comma-separated list of entity types to limit the repair (default: all)"
     )
     .option("--rollback <run_id>", "Roll back a prior repair run by its run_id")
-    .action(
-      async (opts: { dryRun?: boolean; types?: string; rollback?: string }) => {
-        const { auditAll, repairAll, rollbackRun } = await import(
-          "../../services/schema_lag_repair.js"
-        );
+    .action(async (opts: { dryRun?: boolean; types?: string; rollback?: string }) => {
+      const { auditAll, repairAll, rollbackRun } =
+        await import("../../services/schema_lag_repair.js");
 
-        if (opts.rollback) {
-          process.stdout.write(`Rolling back run: ${opts.rollback}\n`);
-          const result = await rollbackRun(opts.rollback);
-          if (result.deleted_observations === 0) {
-            process.stdout.write("No observations found for that run_id. Nothing rolled back.\n");
-          } else {
-            process.stdout.write(
-              `Deleted ${result.deleted_observations} observation(s), recomputed ${result.recomputed_snapshots} snapshot(s).\n`
-            );
-          }
-          return;
-        }
-
-        const filterTypes = opts.types
-          ? opts.types.split(",").map((s) => s.trim()).filter(Boolean)
-          : undefined;
-
-        if (filterTypes) {
-          process.stdout.write(`Limiting to entity types: ${filterTypes.join(", ")}\n`);
-        }
-
-        process.stdout.write("Auditing raw_fragments for schema-lag misfiles...\n\n");
-        const hits = await auditAll();
-        const filtered = filterTypes ? hits.filter((h) => filterTypes.includes(h.entity_type)) : hits;
-
-        if (filtered.length === 0) {
-          process.stdout.write("✅ No misfiled raw_fragments found. Nothing to repair.\n");
-          return;
-        }
-
-        for (const h of filtered) {
+      if (opts.rollback) {
+        process.stdout.write(`Rolling back run: ${opts.rollback}\n`);
+        const result = await rollbackRun(opts.rollback);
+        if (result.deleted_observations === 0) {
+          process.stdout.write("No observations found for that run_id. Nothing rolled back.\n");
+        } else {
           process.stdout.write(
-            `  ⚠️  ${h.entity_type} — ${h.misfiled_fields.length} field(s), ${h.fragment_count} fragment(s)\n`
+            `Deleted ${result.deleted_observations} observation(s), recomputed ${result.recomputed_snapshots} snapshot(s).\n`
           );
-          process.stdout.write(`      fields: ${h.misfiled_fields.join(", ")}\n`);
         }
-        process.stdout.write(`\n${filtered.length} entity type(s) affected.\n`);
-
-        if (opts.dryRun) {
-          process.stdout.write("\n[dry-run] No changes written. Re-run without --dry-run to repair.\n");
-          return;
-        }
-
-        process.stdout.write("\nRepairing...\n");
-        const result = await repairAll(filterTypes);
-
-        process.stdout.write(`\n✅ Repair complete.\n`);
-        process.stdout.write(`   Entity types repaired : ${result.repaired_entity_types}\n`);
-        process.stdout.write(`   Observations inserted : ${result.inserted_observations}\n`);
-        process.stdout.write(`   Snapshots recomputed  : ${result.recomputed_snapshots}\n`);
-        process.stdout.write(`   run_id                : ${result.run_id}\n`);
-        if (result.errors.length > 0) {
-          process.stdout.write(`\n   Errors (${result.errors.length}):\n`);
-          for (const e of result.errors) process.stdout.write(`     - ${e}\n`);
-        }
-        process.stdout.write(
-          `\nTo roll back: neotoma db repair-schema-lag --rollback "${result.run_id}"\n`
-        );
+        return;
       }
-    );
+
+      const filterTypes = opts.types
+        ? opts.types
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean)
+        : undefined;
+
+      if (filterTypes) {
+        process.stdout.write(`Limiting to entity types: ${filterTypes.join(", ")}\n`);
+      }
+
+      process.stdout.write("Auditing raw_fragments for schema-lag misfiles...\n\n");
+      const hits = await auditAll();
+      const filtered = filterTypes ? hits.filter((h) => filterTypes.includes(h.entity_type)) : hits;
+
+      if (filtered.length === 0) {
+        process.stdout.write("✅ No misfiled raw_fragments found. Nothing to repair.\n");
+        return;
+      }
+
+      for (const h of filtered) {
+        process.stdout.write(
+          `  ⚠️  ${h.entity_type} — ${h.misfiled_fields.length} field(s), ${h.fragment_count} fragment(s)\n`
+        );
+        process.stdout.write(`      fields: ${h.misfiled_fields.join(", ")}\n`);
+      }
+      process.stdout.write(`\n${filtered.length} entity type(s) affected.\n`);
+
+      if (opts.dryRun) {
+        process.stdout.write(
+          "\n[dry-run] No changes written. Re-run without --dry-run to repair.\n"
+        );
+        return;
+      }
+
+      process.stdout.write("\nRepairing...\n");
+      const result = await repairAll(filterTypes);
+
+      process.stdout.write(`\n✅ Repair complete.\n`);
+      process.stdout.write(`   Entity types repaired : ${result.repaired_entity_types}\n`);
+      process.stdout.write(`   Observations inserted : ${result.inserted_observations}\n`);
+      process.stdout.write(`   Snapshots recomputed  : ${result.recomputed_snapshots}\n`);
+      process.stdout.write(`   run_id                : ${result.run_id}\n`);
+      if (result.errors.length > 0) {
+        process.stdout.write(`\n   Errors (${result.errors.length}):\n`);
+        for (const e of result.errors) process.stdout.write(`     - ${e}\n`);
+      }
+      process.stdout.write(
+        `\nTo roll back: neotoma db repair-schema-lag --rollback "${result.run_id}"\n`
+      );
+    });
 
   dbCommand
     .command("migrate-encryption <direction>")

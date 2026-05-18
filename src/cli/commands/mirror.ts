@@ -225,9 +225,7 @@ export function formatRebuildReport(result: MirrorRebuildResult): string {
   const profileEntries = Object.entries(result.report.profiles ?? {});
   if (profileEntries.length > 0) {
     lines.push("");
-    lines.push(
-      "Profile         Written  Unchanged  Removed"
-    );
+    lines.push("Profile         Written  Unchanged  Removed");
     for (const [profileId, c] of profileEntries) {
       lines.push(
         `  ${profileId.padEnd(14)}  ${String(c.written).padStart(7)}  ${String(c.unchanged).padStart(9)}  ${String(c.removed).padStart(7)}`

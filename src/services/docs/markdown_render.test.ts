@@ -3,7 +3,9 @@ import { renderMarkdown, escapeHtml } from "./markdown_render.js";
 
 describe("escapeHtml", () => {
   it("escapes the standard set", () => {
-    expect(escapeHtml(`<a href="x">&'</a>`)).toBe("&lt;a href=&quot;x&quot;&gt;&amp;&#39;&lt;/a&gt;");
+    expect(escapeHtml(`<a href="x">&'</a>`)).toBe(
+      "&lt;a href=&quot;x&quot;&gt;&amp;&#39;&lt;/a&gt;"
+    );
   });
 });
 
@@ -45,7 +47,7 @@ describe("renderMarkdown", () => {
   it("allows http, https, and mailto URL schemes in links", () => {
     expect(renderMarkdown("[web](https://x.test)")).toContain('<a href="https://x.test">web</a>');
     expect(renderMarkdown("[mail](mailto:docs@example.test)")).toContain(
-      '<a href="mailto:docs@example.test">mail</a>',
+      '<a href="mailto:docs@example.test">mail</a>'
     );
   });
 

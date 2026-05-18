@@ -2901,10 +2901,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       },
       // session_id is the primary stable identity key. Falls back to
       // name + date for sessions created without an explicit session_id.
-      canonical_name_fields: [
-        "session_id",
-        { composite: ["name", "date"] },
-      ],
+      canonical_name_fields: ["session_id", { composite: ["name", "date"] }],
     },
     reducer_config: {
       merge_policies: {

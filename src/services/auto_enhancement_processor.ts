@@ -68,7 +68,11 @@ export async function processAutoEnhancementQueue(): Promise<{
           if (!audit || audit.misfiled_fields.length === 0) {
             await db
               .from("auto_enhancement_queue")
-              .update({ status: "completed", processed_at: new Date().toISOString(), error_message: "no misfiled fragments found" })
+              .update({
+                status: "completed",
+                processed_at: new Date().toISOString(),
+                error_message: "no misfiled fragments found",
+              })
               .eq("id", item.id);
             skipped++;
             continue;

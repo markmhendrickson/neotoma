@@ -19,17 +19,13 @@ const MANIFEST: DocsManifest = {
       key: "architecture",
       display_name: "Architecture",
       order: 30,
-      subcategories: [
-        { key: "subsystems", display_name: "Subsystems", order: 10 },
-      ],
+      subcategories: [{ key: "subsystems", display_name: "Subsystems", order: 10 }],
     },
     {
       key: "internal",
       display_name: "Internal",
       order: 200,
-      subcategories: [
-        { key: "plans", display_name: "Plans", order: 20 },
-      ],
+      subcategories: [{ key: "plans", display_name: "Plans", order: 20 }],
     },
   ],
   featured: ["docs/foundation/core_identity.md"],
@@ -44,24 +40,21 @@ beforeAll(() => {
   fs.mkdirSync(path.join(docsRoot, "plans"), { recursive: true });
   fs.writeFileSync(
     path.join(docsRoot, "foundation", "core_identity.md"),
-    "# Core Identity\n\nState Layer.\n",
+    "# Core Identity\n\nState Layer.\n"
   );
   fs.writeFileSync(
     path.join(docsRoot, "foundation", "philosophy.md"),
-    "# Philosophy\n\nPrinciples.\n",
+    "# Philosophy\n\nPrinciples.\n"
   );
   fs.writeFileSync(
     path.join(docsRoot, "architecture", "architecture.md"),
-    "# Architecture\n\nSystem.\n",
+    "# Architecture\n\nSystem.\n"
   );
   fs.writeFileSync(
     path.join(docsRoot, "subsystems", "ingestion.md"),
-    "# Ingestion\n\nIngestion subsystem.\n",
+    "# Ingestion\n\nIngestion subsystem.\n"
   );
-  fs.writeFileSync(
-    path.join(docsRoot, "plans", "draft.md"),
-    "# Draft Plan\n\nNot ready.\n",
-  );
+  fs.writeFileSync(path.join(docsRoot, "plans", "draft.md"), "# Draft Plan\n\nNot ready.\n");
 });
 
 afterAll(() => {
@@ -78,9 +71,9 @@ describe("buildDocsIndex", () => {
       "foundation/philosophy",
     ]);
     const architecture = idx.categories.find((c) => c.key === "architecture")!;
-    expect(architecture.subcategories.find((s) => s.key === "subsystems")!.docs.map((d) => d.slug)).toEqual([
-      "subsystems/ingestion",
-    ]);
+    expect(
+      architecture.subcategories.find((s) => s.key === "subsystems")!.docs.map((d) => d.slug)
+    ).toEqual(["subsystems/ingestion"]);
   });
 
   it("hides internal docs in production", () => {

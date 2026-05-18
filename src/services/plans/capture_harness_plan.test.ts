@@ -39,7 +39,10 @@ describe("capture_harness_plan helpers", () => {
   });
 
   it("derives slug + harness_plan_id from a Cursor-style filename", () => {
-    const id = deriveIdentityFromFilename("/repo/.cursor/plans/process-issues_skill_2d3bdfdc.plan.md", "cursor");
+    const id = deriveIdentityFromFilename(
+      "/repo/.cursor/plans/process-issues_skill_2d3bdfdc.plan.md",
+      "cursor"
+    );
     expect(id.slug).toBe("process-issues_skill_2d3bdfdc");
     expect(id.harness_plan_id).toBe("2d3bdfdc");
     expect(id.harness).toBe("cursor");
@@ -78,7 +81,7 @@ describe("captureHarnessPlan", () => {
     const file = await writeSample(
       "neotoma-plan-cap-",
       "process-issues_skill_2d3bdfdc.plan.md",
-      SAMPLE_PLAN,
+      SAMPLE_PLAN
     );
     try {
       const result = await captureHarnessPlan({
@@ -110,12 +113,8 @@ describe("captureHarnessPlan", () => {
       expect((plan.todos as unknown[]).length).toBe(2);
 
       expect(result.storePayload.file_path).toBe(file);
-      expect(result.storePayload.idempotency_key).toBe(
-        "plan-capture-cursor-2d3bdfdc",
-      );
-      expect(result.storePayload.file_idempotency_key).toBe(
-        "plan-file-cursor-2d3bdfdc",
-      );
+      expect(result.storePayload.idempotency_key).toBe("plan-capture-cursor-2d3bdfdc");
+      expect(result.storePayload.file_idempotency_key).toBe("plan-file-cursor-2d3bdfdc");
     } finally {
       await fs.rm(path.dirname(file), { recursive: true, force: true });
     }

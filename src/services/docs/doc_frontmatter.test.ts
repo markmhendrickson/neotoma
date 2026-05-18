@@ -90,7 +90,7 @@ describe("extractFirstH1", () => {
 describe("extractFirstParagraph", () => {
   it("returns first paragraph after H1", () => {
     expect(extractFirstParagraph("# Title\n\nFirst paragraph.\n\nSecond.")).toBe(
-      "First paragraph.",
+      "First paragraph."
     );
   });
   it("truncates long paragraphs", () => {
@@ -111,7 +111,7 @@ describe("resolveFrontmatter", () => {
   it("infers fields from path and H1 when frontmatter absent", () => {
     const fm = resolveFrontmatter(
       "foundation/philosophy.md",
-      "# Philosophy\n\nNeotoma is structured personal data memory.\n",
+      "# Philosophy\n\nNeotoma is structured personal data memory.\n"
     );
     expect(fm.title).toBe("Philosophy");
     expect(fm.category).toBe("foundation");

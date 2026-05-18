@@ -1,10 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  PLAN_ENTITY_TYPE,
-  PLAN_FIELD_SPECS,
-  seedPlanSchema,
-} from "./seed_schema.js";
+import { PLAN_ENTITY_TYPE, PLAN_FIELD_SPECS, seedPlanSchema } from "./seed_schema.js";
 
 interface FakeRegistryShape {
   loadGlobalSchema: ReturnType<typeof vi.fn>;
@@ -12,7 +8,9 @@ interface FakeRegistryShape {
   updateSchemaIncremental: ReturnType<typeof vi.fn>;
 }
 
-function makeRegistry(initial: { exists: boolean; existingFields?: string[] } = { exists: false }): FakeRegistryShape {
+function makeRegistry(
+  initial: { exists: boolean; existingFields?: string[] } = { exists: false }
+): FakeRegistryShape {
   const existingFields = initial.existingFields ?? [];
   return {
     loadGlobalSchema: vi.fn(async () =>
@@ -22,12 +20,12 @@ function makeRegistry(initial: { exists: boolean; existingFields?: string[] } = 
             schema_version: "1.0",
             schema_definition: {
               fields: Object.fromEntries(
-                existingFields.map((name) => [name, { type: "string" as const }]),
+                existingFields.map((name) => [name, { type: "string" as const }])
               ),
             },
             reducer_config: { merge_policies: {} },
           }
-        : null,
+        : null
     ),
     register: vi.fn(async (entry) => entry),
     updateSchemaIncremental: vi.fn(async (entry) => entry),
@@ -37,7 +35,9 @@ function makeRegistry(initial: { exists: boolean; existingFields?: string[] } = 
 describe("seedPlanSchema", () => {
   it("registers a fresh `plan` schema with the documented fields and identity rules", async () => {
     const registry = makeRegistry({ exists: false });
-    const result = await seedPlanSchema({ registry: registry as unknown as Parameters<typeof seedPlanSchema>[0]["registry"] });
+    const result = await seedPlanSchema({
+      registry: registry as unknown as Parameters<typeof seedPlanSchema>[0]["registry"],
+    });
     expect(registry.register).toHaveBeenCalledTimes(1);
     expect(registry.updateSchemaIncremental).not.toHaveBeenCalled();
     const registered = registry.register.mock.calls[0]?.[0] as {
@@ -73,7 +73,9 @@ describe("seedPlanSchema", () => {
       exists: true,
       existingFields: ["title", "slug", "harness", "harness_plan_id", "body"],
     });
-    await seedPlanSchema({ registry: registry as unknown as Parameters<typeof seedPlanSchema>[0]["registry"] });
+    await seedPlanSchema({
+      registry: registry as unknown as Parameters<typeof seedPlanSchema>[0]["registry"],
+    });
     expect(registry.register).not.toHaveBeenCalled();
     expect(registry.updateSchemaIncremental).toHaveBeenCalledTimes(1);
     const update = registry.updateSchemaIncremental.mock.calls[0]?.[0] as {
@@ -92,7 +94,9 @@ describe("seedPlanSchema", () => {
       exists: true,
       existingFields: PLAN_FIELD_SPECS.map((s) => s.name),
     });
-    await seedPlanSchema({ registry: registry as unknown as Parameters<typeof seedPlanSchema>[0]["registry"] });
+    await seedPlanSchema({
+      registry: registry as unknown as Parameters<typeof seedPlanSchema>[0]["registry"],
+    });
     expect(registry.register).not.toHaveBeenCalled();
     expect(registry.updateSchemaIncremental).not.toHaveBeenCalled();
   });

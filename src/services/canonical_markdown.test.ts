@@ -317,7 +317,6 @@ describe("renderIndexMarkdown", () => {
   });
 });
 
-
 describe("renderProfileEntity", () => {
   const meta = {
     entity_id: "ent_plan_abc123",

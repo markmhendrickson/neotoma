@@ -43,7 +43,7 @@ export interface DocLookupFailure {
 
 export function lookupDoc(
   slug: string,
-  opts: { docsRoot: string; env: VisibilityEnv; manifestEntries?: Map<string, { status?: string }> },
+  opts: { docsRoot: string; env: VisibilityEnv; manifestEntries?: Map<string, { status?: string }> }
 ): DocLookupResult | DocLookupFailure {
   const { docsRoot, env, manifestEntries } = opts;
   // Strip leading / trailing slashes; reject empty.

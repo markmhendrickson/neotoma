@@ -150,9 +150,7 @@ export function renderMarkdown(source: string): string {
       const level = heading[1].length;
       const text = heading[2];
       const slug = slugifyHeading(text);
-      state.out.push(
-        `<h${level} id="${escapeHtml(slug)}">${renderInline(text)}</h${level}>`,
-      );
+      state.out.push(`<h${level} id="${escapeHtml(slug)}">${renderInline(text)}</h${level}>`);
       state.i += 1;
       continue;
     }

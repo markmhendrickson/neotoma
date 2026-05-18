@@ -128,9 +128,14 @@ async function flushPendingFragments(opts: {
   pendingUnknownFragments: Array<{ key: string; value: unknown }>;
 }): Promise<void> {
   const {
-    sourceId, interpretationId, userId, entityType,
-    effectiveSchemaVersion, validFields,
-    pendingConvertedFragments, pendingUnknownFragments,
+    sourceId,
+    interpretationId,
+    userId,
+    entityType,
+    effectiveSchemaVersion,
+    validFields,
+    pendingConvertedFragments,
+    pendingUnknownFragments,
   } = opts;
 
   // Write converted-value originals (preserves zero data loss for converter fields).
@@ -205,7 +210,10 @@ async function flushPendingFragments(opts: {
       try {
         const { schemaRecommendationService } = await import("./schema_recommendation.js");
         await schemaRecommendationService.queueAutoEnhancementCheck({
-          entity_type: entityType, fragment_key: key, user_id: userId, frequency_count: newFreq,
+          entity_type: entityType,
+          fragment_key: key,
+          user_id: userId,
+          frequency_count: newFreq,
         });
       } catch (queueError: unknown) {
         logger.warn(
@@ -255,7 +263,10 @@ async function flushPendingFragments(opts: {
           try {
             const { schemaRecommendationService } = await import("./schema_recommendation.js");
             await schemaRecommendationService.queueAutoEnhancementCheck({
-              entity_type: entityType, fragment_key: key, user_id: userId, frequency_count: retryFreq,
+              entity_type: entityType,
+              fragment_key: key,
+              user_id: userId,
+              frequency_count: retryFreq,
             });
           } catch (queueError: unknown) {
             logger.warn(
@@ -268,7 +279,10 @@ async function flushPendingFragments(opts: {
         try {
           const { schemaRecommendationService } = await import("./schema_recommendation.js");
           await schemaRecommendationService.queueAutoEnhancementCheck({
-            entity_type: entityType, fragment_key: key, user_id: userId, frequency_count: 1,
+            entity_type: entityType,
+            fragment_key: key,
+            user_id: userId,
+            frequency_count: 1,
           });
         } catch (queueError: unknown) {
           logger.warn(
@@ -331,7 +345,11 @@ export async function runInterpretation(
     observationId: string;
   }> = [];
   const interpretationInsertedObservationIds = new Set<string>();
-  const refinementDebug: Array<{ extracted_keys: string[]; type_before: string; type_after: string }> = [];
+  const refinementDebug: Array<{
+    extracted_keys: string[];
+    type_before: string;
+    type_after: string;
+  }> = [];
   const noSchemaEntityTypes: string[] = [];
 
   try {
@@ -590,9 +608,15 @@ export async function runInterpretation(
         // Observation already exists - don't create duplicate.
         // Still flush buffered fragments so they are kept current on replay.
         await flushPendingFragments({
-          db, sourceId, interpretationId, userId, entityType,
-          effectiveSchemaVersion, validFields,
-          pendingConvertedFragments, pendingUnknownFragments,
+          db,
+          sourceId,
+          interpretationId,
+          userId,
+          entityType,
+          effectiveSchemaVersion,
+          validFields,
+          pendingConvertedFragments,
+          pendingUnknownFragments,
         });
         unknownFieldsCount += pendingUnknownFragments.length;
         entities.push({
@@ -654,9 +678,15 @@ export async function runInterpretation(
       // Flush buffered raw_fragments now that entity resolution and observation
       // creation have both succeeded (issue #163).
       await flushPendingFragments({
-        db, sourceId, interpretationId, userId, entityType,
-        effectiveSchemaVersion, validFields,
-        pendingConvertedFragments, pendingUnknownFragments,
+        db,
+        sourceId,
+        interpretationId,
+        userId,
+        entityType,
+        effectiveSchemaVersion,
+        validFields,
+        pendingConvertedFragments,
+        pendingUnknownFragments,
       });
       unknownFieldsCount += pendingUnknownFragments.length;
     }
