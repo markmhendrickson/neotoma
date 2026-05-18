@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 /**
- * Install LaunchAgent so Neotoma production HTTP API (`npm run start:server:prod`) starts at login
+ * Install LaunchAgent so Neotoma production HTTP API (`npm run dev:server:prod`) starts at login
  * and restarts after reboot. Writes com.neotoma.prod-server.plist to ~/Library/LaunchAgents.
+ *
+ * The server hot-reloads from source via node --watch + tsx so code changes take effect
+ * automatically without restarting the LaunchAgent.
  *
  * Usage: node scripts/install_launchd_prod_server.js
  * Or: npm run setup:launchd-prod-server
@@ -27,8 +30,20 @@ const templatePath = join(__dirname, "com.neotoma.prod-server.plist.template");
 const plistPath = join(launchAgentsDir, plistName);
 const logDir = join(repoRoot, "data", "logs");
 
+// Resolve the nvm node binary so launchd (GUI-less session) can find it.
+let nodeBin = process.execPath;
+let npmCli = "";
+try {
+  npmCli = execSync("npm root -g", { encoding: "utf-8" }).trim().replace(/node_modules$/, "") + "node_modules/npm/bin/npm-cli.js";
+} catch {
+  // fallback: leave blank and the script will use PATH npm
+}
+
 const template = readFileSync(templatePath, "utf-8");
-const plistContent = template.replace(/REPO_ROOT_PLACEHOLDER/g, repoRoot);
+const plistContent = template
+  .replace(/REPO_ROOT_PLACEHOLDER/g, repoRoot)
+  .replace(/NEOTOMA_LAUNCHD_NODE_PLACEHOLDER/g, nodeBin)
+  .replace(/NEOTOMA_LAUNCHD_NPM_CLI_PLACEHOLDER/g, npmCli);
 
 const runScript = join(__dirname, "run_prod_server_launchd.sh");
 chmodSync(runScript, 0o755);
@@ -43,7 +58,7 @@ console.log("Load now:   launchctl load " + plistPath);
 console.log("Unload:     launchctl unload " + plistPath);
 console.log("Status:     launchctl list | grep neotoma");
 console.log("");
-console.log("Prod-mode server will start at login and restart if it exits.");
+console.log("Prod-mode server will start at login, hot-reload on source changes, and restart if it exits.");
 console.log("Avoid loading dev-server and prod-server on the same default port; set HTTP_PORT in .env if needed.");
 
 try {
