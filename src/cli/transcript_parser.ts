@@ -825,7 +825,7 @@ export function conversationsToEntities(
       conversation_id: conv.id,
       title: conv.title,
       source_platform: conv.source,
-      message_count: conv.messages.length,
+      reported_message_count: conv.messages.length,
       started_at: conv.createdAt,
       ended_at: conv.updatedAt,
     });

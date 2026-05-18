@@ -12,10 +12,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { ENTITY_SCHEMAS } from "../../src/services/schema_definitions.js";
-import {
-  ObservationReducer,
-  type Observation,
-} from "../../src/reducers/observation_reducer.js";
+import { ObservationReducer, type Observation } from "../../src/reducers/observation_reducer.js";
 
 // ---------------------------------------------------------------------------
 // Mocks — keep unit tests database-free
@@ -36,13 +33,13 @@ vi.mock("../../src/services/schema_registry.js", () => ({
 }));
 
 vi.mock("../../src/services/field_validation.js", () => ({
-  validateFieldWithConverters: vi.fn().mockImplementation(
-    (_field: string, value: unknown, _fieldDef: unknown) => ({
+  validateFieldWithConverters: vi
+    .fn()
+    .mockImplementation((_field: string, value: unknown, _fieldDef: unknown) => ({
       isValid: true,
       value,
       shouldRouteToRawFragments: false,
-    }),
-  ),
+    })),
 }));
 
 // ---------------------------------------------------------------------------
@@ -52,7 +49,7 @@ vi.mock("../../src/services/field_validation.js", () => ({
 import { schemaRegistry } from "../../src/services/schema_registry.js";
 
 function makeObs(
-  overrides: Partial<Observation> & { fields: Record<string, unknown> },
+  overrides: Partial<Observation> & { fields: Record<string, unknown> }
 ): Observation {
   return {
     id: "obs_default",
@@ -87,8 +84,8 @@ describe("conversation schema definition — bootstrap registration (#138)", () 
     expect(cnf).toBeDefined();
     // Uses ordered-rule form: each field is an independent { composite: [...] } rule
     // so either field alone resolves deterministically without requiring both.
-    const hasConversationId = cnf?.some(
-      (r) => typeof r === "string" ? r === "conversation_id" : r.composite?.includes("conversation_id")
+    const hasConversationId = cnf?.some((r) =>
+      typeof r === "string" ? r === "conversation_id" : r.composite?.includes("conversation_id")
     );
     expect(hasConversationId).toBe(true);
   });
@@ -98,8 +95,8 @@ describe("conversation schema definition — bootstrap registration (#138)", () 
     expect(cnf).toBeDefined();
     // Uses ordered-rule form: each field is an independent { composite: [...] } rule
     // so either field alone resolves deterministically without requiring both.
-    const hasSessionId = cnf?.some(
-      (r) => typeof r === "string" ? r === "session_id" : r.composite?.includes("session_id")
+    const hasSessionId = cnf?.some((r) =>
+      typeof r === "string" ? r === "session_id" : r.composite?.includes("session_id")
     );
     expect(hasSessionId).toBe(true);
   });
@@ -132,7 +129,7 @@ describe("conversation schema definition — bootstrap registration (#138)", () 
       "date",
       "participants",
       "participant_count",
-      "message_count",
+      "reported_message_count",
       "model",
       "tool",
       "source_url",
@@ -141,7 +138,9 @@ describe("conversation schema definition — bootstrap registration (#138)", () 
       "open_tasks",
     ];
     for (const f of expected) {
-      expect(fields, `expected field '${f}' to be declared in conversation schema`).toHaveProperty(f);
+      expect(fields, `expected field '${f}' to be declared in conversation schema`).toHaveProperty(
+        f
+      );
     }
   });
 
@@ -183,36 +182,28 @@ describe("conversation snapshot projection (#138 — fields at top level)", () =
   });
 
   it("projects title to the snapshot top level", async () => {
-    const obs: Observation[] = [
-      makeObs({ fields: { title: "Refactor auth module" } }),
-    ];
+    const obs: Observation[] = [makeObs({ fields: { title: "Refactor auth module" } })];
     const snapshot = await reducer.computeSnapshot("ent_conv_test", obs);
     expect(snapshot).not.toBeNull();
     expect(snapshot!.snapshot.title).toBe("Refactor auth module");
   });
 
   it("projects session_id to the snapshot top level", async () => {
-    const obs: Observation[] = [
-      makeObs({ fields: { session_id: "sess_abc123" } }),
-    ];
+    const obs: Observation[] = [makeObs({ fields: { session_id: "sess_abc123" } })];
     const snapshot = await reducer.computeSnapshot("ent_conv_test", obs);
     expect(snapshot).not.toBeNull();
     expect(snapshot!.snapshot.session_id).toBe("sess_abc123");
   });
 
   it("projects summary to the snapshot top level", async () => {
-    const obs: Observation[] = [
-      makeObs({ fields: { summary: "Discussed migration strategy." } }),
-    ];
+    const obs: Observation[] = [makeObs({ fields: { summary: "Discussed migration strategy." } })];
     const snapshot = await reducer.computeSnapshot("ent_conv_test", obs);
     expect(snapshot).not.toBeNull();
     expect(snapshot!.snapshot.summary).toBe("Discussed migration strategy.");
   });
 
   it("projects model to the snapshot top level", async () => {
-    const obs: Observation[] = [
-      makeObs({ fields: { model: "claude-sonnet-4-5" } }),
-    ];
+    const obs: Observation[] = [makeObs({ fields: { model: "claude-sonnet-4-5" } })];
     const snapshot = await reducer.computeSnapshot("ent_conv_test", obs);
     expect(snapshot).not.toBeNull();
     expect(snapshot!.snapshot.model).toBe("claude-sonnet-4-5");
