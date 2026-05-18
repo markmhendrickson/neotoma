@@ -42,7 +42,43 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
+
+      - name: Check diff size
+        id: diff_check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Explicit @claude review comments always bypass the gate.
+          if [ "${{ github.event_name }}" = "issue_comment" ]; then
+            echo "substantial=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          PR_NUMBER=${{ github.event.pull_request.number }}
+          REPO=${{ github.repository }}
+
+          FILES=$(gh pr view $PR_NUMBER --repo $REPO --json files --jq '.files | length')
+          ADDITIONS=$(gh pr view $PR_NUMBER --repo $REPO --json additions --jq '.additions')
+          DELETIONS=$(gh pr view $PR_NUMBER --repo $REPO --json deletions --jq '.deletions')
+          CHANGED_FILES=$(gh pr view $PR_NUMBER --repo $REPO --json files --jq '[.files[].path] | join("\n")')
+
+          LINES=$((ADDITIONS + DELETIONS))
+          TOUCHES_SRC=$(echo "$CHANGED_FILES" | grep -c "^src/" || true)
+          TOUCHES_OPENAPI=$(echo "$CHANGED_FILES" | grep -c "^openapi.yaml" || true)
+          TOUCHES_AUTH=$(echo "$CHANGED_FILES" | grep -cE "(auth|token|session|credential|permission|middleware)" || true)
+
+          echo "files=$FILES lines=$LINES src=$TOUCHES_SRC openapi=$TOUCHES_OPENAPI auth=$TOUCHES_AUTH"
+
+          if [ "$FILES" -gt 5 ] || [ "$LINES" -gt 150 ] || \
+             ( [ "$TOUCHES_SRC" -gt 0 ] && [ "$TOUCHES_OPENAPI" -gt 0 ] ) || \
+             [ "$TOUCHES_AUTH" -gt 0 ]; then
+            echo "substantial=true" >> $GITHUB_OUTPUT
+          else
+            echo "substantial=false" >> $GITHUB_OUTPUT
+          fi
+
       - uses: anthropics/claude-code-action@beta
+        if: steps.diff_check.outputs.substantial == 'true'
         with:
           anthropic_api_key: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
