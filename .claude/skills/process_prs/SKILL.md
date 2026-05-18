@@ -1,6 +1,6 @@
 ---
 name: process_prs
-description: Process open pull requests — triage readiness, run security checks, merge eligible PRs, detect release PRs and hand off to /release.
+description: Process open pull requests — triage readiness, run security checks, request Opus review on substantial PRs, merge eligible PRs, detect release PRs and hand off to /release.
 triggers:
   - process prs
   - /process_prs
@@ -11,7 +11,7 @@ triggers:
 
 # Process PRs
 
-Use this skill to work the open PR queue end-to-end: assess merge readiness, run security gates, merge eligible PRs, and hand off release PRs to `/release`.
+Use this skill to work the open PR queue end-to-end: assess merge readiness, run security gates, selectively request Claude Opus review on substantial PRs, merge eligible PRs, and hand off release PRs to `/release`.
 
 ## When to Use
 
@@ -28,6 +28,55 @@ gh pr list --state open --json number,title,headRefName,baseRefName,isDraft,revi
 ```
 
 Exclude draft PRs from automated merge actions. Include them in the summary report.
+
+### Step 1b: Gate Substantial PRs for Opus Review
+
+Before classifying for merge, check whether each PR needs (or needs another) automated Opus review. The `claude_pr_review.yml` workflow runs on `synchronize` events but deliberately skips `claude/*` branches to avoid runaway agent loops. This step compensates by explicitly posting `@claude review` on PRs that are worth a holistic look.
+
+**Skip review-requesting for:**
+- Draft PRs
+- Release PRs (dev→main with version bump)
+- PRs whose head branch starts with `claude/` — the workflow already runs on `opened` for these
+
+**For newly opened PRs (state was just opened, no review comment yet):**
+
+```bash
+gh pr diff <number> --stat
+```
+
+Parse the stat output to get: files changed, insertions, deletions. Also check whether the diff touches both `src/` and `openapi.yaml` simultaneously:
+
+```bash
+gh pr diff <number> --name-only
+```
+
+Post `@claude review` if **any** of the following are true:
+- Files changed > 5
+- Total lines changed (insertions + deletions) > 150
+- Diff touches both `src/` and `openapi.yaml` (contract surface change)
+- PR is security-adjacent (per the criteria in Step 2)
+
+```bash
+gh pr comment <number> --body "@claude review"
+```
+
+**For PRs with new commits since last review was requested:**
+
+Find the most recent `@claude review` comment:
+
+```bash
+gh pr view <number> --json comments --jq '[.comments[] | select(.body | contains("@claude review"))] | last | .createdAt // empty'
+```
+
+If a prior review comment exists, count commits that landed after that timestamp:
+
+```bash
+gh api repos/{owner}/{repo}/pulls/<number>/commits --jq '[.[] | select(.commit.committer.date > "<last_review_iso_timestamp>")] | length'
+```
+
+Post another `@claude review` if new commits since last review ≥ 3.
+
+**Never post `@claude review` more than once per batch run on the same PR.** If you already posted in this run, do not post again.
 
 ### Step 2: Classify Each PR
 
@@ -108,7 +157,8 @@ For each PR that cannot be merged, take the appropriate action:
 Produce a comprehensive summary covering:
 
 - Total PRs reviewed
-- For each PR: title, number, classification (release / security-adjacent / standard), CI status, security gate results, and action taken (merged / blocked / handed off / skipped)
+- For each PR: title, number, classification (release / security-adjacent / standard), CI status, security gate results, and action taken (merged / blocked / handed off / skipped / review requested)
+- PRs where `@claude review` was posted and why (new substantial PR, or N new commits since last review)
 - Any security gate errors found, with PR numbers
 - Release PRs identified, with a clear "run `/release` to ship these" callout
 - Outstanding blockers that require author or user action
@@ -142,6 +192,9 @@ The `/release` Step 3.5 re-runs G2 and G3 against the exact release commit as a 
 - Never merge if G2 or G3 produce errors on a security-adjacent PR.
 - Always run G2 and G3 before merging a security-adjacent PR.
 - Always report security gate results in the summary, even when advisory.
+- Never post `@claude review` on a `claude/*` branch PR — the workflow already runs on `opened` for those.
+- Never post `@claude review` more than once per batch run on the same PR.
+- Do not post `@claude review` on trivially small PRs (≤5 files, ≤150 lines, no contract surface changes, not security-adjacent).
 
 ## Forbidden Patterns
 
@@ -151,3 +204,4 @@ The `/release` Step 3.5 re-runs G2 and G3 against the exact release commit as a 
 - Treating G2/G3 warnings as blocking (only errors block)
 - Posting noisy comments on PRs that merely need a reviewer
 - Force-pushing or rebasing shared branches
+- Spamming `@claude review` on every push — only request when the diff genuinely warrants a holistic re-review (≥3 new commits since last request)
