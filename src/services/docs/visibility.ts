@@ -5,9 +5,9 @@
  * from `FOLDER_DEFAULTS`). At request time, internal docs 404 unless the
  * environment opts in via `NEOTOMA_DOCS_SHOW_INTERNAL=true`.
  *
- * Default: internal docs are visible unless `NODE_ENV === "production"`. This
- * keeps dev and sandbox useful for developers while keeping production
- * conservative.
+ * Default: internal docs are hidden unless the operator explicitly opts in.
+ * This fails closed for staging, previews, sandboxes, and any deployment that
+ * forgets to set `NODE_ENV=production`.
  */
 
 import type { DocFrontmatter } from "./doc_frontmatter.js";
@@ -22,7 +22,7 @@ export function shouldShowInternal(env: VisibilityEnv): boolean {
   const flag = env.NEOTOMA_DOCS_SHOW_INTERNAL;
   if (flag === "true") return true;
   if (flag === "false") return false;
-  return env.NODE_ENV !== "production";
+  return false;
 }
 
 /** True when the doc should be visible to the requester. */

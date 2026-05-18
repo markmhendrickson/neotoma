@@ -11,10 +11,11 @@ describe("shouldShowInternal", () => {
   it("unset + production hides internal", () => {
     expect(shouldShowInternal({ NODE_ENV: "production" })).toBe(false);
   });
-  it("unset + non-production shows internal", () => {
-    expect(shouldShowInternal({ NODE_ENV: "development" })).toBe(true);
-    expect(shouldShowInternal({ NODE_ENV: "test" })).toBe(true);
-    expect(shouldShowInternal({})).toBe(true);
+  it("unset fails closed in all environments", () => {
+    expect(shouldShowInternal({ NODE_ENV: "development" })).toBe(false);
+    expect(shouldShowInternal({ NODE_ENV: "test" })).toBe(false);
+    expect(shouldShowInternal({ NODE_ENV: "staging" })).toBe(false);
+    expect(shouldShowInternal({})).toBe(false);
   });
 });
 
@@ -25,7 +26,7 @@ describe("isVisible", () => {
   });
   it("internal docs gated by shouldShowInternal", () => {
     expect(isVisible({ visibility: "internal" }, { NODE_ENV: "production" })).toBe(false);
-    expect(isVisible({ visibility: "internal" }, { NODE_ENV: "development" })).toBe(true);
+    expect(isVisible({ visibility: "internal" }, { NODE_ENV: "development" })).toBe(false);
     expect(
       isVisible({ visibility: "internal" }, { NODE_ENV: "production", NEOTOMA_DOCS_SHOW_INTERNAL: "true" }),
     ).toBe(true);

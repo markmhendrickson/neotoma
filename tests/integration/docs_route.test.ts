@@ -81,9 +81,9 @@ afterEach(async () => {
   if (server) await stopServer(server);
 });
 
-async function fetchPath(p: string): Promise<{ status: number; body: string }> {
+async function fetchPath(p: string): Promise<{ status: number; body: string; cacheControl: string | null }> {
   const res = await fetch(baseUrl + p);
-  return { status: res.status, body: await res.text() };
+  return { status: res.status, body: await res.text(), cacheControl: res.headers.get("cache-control") };
 }
 
 describe("/docs", () => {
@@ -100,6 +100,7 @@ describe("/docs", () => {
     expect(r.body).toContain("Documentation");
     expect(r.body).toContain("Core Identity");
     expect(r.body).toContain("Featured");
+    expect(r.cacheControl).toBe("public, max-age=60");
   });
 
   it("renders a known doc page", async () => {
@@ -107,6 +108,7 @@ describe("/docs", () => {
     expect(r.status).toBe(200);
     expect(r.body).toContain('<h1 id="core-identity">Core Identity</h1>');
     expect(r.body).toContain("State Layer");
+    expect(r.cacheControl).toBe("public, max-age=60");
   });
 
   it("returns 404 for unknown slugs", async () => {
@@ -120,6 +122,13 @@ describe("/docs", () => {
     expect(r.status).toBe(404);
   });
 
+  it("returns 404 for additional invalid slug forms", async () => {
+    for (const slug of ["/docs/../etc/passwd", "/docs/%00", "/docs/foo%5Cbar", "/docs/foo/", "/docs/foo.md/bar"]) {
+      const r = await fetchPath(slug);
+      expect(r.status).toBe(404);
+    }
+  });
+
   it("hides internal docs in production", async () => {
     const r = await fetchPath("/docs/plans/draft");
     expect(r.status).toBe(404);
@@ -128,6 +137,20 @@ describe("/docs", () => {
   it("does not list internal docs on the index in production", async () => {
     const r = await fetchPath("/docs");
     expect(r.body).not.toContain("Draft Plan");
+  });
+});
+
+describe("/docs with staging-like env", () => {
+  beforeEach(async () => {
+    const app = makeApp({ NODE_ENV: "staging" });
+    server = await startServer(app);
+    const addr = server.address() as AddressInfo;
+    baseUrl = `http://127.0.0.1:${addr.port}`;
+  });
+
+  it("hides internal docs unless explicitly enabled", async () => {
+    const r = await fetchPath("/docs/plans/draft");
+    expect(r.status).toBe(404);
   });
 });
 

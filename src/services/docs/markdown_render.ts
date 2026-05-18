@@ -92,19 +92,26 @@ function renderInline(text: string): string {
  *   - `docs/foo/bar.md` → `/docs/foo/bar`
  *   - `./bar.md` and `../sibling.md` are left as-is (best-effort; deep relative
  *     links are validated by gap-doc authoring rather than the renderer).
- *   - Anchors and absolute URLs pass through unchanged.
+ *   - Anchors, root-relative links, and allowed absolute URL schemes pass through.
+ *   - Unknown URL schemes are rewritten to `#` so contributor-authored docs
+ *     cannot create active `javascript:` / `data:` links on the public route.
  */
 function rewriteHref(href: string): string {
-  if (href.startsWith("http://") || href.startsWith("https://")) return href;
-  if (href.startsWith("#")) return href;
-  if (href.startsWith("/")) return href;
-  if (href.startsWith("docs/") && href.endsWith(".md")) {
-    return "/docs/" + href.slice("docs/".length).replace(/\.md$/, "");
+  const trimmed = href.trim();
+  const scheme = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(trimmed)?.[1]?.toLowerCase();
+  if (scheme) {
+    return scheme === "http" || scheme === "https" || scheme === "mailto" ? trimmed : "#";
   }
-  if (href.endsWith(".md")) {
-    return href.replace(/\.md$/, "");
+  if (trimmed.startsWith("//")) return "#";
+  if (trimmed.startsWith("#")) return trimmed;
+  if (trimmed.startsWith("/")) return trimmed;
+  if (trimmed.startsWith("docs/") && trimmed.endsWith(".md")) {
+    return "/docs/" + trimmed.slice("docs/".length).replace(/\.md$/, "");
   }
-  return href;
+  if (trimmed.endsWith(".md")) {
+    return trimmed.replace(/\.md$/, "");
+  }
+  return trimmed;
 }
 
 interface BlockState {

@@ -20,10 +20,11 @@
  * `Math.random()`; no wall-clock fallbacks.
  */
 
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type express from "express";
-import { buildDocsIndex } from "./index_builder.js";
+import { buildDocsIndex, type DocsIndex } from "./index_builder.js";
 import { renderIndexHtml, renderDocHtml, renderNotFoundHtml } from "./html_template.js";
 import { lookupDoc } from "./render.js";
 import { loadManifest } from "./manifest_loader.js";
@@ -43,6 +44,63 @@ export interface DocsRoutesOptions {
   envSource?: VisibilityEnv;
 }
 
+interface DocsIndexCache {
+  key: string;
+  index: DocsIndex;
+}
+
+let docsIndexCache: DocsIndexCache | null = null;
+
+function getTreeMtimeMs(root: string): number {
+  let max = 0;
+  const walk = (abs: string): void => {
+    let st: fs.Stats;
+    try {
+      st = fs.statSync(abs);
+    } catch {
+      return;
+    }
+    max = Math.max(max, st.mtimeMs);
+    if (!st.isDirectory()) return;
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(abs, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const ent of entries) {
+      if (ent.name === "node_modules" || ent.name === ".git") continue;
+      walk(path.join(abs, ent.name));
+    }
+  };
+  walk(root);
+  return max;
+}
+
+function getDocsIndex(opts: {
+  docsRoot: string;
+  manifestPath: string;
+  env: VisibilityEnv;
+}): DocsIndex {
+  const manifestMtime = fs.existsSync(opts.manifestPath)
+    ? fs.statSync(opts.manifestPath).mtimeMs
+    : 0;
+  const docsMtime = getTreeMtimeMs(opts.docsRoot);
+  const showInternal = opts.env.NEOTOMA_DOCS_SHOW_INTERNAL === "true" ? "1" : "0";
+  const key = `${opts.docsRoot}:${opts.manifestPath}:${manifestMtime}:${docsMtime}:${showInternal}`;
+  if (docsIndexCache?.key === key) return docsIndexCache.index;
+
+  const manifest = loadManifest(opts.manifestPath);
+  const index = buildDocsIndex({
+    docsRoot: opts.docsRoot,
+    manifest: manifest.docs,
+    env: opts.env,
+    manifestEntries: manifest.entries,
+  });
+  docsIndexCache = { key, index };
+  return index;
+}
+
 export function mountDocsRoutes(app: express.Express, opts: DocsRoutesOptions = {}): void {
   const repoRoot = opts.repoRoot ?? resolveRepoRoot();
   const docsRoot = path.join(repoRoot, "docs");
@@ -50,14 +108,13 @@ export function mountDocsRoutes(app: express.Express, opts: DocsRoutesOptions = 
 
   app.get("/docs", (req, res) => {
     const env = opts.envSource ?? (process.env as VisibilityEnv);
-    const manifest = loadManifest(manifestPath);
-    const index = buildDocsIndex({
+    const index = getDocsIndex({
       docsRoot,
-      manifest: manifest.docs,
+      manifestPath,
       env,
-      manifestEntries: manifest.entries,
     });
     res.set("Content-Type", "text/html; charset=utf-8");
+    res.set("Cache-Control", "public, max-age=60");
     res.status(200).send(renderIndexHtml(index));
   });
 
@@ -73,6 +130,7 @@ export function mountDocsRoutes(app: express.Express, opts: DocsRoutesOptions = 
       manifestEntries: manifest.entries,
     });
     res.set("Content-Type", "text/html; charset=utf-8");
+    res.set("Cache-Control", "public, max-age=60");
     if (!lookup.ok) {
       res.status(404).send(renderNotFoundHtml(rawSlug));
       return;

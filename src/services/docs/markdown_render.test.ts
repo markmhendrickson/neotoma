@@ -36,6 +36,19 @@ describe("renderMarkdown", () => {
     expect(out).toContain('href="/docs/foundation/core_identity"');
   });
 
+  it("rejects active unsafe URL schemes in links", () => {
+    expect(renderMarkdown("[bad](javascript:alert(1))")).toContain('<a href="#">bad</a>');
+    expect(renderMarkdown("[bad](data:text/html,<svg>)")).toContain('<a href="#">bad</a>');
+    expect(renderMarkdown("[bad](//evil.example/x)")).toContain('<a href="#">bad</a>');
+  });
+
+  it("allows http, https, and mailto URL schemes in links", () => {
+    expect(renderMarkdown("[web](https://x.test)")).toContain('<a href="https://x.test">web</a>');
+    expect(renderMarkdown("[mail](mailto:docs@example.test)")).toContain(
+      '<a href="mailto:docs@example.test">mail</a>',
+    );
+  });
+
   it("renders unordered and ordered lists", () => {
     expect(renderMarkdown("- a\n- b\n")).toBe("<ul><li>a</li><li>b</li></ul>");
     expect(renderMarkdown("1. a\n2. b\n")).toBe("<ol><li>a</li><li>b</li></ol>");

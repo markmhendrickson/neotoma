@@ -18,6 +18,10 @@ import { isVisible, type VisibilityEnv } from "./visibility.js";
 
 const SKIP_DIR_NAMES = new Set(["private", "node_modules", ".git", "archived"]);
 
+function compareStable(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
 export interface DocsManifestSubcategory {
   key: string;
   display_name: string;
@@ -96,7 +100,7 @@ function collectMarkdownFiles(docsRoot: string): string[] {
     }
   };
   walk(docsRoot, "");
-  out.sort((a, b) => a.localeCompare(b));
+  out.sort(compareStable);
   return out;
 }
 
@@ -108,7 +112,7 @@ function compareDocs(a: DocEntry, b: DocEntry): number {
   if (a.frontmatter.order !== b.frontmatter.order) {
     return a.frontmatter.order - b.frontmatter.order;
   }
-  return a.frontmatter.title.localeCompare(b.frontmatter.title);
+  return compareStable(a.frontmatter.title, b.frontmatter.title);
 }
 
 export function buildDocsIndex(opts: BuildDocsIndexOptions): DocsIndex {
@@ -183,7 +187,7 @@ export function buildDocsIndex(opts: BuildDocsIndexOptions): DocsIndex {
     for (const k of bySub.keys()) {
       if (k && !subSeen.has(k)) extraSubKeys.push(k);
     }
-    extraSubKeys.sort();
+    extraSubKeys.sort(compareStable);
     for (const k of extraSubKeys) {
       const docs = bySub.get(k)!;
       docs.sort(compareDocs);
@@ -210,7 +214,7 @@ export function buildDocsIndex(opts: BuildDocsIndexOptions): DocsIndex {
   for (const k of byCategory.keys()) {
     if (!seenCatKeys.has(k)) extraCatKeys.push(k);
   }
-  extraCatKeys.sort();
+  extraCatKeys.sort(compareStable);
   for (const k of extraCatKeys) {
     const bySub = byCategory.get(k)!;
     const subKeys: string[] = [];

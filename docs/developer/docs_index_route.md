@@ -33,9 +33,11 @@ correctly, and how the featured list and category tree are curated.
 Every doc has a `visibility` value: `public` or `internal`.
 
 - `public` docs are always shown.
-- `internal` docs 404 unless one of:
-  - `NEOTOMA_DOCS_SHOW_INTERNAL=true`, or
-  - `NODE_ENV !== "production"`.
+- `internal` docs 404 unless `NEOTOMA_DOCS_SHOW_INTERNAL=true`.
+
+The route fails closed in every environment (`development`, `test`, `staging`,
+`production`, and unset). Local operators who want internal docs must opt in
+explicitly with `NEOTOMA_DOCS_SHOW_INTERNAL=true`.
 
 The default for a folder is in `FOLDER_DEFAULTS` in
 `src/services/docs/doc_frontmatter.ts`. Folders that default to internal:
@@ -136,8 +138,8 @@ production; no manual action needed.
    `docs/site/site_doc_manifest.yaml`.
 4. If the doc should appear in the featured list, add its repo path to
    `featured:` in the same manifest.
-5. No build step is required at runtime — `/docs` reads from disk on each
-   request.
+5. No build step is required at runtime — `/docs` refreshes an in-process index
+   cache when the docs tree or manifest changes.
 
 ## Security
 
@@ -151,6 +153,25 @@ production; no manual action needed.
   runtime-only unauth allow-list with a stated reason.
 - No reads of `req.socket.remoteAddress`, `X-Forwarded-For`, or `Host` — the
   route is stateless and serves identical bytes regardless of caller.
+- Inline markdown links only allow `http`, `https`, and `mailto` URL schemes.
+  Other schemes, including `javascript:` and protocol-relative URLs, are
+  rewritten to `#`.
+- `Cache-Control: public, max-age=60` is set on `/docs` and `/docs/<slug>`.
+  The index route also uses an in-process cache keyed by docs/manifest mtimes
+  and the internal-doc visibility flag so unauthenticated traffic does not
+  re-read every markdown file on each request.
+
+## Markdown support
+
+The renderer intentionally implements a narrow subset used by Neotoma's docs:
+ATX headings, paragraphs, fenced code blocks, inline code, bold, italic, links,
+unordered/ordered lists, blockquotes, horizontal rules, and hard line breaks.
+
+Unsupported constructs currently render as plain text or simplified HTML:
+nested lists, indented code blocks, tables with alignment, footnotes, math,
+raw HTML passthrough, and autolinks (`<https://example.test>`). The source
+markdown remains canonical; richer rendering can be added later without
+changing authoring paths.
 
 ## Determinism
 
