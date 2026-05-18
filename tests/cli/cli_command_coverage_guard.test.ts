@@ -48,6 +48,7 @@ describe("CLI command coverage guard", () => {
       "issues",
       "plans",
       "preflight",
+      "reporter", // neotoma reporter setup covered by tests/cli/reporter_setup.test.ts
       "upload",
       "db", // subcommands covered by db_migrate_encryption.test.ts (migrate-encryption) and db_repair_schema_lag.test.ts (repair-schema-lag)
     ]);

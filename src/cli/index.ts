@@ -9256,6 +9256,78 @@ program
     process.exitCode = exitCode;
   });
 
+// ─── Reporter commands ────────────────────────────────────────────────────
+const reporterCommand = program
+  .command("reporter")
+  .description("Reporter-side commands for agents that file friction issues via Neotoma.");
+
+reporterCommand
+  .command("setup")
+  .description(
+    "One-shot reporter onboarding: version check + harness allowlist + project-local reporter config. " +
+      "Run once per project to enable agents to file issues automatically."
+  )
+  .option(
+    "--tool <tool>",
+    "Target harness (claude-code|cursor|codex|openclaw|claude-desktop). Auto-detected when omitted."
+  )
+  .option("--git-sha <sha>", "Default reporter_git_sha to embed in every submitted issue")
+  .option(
+    "--app-version <version>",
+    "Default reporter_app_version to embed in every submitted issue"
+  )
+  .option(
+    "--default-visibility <visibility>",
+    "Default issue visibility: public (default) or private",
+    "public"
+  )
+  .option("--dry-run", "Plan the setup without writing files or applying changes", false)
+  .option(
+    "--print-block",
+    "Print a copy-pastable env-var block instead of writing the project config file",
+    false
+  )
+  .action(async (opts) => {
+    const outputMode = resolveOutputMode();
+    const { runReporterSetup, buildEnvBlock } = await import("./reporter_setup.js");
+    const report = await runReporterSetup({
+      tool: opts.tool ?? null,
+      dryRun: Boolean(opts.dryRun),
+      cwd: process.cwd(),
+      gitSha: opts.gitSha,
+      appVersion: opts.appVersion,
+      defaultVisibility: opts.defaultVisibility === "private" ? "private" : "public",
+      printBlock: Boolean(opts.printBlock),
+    });
+
+    if (outputMode === "json") {
+      writeOutput(report, outputMode);
+    } else {
+      // Emit a step-by-step status block.
+      for (const step of report.steps) {
+        const status = step.ok ? "ok" : "FAIL";
+        const skipped = step.skipped ? " (skipped)" : step.changed ? " (changed)" : "";
+        process.stdout.write(`[${status}] ${step.step}${skipped}`);
+        if (step.reason) process.stdout.write(`: ${step.reason}`);
+        process.stdout.write("\n");
+      }
+      process.stdout.write("\n");
+      process.stdout.write(`${report.summary}\n`);
+      if (report.overall_ok) {
+        process.stdout.write("\n");
+        process.stdout.write(`Smoke test: ${report.smoke_test_command}\n`);
+      }
+      if (opts.printBlock) {
+        process.stdout.write("\n");
+        process.stdout.write(
+          buildEnvBlock(report.reporter_config, report.reporter_config_path) + "\n"
+        );
+      }
+    }
+
+    process.exitCode = report.overall_ok ? 0 : 1;
+  });
+
 program
   .command("preflight")
   .description(

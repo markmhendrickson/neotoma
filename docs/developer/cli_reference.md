@@ -369,6 +369,20 @@ After the JSON report, `neotoma setup` always emits two plain-text lines to stdo
 
 Use `neotoma setup --tool <harness> --yes` for the normal greenfield path. Use `neotoma mcp config` or `neotoma cli config` when only one layer needs repair.
 
+### Reporter
+
+One-shot onboarding for friction reporters (testers or user agents who file issues via Neotoma):
+
+- `neotoma reporter setup`: Orchestrate the full reporter setup in one command.
+  - `--tool <tool>`: Target harness (`claude-code|cursor|codex|openclaw|claude-desktop`). Auto-detected from cwd when omitted.
+  - `--git-sha <sha>`: Default `reporter_git_sha` embedded in every submitted issue.
+  - `--app-version <version>`: Default `reporter_app_version` embedded in every submitted issue.
+  - `--default-visibility <public|private>`: Default issue visibility (default: `public`).
+  - `--dry-run`: Plan the setup without writing files or applying changes.
+  - `--print-block`: Print a copy-pastable env-var block instead of writing the project config file.
+
+The command runs four steps in sequence: (1) version check — warns when the installed CLI is older than the minimum required version; (2) preflight — applies harness permission-file allowlist entries via `neotoma preflight --apply`; (3) config write — persists the reporter defaults to `.neotoma/reporter.json` in the project root so subsequent `neotoma issues create` calls pick them up automatically; (4) smoke-test hint — prints a ready-to-run dry-run command. The structured JSON report includes `tool`, `dry_run`, `installed_version`, `version_ok`, `steps[]`, `reporter_config`, `reporter_config_path`, `smoke_test_command`, `overall_ok`, and `summary`.
+
 ### Preflight
 
 - `neotoma preflight`: Check or apply harness permission-file entries for Neotoma.
