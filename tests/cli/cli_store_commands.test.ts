@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterEach } from "vitest";
 import { exec } from "child_process";
 import { promisify } from "util";
+import { randomUUID } from "crypto";
 import { TestIdTracker } from "../helpers/cleanup_helpers.js";
 import { writeFile, mkdir } from "fs/promises";
 import { join } from "path";
@@ -192,7 +193,7 @@ describe("CLI store commands", () => {
     });
 
     it("should be replay-safe with idempotency key", async () => {
-      const key = `store-turn-idem-${Date.now()}`;
+      const key = `store-turn-idem-${randomUUID()}`;
       const cmd =
         `${CLI_PATH} store-turn --conversation-title "CLI Turn Idem" ` +
         `--message "User said hello twice" --idempotency-key "${key}" --user-id "${TEST_USER_ID}" --json`;
@@ -203,6 +204,7 @@ describe("CLI store commands", () => {
       expect(first.source_id).toBeDefined();
       expect(second.source_id).toBe(first.source_id);
 
+      if (first.source_id) tracker.trackSource(first.source_id);
       if (Array.isArray(first.entities)) {
         for (const entity of first.entities) {
           if (entity?.id) tracker.trackEntity(entity.id);
