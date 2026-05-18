@@ -61,18 +61,18 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **360**
-- Backend and repo Vitest files: **327**
+- Total automated test files: **375**
+- Backend and repo Vitest files: **342**
 - Frontend Vitest files: **9**
 - Playwright spec files: **24**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 87 |
+| Vitest unit tests | 89 |
 | Vitest service tests | 33 |
-| Source-adjacent tests | 39 |
-| Vitest integration tests | 94 |
+| Source-adjacent tests | 45 |
+| Vitest integration tests | 101 |
 | Vitest CLI tests | 55 |
 | Vitest contract tests | 10 |
 | Vitest security tests | 1 |
@@ -107,7 +107,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (87):**
+**Files (89):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -136,6 +136,7 @@ flowchart TD
 - `tests/unit/client_turn_report.test.ts`
 - `tests/unit/compliance_scorecard.test.ts`
 - `tests/unit/config_data_dir_resolution.test.ts`
+- `tests/unit/conversation_schema_bootstrap.test.ts`
 - `tests/unit/cursor_hooks_context.test.ts`
 - `tests/unit/cursor_hooks_external_data.test.ts`
 - `tests/unit/cursor_hooks_small_model.test.ts`
@@ -172,6 +173,7 @@ flowchart TD
 - `tests/unit/observation_reducer_provenance.test.ts`
 - `tests/unit/opencode_plugin.test.ts`
 - `tests/unit/parquet_reader.test.ts`
+- `tests/unit/product_feedback_schema.test.ts`
 - `tests/unit/protected_entity_types.test.ts`
 - `tests/unit/relationship_batch_schemas.test.ts`
 - `tests/unit/relationship_reducer.test.ts`
@@ -241,7 +243,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- src`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (39):**
+**Files (45):**
 - `src/cli/parse_cli_corrected_value.test.ts`
 - `src/crypto/crypto.test.ts`
 - `src/record_types.test.ts`
@@ -263,6 +265,12 @@ flowchart TD
 - `src/services/canonical_markdown.test.ts`
 - `src/services/canonical_mirror_git.test.ts`
 - `src/services/canonical_mirror.test.ts`
+- `src/services/docs/doc_frontmatter.test.ts`
+- `src/services/docs/index_builder.test.ts`
+- `src/services/docs/manifest_loader.test.ts`
+- `src/services/docs/markdown_render.test.ts`
+- `src/services/docs/render.test.ts`
+- `src/services/docs/visibility.test.ts`
 - `src/services/guest_access_token.test.ts`
 - `src/services/issues/issue_operations.test.ts`
 - `src/services/issues/neotoma_client.test.ts`
@@ -287,7 +295,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (94):**
+**Files (101):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_resource_metadata.test.ts`
 - `tests/integration/aauth_revocation_e2e.test.ts`
@@ -311,6 +319,7 @@ flowchart TD
 - `tests/integration/cross_instance_issues.test.ts`
 - `tests/integration/cursor_hook_stop_backfill.test.ts`
 - `tests/integration/dashboard_stats.test.ts`
+- `tests/integration/docs_route.test.ts`
 - `tests/integration/entity_identifier_handler.test.ts`
 - `tests/integration/entity_queries.test.ts`
 - `tests/integration/events_stream.test.ts`
@@ -322,8 +331,12 @@ flowchart TD
 - `tests/integration/guest_write_rate_limit.test.ts`
 - `tests/integration/hook_failure_hint.test.ts`
 - `tests/integration/idempotency_collision.test.ts`
+- `tests/integration/idempotency_key_content_mismatch.test.ts`
 - `tests/integration/inspector_bundled_mount.test.ts`
+- `tests/integration/interpretation_fragment_ordering.test.ts`
+- `tests/integration/interpretation_no_schema_fallback.test.ts`
 - `tests/integration/interpretation_store.test.ts`
+- `tests/integration/issue_207_list_timeline_events_unknown_type.test.ts`
 - `tests/integration/issue_37_event_schema_projection.test.ts`
 - `tests/integration/lexical_search.test.ts`
 - `tests/integration/live_issues_tooling.test.ts`
@@ -371,10 +384,12 @@ flowchart TD
 - `tests/integration/session_introspection.test.ts`
 - `tests/integration/store_builtin_identity_opt_out_schemas.test.ts`
 - `tests/integration/store_conversation_message_role_conflict.test.ts`
+- `tests/integration/store_exercise_log_device_schema.test.ts`
 - `tests/integration/store_explicit_canonical_name.test.ts`
 - `tests/integration/store_external_link_schema.test.ts`
 - `tests/integration/store_registered_schema_alias_precedence.test.ts`
 - `tests/integration/store_resolution_attributes_hint.test.ts`
+- `tests/integration/store_unknown_fields_list.test.ts`
 - `tests/integration/submit_issue_advisory_alias.test.ts`
 - `tests/integration/subscription_list.test.ts`
 - `tests/integration/subscription_unsubscribe.test.ts`
