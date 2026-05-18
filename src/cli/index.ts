@@ -9255,10 +9255,20 @@ reporterCommand
     "One-shot reporter onboarding: version check + harness allowlist + project-local reporter config. " +
       "Run once per project to enable agents to file issues automatically."
   )
-  .option("--tool <tool>", "Target harness (claude-code|cursor|codex|openclaw|claude-desktop). Auto-detected when omitted.")
+  .option(
+    "--tool <tool>",
+    "Target harness (claude-code|cursor|codex|openclaw|claude-desktop). Auto-detected when omitted."
+  )
   .option("--git-sha <sha>", "Default reporter_git_sha to embed in every submitted issue")
-  .option("--app-version <version>", "Default reporter_app_version to embed in every submitted issue")
-  .option("--default-visibility <visibility>", "Default issue visibility: public (default) or private", "public")
+  .option(
+    "--app-version <version>",
+    "Default reporter_app_version to embed in every submitted issue"
+  )
+  .option(
+    "--default-visibility <visibility>",
+    "Default issue visibility: public (default) or private",
+    "public"
+  )
   .option("--dry-run", "Plan the setup without writing files or applying changes", false)
   .option(
     "--print-block",
@@ -9274,8 +9284,7 @@ reporterCommand
       cwd: process.cwd(),
       gitSha: opts.gitSha,
       appVersion: opts.appVersion,
-      defaultVisibility:
-        opts.defaultVisibility === "private" ? "private" : "public",
+      defaultVisibility: opts.defaultVisibility === "private" ? "private" : "public",
       printBlock: Boolean(opts.printBlock),
     });
 
@@ -9298,7 +9307,9 @@ reporterCommand
       }
       if (opts.printBlock) {
         process.stdout.write("\n");
-        process.stdout.write(buildEnvBlock(report.reporter_config, report.reporter_config_path) + "\n");
+        process.stdout.write(
+          buildEnvBlock(report.reporter_config, report.reporter_config_path) + "\n"
+        );
       }
     }
 

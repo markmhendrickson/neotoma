@@ -111,7 +111,10 @@ export async function readReporterConfig(configPath: string): Promise<ReporterCo
 }
 
 /** Write reporter config JSON, creating the .neotoma/ directory if needed. */
-export async function writeReporterConfig(configPath: string, config: ReporterConfig): Promise<void> {
+export async function writeReporterConfig(
+  configPath: string,
+  config: ReporterConfig
+): Promise<void> {
   await fs.mkdir(path.dirname(configPath), { recursive: true });
   await fs.writeFile(configPath, JSON.stringify(config, null, 2) + "\n", "utf8");
 }
@@ -233,8 +236,7 @@ export async function runReporterSetup(
     Object.entries(newConfig).filter(([, v]) => v !== undefined)
   ) as ReporterConfig;
 
-  const configChanged =
-    JSON.stringify(cleanConfig) !== JSON.stringify(existingConfig);
+  const configChanged = JSON.stringify(cleanConfig) !== JSON.stringify(existingConfig);
 
   if (options.printBlock) {
     steps.push({
@@ -281,7 +283,8 @@ export async function runReporterSetup(
   }
 
   // ── Build outputs ─────────────────────────────────────────────────────────
-  const smokeTestCommand = "neotoma issues create --dry-run --title \"test\" --body \"Reporter setup smoke test\"";
+  const smokeTestCommand =
+    'neotoma issues create --dry-run --title "test" --body "Reporter setup smoke test"';
 
   const overallOk = steps.every((s) => s.ok);
 
