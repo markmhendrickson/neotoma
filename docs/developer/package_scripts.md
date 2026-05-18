@@ -1,3 +1,8 @@
+---
+title: npm script-prefix convention
+summary: "Canonical npm script taxonomy lives in [`docs/developer/npm_scripts.md`](npm_scripts.md)."
+---
+
 # npm script-prefix convention
 
 Canonical npm script taxonomy lives in [`docs/developer/npm_scripts.md`](npm_scripts.md).

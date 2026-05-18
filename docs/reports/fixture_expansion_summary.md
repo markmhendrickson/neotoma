@@ -1,3 +1,8 @@
+---
+title: Fixture Expansion Implementation Summary
+summary: "Generated: 2026-01-22"
+---
+
 # Fixture Expansion Implementation Summary
 
 Generated: 2026-01-22

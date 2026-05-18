@@ -1,3 +1,8 @@
+---
+title: "Implementation Decision Log: FU-100"
+summary: "**Generated:** 2025-12-14T05:55:55.293Z ## Overview This log documents implementation decisions made for FU-100 and how each requirement from the specification was addressed. ## Implementation Decisions ### Decision 1: Rule-based schema ..."
+---
+
 # Implementation Decision Log: FU-100
 **Generated:** 2025-12-14T05:55:55.293Z
 ## Overview

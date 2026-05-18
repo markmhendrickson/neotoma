@@ -1,3 +1,8 @@
+---
+title: "Schema Extension: agent_session"
+summary: "- **Entity Type**: `agent_session` - **Version**: `v1` - **Status**: Proposed - **Purpose**: Track agent session history in Neotoma"
+---
+
 # Schema Extension: agent_session
 
 ## Overview

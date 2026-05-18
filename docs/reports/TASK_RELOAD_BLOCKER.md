@@ -1,3 +1,8 @@
+---
+title: Task Reload Blocker
+summary: "**Date**: 2026-01-14 **Issue**: BigInt serialization error when storing tasks from parquet file"
+---
+
 # Task Reload Blocker
 
 **Date**: 2026-01-14  

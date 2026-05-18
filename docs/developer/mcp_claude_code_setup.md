@@ -1,3 +1,8 @@
+---
+title: Claude Code MCP Setup Guide
+summary: This guide explains how to connect the Neotoma MCP server to Claude Code for localhost agent integration.
+---
+
 # Claude Code MCP Setup Guide
 
 This guide explains how to connect the Neotoma MCP server to Claude Code for localhost agent integration.

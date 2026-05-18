@@ -1,3 +1,8 @@
+---
+title: Github Release Supplement
+summary: "**Shipped scope:** Git tag **`v0.4.1`** is at **`8081ee5`** (`Release v0.4.1: incremental deploy (marketing site)`). Narrative and `release-notes:render --tag v0.4.1` use range **`v0.4.0..v0.4.1`**."
+---
+
 **Shipped scope:** Git tag **`v0.4.1`** is at **`8081ee5`** (`Release v0.4.1: incremental deploy (marketing site)`). Narrative and `release-notes:render --tag v0.4.1` use range **`v0.4.0..v0.4.1`**.
 
 **Post-tag `dev` (not in the `v0.4.1` tag):** `5258b9f3` — `fix(site): keep record-types headline tail on one line`. Ship as **`v0.4.2`** (or cherry-pick) if that fix should ride with npm/GitHub users on the same semver.

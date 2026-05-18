@@ -1,3 +1,8 @@
+---
+title: Search Components
+summary: "**Search Input:**"
+---
+
 # Search Components
 
 ## Advanced Search UI (FU-600)

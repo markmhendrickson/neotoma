@@ -1,3 +1,8 @@
+---
+title: Windsurf MCP Setup Guide
+summary: "This guide covers connecting Windsurf (Codeium) to Neotoma through MCP. Windsurf reads `~/.codeium/windsurf/mcp_config.json` (macOS/Linux) or `%APPDATA%\Codeium\Windsurf\mcp_config.json` (Windows) at startup and supports the same `mcpSer..."
+---
+
 # Windsurf MCP Setup Guide
 
 This guide covers connecting Windsurf (Codeium) to Neotoma through MCP. Windsurf reads `~/.codeium/windsurf/mcp_config.json` (macOS/Linux) or `%APPDATA%\Codeium\Windsurf\mcp_config.json` (Windows) at startup and supports the same `mcpServers` format as Cursor.

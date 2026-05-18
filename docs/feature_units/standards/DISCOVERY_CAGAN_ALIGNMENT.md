@@ -1,3 +1,7 @@
+---
+title: Discovery Process Alignment with Marty Cagan Principles
+---
+
 # Discovery Process Alignment with Marty Cagan Principles
 ## Cagan's Four Product Risks
 ### 1. Value Risk: Will users buy or choose to use this?

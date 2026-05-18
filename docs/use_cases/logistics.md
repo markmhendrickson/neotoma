@@ -1,3 +1,8 @@
+---
+title: "Logistics & supply chain"
+summary: "Supply chain decisions involve complex constraint evaluation — carrier availability, cost thresholds, delivery windows, capacity limits — that change continuously. When a routing decision leads to a delay or cost overrun, operations team..."
+---
+
 # Logistics & supply chain
 
 Supply chain decisions involve complex constraint evaluation — carrier availability, cost thresholds, delivery windows, capacity limits — that change continuously. When a routing decision leads to a delay or cost overrun, operations teams need to understand what constraints the system evaluated and why it chose a specific path. Neotoma provides constraint snapshots, routing provenance, and inventory position history, enabling logistics teams and AI agents to reconstruct the full decision context at any routing choice point, including the constraints that were active, the alternatives that were evaluated, and the inventory positions that informed the decision.

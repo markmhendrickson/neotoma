@@ -1,3 +1,8 @@
+---
+title: Dark Mode
+summary: "**Default:** System preference (respects `prefers-color-scheme`)"
+---
+
 # Dark Mode
 
 ## Dark Mode Strategy

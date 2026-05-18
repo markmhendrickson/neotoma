@@ -1,3 +1,8 @@
+---
+title: Agent Feedback Pipeline (DEPRECATED)
+summary: "> **This subsystem has been replaced by the GitHub Issues integration.** > See the new system at `src/services/issues/` and the MCP tools `submit_issue`, `add_issue_message`, `get_issue_status`, `sync_issues`."
+---
+
 # Agent Feedback Pipeline (DEPRECATED)
 
 > **This subsystem has been replaced by the GitHub Issues integration.**

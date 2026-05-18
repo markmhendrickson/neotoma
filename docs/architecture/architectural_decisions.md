@@ -1,3 +1,8 @@
+---
+title: Neotoma Architectural Decisions
+summary: "**Authoritative Vocabulary:** [`docs/vocabulary/canonical_terms.md`](../vocabulary/canonical_terms.md)"
+---
+
 # Neotoma Architectural Decisions
 
 **Authoritative Vocabulary:** [`docs/vocabulary/canonical_terms.md`](../vocabulary/canonical_terms.md)

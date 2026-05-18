@@ -1,3 +1,8 @@
+---
+title: "Example: `github_release_supplement.md` (copy into `docs/releases/in_progress/<TAG>/`)"
+summary: Use this shape so releases stay scannable and reader-first.
+---
+
 # Example: `github_release_supplement.md` (copy into `docs/releases/in_progress/<TAG>/`)
 
 Use this shape so releases stay scannable and reader-first.

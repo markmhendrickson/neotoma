@@ -1,3 +1,8 @@
+---
+title: "Bounded Convergence — Reducing Agent-Layer Nondeterminism"
+summary: "**Reference:** [`docs/architecture/determinism.md`](./determinism.md) — Section 1.6 on agent-layer nondeterminism"
+---
+
 # Bounded Convergence — Reducing Agent-Layer Nondeterminism
 
 **Reference:** [`docs/architecture/determinism.md`](./determinism.md) — Section 1.6 on agent-layer nondeterminism

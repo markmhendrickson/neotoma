@@ -1,3 +1,8 @@
+---
+title: MCP OAuth Implementation
+summary: Details of the OAuth 2.0 Authorization Code flow with PKCE used by the Neotoma MCP server.
+---
+
 # MCP OAuth Implementation
 
 Details of the OAuth 2.0 Authorization Code flow with PKCE used by the Neotoma MCP server.

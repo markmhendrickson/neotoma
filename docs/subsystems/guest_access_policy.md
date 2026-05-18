@@ -1,3 +1,8 @@
+---
+title: Guest Access Policy
+summary: "Guest access policies control what AAuth-verified callers — who are _not_ admitted via a specific `agent_grant` — can do with each entity type. This is complementary to the per-agent grant system: grants whitelist specific agents, while ..."
+---
+
 # Guest Access Policy
 
 Guest access policies control what AAuth-verified callers — who are _not_ admitted via a specific `agent_grant` — can do with each entity type. This is complementary to the per-agent grant system: grants whitelist specific agents, while guest access policies define default capabilities for any authenticated guest.

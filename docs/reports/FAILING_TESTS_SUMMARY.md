@@ -1,3 +1,8 @@
+---
+title: Failing Tests Summary
+summary: "**Date**: 2026-01-15 **Total Failing**: 23/58 tests (40%)"
+---
+
 # Failing Tests Summary
 
 **Date**: 2026-01-15  

@@ -1,3 +1,8 @@
+---
+title: "CLI banner (session/REPL): show Prod/Dev counts with user data dir and no repo root"
+summary: "This doc covers the **remaining** fix for the intro banner when using a user-level data dir with no project root. The **no-session** path is described in [cli-banner-user-data-dir-fix.md](./cli-banner-user-data-dir-fix.md). Here we fix t..."
+---
+
 # CLI banner (session/REPL): show Prod/Dev counts with user data dir and no repo root
 
 This doc covers the **remaining** fix for the intro banner when using a user-level data dir with no project root. The **no-session** path is described in [cli-banner-user-data-dir-fix.md](./cli-banner-user-data-dir-fix.md). Here we fix the **session/REPL** path so the banner shows counts when the user is in the REPL (`neotoma>` prompt) and was started without a repo root.

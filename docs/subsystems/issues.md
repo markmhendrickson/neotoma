@@ -1,3 +1,8 @@
+---
+title: Issues
+summary: "The Issues subsystem is the operator-canonical pipeline for collaborative bug, doc, and feature tracking, backed by Neotoma `issue` entities (and their `conversation` threads) plus an optional GitHub Issues mirror for discoverability. It..."
+---
+
 # Issues
 
 The Issues subsystem is the operator-canonical pipeline for collaborative bug, doc, and feature tracking, backed by Neotoma `issue` entities (and their `conversation` threads) plus an optional GitHub Issues mirror for discoverability. It replaces the deprecated custom feedback pipeline (see [`agent_feedback_pipeline.md`](agent_feedback_pipeline.md) for migration and historical context).

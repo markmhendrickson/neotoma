@@ -1,3 +1,8 @@
+---
+title: Neotoma Ingestion State Machine
+summary: "*(Canonical States, Transitions, and UI Mapping)* ## Ingestion State Machine ```mermaid %%{init: {'theme':'neutral'}}%% stateDiagram-v2 [*] --> Pending Pending --> Processing: start_ingestion Processing --> Extracting: text_extracted Ext..."
+---
+
 # Neotoma Ingestion State Machine
 *(Canonical States, Transitions, and UI Mapping)*
 ## Ingestion State Machine

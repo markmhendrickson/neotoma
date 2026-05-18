@@ -1,3 +1,8 @@
+---
+title: "Release v0.2.0 — Status"
+summary: "**Release**: Minimal Ingestion + Correction Loop **Release Type**: Not Marketed **Deployment**: Production (neotoma.io) **Status**: `in_testing` **Last Updated**: 2025-12-31"
+---
+
 # Release v0.2.0 — Status
 **Release**: Minimal Ingestion + Correction Loop  
 **Release Type**: Not Marketed  

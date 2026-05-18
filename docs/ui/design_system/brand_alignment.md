@@ -1,3 +1,8 @@
+---
+title: Brand Alignment
+summary: "**Minimal:**"
+---
+
 # Brand Alignment
 
 ## Design Principles Applied

@@ -1,3 +1,8 @@
+---
+title: "Neotoma security audit — 2026-04-22"
+summary: "Scope: read-only static review of the Neotoma repo (`src/`, `services/agent-site/`, `frontend/`, `inspector/`, `scripts/`, top-level configs) plus `npm audit --production`. Remediation pass landed in the same working tree; see the **Reso..."
+---
+
 # Neotoma security audit — 2026-04-22
 
 Scope: read-only static review of the Neotoma repo (`src/`, `services/agent-site/`,

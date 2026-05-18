@@ -1,3 +1,8 @@
+---
+title: "Agentic Eval — Three-Tier Framework"
+summary: "Neotoma's agentic test framework verifies that agents (and the harness hooks that surround them) actually obey the Neotoma turn lifecycle contract: bounded retrieval → user-phase store → tool work → closing assistant store. The framework..."
+---
+
 # Agentic Eval — Three-Tier Framework
 
 Neotoma's agentic test framework verifies that agents (and the harness

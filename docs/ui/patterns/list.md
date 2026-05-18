@@ -1,3 +1,8 @@
+---
+title: "UI Pattern: List View"
+summary: "*(Tables, Grids, and Filterable Lists)* ## Purpose List pattern for displaying collections of records, entities, or events. ## When to Use - Displaying multiple records - Browsing timeline events - Entity list views - Search results ## D..."
+---
+
 # UI Pattern: List View
 *(Tables, Grids, and Filterable Lists)*
 ## Purpose

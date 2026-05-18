@@ -1,3 +1,8 @@
+---
+title: DEV_CONNECTOR_SECRET_KEY Explanation
+summary: "`DEV_CONNECTOR_SECRET_KEY` is a cryptographic key used to encrypt and decrypt OAuth tokens stored in the database for external connectors (integrations with third-party services)."
+---
+
 # DEV_CONNECTOR_SECRET_KEY Explanation
 
 ## What is it?

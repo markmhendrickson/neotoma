@@ -1622,6 +1622,17 @@ components:
           type: string
           nullable: true
           description: Interpretation row linked to observations when the request supplied an explicit interpretation block.
+        no_schema_entity_types:
+          type: array
+          items:
+            type: string
+          description: |
+            Entity types whose payloads were routed to raw_fragments because no
+            schema could be found or auto-registered. Each element is a distinct
+            entity_type string. An empty array (or absent field) means all entity
+            types had an active schema and were processed normally. When this list
+            is non-empty, run `register_schema` for each type to create a schema
+            so future ingestion produces observations instead of fragments.
     ResolverWarning:
       type: object
       description: |

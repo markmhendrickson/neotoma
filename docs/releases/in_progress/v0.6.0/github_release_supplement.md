@@ -1,3 +1,8 @@
+---
+title: Github Release Supplement
+summary: "v0.6.0 is an agent-runtime hardening release: AAuth-aware attribution and a `/session` preflight land across every write surface; closed OpenAPI request shapes now reject unknown top-level fields with a structured `ERR_UNKNOWN_FIELD`; wr..."
+---
+
 v0.6.0 is an agent-runtime hardening release: AAuth-aware attribution and a `/session` preflight land across every write surface; closed OpenAPI request shapes now reject unknown top-level fields with a structured `ERR_UNKNOWN_FIELD`; writes can be classified by `observation_source`; multi-agent chat becomes first-class via `conversation_message` + `sender_kind`; over-merged entities are recoverable through `POST /entities/split`; an agents directory and richer provenance reads land; a full submit→queue→triage→mirror→upgrade/verify feedback pipeline ships (local store, HTTP transport, and a Netlify-hosted `agent-site` relay at `agent.neotoma.io`); fleet snapshot export + drift tooling lands via `neotoma snapshots`; and API security defaults tighten (Helmet CSP, per-user write rate limiting, timing-safe token compare, socket-based loopback classification). The previously planned `neotoma api start --env prod` default-runner flip ships in the same release.
 
 ## Highlights

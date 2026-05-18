@@ -1,3 +1,8 @@
+---
+title: Github Release Supplement
+summary: "v0.9.0 delivers the bundled Inspector, a unified turn-telemetry pipeline across all hook harnesses, the self-contained local feedback pipeline, and sandbox ephemeral sessions — all aimed at making a fresh `npm install -g neotoma` immedia..."
+---
+
 v0.9.0 delivers the bundled Inspector, a unified turn-telemetry pipeline across all hook harnesses, the self-contained local feedback pipeline, and sandbox ephemeral sessions — all aimed at making a fresh `npm install -g neotoma` immediately useful without external configuration.
 
 ## Highlights

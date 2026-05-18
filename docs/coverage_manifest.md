@@ -1,3 +1,8 @@
+---
+title: Documentation coverage manifest
+summary: "A reviewable map of every code surface in the repo to its primary `docs/` source-of-truth. Generated as the spine of the docs full-coverage audit (see [.cursor/plans/docs_full-coverage_audit_760791a8.plan.md](../.cursor/plans/docs_full-c..."
+---
+
 # Documentation coverage manifest
 
 A reviewable map of every code surface in the repo to its primary `docs/` source-of-truth. Generated as the spine of the docs full-coverage audit (see [.cursor/plans/docs_full-coverage_audit_760791a8.plan.md](../.cursor/plans/docs_full-coverage_audit_760791a8.plan.md)).

@@ -1,3 +1,8 @@
+---
+title: PR Review Reading List
+summary: This document is the authoritative reading list for the automated Claude PR reviewer. It tells the reviewer which docs to read and when.
+---
+
 # PR Review Reading List
 
 This document is the authoritative reading list for the automated Claude PR reviewer. It tells the reviewer which docs to read and when.

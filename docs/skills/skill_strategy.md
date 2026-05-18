@@ -1,3 +1,8 @@
+---
+title: Skill strategy
+summary: "Canonical reference for how Neotoma treats agent skills — naming, publishing, installation, site documentation, and governance."
+---
+
 # Skill strategy
 
 Canonical reference for how Neotoma treats agent skills — naming, publishing, installation, site documentation, and governance.

@@ -1,3 +1,8 @@
+---
+title: DATA_DIR Schema Alignment Report
+summary: "**Date:** 2025-01-27 **Purpose:** Align `src/services/schema_definitions.ts` with entity types found in `$DATA_DIR`"
+---
+
 # DATA_DIR Schema Alignment Report
 
 **Date:** 2025-01-27  

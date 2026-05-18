@@ -1,3 +1,7 @@
+---
+title: Code Conventions Review Summary
+---
+
 # Code Conventions Review Summary
 ## Overview
 Reviewed the Neotoma codebase against the newly established code conventions in `docs/conventions/code_conventions.md`.

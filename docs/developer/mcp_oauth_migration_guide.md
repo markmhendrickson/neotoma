@@ -1,3 +1,8 @@
+---
+title: MCP OAuth Migration Guide
+summary: This guide helps you migrate from session token authentication (deprecated) to OAuth 2.0 for MCP connections.
+---
+
 # MCP OAuth Migration Guide
 
 ## Overview

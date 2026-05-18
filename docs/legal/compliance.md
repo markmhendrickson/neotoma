@@ -1,3 +1,8 @@
+---
+title: "Neotoma Legal & Compliance"
+summary: "**Reference:** `docs/subsystems/deletion.md` — Complete deletion architecture and procedures"
+---
+
 # Neotoma Legal & Compliance
 ## Scope
 This document covers:

@@ -1,3 +1,8 @@
+---
+title: Neotoma ICP Profiles
+summary: "*(Detailed Profiles for All Target User Segments)*"
+---
+
 # Neotoma ICP Profiles
 *(Detailed Profiles for All Target User Segments)*
 

@@ -1,3 +1,8 @@
+---
+title: Error Debug Instructions
+summary: Please process all pending errors in the error queue.
+---
+
 # Error Debug Instructions
 
 Please process all pending errors in the error queue.

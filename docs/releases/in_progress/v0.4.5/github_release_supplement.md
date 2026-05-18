@@ -1,3 +1,8 @@
+---
+title: Github Release Supplement
+summary: "This release turns Neotoma's onboarding into an install-first flow and adds the first reusable integration surface for hook-driven agents, alongside a deterministic markdown mirror and bounded `MEMORY.md` export."
+---
+
 This release turns Neotoma's onboarding into an install-first flow and adds the first reusable integration surface for hook-driven agents, alongside a deterministic markdown mirror and bounded `MEMORY.md` export.
 
 ## What changed for npm package users

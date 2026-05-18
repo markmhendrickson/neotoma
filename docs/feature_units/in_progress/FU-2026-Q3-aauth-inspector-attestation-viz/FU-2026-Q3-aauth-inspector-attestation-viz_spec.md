@@ -1,3 +1,8 @@
+---
+title: "Feature Unit: FU-2026-Q3-aauth-inspector-attestation-viz — Inspector Attestation Envelope Visualisation"
+summary: "**Status:** In Progress **Priority:** P2 (operator UX) **Risk Level:** Low (frontend-only, no schema or write-path changes) **Target Release:** v0.9.0 **Owner:** Engineering **Created:** 2026-04-27 **Last Updated:** 2026-04-27"
+---
+
 # Feature Unit: FU-2026-Q3-aauth-inspector-attestation-viz — Inspector Attestation Envelope Visualisation
 
 **Status:** In Progress

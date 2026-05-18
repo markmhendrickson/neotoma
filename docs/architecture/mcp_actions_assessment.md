@@ -1,3 +1,8 @@
+---
+title: MCP Actions Architecture Assessment
+summary: "**Date:** 2026-01-01 **Status:** Assessment Complete"
+---
+
 # MCP Actions Architecture Assessment
 
 **Date:** 2026-01-01  

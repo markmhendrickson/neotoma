@@ -1,3 +1,8 @@
+---
+title: Parquet MCP Resources Specification
+summary: "**Date**: 2026-01-15 **Status**: 📋 **SPECIFICATION** - Implementation guide for adding resources to parquet MCP server"
+---
+
 # Parquet MCP Resources Specification
 
 **Date**: 2026-01-15  

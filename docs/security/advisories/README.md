@@ -1,3 +1,8 @@
+---
+title: Neotoma security advisories
+summary: "This directory is the in-repo index of security advisories that affect a published Neotoma version. Each advisory is a dated Markdown file (`YYYY-MM-DD-<slug>.md`) so the chronological ordering matches the disclosure timeline."
+---
+
 # Neotoma security advisories
 
 This directory is the in-repo index of security advisories that affect a published Neotoma version. Each advisory is a dated Markdown file (`YYYY-MM-DD-<slug>.md`) so the chronological ordering matches the disclosure timeline.

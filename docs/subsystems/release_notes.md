@@ -1,3 +1,8 @@
+---
+title: Release notes
+summary: Helpers used by the release pipeline to render human-readable changelog text and to gate semver-compatibility checks between the local CLI / package and a remote Neotoma instance (peer or hosted).
+---
+
 # Release notes
 
 Helpers used by the release pipeline to render human-readable changelog text and to gate semver-compatibility checks between the local CLI / package and a remote Neotoma instance (peer or hosted).

@@ -1,3 +1,8 @@
+---
+title: Continue MCP Setup Guide
+summary: "This guide covers connecting Continue to Neotoma through MCP. Continue reads `~/.continue/config.json` at startup and supports MCP servers via the `mcpServers` key."
+---
+
 # Continue MCP Setup Guide
 
 This guide covers connecting Continue to Neotoma through MCP. Continue reads `~/.continue/config.json` at startup and supports MCP servers via the `mcpServers` key.

@@ -1,3 +1,8 @@
+---
+title: Github Release Supplement
+summary: "v0.7.0 turns the hosted Neotoma story into a coherent product surface: a public sandbox with weekly resets and abuse reporting, a mode-aware root landing page for hosted instances, admin feedback proxying for the Inspector, new hosted/co..."
+---
+
 v0.7.0 turns the hosted Neotoma story into a coherent product surface: a public sandbox with weekly resets and abuse reporting, a mode-aware root landing page for hosted instances, admin feedback proxying for the Inspector, new hosted/connect marketing routes, and the deployment/runtime plumbing to operate all of it.
 
 ## Ship constraints

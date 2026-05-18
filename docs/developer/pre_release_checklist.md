@@ -1,3 +1,8 @@
+---
+title: Pre-Release Validation Checklist
+summary: "**Purpose:** Automated and manual checks run before release sign-off (Checkpoint 2). Used by Step 3.6 of the release workflow."
+---
+
 # Pre-Release Validation Checklist
 
 **Purpose:** Automated and manual checks run before release sign-off (Checkpoint 2). Used by Step 3.6 of the release workflow.

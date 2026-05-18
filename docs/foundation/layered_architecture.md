@@ -1,3 +1,8 @@
+---
+title: Neotoma as the State Layer
+summary: "Neotoma is the **state layer**: a deterministic, event-sourced, reducer-driven world model. Anything sitting above Neotoma is an **operational layer** — agents, pipelines, orchestration systems, custom applications. The boundary is a sin..."
+---
+
 # Neotoma as the State Layer
 
 ## Core architectural model

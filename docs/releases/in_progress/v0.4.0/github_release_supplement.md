@@ -1,3 +1,8 @@
+---
+title: Github Release Supplement
+summary: "**Draft release summary:** Neotoma `0.4.0` is planned as the first npm release after `0.3.10`, combining the unpublished `v0.3.11` train with the current `dev` work. The headline is a clearer evaluation-first site, expanded use-case posi..."
+---
+
 **Draft release summary:** Neotoma `0.4.0` is planned as the first npm release after `0.3.10`, combining the unpublished `v0.3.11` train with the current `dev` work. The headline is a clearer evaluation-first site, expanded use-case positioning, and a larger round of CLI/runtime/schema changes that justify a minor release instead of another patch.
 
 **Release-prep note:** This draft assumes the remaining `dev` changes are committed before tagging `v0.4.0`. Render GitHub Release notes with **`--compare-base v0.3.10`** so the compare link matches what npm users actually upgrade from.

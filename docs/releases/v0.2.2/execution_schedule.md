@@ -1,3 +1,8 @@
+---
+title: "Release v0.2.2 — Execution Schedule"
+summary: "**Release ID**: v0.2.2 **Release Name**: list_capabilities MCP Action **Release Type**: Not Marketed **Deployment**: Production (neotoma.io) **Generated**: 2025-12-31 ## Execution Strategy - **Type**: Single Feature Unit - **Max Parallel..."
+---
+
 # Release v0.2.2 — Execution Schedule
 **Release ID**: v0.2.2  
 **Release Name**: list_capabilities MCP Action  

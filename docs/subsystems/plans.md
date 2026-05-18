@@ -1,3 +1,8 @@
+---
+title: Plans
+summary: "The Plans subsystem makes plans first-class Neotoma entities. A `plan` row stores the full markdown body of a plan **and** structured metadata (identity, status, todos, source linkage, reproduction environment). One generic schema covers..."
+---
+
 # Plans
 
 The Plans subsystem makes plans first-class Neotoma entities. A `plan` row stores the full markdown body of a plan **and** structured metadata (identity, status, todos, source linkage, reproduction environment). One generic schema covers three categories of plans:

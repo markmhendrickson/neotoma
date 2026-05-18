@@ -1,3 +1,8 @@
+---
+title: Documentation Consistency Fixes
+summary: "name: Fix Doc Inconsistencies overview: Resolve documentation inconsistencies between v0.2.0 release plan and foundational docs by updating determinism doctrine, sources.md scope, observation_architecture provenance chain, and consolidat..."
+---
+
 name: Fix Doc Inconsistencies
 overview: Resolve documentation inconsistencies between v0.2.0 release plan and foundational docs by updating determinism doctrine, sources.md scope, observation_architecture provenance chain, and consolidating validation contract.
 todos:

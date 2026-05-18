@@ -1,3 +1,8 @@
+---
+title: General Release Readiness Criteria
+summary: Criteria for exiting the developer release and entering general release. The developer release exists to validate architecture, ICP, and activation path. General release means Neotoma can sustain unassisted discovery, adoption, and reten...
+---
+
 # General Release Readiness Criteria
 
 Criteria for exiting the developer release and entering general release. The developer release exists to validate architecture, ICP, and activation path. General release means Neotoma can sustain unassisted discovery, adoption, and retention at scale.

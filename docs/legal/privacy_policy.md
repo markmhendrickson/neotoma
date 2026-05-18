@@ -1,3 +1,8 @@
+---
+title: Neotoma Privacy Policy (Post-Incorporation Template)
+summary: "> **Status:** Draft template. **Not currently published.** > > The live pre-incorporation privacy notice for `neotoma.io` is > [`site_privacy_notice.md`](./site_privacy_notice.md) and is rendered at > <https://neotoma.io/privacy>. This d..."
+---
+
 # Neotoma Privacy Policy (Post-Incorporation Template)
 
 > **Status:** Draft template. **Not currently published.**

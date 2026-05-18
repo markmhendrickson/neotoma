@@ -1,3 +1,8 @@
+---
+title: ChatGPT Apps Validation and Submission Checklist
+summary: Use this checklist for release gating before app submission.
+---
+
 # ChatGPT Apps Validation and Submission Checklist
 
 Use this checklist for release gating before app submission.

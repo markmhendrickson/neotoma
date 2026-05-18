@@ -1,3 +1,8 @@
+---
+title: README Generation Framework
+summary: "**Reference:** `README.md` — Project overview and entry point ## README Purpose and Audience **Primary Audiences:** 1. **New developers** — Quick onboarding, setup, understanding what Neotoma is 2. **Potential users** — Understanding val..."
+---
+
 # README Generation Framework
 **Reference:** `README.md` — Project overview and entry point
 ## README Purpose and Audience

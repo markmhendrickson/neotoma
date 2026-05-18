@@ -1,3 +1,8 @@
+---
+title: Sample Parquet Import Test Results
+summary: "**Date**: 2026-01-14 **Status**: ✅ **ALL TESTS PASSED**"
+---
+
 # Sample Parquet Import Test Results
 
 **Date**: 2026-01-14  

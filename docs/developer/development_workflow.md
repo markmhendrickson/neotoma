@@ -1,3 +1,8 @@
+---
+title: Development Workflow Guide
+summary: "**Cursor IDE — disable \"Made-with: Cursor\" trailer:** Cursor adds a `--trailer \"Made-with: Cursor\"` to commits made through its UI or agent. To turn this off: **Cursor Settings → Agents → Attribution** and toggle Attribution off. (See [C..."
+---
+
 # Development Workflow Guide
 ## Scope
 This document covers:

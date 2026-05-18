@@ -1,3 +1,8 @@
+---
+title: Release Report Specification
+summary: "**Purpose:** Defines the structure, format, and generation rules for release build reports. **Related Documents:** - [`release_workflow.md`](./release_workflow.md) — Release workflow integration - [`discovery_process.md`](./discovery_pro..."
+---
+
 # Release Report Specification
 **Purpose:** Defines the structure, format, and generation rules for release build reports.
 **Related Documents:**

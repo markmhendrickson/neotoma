@@ -1,3 +1,8 @@
+---
+title: Schema Redundancy Analysis
+summary: "Generated: 2026-01-22"
+---
+
 # Schema Redundancy Analysis
 
 Generated: 2026-01-22

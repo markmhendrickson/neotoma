@@ -1,3 +1,8 @@
+---
+title: "Neotoma [Storing](#storing) Pipeline — [Source](#source) Processing and Truth [Extraction](#extraction)"
+summary: "**Key Points:** - **AI interpretation** (via `interpretation.ts` service): Non-deterministic but auditable; interpretation config (model, temperature, prompt_hash) logged - **System-level idempotence**: Canonicalization + hashing ensures..."
+---
+
 # Neotoma [Storing](#storing) Pipeline — [Source](#source) Processing and Truth [Extraction](#extraction)
 ## Sources-First Architecture
 Neotoma uses a **sources-first architecture** that decouples raw content storage from [interpretation](#interpretation):

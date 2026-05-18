@@ -1,3 +1,8 @@
+---
+title: ChatGPT Apps Auth and Security Notes
+summary: "This document captures Neotoma's auth/security expectations for ChatGPT Apps connector deployments."
+---
+
 # ChatGPT Apps Auth and Security Notes
 
 This document captures Neotoma's auth/security expectations for ChatGPT Apps connector deployments.

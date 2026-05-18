@@ -1,3 +1,7 @@
+---
+title: Failure gallery
+---
+
 # Failure gallery
 ## Scope
 This document catalogs deterministic failure modes for ingestion, MCP actions, and reducers. It does not define remediation playbooks or release processes.

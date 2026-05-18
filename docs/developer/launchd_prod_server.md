@@ -1,3 +1,8 @@
+---
+title: Run Neotoma production HTTP API at login (macOS)
+summary: "Use a LaunchAgent so `npm run start:server:prod` runs when you log in and restarts after reboot. That npm recipe builds the server, picks an HTTP port from 3180, sets `NEOTOMA_ENV=production`, and runs the same `start:server` entrypoint ..."
+---
+
 # Run Neotoma production HTTP API at login (macOS)
 
 Use a LaunchAgent so `npm run start:server:prod` runs when you log in and restarts after reboot. That npm recipe builds the server, picks an HTTP port from 3180, sets `NEOTOMA_ENV=production`, and runs the same `start:server` entrypoint as other environments.

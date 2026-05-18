@@ -1,3 +1,8 @@
+---
+title: Manual Regression Checklist
+summary: This checklist documents the product areas that still require manual verification after the automated suites pass. Use it for pre-release checks, risky refactors, and any change that touches auth, storage, routing, or deployment behavior.
+---
+
 # Manual Regression Checklist
 
 ## Purpose

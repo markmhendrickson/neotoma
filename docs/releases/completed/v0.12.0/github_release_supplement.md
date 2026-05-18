@@ -1,3 +1,8 @@
+---
+title: Github Release Supplement
+summary: "v0.12.0 turns Neotoma into a multi-instance State Layer. Substrate subscriptions, peer-to-peer sync, and a first-class issues subsystem replace the legacy feedback path; the auth hardening introduced in v0.11.1 is carried forward here an..."
+---
+
 v0.12.0 turns Neotoma into a multi-instance State Layer. Substrate subscriptions, peer-to-peer sync, and a first-class issues subsystem replace the legacy feedback path; the auth hardening introduced in v0.11.1 is carried forward here and extended with pre-release gates G1–G5, stricter proxy/loopback handling, and clearer operator guidance; and the dev/prod LaunchAgents, MCP stdio shims, and CLI surfaces are reworked to stop orphaning processes, stop drifting off canonical ports, and give operators a real `processes servers` view, plans capture/list, and a doctor that flags risky data directories.
 
 ## Highlights

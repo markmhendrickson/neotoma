@@ -1,3 +1,8 @@
+---
+title: Github Release Supplement
+summary: "v0.12.2 reconciles the post-v0.12.1 work that landed on `main` between 2026-05-12 and 2026-05-15. It documents one previously-undeclared MCP response shape change (`add_issue_message` `remote_submission_error`), restores a missing struct..."
+---
+
 v0.12.2 reconciles the post-v0.12.1 work that landed on `main` between 2026-05-12 and 2026-05-15. It documents one previously-undeclared MCP response shape change (`add_issue_message` `remote_submission_error`), restores a missing structured `hint` envelope on a CLI tightening (`--base-url`/`--api-only` on access mutations), redacts client IPs from the tunnel rejection log line, and seeds the supplement scaffolding the release process expects.
 
 ## Highlights

@@ -1,3 +1,8 @@
+---
+title: Legacy Support Removal Summary
+summary: "**Date:** 2025-01-27 **File:** `src/server.ts`"
+---
+
 # Legacy Support Removal Summary
 
 **Date:** 2025-01-27  

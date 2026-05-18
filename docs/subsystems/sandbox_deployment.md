@@ -1,3 +1,8 @@
+---
+title: Sandbox Neotoma Deployment
+summary: "*(Public read/write demo at `sandbox.neotoma.io`)*"
+---
+
 # Sandbox Neotoma Deployment
 *(Public read/write demo at `sandbox.neotoma.io`)*
 

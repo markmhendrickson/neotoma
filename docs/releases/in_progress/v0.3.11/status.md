@@ -1,3 +1,8 @@
+---
+title: "Release v0.3.11 — Status"
+summary: "**Release**: Outstanding Changes Consolidation **Release Type**: Not Marketed **Deployment**: Production (staging-first rollout) **Status**: `ready_for_deployment` **Last Updated**: 2026-03-20"
+---
+
 # Release v0.3.11 — Status
 
 **Release**: Outstanding Changes Consolidation  

@@ -1,3 +1,8 @@
+---
+title: Smithery (external HTTPS URL)
+summary: "Neotoma already serves **Streamable HTTP MCP** on the HTTP actions server at **`/mcp`** (`src/actions.ts`). For Smithery “bring your own URL”, publish the **HTTPS base that reaches that server**, including path **`/mcp`**."
+---
+
 # Smithery (external HTTPS URL)
 
 Neotoma already serves **Streamable HTTP MCP** on the HTTP actions server at **`/mcp`** (`src/actions.ts`). For Smithery “bring your own URL”, publish the **HTTPS base that reaches that server**, including path **`/mcp`**.

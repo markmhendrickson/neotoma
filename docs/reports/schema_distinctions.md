@@ -1,3 +1,8 @@
+---
+title: Schema Type Distinctions and Redundancy Analysis
+summary: "Generated: 2026-01-22"
+---
+
 # Schema Type Distinctions and Redundancy Analysis
 
 Generated: 2026-01-22

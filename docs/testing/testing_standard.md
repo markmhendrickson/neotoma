@@ -1,3 +1,8 @@
+---
+title: Neotoma Testing Standard
+summary: "*(Test Types, Coverage Requirements, and Testing Strategy)* ## Test Types ### Unit Tests **Scope:** Pure functions, deterministic logic **Examples:** - `extractFieldsForFinancialRecord(text)` - `generateEntityId(type, name)` - `calculate..."
+---
+
 # Neotoma Testing Standard
 *(Test Types, Coverage Requirements, and Testing Strategy)*
 ## Test Types

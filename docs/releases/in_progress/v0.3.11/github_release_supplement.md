@@ -1,3 +1,8 @@
+---
+title: Github Release Supplement
+summary: "**Note:** Git tag **`v0.3.11`** describes this train, but **`neotoma@0.3.11` was not published to npm**; registry users last had **`0.3.10`** until **`0.4.0`**. This file remains the curated narrative for the **`v0.3.10…v0.3.11`** git ra..."
+---
+
 **Note:** Git tag **`v0.3.11`** describes this train, but **`neotoma@0.3.11` was not published to npm**; registry users last had **`0.3.10`** until **`0.4.0`**. This file remains the curated narrative for the **`v0.3.10…v0.3.11`** git range.
 
 Patch release (git **`v0.3.11`**): large **CLI + HTTP action + MCP runtime** hardening, **instruction / OpenAPI** alignment, plus the **docs site** and **ChatGPT / MCP** integration pages. The single release commit bundles prior work on retrieval parity, entity query paths, and agent-facing rules—not “docs only.”

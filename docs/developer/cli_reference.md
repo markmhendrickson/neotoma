@@ -1,3 +1,8 @@
+---
+title: Neotoma CLI reference
+summary: This document covers CLI commands, options, configuration, and developer facing details. It does not cover MCP behavior or server side implementation beyond public API references.
+---
+
 # Neotoma CLI reference
 
 ## Scope

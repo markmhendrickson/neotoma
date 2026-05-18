@@ -1,3 +1,8 @@
+---
+title: Import and Interpretation Debug Guide
+summary: This document helps agents and developers debug Neotoma file import, AI interpretation, and entity/snapshot behavior. It summarizes common root causes and fixes.
+---
+
 # Import and Interpretation Debug Guide
 
 ## Scope

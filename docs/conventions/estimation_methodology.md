@@ -1,3 +1,7 @@
+---
+title: Estimation Methodology
+---
+
 # Estimation Methodology
 ## Core Principle: Velocity-Based Estimation
 **Always base estimates on actual project velocity, not theoretical calculations.**

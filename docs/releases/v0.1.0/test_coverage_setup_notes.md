@@ -1,3 +1,7 @@
+---
+title: Test Coverage Setup Notes
+---
+
 # Test Coverage Setup Notes
 ## Required Dependencies
 To run test coverage, install the vitest coverage package:

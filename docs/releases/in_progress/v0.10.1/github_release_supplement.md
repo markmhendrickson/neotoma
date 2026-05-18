@@ -1,3 +1,8 @@
+---
+title: Github Release Supplement
+summary: This hotfix preserves user-registered entity schemas when their type name overlaps a built-in alias.
+---
+
 This hotfix preserves user-registered entity schemas when their type name overlaps a built-in alias.
 
 ## Highlights

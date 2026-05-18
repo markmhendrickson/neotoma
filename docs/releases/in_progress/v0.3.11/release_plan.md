@@ -1,3 +1,8 @@
+---
+title: "Release v0.3.11 — Outstanding Changes Consolidation"
+summary: "- **Release ID**: `v0.3.11` - **Name**: Outstanding Changes Consolidation - **Release Type**: Not Marketed - **Goal**: Ship all currently outstanding repository changes in one coordinated patch release with explicit reliability validatio..."
+---
+
 # Release v0.3.11 — Outstanding Changes Consolidation
 
 ## 1. Release Overview

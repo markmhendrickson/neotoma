@@ -1,3 +1,8 @@
+---
+title: "Conversational UX Architecture Assessment — MCP-First Design Decision"
+summary: "**Migration complete:** 1. **ChatPanel removed:** Never present on `main`; only existed on the visualization feature branch which was closed without merging. 2. **suggest_visualization removed:** Not present on `main`; only existed on th..."
+---
+
 # Conversational UX Architecture Assessment — MCP-First Design Decision
 ## Scope
 This document covers:

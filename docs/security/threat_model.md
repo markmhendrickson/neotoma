@@ -1,3 +1,8 @@
+---
+title: "Neotoma threat model — channels covered by the pre-release security gates"
+summary: "**Status:** Track 1 baseline (covers the v0.11.1 Inspector auth-bypass class). Track 2 (advisory + rollout via subscriptions / peer / guest) extends the model with cross-instance notification and rollout obligations."
+---
+
 # Neotoma threat model — channels covered by the pre-release security gates
 
 **Status:** Track 1 baseline (covers the v0.11.1 Inspector auth-bypass class). Track 2 (advisory + rollout via subscriptions / peer / guest) extends the model with cross-instance notification and rollout obligations.

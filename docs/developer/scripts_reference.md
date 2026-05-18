@@ -1,3 +1,8 @@
+---
+title: "`scripts/` reference"
+summary: "Index of the helpers under `scripts/`. The directory holds 200+ files; this page groups them by family so contributors can find the right tool without scanning the directory tree. Each family entry links to the canonical doc that owns th..."
+---
+
 # `scripts/` reference
 
 Index of the helpers under `scripts/`. The directory holds 200+ files; this page groups them by family so contributors can find the right tool without scanning the directory tree. Each family entry links to the canonical doc that owns the underlying behavior so this page stays a router rather than a duplicated source-of-truth.

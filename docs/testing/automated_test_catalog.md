@@ -1,3 +1,8 @@
+---
+title: Automated test catalog
+summary: "This document does not cover: - Test quality policy - Fixture design standards - Feature-specific testing strategy - Historical audit narratives"
+---
+
 # Automated test catalog
 ## Scope
 This document summarizes repo-wide automated test coverage and inventories every automated test file in the repository. It does not define test-writing standards, fixture rules, or route coverage policy.
@@ -61,18 +66,18 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **366**
-- Backend and repo Vitest files: **333**
+- Total automated test files: **371**
+- Backend and repo Vitest files: **338**
 - Frontend Vitest files: **9**
 - Playwright spec files: **24**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 87 |
+| Vitest unit tests | 90 |
 | Vitest service tests | 33 |
 | Source-adjacent tests | 45 |
-| Vitest integration tests | 94 |
+| Vitest integration tests | 96 |
 | Vitest CLI tests | 55 |
 | Vitest contract tests | 10 |
 | Vitest security tests | 1 |
@@ -107,7 +112,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (87):**
+**Files (90):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -136,9 +141,11 @@ flowchart TD
 - `tests/unit/client_turn_report.test.ts`
 - `tests/unit/compliance_scorecard.test.ts`
 - `tests/unit/config_data_dir_resolution.test.ts`
+- `tests/unit/conversation_schema_bootstrap.test.ts`
 - `tests/unit/cursor_hooks_context.test.ts`
 - `tests/unit/cursor_hooks_external_data.test.ts`
 - `tests/unit/cursor_hooks_small_model.test.ts`
+- `tests/unit/docs_frontmatter_backfill.test.ts`
 - `tests/unit/docs_sidebar_nav.test.ts`
 - `tests/unit/drift_comparison.test.ts`
 - `tests/unit/duplicate_detection.test.ts`
@@ -194,6 +201,7 @@ flowchart TD
 - `tests/unit/substrate_event_bus.test.ts`
 - `tests/unit/timeline_events.test.ts`
 - `tests/unit/unknown_fields_guard.test.ts`
+- `tests/unit/validate_docs_frontmatter.test.ts`
 - `tests/unit/workout_session_schema.test.ts`
 
 ### Vitest service tests
@@ -293,7 +301,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (94):**
+**Files (96):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_resource_metadata.test.ts`
 - `tests/integration/aauth_revocation_e2e.test.ts`
@@ -329,6 +337,8 @@ flowchart TD
 - `tests/integration/guest_write_rate_limit.test.ts`
 - `tests/integration/hook_failure_hint.test.ts`
 - `tests/integration/inspector_bundled_mount.test.ts`
+- `tests/integration/interpretation_fragment_ordering.test.ts`
+- `tests/integration/interpretation_no_schema_fallback.test.ts`
 - `tests/integration/interpretation_store.test.ts`
 - `tests/integration/issue_37_event_schema_projection.test.ts`
 - `tests/integration/lexical_search.test.ts`

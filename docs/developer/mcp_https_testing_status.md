@@ -1,3 +1,8 @@
+---
+title: MCP HTTPS Testing Status
+summary: "**Date:** 2026-01-27 **Status:** ✅ **READY FOR TESTING**"
+---
+
 # MCP HTTPS Testing Status
 
 **Date:** 2026-01-27

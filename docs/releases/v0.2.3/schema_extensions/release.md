@@ -1,3 +1,8 @@
+---
+title: "Schema Extension: release"
+summary: "- **Entity Type**: `release` - **Version**: `v1` - **Status**: Proposed - **Purpose**: Track version release records in Neotoma"
+---
+
 # Schema Extension: release
 
 ## Overview

@@ -1,3 +1,8 @@
+---
+title: Neotoma Design System
+summary: _(Styles Based on Brand Needs and Tier 1 ICP Aesthetic Preferences)_
+---
+
 # Neotoma Design System
 
 _(Styles Based on Brand Needs and Tier 1 ICP Aesthetic Preferences)_

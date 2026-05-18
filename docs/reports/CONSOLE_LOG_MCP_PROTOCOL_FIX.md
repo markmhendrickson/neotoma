@@ -1,3 +1,8 @@
+---
+title: Console.log Breaking MCP Protocol - Fix
+summary: "**Date**: 2026-01-14 **Status**: ✅ **FIXED**"
+---
+
 # Console.log Breaking MCP Protocol - Fix
 
 **Date**: 2026-01-14  

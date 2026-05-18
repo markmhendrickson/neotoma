@@ -1,3 +1,8 @@
+---
+title: "Public site MDX (`docs/site/pages`)"
+summary: "**Authoring surface:** Allowlisted MDX for the marketing/docs SPA lives under `docs/site/pages/<locale>/`. Each registered page has a sibling **`.meta.json`** (schema: `frontend/src/site/mdx_page_meta.ts`). Prose and light layout live he..."
+---
+
 # Public site MDX (`docs/site/pages`)
 
 **Authoring surface:** Allowlisted MDX for the marketing/docs SPA lives under `docs/site/pages/<locale>/`. Each registered page has a sibling **`.meta.json`** (schema: `frontend/src/site/mdx_page_meta.ts`). Prose and light layout live here; heavy tables, charts, and complex widgets stay in **`frontend/src/components/`** and are imported from MDX when needed (**hybrid** pages).

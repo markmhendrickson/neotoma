@@ -1,3 +1,8 @@
+---
+title: "Neotoma Data Models: Global Commitments"
+summary: "Identity rule: `(user_id, subscriber_id, delivery_endpoint)` — not hash-based content IDs. Subscriptions are user-scoped and may be created, updated, or deleted by the user or the consumer agent."
+---
+
 # Neotoma Data Models: Global Commitments
 ## Three-Layer Truth Model
 Neotoma implements a three-layer truth model that decouples ingestion order from truth:

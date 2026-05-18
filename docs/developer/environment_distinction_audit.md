@@ -1,3 +1,8 @@
+---
+title: Environment distinction audit (dev vs prod)
+summary: This document records how the codebase distinguishes development from production (local SQLite, CLI, API) and what was audited or changed so dev and prod can run in parallel without overwriting each other.
+---
+
 # Environment distinction audit (dev vs prod)
 
 ## Purpose

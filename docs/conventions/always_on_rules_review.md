@@ -1,3 +1,8 @@
+---
+title: "Review: Repo Rules Currently Always Applied but Should Be On-Demand"
+summary: "The selective rule injection plan defines **three always-on repo rules**: `docs/context/index_rules.mdc`, `docs/conventions/rule_router_rules.mdc`, and `docs/foundation/agent_instructions_rules.mdc`. The foundation setup script **honors ..."
+---
+
 # Review: Repo Rules Currently Always Applied but Should Be On-Demand
 
 ## Summary

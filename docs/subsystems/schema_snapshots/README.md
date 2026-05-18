@@ -1,3 +1,8 @@
+---
+title: "Schema Snapshots — Public Schema Registry Reference"
+summary: "This directory contains exported snapshots of all schema versions from the `schema_registry` database table. These snapshots provide public reference to schema definitions without requiring database access. ## Purpose - **Public Referenc..."
+---
+
 # Schema Snapshots — Public Schema Registry Reference
 This directory contains exported snapshots of all schema versions from the `schema_registry` database table. These snapshots provide public reference to schema definitions without requiring database access.
 ## Purpose

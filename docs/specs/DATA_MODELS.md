@@ -1,3 +1,8 @@
+---
+title: Neotoma Data Models
+summary: "**Authoritative Vocabulary:** [`docs/vocabulary/canonical_terms.md`](../vocabulary/canonical_terms.md)"
+---
+
 # Neotoma Data Models
 
 **Authoritative Vocabulary:** [`docs/vocabulary/canonical_terms.md`](../vocabulary/canonical_terms.md)

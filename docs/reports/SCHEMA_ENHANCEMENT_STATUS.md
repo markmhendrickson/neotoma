@@ -1,3 +1,8 @@
+---
+title: Schema Enhancement Status for Sample Parquet Imports
+summary: "**Date**: 2026-01-14 **Status**: ⚠️ **NOT ENHANCED** - Blocked by source diversity requirement"
+---
+
 # Schema Enhancement Status for Sample Parquet Imports
 
 **Date**: 2026-01-14  

@@ -1,3 +1,8 @@
+---
+title: Personal agent state
+summary: "Individuals interact with dozens of AI tools — fitness trackers, financial apps, habit coaches, goal planners — yet none of these tools share state or maintain temporal continuity across the user's full life context. Neotoma provides ver..."
+---
+
 # Personal agent state
 
 Individuals interact with dozens of AI tools — fitness trackers, financial apps, habit coaches, goal planners — yet none of these tools share state or maintain temporal continuity across the user's full life context. Neotoma provides versioned memory for health, finance, habits, and goals across every AI tool, serving as the personal state layer that enables any agent to access the user's complete temporal history. This means a fitness agent can see spending context, a financial agent can see health goals, and every tool benefits from the full picture rather than operating in isolation.

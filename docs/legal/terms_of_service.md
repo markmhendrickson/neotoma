@@ -1,3 +1,8 @@
+---
+title: Neotoma Terms of Service (Post-Incorporation Template)
+summary: "> **Status:** Draft template. **Not currently published.** > > The live pre-incorporation site terms for `neotoma.io` are > [`site_terms_of_use.md`](./site_terms_of_use.md) and are rendered at > <https://neotoma.io/terms>. This document ..."
+---
+
 # Neotoma Terms of Service (Post-Incorporation Template)
 
 > **Status:** Draft template. **Not currently published.**

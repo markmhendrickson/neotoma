@@ -1,3 +1,8 @@
+---
+title: Neotoma UI DSL Specification
+summary: "*(UI Component Schema and Interaction Model)* ## DSL Schema ```typescript interface UISpec { component_type: 'list' | 'detail' | 'dashboard' | 'wizard' | 'settings'; title: string; data_source: DataSource; layout: Layout; interactions: I..."
+---
+
 # Neotoma UI DSL Specification
 *(UI Component Schema and Interaction Model)*
 ## DSL Schema

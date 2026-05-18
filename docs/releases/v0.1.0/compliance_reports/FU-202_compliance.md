@@ -1,3 +1,8 @@
+---
+title: FU-202 Compliance Report
+summary: "**Generated:** 2025-12-14T06:22:11.180Z ## Summary - **Total Requirements:** 4 - **✅ Passed:** 3 - **❌ Failed:** 1 - **Compliance Rate:** 75.0% ## Requirements Status | Requirement | Location | Status | Evidence | Gap | |------------|---..."
+---
+
 # FU-202 Compliance Report
 **Generated:** 2025-12-14T06:22:11.180Z
 ## Summary

@@ -1,3 +1,8 @@
+---
+title: "Feature Unit: FU-2026-04-aauth-hardware-attestation — AAuth Tier Honesty + Hardware Attestation"
+summary: "**Status:** In Progress **Priority:** P0 (release blocker for v0.8.0 attribution honesty) **Risk Level:** Medium (write-path attribution semantics, breaking change for self-claimed `hardware` agents) **Target Release:** v0.8.0 **Owner:**..."
+---
+
 # Feature Unit: FU-2026-04-aauth-hardware-attestation — AAuth Tier Honesty + Hardware Attestation
 
 **Status:** In Progress

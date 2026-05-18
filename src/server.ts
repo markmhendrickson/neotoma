@@ -3686,6 +3686,9 @@ export class NeotomaServer {
       observations_created: result.observationsCreated,
       unknown_fields_count: result.unknownFieldsCount,
       relationships_created: relationshipsCreated,
+      ...(result.noSchemaEntityTypes && result.noSchemaEntityTypes.length > 0
+        ? { no_schema_entity_types: result.noSchemaEntityTypes }
+        : {}),
     });
   }
 
@@ -4350,6 +4353,9 @@ export class NeotomaServer {
           observation_id: entity.observationId,
         })),
         unknown_fields_count: result.unknownFieldsCount,
+        ...(result.noSchemaEntityTypes && result.noSchemaEntityTypes.length > 0
+          ? { no_schema_entity_types: result.noSchemaEntityTypes }
+          : {}),
       });
     }
 

@@ -1,3 +1,7 @@
+---
+title: Integration Tests
+---
+
 ## Release v0.1.0 — Cross-FU Integration Tests
 ### 1. Purpose
 Define the **integration test suite** for Release `v0.1.0` (Internal MCP Release). These tests:

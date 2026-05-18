@@ -1,3 +1,8 @@
+---
+title: Model Selection for Feature Unit Execution
+summary: "**Purpose:** Defines how the release orchestrator selects AI models based on Feature Unit complexity to optimize cost and performance. **Related Documents:** - [`multi_agent_orchestration.md`](./multi_agent_orchestration.md) — Multi-agen..."
+---
+
 # Model Selection for Feature Unit Execution
 **Purpose:** Defines how the release orchestrator selects AI models based on Feature Unit complexity to optimize cost and performance.
 **Related Documents:**

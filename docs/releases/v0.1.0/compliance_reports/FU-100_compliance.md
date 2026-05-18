@@ -1,3 +1,8 @@
+---
+title: FU-100 Compliance Report
+summary: "**Generated:** 2025-12-14T05:55:55.634Z ## Summary - **Total Requirements:** 24 - **✅ Passed:** 14 - **❌ Failed:** 10 - **Compliance Rate:** 58.3% ## Requirements Status | Requirement | Location | Status | Evidence | Gap | |------------|..."
+---
+
 # FU-100 Compliance Report
 **Generated:** 2025-12-14T05:55:55.634Z
 ## Summary

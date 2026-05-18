@@ -222,6 +222,12 @@ export function getMirrorConfig(): MirrorConfig {
         allow_git_commit: true,
         render_mode: "frontmatter_content",
         content_field: "body",
+        // Compact metadata in frontmatter; content fields (overview, scope, etc.) render as ## sections in the body
+        frontmatter_fields: [
+          "title", "status", "priority", "phase", "target_release",
+          "repository", "file_path", "tags",
+          "todos_completed", "todos_pending",
+        ],
       },
     ],
   };

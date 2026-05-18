@@ -1,3 +1,8 @@
+---
+title: "Public site content: MDX and markdown-backed pages"
+summary: "This document describes how **public marketing and docs-facing pages** in the Neotoma SPA are authored, where sources live, and how they connect to routing, SEO, and validation."
+---
+
 # Public site content: MDX and markdown-backed pages
 
 ## Scope

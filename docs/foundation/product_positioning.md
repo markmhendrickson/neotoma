@@ -1,3 +1,8 @@
+---
+title: Neotoma Product Positioning and Differentiation
+summary: "This section maps Neotoma to April Dunford’s five core positioning choices plus the extended canvas used in agent skill `foundation/agent_instructions/cursor_skills/evaluate_positioning/SKILL.md` (mirrored at `.cursor/skills/evaluate_pos..."
+---
+
 # Neotoma Product Positioning and Differentiation
 
 ## 7.0 Positioning canvas (Obviously Awesome)

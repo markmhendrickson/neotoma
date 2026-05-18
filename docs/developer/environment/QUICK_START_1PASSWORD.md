@@ -1,3 +1,8 @@
+---
+title: "Quick Start: 1Password Environment Variable Sync"
+summary: "All infrastructure is in place: - ✅ Foundation script configured - ✅ Wrapper script created (`scripts/sync-env-from-1password.sh`) - ✅ NPM script added (`npm run sync:env`) - ✅ Configuration updated (`foundation-config.yaml`) - ✅ Documen..."
+---
+
 # Quick Start: 1Password Environment Variable Sync
 
 ## ✅ Setup Complete

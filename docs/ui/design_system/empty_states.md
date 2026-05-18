@@ -1,3 +1,8 @@
+---
+title: Empty States
+summary: "**Minimal Approach:**"
+---
+
 # Empty States
 
 ## Empty State Style

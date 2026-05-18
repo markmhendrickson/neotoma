@@ -1,3 +1,8 @@
+---
+title: v0.12.2 security review
+summary: "**Status:** Draft — populated automatically as a placeholder during the post-v0.12.1 reconciliation PR. Re-run `npm run security:classify-diff`, `npm run security:lint`, `npm run security:manifest:check`, and `npm run test:security:auth-..."
+---
+
 # v0.12.2 security review
 
 **Status:** Draft — populated automatically as a placeholder during the post-v0.12.1 reconciliation PR. Re-run `npm run security:classify-diff`, `npm run security:lint`, `npm run security:manifest:check`, and `npm run test:security:auth-matrix` before tagging v0.12.2 and fill in findings below.

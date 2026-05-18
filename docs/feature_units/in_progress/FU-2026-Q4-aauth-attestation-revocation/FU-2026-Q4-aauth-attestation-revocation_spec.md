@@ -1,3 +1,8 @@
+---
+title: "Feature Unit: FU-2026-Q4-aauth-attestation-revocation — Attestation Revocation"
+summary: "**Status:** In Progress **Priority:** P1 (closes the trust-lifecycle gap deferred from v0.8.0) **Risk Level:** Medium (touches every format verifier; tier-resolution semantics change in `enforce` mode) **Target Release:** v0.11.0 (`log_o..."
+---
+
 # Feature Unit: FU-2026-Q4-aauth-attestation-revocation — Attestation Revocation
 
 **Status:** In Progress

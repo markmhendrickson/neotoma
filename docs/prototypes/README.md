@@ -1,3 +1,7 @@
+---
+title: Neotoma MVP Interactive Prototype
+---
+
 # Neotoma MVP Interactive Prototype
 ## Quick Links
 - **[Quick Start](./prototype_quickstart.md)** — One-page getting started guide
