@@ -1212,6 +1212,15 @@ components:
           type: integer
         unknown_fields_count:
           type: integer
+        unknown_fields:
+          type: array
+          items:
+            type: string
+          description: |
+            Names of fields that were dropped because they are not declared in
+            the entity's active schema. Present when `unknown_fields_count > 0`.
+            Use `update_schema_incremental` or `register_schema` to add these
+            fields before re-storing.
         relationships_created:
           type: array
           items:
@@ -1625,6 +1634,15 @@ components:
           type: string
           nullable: true
           description: Interpretation row linked to observations when the request supplied an explicit interpretation block.
+        unknown_fields:
+          type: array
+          items:
+            type: string
+          description: |
+            Names of fields that were dropped because they are not declared in
+            the entity's active schema. Present when `unknown_fields_count > 0`.
+            Use `update_schema_incremental` or `register_schema` to add these
+            fields before re-storing.
         no_schema_entity_types:
           type: array
           items:

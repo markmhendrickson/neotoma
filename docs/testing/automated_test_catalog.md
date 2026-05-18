@@ -72,7 +72,7 @@ flowchart TD
 | Vitest unit tests | 90 |
 | Vitest service tests | 33 |
 | Source-adjacent tests | 45 |
-| Vitest integration tests | 100 |
+| Vitest integration tests | 101 |
 | Vitest CLI tests | 55 |
 | Vitest contract tests | 10 |
 | Vitest security tests | 1 |
@@ -296,7 +296,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (100):**
+**Files (101):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_resource_metadata.test.ts`
 - `tests/integration/aauth_revocation_e2e.test.ts`
@@ -361,6 +361,7 @@ flowchart TD
 - `tests/integration/mcp_stdio_attribution.test.ts`
 - `tests/integration/mcp_store_canonical_name_unknown_fields.test.ts`
 - `tests/integration/mcp_store_parquet.test.ts`
+- `tests/integration/mcp_store_unknown_fields_names.test.ts`
 - `tests/integration/mcp_store_unstructured.test.ts`
 - `tests/integration/mcp_store_variations.test.ts`
 - `tests/integration/mcp_target_id_identity_conflict.test.ts`
