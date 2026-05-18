@@ -94,6 +94,11 @@ neotoma entities search "Acme Corp"
 neotoma entities list --type task
 neotoma entities list --type event
 
+# Named entity-type queries ("newest plans", "my tasks", "recent notes")
+# Use --type with the matching entity_type; do NOT search conversation history first.
+neotoma entities list --type plan
+neotoma entities list --type task
+
 # History/provenance lookup
 neotoma observations list --entity-id <entity_id>
 
@@ -102,6 +107,8 @@ neotoma relationships list --entity-id <entity_id>
 ```
 
 Use narrow queries first, then expand only if needed.
+
+**Named entity-type routing:** when the user asks about a named entity type ("newest plans", "my tasks", "open issues", "recent notes"), query `neotoma entities list --type <entity_type>` directly. FORBIDDEN: searching conversation history or agent_message rows as a substitute for a type-scoped entity list. Do not fall back to conversation search until the type-scoped query has been attempted and returned no relevant results. For recency queries, the most recently updated entities appear first in default output.
 
 ## Install verification
 
