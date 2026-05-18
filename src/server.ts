@@ -4245,7 +4245,7 @@ export class NeotomaServer {
           const mismatchErr = new McpError(
             ErrorCode.InvalidParams,
             `ERR_IDEMPOTENCY_MISMATCH: idempotency_key "${idempotencyKey}" was already used with different content. ` +
-            `Use a unique idempotency_key for each distinct write.`
+              `Use a unique idempotency_key for each distinct write.`
           );
           throw mismatchErr;
         }
@@ -4270,7 +4270,9 @@ export class NeotomaServer {
           .select("fragment_key")
           .eq("source_id", existingSource.id)
           .eq("user_id", userId);
-        const replayUnknownFieldNames = [...new Set((fragmentRows ?? []).map((r: { fragment_key: string }) => r.fragment_key))].sort();
+        const replayUnknownFieldNames = [
+          ...new Set((fragmentRows ?? []).map((r: { fragment_key: string }) => r.fragment_key)),
+        ].sort();
 
         return this.buildTextResponse({
           source_id: existingSource.id,
@@ -4753,7 +4755,10 @@ export class NeotomaServer {
         insertedObservationIds.add(observationId);
       }
 
-      resolvedFieldsByIndex.set(createdEntities.length, fieldsToValidate as Record<string, unknown>);
+      resolvedFieldsByIndex.set(
+        createdEntities.length,
+        fieldsToValidate as Record<string, unknown>
+      );
       createdEntities.push({
         entityId,
         entityType,
@@ -5004,7 +5009,7 @@ export class NeotomaServer {
       if (!storeWarningRules?.length) continue;
       for (const rule of storeWarningRules) {
         const hasIdentityField = rule.fields.some(
-          (f) => entityFields[f] !== undefined && entityFields[f] !== null && entityFields[f] !== "",
+          (f) => entityFields[f] !== undefined && entityFields[f] !== null && entityFields[f] !== ""
         );
         if (!hasIdentityField) {
           schemaStoreWarnings.push({
