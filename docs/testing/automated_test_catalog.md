@@ -138,6 +138,7 @@ flowchart TD
 - `tests/unit/compliance_scorecard.test.ts`
 - `tests/unit/config_data_dir_resolution.test.ts`
 - `tests/unit/conversation_schema_bootstrap.test.ts`
+- `tests/unit/conversation_session_uuid_bridge.test.ts`
 - `tests/unit/cursor_hooks_context.test.ts`
 - `tests/unit/cursor_hooks_external_data.test.ts`
 - `tests/unit/cursor_hooks_small_model.test.ts`
