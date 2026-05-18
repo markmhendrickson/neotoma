@@ -684,3 +684,83 @@ export function renderIndexMarkdown(
   parts.push(lines.join("\n"));
   return parts.join("\n\n") + "\n";
 }
+
+// ============================================================================
+// Profile entity renderer (harness-compatible output)
+// ============================================================================
+
+/**
+ * Renders an entity for a mirror profile using `render_mode`:
+ * - "frontmatter_content": YAML frontmatter block (selected fields) followed by
+ *   the markdown body from `content_field` (default "content").
+ * - "content_only": bare markdown body from `content_field` with no frontmatter.
+ *
+ * Produced output is suitable for direct consumption by AI harnesses (Cursor,
+ * Claude Code) without Neotoma-specific framing.
+ */
+export function renderProfileEntity(
+  snapshot: Record<string, unknown>,
+  entityMeta: {
+    entity_id: string;
+    entity_type: string;
+    schema_version: string;
+    computed_at?: string | null;
+    last_observation_at?: string | null;
+    observation_count?: number | null;
+  },
+  opts: {
+    render_mode: "frontmatter_content" | "content_only";
+    frontmatter_fields?: string[];
+    content_field?: string;
+  }
+): string {
+  const contentField = opts.content_field ?? "content";
+  const body = typeof snapshot[contentField] === "string" ? (snapshot[contentField] as string) : "";
+
+  if (opts.render_mode === "content_only") {
+    return body.endsWith("\n") ? body : body + "\n";
+  }
+
+  // frontmatter_content: build YAML frontmatter from selected (or all scalar) fields.
+  const frontmatterKeys =
+    opts.frontmatter_fields && opts.frontmatter_fields.length > 0
+      ? opts.frontmatter_fields
+      : Object.keys(snapshot).filter((k) => k !== contentField);
+
+  // Merge entity meta fields so callers can include entity_id etc in frontmatter_fields.
+  const metaFields: Record<string, unknown> = {
+    entity_id: entityMeta.entity_id,
+    entity_type: entityMeta.entity_type,
+    schema_version: entityMeta.schema_version,
+    computed_at: entityMeta.computed_at ?? undefined,
+    last_observation_at: entityMeta.last_observation_at ?? undefined,
+    observation_count: entityMeta.observation_count ?? undefined,
+  };
+  const allFields: Record<string, unknown> = { ...snapshot, ...metaFields };
+
+  const fmLines: string[] = ["---"];
+  for (const key of frontmatterKeys) {
+    if (!(key in allFields)) continue;
+    const val = allFields[key];
+    if (val === null || val === undefined) continue;
+    if (typeof val === "string") {
+      // Quote strings that need it (contain colons, leading whitespace, etc.).
+      const needsQuote = /[:#[\]{},|>&*!'"@%`]/.test(val) || /^\s/.test(val) || val === "";
+      fmLines.push(needsQuote ? `${key}: ${JSON.stringify(val)}` : `${key}: ${val}`);
+    } else if (typeof val === "number" || typeof val === "boolean") {
+      fmLines.push(`${key}: ${val}`);
+    } else if (Array.isArray(val)) {
+      fmLines.push(`${key}:`);
+      for (const item of val) {
+        fmLines.push(`  - ${typeof item === "string" ? item : JSON.stringify(item)}`);
+      }
+    }
+  }
+  fmLines.push("---");
+
+  const fm = fmLines.join("\n");
+  if (!body) return fm + "\n";
+  return (
+    fm + "\n" + (body.startsWith("\n") ? body : "\n" + body) + (body.endsWith("\n") ? "" : "\n")
+  );
+}
