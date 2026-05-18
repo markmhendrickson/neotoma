@@ -3037,9 +3037,12 @@ export interface components {
       success?: boolean;
       /**
        * @description True when the response is an idempotency replay (no new observations
-       *     or entities were written for this request). Consumers can use this
-       *     to distinguish a genuine fresh commit from a replayed earlier result
-       *     when `entities_created_count` is 0.
+       *     or entities were written for this request). The key was already used
+       *     with identical content so the original result is returned. Consumers
+       *     can use this to distinguish a genuine fresh commit from a replayed
+       *     earlier result when `entities_created_count` is 0. If the same key
+       *     is reused with *different* content the request is rejected with
+       *     `ERR_IDEMPOTENCY_MISMATCH` (HTTP 400).
        */
       replayed?: boolean;
       entities?: {
@@ -3090,6 +3093,15 @@ export interface components {
       })[];
       /** @description Interpretation row linked to observations when the request supplied an explicit interpretation block. */
       interpretation_id?: string | null;
+      /**
+       * @description Entity types whose payloads were routed to raw_fragments because no
+       *     schema could be found or auto-registered. Each element is a distinct
+       *     entity_type string. An empty array (or absent field) means all entity
+       *     types had an active schema and were processed normally. When this list
+       *     is non-empty, run `register_schema` for each type to create a schema
+       *     so future ingestion produces observations instead of fragments.
+       */
+      no_schema_entity_types?: string[];
     };
     /**
      * @description Non-fatal warning emitted by entity resolution when a schema declares
@@ -4963,8 +4975,10 @@ export interface operations {
       };
       /**
        * @description Request rejected. `ERR_STORE_RESOLUTION_FAILED` uses the richer
-       *     `StoreResolutionErrorEnvelope` shape; other validation errors fall
-       *     back to the generic `ErrorEnvelope`.
+       *     `StoreResolutionErrorEnvelope` shape. `ERR_IDEMPOTENCY_MISMATCH` is
+       *     returned when the same `idempotency_key` is reused with materially
+       *     different content — use a new key for a different payload. Other
+       *     validation errors fall back to the generic `ErrorEnvelope`.
        */
       400: {
         headers: {
@@ -4974,6 +4988,19 @@ export interface operations {
           "application/json":
             | components["schemas"]["StoreResolutionErrorEnvelope"]
             | components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /**
+       * @description Idempotency key collision (`ERR_IDEMPOTENCY_COLLISION`). The
+       *     idempotency_key was already used for a store call with different
+       *     content. Use a new idempotency_key to write the updated payload.
+       */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
     };

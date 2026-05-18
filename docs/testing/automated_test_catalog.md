@@ -331,6 +331,7 @@ flowchart TD
 - `tests/integration/guest_token_isolation.test.ts`
 - `tests/integration/guest_write_rate_limit.test.ts`
 - `tests/integration/hook_failure_hint.test.ts`
+- `tests/integration/idempotency_collision.test.ts`
 - `tests/integration/idempotency_key_content_mismatch.test.ts`
 - `tests/integration/inspector_bundled_mount.test.ts`
 - `tests/integration/interpretation_fragment_ordering.test.ts`

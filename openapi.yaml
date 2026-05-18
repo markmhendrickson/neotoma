@@ -3725,6 +3725,14 @@ paths:
                 oneOf:
                   - { $ref: '#/components/schemas/StoreResolutionErrorEnvelope' }
                   - { $ref: '#/components/schemas/ErrorEnvelope' }
+        '409':
+          description: |
+            Idempotency key collision (`ERR_IDEMPOTENCY_COLLISION`). The
+            idempotency_key was already used for a store call with different
+            content. Use a new idempotency_key to write the updated payload.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
 
   /get_entity_snapshot:
     post:
