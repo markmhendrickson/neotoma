@@ -125,6 +125,21 @@ export async function submitIssueToRemote(params: {
   };
 
   if (error) {
+    // Surface the actionable hint when the remote returns AUTH_REQUIRED so the
+    // agent (and user) know exactly what step to take instead of seeing a raw
+    // JSON blob. (closes #183, #206)
+    const errObj = error && typeof error === "object" ? (error as Record<string, unknown>) : null;
+    if (errObj?.["error_code"] === "AUTH_REQUIRED") {
+      const hint =
+        typeof errObj?.["details"] === "object" &&
+        errObj["details"] !== null &&
+        typeof (errObj["details"] as Record<string, unknown>)["hint"] === "string"
+          ? ` ${(errObj["details"] as Record<string, unknown>)["hint"]}`
+          : " Create an agent grant via Inspector → Agents → Grants to allow AAuth-signed agents to authenticate without a Bearer token.";
+      throw new Error(
+        `Remote Neotoma issue submit failed: authentication required (AUTH_REQUIRED).${hint}`
+      );
+    }
     throw new Error(`Remote Neotoma issue submit failed: ${JSON.stringify(error)}`);
   }
 
