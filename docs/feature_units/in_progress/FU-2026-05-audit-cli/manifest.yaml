@@ -1,0 +1,67 @@
+feature_id: "FU-2026-05-audit-cli"
+version: "1.0.0"
+status: "draft"
+priority: "p2"
+risk_level: "medium"
+
+tags:
+  - "cli"
+  - "mcp"
+  - "graph"
+  - "quality"
+
+metadata:
+  title: "neotoma audit CLI command"
+  description: "First-class CLI + MCP surface for the graph-health audit prototyped in the /audit skill"
+  owner: "markmhendrickson"
+  created_at: "2026-05-16"
+  target_release: "v0.14.0"
+
+subsystems:
+  - name: "cli"
+    changes: "New `neotoma audit` top-level command with --deep/--scope/--since/--user/--format/--yes flags"
+  - name: "mcp"
+    changes: "New `audit_database` tool exposed via tool_definitions.ts and server.ts"
+  - name: "schema_bootstrap"
+    changes: "Seed `audit_run` entity_type with canonical_name_fields=[run_id], required snapshot fields"
+  - name: "openapi"
+    changes: "New endpoint declaration, generated types, contract mappings row"
+  - name: "services/audit"
+    changes: "New module: 16 deterministic check implementations, 2 LLM check implementations, batching/cost-cap infrastructure"
+
+schema_changes:
+  - entity_type: "audit_run"
+    operation: "register_schema"
+    canonical_name_fields: ["run_id"]
+    required_fields:
+      - "run_id"
+      - "started_at"
+      - "completed_at"
+      - "mode"
+      - "scope"
+      - "findings_count"
+    notes: "Stores audit run metadata + findings array (JSONB) per FU spec recommendation"
+
+dependencies:
+  - "github_issue: https://github.com/markmhendrickson/neotoma/issues/159 (create_relationship empty JSONSchema)"
+
+kill_switch:
+  conditions:
+    - condition: "create_relationship MCP fix (issue #159) not merged before LLM_RELATIONSHIP_SUGGESTION check ships"
+      action: "Defer the relationship-suggestion check to follow-up FU (already out of scope for v1)"
+    - condition: "Audit run against real DB takes >5 minutes for default scope"
+      action: "Pause, profile, and add pagination/streaming before shipping"
+
+acceptance_criteria:
+  - "neotoma audit runs all 16 deterministic checks against a seeded test DB and produces the expected finding set"
+  - "neotoma audit --deep with valid API key runs 2 LLM checks and respects cost cap"
+  - "audit_run entity created and queryable after each run"
+  - "Repair phase calls existing tools with confirmed args only; no auto-mutation"
+  - "Determinism: two consecutive runs on unchanged DB produce byte-identical finding sets"
+  - "Contract tests pass; CLI command coverage guard test passes"
+  - "MCP <-> CLI agent-instruction parity verified via `neotoma cli config --yes`"
+  - "OpenAPI breaking-change diff is clean (additive only)"
+
+related:
+  prototype_skill: ".cursor/skills/audit/SKILL.md"
+  validation_run: "2026-05-16 against live dev registry, surfaced places/plans/meeting_notes duplicate-types + 5 plural names"
