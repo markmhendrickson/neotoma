@@ -684,4 +684,3 @@ export function renderIndexMarkdown(
   parts.push(lines.join("\n"));
   return parts.join("\n\n") + "\n";
 }
-
