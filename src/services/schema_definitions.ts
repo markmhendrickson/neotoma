@@ -3039,7 +3039,8 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         feedback_source: {
           type: "string",
           required: false,
-          description: 'Discriminator for feedback origin. Use "internal" for engineering/team ' +
+          description:
+            'Discriminator for feedback origin. Use "internal" for engineering/team ' +
             'observations and "external" for reports from end users or beta testers.',
         },
         title: { type: "string", required: false, preserveCase: true },
