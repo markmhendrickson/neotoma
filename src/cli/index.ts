@@ -10601,16 +10601,33 @@ mirrorCommand
     "Remove stale files in the mirror that no longer correspond to database rows",
     false
   )
+  .option("--profile <id>", "Rebuild a single named profile instead of the main mirror")
   .action(
-    async (opts: { kind?: string; entityType?: string; entityId?: string; clean?: boolean }) => {
+    async (opts: {
+      kind?: string;
+      entityType?: string;
+      entityId?: string;
+      clean?: boolean;
+      profile?: string;
+    }) => {
       const outputMode = resolveOutputMode();
       try {
-        const { runMirrorRebuild, formatRebuildReport } = await import("./commands/mirror.js");
+        const { runMirrorRebuild, formatRebuildReport } = await import(
+          "./commands/mirror.js"
+        );
+        const mirrorConfig = await readConfig();
+        const mirrorToken = await getCliToken();
+        const mirrorApi = createApiClient({
+          baseUrl: await resolveBaseUrl(program.opts().baseUrl, mirrorConfig),
+          token: mirrorToken,
+        });
         const result = await runMirrorRebuild({
           kind: opts.kind,
           entityType: opts.entityType,
           entityId: opts.entityId,
           clean: Boolean(opts.clean),
+          profileId: opts.profile,
+          apiClient: mirrorApi,
         });
         if (outputMode === "json") {
           writeOutput(result, outputMode);

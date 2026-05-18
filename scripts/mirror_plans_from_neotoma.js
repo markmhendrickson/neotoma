@@ -1,5 +1,9 @@
 #!/usr/bin/env node
 /**
+ * @deprecated Use `neotoma mirror rebuild --profile neotoma-plans` instead.
+ * Configure the profile in ~/.config/neotoma/config.json under mirror.profiles.
+ * This script is kept for reference only and will be removed in a future release.
+ *
  * Mirrors all `plan` entities from the local Neotoma prod instance into
  * plans/ as individual markdown files. The directory is gitignored so these
  * are local working copies only.
