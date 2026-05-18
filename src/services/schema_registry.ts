@@ -5,7 +5,11 @@
  */
 
 import { db } from "../db.js";
-import { enforceEntityTypeGuards } from "./entity_type_guard.js";
+import {
+  checkPluralEntityType,
+  enforceEntityTypeGuards,
+  suggestSingular,
+} from "./entity_type_guard.js";
 import {
   prepareEntitySnapshotWithEmbedding,
   upsertEntitySnapshotWithEmbedding,
@@ -689,6 +693,43 @@ export class SchemaRegistryService {
       );
     }
     return { opt_outs: optOuts };
+  }
+
+  /**
+   * Emit a one-time startup log of every active schema whose entity_type name
+   * looks plural (per {@link checkPluralEntityType}), advising the operator to
+   * run `neotoma schemas repair-plural-types` to migrate or alias them.
+   *
+   * Returns the list of plural entity_types. Set `silent: true` to compute the
+   * list without writing to stderr (e.g. for CLI stat tables).
+   */
+  async logPluralTypesAtStartup(options?: {
+    userId?: string;
+    silent?: boolean;
+  }): Promise<{ plural_types: Array<{ entity_type: string; suggested_singular: string }> }> {
+    const schemas = await this.listActiveSchemas(options?.userId);
+    const pluralTypes: Array<{ entity_type: string; suggested_singular: string }> = [];
+    for (const s of schemas) {
+      const guard = checkPluralEntityType(s.entity_type);
+      if (guard.reason === "looks_plural") {
+        const singular = suggestSingular(s.entity_type);
+        if (singular) {
+          pluralTypes.push({ entity_type: s.entity_type, suggested_singular: singular });
+        }
+      }
+    }
+    pluralTypes.sort((a, b) => a.entity_type.localeCompare(b.entity_type));
+    if (!options?.silent && pluralTypes.length > 0) {
+      const label =
+        pluralTypes.length === 1 ? "1 entity type" : `${pluralTypes.length} entity types`;
+      logSchemaRegistryInfo(
+        `⚠️  [SCHEMA_REGISTRY] ${label} appear to use plural names: ` +
+          `${pluralTypes.map((t) => t.entity_type).join(", ")}. ` +
+          "Run `neotoma schemas repair-plural-types` to merge or alias them. " +
+          "See docs/foundation/schema_agnostic_design_rules.md."
+      );
+    }
+    return { plural_types: pluralTypes };
   }
 
   /**

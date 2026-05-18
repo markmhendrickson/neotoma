@@ -12999,6 +12999,87 @@ schemasCommand
     }
   );
 
+schemasCommand
+  .command("repair-plural-types")
+  .description(
+    "Detect and repair plural entity_type names in the schema registry. " +
+      "Plural types whose singular sibling already exists will have their entities merged " +
+      "into the singular type. Plural types with no sibling will have a new singular schema " +
+      "registered with an alias pointing back to the plural name. " +
+      "Dry-run by default — pass --apply to write changes."
+  )
+  .option(
+    "--apply",
+    "Write changes (merge entities and/or register alias schemas). Default: dry-run only.",
+    false
+  )
+  .option("--user-id <userId>", "Restrict audit to schemas owned by this user ID")
+  .action(async (opts: { apply?: boolean; userId?: string }) => {
+    const outputMode = resolveOutputMode();
+    const dryRun = !opts.apply;
+
+    const { repairAllPluralTypes } = await import("../../services/plural_type_repair.js" as string);
+
+    if (dryRun) {
+      process.stdout.write(
+        "[dry-run] Auditing plural entity types. No changes will be written.\n" +
+          "Re-run with --apply to write changes.\n\n"
+      );
+    } else {
+      process.stdout.write("Repairing plural entity types...\n\n");
+    }
+
+    const result = await repairAllPluralTypes(dryRun);
+
+    if (result.plural_types_found === 0) {
+      process.stdout.write("No plural entity types found. Nothing to repair.\n");
+      if (outputMode === "json") writeOutput(result, outputMode);
+      return;
+    }
+
+    for (const entry of result.entries) {
+      const strategyLabel =
+        entry.strategy === "merge"
+          ? `merge entities → singular sibling`
+          : `register singular schema + alias`;
+      const statusLabel = entry.errors.length > 0 ? "errors" : dryRun ? "would repair" : "repaired";
+      process.stdout.write(`  ${entry.plural_type}  [${strategyLabel}]  [${statusLabel}]\n`);
+      if (entry.strategy === "merge") {
+        const action = dryRun ? "would merge" : "merged";
+        process.stdout.write(`    entities ${action}: ${entry.entities_merged}\n`);
+      } else {
+        const action = dryRun ? "would register" : "registered";
+        process.stdout.write(
+          `    singular schema ${action}: ${entry.alias_schema_registered ? "yes" : "no"}\n`
+        );
+      }
+      if (entry.errors.length > 0) {
+        for (const e of entry.errors) process.stdout.write(`    error: ${e}\n`);
+      }
+    }
+
+    process.stdout.write("\n");
+    process.stdout.write(`Plural types found    : ${result.plural_types_found}\n`);
+    process.stdout.write(
+      `${dryRun ? "Would repair" : "Repaired"}          : ${result.plural_types_repaired}\n`
+    );
+    process.stdout.write(`Entities merged       : ${result.total_entities_merged}\n`);
+    process.stdout.write(
+      `Alias schemas ${dryRun ? "to register" : "registered"}: ${result.alias_schemas_registered}\n`
+    );
+
+    if (dryRun && result.plural_types_found > 0) {
+      process.stdout.write("\n[dry-run] No changes written. Re-run with --apply to repair.\n");
+    }
+
+    if (result.errors.length > 0) {
+      process.stderr.write(`\nErrors (${result.errors.length}):\n`);
+      for (const e of result.errors) process.stderr.write(`  - ${e}\n`);
+    }
+
+    if (outputMode === "json") writeOutput(result, outputMode);
+  });
+
 registerPeersCommand(program, {
   createApiClient: async () => {
     const config = await readConfig();
