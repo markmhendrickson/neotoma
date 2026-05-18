@@ -194,9 +194,13 @@ describe("CLI store commands", () => {
 
     it("should be replay-safe with idempotency key", async () => {
       const key = `store-turn-idem-${randomUUID()}`;
+      // Use a stable --turn-key so the entities payload is identical between calls.
+      // Without it, each call generates a timestamp-based turn_key, causing a
+      // content-hash mismatch on the second call (ERR_IDEMPOTENCY_MISMATCH).
+      const turnKey = `idem-turn-${key}`;
       const cmd =
         `${CLI_PATH} store-turn --conversation-title "CLI Turn Idem" ` +
-        `--message "User said hello twice" --idempotency-key "${key}" --user-id "${TEST_USER_ID}" --json`;
+        `--message "User said hello twice" --turn-key "${turnKey}" --idempotency-key "${key}" --user-id "${TEST_USER_ID}" --json`;
 
       const first = JSON.parse((await execAsync(cmd)).stdout);
       const second = JSON.parse((await execAsync(cmd)).stdout);
