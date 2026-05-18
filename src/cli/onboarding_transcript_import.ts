@@ -58,15 +58,11 @@ export async function runTranscriptImport(
   const { discoverHarnessTranscripts } = await import("./discovery.js");
   const summaries = await discoverHarnessTranscripts(homeDir);
 
-  const relevant = harness
-    ? summaries.filter((s) => s.harness === harness)
-    : summaries;
+  const relevant = harness ? summaries.filter((s) => s.harness === harness) : summaries;
 
   if (relevant.length === 0) {
     const label = harness ? `harness "${harness}"` : "any harness";
-    process.stdout.write(
-      `[onboarding] No transcript files found for ${label}.\n`
-    );
+    process.stdout.write(`[onboarding] No transcript files found for ${label}.\n`);
     return {
       harnesses_scanned: relevant.length,
       files_found: 0,
@@ -112,9 +108,7 @@ export async function runTranscriptImport(
       continue;
     }
 
-    process.stdout.write(
-      `[onboarding] ${summary.harness}: importing ${files.length} file(s)...\n`
-    );
+    process.stdout.write(`[onboarding] ${summary.harness}: importing ${files.length} file(s)...\n`);
 
     for (const filePath of files) {
       try {
@@ -152,9 +146,7 @@ export async function runTranscriptImport(
       `${totalFilesSkipped} skipped, ${errors.length} error(s).\n`
   );
   if (dryRun && totalFilesFound > 0) {
-    process.stdout.write(
-      `[onboarding] Re-run with --apply to store the discovered transcripts.\n`
-    );
+    process.stdout.write(`[onboarding] Re-run with --apply to store the discovered transcripts.\n`);
   }
 
   return {

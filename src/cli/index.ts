@@ -4629,10 +4629,7 @@ const initCommand = program
     "--transcript-harness <name>",
     "Limit transcript import to a specific harness: claude-code, codex, or cursor"
   )
-  .option(
-    "--transcript-limit <n>",
-    "Maximum number of transcript files to import per harness"
-  )
+  .option("--transcript-limit <n>", "Maximum number of transcript files to import per harness")
   .action(
     async (opts: {
       dataDir?: string;
@@ -13212,31 +13209,22 @@ onboardingCommand
   .option("--limit <n>", "Maximum number of transcript files per harness to import")
   .option("--apply", "Actually store the discovered transcripts (default: dry-run)", false)
   .option("--user-id <userId>", "User ID for the store operation")
-  .action(
-    async (opts: {
-      harness?: string;
-      limit?: string;
-      apply?: boolean;
-      userId?: string;
-    }) => {
-      const { runTranscriptImport } = await import(
-        "./onboarding_transcript_import.js" as string
-      );
-      const config = await readConfig();
-      const token = await getCliToken();
-      const api = createApiClient({
-        baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
-        token,
-      });
-      await runTranscriptImport({
-        harness: opts.harness as "claude-code" | "codex" | "cursor" | undefined,
-        limit: opts.limit ? parseInt(opts.limit, 10) : undefined,
-        dryRun: !opts.apply,
-        api,
-        userId: resolveEffectiveUserId(opts.userId),
-      });
-    }
-  );
+  .action(async (opts: { harness?: string; limit?: string; apply?: boolean; userId?: string }) => {
+    const { runTranscriptImport } = await import("./onboarding_transcript_import.js" as string);
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({
+      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      token,
+    });
+    await runTranscriptImport({
+      harness: opts.harness as "claude-code" | "codex" | "cursor" | undefined,
+      limit: opts.limit ? parseInt(opts.limit, 10) : undefined,
+      dryRun: !opts.apply,
+      api,
+      userId: resolveEffectiveUserId(opts.userId),
+    });
+  });
 
 // ── End Onboarding ──────────────────────────────────────────────────────────
 
