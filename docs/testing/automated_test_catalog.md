@@ -362,6 +362,7 @@ flowchart TD
 - `tests/integration/mcp_schema_variations.test.ts`
 - `tests/integration/mcp_stdio_attribution.test.ts`
 - `tests/integration/mcp_store_canonical_name_unknown_fields.test.ts`
+- `tests/integration/mcp_store_intra_batch_relationships.test.ts`
 - `tests/integration/mcp_store_parquet.test.ts`
 - `tests/integration/mcp_store_unknown_fields_names.test.ts`
 - `tests/integration/mcp_store_unstructured.test.ts`

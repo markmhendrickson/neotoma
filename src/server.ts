@@ -4399,6 +4399,57 @@ export class NeotomaServer {
     }
 
     // Process structured entities directly (no interpretation run)
+    //
+    // Pre-resolution pass (#203): validate that every entity in the batch can
+    // be resolved before writing any observations. Without this, an error on
+    // entity N leaves entities 0..N-1 already committed (partial write). The
+    // pre-pass uses commit=false so it only tests derivation without touching
+    // the DB. The commit pass below runs only when all entities pass.
+    const preResolutionIssues: Array<{ index: number; entityType: string; message: string }> = [];
+    for (let preIdx = 0; preIdx < entities.length; preIdx++) {
+      const preEntityData = entities[preIdx];
+      const preEntityType =
+        (preEntityData.entity_type as string) || (preEntityData.type as string) || "generic";
+      const preFields: Record<string, unknown> = { ...preEntityData };
+      delete preFields.entity_type;
+      delete preFields.type;
+      delete preFields.schema_version;
+      delete preFields.target_id;
+      const preTargetId =
+        typeof preEntityData.target_id === "string"
+          ? (preEntityData.target_id as string)
+          : undefined;
+      try {
+        await resolveEntityWithTrace({
+          entityType: preEntityType,
+          fields: preFields,
+          userId,
+          commit: false,
+          strict,
+          targetId: preTargetId,
+        });
+      } catch (err) {
+        if (err instanceof CanonicalNameUnresolvedError || err instanceof MergeRefusedError) {
+          preResolutionIssues.push({
+            index: preIdx,
+            entityType: preEntityType,
+            message: (err as Error).message,
+          });
+        } else {
+          throw err;
+        }
+      }
+    }
+    if (preResolutionIssues.length > 0) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        `store: ${preResolutionIssues.length} entity resolution issue(s) in batch — no entities were written. ` +
+          preResolutionIssues
+            .map((iss) => `[entity ${iss.index}, type=${iss.entityType}] ${iss.message}`)
+            .join(" | ")
+      );
+    }
+
     const createdEntities: Array<{
       entityId: string;
       entityType: string;
