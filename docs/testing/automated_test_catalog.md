@@ -159,6 +159,7 @@ flowchart TD
 - `tests/unit/i18n_routing.test.ts`
 - `tests/unit/inspector_admin_unlock_url.test.ts`
 - `tests/unit/keepalive_timeout.test.ts`
+- `tests/unit/list_timeline_events_unknown_type.test.ts`
 - `tests/unit/markdown_mirror_paths.test.ts`
 - `tests/unit/mcp_dev_shim.test.ts`
 - `tests/unit/mcp_instruction_doc.test.ts`
