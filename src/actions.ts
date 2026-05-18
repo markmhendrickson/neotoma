@@ -5473,6 +5473,7 @@ app.post("/interpretations/create", async (req, res) => {
       observations_created: interpretationResult.observationsCreated,
       unknown_fields_count: interpretationResult.unknownFieldsCount,
       unknown_fields: interpretationResult.unknownFieldNames,
+      ...(interpretationResult.hint ? { hint: interpretationResult.hint } : {}),
       relationships_created: relationshipsCreated,
       ...(interpretationResult.noSchemaEntityTypes &&
       interpretationResult.noSchemaEntityTypes.length > 0

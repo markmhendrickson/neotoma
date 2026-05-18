@@ -57,12 +57,19 @@ export interface InterpretationOptions {
   config: InterpretationConfig;
 }
 
+export const UNKNOWN_FIELDS_HINT =
+  "Unknown fields were stored in raw_fragments. " +
+  "Call update_schema_incremental to promote them to schema fields, " +
+  "then set migrate_existing: true to backfill existing data.";
+
 export interface InterpretationResult {
   interpretationId: string;
   observationsCreated: number;
   unknownFieldsCount: number;
   /** The field names that were not recognized by the schema. */
   unknownFieldNames: string[];
+  /** Actionable guidance surfaced when unknownFieldsCount > 0. */
+  hint?: string;
   observationsDeduplicated?: number; // Count of observations that already existed
   fixedPointReached?: boolean; // Whether fixed-point convergence was achieved
   convergenceIterations?: number; // Number of iterations to reach convergence
@@ -831,6 +838,7 @@ export async function runInterpretation(
       observationsCreated,
       unknownFieldsCount,
       unknownFieldNames: Array.from(unknownFieldNamesSet).sort(),
+      hint: unknownFieldsCount > 0 ? UNKNOWN_FIELDS_HINT : undefined,
       entities,
       refinement_debug: refinementDebug.length > 0 ? refinementDebug : undefined,
       noSchemaEntityTypes: noSchemaEntityTypes.length > 0 ? noSchemaEntityTypes : undefined,
