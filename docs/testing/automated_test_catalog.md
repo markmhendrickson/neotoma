@@ -458,6 +458,7 @@ flowchart TD
 - `tests/cli/discovery_harness.test.ts`
 - `tests/cli/extract_user_cli_args.test.ts`
 - `tests/cli/issues_message.test.ts`
+- `tests/cli/onboarding_import_transcripts.test.ts`
 - `tests/cli/peers.test.ts`
 - `tests/cli/processes_command.test.ts`
 - `tests/cli/reporter_setup.test.ts`
