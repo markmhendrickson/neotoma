@@ -71,6 +71,13 @@ export interface InterpretationResult {
   }>;
   /** Debug: per-entity type refinement (extracted keys, type before/after) for store responses */
   refinement_debug?: Array<{ extracted_keys: string[]; type_before: string; type_after: string }>;
+  /**
+   * Entity types for which no schema was found or could be auto-registered.
+   * Payloads for these types were written as raw_fragments (reason: "no_schema"
+   * or "no_schema_registration_failed") and will not appear in the entities array.
+   * Callers should register a schema for each listed type.
+   */
+  noSchemaEntityTypes?: string[];
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -324,11 +331,8 @@ export async function runInterpretation(
     observationId: string;
   }> = [];
   const interpretationInsertedObservationIds = new Set<string>();
-  const refinementDebug: Array<{
-    extracted_keys: string[];
-    type_before: string;
-    type_after: string;
-  }> = [];
+  const refinementDebug: Array<{ extracted_keys: string[]; type_before: string; type_after: string }> = [];
+  const noSchemaEntityTypes: string[] = [];
 
   try {
     // Build refinement candidates: DB schemas (user + global) + code-only types so dynamic schemas participate
@@ -421,7 +425,9 @@ export async function runInterpretation(
       }
 
       // When no known schema at all (neither DB nor code): optionally create a user-scoped schema from extracted fields
+      let schemaCreationAttempted = false;
       if (!schema && !codeSchema && config.create_schema_for_unknown !== false) {
+        schemaCreationAttempted = true;
         schema = await schemaRegistry.ensureSchemaForExtractedEntity(
           entityType,
           entityData,
@@ -443,10 +449,16 @@ export async function runInterpretation(
       const effectiveSchemaVersion = schema?.schema_version ?? codeSchema?.schema_version ?? "1.0";
 
       if (Object.keys(effectiveSchemaDefinition.fields).length === 0) {
-        // No schema found - route all fields to raw_fragments (helps debug: log extracted type)
+        // No schema found and auto-registration failed (or was disabled): route all fields to a
+        // raw_fragment so the payload is preserved. Use a distinct reason so callers can tell
+        // whether creation was attempted ("no_schema_registration_failed") or never tried
+        // ("no_schema" — creation disabled via config.create_schema_for_unknown=false).
+        const noSchemaReason = schemaCreationAttempted
+          ? "no_schema_registration_failed"
+          : "no_schema";
         logger.warn(
-          `[Interpretation] No schema for entity_type "${entityType}" (resolved from extracted data); routing to raw_fragments. ` +
-            `Run schema:init or add alias for this type.`
+          `[Interpretation] No schema for entity_type "${entityType}" (resolved from extracted data); ` +
+            `reason=${noSchemaReason}. Register a schema via register_schema to enable observations.`
         );
         const fragmentId = randomUUID();
         await db.from("raw_fragments").insert({
@@ -458,11 +470,15 @@ export async function runInterpretation(
           fragment_key: "full_entity",
           fragment_value: currentEntityData,
           fragment_envelope: {
-            reason: "no_schema",
+            reason: noSchemaReason,
             entity_type: entityType,
           },
         });
         unknownFieldsCount += Object.keys(currentEntityData).length;
+        // Track distinct no-schema entity types so callers can discover and fix them.
+        if (!noSchemaEntityTypes.includes(entityType)) {
+          noSchemaEntityTypes.push(entityType);
+        }
         continue;
       }
 
@@ -779,6 +795,7 @@ export async function runInterpretation(
       unknownFieldsCount,
       entities,
       refinement_debug: refinementDebug.length > 0 ? refinementDebug : undefined,
+      noSchemaEntityTypes: noSchemaEntityTypes.length > 0 ? noSchemaEntityTypes : undefined,
     };
   } catch (error) {
     // Mark interpretation as failed
