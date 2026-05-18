@@ -122,7 +122,7 @@ documentation:
       changes: "Parity-anchored mirror of MCP instructions"
     - path: "docs/releases/in_progress/v0.8.0/github_release_supplement.md"
       changes: "Document attestation, breaking change, operator allowlist, ops migration"
-    - path: "docs/developer/mcp_chatgpt_setup.md"
+    - path: "docs/developer/chatgpt_actions_setup.md"
       changes: "Add Cursor MCP-reload note"
     - path: "AGENTS.md"
       changes: "Cross-reference Cursor MCP-reload note"

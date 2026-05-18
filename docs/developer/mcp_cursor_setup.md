@@ -3,7 +3,7 @@
 This guide covers connecting the Neotoma MCP server to Cursor IDE.
 
 For other integrations, see:
-- [mcp_chatgpt_setup.md](mcp_chatgpt_setup.md) — ChatGPT Custom GPT setup
+- [chatgpt_actions_setup.md](chatgpt_actions_setup.md) — ChatGPT Custom GPT setup
 - [mcp_claude_code_setup.md](mcp_claude_code_setup.md) — Claude Code integration
 
 ## Choose Your Transport: Stdio (Local) vs HTTP (Remote)
@@ -257,5 +257,5 @@ cat /tmp/ngrok-mcp-url.txt  # get tunnel URL
 - [mcp_oauth_implementation.md](mcp_oauth_implementation.md) — OAuth flow details
 - [mcp_oauth_troubleshooting.md](mcp_oauth_troubleshooting.md) — OAuth troubleshooting
 - [mcp_claude_code_setup.md](mcp_claude_code_setup.md) — Claude Code setup
-- [mcp_chatgpt_setup.md](mcp_chatgpt_setup.md) — ChatGPT setup
+- [chatgpt_actions_setup.md](chatgpt_actions_setup.md) — ChatGPT setup
 - [agent_cli_configuration.md](agent_cli_configuration.md) — Unified MCP config for Cursor, Claude Code, Codex
