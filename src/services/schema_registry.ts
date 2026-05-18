@@ -720,12 +720,13 @@ export class SchemaRegistryService {
     }
     pluralTypes.sort((a, b) => a.entity_type.localeCompare(b.entity_type));
     if (!options?.silent && pluralTypes.length > 0) {
-      const label = pluralTypes.length === 1 ? "1 entity type" : `${pluralTypes.length} entity types`;
+      const label =
+        pluralTypes.length === 1 ? "1 entity type" : `${pluralTypes.length} entity types`;
       logSchemaRegistryInfo(
         `⚠️  [SCHEMA_REGISTRY] ${label} appear to use plural names: ` +
           `${pluralTypes.map((t) => t.entity_type).join(", ")}. ` +
           "Run `neotoma schemas repair-plural-types` to merge or alias them. " +
-          "See docs/foundation/schema_agnostic_design_rules.md.",
+          "See docs/foundation/schema_agnostic_design_rules.md."
       );
     }
     return { plural_types: pluralTypes };

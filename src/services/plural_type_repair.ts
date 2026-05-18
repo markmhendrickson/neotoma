@@ -190,10 +190,7 @@ export async function repairPluralType(
         const baseDefinition = pluralSchema?.schema_definition ?? { fields: {} };
         const singularDefinition = {
           ...baseDefinition,
-          aliases: [
-            ...(baseDefinition.aliases ?? []),
-            entry.plural_type,
-          ],
+          aliases: [...(baseDefinition.aliases ?? []), entry.plural_type],
           // singular types should declare identity_opt_out if the plural had it
           ...(baseDefinition.identity_opt_out
             ? { identity_opt_out: baseDefinition.identity_opt_out }
@@ -229,9 +226,7 @@ export async function repairPluralType(
  * Audit and (optionally) repair all plural entity types.
  * @param dryRun When true, report changes but write nothing. Default: true.
  */
-export async function repairAllPluralTypes(
-  dryRun = true
-): Promise<PluralTypeRepairRunResult> {
+export async function repairAllPluralTypes(dryRun = true): Promise<PluralTypeRepairRunResult> {
   const runResult: PluralTypeRepairRunResult = {
     plural_types_found: 0,
     plural_types_repaired: 0,
