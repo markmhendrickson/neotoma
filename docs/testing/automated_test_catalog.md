@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **366**
-- Backend and repo Vitest files: **333**
+- Total automated test files: **367**
+- Backend and repo Vitest files: **334**
 - Frontend Vitest files: **9**
 - Playwright spec files: **24**
 
@@ -72,7 +72,7 @@ flowchart TD
 | Vitest unit tests | 87 |
 | Vitest service tests | 33 |
 | Source-adjacent tests | 45 |
-| Vitest integration tests | 94 |
+| Vitest integration tests | 95 |
 | Vitest CLI tests | 55 |
 | Vitest contract tests | 10 |
 | Vitest security tests | 1 |
@@ -293,7 +293,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (94):**
+**Files (95):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_resource_metadata.test.ts`
 - `tests/integration/aauth_revocation_e2e.test.ts`
@@ -329,6 +329,7 @@ flowchart TD
 - `tests/integration/guest_write_rate_limit.test.ts`
 - `tests/integration/hook_failure_hint.test.ts`
 - `tests/integration/inspector_bundled_mount.test.ts`
+- `tests/integration/interpretation_fragment_ordering.test.ts`
 - `tests/integration/interpretation_store.test.ts`
 - `tests/integration/issue_37_event_schema_projection.test.ts`
 - `tests/integration/lexical_search.test.ts`
