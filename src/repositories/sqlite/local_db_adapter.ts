@@ -687,183 +687,37 @@ class LocalQueryBuilder {
     const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
 
     for (let lockRetry = 0; lockRetry < SQLITE_LOCK_MAX_RETRIES; lockRetry += 1) {
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      const db = getSqliteDb();
-      try {
-        if (this.operation === "select") {
-          const countRow = this.countExact
-            ? (db.prepare(`SELECT COUNT(*) as count FROM ${this.table} ${whereSql}`).get(values) as
-                | { count: number }
-                | undefined)
-            : undefined;
-          const count = countRow?.count;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const db = getSqliteDb();
+        try {
+          if (this.operation === "select") {
+            const countRow = this.countExact
+              ? (db
+                  .prepare(`SELECT COUNT(*) as count FROM ${this.table} ${whereSql}`)
+                  .get(values) as { count: number } | undefined)
+              : undefined;
+            const count = countRow?.count;
 
-          if (this.countHead) {
-            return { data: null, error: null, count };
-          }
-
-          const orderSql =
-            this.orderBy.length > 0
-              ? `ORDER BY ${this.orderBy
-                  .map((o) => `${o.column} ${o.ascending ? "ASC" : "DESC"}`)
-                  .join(", ")}`
-              : "";
-          const limitSql = this.limitValue !== null ? `LIMIT ${this.limitValue}` : "";
-          const offsetSql = this.offsetValue !== null ? `OFFSET ${this.offsetValue}` : "";
-
-          const sql =
-            `SELECT ${this.selectColumns || "*"} FROM ${this.table} ${whereSql} ${orderSql} ${limitSql} ${offsetSql}`.trim();
-          const rows = db
-            .prepare(sql)
-            .all(values)
-            .map((row: any) => fromDbRow(this.table, row));
-
-          if (this.expectSingle) {
-            const row = rows[0] || null;
-            if (!row && !this.allowNullSingle) {
-              const detail = whereSql || "no filter applied";
-              return {
-                data: null,
-                error: {
-                  message: `SELECT on table '${this.table}' returned no rows (expected exactly one). Query had: ${detail}.`,
-                  code: "PGRST116",
-                },
-              };
-            }
-            return { data: row, error: null, count };
-          }
-
-          return { data: rows, error: null, count };
-        }
-
-        if (this.operation === "insert" && this.insertPayload) {
-          const inserted: Record<string, unknown>[] = [];
-          for (const item of this.insertPayload) {
-            const payload = { ...item };
-
-            // Compatibility: observations.priority -> observations.source_priority
-            if (
-              this.table === "observations" &&
-              "priority" in payload &&
-              !("source_priority" in payload)
-            ) {
-              payload["source_priority"] = payload["priority"];
-              delete payload["priority"];
+            if (this.countHead) {
+              return { data: null, error: null, count };
             }
 
-            // Parity with Postgres: supply required observation columns when omitted by tests/helpers.
-            if (this.table === "observations") {
-              // Compatibility: some tests use observations.id as entity identifier.
-              if (
-                !("entity_id" in payload) &&
-                typeof payload["id"] === "string" &&
-                /^ent_/i.test(payload["id"] as string)
-              ) {
-                payload["entity_id"] = payload["id"];
-              }
-              if (!("schema_version" in payload)) payload["schema_version"] = "1.0";
-              if (!("observed_at" in payload)) payload["observed_at"] = new Date().toISOString();
-            }
+            const orderSql =
+              this.orderBy.length > 0
+                ? `ORDER BY ${this.orderBy
+                    .map((o) => `${o.column} ${o.ascending ? "ASC" : "DESC"}`)
+                    .join(", ")}`
+                : "";
+            const limitSql = this.limitValue !== null ? `LIMIT ${this.limitValue}` : "";
+            const offsetSql = this.offsetValue !== null ? `OFFSET ${this.offsetValue}` : "";
 
-            // Parity with Postgres: derive relationship_key when omitted.
-            if (this.table === "relationship_observations") {
-              const hasKey =
-                typeof payload["relationship_key"] === "string" && payload["relationship_key"];
-              if (!hasKey) {
-                const rt =
-                  typeof payload["relationship_type"] === "string"
-                    ? payload["relationship_type"]
-                    : "";
-                const se =
-                  typeof payload["source_entity_id"] === "string"
-                    ? payload["source_entity_id"]
-                    : "";
-                const te =
-                  typeof payload["target_entity_id"] === "string"
-                    ? payload["target_entity_id"]
-                    : "";
-                if (rt && se && te) {
-                  payload["relationship_key"] = `${rt}:${se}:${te}`;
-                }
-              }
-              if (!("observed_at" in payload)) payload["observed_at"] = new Date().toISOString();
-              if (!("source_priority" in payload)) payload["source_priority"] = 0;
-              if (!("metadata" in payload)) payload["metadata"] = {};
-            }
-
-            // Parity: entity_snapshots.canonical_name column for filtering.
-            if (this.table === "entity_snapshots" && !("canonical_name" in payload)) {
-              const derived = deriveCanonicalNameFromObject(payload["snapshot"]);
-              if (derived) payload["canonical_name"] = derived;
-            }
-
-            if (TABLES_WITH_ID.has(this.table) && !payload.id) {
-              if (DETERMINISTIC_ID_TABLES.has(this.table)) {
-                console.warn(
-                  `[DETERMINISM] Missing ID for ${this.table} insert; falling back to randomUUID. Callers should provide deterministic IDs for domain tables.`
-                );
-              }
-              payload.id = crypto.randomUUID();
-            }
-            // Only add created_at for tables that have this column
-            // entity_snapshots and relationship_snapshots don't have created_at
-            const TABLES_WITHOUT_CREATED_AT = new Set([
-              "entity_snapshots",
-              "relationship_snapshots",
-            ]);
-            if ("created_at" in payload === false && !TABLES_WITHOUT_CREATED_AT.has(this.table)) {
-              payload.created_at = new Date().toISOString();
-            }
-            const columns = Object.keys(payload);
-            const values = columns.map((column) => toDbValue(this.table, column, payload[column]));
-            const placeholders = columns.map(() => "?").join(", ");
-            db.prepare(
-              `INSERT INTO ${this.table} (${columns.join(", ")}) VALUES (${placeholders})`
-            ).run(values);
-            inserted.push(payload);
-
-            // Local backend parity: inserts can materialize related state (entities + snapshots).
-            if (this.table === "observations") {
-              await ensureEntityRowForObservation(db, payload);
-              if (typeof payload["entity_id"] === "string") {
-                await recomputeEntitySnapshot(db, payload["entity_id"] as string);
-              }
-            }
-            if (this.table === "entity_snapshots") {
-              await ensureEntityRowForSnapshot(db, payload);
-            }
-            if (this.table === "relationship_observations") {
-              const rk = payload["relationship_key"];
-              if (typeof rk === "string" && rk) {
-                await recomputeRelationshipSnapshot(db, rk);
-              }
-            }
-          }
-
-          if (this.selectColumns) {
-            return { data: this.expectSingle ? inserted[0] : inserted, error: null };
-          }
-          return { data: null, error: null };
-        }
-
-        if (this.operation === "update" && this.updatePayload) {
-          const payload = { ...this.updatePayload };
-          const columns = Object.keys(payload);
-          const updateValues = columns.map((column) =>
-            toDbValue(this.table, column, payload[column])
-          );
-          const updateSql = columns.map((column) => `${column} = ?`).join(", ");
-
-          db.prepare(`UPDATE ${this.table} SET ${updateSql} ${whereSql}`).run([
-            ...updateValues,
-            ...values,
-          ]);
-
-          if (this.selectColumns) {
+            const sql =
+              `SELECT ${this.selectColumns || "*"} FROM ${this.table} ${whereSql} ${orderSql} ${limitSql} ${offsetSql}`.trim();
             const rows = db
-              .prepare(`SELECT ${this.selectColumns} FROM ${this.table} ${whereSql}`)
+              .prepare(sql)
               .all(values)
               .map((row: any) => fromDbRow(this.table, row));
+
             if (this.expectSingle) {
               const row = rows[0] || null;
               if (!row && !this.allowNullSingle) {
@@ -871,84 +725,237 @@ class LocalQueryBuilder {
                 return {
                   data: null,
                   error: {
-                    message: `UPDATE on table '${this.table}' then SELECT returned no rows (expected exactly one). Query had: ${detail}.`,
+                    message: `SELECT on table '${this.table}' returned no rows (expected exactly one). Query had: ${detail}.`,
                     code: "PGRST116",
                   },
                 };
               }
-              return { data: row, error: null };
+              return { data: row, error: null, count };
             }
-            return { data: rows, error: null };
+
+            return { data: rows, error: null, count };
           }
-          return { data: null, error: null };
-        }
 
-        if (this.operation === "upsert" && this.upsertPayload) {
-          const inserted: Record<string, unknown>[] = [];
-          for (const item of this.upsertPayload) {
-            const payload = { ...item };
+          if (this.operation === "insert" && this.insertPayload) {
+            const inserted: Record<string, unknown>[] = [];
+            for (const item of this.insertPayload) {
+              const payload = { ...item };
 
-            if (this.table === "entity_snapshots" && !("canonical_name" in payload)) {
-              const derived = deriveCanonicalNameFromObject(payload["snapshot"]);
-              if (derived) payload["canonical_name"] = derived;
-            }
-
-            if (TABLES_WITH_ID.has(this.table) && !payload.id) {
-              if (DETERMINISTIC_ID_TABLES.has(this.table)) {
-                console.warn(
-                  `[DETERMINISM] Missing ID for ${this.table} upsert; falling back to randomUUID. Callers should provide deterministic IDs for domain tables.`
-                );
+              // Compatibility: observations.priority -> observations.source_priority
+              if (
+                this.table === "observations" &&
+                "priority" in payload &&
+                !("source_priority" in payload)
+              ) {
+                payload["source_priority"] = payload["priority"];
+                delete payload["priority"];
               }
-              payload.id = crypto.randomUUID();
+
+              // Parity with Postgres: supply required observation columns when omitted by tests/helpers.
+              if (this.table === "observations") {
+                // Compatibility: some tests use observations.id as entity identifier.
+                if (
+                  !("entity_id" in payload) &&
+                  typeof payload["id"] === "string" &&
+                  /^ent_/i.test(payload["id"] as string)
+                ) {
+                  payload["entity_id"] = payload["id"];
+                }
+                if (!("schema_version" in payload)) payload["schema_version"] = "1.0";
+                if (!("observed_at" in payload)) payload["observed_at"] = new Date().toISOString();
+              }
+
+              // Parity with Postgres: derive relationship_key when omitted.
+              if (this.table === "relationship_observations") {
+                const hasKey =
+                  typeof payload["relationship_key"] === "string" && payload["relationship_key"];
+                if (!hasKey) {
+                  const rt =
+                    typeof payload["relationship_type"] === "string"
+                      ? payload["relationship_type"]
+                      : "";
+                  const se =
+                    typeof payload["source_entity_id"] === "string"
+                      ? payload["source_entity_id"]
+                      : "";
+                  const te =
+                    typeof payload["target_entity_id"] === "string"
+                      ? payload["target_entity_id"]
+                      : "";
+                  if (rt && se && te) {
+                    payload["relationship_key"] = `${rt}:${se}:${te}`;
+                  }
+                }
+                if (!("observed_at" in payload)) payload["observed_at"] = new Date().toISOString();
+                if (!("source_priority" in payload)) payload["source_priority"] = 0;
+                if (!("metadata" in payload)) payload["metadata"] = {};
+              }
+
+              // Parity: entity_snapshots.canonical_name column for filtering.
+              if (this.table === "entity_snapshots" && !("canonical_name" in payload)) {
+                const derived = deriveCanonicalNameFromObject(payload["snapshot"]);
+                if (derived) payload["canonical_name"] = derived;
+              }
+
+              if (TABLES_WITH_ID.has(this.table) && !payload.id) {
+                if (DETERMINISTIC_ID_TABLES.has(this.table)) {
+                  console.warn(
+                    `[DETERMINISM] Missing ID for ${this.table} insert; falling back to randomUUID. Callers should provide deterministic IDs for domain tables.`
+                  );
+                }
+                payload.id = crypto.randomUUID();
+              }
+              // Only add created_at for tables that have this column
+              // entity_snapshots and relationship_snapshots don't have created_at
+              const TABLES_WITHOUT_CREATED_AT = new Set([
+                "entity_snapshots",
+                "relationship_snapshots",
+              ]);
+              if ("created_at" in payload === false && !TABLES_WITHOUT_CREATED_AT.has(this.table)) {
+                payload.created_at = new Date().toISOString();
+              }
+              const columns = Object.keys(payload);
+              const values = columns.map((column) =>
+                toDbValue(this.table, column, payload[column])
+              );
+              const placeholders = columns.map(() => "?").join(", ");
+              db.prepare(
+                `INSERT INTO ${this.table} (${columns.join(", ")}) VALUES (${placeholders})`
+              ).run(values);
+              inserted.push(payload);
+
+              // Local backend parity: inserts can materialize related state (entities + snapshots).
+              if (this.table === "observations") {
+                await ensureEntityRowForObservation(db, payload);
+                if (typeof payload["entity_id"] === "string") {
+                  await recomputeEntitySnapshot(db, payload["entity_id"] as string);
+                }
+              }
+              if (this.table === "entity_snapshots") {
+                await ensureEntityRowForSnapshot(db, payload);
+              }
+              if (this.table === "relationship_observations") {
+                const rk = payload["relationship_key"];
+                if (typeof rk === "string" && rk) {
+                  await recomputeRelationshipSnapshot(db, rk);
+                }
+              }
             }
+
+            if (this.selectColumns) {
+              return { data: this.expectSingle ? inserted[0] : inserted, error: null };
+            }
+            return { data: null, error: null };
+          }
+
+          if (this.operation === "update" && this.updatePayload) {
+            const payload = { ...this.updatePayload };
             const columns = Object.keys(payload);
-            const values = columns.map((column) => toDbValue(this.table, column, payload[column]));
-            const placeholders = columns.map(() => "?").join(", ");
-            db.prepare(
-              `INSERT OR REPLACE INTO ${this.table} (${columns.join(", ")}) VALUES (${placeholders})`
-            ).run(values);
-            inserted.push(payload);
+            const updateValues = columns.map((column) =>
+              toDbValue(this.table, column, payload[column])
+            );
+            const updateSql = columns.map((column) => `${column} = ?`).join(", ");
 
-            if (this.table === "entity_snapshots") {
-              await ensureEntityRowForSnapshot(db, payload);
+            db.prepare(`UPDATE ${this.table} SET ${updateSql} ${whereSql}`).run([
+              ...updateValues,
+              ...values,
+            ]);
+
+            if (this.selectColumns) {
+              const rows = db
+                .prepare(`SELECT ${this.selectColumns} FROM ${this.table} ${whereSql}`)
+                .all(values)
+                .map((row: any) => fromDbRow(this.table, row));
+              if (this.expectSingle) {
+                const row = rows[0] || null;
+                if (!row && !this.allowNullSingle) {
+                  const detail = whereSql || "no filter applied";
+                  return {
+                    data: null,
+                    error: {
+                      message: `UPDATE on table '${this.table}' then SELECT returned no rows (expected exactly one). Query had: ${detail}.`,
+                      code: "PGRST116",
+                    },
+                  };
+                }
+                return { data: row, error: null };
+              }
+              return { data: rows, error: null };
             }
+            return { data: null, error: null };
           }
-          if (this.selectColumns) {
-            return { data: this.expectSingle ? inserted[0] : inserted, error: null };
+
+          if (this.operation === "upsert" && this.upsertPayload) {
+            const inserted: Record<string, unknown>[] = [];
+            for (const item of this.upsertPayload) {
+              const payload = { ...item };
+
+              if (this.table === "entity_snapshots" && !("canonical_name" in payload)) {
+                const derived = deriveCanonicalNameFromObject(payload["snapshot"]);
+                if (derived) payload["canonical_name"] = derived;
+              }
+
+              if (TABLES_WITH_ID.has(this.table) && !payload.id) {
+                if (DETERMINISTIC_ID_TABLES.has(this.table)) {
+                  console.warn(
+                    `[DETERMINISM] Missing ID for ${this.table} upsert; falling back to randomUUID. Callers should provide deterministic IDs for domain tables.`
+                  );
+                }
+                payload.id = crypto.randomUUID();
+              }
+              const columns = Object.keys(payload);
+              const values = columns.map((column) =>
+                toDbValue(this.table, column, payload[column])
+              );
+              const placeholders = columns.map(() => "?").join(", ");
+              db.prepare(
+                `INSERT OR REPLACE INTO ${this.table} (${columns.join(", ")}) VALUES (${placeholders})`
+              ).run(values);
+              inserted.push(payload);
+
+              if (this.table === "entity_snapshots") {
+                await ensureEntityRowForSnapshot(db, payload);
+              }
+            }
+            if (this.selectColumns) {
+              return { data: this.expectSingle ? inserted[0] : inserted, error: null };
+            }
+            return { data: null, error: null };
           }
-          return { data: null, error: null };
-        }
 
-        if (this.operation === "delete") {
-          db.prepare(`DELETE FROM ${this.table} ${whereSql}`).run(values);
-          return { data: null, error: null };
-        }
+          if (this.operation === "delete") {
+            db.prepare(`DELETE FROM ${this.table} ${whereSql}`).run(values);
+            return { data: null, error: null };
+          }
 
-        return { data: null, error: { message: "Unsupported operation" } };
-      } catch (error: any) {
-        if (attempt === 0 && isRecoverableSqliteConnectionError(error)) {
-          clearSqliteCache();
-          continue;
+          return { data: null, error: { message: "Unsupported operation" } };
+        } catch (error: any) {
+          if (attempt === 0 && isRecoverableSqliteConnectionError(error)) {
+            clearSqliteCache();
+            continue;
+          }
+          if (isSqliteLockError(error)) {
+            // Break out of the connection-retry inner loop; the outer lock-retry
+            // loop will sleep and try again.
+            break;
+          }
+          const msg = error.message || String(error);
+          const code = mapSqliteErrorToPostgres(error);
+          return { data: null, error: { message: msg, ...(code ? { code } : {}) } };
         }
-        if (isSqliteLockError(error)) {
-          // Break out of the connection-retry inner loop; the outer lock-retry
-          // loop will sleep and try again.
-          break;
-        }
-        const msg = error.message || String(error);
-        const code = mapSqliteErrorToPostgres(error);
-        return { data: null, error: { message: msg, ...(code ? { code } : {}) } };
       }
-    }
-    // If we reach here inside the lock-retry loop, a lock error occurred.
-    // Sleep with exponential backoff before the next attempt.
-    if (lockRetry < SQLITE_LOCK_MAX_RETRIES - 1) {
-      const delay = SQLITE_LOCK_BASE_DELAY_MS * Math.pow(2, lockRetry);
-      await sleep(delay);
-    }
+      // If we reach here inside the lock-retry loop, a lock error occurred.
+      // Sleep with exponential backoff before the next attempt.
+      if (lockRetry < SQLITE_LOCK_MAX_RETRIES - 1) {
+        const delay = SQLITE_LOCK_BASE_DELAY_MS * Math.pow(2, lockRetry);
+        await sleep(delay);
+      }
     } // end lock-retry loop
 
-    return { data: null, error: { message: "SQLite database is locked: maximum retries exceeded" } };
+    return {
+      data: null,
+      error: { message: "SQLite database is locked: maximum retries exceeded" },
+    };
   }
 
   then<TResult1 = QueryResult<any>, TResult2 = never>(

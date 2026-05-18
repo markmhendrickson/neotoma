@@ -251,15 +251,25 @@ describe("local db adapter", () => {
 
   describe("isSqliteLockError", () => {
     it("detects SQLITE_BUSY code", () => {
-      expect(isSqliteLockError(Object.assign(new Error("database is locked"), { code: "SQLITE_BUSY" }))).toBe(true);
+      expect(
+        isSqliteLockError(Object.assign(new Error("database is locked"), { code: "SQLITE_BUSY" }))
+      ).toBe(true);
     });
 
     it("detects SQLITE_LOCKED code", () => {
-      expect(isSqliteLockError(Object.assign(new Error("database table is locked"), { code: "SQLITE_LOCKED" }))).toBe(true);
+      expect(
+        isSqliteLockError(
+          Object.assign(new Error("database table is locked"), { code: "SQLITE_LOCKED" })
+        )
+      ).toBe(true);
     });
 
     it("detects SQLITE_BUSY_SNAPSHOT extended code", () => {
-      expect(isSqliteLockError(Object.assign(new Error("database is locked"), { code: "SQLITE_BUSY_SNAPSHOT" }))).toBe(true);
+      expect(
+        isSqliteLockError(
+          Object.assign(new Error("database is locked"), { code: "SQLITE_BUSY_SNAPSHOT" })
+        )
+      ).toBe(true);
     });
 
     it("detects 'database is locked' message without code", () => {
@@ -271,7 +281,9 @@ describe("local db adapter", () => {
     });
 
     it("returns false for non-lock errors", () => {
-      expect(isSqliteLockError(Object.assign(new Error("disk i/o error"), { code: "SQLITE_IOERR" }))).toBe(false);
+      expect(
+        isSqliteLockError(Object.assign(new Error("disk i/o error"), { code: "SQLITE_IOERR" }))
+      ).toBe(false);
     });
 
     it("returns false for null input", () => {
