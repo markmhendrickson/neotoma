@@ -9,7 +9,6 @@ observation_count: 2
 computed_at: 2026-05-16T12:44:52.706Z
 title: Schema Introspection and Field Promotion
 status: in_progress
-repository_name: neotoma
 ---
 
 # Schema Introspection and Field Promotion

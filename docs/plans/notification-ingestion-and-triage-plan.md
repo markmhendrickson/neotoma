@@ -8,25 +8,6 @@ last_observation_at: 2026-05-14T14:26:30.325Z
 observation_count: 3
 computed_at: 2026-05-14T14:26:30.325Z
 title: Notification ingestion and triage plan
-schema_version: 1.0
-slug: notification_triage_pipeline_f617d213
-overview: Design a local-first communication ingestion and notification triage system that stores source communications and derived events in Neotoma, uses email as the MVP input path, adds messaging (WhatsApp in-repo, Telegram and Signal where feasible), and sends actionable alerts through an external Onychomys adapter with proposed responses.
-plan_file_path: .cursor/plans/notification_triage_pipeline_f617d213.plan.md
-plan_kind: cursor_agent_plan
-harness: cursor
-is_project: false
-todos:
-  - [object Object]
-  - [object Object]
-  - [object Object]
-  - [object Object]
-  - [object Object]
-  - [object Object]
-  - [object Object]
-repository_name: ateles
-conversation_id: ateles-cursor-plan-full-entity-2026-05-14
-source_message_entity_id: ent_2aced9dd608de44dc9db23c0
-data_source: ateles Cursor plan full body correction 2026-05-14 file=/Users/markmhendrickson/repos/ateles/.cursor/plans/notification_triage_pipeline_f617d213.plan.md
 ---
 
 # Notification ingestion and triage plan

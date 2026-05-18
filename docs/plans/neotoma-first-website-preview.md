@@ -7,10 +7,8 @@ schema_version: 1.0
 last_observation_at: 2026-05-14T14:22:16.999Z
 observation_count: 1
 computed_at: 2026-05-14T14:22:16.999Z
-schema_version: 1.0
 title: Neotoma-first website preview
 status: draft
-data_source: Cursor user request plan-as-plan entity; source .cursor/plans/neotoma_preview_sync_5c7dda1e.plan.md 2026-05-14
 ---
 
 ---

@@ -8,16 +8,19 @@ last_observation_at: 2026-05-14T05:09:26.305Z
 observation_count: 1
 computed_at: 2026-05-14T05:09:26.305Z
 title: MCP-CLI Action Item 11: Fixtures Repository with Expected Outputs
-file_path: .cursor/plans/mcp-cli-action-item-11-fixtures-expected-outputs.plan.md
-repository: neotoma
 status: pending
-overview: Define a folder structure for expected outputs under tests/fixtures/, add expected outputs for key fixture types, and add validation tooling that fails if expected outputs are missing.
 priority: low
-todos_pending: 4
-todos_completed: 0
+repository: neotoma
+file_path: .cursor/plans/mcp-cli-action-item-11-fixtures-expected-outputs.plan.md
 tags:
   - fixtures
   - testing
   - expected-outputs
   - validation
+todos_completed: 0
+todos_pending: 4
 ---
+
+## overview
+
+Define a folder structure for expected outputs under tests/fixtures/, add expected outputs for key fixture types, and add validation tooling that fails if expected outputs are missing.

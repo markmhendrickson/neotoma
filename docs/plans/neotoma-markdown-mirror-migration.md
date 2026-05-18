@@ -8,39 +8,7 @@ last_observation_at: 2026-05-14T14:20:29.340Z
 observation_count: 1
 computed_at: 2026-05-14T14:20:29.340Z
 title: Neotoma markdown mirror migration
-slug: neotoma_markdown_mirror_migration_9f208493
-harness: cursor
-plan_kind: harness_plan
-plan_file_path: /Users/markmhendrickson/repos/ateles/.cursor/plans/neotoma_markdown_mirror_migration_9f208493.plan.md
-overview: Migrate durable knowledge markdown out of the ateles repo into Neotoma entities, enable Neotoma's filesystem mirror, and rewire every dependent skill/rule/script to read from the mirror path. `memory/` and the `loop-start` BTC agent daemon are explicitly out of scope per user decision.
-is_project: false
-todos:
-  - [object Object]
-  - [object Object]
-  - [object Object]
-  - [object Object]
-  - [object Object]
-  - [object Object]
-  - [object Object]
-  - [object Object]
-  - [object Object]
-  - [object Object]
-  - [object Object]
-  - [object Object]
-  - [object Object]
-  - [object Object]
-  - [object Object]
-  - [object Object]
-  - [object Object]
-  - [object Object]
-  - [object Object]
-  - [object Object]
-  - [object Object]
 status: draft
-created_at: 2026-05-14T13:57:02.398Z
-data_source: cursor harness plan file 2026-05-14
-harness_plan_id: 9f208493
-source_message_entity_id: ent_45a7d77c3d77eb7ad0272a41
 ---
 
 # Neotoma Markdown Mirror Migration

@@ -8,16 +8,19 @@ last_observation_at: 2026-05-14T05:09:26.302Z
 observation_count: 1
 computed_at: 2026-05-14T05:09:26.302Z
 title: MCP-CLI Action Item 8: CLI as Reference Executor
-file_path: .cursor/plans/mcp-cli-action-item-08-cli-reference-executor.plan.md
-repository: neotoma
 status: pending
-overview: Add a CLI module that calls the same service layer as MCP and REST. Refactor MCP and REST to share that service layer, and add tests that compare CLI and MCP outputs for the same inputs.
 priority: medium
-todos_pending: 4
-todos_completed: 0
+repository: neotoma
+file_path: .cursor/plans/mcp-cli-action-item-08-cli-reference-executor.plan.md
 tags:
   - cli
   - mcp
   - service-layer
   - reference
+todos_completed: 0
+todos_pending: 4
 ---
+
+## overview
+
+Add a CLI module that calls the same service layer as MCP and REST. Refactor MCP and REST to share that service layer, and add tests that compare CLI and MCP outputs for the same inputs.

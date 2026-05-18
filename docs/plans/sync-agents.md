@@ -8,10 +8,7 @@ last_observation_at: 2026-05-14T08:44:10.163Z
 observation_count: 2
 computed_at: 2026-05-14T08:44:10.163Z
 title: Sync Agents
-plan_kind: feature_implementation
 status: draft
-repository_name: neotoma
-overview: Long-running background agents moving data between external sources (Gmail, Notion, Linear, Slack) and Neotoma in both directions. Inbound: scheduled pulls or source change events become observations via reader/writer split. Outbound: substrate subscription events trigger writes back to source. Neotoma ships no per-source connector code — daemons live in separate packages.
 ---
 
 # Sync Agents

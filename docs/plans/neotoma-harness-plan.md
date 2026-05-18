@@ -8,13 +8,7 @@ last_observation_at: 2026-05-14T14:20:06.027Z
 observation_count: 1
 computed_at: 2026-05-14T14:20:06.027Z
 title: neotoma_harness_plan
-slug: neotoma_harness_plan
-harness: other
-plan_kind: harness_plan
-plan_file_path: /Users/markmhendrickson/repos/neotoma/docs/private/strategy/neotoma_harness_plan.md
 status: draft
-created_at: 2026-05-11T17:07:32.765Z
-data_source: other harness plan file 2026-05-11
 ---
 
 # Neotoma Harness & Landing Page: Net Plan

@@ -7,21 +7,8 @@ schema_version: 1.0
 last_observation_at: 2026-05-14T14:23:01.129Z
 observation_count: 1
 computed_at: 2026-05-14T14:23:01.129Z
-schema_version: 1.0
 title: Release readiness sub-plans (v0.12.0)
-slug: release_readiness_subplans
-harness: agent
-harness_plan_id: cursor_export_20260514
-plan_file_path: /private/tmp/release_readiness_subplans_neotoma_export.md
-plan_kind: other
-overview: Decomposition of release-readiness work: wave 1 + 1.5 completed; R1–R3 before invoking /release; wave 2 deferred. Full markdown body is the canonical plan text.
 status: draft
-conversation_id: cursor-release-readiness-plan-2026-05-14
-repository_name: neotoma
-git_ref: fix/issue-queue-99-95-93-97
-data_source: cursor-agent store entity_type=plan combined file_path 2026-05-14
-created_at: 2026-05-14T00:00:00.000Z
-agent_id: cursor-agent
 ---
 
 # Release readiness sub-plans

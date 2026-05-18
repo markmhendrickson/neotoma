@@ -8,17 +8,20 @@ last_observation_at: 2026-05-14T05:09:26.306Z
 observation_count: 1
 computed_at: 2026-05-14T05:09:26.306Z
 title: Agent Trust Framework
-file_path: .cursor/plans/agent_trust_framework_eb38ca7d.plan.md
-repository: neotoma
 status: pending
-overview: Implement blockchain-inspired trust mechanisms for multi-agent data contributions: cryptographic agent identity, authorization table, signed observations, hash chains, Merkle-tree verification, and conflict detection. Builds on existing crypto infrastructure and v2.0.0 E2EE foundation.
 priority: low
-todos_pending: 9
-todos_completed: 0
+repository: neotoma
+file_path: .cursor/plans/agent_trust_framework_eb38ca7d.plan.md
 tags:
   - trust
   - cryptography
   - multi-agent
   - security
   - e2ee
+todos_completed: 0
+todos_pending: 9
 ---
+
+## overview
+
+Implement blockchain-inspired trust mechanisms for multi-agent data contributions: cryptographic agent identity, authorization table, signed observations, hash chains, Merkle-tree verification, and conflict detection. Builds on existing crypto infrastructure and v2.0.0 E2EE foundation.

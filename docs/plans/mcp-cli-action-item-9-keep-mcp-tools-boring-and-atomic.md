@@ -8,17 +8,20 @@ last_observation_at: 2026-05-14T05:09:26.303Z
 observation_count: 1
 computed_at: 2026-05-14T05:09:26.303Z
 title: MCP-CLI Action Item 9: Keep MCP Tools Boring and Atomic
-file_path: .cursor/plans/mcp-cli-action-item-09-mcp-tools-atomic.plan.md
-repository: neotoma
 status: pending
-overview: Define tool naming and versioning rules, add a registry validation test asserting stable tool names, split composite tools into atomic operations where needed, and update docs referencing tool names.
 priority: medium
-todos_pending: 4
-todos_completed: 0
+repository: neotoma
+file_path: .cursor/plans/mcp-cli-action-item-09-mcp-tools-atomic.plan.md
 tags:
   - mcp
   - tooling
   - atomic
   - naming
   - stability
+todos_completed: 0
+todos_pending: 4
 ---
+
+## overview
+
+Define tool naming and versioning rules, add a registry validation test asserting stable tool names, split composite tools into atomic operations where needed, and update docs referencing tool names.

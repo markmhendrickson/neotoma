@@ -9,5 +9,8 @@ observation_count: 1
 computed_at: 2026-05-14T05:08:01.310Z
 title: Agentic Eval — Tier 3 — Compliance Scorecard CLI
 status: pending
-overview: Turn turn_compliance observations and instruction_profile counters into a first-class operator-facing eval signal. Ship neotoma compliance scorecard CLI subcommand and matching /admin/compliance/* HTTP endpoints that aggregate per-model, per-harness, per-profile backfill rates.
 ---
+
+## overview
+
+Turn turn_compliance observations and instruction_profile counters into a first-class operator-facing eval signal. Ship neotoma compliance scorecard CLI subcommand and matching /admin/compliance/* HTTP endpoints that aggregate per-model, per-harness, per-profile backfill rates.

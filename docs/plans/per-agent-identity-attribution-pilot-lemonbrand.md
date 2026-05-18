@@ -9,7 +9,6 @@ observation_count: 2
 computed_at: 2026-05-16T12:43:48.201Z
 title: Per-Agent Identity Attribution Pilot — Lemonbrand
 status: in_progress
-repository_name: neotoma
 ---
 
 # Per-Agent Identity Attribution Pilot — Lemonbrand

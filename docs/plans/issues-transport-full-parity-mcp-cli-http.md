@@ -9,7 +9,6 @@ observation_count: 2
 computed_at: 2026-05-16T12:43:52.331Z
 title: Issues transport full parity (MCP, CLI, HTTP)
 status: completed
-repository_name: neotoma
 ---
 
 # Issues transport full parity (MCP, CLI, HTTP)

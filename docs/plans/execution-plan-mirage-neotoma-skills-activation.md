@@ -7,7 +7,6 @@ schema_version: 1.0
 last_observation_at: 2026-05-14T14:18:40.451Z
 observation_count: 3
 computed_at: 2026-05-14T14:18:40.451Z
-schema_version: 1.0
 title: Execution Plan: Mirage + Neotoma Skills & Activation
 status: draft
 ---

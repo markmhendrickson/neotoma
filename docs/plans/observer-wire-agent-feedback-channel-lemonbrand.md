@@ -9,7 +9,6 @@ observation_count: 2
 computed_at: 2026-05-16T12:44:48.188Z
 title: Observer Wire / Agent Feedback Channel — Lemonbrand
 status: in_progress
-repository_name: neotoma
 ---
 
 # Observer Wire / Agent Feedback Channel — Lemonbrand

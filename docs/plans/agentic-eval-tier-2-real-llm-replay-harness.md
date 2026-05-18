@@ -9,5 +9,8 @@ observation_count: 1
 computed_at: 2026-05-14T05:08:01.307Z
 title: Agentic Eval — Tier 2 — Real-LLM Replay Harness
 status: pending
-overview: Build a real-LLM eval harness for Neotoma agentic behaviors. Each scenario spins up an isolated in-process Neotoma server, drives a real LLM through a scripted prompt, and asserts on Neotoma DB state. Cassette mode replays recorded responses for CI.
 ---
+
+## overview
+
+Build a real-LLM eval harness for Neotoma agentic behaviors. Each scenario spins up an isolated in-process Neotoma server, drives a real LLM through a scripted prompt, and asserts on Neotoma DB state. Cassette mode replays recorded responses for CI.

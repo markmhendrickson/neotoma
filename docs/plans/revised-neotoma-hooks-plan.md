@@ -9,5 +9,8 @@ observation_count: 1
 computed_at: 2026-05-14T05:08:01.302Z
 title: Revised Neotoma Hooks Plan
 status: pending
-overview: Revise the Neotoma hooks integration plan to prioritize CLI/IDE tool hooks (Claude Code, Cursor, OpenCode, Codex) as primary targets, update Wooders analysis report with corrected findings, and build a client library as shared foundation.
 ---
+
+## overview
+
+Revise the Neotoma hooks integration plan to prioritize CLI/IDE tool hooks (Claude Code, Cursor, OpenCode, Codex) as primary targets, update Wooders analysis report with corrected findings, and build a client library as shared foundation.

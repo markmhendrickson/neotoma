@@ -9,7 +9,6 @@ observation_count: 2
 computed_at: 2026-05-16T12:43:56.453Z
 title: Multi-Tenant Operational Patterns
 status: draft
-repository_name: neotoma
 ---
 
 # Multi-Tenant Operational Patterns

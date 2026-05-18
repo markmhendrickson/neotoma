@@ -8,10 +8,7 @@ last_observation_at: 2026-05-14T08:44:48.148Z
 observation_count: 2
 computed_at: 2026-05-14T08:44:48.148Z
 title: Update & Advisory Agents
-plan_kind: feature_implementation
 status: draft
-repository_name: neotoma
-overview: Long-running background agents watching for new Neotoma releases and security advisories, surfacing them with tiered urgency (Tier 0 silent observation through Tier 4 auto-apply), and optionally applying critical security patches automatically under maximalist predicates. Local-first polling model, no telemetry, no central update server.
 ---
 
 # Update & Advisory Agents

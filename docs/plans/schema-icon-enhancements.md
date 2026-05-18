@@ -8,17 +8,20 @@ last_observation_at: 2026-05-14T05:08:58.291Z
 observation_count: 1
 computed_at: 2026-05-14T05:08:58.291Z
 title: Schema Icon Enhancements
-file_path: .cursor/plans/schema_icon_enhancements_plan.md
-repository: neotoma
 status: pending
-overview: Enhance the AI-powered schema icon system with: icon customization UI (user overrides), icon versioning (auto-regenerate on schema changes), batch API endpoint, MCP action for manual icon generation, and TTL cache expiration.
 priority: low
-todos_pending: 5
-todos_completed: 0
+repository: neotoma
+file_path: .cursor/plans/schema_icon_enhancements_plan.md
 tags:
   - schema
   - icons
   - ui
   - mcp
   - cache
+todos_completed: 0
+todos_pending: 5
 ---
+
+## overview
+
+Enhance the AI-powered schema icon system with: icon customization UI (user overrides), icon versioning (auto-regenerate on schema changes), batch API endpoint, MCP action for manual icon generation, and TTL cache expiration.

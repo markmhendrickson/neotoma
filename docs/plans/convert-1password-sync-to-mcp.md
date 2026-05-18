@@ -8,16 +8,19 @@ last_observation_at: 2026-05-14T05:08:58.291Z
 observation_count: 1
 computed_at: 2026-05-14T05:08:58.291Z
 title: Convert 1Password Sync to MCP
-file_path: .cursor/plans/convert_1password_sync_to_mcp_343ca61c.plan.md
-repository: neotoma
 status: pending
-overview: Convert the /sync_env_from_1password command to use 1Password MCP server instead of CLI, eliminating session management issues and providing persistent authentication.
 priority: low
-todos_pending: 5
-todos_completed: 0
+repository: neotoma
+file_path: .cursor/plans/convert_1password_sync_to_mcp_343ca61c.plan.md
 tags:
   - 1password
   - mcp
   - env-sync
   - auth
+todos_completed: 0
+todos_pending: 5
 ---
+
+## overview
+
+Convert the /sync_env_from_1password command to use 1Password MCP server instead of CLI, eliminating session management issues and providing persistent authentication.

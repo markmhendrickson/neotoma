@@ -8,16 +8,19 @@ last_observation_at: 2026-05-14T05:08:29.723Z
 observation_count: 1
 computed_at: 2026-05-14T05:08:29.723Z
 title: Chrome Extension Auto-Capture
-file_path: .cursor/plans/chrome_extension_capture_plan_675a89a7.plan.md
-repository: neotoma
 status: pending
-overview: Build a Chrome extension MVP that captures useful page data from tabs you view and sends it to Neotoma automatically, with strong privacy controls, deduplication, and optional site-specific extractors (including WhatsApp Web as an advanced path).
 priority: low
-todos_pending: 6
-todos_completed: 0
+repository: neotoma
+file_path: .cursor/plans/chrome_extension_capture_plan_675a89a7.plan.md
 tags:
   - chrome-extension
   - capture
   - ingestion
   - privacy
+todos_completed: 0
+todos_pending: 6
 ---
+
+## overview
+
+Build a Chrome extension MVP that captures useful page data from tabs you view and sends it to Neotoma automatically, with strong privacy controls, deduplication, and optional site-specific extractors (including WhatsApp Web as an advanced path).

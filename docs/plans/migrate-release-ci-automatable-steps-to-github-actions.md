@@ -8,7 +8,7 @@ last_observation_at: 2026-05-14T08:36:51.860Z
 observation_count: 1
 computed_at: 2026-05-14T08:36:51.860Z
 title: Migrate /release CI-automatable steps to GitHub Actions
-repository: neotoma
 status: proposed
 priority: medium
+repository: neotoma
 ---

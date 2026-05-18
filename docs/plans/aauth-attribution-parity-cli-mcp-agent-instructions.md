@@ -8,17 +8,20 @@ last_observation_at: 2026-05-14T05:08:29.725Z
 observation_count: 1
 computed_at: 2026-05-14T05:08:29.725Z
 title: AAuth Attribution Parity (CLI ⇔ MCP Agent Instructions)
-file_path: .cursor/plans/aauth_agent_instruction_parity.plan.md
-repository: neotoma
 status: pending
-overview: Align cli_agent_instructions.md with how attribution actually works when the MCP identity proxy auto-enables --aauth (keys present) and when the CLI signs HTTP requests via the same ~/.neotoma/aauth/ keypair. Keep mcp/instructions.md in lockstep per repo sync rules.
 priority: medium
-todos_pending: 4
-todos_completed: 0
+repository: neotoma
+file_path: .cursor/plans/aauth_agent_instruction_parity.plan.md
 tags:
   - aauth
   - attribution
   - cli
   - mcp
   - docs
+todos_completed: 0
+todos_pending: 4
 ---
+
+## overview
+
+Align cli_agent_instructions.md with how attribution actually works when the MCP identity proxy auto-enables --aauth (keys present) and when the CLI signs HTTP requests via the same ~/.neotoma/aauth/ keypair. Keep mcp/instructions.md in lockstep per repo sync rules.
