@@ -8,10 +8,11 @@ on:
       - synchronize
     # Only run when code or contract surfaces change — skip pure docs/config PRs.
     paths:
-      - 'src/**'
-      - 'openapi.yaml'
-      - 'package.json'
-      - 'tests/**'
+      - "src/**"
+      - "packages/**"
+      - "openapi.yaml"
+      - "package.json"
+      - "tests/**"
   issue_comment:
     types:
       - created
@@ -64,13 +65,15 @@ jobs:
 
           LINES=$((ADDITIONS + DELETIONS))
           TOUCHES_SRC=$(echo "$CHANGED_FILES" | grep -c "^src/" || true)
+          TOUCHES_PACKAGES=$(echo "$CHANGED_FILES" | grep -c "^packages/" || true)
           TOUCHES_OPENAPI=$(echo "$CHANGED_FILES" | grep -c "^openapi.yaml" || true)
           TOUCHES_AUTH=$(echo "$CHANGED_FILES" | grep -cE "(auth|token|session|credential|permission|middleware)" || true)
 
-          echo "files=$FILES lines=$LINES src=$TOUCHES_SRC openapi=$TOUCHES_OPENAPI auth=$TOUCHES_AUTH"
+          echo "files=$FILES lines=$LINES src=$TOUCHES_SRC packages=$TOUCHES_PACKAGES openapi=$TOUCHES_OPENAPI auth=$TOUCHES_AUTH"
 
           if [ "$FILES" -gt 5 ] || [ "$LINES" -gt 150 ] || \
              ( [ "$TOUCHES_SRC" -gt 0 ] && [ "$TOUCHES_OPENAPI" -gt 0 ] ) || \
+             [ "$TOUCHES_PACKAGES" -gt 0 ] || \
              [ "$TOUCHES_AUTH" -gt 0 ]; then
             echo "substantial=true" >> $GITHUB_OUTPUT
           else
