@@ -121,12 +121,23 @@ function validateAgainstSchema(
 }
 
 /**
+ * Result of flushing buffered raw_fragments. The `insertedUnknown` count is
+ * the number of unknown-field fragments that were *newly inserted* this call —
+ * not the number of pending entries (which over-counts on the dedup path
+ * where the same fragment from an earlier observation only bumps the
+ * existing row's frequency).
+ */
+interface FlushPendingFragmentsResult {
+  insertedUnknown: number;
+  insertedConverted: number;
+}
+
+/**
  * Write buffered raw_fragments for a single entity after entity resolution and
  * observation creation have both succeeded (issue #163: do not write fragments
  * before entity resolution).
  */
 async function flushPendingFragments(opts: {
-  db: unknown; // unused; kept for call-site symmetry — module-level db is used
   sourceId: string;
   interpretationId: string;
   userId: string;
@@ -135,7 +146,7 @@ async function flushPendingFragments(opts: {
   validFields: Record<string, unknown>;
   pendingConvertedFragments: Array<{ key: string; value: unknown }>;
   pendingUnknownFragments: Array<{ key: string; value: unknown }>;
-}): Promise<void> {
+}): Promise<FlushPendingFragmentsResult> {
   const {
     sourceId,
     interpretationId,
@@ -146,6 +157,8 @@ async function flushPendingFragments(opts: {
     pendingConvertedFragments,
     pendingUnknownFragments,
   } = opts;
+  let insertedUnknown = 0;
+  let insertedConverted = 0;
 
   // Write converted-value originals (preserves zero data loss for converter fields).
   for (const { key, value } of pendingConvertedFragments) {
@@ -188,6 +201,7 @@ async function flushPendingFragments(opts: {
           converted_to: validFields[key],
         },
       });
+      insertedConverted += 1;
     }
   }
 
@@ -285,6 +299,7 @@ async function flushPendingFragments(opts: {
           }
         }
       } else if (!insertError) {
+        insertedUnknown += 1;
         try {
           const { schemaRecommendationService } = await import("./schema_recommendation.js");
           await schemaRecommendationService.queueAutoEnhancementCheck({
@@ -302,6 +317,8 @@ async function flushPendingFragments(opts: {
       }
     }
   }
+
+  return { insertedUnknown, insertedConverted };
 }
 
 /**
@@ -621,8 +638,7 @@ export async function runInterpretation(
       if (existingObservation) {
         // Observation already exists - don't create duplicate.
         // Still flush buffered fragments so they are kept current on replay.
-        await flushPendingFragments({
-          db,
+        const flushed = await flushPendingFragments({
           sourceId,
           interpretationId,
           userId,
@@ -632,7 +648,11 @@ export async function runInterpretation(
           pendingConvertedFragments,
           pendingUnknownFragments,
         });
-        unknownFieldsCount += pendingUnknownFragments.length;
+        // Count only newly inserted fragments (not freq-bumped existing rows),
+        // otherwise idempotent replays of a dedup'd observation inflate
+        // `unknown_fields_count` on the interpretations row each time. See
+        // PR #224 review.
+        unknownFieldsCount += flushed.insertedUnknown;
         entities.push({
           entityId,
           entityType,
@@ -691,8 +711,7 @@ export async function runInterpretation(
 
       // Flush buffered raw_fragments now that entity resolution and observation
       // creation have both succeeded (issue #163).
-      await flushPendingFragments({
-        db,
+      const flushed = await flushPendingFragments({
         sourceId,
         interpretationId,
         userId,
@@ -702,7 +721,8 @@ export async function runInterpretation(
         pendingConvertedFragments,
         pendingUnknownFragments,
       });
-      unknownFieldsCount += pendingUnknownFragments.length;
+      // Count only newly inserted fragments (see PR #224 review).
+      unknownFieldsCount += flushed.insertedUnknown;
     }
 
     // Compute snapshots for all entities
