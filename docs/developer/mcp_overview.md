@@ -43,7 +43,7 @@ The table below lists every supported harness with its setup guide and whether `
 | Continue | [`mcp_continue_setup.md`](mcp_continue_setup.md) | `neotoma setup --tool continue` | stdio (local) or HTTP | Writes Continue's `config.json` |
 | VS Code | [`mcp_vscode_setup.md`](mcp_vscode_setup.md) | `neotoma setup --tool vscode` | stdio (local) or HTTP | Copilot Chat MCP integration |
 | OpenClaw | [`mcp_openclaw_setup.md`](mcp_openclaw_setup.md) | `neotoma setup --tool openclaw` | stdio (local) or HTTP | Native plugin manages permissions; allowlist patch is skipped; installs skills under `.openclaw/skills/` |
-| IronClaw | [`mcp_ironclaw_setup.md`](mcp_ironclaw_setup.md) | use `ironclaw mcp add` | HTTP recommended | No `neotoma setup --tool ironclaw`; configured via IronClaw's own MCP commands |
+| IronClaw | [`docs/developer/mcp_ironclaw_setup.md`](mcp_ironclaw_setup.md) | use `ironclaw mcp add` | HTTP recommended | No `neotoma setup --tool ironclaw`; configured via IronClaw's own MCP commands |
 | Letta | [`mcp_letta_setup.md`](mcp_letta_setup.md) | manual | streamable HTTP, SSE, or stdio | TypeScript SDK or HTTP endpoint; no `neotoma setup` integration |
 | ChatGPT Apps connector | [`chatgpt_apps_setup.md`](chatgpt_apps_setup.md) | manual | HTTP (MCP endpoint) | Public HTTPS required; ChatGPT Developer Mode |
 | ChatGPT Custom GPT Actions | [`chatgpt_actions_setup.md`](chatgpt_actions_setup.md) | manual | HTTP (OpenAPI, not MCP) | Uses `openapi.yaml` as the action schema; distinct from MCP |
