@@ -365,9 +365,7 @@ export function registerDbCommand(program: Command, hooks: DbCliHooks): void {
     .action(async (opts: { dataDir?: string; dryRun?: boolean; yes?: boolean }) => {
       const { migrateEnvSplit } = await import("./db_migrate_env_split.js");
       const dataDir =
-        opts.dataDir ??
-        process.env.NEOTOMA_DATA_DIR ??
-        path.join(os.homedir(), "neotoma", "data");
+        opts.dataDir ?? process.env.NEOTOMA_DATA_DIR ?? path.join(os.homedir(), "neotoma", "data");
       try {
         const result = await migrateEnvSplit({
           dataDir,

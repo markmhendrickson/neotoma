@@ -31,10 +31,10 @@ export interface DbInfo {
 }
 
 export type EnvSplitStatus =
-  | "no_data"           // Neither DB has user data — nothing to do.
-  | "prod_only"         // Prod has data, dev empty/absent — already correct.
-  | "dev_only"          // Dev has data, prod empty/absent — rename candidate.
-  | "both_have_data"    // Both have user data — manual merge required.
+  | "no_data" // Neither DB has user data — nothing to do.
+  | "prod_only" // Prod has data, dev empty/absent — already correct.
+  | "dev_only" // Dev has data, prod empty/absent — rename candidate.
+  | "both_have_data" // Both have user data — manual merge required.
   | "dev_empty_prod_empty"; // Both exist but both empty — nothing to do.
 
 export interface EnvSplitReport {
@@ -92,7 +92,11 @@ function inspectDb(dbPath: string): Omit<DbInfo, "path" | "exists"> {
   } catch {
     return { observation_count: 0, snapshot_count: 0, source_count: 0 };
   } finally {
-    try { db?.close?.(); } catch { /* ignore */ }
+    try {
+      db?.close?.();
+    } catch {
+      /* ignore */
+    }
   }
 }
 
@@ -104,8 +108,12 @@ export function inspectEnvSplit(dataDir: string): EnvSplitReport {
   const devExists = existsSync(devPath);
   const prodExists = existsSync(prodPath);
 
-  const devCounts = devExists ? inspectDb(devPath) : { observation_count: 0, snapshot_count: 0, source_count: 0 };
-  const prodCounts = prodExists ? inspectDb(prodPath) : { observation_count: 0, snapshot_count: 0, source_count: 0 };
+  const devCounts = devExists
+    ? inspectDb(devPath)
+    : { observation_count: 0, snapshot_count: 0, source_count: 0 };
+  const prodCounts = prodExists
+    ? inspectDb(prodPath)
+    : { observation_count: 0, snapshot_count: 0, source_count: 0 };
 
   const dev: DbInfo = { path: devPath, exists: devExists, ...devCounts };
   const prod: DbInfo = { path: prodPath, exists: prodExists, ...prodCounts };
@@ -137,7 +145,8 @@ export function inspectEnvSplit(dataDir: string): EnvSplitReport {
 /** Format a count line for human output. */
 function fmtCounts(info: DbInfo): string {
   if (!info.exists) return "  (file does not exist)";
-  if (info.observation_count === 0 && info.source_count === 0) return "  0 observations, 0 sources (empty)";
+  if (info.observation_count === 0 && info.source_count === 0)
+    return "  0 observations, 0 sources (empty)";
   return `  ${info.observation_count} observations, ${info.source_count} sources, ${info.snapshot_count} snapshots`;
 }
 
@@ -153,7 +162,9 @@ export interface MigrateEnvSplitOptions {
  * Detect and (optionally) repair a dev/prod env split.
  * Returns a structured result for programmatic callers (tests, JSON output).
  */
-export async function migrateEnvSplit(opts: MigrateEnvSplitOptions): Promise<MigrateEnvSplitResult> {
+export async function migrateEnvSplit(
+  opts: MigrateEnvSplitOptions
+): Promise<MigrateEnvSplitResult> {
   const out = opts.write ?? ((s: string) => process.stdout.write(s));
   const report = inspectEnvSplit(opts.dataDir);
   const { status, dev, prod } = report;
@@ -261,17 +272,33 @@ export function detectEnvSplitWarning(dataDir: string): EnvSplitWarning {
   const prodExists = existsSync(prodPath);
 
   if (!devExists) {
-    return { has_split: false, dev_observations: 0, dev_sources: 0, prod_observations: 0, prod_sources: 0, suggested_action: null };
+    return {
+      has_split: false,
+      dev_observations: 0,
+      dev_sources: 0,
+      prod_observations: 0,
+      prod_sources: 0,
+      suggested_action: null,
+    };
   }
 
   const devCounts = inspectDb(devPath);
-  const prodCounts = prodExists ? inspectDb(prodPath) : { observation_count: 0, source_count: 0, snapshot_count: 0 };
+  const prodCounts = prodExists
+    ? inspectDb(prodPath)
+    : { observation_count: 0, source_count: 0, snapshot_count: 0 };
 
   const devHasData = devCounts.observation_count > 0 || devCounts.source_count > 0;
   const prodHasData = prodCounts.observation_count > 0 || prodCounts.source_count > 0;
 
   if (!devHasData) {
-    return { has_split: false, dev_observations: 0, dev_sources: 0, prod_observations: prodCounts.observation_count, prod_sources: prodCounts.source_count, suggested_action: null };
+    return {
+      has_split: false,
+      dev_observations: 0,
+      dev_sources: 0,
+      prod_observations: prodCounts.observation_count,
+      prod_sources: prodCounts.source_count,
+      suggested_action: null,
+    };
   }
 
   const has_split = !prodHasData; // dev has data, prod is empty → wrong DB
@@ -281,8 +308,6 @@ export function detectEnvSplitWarning(dataDir: string): EnvSplitWarning {
     dev_sources: devCounts.source_count,
     prod_observations: prodCounts.observation_count,
     prod_sources: prodCounts.source_count,
-    suggested_action: has_split
-      ? `Run: neotoma db migrate-env-split --dry-run`
-      : null,
+    suggested_action: has_split ? `Run: neotoma db migrate-env-split --dry-run` : null,
   };
 }

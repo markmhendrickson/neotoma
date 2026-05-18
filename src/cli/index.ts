@@ -7816,8 +7816,7 @@ cliCommand
       if (opts.yes) {
         const cliDir = path.dirname(fileURLToPath(import.meta.url));
         const isDistBuild =
-          cliDir.includes("/dist/") ||
-          process.env.NEOTOMA_TEST_SIMULATE_DIST_BUILD === "1";
+          cliDir.includes("/dist/") || process.env.NEOTOMA_TEST_SIMULATE_DIST_BUILD === "1";
         if (isDistBuild) {
           try {
             const existingConfig = await readConfig();
