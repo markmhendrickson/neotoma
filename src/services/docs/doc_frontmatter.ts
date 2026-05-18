@@ -326,7 +326,17 @@ export function resolveFolderDefaults(relPath: string): {
       };
     }
   }
-  return { category: "reference", subcategory: null, visibility: "public", audience: "developer" };
+  // Fail closed: unmapped folders default to `internal` so a newly-added
+  // `docs/<unknown_dir>/...` tree does not become silently public on the
+  // /docs route. Operators who want a new folder visible publicly must add
+  // it to FOLDER_DEFAULTS explicitly, or set frontmatter `visibility: public`
+  // on the individual doc.
+  return {
+    category: "reference",
+    subcategory: null,
+    visibility: "internal",
+    audience: "developer",
+  };
 }
 
 /** Extract the first H1 from a markdown body. */

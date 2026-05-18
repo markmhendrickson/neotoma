@@ -71,10 +71,13 @@ describe("resolveFolderDefaults", () => {
     const r = resolveFolderDefaults("reports/something.md");
     expect(r.visibility).toBe("internal");
   });
-  it("falls back to reference/public for unknown folders", () => {
+  it("falls back to reference/internal for unknown folders (fail-closed)", () => {
+    // Unmapped folders are gated as internal so a new docs/<unknown>/ tree
+    // is not silently public on the /docs route. Operators must add to
+    // FOLDER_DEFAULTS or set frontmatter visibility: public to expose.
     const r = resolveFolderDefaults("brand_new_folder/foo.md");
     expect(r.category).toBe("reference");
-    expect(r.visibility).toBe("public");
+    expect(r.visibility).toBe("internal");
   });
 });
 
