@@ -501,7 +501,7 @@ export async function runInterpretation(
           noSchemaEntityTypes.push(entityType);
         }
         for (const k of Object.keys(currentEntityData)) {
-          unknownFieldNames.add(k);
+          unknownFieldNamesSet.add(k);
         }
         continue;
       }
