@@ -131,6 +131,7 @@ flowchart TD
 - `tests/unit/cli_aauth_tbs_attestation.test.ts`
 - `tests/unit/cli_aauth_tpm2_attestation.test.ts`
 - `tests/unit/cli_aauth_yubikey_attestation.test.ts`
+- `tests/unit/cli_bug_fixes.test.ts`
 - `tests/unit/client_diagnose.test.ts`
 - `tests/unit/client_helpers.test.ts`
 - `tests/unit/client_turn_report.test.ts`

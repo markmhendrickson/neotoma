@@ -861,19 +861,34 @@ async function fileExists(filePath: string): Promise<boolean> {
 
 /**
  * Walk up from startDir to find project root (directory with .git, package.json, or .cursor).
+ *
+ * Fix #168: Only anchor on .git when walking up. If startDir already has any
+ * project marker (.git, package.json, .cursor) return it immediately so we
+ * never escape to a parent workspace directory that happens to have .cursor.
  */
 export async function getProjectRoot(startDir: string): Promise<string> {
-  let current = startDir;
+  // Rule 1: if startDir itself has any project marker, use it as-is.
+  if (
+    (await fileExists(path.join(startDir, ".git"))) ||
+    (await fileExists(path.join(startDir, "package.json"))) ||
+    (await fileExists(path.join(startDir, ".cursor")))
+  ) {
+    return startDir;
+  }
+
+  // Rule 2: walk up anchoring only on .git (not .cursor / package.json which
+  // may belong to an unrelated parent monorepo or Cursor workspace).
+  let current = path.dirname(startDir);
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const hasGit = await fileExists(path.join(current, ".git"));
-    const hasPkg = await fileExists(path.join(current, "package.json"));
-    const hasCursor = await fileExists(path.join(current, ".cursor"));
-    if (hasGit || hasPkg || hasCursor) return current;
+    if (await fileExists(path.join(current, ".git"))) return current;
     const parent = path.dirname(current);
-    if (parent === current) return startDir;
+    if (parent === current) break;
     current = parent;
   }
+
+  // Rule 3: no .git found anywhere above — fall back to startDir.
+  return startDir;
 }
 
 /**

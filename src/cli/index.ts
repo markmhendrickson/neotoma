@@ -856,6 +856,18 @@ function recordResolvedBaseUrl(url: string): void {
 }
 
 async function resolveBaseUrl(option?: string, config?: Config): Promise<string> {
+  // Fix #171: when NEOTOMA_FORCE_LOCAL_TRANSPORT=true and no explicit base-url
+  // is provided, skip TCP probing entirely and return a localhost fallback.
+  // In local-transport mode the HTTP API is never contacted, so probing is
+  // not only unnecessary but fails inside sandboxed agent environments.
+  const forceLocal = process.env.NEOTOMA_FORCE_LOCAL_TRANSPORT === "true";
+  const explicitOption = option?.trim();
+  const envBaseUrl = process.env.NEOTOMA_BASE_URL?.trim();
+  if (forceLocal && !explicitOption && !(envBaseUrl && envBaseUrl.startsWith("http"))) {
+    const fallback = "http://localhost:3080";
+    recordResolvedBaseUrl(fallback);
+    return fallback;
+  }
   const url = await resolveBaseUrlInner(option, config);
   recordResolvedBaseUrl(url);
   return url;
@@ -13759,6 +13771,13 @@ program
       const mimeType = opts.mimeType ?? inferMimeTypeForPath(resolvedPath);
 
       if (opts.local) {
+        // Fix #172: default NEOTOMA_DATA_DIR to <cwd>/data when not set so
+        // --local uses the current project data dir rather than the npm
+        // package install dir (which is what config.ts resolves to when the
+        // variable is absent and it cannot find a project root).
+        if (!process.env.NEOTOMA_DATA_DIR?.trim()) {
+          process.env.NEOTOMA_DATA_DIR = path.join(process.cwd(), "data");
+        }
         // Run the store+interpretation pipeline in-process without an API server.
         try {
           const { storeRawContent } = await import("../services/raw_storage.js");
