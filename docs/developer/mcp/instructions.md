@@ -171,7 +171,7 @@ Attribution surfaces: Neotoma clients expose agent identity on entities, observa
 Preflight your session: before enabling writes from a new client or proxy, call the MCP tool `get_session_identity` (or HTTP `GET /session`, or `neotoma auth session`) and verify that `attribution.tier` is `software`/`hardware` and `eligible_for_trusted_writes` is true. The response also includes a diagnostic `attribution.decision` block that explains why a tier resolved the way it did — see `docs/subsystems/agent_attribution_integration.md` for the full wiring + diagnostics guide.
 
 [CONVENTIONS]
-Transport precedence: when both neotoma (prod) and neotoma-dev MCP servers are available, default to neotoma for retrieval/store/instruction precedence; use neotoma-dev only when the user explicitly requests dev behavior or the task is clearly dev-only.
+Transport precedence: when both neotoma (prod) and neotoma-dev MCP servers are available, default to neotoma for retrieval/store/instruction precedence; use neotoma-dev only when the user explicitly requests dev behavior or the task is clearly dev-only. Dev vs prod are separate SQLite databases (neotoma.db vs neotoma.prod.db) — data written to one is not visible in the other. When the active environment is ambiguous, confirm with the user or check `neotoma env` before storing.
 Avoid get_authenticated_user unless the next action needs it.
 Pre-check before storing: check for existing records before storing to avoid duplicates; use the existing entity_id for relationships if a match is found.
 Include all fields from source when storing.

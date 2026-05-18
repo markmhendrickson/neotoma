@@ -70,7 +70,8 @@ export interface MirrorReport {
 export type DataDirRiskCode =
   | "icloud_drive"
   | "macos_synced_desktop_or_documents"
-  | "prior_sqlite_repair_artifacts";
+  | "prior_sqlite_repair_artifacts"
+  | "dev_data_in_wrong_env";
 
 export interface DataDirRisk {
   code: DataDirRiskCode;
@@ -104,6 +105,8 @@ export interface DoctorReport {
     initialized: boolean;
     risks: DataDirRisk[];
     suggested_safe_data_dir: string | null;
+    /** Non-null when the dev DB has user data and the prod DB does not. */
+    env_split_warning: import("./commands/db_migrate_env_split.js").EnvSplitWarning | null;
   };
   api: {
     running: boolean;
@@ -526,6 +529,24 @@ export async function runDoctor(opts: RunDoctorOptions = {}): Promise<DoctorRepo
     hasPriorRepairArtifacts: priorRepairArtifacts,
   });
 
+  // Detect dev/prod env split (data in neotoma.db when neotoma.prod.db is empty).
+  let envSplitWarning: import("./commands/db_migrate_env_split.js").EnvSplitWarning | null = null;
+  try {
+    const { detectEnvSplitWarning } = await import("./commands/db_migrate_env_split.js");
+    const warning = detectEnvSplitWarning(dataDir);
+    if (warning.has_split) {
+      envSplitWarning = warning;
+      risks.push({
+        code: "dev_data_in_wrong_env",
+        severity: "warn",
+        message: `Dev database (neotoma.db) has ${warning.dev_observations} observation(s) and ${warning.dev_sources} source(s) but the production database is empty. Data may have been written to the wrong environment.`,
+        suggested_action: `Run: neotoma db migrate-env-split --dry-run`,
+      });
+    }
+  } catch {
+    // Never let env-split detection break doctor.
+  }
+
   // API running?
   let apiRunning = false;
   let apiEnv: "dev" | "prod" | null = null;
@@ -629,6 +650,7 @@ export async function runDoctor(opts: RunDoctorOptions = {}): Promise<DoctorRepo
       initialized,
       risks,
       suggested_safe_data_dir: risks.length > 0 ? suggestSafeDataDir() : null,
+      env_split_warning: envSplitWarning,
     },
     api: {
       running: apiRunning,
