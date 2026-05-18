@@ -61,6 +61,8 @@ export interface InterpretationResult {
   interpretationId: string;
   observationsCreated: number;
   unknownFieldsCount: number;
+  /** The field names that were not recognized by the schema. */
+  unknownFieldNames: string[];
   observationsDeduplicated?: number; // Count of observations that already existed
   fixedPointReached?: boolean; // Whether fixed-point convergence was achieved
   convergenceIterations?: number; // Number of iterations to reach convergence
@@ -339,6 +341,7 @@ export async function runInterpretation(
   const interpretationId = run.id;
   let observationsCreated = 0;
   let unknownFieldsCount = 0;
+  const unknownFieldNamesSet = new Set<string>();
   const entities: Array<{
     entityId: string;
     entityType: string;
@@ -544,6 +547,7 @@ export async function runInterpretation(
       for (const [key, value] of Object.entries(unknownFields)) {
         if (value === null || value === undefined) continue;
         pendingUnknownFragments.push({ key, value });
+        unknownFieldNamesSet.add(key);
       }
 
       const validFieldKeys = Object.keys(validFields).filter((key) => key !== "schema_version");
@@ -823,6 +827,7 @@ export async function runInterpretation(
       interpretationId,
       observationsCreated,
       unknownFieldsCount,
+      unknownFieldNames: Array.from(unknownFieldNamesSet).sort(),
       entities,
       refinement_debug: refinementDebug.length > 0 ? refinementDebug : undefined,
       noSchemaEntityTypes: noSchemaEntityTypes.length > 0 ? noSchemaEntityTypes : undefined,
