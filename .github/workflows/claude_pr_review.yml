@@ -16,6 +16,10 @@ permissions:
   issues: write
   id-token: write
 
+concurrency:
+  group: pr-review-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: true
+
 jobs:
   review:
     if: |
@@ -31,10 +35,10 @@ jobs:
           fetch-depth: 1
       - uses: anthropics/claude-code-action@beta
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          anthropic_api_key: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           model: claude-opus-4-7
-          timeout_minutes: 60
+          timeout_minutes: 30
           trigger_phrase: "@claude review"
           direct_prompt: |
             Before reviewing, read docs/developer/pr_review_reading_list.md.
