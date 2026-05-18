@@ -168,6 +168,57 @@ describe("profileEntityFilePath", () => {
     const result = profileEntityFilePath(profile, "ent_abc123", "My Plan");
     expect(result).toBe("/out/my-plan.md");
   });
+
+  it("expands snapshot field tokens in filename_template", () => {
+    const profile = makeProfile({
+      output_path: "/out",
+      filename_template: "{title}",
+    });
+    const result = profileEntityFilePath(profile, "ent_abc123", "My Plan", { title: "My Custom Title" });
+    expect(result).toBe("/out/my-custom-title.md");
+  });
+
+  it("falls back to entity slug when snapshot field token is absent", () => {
+    const profile = makeProfile({
+      output_path: "/out",
+      filename_template: "{title}",
+    });
+    const result = profileEntityFilePath(profile, "ent_abc123", "my plan", {});
+    // Falls back to the entity slug (canonical-name + hash), not "title"
+    expect(result).toMatch(/^\/out\/my-plan-[a-f0-9]+\.md$/);
+    expect(result).not.toContain("title");
+  });
+
+  it("auto-appends .md when template lacks extension", () => {
+    const profile = makeProfile({
+      output_path: "/out",
+      filename_template: "{entity_id}",
+    });
+    const result = profileEntityFilePath(profile, "ent_abc123", null);
+    expect(result).toBe("/out/ent_abc123.md");
+  });
+
+  it("truncates long snapshot field values to 80 chars", () => {
+    const longTitle = "a".repeat(200);
+    const profile = makeProfile({
+      output_path: "/out",
+      filename_template: "{title}",
+    });
+    const result = profileEntityFilePath(profile, "ent_abc123", null, { title: longTitle });
+    const filename = result.replace("/out/", "").replace(".md", "");
+    expect(filename.length).toBeLessThanOrEqual(80);
+  });
+
+  it("truncates long slug to 100 chars when no title in snapshot", () => {
+    const longName = "word-".repeat(30); // 150 chars
+    const profile = makeProfile({
+      output_path: "/out",
+      filename_template: "{title}",
+    });
+    const result = profileEntityFilePath(profile, "ent_abc123", longName, {});
+    const filename = result.replace("/out/", "").replace(".md", "");
+    expect(filename.length).toBeLessThanOrEqual(100);
+  });
 });
 
 // ---------------------------------------------------------------------------

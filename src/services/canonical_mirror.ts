@@ -34,6 +34,7 @@ import * as path from "node:path";
 
 import { db } from "../db.js";
 import { config } from "../config.js";
+import type { NeotomaApiClient } from "../shared/api_client.js";
 import { schemaRegistry } from "./schema_registry.js";
 import { getEntityDisplayName } from "../shared/entity_display_name.js";
 import { getRecordDisplaySummary } from "../shared/record_display_summary.js";
@@ -288,14 +289,34 @@ export function profileMatchesEntity(
 export function profileEntityFilePath(
   profile: MirrorProfile,
   entityId: string,
-  canonicalName: string | null | undefined
+  canonicalName: string | null | undefined,
+  snapshot?: Record<string, unknown>
 ): string {
-  const slug = entitySlug(entityId, canonicalName);
+  // Truncate the slug to keep filenames within OS PATH_MAX limits.
+  const rawSlug = entitySlug(entityId, canonicalName);
+  const slug = rawSlug.length > 100 ? rawSlug.slice(0, 100) : rawSlug;
   const template = profile.filename_template ?? "{slug}.md";
-  const filename = template
+  // Replace well-known tokens first, then any remaining {field} tokens from the snapshot.
+  let filename = template
     .replace("{slug}", slug)
     .replace("{entity_id}", entityId)
     .replace("{canonical_name}", slugify(canonicalName ?? ""));
+  if (snapshot) {
+    filename = filename.replace(/\{(\w+)\}/g, (_match, field: string) => {
+      const value = snapshot[field];
+      if (value != null) {
+        // Truncate long field values to keep filenames within OS limits.
+        return slugify(String(value)).slice(0, 80);
+      }
+      // When the snapshot field is absent, fall back to the entity slug so that
+      // entities without the templated field still get a unique, stable filename.
+      return slug;
+    });
+  }
+  // Ensure the filename ends with .md.
+  if (!filename.endsWith(".md")) {
+    filename = `${filename}.md`;
+  }
   return path.join(profile.output_path, filename);
 }
 
@@ -577,7 +598,7 @@ export async function mirrorEntity(entity: MirrorEntityRow, cfg?: MirrorConfig):
       const profileRendered = renderEntityMarkdown(profileInput, schemaFieldOrder, {
         includeProvenance: false,
       });
-      const profilePath = profileEntityFilePath(profile, entity.entity_id, canonicalName);
+      const profilePath = profileEntityFilePath(profile, entity.entity_id, canonicalName, entity.snapshot ?? {});
       await writeFileIfChanged(profilePath, profileRendered);
       if (profile.index_enabled !== false) {
         await regenerateProfileIndex(profile, c);
@@ -604,7 +625,7 @@ export async function removeMirrorEntity(
   if (c.profiles && c.profiles.length > 0 && entitySnapshot) {
     for (const profile of c.profiles) {
       if (!profileMatchesEntity(profile, entityType, entitySnapshot)) continue;
-      const profilePath = profileEntityFilePath(profile, entityId, canonicalName);
+      const profilePath = profileEntityFilePath(profile, entityId, canonicalName, entitySnapshot);
       await removeIfPresent(profilePath);
       if (profile.index_enabled !== false) {
         await regenerateProfileIndex(profile, c);
@@ -1102,6 +1123,12 @@ export interface RebuildOptions {
   profileId?: string;
   /** When true, emit an error (throw) instead of a warning for git-safety violations. */
   strict?: boolean;
+  /**
+   * When provided, profile rebuilds fetch entity snapshots from the HTTP API
+   * rather than from local SQLite. Required when entity data lives on a remote
+   * server rather than the local database.
+   */
+  apiClient?: NeotomaApiClient;
 }
 
 export interface RebuildReport {
@@ -1235,19 +1262,47 @@ async function rebuildProfile(
     process.stderr.write(`[mirror profile warning] ${warn}\n`);
   }
 
-  let query = db.from("entity_snapshots").select("*").eq("entity_type", profile.entity_type);
-  if (opts.entityId) query = query.eq("entity_id", opts.entityId);
-  const { data, error } = await query;
-  if (error) return;
-
   if (!report.profiles[profile.id]) {
     report.profiles[profile.id] = { written: 0, unchanged: 0, removed: 0 };
   }
   const profileReport = report.profiles[profile.id];
 
+  // Fetch entity rows — prefer the HTTP API when a client is provided so that
+  // profiles work against remote servers, not only local SQLite.
+  type EntityRow = Record<string, unknown>;
+  let rows: EntityRow[] = [];
+  if (opts.apiClient) {
+    type EntitiesResp = { entities?: Array<Record<string, unknown>>; total?: number };
+    const apiClientCast = opts.apiClient as unknown as {
+      POST: (
+        path: "/entities/query",
+        args: { body: Record<string, unknown> },
+      ) => Promise<{ data?: EntitiesResp; error?: unknown }>;
+    };
+    const { data: apiData, error: apiError } = await apiClientCast.POST("/entities/query", {
+      body: {
+        entity_type: profile.entity_type,
+        limit: 1000,
+        include_snapshots: true,
+        ...(opts.entityId ? { entity_id: opts.entityId } : {}),
+      },
+    });
+    if (apiError) {
+      process.stderr.write(`[mirror profile] API fetch failed for profile ${profile.id}: ${JSON.stringify(apiError)}\n`);
+      return;
+    }
+    rows = (apiData?.entities ?? []) as EntityRow[];
+  } else {
+    let query = db.from("entity_snapshots").select("*").eq("entity_type", profile.entity_type);
+    if (opts.entityId) query = query.eq("entity_id", opts.entityId);
+    const { data, error } = await query;
+    if (error) return;
+    rows = (data ?? []) as EntityRow[];
+  }
+
   const writtenPaths = new Set<string>();
 
-  for (const row of (data ?? []) as Array<Record<string, unknown>>) {
+  for (const row of rows) {
     const snapshot = (row.snapshot as Record<string, unknown>) ?? {};
     if (!profileMatchesEntity(profile, profile.entity_type, snapshot)) continue;
 
@@ -1286,7 +1341,7 @@ async function rebuildProfile(
       { includeProvenance: false }
     );
 
-    const targetPath = profileEntityFilePath(profile, entityId, canonicalName);
+    const targetPath = profileEntityFilePath(profile, entityId, canonicalName, snapshot);
     writtenPaths.add(targetPath);
     const result = await writeFileIfChanged(targetPath, rendered);
     profileReport[result === "written" ? "written" : "unchanged"]++;

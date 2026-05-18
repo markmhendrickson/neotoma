@@ -19,6 +19,7 @@ import {
   setMirrorConfig,
 } from "../../services/canonical_mirror.js";
 import { initMirrorRepo } from "../../services/canonical_mirror_git.js";
+import type { NeotomaApiClient } from "../../shared/api_client.js";
 
 export interface MirrorRebuildOptions {
   kind?: string;
@@ -26,6 +27,8 @@ export interface MirrorRebuildOptions {
   entityId?: string;
   clean?: boolean;
   profileId?: string;
+  /** When provided, profile rebuilds fetch entity data from the HTTP API. */
+  apiClient?: NeotomaApiClient;
 }
 
 export interface MirrorEnableOptions {
@@ -94,6 +97,7 @@ export async function runMirrorRebuild(
     entityId: options.entityId,
     clean: Boolean(options.clean),
     profileId: options.profileId,
+    apiClient: options.apiClient,
   });
   return {
     config: {
