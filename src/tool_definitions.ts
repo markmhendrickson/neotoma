@@ -1136,8 +1136,10 @@ export function buildToolDefinitions(
       name: "sync_issues",
       description: desc(
         "sync_issues",
-        "Full sync of issues from the configured GitHub repo into local Neotoma. " +
-          "Pulls all issues and their messages, creating/updating local entities. " +
+        "Bidirectional sync between local Neotoma and the configured GitHub repo. " +
+          "Push leg (default on): local public issues with no github_number are sanitized " +
+          "(PII stripped) and created on GitHub, then updated locally with the returned number/url. " +
+          "Pull leg: GitHub issues and their messages are pulled into local entities. " +
           "Supports filtering by state, labels, and since date."
       ),
       inputSchema: {
@@ -1156,6 +1158,10 @@ export function buildToolDefinitions(
           since: {
             type: "string",
             description: "Only sync issues updated after this ISO date.",
+          },
+          push: {
+            type: "boolean",
+            description: "When false, skip the push leg (local public → GitHub). Default: true.",
           },
         },
       },

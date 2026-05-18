@@ -72,6 +72,11 @@ export interface IssueSyncParams {
   since?: string;
   state?: "open" | "closed" | "all";
   labels?: string[];
+  /**
+   * When true (default), local public issues with no github_number are pushed to GitHub
+   * before the pull leg runs. Set to false to pull-only.
+   */
+  push?: boolean;
 }
 
 export interface IssueStatusParams {

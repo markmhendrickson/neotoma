@@ -1,11 +1,17 @@
 /**
- * GitHub → Neotoma issues sync (`syncIssuesFromGitHub`, `syncIssueIfStale`).
+ * GitHub ↔ Neotoma issues sync (`syncIssuesFromGitHub`, `syncIssueIfStale`).
  *
- * Pulls GitHub issues and comments into local Neotoma entities:
+ * Pull leg — GitHub → Neotoma:
  *   - issue entity (per GitHub issue)
  *   - conversation entity (one per issue, linked via REFERS_TO)
  *   - conversation_message entities (one per comment, PART_OF conversation);
  *     sender_kind is `user` here (GitHub mirror). MCP/CLI issue tooling uses `agent`.
+ *
+ * Push leg — Neotoma → GitHub (when `push` param is true, default):
+ *   - Finds local issue entities with `visibility: "public"` and no `github_number`
+ *     (i.e. `sync_pending: true` or never pushed).
+ *   - Runs `runRedactionGuard` (scan mode) on title+body before creating on GitHub.
+ *   - Writes `github_number`, `github_url`, `sync_pending: false` back via `correct`.
  *
  * Identity: `issue` via github_number + repo; `conversation` thread via
  * `conversation_id` from {@link githubIssueThreadConversationId}; `conversation_message` via
@@ -27,26 +33,48 @@ import {
 import * as github from "./github_client.js";
 import { githubIssueThreadConversationId } from "./github_issue_thread.js";
 import { githubIssueBodyTurnKey, githubIssueCommentTurnKey } from "./github_thread_keys.js";
+import { runRedactionGuard } from "./redaction_guard.js";
 import type { GitHubIssue, GitHubComment, IssueSyncParams } from "./types.js";
 
 export interface SyncResult {
   issues_synced: number;
   messages_synced: number;
   errors: string[];
+  /** Number of local public issues successfully pushed to GitHub. */
+  issues_pushed: number;
+  /** Per-issue push errors (non-fatal — pull leg still runs). */
+  push_errors: string[];
 }
 
 /**
- * Pull issues from GitHub into local Neotoma entities.
- * Idempotent: uses github_number + repo as identity for issues,
- * and github_comment_id for messages.
+ * Sync issues between Neotoma and GitHub.
+ *
+ * Push leg (default on): local public issues with no github_number are
+ * sanitized and created on GitHub, then updated locally with the returned number/url.
+ *
+ * Pull leg: GitHub issues and their comments are pulled into local entities.
+ *
+ * Both legs are idempotent. Push failures are non-fatal: the pull leg still runs.
  */
 export async function syncIssuesFromGitHub(
   ops: Operations,
   params?: IssueSyncParams
 ): Promise<SyncResult> {
   const config = await loadIssuesConfig();
-  const result: SyncResult = { issues_synced: 0, messages_synced: 0, errors: [] };
+  const result: SyncResult = {
+    issues_synced: 0,
+    messages_synced: 0,
+    errors: [],
+    issues_pushed: 0,
+    push_errors: [],
+  };
 
+  // Push leg: local public issues that have never been mirrored to GitHub.
+  if (params?.push !== false) {
+    await pushUnsyncedIssues(ops, config.repo, result);
+  }
+
+  // Pull leg: GitHub → Neotoma.
   let issues: GitHubIssue[];
   try {
     issues = await github.listIssues({
@@ -76,6 +104,96 @@ export async function syncIssuesFromGitHub(
   }
 
   return result;
+}
+
+/**
+ * Find local public issues with no github_number and push each to GitHub.
+ * Redaction guard runs in scan mode before each create — PII is stripped, not blocked.
+ * Updates the local entity with the returned github_number, github_url, sync_pending: false.
+ *
+ * Errors per issue are accumulated in result.push_errors and do not abort other issues.
+ */
+async function pushUnsyncedIssues(
+  ops: Operations,
+  repo: string,
+  result: SyncResult
+): Promise<void> {
+  // Retrieve local public issues. We request a generous page and filter client-side
+  // because retrieveEntities does not support compound snapshot field filters.
+  let raw: unknown;
+  try {
+    raw = await ops.retrieveEntities({ entity_type: "issue", limit: 500, include_snapshots: true });
+  } catch (err) {
+    result.push_errors.push(`Failed to retrieve local issues for push: ${(err as Error).message}`);
+    return;
+  }
+
+  const entities = extractEntitiesArray(raw);
+
+  for (const entity of entities) {
+    const snap = entity.snapshot as Record<string, unknown> | undefined;
+    if (!snap) continue;
+
+    // Only push public issues with no github_number assigned yet.
+    if (snap["visibility"] !== "public") continue;
+    const githubNumber = snap["github_number"];
+    if (typeof githubNumber === "number" && githubNumber > 0) continue;
+    if (typeof githubNumber === "string" && githubNumber.length > 0) continue;
+
+    const entityId = entity.entity_id as string;
+    const rawTitle = String(snap["title"] ?? "");
+    const rawBody = String(snap["body"] ?? "");
+    const labels = Array.isArray(snap["labels"]) ? (snap["labels"] as string[]) : [];
+
+    // Strip PII from title and body before sending to GitHub.
+    const guarded = runRedactionGuard({ title: rawTitle, body: rawBody, mode: "scan" });
+
+    let created: GitHubIssue;
+    try {
+      created = await github.createIssue({
+        title: guarded.title,
+        body: guarded.body,
+        labels,
+      });
+    } catch (err) {
+      result.push_errors.push(
+        `Push failed for entity ${entityId} ("${rawTitle}"): ${(err as Error).message}`
+      );
+      continue;
+    }
+
+    // Write github_number/url back and clear sync_pending.
+    try {
+      await ops.correct({
+        entity_id: entityId,
+        corrections: {
+          github_number: created.number,
+          github_url: created.html_url,
+          sync_pending: false,
+          last_synced_at: new Date().toISOString(),
+        },
+      });
+    } catch (err) {
+      // Push succeeded but local update failed — not fatal, but notable.
+      result.push_errors.push(
+        `GitHub issue #${created.number} created but local update failed for ${entityId}: ${(err as Error).message}`
+      );
+      // Still count as pushed since the GitHub issue exists.
+    }
+
+    result.issues_pushed++;
+  }
+}
+
+/**
+ * Safely extract an entities array from the opaque return value of retrieveEntities.
+ */
+function extractEntitiesArray(raw: unknown): Array<Record<string, unknown>> {
+  if (!raw || typeof raw !== "object") return [];
+  const obj = raw as Record<string, unknown>;
+  if (Array.isArray(obj)) return obj as Array<Record<string, unknown>>;
+  if (Array.isArray(obj["entities"])) return obj["entities"] as Array<Record<string, unknown>>;
+  return [];
 }
 
 /**
