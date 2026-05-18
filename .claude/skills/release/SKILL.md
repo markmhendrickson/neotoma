@@ -1,6 +1,6 @@
 ---
 name: release
-description: Prepare a GitHub + npm + sandbox release with preview. Covers preflight, changelog preview, version bump, tag, merge, GitHub Release creation, npm publish, and sandbox.neotoma.io deployment.
+description: Prepare a GitHub + npm + sandbox release with preview. Covers preflight, changelog preview, RC branch + PR for public review, version bump, tag, GitHub Release creation, npm publish, and sandbox.neotoma.io deployment.
 triggers:
   - new release
   - release
@@ -164,9 +164,44 @@ Run after Step 3.5 passes, before Step 4. Symmetric in role to the security revi
 
 If new commits are added to satisfy this lane, rerun Step 3.5 (Security review lane) against the final HEAD before Step 4.
 
+### Step 3.7: Release candidate PR
+
+Run after Step 3.6 passes. Push an RC branch and open a PR so the release can be reviewed publicly — with inline comments on the notes, CI, and a clear merge point — before anything is tagged or published.
+
+1. **Create and push the RC branch** from the current integration branch (e.g. `dev`):
+   ```bash
+   git checkout -b release/vX.Y.Z
+   git push origin release/vX.Y.Z
+   ```
+
+2. **Open the PR** targeting `main`, using the confirmed supplement as the PR body:
+   ```bash
+   gh pr create \
+     --base main \
+     --head release/vX.Y.Z \
+     --title "Release vX.Y.Z" \
+     --body "$(cat docs/releases/in_progress/vX.Y.Z/github_release_supplement.md)"
+   ```
+   The PR body gives reviewers the exact same narrative they will see in the GitHub Release notes.
+
+3. **Surface the PR URL** to the user and **STOP**:
+
+   > "Release candidate PR for **vX.Y.Z** is open at `<PR_URL>`. Review, comment, and approve — then reply **`execute`** (or confirm merge) to continue with tagging, npm publish, and sandbox deployment."
+
+   Do not proceed to Step 4 until the user explicitly confirms they are ready to execute. This is the public review window.
+
+4. **When the user confirms execute** (either by replying `execute`, confirming they merged the PR, or explicitly approving):
+   - If the PR is not yet merged, merge it now:
+     ```bash
+     gh pr merge release/vX.Y.Z --merge --delete-branch
+     ```
+   - Verify the merge landed on `main` before proceeding.
+
+**Note:** If uncommitted changes were staged in Step 4.1 and not yet committed, commit them onto `release/vX.Y.Z` before pushing the branch. The PR must reflect the exact state that will be released.
+
 ### Step 4: Execute
 
-After user confirms, run **every** step below in order through **npm publish and sandbox deployment**. Stopping after `gh release create` or `npm publish` is a failed full `/release` unless the user confirmed a GitHub-only / no-registry / no-sandbox scope.
+After the RC PR is merged and the user confirms execute, run **every** step below in order through **npm publish and sandbox deployment**. Stopping after `gh release create` or `npm publish` is a failed full `/release` unless the user confirmed a GitHub-only / no-registry / no-sandbox scope.
 
 1. **Commit uncommitted changes** (when the preview assumed them and the user confirms execute):
    - Stage only paths that should ship; **never** stage paths forbidden by repository security / pre-commit rules (for example configured `protected_paths`, `.env*`, `data/` when disallowed).
@@ -188,13 +223,12 @@ After user confirms, run **every** step below in order through **npm publish and
    - Demote the oldest supported series to the unsupported row.
    - Stage and amend into the version bump commit, or create a separate commit.
 
-4. **Merge dev into main**:
+4. **Confirm main is up to date** (the RC PR merge already landed the release commits on `main`):
    ```bash
    git checkout main
    git pull origin main
-   git merge --no-ff dev -m "Merge dev into main for vX.Y.Z"
    ```
-   If merge conflicts: STOP and report. User resolves manually.
+   Verify `git log --oneline -5` shows the RC PR merge commit at HEAD. If the branch was merged via the PR in Step 3.7, no separate `git merge dev` is needed. If for any reason `main` does not reflect the RC commits, STOP and reconcile before tagging.
 
 5. **Tag**:
    ```bash
@@ -363,6 +397,7 @@ If the user says `/release foundation` (or another submodule name):
 - Always describe uncommitted changes concretely — never use a generic placeholder.
 - Do not ship a GitHub Release body that is only an auto-generated commit list.
 - Do not merge or tag without user approval of the preview.
+- For a standard `/release`, always open a release candidate PR (`release/vX.Y.Z` → `main`) in Step 3.7 after all review lanes pass, and do not proceed to Step 4 until the user confirms execute (or confirms the PR is merged).
 - For a standard `/release`, always create the GitHub Release as a **draft** (`--draft`) in Step 4.9 and publish it (`gh release edit --draft=false`) only after sandbox verification passes in Step 4.11b.
 - For a standard `/release`, **always** run **`npm publish`** after `gh release create --draft` unless the user explicitly confirmed GitHub-only / no registry.
 - For a standard `/release`, **always** deploy `sandbox.neotoma.io` with `flyctl deploy -c fly.sandbox.toml --remote-only` and verify the live sandbox version unless the user explicitly confirmed no sandbox.
@@ -386,6 +421,8 @@ If the user says `/release foundation` (or another submodule name):
 - Omitting material working-tree changes from the integrated preview (they must appear in-section, not dropped)
 - Treating confirmed uncommitted changes as shipped without committing them first
 - Using only `git log --oneline` as the GitHub Release body
+- Skipping the RC PR step (Step 3.7) and proceeding directly to merge/tag/push after review lanes pass
+- Proceeding to Step 4 execute without the user explicitly confirming after the RC PR is open
 - Creating the GitHub Release without `--draft` when no draft exists yet (must be a draft until sandbox is verified)
 - Calling `gh release create` when a draft already exists for the tag (must use `gh release edit` to update it)
 - Silently overwriting a published (non-draft) GitHub Release — always stop and ask the user first

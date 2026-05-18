@@ -1,6 +1,6 @@
 ---
 name: release
-description: Prepare a GitHub + npm + sandbox release with preview. Covers preflight, changelog preview, version bump, tag, merge, GitHub Release creation, npm publish, and sandbox.neotoma.io deployment.
+description: Prepare a GitHub + npm + sandbox release with preview. Covers preflight, changelog preview, RC branch + PR for public review, version bump, tag, GitHub Release creation, npm publish, and sandbox.neotoma.io deployment.
 triggers:
   - new release
   - release
@@ -138,9 +138,70 @@ If any pre-release commit is added after Step 3.5 runs, rerun Step 3.5 before an
 
 Re-render the GitHub Release preview (`npm run -s release-notes:render`) so the supplement diff is reflected; STOP and re-confirm if the supplement changed materially.
 
+### Step 3.6: Test coverage review lane
+
+Run after Step 3.5 passes, before Step 4. Symmetric in role to the security review lane: a structured audit of whether new user-facing surfaces actually have tests that would catch the failure modes a user would hit. Sources: `docs/testing/testing_standard.md`, the supplement's "What changed for npm package users" section.
+
+**Why this lane exists:** Tests-exist is not the same as tests-cover-the-thing-users-will-do. A surface can ship with a named test file that exercises only the happy path of an internal helper, leaving destructive operations, external-file-shape parsing, or new CLI commands effectively unverified. The v0.13.0 audit found 5 such gaps after the supplement was confirmed; this lane catches them before execute.
+
+1. **Walk the supplement's user-facing surfaces** (from "New CLI commands", "New CLI flags on existing commands", "Behavior changes in existing commands", "API surface & contracts"). For each, locate the test file(s) and read what they assert. Note specifically:
+
+   **Surfaces that need a regression test before shipping:**
+   - **Destructive or data-mutating operations** (encryption migrations, schema migrations, repair commands, anything that writes to the user's database or filesystem at rest). Required: a real round-trip test against a real file, not in-memory stubs. Encrypt→decrypt identity, dry-run non-mutation, idempotency on re-run, NULL preservation.
+   - **External file-shape parsers** (harness transcripts, exports, third-party config files). Required: at least one fixture per supported format that exercises the *actual* parsing code path (not just `detectSource`). For SQLite-backed formats, build the SQLite file in the test and parse it.
+   - **New CLI commands or flags** (`neotoma <new-command>`, new flag on existing command). Required: a test that spawns or invokes the command with the flag and asserts the user-observable effect (file written, output emitted, exit code).
+   - **Discovery / detection / parser pairs** that must agree on file layout. Required: a roundtrip test that asserts paths emitted by discovery are parseable by the parser.
+   - **HTTP server runtime configuration** (timeouts, headers, connection behavior) that fails silently. Required: a test that asserts the *runtime* behavior, not just the source string. For timeouts, read the response header or socket behavior.
+
+2. **For each surface, classify the existing test coverage as one of:**
+   - **Covers user-observable behavior end-to-end** → no action needed.
+   - **Covers a helper function only** → flag as a gap. The helper test does not prove the command/parser/migration works for users.
+   - **No test** → flag as BLOCKING.
+
+3. **Write `docs/releases/in_progress/vX.Y.Z/test_coverage_review.md`** with one section per surface, the classification above, and either a link to the satisfying test or a description of the test that needs to be added before execute.
+
+**Hard gate before Step 4:** Any surface classified BLOCKING must be either tested before execute or explicitly deferred to a follow-up patch release with the user's approval recorded in the review file. Trust-but-verify: read the actual test bodies; do not accept "the test file exists" as evidence of coverage.
+
+If new commits are added to satisfy this lane, rerun Step 3.5 (Security review lane) against the final HEAD before Step 4.
+
+### Step 3.7: Release candidate PR
+
+Run after Step 3.6 passes. Push an RC branch and open a PR so the release can be reviewed publicly — with inline comments on the notes, CI, and a clear merge point — before anything is tagged or published.
+
+1. **Create and push the RC branch** from the current integration branch (e.g. `dev`):
+   ```bash
+   git checkout -b release/vX.Y.Z
+   git push origin release/vX.Y.Z
+   ```
+
+2. **Open the PR** targeting `main`, using the confirmed supplement as the PR body:
+   ```bash
+   gh pr create \
+     --base main \
+     --head release/vX.Y.Z \
+     --title "Release vX.Y.Z" \
+     --body "$(cat docs/releases/in_progress/vX.Y.Z/github_release_supplement.md)"
+   ```
+   The PR body gives reviewers the exact same narrative they will see in the GitHub Release notes.
+
+3. **Surface the PR URL** to the user and **STOP**:
+
+   > "Release candidate PR for **vX.Y.Z** is open at `<PR_URL>`. Review, comment, and approve — then reply **`execute`** (or confirm merge) to continue with tagging, npm publish, and sandbox deployment."
+
+   Do not proceed to Step 4 until the user explicitly confirms they are ready to execute. This is the public review window.
+
+4. **When the user confirms execute** (either by replying `execute`, confirming they merged the PR, or explicitly approving):
+   - If the PR is not yet merged, merge it now:
+     ```bash
+     gh pr merge release/vX.Y.Z --merge --delete-branch
+     ```
+   - Verify the merge landed on `main` before proceeding.
+
+**Note:** If uncommitted changes were staged in Step 4.1 and not yet committed, commit them onto `release/vX.Y.Z` before pushing the branch. The PR must reflect the exact state that will be released.
+
 ### Step 4: Execute
 
-After user confirms, run **every** step below in order through **npm publish and sandbox deployment**. Stopping after `gh release create` or `npm publish` is a failed full `/release` unless the user confirmed a GitHub-only / no-registry / no-sandbox scope.
+After the RC PR is merged and the user confirms execute, run **every** step below in order through **npm publish and sandbox deployment**. Stopping after `gh release create` or `npm publish` is a failed full `/release` unless the user confirmed a GitHub-only / no-registry / no-sandbox scope.
 
 1. **Commit uncommitted changes** (when the preview assumed them and the user confirms execute):
    - Stage only paths that should ship; **never** stage paths forbidden by repository security / pre-commit rules (for example configured `protected_paths`, `.env*`, `data/` when disallowed).
@@ -162,13 +223,12 @@ After user confirms, run **every** step below in order through **npm publish and
    - Demote the oldest supported series to the unsupported row.
    - Stage and amend into the version bump commit, or create a separate commit.
 
-4. **Merge dev into main**:
+4. **Confirm main is up to date** (the RC PR merge already landed the release commits on `main`):
    ```bash
    git checkout main
    git pull origin main
-   git merge --no-ff dev -m "Merge dev into main for vX.Y.Z"
    ```
-   If merge conflicts: STOP and report. User resolves manually.
+   Verify `git log --oneline -5` shows the RC PR merge commit at HEAD. If the branch was merged via the PR in Step 3.7, no separate `git merge dev` is needed. If for any reason `main` does not reflect the RC commits, STOP and reconcile before tagging.
 
 5. **Tag**:
    ```bash
@@ -337,6 +397,7 @@ If the user says `/release foundation` (or another submodule name):
 - Always describe uncommitted changes concretely — never use a generic placeholder.
 - Do not ship a GitHub Release body that is only an auto-generated commit list.
 - Do not merge or tag without user approval of the preview.
+- For a standard `/release`, always open a release candidate PR (`release/vX.Y.Z` → `main`) in Step 3.7 after all review lanes pass, and do not proceed to Step 4 until the user confirms execute (or confirms the PR is merged).
 - For a standard `/release`, always create the GitHub Release as a **draft** (`--draft`) in Step 4.9 and publish it (`gh release edit --draft=false`) only after sandbox verification passes in Step 4.11b.
 - For a standard `/release`, **always** run **`npm publish`** after `gh release create --draft` unless the user explicitly confirmed GitHub-only / no registry.
 - For a standard `/release`, **always** deploy `sandbox.neotoma.io` with `flyctl deploy -c fly.sandbox.toml --remote-only` and verify the live sandbox version unless the user explicitly confirmed no sandbox.
@@ -360,6 +421,8 @@ If the user says `/release foundation` (or another submodule name):
 - Omitting material working-tree changes from the integrated preview (they must appear in-section, not dropped)
 - Treating confirmed uncommitted changes as shipped without committing them first
 - Using only `git log --oneline` as the GitHub Release body
+- Skipping the RC PR step (Step 3.7) and proceeding directly to merge/tag/push after review lanes pass
+- Proceeding to Step 4 execute without the user explicitly confirming after the RC PR is open
 - Creating the GitHub Release without `--draft` when no draft exists yet (must be a draft until sandbox is verified)
 - Calling `gh release create` when a draft already exists for the tag (must use `gh release edit` to update it)
 - Silently overwriting a published (non-draft) GitHub Release — always stop and ask the user first
