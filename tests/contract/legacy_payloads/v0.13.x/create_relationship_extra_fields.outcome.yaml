@@ -1,0 +1,15 @@
+endpoint: "POST /create_relationship"
+outcome: rejected
+notes: |
+  v0.13.0 schema correction. POST /create_relationship previously declared an
+  open schema (additionalProperties: true, no properties declared). The handler
+  has always rejected undeclared fields via CreateRelationshipRequestSchema
+  (Zod). The OpenAPI spec now declares additionalProperties: false with the
+  three required fields (relationship_type, source_entity_id, target_entity_id)
+  and three optional fields (source_id, metadata, user_id) matching the handler.
+
+  Callers sending extra undeclared fields were already receiving 400 validation
+  errors from the handler; this fixture documents that the behavior is unchanged
+  and the spec now reflects it.
+
+  Fix on the caller side: send only declared fields.
