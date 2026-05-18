@@ -1252,6 +1252,54 @@
       ]
     },
     {
+      "path": "/docs",
+      "method": "GET",
+      "operation_id": null,
+      "requires_auth": false,
+      "runtime_only": true,
+      "reason": "Public docs index: read-only render of repo docs/**.md with visibility filtering.",
+      "expected_no_auth_status": [
+        200,
+        204,
+        400,
+        404,
+        405,
+        429
+      ],
+      "expected_invalid_auth_status": [
+        200,
+        204,
+        400,
+        404,
+        405,
+        429
+      ]
+    },
+    {
+      "path": "/docs/*",
+      "method": "GET",
+      "operation_id": null,
+      "requires_auth": false,
+      "runtime_only": true,
+      "reason": "Public docs page: read-only render of a single docs/**.md with visibility filtering and slug sanitization.",
+      "expected_no_auth_status": [
+        200,
+        204,
+        400,
+        404,
+        405,
+        429
+      ],
+      "expected_invalid_auth_status": [
+        200,
+        204,
+        400,
+        404,
+        405,
+        429
+      ]
+    },
+    {
       "path": "/sandbox/session/new",
       "method": "POST",
       "operation_id": null,

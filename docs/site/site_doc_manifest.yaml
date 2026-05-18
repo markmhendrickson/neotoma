@@ -440,3 +440,165 @@ entries:
     status: supporting_source
     canonical_site_path: /neotoma-with-openclaw
     notes: "Native plugin entry reference: src/openclaw_entry.ts, kind: memory, plugins.slots.memory wiring, session lifecycle hooks. The site /neotoma-with-openclaw page covers end-user setup; this doc covers the plugin contract."
+
+# ============================================================================
+# /docs index — category tree and featured list
+# ============================================================================
+# Consumed by `src/services/docs/` to render the server-side /docs index.
+# `categories[].key` matches per-doc `category` frontmatter; `subcategories[].key`
+# matches per-doc `subcategory` frontmatter. Docs without explicit frontmatter
+# inherit category/subcategory from `src/services/docs/doc_frontmatter.ts`
+# FOLDER_DEFAULTS based on their path under `docs/`.
+categories:
+  - key: getting_started
+    display_name: "Getting Started"
+    description: "Install, connect, and run your first ingestion."
+    order: 10
+    subcategories: []
+
+  - key: foundation
+    display_name: "Foundation"
+    description: "Core identity, philosophy, and architectural invariants."
+    order: 20
+    subcategories: []
+
+  - key: architecture
+    display_name: "Architecture"
+    description: "System design, determinism, consistency, and subsystem internals."
+    order: 30
+    subcategories:
+      - key: subsystems
+        display_name: "Subsystems"
+        order: 10
+      - key: specs
+        display_name: "Specifications"
+        order: 20
+
+  - key: api
+    display_name: "API & Interfaces"
+    description: "CLI reference, MCP tool surface, REST API, agent instructions."
+    order: 40
+    subcategories:
+      - key: cli
+        display_name: "CLI"
+        order: 10
+      - key: mcp
+        display_name: "MCP"
+        order: 20
+
+  - key: operations
+    display_name: "Operations"
+    description: "Running Neotoma in production: observability, security, infrastructure."
+    order: 50
+    subcategories:
+      - key: observability
+        display_name: "Observability"
+        order: 10
+      - key: security
+        display_name: "Security"
+        order: 20
+      - key: infrastructure
+        display_name: "Infrastructure"
+        order: 30
+
+  - key: development
+    display_name: "Development"
+    description: "Conventions, testing, migration, and developer workflows."
+    order: 60
+    subcategories:
+      - key: conventions
+        display_name: "Conventions"
+        order: 10
+      - key: testing
+        display_name: "Testing"
+        order: 20
+      - key: migration
+        display_name: "Migration"
+        order: 30
+      - key: ui
+        display_name: "UI"
+        order: 40
+      - key: site
+        display_name: "Site"
+        order: 50
+      - key: skills
+        display_name: "Skills"
+        order: 60
+      - key: templates
+        display_name: "Templates"
+        order: 70
+      - key: examples
+        display_name: "Examples"
+        order: 80
+      - key: assets
+        display_name: "Assets"
+        order: 90
+
+  - key: integrations
+    display_name: "Integrations"
+    description: "Connecting harnesses, browsers, and external tools."
+    order: 70
+    subcategories: []
+
+  - key: use_cases
+    display_name: "Use Cases"
+    description: "Industry workflows and ideal customer profiles."
+    order: 80
+    subcategories:
+      - key: icp
+        display_name: "Ideal Customer Profiles"
+        order: 10
+
+  - key: releases
+    display_name: "Releases & History"
+    description: "Feature units, release plans, and historical record."
+    order: 90
+    subcategories:
+      - key: feature_units
+        display_name: "Feature Units"
+        order: 10
+
+  - key: reference
+    display_name: "Reference"
+    description: "Vocabulary, legal, and supporting reference material."
+    order: 100
+    subcategories:
+      - key: vocabulary
+        display_name: "Vocabulary"
+        order: 10
+      - key: legal
+        display_name: "Legal"
+        order: 20
+
+  - key: internal
+    display_name: "Internal"
+    description: "Plans, proposals, prototypes, and internal reports. Hidden in production."
+    order: 200
+    subcategories:
+      - key: reports
+        display_name: "Reports"
+        order: 10
+      - key: plans
+        display_name: "Plans"
+        order: 20
+      - key: proposals
+        display_name: "Proposals"
+        order: 30
+      - key: prototypes
+        display_name: "Prototypes"
+        order: 40
+      - key: implementation
+        display_name: "Implementation Notes"
+        order: 50
+
+featured:
+  - docs/NEOTOMA_MANIFEST.md
+  - docs/foundation/core_identity.md
+  - docs/foundation/philosophy.md
+  - docs/architecture/architecture.md
+  - docs/architecture/determinism.md
+  - docs/developer/cli_reference.md
+  - docs/developer/mcp/instructions.md
+  - docs/observability/logging.md
+  - docs/security/threat_model.md
+  - docs/testing/testing_standard.md

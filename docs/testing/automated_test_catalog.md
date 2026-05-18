@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **359**
-- Backend and repo Vitest files: **326**
+- Total automated test files: **366**
+- Backend and repo Vitest files: **333**
 - Frontend Vitest files: **9**
 - Playwright spec files: **24**
 
@@ -71,8 +71,8 @@ flowchart TD
 |---|---:|
 | Vitest unit tests | 87 |
 | Vitest service tests | 33 |
-| Source-adjacent tests | 39 |
-| Vitest integration tests | 93 |
+| Source-adjacent tests | 45 |
+| Vitest integration tests | 94 |
 | Vitest CLI tests | 55 |
 | Vitest contract tests | 10 |
 | Vitest security tests | 1 |
@@ -241,7 +241,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- src`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (39):**
+**Files (45):**
 - `src/cli/parse_cli_corrected_value.test.ts`
 - `src/crypto/crypto.test.ts`
 - `src/record_types.test.ts`
@@ -263,6 +263,12 @@ flowchart TD
 - `src/services/canonical_markdown.test.ts`
 - `src/services/canonical_mirror_git.test.ts`
 - `src/services/canonical_mirror.test.ts`
+- `src/services/docs/doc_frontmatter.test.ts`
+- `src/services/docs/index_builder.test.ts`
+- `src/services/docs/manifest_loader.test.ts`
+- `src/services/docs/markdown_render.test.ts`
+- `src/services/docs/render.test.ts`
+- `src/services/docs/visibility.test.ts`
 - `src/services/guest_access_token.test.ts`
 - `src/services/issues/issue_operations.test.ts`
 - `src/services/issues/neotoma_client.test.ts`
@@ -287,7 +293,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (93):**
+**Files (94):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_resource_metadata.test.ts`
 - `tests/integration/aauth_revocation_e2e.test.ts`
@@ -311,6 +317,7 @@ flowchart TD
 - `tests/integration/cross_instance_issues.test.ts`
 - `tests/integration/cursor_hook_stop_backfill.test.ts`
 - `tests/integration/dashboard_stats.test.ts`
+- `tests/integration/docs_route.test.ts`
 - `tests/integration/entity_identifier_handler.test.ts`
 - `tests/integration/entity_queries.test.ts`
 - `tests/integration/events_stream.test.ts`

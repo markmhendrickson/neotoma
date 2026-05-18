@@ -53,6 +53,23 @@ Treat the diff as if you were an attacker. For every concern below, propose at l
 
 - `NEOTOMA_TRUSTED_PROXY_IPS` feature (introduced in v0.12.x, unchanged here): operators who misconfigure a CIDR too broadly could inadvertently trust spoofed `X-Forwarded-For` values. Documented in `docs/security/threat_model.md` and the v0.11.1 advisory. No new exposure introduced in v0.13.0.
 
+## Addendum — `/docs` unauthenticated route
+
+- New route: `GET /docs` and `GET /docs/*`, registered in
+  `scripts/security/protected_routes_manifest.json` as runtime-only unauth
+  with the reason that it serves public repository markdown documentation.
+- Visibility: internal docs fail closed unless the operator explicitly sets
+  `NEOTOMA_DOCS_SHOW_INTERNAL=true`; `docs/private/` is never served.
+- XSS posture: rendered markdown escapes text boundaries and rewrites inline
+  links with unsafe schemes (`javascript:`, `data:`, protocol-relative URLs)
+  to `#`. Allowed absolute schemes are `http`, `https`, and `mailto`.
+- Availability posture: `Cache-Control: public, max-age=60` is set on docs
+  responses, and the `/docs` index uses an in-process cache keyed by manifest
+  mtime, docs-tree mtime, and the internal-doc visibility flag.
+- PII posture: the route serves only checked-in markdown files under `docs/`.
+  Folder defaults mark plans, proposals, reports, implementation notes, and
+  assets internal by default; private docs are excluded regardless of flags.
+
 ## Sign-off
 
 | Reviewer | Verdict | Date |
