@@ -12,7 +12,9 @@
  * delegates to it (`semgrep --config scripts/security/semgrep_auth_rules.yml`).
  * Otherwise it walks every `*.ts` file under src/ and applies regex
  * equivalents of each rule, with the same severities (ERROR fails CI,
- * WARNING annotates).
+ * WARNING annotates). The severity → gate mapping is documented canonically
+ * in `docs/security/threat_model.md` § "Static-rule severity → gate behavior";
+ * promoting a rule from WARNING to ERROR is itself a guardrail change.
  *
  * Escape hatches:
  *   - `// neotoma:security-allow:<rule-id> <reason>` on the *previous* line

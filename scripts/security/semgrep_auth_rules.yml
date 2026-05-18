@@ -10,6 +10,17 @@
 # a short rationale + suggested fix in the rule message so PR reviewers and
 # agents see them without having to follow a link.
 #
+# Severity → gate mapping (canonical: docs/security/threat_model.md
+# § "Static-rule severity → gate behavior"):
+#   ERROR   — blocking. Fails `npm run security:lint` and the security_gates
+#             CI lane. Reserved for rules guarding a MUST / MUST NOT in
+#             .claude/rules/change_guardrails_rules.md.
+#   WARNING — advisory. Annotated in the run report and surfaced in
+#             security_review.md; does not fail CI.
+#   INFO    — unused.
+# Promoting WARNING → ERROR requires a cited incident or design rationale in
+# docs/security/advisories/ and a security_review.md sign-off on the same PR.
+#
 # Escape hatches (intentional and bounded):
 #   - `assertExplicitlyTrusted("<reason>")` from src/services/access_policy.ts
 #     marks a deliberate exception; the rule's metavariable check filters it.

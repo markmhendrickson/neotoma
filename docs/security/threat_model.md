@@ -78,6 +78,16 @@ The attribution contract (`docs/subsystems/agent_attribution_integration.md`) tr
 - **Supply-chain attacks.** `npm audit`, Socket.dev, and the package lockfile policy stay the canonical defense (see `docs/developer/pre_release_checklist.md` § 1.8).
 - **Social engineering and phishing.** Out of scope; covered by the operator runbook.
 
+## Static-rule severity → gate behavior
+
+The G2 static-rule runner (`scripts/security/run_semgrep.js`, wired into `npm run security:lint`) maps each rule's declared `severity` to CI gate behavior. The mapping is intentional, not a side effect of how Semgrep happens to exit:
+
+- **`ERROR` — blocking.** A single hit fails `npm run security:lint` (exit 1) and therefore fails the `security_gates` CI lane. Reserved for rules that guard a MUST / MUST NOT in `.claude/rules/change_guardrails_rules.md` (e.g. `no-auth-local-fallback`, `loopback-trust-in-production`, `forwarded-for-trust`). New `ERROR` rules MUST cite the constraint they enforce in the rule message.
+- **`WARNING` — advisory.** Findings are annotated in the run report and surfaced in PR security review (`security_review.md`) but do not fail CI. Reserved for hygiene rules and "confirm this is intentional" checks (e.g. `local-dev-user-widening`, `unauth-route-without-allowlist-marker`). The intent is to force a written rationale in review, not to block.
+- **`INFO`** — currently unused. If adopted, treat as advisory-only with no required reviewer response.
+
+The runner's `--fail-on <warning|error>` flag lets local development tighten the gate temporarily; CI runs the default (`error`). Promoting a rule from `WARNING` to `ERROR` is itself a guardrail change — it MUST land with at least one cited incident or design rationale in `docs/security/advisories/` and a `security_review.md` sign-off on the same PR.
+
 ## Versioning & escape hatches
 
 - **`assertExplicitlyTrusted("<reason>")`** in `src/services/access_policy.ts` is the only sanctioned bypass for the auth-local-fallback rule. Every call site MUST cite the reason in the same string the helper records.

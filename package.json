@@ -99,6 +99,8 @@
     "recover:db:prod": "node scripts/recover_sqlite_database.js --env production",
     "lint": "eslint src --ext .ts",
     "lint:site-copy": "tsx scripts/lint_site_copy_style.ts",
+    "format": "prettier --write 'src/**/*.{ts,tsx,js,json}'",
+    "format:check": "prettier --check 'src/**/*.{ts,tsx,js,json}'",
     "type-check": "tsc --noEmit",
     "start:server": "node dist/actions.js",
     "start:server:prod": "npm run build:server && node scripts/pick-port.js 3180 -- cross-env NEOTOMA_ENV=production npm run start:server",
