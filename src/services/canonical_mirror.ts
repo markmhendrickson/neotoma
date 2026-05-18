@@ -118,6 +118,23 @@ export interface MirrorProfile {
    * path is git-tracked.
    */
   allow_git_commit?: boolean;
+  /**
+   * Controls how the entity is rendered to disk.
+   * - "entity" (default): full Neotoma entity markdown via renderEntityMarkdown
+   * - "frontmatter_content": YAML frontmatter (selected fields) + markdown body
+   * - "content_only": bare markdown body from a single snapshot field
+   */
+  render_mode?: "entity" | "frontmatter_content" | "content_only";
+  /**
+   * For render_mode "frontmatter_content": which snapshot fields to include in
+   * the YAML frontmatter block. If omitted, all scalar snapshot fields are used.
+   */
+  frontmatter_fields?: string[];
+  /**
+   * For render_mode "frontmatter_content" and "content_only": which snapshot
+   * field to use as the markdown body. Defaults to "content".
+   */
+  content_field?: string;
 }
 
 export interface MirrorConfig {
@@ -193,7 +210,18 @@ export function getMirrorConfig(): MirrorConfig {
       path: "MEMORY.md",
       limit_lines: 200,
     },
-    profiles: undefined,
+    profiles: [
+      {
+        id: "neotoma-plans",
+        entity_type: "plan",
+        filter: {},
+        output_path: "plans",
+        exclude_fields: ["user_id", "repository_root"],
+        filename_template: "{title}.md",
+        index_enabled: true,
+        allow_git_commit: true,
+      },
+    ],
   };
 
   const user = readUserConfig()?.mirror as Partial<MirrorConfig> | undefined;
@@ -598,7 +626,12 @@ export async function mirrorEntity(entity: MirrorEntityRow, cfg?: MirrorConfig):
       const profileRendered = renderEntityMarkdown(profileInput, schemaFieldOrder, {
         includeProvenance: false,
       });
-      const profilePath = profileEntityFilePath(profile, entity.entity_id, canonicalName, entity.snapshot ?? {});
+      const profilePath = profileEntityFilePath(
+        profile,
+        entity.entity_id,
+        canonicalName,
+        entity.snapshot ?? {}
+      );
       await writeFileIfChanged(profilePath, profileRendered);
       if (profile.index_enabled !== false) {
         await regenerateProfileIndex(profile, c);
@@ -697,10 +730,7 @@ async function regenerateEntitiesRootIndex(cfg: MirrorConfig): Promise<void> {
  * that directory (by scanning the DB for matching entities rather than scanning
  * the filesystem, to stay deterministic).
  */
-async function regenerateProfileIndex(
-  profile: MirrorProfile,
-  _cfg: MirrorConfig
-): Promise<void> {
+async function regenerateProfileIndex(profile: MirrorProfile, _cfg: MirrorConfig): Promise<void> {
   const indexPath = path.join(profile.output_path, "index.md");
 
   const query = db.from("entity_snapshots").select("*").eq("entity_type", profile.entity_type);
@@ -1276,7 +1306,7 @@ async function rebuildProfile(
     const apiClientCast = opts.apiClient as unknown as {
       POST: (
         path: "/entities/query",
-        args: { body: Record<string, unknown> },
+        args: { body: Record<string, unknown> }
       ) => Promise<{ data?: EntitiesResp; error?: unknown }>;
     };
     const { data: apiData, error: apiError } = await apiClientCast.POST("/entities/query", {
@@ -1288,7 +1318,9 @@ async function rebuildProfile(
       },
     });
     if (apiError) {
-      process.stderr.write(`[mirror profile] API fetch failed for profile ${profile.id}: ${JSON.stringify(apiError)}\n`);
+      process.stderr.write(
+        `[mirror profile] API fetch failed for profile ${profile.id}: ${JSON.stringify(apiError)}\n`
+      );
       return;
     }
     rows = (apiData?.entities ?? []) as EntityRow[];
@@ -1306,13 +1338,10 @@ async function rebuildProfile(
     const snapshot = (row.snapshot as Record<string, unknown>) ?? {};
     if (!profileMatchesEntity(profile, profile.entity_type, snapshot)) continue;
 
-    const canonicalName =
-      (snapshot.canonical_name as string | undefined) ??
-      (row.canonical_name as string | undefined) ??
-      (row.entity_id as string);
     const entityId = row.entity_id as string;
 
     let schemaFieldOrder: string[] = [];
+    let schemaCanonicalNameFields: import("./schema_registry.js").CanonicalNameRule[] | undefined;
     try {
       const schema = await schemaRegistry.loadActiveSchema(
         profile.entity_type,
@@ -1320,26 +1349,79 @@ async function rebuildProfile(
       );
       if (schema) {
         schemaFieldOrder = Object.keys(schema.schema_definition?.fields ?? {});
+        schemaCanonicalNameFields = schema.schema_definition?.canonical_name_fields;
       }
     } catch {
       /* ignore */
     }
 
+    // Derive canonical name from snapshot fields declared in the schema, then
+    // fall back to the stored column, then entity_id.
+    let canonicalName: string =
+      (snapshot.canonical_name as string | undefined) ??
+      (row.canonical_name as string | undefined) ??
+      entityId;
+    if (
+      (!snapshot.canonical_name || !(row.canonical_name as string | undefined)) &&
+      schemaCanonicalNameFields &&
+      schemaCanonicalNameFields.length > 0
+    ) {
+      for (const rule of schemaCanonicalNameFields) {
+        if (typeof rule === "string") {
+          const val = snapshot[rule];
+          if (typeof val === "string" && val.trim().length > 0) {
+            canonicalName = val.trim();
+            break;
+          }
+        } else if (typeof rule === "object" && "composite" in rule) {
+          const parts = rule.composite
+            .map((f) => snapshot[f])
+            .filter((v): v is string => typeof v === "string" && v.trim().length > 0);
+          if (parts.length === rule.composite.length) {
+            canonicalName = parts.join("|");
+            break;
+          }
+        }
+      }
+    }
+
     const filteredSnapshot = applyProfileFieldFilter(profile, snapshot);
-    const rendered = renderEntityMarkdown(
-      {
-        entity_id: entityId,
-        entity_type: profile.entity_type,
-        schema_version: (row.schema_version as string) ?? "1.0",
-        snapshot: filteredSnapshot,
-        computed_at: (row.computed_at as string | undefined) ?? null,
-        observation_count: (row.observation_count as number | undefined) ?? null,
-        last_observation_at: (row.last_observation_at as string | undefined) ?? null,
-        provenance: undefined,
-      },
-      schemaFieldOrder,
-      { includeProvenance: false }
-    );
+    const renderMode = profile.render_mode ?? "entity";
+    let rendered: string;
+    if (renderMode === "frontmatter_content" || renderMode === "content_only") {
+      const { renderProfileEntity } = await import("./canonical_markdown.js");
+      rendered = renderProfileEntity(
+        filteredSnapshot,
+        {
+          entity_id: entityId,
+          entity_type: profile.entity_type,
+          schema_version: (row.schema_version as string) ?? "1.0",
+          computed_at: (row.computed_at as string | undefined) ?? null,
+          last_observation_at: (row.last_observation_at as string | undefined) ?? null,
+          observation_count: (row.observation_count as number | undefined) ?? null,
+        },
+        {
+          render_mode: renderMode,
+          frontmatter_fields: profile.frontmatter_fields,
+          content_field: profile.content_field,
+        }
+      );
+    } else {
+      rendered = renderEntityMarkdown(
+        {
+          entity_id: entityId,
+          entity_type: profile.entity_type,
+          schema_version: (row.schema_version as string) ?? "1.0",
+          snapshot: filteredSnapshot,
+          computed_at: (row.computed_at as string | undefined) ?? null,
+          observation_count: (row.observation_count as number | undefined) ?? null,
+          last_observation_at: (row.last_observation_at as string | undefined) ?? null,
+          provenance: undefined,
+        },
+        schemaFieldOrder,
+        { includeProvenance: false }
+      );
+    }
 
     const targetPath = profileEntityFilePath(profile, entityId, canonicalName, snapshot);
     writtenPaths.add(targetPath);

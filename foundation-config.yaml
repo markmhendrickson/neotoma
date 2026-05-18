@@ -22,7 +22,7 @@ development:
     bugfix_prefix: "bugfix"
     hotfix_prefix: "hotfix"
     release_prefix: "release"
-    naming_pattern: "{prefix}/FU-{id}-{description}"  # Neotoma uses Feature Unit IDs
+    naming_pattern: "{prefix}/{description}"
     require_id: true  # whether ID is required in branch names
   
   # Workflow preferences
@@ -35,7 +35,7 @@ development:
   commit_format:
     require_id: true  # whether ID is required in commit messages
     require_references: false  # whether "References:" line is required
-    pattern: "FU-{id}: {description}"  # Neotoma Feature Unit format
+    pattern: "{description}"
   
   # Commit workflow configuration
   commit:
@@ -48,7 +48,7 @@ development:
   # Pull requests
   pull_requests:
     require_id_in_title: true
-    title_pattern: "FU-{id}: {description}"  # Neotoma Feature Unit format
+    title_pattern: "{description}"
     min_approvals: 1
     high_risk_approvals: 2
     require_review_from_code_owners: false
@@ -379,7 +379,7 @@ agent_instructions:
       - commit
       - publish
     custom_commands:
-      - create_feature_unit
+      - create_plan
       - release
       - fix_feature_bug
       - run_feature_workflow
@@ -435,84 +435,12 @@ strategy:
       frequency: "weekly"  # or "bi-weekly", "monthly"
       min_participants_per_cycle: 2
 
-# Feature Unit development workflow
-feature_units:
+# Plan workflow — plans are stored as Neotoma entities, not repo files.
+# See foundation/development/plan_workflow.md for the complete workflow.
+plans:
   enabled: true
-  directory: "docs/feature_units/"
-  completed_subdir: "completed"
-  in_progress_subdir: "in_progress"
-  id_pattern: "FU-YYYY-MM-NNN"
-  id_regex: "^FU-\\d{4}-\\d{2}-\\d{3}$"
-  manifest_complexity: "extended"
-  
-  required_sections:
-    - "Overview"
-    - "Requirements"
-    - "Testing Strategy"
-    - "Observability"
-  
-  optional_sections:
-    - "UX Requirements"
-    - "Architecture Details"
-  
-  product_strategy:
-    enabled: true
-    track_defensible_differentiation: true
-    differentiation_types:
-      - "privacy-first"
-      - "deterministic"
-      - "cross-platform"
-    track_user_value: true
-    track_competitive_positioning: false
-  
-  architecture:
-    track_subsystems: true
-    subsystems:
-      - "ingestion"
-      - "schema"
-      - "search"
-      - "graph"
-      - "auth"
-      - "vector_ops"
-      - "events"
-      - "errors"
-      - "i18n"
-      - "accessibility"
-      - "privacy"
-    track_schema_changes: true
-    track_api_changes: true
-    track_ui_changes: true
-    track_state_machines: true
-  
-  dependencies:
-    validate_on_create: true
-    allow_partial_dependencies: true
-    reject_missing_dependencies: true
-  
-  testing:
-    require_unit_tests: true
-    require_integration_tests: true
-    require_e2e_tests: false
-    require_observability: true
-    coverage_targets:
-      lines: 80
-      branches: 80
-      critical_paths: 100
-  
-  checkpoints:
-    checkpoint_0_spec_creation: true
-    checkpoint_1_prototype_review: true
-    checkpoint_2_final_review: true
-  
-  git_workflow:
-    use_worktrees: true
-    worktree_path_pattern: "../neotoma-{feature_id}"
-    branch_prefix: "feature"
-    require_pr: true
-  
-  kill_switch:
-    enabled: true
-    check_on_execution: true
+  mirror_profile: "neotoma-plans"   # Default profile id in canonical_mirror.ts
+  mirror_output_path: "plans"       # Repo-relative path where plans are mirrored
 
 # Release orchestration (optional)
 orchestration:
