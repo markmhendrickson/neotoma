@@ -6510,7 +6510,7 @@ export async function storeStructuredForApi(params: {
       if (!storeWarningRules?.length) continue;
       for (const rule of storeWarningRules) {
         const hasIdentityField = rule.fields.some(
-          (f) => r.fields[f] !== undefined && r.fields[f] !== null && r.fields[f] !== "",
+          (f) => r.fields[f] !== undefined && r.fields[f] !== null && r.fields[f] !== ""
         );
         if (!hasIdentityField) {
           schemaStoreWarnings.push({
