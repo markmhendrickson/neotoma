@@ -4621,6 +4621,18 @@ const initCommand = program
     "--idempotent",
     "If already initialized, exit 0 with a report instead of prompting or failing"
   )
+  .option(
+    "--import-transcripts",
+    "After init completes, discover and import transcript files from known harness locations"
+  )
+  .option(
+    "--transcript-harness <name>",
+    "Limit transcript import to a specific harness: claude-code, codex, or cursor"
+  )
+  .option(
+    "--transcript-limit <n>",
+    "Maximum number of transcript files to import per harness"
+  )
   .action(
     async (opts: {
       dataDir?: string;
@@ -4642,6 +4654,9 @@ const initCommand = program
       useCurrentDirTargets?: string;
       keySource?: string;
       keyPath?: string;
+      importTranscripts?: boolean;
+      transcriptHarness?: string;
+      transcriptLimit?: string;
     }) => {
       try {
         const outputMode = resolveOutputMode();
@@ -6549,6 +6564,19 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
                 pathStyle("neotoma auth login")
             ) + "\n"
           );
+        }
+        if (opts.importTranscripts) {
+          const { runTranscriptImport } = await import(
+            "./onboarding_transcript_import.js" as string
+          );
+          await runTranscriptImport({
+            harness: opts.transcriptHarness as "claude-code" | "codex" | "cursor" | undefined,
+            limit: opts.transcriptLimit ? parseInt(opts.transcriptLimit, 10) : undefined,
+            api: await createApiClient({
+              baseUrl: await resolveBaseUrl(program.opts().baseUrl, await readConfig()),
+              token: await getCliToken(),
+            }),
+          });
         }
         // Release stdin after interactive prompts so Node can exit immediately.
         process.stdin.pause();
@@ -13163,6 +13191,54 @@ program
       }
     }
   );
+
+// ── Onboarding ─────────────────────────────────────────────────────────────
+
+const onboardingCommand = program
+  .command("onboarding")
+  .description("Onboarding utilities (transcript import, discovery, bootstrap)");
+
+onboardingCommand
+  .command("import-transcripts")
+  .description(
+    "Discover transcript files from known harness locations (claude-code, codex, cursor) " +
+      "and import them into Neotoma via the store pipeline. " +
+      "Dry-run by default — pass --apply to store files."
+  )
+  .option(
+    "--harness <name>",
+    "Limit to a specific harness: claude-code, codex, or cursor (default: all)"
+  )
+  .option("--limit <n>", "Maximum number of transcript files per harness to import")
+  .option("--apply", "Actually store the discovered transcripts (default: dry-run)", false)
+  .option("--user-id <userId>", "User ID for the store operation")
+  .action(
+    async (opts: {
+      harness?: string;
+      limit?: string;
+      apply?: boolean;
+      userId?: string;
+    }) => {
+      const { runTranscriptImport } = await import(
+        "./onboarding_transcript_import.js" as string
+      );
+      const config = await readConfig();
+      const token = await getCliToken();
+      const api = createApiClient({
+        baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+        token,
+      });
+      await runTranscriptImport({
+        harness: opts.harness as "claude-code" | "codex" | "cursor" | undefined,
+        limit: opts.limit ? parseInt(opts.limit, 10) : undefined,
+        dryRun: !opts.apply,
+        api,
+        userId: resolveEffectiveUserId(opts.userId),
+      });
+    }
+  );
+
+// ── End Onboarding ──────────────────────────────────────────────────────────
 
 program
   .command("ingest-transcript [path]")
