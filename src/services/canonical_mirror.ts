@@ -215,7 +215,7 @@ export function getMirrorConfig(): MirrorConfig {
         id: "neotoma-plans",
         entity_type: "plan",
         filter: {},
-        output_path: "plans",
+        output_path: "docs/plans",
         exclude_fields: ["user_id", "repository_root"],
         filename_template: "{title}.md",
         index_enabled: true,
