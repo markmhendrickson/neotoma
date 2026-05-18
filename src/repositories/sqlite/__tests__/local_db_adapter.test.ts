@@ -1,7 +1,7 @@
 import path from "path";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import { isRecoverableSqliteConnectionError, isSqliteLockError } from "../local_db_adapter.ts";
 
 let dbImportSeq = 0;
@@ -302,10 +302,6 @@ describe("local db adapter", () => {
   // -------------------------------------------------------------------------
 
   describe("SQLITE_BUSY retry with backoff", () => {
-    afterEach(() => {
-      vi.restoreAllMocks();
-    });
-
     it("succeeds under concurrent writes to the same SQLite file (retry path exercises)", async () => {
       const tempDir = makeTempDir("neotoma-concurrent");
       const db = await loadDb(tempDir);

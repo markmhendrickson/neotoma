@@ -2693,6 +2693,14 @@ export interface components {
        *     fields before re-storing.
        */
       unknown_fields?: string[];
+      /**
+       * @description Actionable guidance when fields were dropped to `raw_fragments`.
+       *     Present only when `unknown_fields_count > 0`. Directs the caller
+       *     to use `update_schema_incremental` with `migrate_existing: true`
+       *     to promote the unknown fields into the schema and backfill existing
+       *     data.
+       */
+      hint?: string;
       relationships_created?: {
         [key: string]: unknown;
       }[];
@@ -3113,6 +3121,33 @@ export interface components {
         observation_index?: number;
         entity_id?: string;
       })[];
+      /**
+       * @description Schema-driven non-fatal warnings emitted when a stored observation
+       *     omits all fields listed by a schema's `store_warnings` rule. Used
+       *     by schemas to surface identity-quality issues (e.g. a
+       *     `product_feedback` observation that supplies none of the declared
+       *     feedback-source identity fields) without rejecting the write.
+       *     Schema-agnostic: the rule lives on the entity's `SchemaDefinition`,
+       *     not in per-type code. Present only when at least one rule fired
+       *     during this request.
+       */
+      store_warnings?: {
+        /**
+         * @description Schema-defined warning code (declared in the schema's
+         *     `store_warnings[].code`). Stable identifier callers can
+         *     switch on.
+         */
+        code: string;
+        /** @description Human-readable description from the schema rule. */
+        message: string;
+        /**
+         * @description Index into the request's `entities[]` array identifying which
+         *     observation triggered the warning.
+         */
+        observation_index: number;
+        entity_type: string;
+        entity_id: string;
+      }[];
       /** @description Interpretation row linked to observations when the request supplied an explicit interpretation block. */
       interpretation_id?: string | null;
       /**
@@ -3131,6 +3166,20 @@ export interface components {
        *     so future ingestion produces observations instead of fragments.
        */
       no_schema_entity_types?: string[];
+      /**
+       * @description Number of entity fields that were dropped because they are not
+       *     declared in the entity's active schema. These fields were stored in
+       *     `raw_fragments` and can be recovered.
+       */
+      unknown_fields_count?: number;
+      /**
+       * @description Actionable guidance when fields were dropped to `raw_fragments`.
+       *     Present only when `unknown_fields_count > 0`. Directs the caller
+       *     to use `update_schema_incremental` with `migrate_existing: true`
+       *     to promote the unknown fields into the schema and backfill existing
+       *     data.
+       */
+      hint?: string;
     };
     /**
      * @description Non-fatal warning emitted by entity resolution when a schema declares

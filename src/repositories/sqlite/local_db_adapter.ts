@@ -9,7 +9,14 @@ import { deriveKeys, deriveKeysFromMnemonic, hexToKey } from "../../crypto/key_d
 
 type QueryResult<T> = {
   data: T | null;
-  error: { message: string; code?: string } | null;
+  error: {
+    message: string;
+    code?: string;
+    /** Originating SQLite error code (e.g. SQLITE_BUSY) when retries were exhausted. */
+    sqlite_code?: string;
+    /** Originating SQLite errno when retries were exhausted. */
+    sqlite_errno?: number;
+  } | null;
   count?: number;
 };
 
@@ -686,6 +693,9 @@ class LocalQueryBuilder {
 
     const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
 
+    // Capture the last SQLite lock error so a retry-exhausted envelope can
+    // preserve its `code`/`errno` instead of returning a string-only message.
+    let lastLockError: { code?: string; errno?: number; message?: string } | null = null;
     for (let lockRetry = 0; lockRetry < SQLITE_LOCK_MAX_RETRIES; lockRetry += 1) {
       for (let attempt = 0; attempt < 2; attempt += 1) {
         const db = getSqliteDb();
@@ -935,8 +945,14 @@ class LocalQueryBuilder {
             continue;
           }
           if (isSqliteLockError(error)) {
-            // Break out of the connection-retry inner loop; the outer lock-retry
-            // loop will sleep and try again.
+            // Capture for the retry-exhausted envelope, then break out of the
+            // connection-retry inner loop; the outer lock-retry loop will sleep
+            // and try again.
+            lastLockError = {
+              code: error?.code,
+              errno: error?.errno,
+              message: error?.message || String(error),
+            };
             break;
           }
           const msg = error.message || String(error);
@@ -952,9 +968,20 @@ class LocalQueryBuilder {
       }
     } // end lock-retry loop
 
+    // Retry exhausted: surface a DB_CONNECTION_FAILED envelope so callers can
+    // distinguish lock-exhaustion from arbitrary adapter failures and so the
+    // originating SQLite `code`/`errno` is preserved for logging. Per
+    // `docs/reference/error_codes.md`, this is HTTP 503 / Retry? Yes.
     return {
       data: null,
-      error: { message: "SQLite database is locked: maximum retries exceeded" },
+      error: {
+        message: lastLockError?.message
+          ? `SQLite database is locked: maximum retries exceeded (${lastLockError.message})`
+          : "SQLite database is locked: maximum retries exceeded",
+        code: "DB_CONNECTION_FAILED",
+        ...(lastLockError?.code ? { sqlite_code: lastLockError.code } : {}),
+        ...(lastLockError?.errno !== undefined ? { sqlite_errno: lastLockError.errno } : {}),
+      },
     };
   }
 
