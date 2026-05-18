@@ -116,7 +116,7 @@ export async function syncIssuesFromGitHub(
 async function pushUnsyncedIssues(
   ops: Operations,
   repo: string,
-  result: SyncResult,
+  result: SyncResult
 ): Promise<void> {
   // Retrieve local public issues. We request a generous page and filter client-side
   // because retrieveEntities does not support compound snapshot field filters.
@@ -143,9 +143,7 @@ async function pushUnsyncedIssues(
     const entityId = entity.entity_id as string;
     const rawTitle = String(snap["title"] ?? "");
     const rawBody = String(snap["body"] ?? "");
-    const labels = Array.isArray(snap["labels"])
-      ? (snap["labels"] as string[])
-      : [];
+    const labels = Array.isArray(snap["labels"]) ? (snap["labels"] as string[]) : [];
 
     // Strip PII from title and body before sending to GitHub.
     const guarded = runRedactionGuard({ title: rawTitle, body: rawBody, mode: "scan" });
@@ -159,7 +157,7 @@ async function pushUnsyncedIssues(
       });
     } catch (err) {
       result.push_errors.push(
-        `Push failed for entity ${entityId} ("${rawTitle}"): ${(err as Error).message}`,
+        `Push failed for entity ${entityId} ("${rawTitle}"): ${(err as Error).message}`
       );
       continue;
     }
@@ -178,7 +176,7 @@ async function pushUnsyncedIssues(
     } catch (err) {
       // Push succeeded but local update failed — not fatal, but notable.
       result.push_errors.push(
-        `GitHub issue #${created.number} created but local update failed for ${entityId}: ${(err as Error).message}`,
+        `GitHub issue #${created.number} created but local update failed for ${entityId}: ${(err as Error).message}`
       );
       // Still count as pushed since the GitHub issue exists.
     }

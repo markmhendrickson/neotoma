@@ -1140,7 +1140,7 @@ export function buildToolDefinitions(
           "Push leg (default on): local public issues with no github_number are sanitized " +
           "(PII stripped) and created on GitHub, then updated locally with the returned number/url. " +
           "Pull leg: GitHub issues and their messages are pulled into local entities. " +
-          "Supports filtering by state, labels, and since date.",
+          "Supports filtering by state, labels, and since date."
       ),
       inputSchema: {
         type: "object",
@@ -1161,8 +1161,7 @@ export function buildToolDefinitions(
           },
           push: {
             type: "boolean",
-            description:
-              "When false, skip the push leg (local public → GitHub). Default: true.",
+            description: "When false, skip the push leg (local public → GitHub). Default: true.",
           },
         },
       },
