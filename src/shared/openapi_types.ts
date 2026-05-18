@@ -2678,14 +2678,6 @@ export interface components {
        *     fields before re-storing.
        */
       unknown_fields?: string[];
-      /**
-       * @description Actionable guidance when fields were dropped to `raw_fragments`.
-       *     Present only when `unknown_fields_count > 0`. Directs the caller
-       *     to use `update_schema_incremental` with `migrate_existing: true`
-       *     to promote the unknown fields into the schema and backfill existing
-       *     data.
-       */
-      hint?: string;
       relationships_created?: {
         [key: string]: unknown;
       }[];
@@ -3124,20 +3116,6 @@ export interface components {
        *     so future ingestion produces observations instead of fragments.
        */
       no_schema_entity_types?: string[];
-      /**
-       * @description Number of entity fields that were dropped because they are not
-       *     declared in the entity's active schema. These fields were stored in
-       *     `raw_fragments` and can be recovered.
-       */
-      unknown_fields_count?: number;
-      /**
-       * @description Actionable guidance when fields were dropped to `raw_fragments`.
-       *     Present only when `unknown_fields_count > 0`. Directs the caller
-       *     to use `update_schema_incremental` with `migrate_existing: true`
-       *     to promote the unknown fields into the schema and backfill existing
-       *     data.
-       */
-      hint?: string;
     };
     /**
      * @description Non-fatal warning emitted by entity resolution when a schema declares
