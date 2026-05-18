@@ -913,9 +913,17 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         ended_at: { type: "date", required: false },
         // v1.4: session date (day-level, for filtering/display).
         date: { type: "date", required: false },
-        // v1.4: participant count and message count for aggregate views.
+        // v1.4: participant count and reported message count for aggregate
+        // views. `reported_message_count` is the count as claimed by the
+        // ingesting source (e.g. transcript importer); it can disagree with
+        // the SQL aggregate over `conversation_message` rows when not every
+        // message was ingested as a separate row. Consumers that need the
+        // authoritative live count should query `conversation_message`
+        // directly (see `src/services/recent_conversations.ts`); the
+        // `message_count` field on `RecentConversationItem` is the SQL
+        // aggregate, not this stored field.
         participant_count: { type: "number", required: false },
-        message_count: { type: "number", required: false },
+        reported_message_count: { type: "number", required: false },
         // v1.4: names or identifiers of participants.
         participants: { type: "array", required: false },
         // v1.4: topics covered in the conversation.
@@ -988,7 +996,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         ended_at: { strategy: "last_write" },
         date: { strategy: "last_write" },
         participant_count: { strategy: "last_write" },
-        message_count: { strategy: "last_write" },
+        reported_message_count: { strategy: "last_write" },
         participants: { strategy: "merge_array" },
         topics: { strategy: "merge_array" },
         decisions: { strategy: "merge_array" },

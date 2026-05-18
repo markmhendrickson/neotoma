@@ -16,10 +16,10 @@ When a Neotoma CLI session starts (dev or prod), applied rule files (e.g. `.curs
 
 ## Canonical behavioral instructions (read these for semantics)
 
-| Situation | Action |
-|-----------|--------|
-| MCP tools visible in the session | Follow MCP `instructions` / tool surface only for Neotoma behavior. |
-| MCP not available | Run `neotoma instructions print` (same body as the MCP fenced block), or open `docs/developer/mcp/instructions.md` in the Neotoma package / checkout. |
+| Situation                        | Action                                                                                                                                                |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| MCP tools visible in the session | Follow MCP `instructions` / tool surface only for Neotoma behavior.                                                                                   |
+| MCP not available                | Run `neotoma instructions print` (same body as the MCP fenced block), or open `docs/developer/mcp/instructions.md` in the Neotoma package / checkout. |
 
 Index and dual-host notes: `docs/developer/agent_instructions.md`.
 
@@ -90,14 +90,12 @@ When MCP is not available and prompt context may depend on prior memory:
 # Identifier lookup
 neotoma entities search "Acme Corp"
 
-# Type-based lookup
-neotoma entities list --type task
-neotoma entities list --type event
-
-# Named entity-type queries ("newest plans", "my tasks", "recent notes")
-# Use --type with the matching entity_type; do NOT search conversation history first.
+# Type-scoped queries — also covers named entity-type asks ("newest plans",
+# "my tasks", "recent notes", "open issues"). See MCP instructions
+# "Named entity-type routing" for the full behavioral rule.
 neotoma entities list --type plan
 neotoma entities list --type task
+neotoma entities list --type event
 
 # History/provenance lookup
 neotoma observations list --entity-id <entity_id>
@@ -108,7 +106,7 @@ neotoma relationships list --entity-id <entity_id>
 
 Use narrow queries first, then expand only if needed.
 
-**Named entity-type routing:** when the user asks about a named entity type ("newest plans", "my tasks", "open issues", "recent notes"), query `neotoma entities list --type <entity_type>` directly. FORBIDDEN: searching conversation history or agent_message rows as a substitute for a type-scoped entity list. Do not fall back to conversation search until the type-scoped query has been attempted and returned no relevant results. For recency queries, the most recently updated entities appear first in default output.
+**Named entity-type routing:** see `docs/developer/mcp/instructions.md` (search "Named entity-type routing"). The CLI form is `neotoma entities list --type <entity_type>`. Run `neotoma instructions print` to see the canonical behavioral rule.
 
 ## Install verification
 
