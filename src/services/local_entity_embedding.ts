@@ -48,15 +48,13 @@ function ensureVecSchema(db: SqliteDatabase): void {
  * Store or update entity embedding in local vec0 table.
  * Call when entity_snapshots upsert succeeds and row has embedding.
  */
-export function storeLocalEntityEmbedding(
-  row: {
-    entity_id: string;
-    embedding?: number[] | null;
-    user_id: string;
-    entity_type: string;
-    merged?: boolean;
-  }
-): void {
+export function storeLocalEntityEmbedding(row: {
+  entity_id: string;
+  embedding?: number[] | null;
+  user_id: string;
+  entity_type: string;
+  merged?: boolean;
+}): void {
   if (!row.embedding || row.embedding.length !== EMBEDDING_DIM) {
     return;
   }
@@ -78,18 +76,15 @@ export function storeLocalEntityEmbedding(
     .get(row.entity_id) as { rowid: number } | undefined;
 
   if (existing) {
-    db.prepare("DELETE FROM entity_embeddings_vec WHERE rowid = ?").run(
-      existing.rowid
-    );
-    db.prepare("DELETE FROM entity_embedding_rows WHERE rowid = ?").run(
-      existing.rowid
-    );
+    db.prepare("DELETE FROM entity_embeddings_vec WHERE rowid = ?").run(existing.rowid);
+    db.prepare("DELETE FROM entity_embedding_rows WHERE rowid = ?").run(existing.rowid);
   }
 
   const embeddingBlob = new Float32Array(row.embedding);
-  db.prepare(
-    "INSERT INTO entity_embeddings_vec(rowid, embedding) VALUES (?, ?)"
-  ).run(null, embeddingBlob);
+  db.prepare("INSERT INTO entity_embeddings_vec(rowid, embedding) VALUES (?, ?)").run(
+    null,
+    embeddingBlob
+  );
 
   const rowid = db.prepare("SELECT last_insert_rowid() as id").get() as {
     id: number;
@@ -117,15 +112,8 @@ export function searchLocalEntityEmbeddings(options: {
   limit: number;
   offset: number;
 }): { entityIds: string[]; total: number } {
-  const {
-    queryEmbedding,
-    userId,
-    entityType,
-    includeMerged,
-    distanceThreshold,
-    limit,
-    offset,
-  } = options;
+  const { queryEmbedding, userId, entityType, includeMerged, distanceThreshold, limit, offset } =
+    options;
 
   if (
     config.storageBackend !== "local" ||
@@ -146,9 +134,17 @@ export function searchLocalEntityEmbeddings(options: {
   ensureVecSchema(db);
 
   // Debug: row counts for userId
-  const totalRows = (db.prepare("SELECT COUNT(*) as c FROM entity_embedding_rows").get() as { c: number }).c;
-  const userRows = (db.prepare("SELECT COUNT(*) as c FROM entity_embedding_rows WHERE user_id = ?").get(userId) as { c: number }).c;
-  const distinctUsers = (db.prepare("SELECT DISTINCT user_id FROM entity_embedding_rows").all() as { user_id: string }[]).map((r) => r.user_id);
+  const totalRows = (
+    db.prepare("SELECT COUNT(*) as c FROM entity_embedding_rows").get() as { c: number }
+  ).c;
+  const userRows = (
+    db.prepare("SELECT COUNT(*) as c FROM entity_embedding_rows WHERE user_id = ?").get(userId) as {
+      c: number;
+    }
+  ).c;
+  const distinctUsers = (
+    db.prepare("SELECT DISTINCT user_id FROM entity_embedding_rows").all() as { user_id: string }[]
+  ).map((r) => r.user_id);
   if (userRows === 0) {
     logger.warn(
       `[searchLocalEntityEmbeddings] userId=${userId} has 0 rows; total=${totalRows} distinctUsers=${distinctUsers.slice(0, 5).join(",")}${distinctUsers.length > 5 ? "..." : ""}`
@@ -179,13 +175,11 @@ export function searchLocalEntityEmbeddings(options: {
       userId,
       entityType ?? null,
       entityType ?? null,
-      includeMerged ? 1 : 0  /* includeMerged=1: all rows; =0: only non-merged (r.merged=0) */
+      includeMerged ? 1 : 0 /* includeMerged=1: all rows; =0: only non-merged (r.merged=0) */
     ) as Array<{ entity_id: string; distance: number }>;
 
   const filtered =
-    distanceThreshold !== undefined
-      ? rows.filter((r) => r.distance < distanceThreshold)
-      : rows;
+    distanceThreshold !== undefined ? rows.filter((r) => r.distance < distanceThreshold) : rows;
   const sliced = filtered.slice(offset, offset + limit);
   if (rows.length === 0 && userRows > 0) {
     logger.warn(

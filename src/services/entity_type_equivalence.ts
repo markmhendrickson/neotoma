@@ -58,9 +58,7 @@ async function loadRegistryTypes(userId?: string): Promise<RegistryRow[]> {
     .select("id, entity_type, schema_definition, scope, user_id")
     .eq("active", true);
   if (error) {
-    logger.warn(
-      `[ENTITY_TYPE_EQUIVALENCE] Failed to load registry types: ${error.message}`,
-    );
+    logger.warn(`[ENTITY_TYPE_EQUIVALENCE] Failed to load registry types: ${error.message}`);
     return [];
   }
   const rows = (data ?? []) as RegistryRow[];
@@ -85,7 +83,7 @@ export interface FindEquivalentOptions {
 
 export async function findEquivalentEntityType(
   candidate: string,
-  options: FindEquivalentOptions = {},
+  options: FindEquivalentOptions = {}
 ): Promise<EquivalenceMatch | null> {
   if (!candidate || typeof candidate !== "string") return null;
   const candidateNorm = normalize(candidate);
@@ -93,9 +91,7 @@ export async function findEquivalentEntityType(
 
   const rows = await loadRegistryTypes(options.userId);
   const filtered =
-    options.includeGlobal === false
-      ? rows.filter((r) => (r.scope ?? "global") === "user")
-      : rows;
+    options.includeGlobal === false ? rows.filter((r) => (r.scope ?? "global") === "user") : rows;
 
   for (const row of filtered) {
     const existingNorm = normalize(row.entity_type);

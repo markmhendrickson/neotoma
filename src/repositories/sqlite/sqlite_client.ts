@@ -312,12 +312,7 @@ const DEPRECATED_TABLES = [
 ];
 
 /** Add a column to a table if it does not exist (for existing SQLite DBs). */
-function addColumnIfMissing(
-  db: SqliteDatabase,
-  table: string,
-  column: string,
-  type: string
-): void {
+function addColumnIfMissing(db: SqliteDatabase, table: string, column: string, type: string): void {
   const rows = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
   if (rows.some((r) => r.name === column)) return;
   db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`).run();
@@ -385,7 +380,8 @@ function ensureSchema(db: SqliteDatabase): void {
 
     addColumnIfMissing(db, "local_auth_users", "is_ephemeral", "INTEGER NOT NULL DEFAULT 0");
 
-    db.prepare(`CREATE TABLE IF NOT EXISTS sandbox_sessions (
+    db.prepare(
+      `CREATE TABLE IF NOT EXISTS sandbox_sessions (
       user_id TEXT PRIMARY KEY REFERENCES local_auth_users(id) ON DELETE CASCADE,
       bearer_token_hash TEXT NOT NULL,
       one_time_code_hash TEXT,
@@ -393,7 +389,8 @@ function ensureSchema(db: SqliteDatabase): void {
       created_at TEXT NOT NULL,
       expires_at TEXT NOT NULL,
       revoked_at TEXT
-    )`).run();
+    )`
+    ).run();
     db.prepare(
       "CREATE INDEX IF NOT EXISTS idx_sandbox_sessions_expires ON sandbox_sessions(expires_at)"
     ).run();

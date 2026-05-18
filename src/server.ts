@@ -127,15 +127,15 @@ const ADVISORY_VISIBILITY_DEPRECATION =
 const MCP_INTERACTION_INSTRUCTIONS_COMPACT_BODY_LINES = [
   "Every turn, do the following in order — do not skip steps:",
   "1. Bounded retrieval: for entities implied by the user message, use retrieve_entity_by_identifier for concrete identifiers and retrieve_entities for category/list queries.",
-  "2. User-phase store: store the conversation, the current user message, and any entities implied by the message in ONE **`store`** call (deprecated alias: store_structured). entities = [ { entity_type: \"conversation\", conversation_id, target_id? when bounded retrieval found the existing conversation, title?, thread_kind?, client_name?/harness?, repository_name?/repository_root?/repository_remote?, scope_summary? }, { entity_type: \"conversation_message\", role: \"user\", sender_kind: \"user\", content: \"<exact message>\", turn_key: \"{conversation_id}:{turn_id}\" }, …extracted entities… ]. Relationships: PART_OF from message to conversation; REFERS_TO from message to each extracted entity. Context fields are optional and never identity-bearing; do not store raw git status, terminal output, file contents, secrets, or large open-file lists by default. MUST NOT skip for greetings or minimal messages.",
+  '2. User-phase store: store the conversation, the current user message, and any entities implied by the message in ONE **`store`** call (deprecated alias: store_structured). entities = [ { entity_type: "conversation", conversation_id, target_id? when bounded retrieval found the existing conversation, title?, thread_kind?, client_name?/harness?, repository_name?/repository_root?/repository_remote?, scope_summary? }, { entity_type: "conversation_message", role: "user", sender_kind: "user", content: "<exact message>", turn_key: "{conversation_id}:{turn_id}" }, …extracted entities… ]. Relationships: PART_OF from message to conversation; REFERS_TO from message to each extracted entity. Context fields are optional and never identity-bearing; do not store raw git status, terminal output, file contents, secrets, or large open-file lists by default. MUST NOT skip for greetings or minimal messages.',
   "3. Other actions: host IDE tools and other MCP tools may run only after steps 1 and 2.",
   "4. Compose reply: synthesize the answer using retrieval results and tool output.",
-  "5a. Closing store: call **`store`** with entities = [ { entity_type: \"conversation_message\", role: \"assistant\", sender_kind: \"assistant\", content: \"<exact reply text>\", turn_key: \"{conversation_id}:{turn_id}:assistant\" } ] and idempotency_key \"conversation-{conversation_id}-{turn_id}-assistant-{suffix}\".",
+  '5a. Closing store: call **`store`** with entities = [ { entity_type: "conversation_message", role: "assistant", sender_kind: "assistant", content: "<exact reply text>", turn_key: "{conversation_id}:{turn_id}:assistant" } ] and idempotency_key "conversation-{conversation_id}-{turn_id}-assistant-{suffix}".',
   "5b. Closing relationship: create_relationship(PART_OF, source=assistant message entity_id, target=conversation entity_id). Include REFERS_TO from assistant message to every entity the reply materially cites or produces.",
   "5c. FORBIDDEN: persisting the user message without storing the assistant reply when you did reply; ending the turn without the closing assistant store when you produced a user-visible reply.",
   "",
   "Idempotency: use conversation-{conversation_id}-{turn_id}-{timestamp_ms} so each turn store creates a new observation. Include stable turn_key on every message entity.",
-  "Fallback IDs: if the host provides no conversation_id/turn_id, use idempotency_key \"conversation-chat-<turn>-<timestamp_ms>\" and turn_key \"chat:<turn>\".",
+  'Fallback IDs: if the host provides no conversation_id/turn_id, use idempotency_key "conversation-chat-<turn>-<timestamp_ms>" and turn_key "chat:<turn>".',
   "",
   "FORBIDDEN: skipping Neotoma for an entire rapid-fire session; persisting only the user message; ending the turn without the closing assistant store.",
   "",
@@ -517,8 +517,7 @@ export class NeotomaServer {
     const clientName = normaliseClientName(this.sessionClientInfo?.name);
     const clientVersion = this.sessionClientInfo?.version;
     const connectionId = this.sessionConnectionId ?? undefined;
-    const hasAny =
-      !!aauth?.verified || !!clientName || !!clientVersion || !!connectionId;
+    const hasAny = !!aauth?.verified || !!clientName || !!clientVersion || !!connectionId;
     if (!hasAny) return null;
     return buildAgentIdentity({
       publicKey: aauth?.publicKey,
@@ -549,9 +548,7 @@ export class NeotomaServer {
       signature_present: !!aauth,
       signature_verified: !!aauth?.verified,
       client_info_raw_name:
-        typeof this.sessionClientInfo?.name === "string"
-          ? this.sessionClientInfo.name
-          : undefined,
+        typeof this.sessionClientInfo?.name === "string" ? this.sessionClientInfo.name : undefined,
       resolved_tier: identity.tier,
     };
   }
@@ -571,9 +568,9 @@ export class NeotomaServer {
         version: "1.0.0",
         ...(updateNotice
           ? {
-            title: "Update available",
-            description: updateNotice,
-          }
+              title: "Update available",
+              description: updateNotice,
+            }
           : {}),
       },
       instructions,
@@ -725,10 +722,10 @@ export class NeotomaServer {
     const storage =
       config.storageBackend === "local"
         ? {
-          storage_backend: "local" as const,
-          data_dir: config.dataDir,
-          sqlite_db: config.sqlitePath,
-        }
+            storage_backend: "local" as const,
+            data_dir: config.dataDir,
+            sqlite_db: config.sqlitePath,
+          }
         : undefined;
 
     return this.buildTextResponse({
@@ -744,7 +741,7 @@ export class NeotomaServer {
    * `src/services/session_info.ts`. Read-only.
    */
   private async getSessionIdentity(
-    args: unknown,
+    args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     z.object({}).parse(args ?? {});
     const userId = this.getAuthenticatedUserId();
@@ -967,7 +964,7 @@ export class NeotomaServer {
 
   private async handleSubmitIssue(
     args: unknown,
-    userId: string,
+    userId: string
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const schema = z.object({
       title: z.string().min(1),
@@ -1016,19 +1013,16 @@ export class NeotomaServer {
         throw new McpError(
           ErrorCode.InvalidParams,
           `submit_issue failed: ${err.message}`,
-          err.toErrorEnvelopeDetails(),
+          err.toErrorEnvelopeDetails()
         );
       }
-      throw new McpError(
-        ErrorCode.InternalError,
-        `submit_issue failed: ${err?.message ?? err}`,
-      );
+      throw new McpError(ErrorCode.InternalError, `submit_issue failed: ${err?.message ?? err}`);
     }
   }
 
   private async handleSubmitEntity(
     args: unknown,
-    userId: string,
+    userId: string
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const schema = z.object({
       entity_type: z.string().min(1),
@@ -1050,14 +1044,14 @@ export class NeotomaServer {
     } catch (err: unknown) {
       throw new McpError(
         ErrorCode.InvalidParams,
-        `submit_entity failed: ${err instanceof Error ? err.message : String(err)}`,
+        `submit_entity failed: ${err instanceof Error ? err.message : String(err)}`
       );
     }
   }
 
   private async handleAddEntityMessage(
     args: unknown,
-    userId: string,
+    userId: string
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const schema = z.object({
       entity_id: z.string().min(1),
@@ -1077,21 +1071,22 @@ export class NeotomaServer {
     } catch (err: unknown) {
       throw new McpError(
         ErrorCode.InvalidParams,
-        `add_entity_message failed: ${err instanceof Error ? err.message : String(err)}`,
+        `add_entity_message failed: ${err instanceof Error ? err.message : String(err)}`
       );
     }
   }
 
   private async handleGetEntitySubmissionStatus(
     args: unknown,
-    userId: string,
+    userId: string
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const schema = z.object({
       entity_id: z.string().min(1),
       guest_access_token: z.string().optional(),
     });
     const parsed = schema.parse(args ?? {});
-    const { getEntitySubmissionStatus } = await import("./services/entity_submission/submission_service.js");
+    const { getEntitySubmissionStatus } =
+      await import("./services/entity_submission/submission_service.js");
     const { createOperations } = await import("./core/operations.js");
     const ops = createOperations({ server: this, userId });
     try {
@@ -1104,14 +1099,14 @@ export class NeotomaServer {
     } catch (err: unknown) {
       throw new McpError(
         ErrorCode.InvalidParams,
-        `get_entity_submission_status failed: ${err instanceof Error ? err.message : String(err)}`,
+        `get_entity_submission_status failed: ${err instanceof Error ? err.message : String(err)}`
       );
     }
   }
 
   private async handleListEntitySubmissions(
     args: unknown,
-    userId: string,
+    userId: string
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const schema = z.object({
       entity_type: z.string().min(1),
@@ -1119,7 +1114,8 @@ export class NeotomaServer {
       offset: z.number().int().min(0).optional(),
     });
     const parsed = schema.parse(args ?? {});
-    const { listEntitySubmissions } = await import("./services/entity_submission/submission_service.js");
+    const { listEntitySubmissions } =
+      await import("./services/entity_submission/submission_service.js");
     const { createOperations } = await import("./core/operations.js");
     const ops = createOperations({ server: this, userId });
     try {
@@ -1132,18 +1128,19 @@ export class NeotomaServer {
     } catch (err: unknown) {
       throw new McpError(
         ErrorCode.InternalError,
-        `list_entity_submissions failed: ${err instanceof Error ? err.message : String(err)}`,
+        `list_entity_submissions failed: ${err instanceof Error ? err.message : String(err)}`
       );
     }
   }
 
   private async handleSyncEntitySubmissions(
     args: unknown,
-    userId: string,
+    userId: string
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const schema = z.object({ entity_type: z.string().optional() });
     const parsed = schema.parse(args ?? {});
-    const { syncEntitySubmissions } = await import("./services/entity_submission/submission_service.js");
+    const { syncEntitySubmissions } =
+      await import("./services/entity_submission/submission_service.js");
     const { createOperations } = await import("./core/operations.js");
     const ops = createOperations({ server: this, userId });
     try {
@@ -1152,14 +1149,14 @@ export class NeotomaServer {
     } catch (err: unknown) {
       throw new McpError(
         ErrorCode.InternalError,
-        `sync_entity_submissions failed: ${err instanceof Error ? err.message : String(err)}`,
+        `sync_entity_submissions failed: ${err instanceof Error ? err.message : String(err)}`
       );
     }
   }
 
   private async handleAddIssueMessage(
     args: unknown,
-    userId: string,
+    userId: string
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const schema = z
       .object({
@@ -1177,7 +1174,7 @@ export class NeotomaServer {
         (v) =>
           (typeof v.entity_id === "string" && v.entity_id.trim().length > 0) ||
           (typeof v.issue_number === "number" && v.issue_number > 0),
-        { message: "Provide entity_id or issue_number" },
+        { message: "Provide entity_id or issue_number" }
       );
     const parsed = schema.parse(args ?? {});
 
@@ -1195,21 +1192,23 @@ export class NeotomaServer {
         ...(parsed.reporter_git_sha ? { reporter_git_sha: parsed.reporter_git_sha } : {}),
         ...(parsed.reporter_git_ref ? { reporter_git_ref: parsed.reporter_git_ref } : {}),
         ...(parsed.reporter_channel ? { reporter_channel: parsed.reporter_channel } : {}),
-        ...(parsed.reporter_app_version ? { reporter_app_version: parsed.reporter_app_version } : {}),
+        ...(parsed.reporter_app_version
+          ? { reporter_app_version: parsed.reporter_app_version }
+          : {}),
         ...(parsed.entity_ids_to_link ? { entity_ids_to_link: parsed.entity_ids_to_link } : {}),
       });
       return this.buildTextResponse(result);
     } catch (err: any) {
       throw new McpError(
         ErrorCode.InternalError,
-        `add_issue_message failed: ${err?.message ?? err}`,
+        `add_issue_message failed: ${err?.message ?? err}`
       );
     }
   }
 
   private async handleGetIssueStatus(
     args: unknown,
-    userId: string,
+    userId: string
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const schema = z
       .object({
@@ -1222,7 +1221,7 @@ export class NeotomaServer {
         (v) =>
           (typeof v.entity_id === "string" && v.entity_id.trim().length > 0) ||
           (typeof v.issue_number === "number" && v.issue_number > 0),
-        { message: "Provide entity_id or issue_number" },
+        { message: "Provide entity_id or issue_number" }
       );
     const parsed = schema.parse(args ?? {});
 
@@ -1242,14 +1241,14 @@ export class NeotomaServer {
     } catch (err: any) {
       throw new McpError(
         ErrorCode.InternalError,
-        `get_issue_status failed: ${err?.message ?? err}`,
+        `get_issue_status failed: ${err?.message ?? err}`
       );
     }
   }
 
   private async handleSyncIssues(
     args: unknown,
-    userId: string,
+    userId: string
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const schema = z.object({
       state: z.enum(["open", "closed", "all"]).optional(),
@@ -1269,16 +1268,13 @@ export class NeotomaServer {
       });
       return this.buildTextResponse(result);
     } catch (err: any) {
-      throw new McpError(
-        ErrorCode.InternalError,
-        `sync_issues failed: ${err?.message ?? err}`,
-      );
+      throw new McpError(ErrorCode.InternalError, `sync_issues failed: ${err?.message ?? err}`);
     }
   }
 
   private async handleSubscribe(
     args: unknown,
-    userId: string,
+    userId: string
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const schema = z.object({
       entity_types: z.array(z.string()).optional(),
@@ -1310,14 +1306,14 @@ export class NeotomaServer {
     } catch (err: unknown) {
       throw new McpError(
         ErrorCode.InvalidParams,
-        `subscribe failed: ${err instanceof Error ? err.message : String(err)}`,
+        `subscribe failed: ${err instanceof Error ? err.message : String(err)}`
       );
     }
   }
 
   private async handleUnsubscribe(
     args: unknown,
-    userId: string,
+    userId: string
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const schema = z.object({ subscription_id: z.string().min(1) });
     const parsed = schema.parse(args ?? {});
@@ -1328,17 +1324,16 @@ export class NeotomaServer {
     } catch (err: unknown) {
       throw new McpError(
         ErrorCode.InvalidParams,
-        `unsubscribe failed: ${err instanceof Error ? err.message : String(err)}`,
+        `unsubscribe failed: ${err instanceof Error ? err.message : String(err)}`
       );
     }
   }
 
   private async handleListSubscriptions(
-    userId: string,
+    userId: string
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
-    const { listSubscriptionsForUser, redactSubscriptionForClient } = await import(
-      "./services/subscriptions/subscription_actions.js"
-    );
+    const { listSubscriptionsForUser, redactSubscriptionForClient } =
+      await import("./services/subscriptions/subscription_actions.js");
     const rows = await listSubscriptionsForUser(userId);
     return this.buildTextResponse({
       subscriptions: rows.map(redactSubscriptionForClient),
@@ -1347,13 +1342,12 @@ export class NeotomaServer {
 
   private async handleGetSubscriptionStatus(
     args: unknown,
-    userId: string,
+    userId: string
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const schema = z.object({ subscription_id: z.string().min(1) });
     const parsed = schema.parse(args ?? {});
-    const { getSubscriptionStatus, redactSubscriptionForClient } = await import(
-      "./services/subscriptions/subscription_actions.js"
-    );
+    const { getSubscriptionStatus, redactSubscriptionForClient } =
+      await import("./services/subscriptions/subscription_actions.js");
     const row = await getSubscriptionStatus({
       userId,
       subscription_id: parsed.subscription_id,
@@ -1366,7 +1360,7 @@ export class NeotomaServer {
 
   private async handleAddPeer(
     args: unknown,
-    userId: string,
+    userId: string
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const schema = z.object({
       peer_id: z.string().min(1),
@@ -1389,14 +1383,14 @@ export class NeotomaServer {
     } catch (err: unknown) {
       throw new McpError(
         ErrorCode.InvalidParams,
-        `add_peer failed: ${err instanceof Error ? err.message : String(err)}`,
+        `add_peer failed: ${err instanceof Error ? err.message : String(err)}`
       );
     }
   }
 
   private async handleRemovePeer(
     args: unknown,
-    userId: string,
+    userId: string
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const schema = z.object({ peer_id: z.string().min(1) });
     const parsed = schema.parse(args ?? {});
@@ -1407,13 +1401,13 @@ export class NeotomaServer {
     } catch (err: unknown) {
       throw new McpError(
         ErrorCode.InvalidParams,
-        `remove_peer failed: ${err instanceof Error ? err.message : String(err)}`,
+        `remove_peer failed: ${err instanceof Error ? err.message : String(err)}`
       );
     }
   }
 
   private async handleListPeers(
-    userId: string,
+    userId: string
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const { listPeersForUser } = await import("./services/sync/peer_ops.js");
     const peers = await listPeersForUser(userId);
@@ -1422,7 +1416,7 @@ export class NeotomaServer {
 
   private async handleGetPeerStatus(
     args: unknown,
-    userId: string,
+    userId: string
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const schema = z.object({ peer_id: z.string().min(1) });
     const parsed = schema.parse(args ?? {});
@@ -1436,7 +1430,7 @@ export class NeotomaServer {
 
   private async handleSyncPeer(
     args: unknown,
-    userId: string,
+    userId: string
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const schema = z.object({
       peer_id: z.string().min(1),
@@ -1454,11 +1448,17 @@ export class NeotomaServer {
 
   private async handleResolveSyncConflict(
     args: unknown,
-    userId: string,
+    userId: string
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const schema = z.object({
       entity_id: z.string().min(1),
-      strategy: z.enum(["prefer_local", "prefer_remote", "last_write_wins", "source_priority", "manual"]),
+      strategy: z.enum([
+        "prefer_local",
+        "prefer_remote",
+        "last_write_wins",
+        "source_priority",
+        "manual",
+      ]),
       sender_peer_url: z.string().min(1).optional(),
       guest_access_token: z.string().optional(),
     });
@@ -1616,7 +1616,7 @@ export class NeotomaServer {
         const attributionDecision = this.getSessionAttributionDecision();
         const result = await runWithRequestContext(
           { agentIdentity: identity, attributionDecision },
-          () => this.executeTool(name, args),
+          () => this.executeTool(name, args)
         );
         const runtimeUpdateNotice =
           name === "npm_check_update" ? null : await this.consumeRuntimeUpdateNotice();
@@ -1635,11 +1635,7 @@ export class NeotomaServer {
           // branch on `ATTRIBUTION_REQUIRED` without string-matching. The
           // envelope carries `min_tier` / `current_tier` / `hint` in the MCP
           // `data` field (see src/services/attribution_policy.ts).
-          throw new McpError(
-            ErrorCode.InvalidRequest,
-            error.message,
-            error.toErrorEnvelope(),
-          );
+          throw new McpError(ErrorCode.InvalidRequest, error.message, error.toErrorEnvelope());
         }
         // Safely extract error message, handling BigInt values
         let errorMessage = "Unknown error";
@@ -1679,9 +1675,8 @@ export class NeotomaServer {
     // that exercise local CLI writes as `anonymous`.
     const identity = this.getAgentIdentity();
     const attributionDecision = this.getSessionAttributionDecision();
-    return runWithRequestContext(
-      { agentIdentity: identity, attributionDecision },
-      () => this.executeTool(name, args),
+    return runWithRequestContext({ agentIdentity: identity, attributionDecision }, () =>
+      this.executeTool(name, args)
     );
   }
 
@@ -3386,29 +3381,29 @@ export class NeotomaServer {
 
       const responseData = useSummary
         ? {
-          entity_types: entityTypes.map((et) => ({
-            entity_type: et.entity_type,
-            schema_version: et.schema_version,
-            field_count: et.field_names?.length || 0,
-          })),
-          total: entityTypes.length,
-          keyword: parsed.keyword || null,
-          search_method: parsed.keyword
-            ? entityTypes[0]?.match_type === "vector"
-              ? "vector_semantic"
-              : "keyword_exact"
-            : "all",
-        }
+            entity_types: entityTypes.map((et) => ({
+              entity_type: et.entity_type,
+              schema_version: et.schema_version,
+              field_count: et.field_names?.length || 0,
+            })),
+            total: entityTypes.length,
+            keyword: parsed.keyword || null,
+            search_method: parsed.keyword
+              ? entityTypes[0]?.match_type === "vector"
+                ? "vector_semantic"
+                : "keyword_exact"
+              : "all",
+          }
         : {
-          entity_types: entityTypes,
-          total: entityTypes.length,
-          keyword: parsed.keyword || null,
-          search_method: parsed.keyword
-            ? entityTypes[0]?.match_type === "vector"
-              ? "vector_semantic"
-              : "keyword_exact"
-            : "all",
-        };
+            entity_types: entityTypes,
+            total: entityTypes.length,
+            keyword: parsed.keyword || null,
+            search_method: parsed.keyword
+              ? entityTypes[0]?.match_type === "vector"
+                ? "vector_semantic"
+                : "keyword_exact"
+              : "all",
+          };
 
       return this.buildTextResponse(responseData);
     } catch (error: any) {
@@ -3573,12 +3568,14 @@ export class NeotomaServer {
   private async listInterpretations(
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
-    const parsed = z.object({
-      user_id: z.string().optional(),
-      source_id: z.string().optional(),
-      limit: z.number().int().positive().max(500).optional().default(100),
-      offset: z.number().int().nonnegative().optional().default(0),
-    }).parse(args ?? {});
+    const parsed = z
+      .object({
+        user_id: z.string().optional(),
+        source_id: z.string().optional(),
+        limit: z.number().int().positive().max(500).optional().default(100),
+        offset: z.number().int().nonnegative().optional().default(0),
+      })
+      .parse(args ?? {});
     const userId = this.getAuthenticatedUserId(parsed.user_id);
 
     let query = db
@@ -3592,7 +3589,10 @@ export class NeotomaServer {
     }
     const { data, error, count } = await query;
     if (error) {
-      throw new McpError(ErrorCode.InternalError, `Failed to list interpretations: ${error.message}`);
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to list interpretations: ${error.message}`
+      );
     }
     return this.buildTextResponse({
       interpretations: data ?? [],
@@ -3740,11 +3740,7 @@ export class NeotomaServer {
 
     let structuredResponsePayload: Record<string, unknown> | undefined;
     let preloadedUnstructuredPayload: Record<string, unknown> | undefined;
-    if (
-      hasEntities &&
-      hasUnstructured &&
-      parsed.interpretation?.source_ref === "unstructured"
-    ) {
+    if (hasEntities && hasUnstructured && parsed.interpretation?.source_ref === "unstructured") {
       const fileIdempotencyKey = parsed.file_idempotency_key ?? `${parsed.idempotency_key}-file`;
       const unstructuredResponse = await this.store({
         idempotency_key: fileIdempotencyKey,
@@ -3777,7 +3773,7 @@ export class NeotomaServer {
           interpretation: parsed.interpretation,
           interpretationSourceId:
             parsed.interpretation?.source_ref === "unstructured" &&
-              typeof preloadedUnstructuredPayload?.source_id === "string"
+            typeof preloadedUnstructuredPayload?.source_id === "string"
               ? preloadedUnstructuredPayload.source_id
               : undefined,
         }
@@ -4198,7 +4194,7 @@ export class NeotomaServer {
         throw new McpError(
           ErrorCode.InvalidParams,
           `store_structured plan: ${issues.length} entity issue(s). ` +
-          issues.map((iss) => `[${iss.observation_index}] ${iss.message}`).join(" | ")
+            issues.map((iss) => `[${iss.observation_index}] ${iss.message}`).join(" | ")
         );
       }
       return this.buildTextResponse({
@@ -4402,9 +4398,8 @@ export class NeotomaServer {
           ? ((fieldsToValidate as Record<string, unknown>).canonical_name as string)
           : undefined;
 
-      const { getSchemaDefinition, resolveEntityTypeFromAlias } = await import(
-        "./services/schema_definitions.js"
-      );
+      const { getSchemaDefinition, resolveEntityTypeFromAlias } =
+        await import("./services/schema_definitions.js");
 
       // DB-registered schemas take priority over code-defined aliases.
       // A user who registered `organization` should not have it silently
@@ -4432,8 +4427,8 @@ export class NeotomaServer {
         if (match) {
           logger.warn(
             `[STORE] Collapsing new entity_type "${entityType}" -> existing ` +
-            `"${match.canonical_entity_type}" (reason: ${match.reason}). ` +
-            `Set schema.aliases explicitly if this is wrong.`
+              `"${match.canonical_entity_type}" (reason: ${match.reason}). ` +
+              `Set schema.aliases explicitly if this is wrong.`
           );
           entityType = match.canonical_entity_type;
           schema = await schemaRegistry.loadActiveSchema(entityType, userId);
@@ -4500,7 +4495,7 @@ export class NeotomaServer {
 
         logger.error(
           `[STORE] Auto-created ${isDefaultUser ? "global" : "user-specific"} schema for "${entityType}" ` +
-          `(version 1.0, ${Object.keys(inferredSchema.schemaDefinition.fields).length} fields)`
+            `(version 1.0, ${Object.keys(inferredSchema.schemaDefinition.fields).length} fields)`
         );
       }
 
@@ -4509,13 +4504,9 @@ export class NeotomaServer {
       // explicitly authorises them. Runs here so the MCP path matches
       // the HTTP `storeStructuredForApi` capability gate.
       {
-        const { assertCanWriteProtected } = await import(
-          "./services/protected_entity_types.js"
-        );
-        const {
-          getCurrentAgentIdentity,
-          getCurrentAAuthAdmission,
-        } = await import("./services/request_context.js");
+        const { assertCanWriteProtected } = await import("./services/protected_entity_types.js");
+        const { getCurrentAgentIdentity, getCurrentAAuthAdmission } =
+          await import("./services/request_context.js");
         assertCanWriteProtected({
           entity_type: entityType,
           op: "store",
@@ -4691,9 +4682,8 @@ export class NeotomaServer {
       if (!existingObservation) {
         // Stamp agent attribution (Phase 1) so the Inspector can show the
         // writing agent for structured-store observations too.
-        const { getCurrentAttribution: _structuredAttrib } = await import(
-          "./services/request_context.js"
-        );
+        const { getCurrentAttribution: _structuredAttrib } =
+          await import("./services/request_context.js");
         const structuredAttribution = _structuredAttrib();
         const observedAt = new Date().toISOString();
         const { error: obsError } = await db.from("observations").insert({
@@ -4887,8 +4877,8 @@ export class NeotomaServer {
             } catch (linkErr) {
               logger.warn(
                 `[STORE] Auto-link reference fields failed for ` +
-                `${snapshot.entity_type}/${snapshot.entity_id}: ` +
-                (linkErr instanceof Error ? linkErr.message : String(linkErr))
+                  `${snapshot.entity_type}/${snapshot.entity_id}: ` +
+                  (linkErr instanceof Error ? linkErr.message : String(linkErr))
               );
             }
           }
@@ -4921,9 +4911,9 @@ export class NeotomaServer {
         if (!sourceEntityId || !targetEntityId) {
           logger.warn(
             `store_structured: relationship reference out of range or missing ` +
-            `(source=${"source_index" in rel ? rel.source_index : rel.source_entity_id}, ` +
-            `target=${"target_index" in rel ? rel.target_index : rel.target_entity_id}, ` +
-            `entities.length=${entityIds.length}); skipping`
+              `(source=${"source_index" in rel ? rel.source_index : rel.source_entity_id}, ` +
+              `target=${"target_index" in rel ? rel.target_index : rel.target_entity_id}, ` +
+              `entities.length=${entityIds.length}); skipping`
           );
           continue;
         }
@@ -4974,10 +4964,8 @@ export class NeotomaServer {
   private async correct(
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
-    const {
-      loadCodeDefinedSchemaEntry,
-      schemaRegistry,
-    } = await import("./services/schema_registry.js");
+    const { loadCodeDefinedSchemaEntry, schemaRegistry } =
+      await import("./services/schema_registry.js");
 
     const parsed = CorrectEntityRequestSchema.parse(args);
 
@@ -5345,14 +5333,14 @@ export class NeotomaServer {
     // Parse query parameters if present
     let queryParams:
       | {
-        limit?: number;
-        offset?: number;
-        sort?: string;
-        order?: "asc" | "desc";
-        entity_type?: string;
-        relationship_type?: string;
-        user_id?: string;
-      }
+          limit?: number;
+          offset?: number;
+          sort?: string;
+          order?: "asc" | "desc";
+          entity_type?: string;
+          relationship_type?: string;
+          user_id?: string;
+        }
       | undefined;
 
     if (queryString) {

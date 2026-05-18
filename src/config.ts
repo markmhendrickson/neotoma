@@ -107,7 +107,9 @@ const logsDir = process.env.NEOTOMA_LOGS_DIR || join(dataDir, logsSubdir);
 const eventLogFileName = env === "production" ? "events.prod.log" : "events.log";
 const eventLogPath =
   process.env.NEOTOMA_EVENT_LOG_PATH ||
-  (process.env.NEOTOMA_EVENT_LOG_DIR ? join(process.env.NEOTOMA_EVENT_LOG_DIR, eventLogFileName) : null) ||
+  (process.env.NEOTOMA_EVENT_LOG_DIR
+    ? join(process.env.NEOTOMA_EVENT_LOG_DIR, eventLogFileName)
+    : null) ||
   join(dataDir, "logs", eventLogFileName);
 
 /**
@@ -121,10 +123,10 @@ function discoverTunnelUrl(httpPort: number, allowAutoDiscovery: boolean): strin
   }
 
   const tunnelFiles = [
-    "/tmp/ngrok-mcp-url.txt",  // Combined scripts write here
-    "/tmp/cloudflared-tunnel.txt"  // Alternative for cloudflare-only
+    "/tmp/ngrok-mcp-url.txt", // Combined scripts write here
+    "/tmp/cloudflared-tunnel.txt", // Alternative for cloudflare-only
   ];
-  
+
   for (const file of tunnelFiles) {
     try {
       if (existsSync(file)) {
@@ -139,7 +141,7 @@ function discoverTunnelUrl(httpPort: number, allowAutoDiscovery: boolean): strin
       // File doesn't exist or unreadable, continue to next
     }
   }
-  
+
   // Store that we're using localhost default
   (discoverTunnelUrl as any)._discovered = { url: `http://localhost:${httpPort}`, file: null };
   return `http://localhost:${httpPort}`;
@@ -158,10 +160,7 @@ export const config = {
   authServerUrl: "",
   authServiceKey: "",
   openaiApiKey: getOpenAIConfig(),
-  port: parseInt(
-    process.env.NEOTOMA_PORT || process.env.PORT || "3000",
-    10
-  ),
+  port: parseInt(process.env.NEOTOMA_PORT || process.env.PORT || "3000", 10),
   httpPort,
   environment: env,
   tunnelAutoDiscoveryEnabled:
@@ -175,9 +174,7 @@ export const config = {
         (process.env.NEOTOMA_AUTO_DISCOVER_TUNNEL_URL_IN_PROD || "false").toLowerCase() === "true"
     ),
   mcpTokenEncryptionKey:
-    process.env.NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY ||
-    process.env.MCP_TOKEN_ENCRYPTION_KEY ||
-    "",
+    process.env.NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY || process.env.MCP_TOKEN_ENCRYPTION_KEY || "",
   /** When true, MCP clients receive the compact instruction block (same body as runtime fallback) instead of the full fenced block from docs — for dual-host setups that already load workspace Neotoma rules. */
   mcpCompactInstructions:
     (process.env.NEOTOMA_MCP_COMPACT_INSTRUCTIONS || "").toLowerCase() === "1" ||
@@ -205,9 +202,7 @@ export const config = {
         "0.8"
     ),
     model:
-      process.env.NEOTOMA_ICON_GENERATION_MODEL ||
-      process.env.ICON_GENERATION_MODEL ||
-      "gpt-4o",
+      process.env.NEOTOMA_ICON_GENERATION_MODEL || process.env.ICON_GENERATION_MODEL || "gpt-4o",
     cacheTTL: parseInt(
       process.env.NEOTOMA_ICON_CACHE_TTL || process.env.ICON_CACHE_TTL || "86400",
       10
@@ -229,11 +224,15 @@ export function logConfigInfo(): void {
       `[Config] Tunnel URL auto-discovery disabled for ${config.environment}; using localhost:${config.httpPort}`
     );
   } else if (discovered?.file) {
-    console.log(`[Config] NEOTOMA_HOST_URL not set; auto-discovered tunnel URL from ${discovered.file}: ${discovered.url}`);
+    console.log(
+      `[Config] NEOTOMA_HOST_URL not set; auto-discovered tunnel URL from ${discovered.file}: ${discovered.url}`
+    );
   } else {
-    console.log(`[Config] NEOTOMA_HOST_URL not set and no tunnel URL file found; using localhost:${config.httpPort}`);
+    console.log(
+      `[Config] NEOTOMA_HOST_URL not set and no tunnel URL file found; using localhost:${config.httpPort}`
+    );
   }
-  
+
   console.log(`[Config] API base (apiBase): ${config.apiBase}`);
   console.log(`[Config] Storage backend: ${config.storageBackend}`);
   console.log(`[Config] Environment: ${config.environment}`);

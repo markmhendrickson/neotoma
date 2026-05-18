@@ -106,7 +106,7 @@ async function verifyInboundPeer(params: {
   if (signatureHeader) {
     const secret = await getPeerSecretForVerification(
       payload.target_user_id,
-      payload.sender_peer_id,
+      payload.sender_peer_id
     );
     if (!secret) {
       throw new Error("PEER_UNKNOWN_OR_INACTIVE");
@@ -124,7 +124,7 @@ async function verifyInboundPeer(params: {
   const peer = await getPeerForAAuthVerification(
     payload.target_user_id,
     payload.sender_peer_id,
-    verifiedAauthThumbprint,
+    verifiedAauthThumbprint
   );
   if (!peer) throw new Error("SIGNATURE_INVALID");
   return peer;
@@ -152,7 +152,12 @@ export async function applyInboundSyncWebhook(params: {
     throw new Error("VALIDATION_ERROR:missing required sync fields");
   }
 
-  const peer = await verifyInboundPeer({ payload, rawBody, signatureHeader, verifiedAauthThumbprint });
+  const peer = await verifyInboundPeer({
+    payload,
+    rawBody,
+    signatureHeader,
+    verifiedAauthThumbprint,
+  });
 
   const base = validateSenderPeerUrl(payload.sender_peer_url, peer);
   const tokenQ = payload.guest_access_token
@@ -181,9 +186,7 @@ export async function applyInboundSyncWebhook(params: {
 
   const { storeStructuredForApi } = await import("../../actions.js");
   const idempotencyKey = createHash("sha256")
-    .update(
-      `sync:${payload.sender_peer_id}:${payload.source_observation_id}:${payload.entity_id}`,
-    )
+    .update(`sync:${payload.sender_peer_id}:${payload.source_observation_id}:${payload.entity_id}`)
     .digest("hex");
 
   await storeStructuredForApi({

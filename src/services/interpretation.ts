@@ -3,12 +3,13 @@
 // Implements idempotence pattern: canonicalization, hash-based IDs, deduplication
 
 import { db } from "../db.js";
-import { schemaRegistry, type SchemaDefinition, type SchemaRegistryEntry } from "./schema_registry.js";
-import { resolveEntity } from "./entity_resolution.js";
 import {
-  getCurrentAgentIdentity,
-  getCurrentAttribution,
-} from "./request_context.js";
+  schemaRegistry,
+  type SchemaDefinition,
+  type SchemaRegistryEntry,
+} from "./schema_registry.js";
+import { resolveEntity } from "./entity_resolution.js";
+import { getCurrentAgentIdentity, getCurrentAttribution } from "./request_context.js";
 import { enforceAttributionPolicy } from "./attribution_policy.js";
 import {
   getSchemaDefinition,
@@ -22,7 +23,7 @@ import { canonicalizeFields, hashCanonicalFields } from "./field_canonicalizatio
 import {
   generateObservationId,
   computeCanonicalHash,
-  checkObservationExistsByHash
+  checkObservationExistsByHash,
 } from "./observation_identity.js";
 import { validateFieldsWithConverters } from "./field_validation.js";
 import {
@@ -37,7 +38,6 @@ import {
   emitObservationCreated,
   shallowFieldsChanged,
 } from "../events/substrate_store_emit.js";
-
 
 export interface InterpretationConfig {
   provider: string;
@@ -154,14 +154,21 @@ export async function runInterpretation(
     observationId: string;
   }> = [];
   const interpretationInsertedObservationIds = new Set<string>();
-  const refinementDebug: Array<{ extracted_keys: string[]; type_before: string; type_after: string }> = [];
+  const refinementDebug: Array<{
+    extracted_keys: string[];
+    type_before: string;
+    type_after: string;
+  }> = [];
 
   try {
     // Build refinement candidates: DB schemas (user + global) + code-only types so dynamic schemas participate
     const dbSchemas = await schemaRegistry.listActiveSchemas(userId).catch(() => []);
     const dbTypes = new Set(dbSchemas.map((e) => e.entity_type));
     const refinementCandidates = [
-      ...dbSchemas.map((e) => ({ entity_type: e.entity_type, schema_definition: e.schema_definition })),
+      ...dbSchemas.map((e) => ({
+        entity_type: e.entity_type,
+        schema_definition: e.schema_definition,
+      })),
       ...getRegisteredEntityTypes()
         .filter((t) => !dbTypes.has(t))
         .map((t) => getSchemaDefinition(t))
@@ -172,9 +179,8 @@ export async function runInterpretation(
     // Process each extracted entity
     for (const entityData of extractedData) {
       // Support both 'entity_type' and 'type' fields for entity type identification
-      let entityType = (entityData.entity_type as string) ||
-                      (entityData.type as string) ||
-                      "generic";
+      let entityType =
+        (entityData.entity_type as string) || (entityData.type as string) || "generic";
       // DB-registered schemas take priority over code-defined aliases so a
       // user-registered type like `organization` is not silently remapped to
       // the built-in `company` alias.
@@ -187,7 +193,11 @@ export async function runInterpretation(
         (k) => k !== "entity_type" && k !== "type"
       );
       const typeBeforeRefinement = entityType;
-      entityType = refineEntityTypeFromExtractedFields(entityType, extractedFieldKeys, refinementCandidates);
+      entityType = refineEntityTypeFromExtractedFields(
+        entityType,
+        extractedFieldKeys,
+        refinementCandidates
+      );
       refinementDebug.push({
         extracted_keys: extractedFieldKeys,
         type_before: typeBeforeRefinement,
@@ -198,7 +208,9 @@ export async function runInterpretation(
         JSON.stringify(extractedFieldKeys),
         typeBeforeRefinement,
         entityType,
-        typeBeforeRefinement !== entityType ? { refined: `${typeBeforeRefinement} → ${entityType}` } : {}
+        typeBeforeRefinement !== entityType
+          ? { refined: `${typeBeforeRefinement} → ${entityType}` }
+          : {}
       );
       let currentEntityData = entityData;
 
@@ -206,18 +218,26 @@ export async function runInterpretation(
 
       // Load active entity schema (user-scoped first, then global) from database
       // NOTE: Schemas should be initialized in the database via `npm run schema:init`
-      let schema: SchemaRegistryEntry | null = await schemaRegistry.loadActiveSchema(entityType, userId);
+      let schema: SchemaRegistryEntry | null = await schemaRegistry.loadActiveSchema(
+        entityType,
+        userId
+      );
 
       // Fallback to code-defined entity schemas if database schema not found
       if (!schema) {
         if (process.env.NEOTOMA_ENV !== "production") {
           console.warn(
             `[Schema Fallback] No database entity schema found for entity type "${entityType}". ` +
-            `Using code fallback. Run 'npm run schema:init' to register schemas in the database.`
+              `Using code fallback. Run 'npm run schema:init' to register schemas in the database.`
           );
         }
 
-        if (codeSchema && codeSchema.entity_type && codeSchema.schema_definition && codeSchema.reducer_config) {
+        if (
+          codeSchema &&
+          codeSchema.entity_type &&
+          codeSchema.schema_definition &&
+          codeSchema.reducer_config
+        ) {
           schema = {
             id: "",
             entity_type: codeSchema.entity_type,
@@ -395,8 +415,7 @@ export async function runInterpretation(
           unknownFieldsCount++;
           // Queue auto-enhancement so raw_fragments can promote to schema
           try {
-            const { schemaRecommendationService } =
-              await import("./schema_recommendation.js");
+            const { schemaRecommendationService } = await import("./schema_recommendation.js");
             await schemaRecommendationService.queueAutoEnhancementCheck({
               entity_type: entityType,
               fragment_key: key,
@@ -454,8 +473,7 @@ export async function runInterpretation(
                 })
                 .eq("id", retryExisting.id);
               try {
-                const { schemaRecommendationService } =
-                  await import("./schema_recommendation.js");
+                const { schemaRecommendationService } = await import("./schema_recommendation.js");
                 await schemaRecommendationService.queueAutoEnhancementCheck({
                   entity_type: entityType,
                   fragment_key: key,
@@ -472,8 +490,7 @@ export async function runInterpretation(
           } else if (!insertError) {
             // New fragment inserted successfully; queue auto-enhancement
             try {
-              const { schemaRecommendationService } =
-                await import("./schema_recommendation.js");
+              const { schemaRecommendationService } = await import("./schema_recommendation.js");
               await schemaRecommendationService.queueAutoEnhancementCheck({
                 entity_type: entityType,
                 fragment_key: key,
@@ -524,13 +541,9 @@ export async function runInterpretation(
           userId,
         });
       } catch (err) {
-        const { CanonicalNameUnresolvedError } = await import(
-          "./entity_resolution.js"
-        );
+        const { CanonicalNameUnresolvedError } = await import("./entity_resolution.js");
         if (err instanceof CanonicalNameUnresolvedError) {
-          logger.warn(
-            `[Interpretation] Skipping observation for ${entityType}: ${err.message}`,
-          );
+          logger.warn(`[Interpretation] Skipping observation for ${entityType}: ${err.message}`);
           continue;
         }
         throw err;
@@ -580,26 +593,23 @@ export async function runInterpretation(
         user_id: userId,
       };
 
-      let { error: obsError } = await db
-        .from("observations")
-        .insert(observationData);
+      let { error: obsError } = await db.from("observations").insert(observationData);
 
       // If error is about canonical_hash not being in schema cache, retry without it
-      if (obsError && (
-        obsError.message?.includes("canonical_hash") ||
-        obsError.code === "PGRST205" ||
-        obsError.message?.includes("schema cache")
-      )) {
+      if (
+        obsError &&
+        (obsError.message?.includes("canonical_hash") ||
+          obsError.code === "PGRST205" ||
+          obsError.message?.includes("schema cache"))
+      ) {
         console.warn(
           `[WARN] canonical_hash column not in schema cache, inserting without it. ` +
-          `Migration may need to be applied or schema cache refreshed.`
+            `Migration may need to be applied or schema cache refreshed.`
         );
         // Retry without canonical_hash
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { canonical_hash: _canonical_hash, ...observationDataWithoutHash } = observationData;
-        ({ error: obsError } = await db
-          .from("observations")
-          .insert(observationDataWithoutHash));
+        ({ error: obsError } = await db.from("observations").insert(observationDataWithoutHash));
       }
 
       if (obsError) {
@@ -669,19 +679,16 @@ export async function runInterpretation(
           });
           const toUpsert = getEntitySnapshotUpsertPayload(rowWithEmbedding);
 
-          await db.from("entity_snapshots").upsert(
-            toUpsert as Record<string, unknown>,
-            {
-              onConflict: "entity_id",
-            }
-          );
+          await db.from("entity_snapshots").upsert(toUpsert as Record<string, unknown>, {
+            onConflict: "entity_id",
+          });
 
           const sameTypeInBatch = entities.filter((e) => e.entityType === entity.entityType).length;
           let timelineSchema: SchemaDefinition | null = null;
           try {
             const entry = await schemaRegistry.loadActiveSchema(
               snapshot.entity_type,
-              snapshot.user_id || userId,
+              snapshot.user_id || userId
             );
             timelineSchema = entry?.schema_definition ?? null;
           } catch {
@@ -882,7 +889,7 @@ export async function createRelationshipObservations(
   sourceId: string,
   interpretationId: string | null,
   userId: string,
-  sourcePriority: number = 0,
+  sourcePriority: number = 0
 ): Promise<number> {
   enforceAttributionPolicy("relationships", getCurrentAgentIdentity());
   const { relationshipReducer } = await import("../reducers/relationship_reducer.js");
@@ -919,7 +926,7 @@ export async function createRelationshipObservations(
             interpretation_id: interpretationId,
             relationship_key: relationshipKey,
             canonical_hash: canonicalHash,
-          }),
+          })
         )
         .digest("hex");
 
@@ -965,9 +972,7 @@ export async function createRelationshipObservations(
         metadata: canonicalMetadata,
         canonical_hash: canonicalHash,
         user_id: userId,
-        ...(Object.keys(relAttribution).length > 0
-          ? { provenance: relAttribution }
-          : {}),
+        ...(Object.keys(relAttribution).length > 0 ? { provenance: relAttribution } : {}),
       };
 
       let { error: obsError } = await db
@@ -975,18 +980,20 @@ export async function createRelationshipObservations(
         .insert(relationshipObsData);
 
       // If error is about canonical_hash not being in schema cache, retry without it
-      if (obsError && (
-        obsError.message?.includes("canonical_hash") ||
-        obsError.code === "PGRST205" ||
-        obsError.message?.includes("schema cache")
-      )) {
+      if (
+        obsError &&
+        (obsError.message?.includes("canonical_hash") ||
+          obsError.code === "PGRST205" ||
+          obsError.message?.includes("schema cache"))
+      ) {
         console.warn(
           `[WARN] canonical_hash column not in schema cache for relationship_observations, inserting without it. ` +
-          `Migration may need to be applied or schema cache refreshed.`
+            `Migration may need to be applied or schema cache refreshed.`
         );
         // Retry without canonical_hash
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { canonical_hash: _canonical_hash, ...relationshipObsDataWithoutHash } = relationshipObsData;
+        const { canonical_hash: _canonical_hash, ...relationshipObsDataWithoutHash } =
+          relationshipObsData;
         ({ error: obsError } = await db
           .from("relationship_observations")
           .insert(relationshipObsDataWithoutHash));
@@ -1003,9 +1010,7 @@ export async function createRelationshipObservations(
               ? rawDetails
               : JSON.stringify(rawDetails)
             : "";
-        const errMsg = detailsStr
-          ? `${obsError.message} (${detailsStr})`
-          : obsError.message;
+        const errMsg = detailsStr ? `${obsError.message} (${detailsStr})` : obsError.message;
         const fullMsg = `Failed to create relationship observation for ${relationshipKey}: ${errMsg}`;
         console.error(fullMsg);
         throw new Error(fullMsg);
@@ -1016,7 +1021,7 @@ export async function createRelationshipObservations(
     } catch (error) {
       console.error(
         `Failed to process relationship observation:`,
-        error instanceof Error ? error.message : String(error),
+        error instanceof Error ? error.message : String(error)
       );
     }
   }
@@ -1035,7 +1040,7 @@ export async function createRelationshipObservations(
       if (fetchError) {
         console.error(
           `Failed to fetch observations for relationship ${relationshipKey}:`,
-          fetchError.message,
+          fetchError.message
         );
         continue;
       }
@@ -1044,7 +1049,7 @@ export async function createRelationshipObservations(
         // Compute snapshot
         const snapshot = await relationshipReducer.computeSnapshot(
           relationshipKey,
-          allObservations as any,
+          allObservations as any
         );
 
         // Save snapshot
@@ -1064,13 +1069,13 @@ export async function createRelationshipObservations(
           },
           {
             onConflict: "relationship_key",
-          },
+          }
         );
       }
     } catch (error) {
       console.error(
         `Failed to compute snapshot for relationship ${relationshipKey}:`,
-        error instanceof Error ? error.message : String(error),
+        error instanceof Error ? error.message : String(error)
       );
     }
   }

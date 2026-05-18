@@ -72,7 +72,11 @@ export async function countActiveSubscriptionsForUser(userId: string): Promise<n
     .eq("entity_type", SUBSCRIPTION_ENTITY_TYPE);
   if (error || !snaps?.length) return 0;
   const entityIds = snaps.map((r: { entity_id: string }) => r.entity_id);
-  const { data: ents } = await db.from("entities").select("id").eq("user_id", userId).in("id", entityIds);
+  const { data: ents } = await db
+    .from("entities")
+    .select("id")
+    .eq("user_id", userId)
+    .in("id", entityIds);
   const allowed = new Set((ents ?? []).map((e: { id: string }) => e.id));
   let n = 0;
   for (const row of snaps) {
@@ -85,7 +89,11 @@ export async function countActiveSubscriptionsForUser(userId: string): Promise<n
 }
 
 export async function refreshSubscriptionInIndex(entityId: string): Promise<void> {
-  const { data: ent } = await db.from("entities").select("user_id").eq("id", entityId).maybeSingle();
+  const { data: ent } = await db
+    .from("entities")
+    .select("user_id")
+    .eq("id", entityId)
+    .maybeSingle();
   if (!ent?.user_id) return;
   const userId = ent.user_id as string;
   const { data: snap } = await db
@@ -101,7 +109,7 @@ export async function refreshSubscriptionInIndex(entityId: string): Promise<void
   const parsed = parseSubscriptionSnapshot(
     entityId,
     userId,
-    snap.snapshot as Record<string, unknown>,
+    snap.snapshot as Record<string, unknown>
   );
   const list = (subscriptionsByUser.get(userId) ?? []).filter((s) => s.entity_id !== entityId);
   if (parsed?.active) {

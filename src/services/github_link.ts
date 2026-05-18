@@ -22,11 +22,11 @@ export interface GitHubLinkParams {
  */
 export async function linkGithubToGrant(
   client: NeotomaApiClient,
-  params: GitHubLinkParams,
+  params: GitHubLinkParams
 ): Promise<{ success: boolean; error?: string }> {
   const now = new Date().toISOString();
 
-  const { error } = await client.POST("/correct" as any, {
+  const { error } = (await client.POST("/correct" as any, {
     body: {
       entity_id: params.grantId,
       entity_type: "agent_grant",
@@ -36,7 +36,7 @@ export async function linkGithubToGrant(
         linked_github_verified_at: now,
       },
     },
-  }) as { data?: unknown; error?: unknown };
+  })) as { data?: unknown; error?: unknown };
 
   if (error) {
     return {
@@ -52,9 +52,9 @@ export async function linkGithubToGrant(
  */
 export async function unlinkGithubFromGrant(
   client: NeotomaApiClient,
-  grantId: string,
+  grantId: string
 ): Promise<{ success: boolean; error?: string }> {
-  const { error } = await client.POST("/correct" as any, {
+  const { error } = (await client.POST("/correct" as any, {
     body: {
       entity_id: grantId,
       entity_type: "agent_grant",
@@ -64,7 +64,7 @@ export async function unlinkGithubFromGrant(
         linked_github_verified_at: null,
       },
     },
-  }) as { data?: unknown; error?: unknown };
+  })) as { data?: unknown; error?: unknown };
 
   if (error) {
     return {

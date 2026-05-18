@@ -72,25 +72,10 @@ function locateRepoRoot(): string | null {
   return null;
 }
 
-function packageInstallerPath(
-  tool: HookHarnessId,
-  repoRoot: string
-): string | null {
+function packageInstallerPath(tool: HookHarnessId, repoRoot: string): string | null {
   const map: Partial<Record<HookHarnessId, string>> = {
-    cursor: path.join(
-      repoRoot,
-      "packages",
-      "cursor-hooks",
-      "scripts",
-      "install.mjs"
-    ),
-    codex: path.join(
-      repoRoot,
-      "packages",
-      "codex-hooks",
-      "scripts",
-      "install.mjs"
-    ),
+    cursor: path.join(repoRoot, "packages", "cursor-hooks", "scripts", "install.mjs"),
+    codex: path.join(repoRoot, "packages", "codex-hooks", "scripts", "install.mjs"),
   };
   const candidate = map[tool];
   if (!candidate) return null;
@@ -267,11 +252,10 @@ async function doInstall(
             };
           }
         }
-        const addRes = spawnSync(
-          "claude",
-          ["plugin", "marketplace", "add", pluginDir],
-          { cwd: repoRoot, stdio: "inherit" }
-        );
+        const addRes = spawnSync("claude", ["plugin", "marketplace", "add", pluginDir], {
+          cwd: repoRoot,
+          stdio: "inherit",
+        });
         const installRes = spawnSync(
           "claude",
           ["plugin", "install", CLAUDE_NEOTOMA_PLUGIN_INSTALL_SPEC],
@@ -285,11 +269,11 @@ async function doInstall(
           action: "install",
           message: ok
             ? `Installed Neotoma Claude Code plugin (${CLAUDE_NEOTOMA_PLUGIN_INSTALL_SPEC}).` +
-                (addOk ? "" : " (marketplace add returned non-zero; it may already be registered.)")
+              (addOk ? "" : " (marketplace add returned non-zero; it may already be registered.)")
             : `claude plugin install failed (status ${installRes.status ?? "unknown"}). ` +
-                `Ensure marketplace is registered: claude plugin marketplace add ${pluginDir} ` +
-                `then: claude plugin install ${CLAUDE_NEOTOMA_PLUGIN_INSTALL_SPEC}` +
-                (addOk ? "" : ` (marketplace add exited ${addRes.status ?? "unknown"})`),
+              `Ensure marketplace is registered: claude plugin marketplace add ${pluginDir} ` +
+              `then: claude plugin install ${CLAUDE_NEOTOMA_PLUGIN_INSTALL_SPEC}` +
+              (addOk ? "" : ` (marketplace add exited ${addRes.status ?? "unknown"})`),
           delegated_to: pluginDir,
           status: report.hooks,
         };
@@ -415,23 +399,17 @@ async function doUninstall(
   };
 }
 
-export async function runHooksInstall(
-  opts: HooksCommandOptions
-): Promise<HooksCommandResult> {
+export async function runHooksInstall(opts: HooksCommandOptions): Promise<HooksCommandResult> {
   const report = await runDoctor({ cwd: opts.cwd });
   return doInstall(opts, report);
 }
 
-export async function runHooksUninstall(
-  opts: HooksCommandOptions
-): Promise<HooksCommandResult> {
+export async function runHooksUninstall(opts: HooksCommandOptions): Promise<HooksCommandResult> {
   const report = await runDoctor({ cwd: opts.cwd });
   return doUninstall(opts, report);
 }
 
-export async function runHooksStatus(
-  opts: { cwd?: string } = {}
-): Promise<DoctorReport["hooks"]> {
+export async function runHooksStatus(opts: { cwd?: string } = {}): Promise<DoctorReport["hooks"]> {
   const report = await runDoctor({ cwd: opts.cwd });
   return report.hooks;
 }

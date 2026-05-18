@@ -18,7 +18,7 @@ export function buildExternalActorFromGithubIssue(
   options?: {
     verified_via?: ExternalActorVerifiedVia;
     repository?: string;
-  },
+  }
 ): ExternalActor | null {
   const user = issue?.user;
   if (!user?.login) return null;
@@ -43,7 +43,7 @@ export function buildExternalActorFromGithubComment(
   options?: {
     verified_via?: ExternalActorVerifiedVia;
     repository?: string;
-  },
+  }
 ): ExternalActor | null {
   const user = comment?.user;
   if (!user?.login) return null;
@@ -88,9 +88,7 @@ export function buildExternalActor(params: {
   };
 }
 
-function normaliseGithubUserType(
-  type: string | undefined,
-): "User" | "Bot" | "Organization" {
+function normaliseGithubUserType(type: string | undefined): "User" | "Bot" | "Organization" {
   if (!type) return "User";
   const lower = type.toLowerCase();
   if (lower === "bot") return "Bot";

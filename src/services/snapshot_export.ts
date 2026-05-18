@@ -126,10 +126,7 @@ export async function exportEntitySnapshots(
 ): Promise<SnapshotExportDocument> {
   const limit = filter.limit ?? DEFAULT_SNAPSHOT_EXPORT_LIMIT;
 
-  let snapshotQuery = db
-    .from("entity_snapshots")
-    .select("*")
-    .eq("user_id", filter.user_id);
+  let snapshotQuery = db.from("entity_snapshots").select("*").eq("user_id", filter.user_id);
 
   if (filter.entity_types && filter.entity_types.length > 0) {
     snapshotQuery = snapshotQuery.in("entity_type", filter.entity_types);
@@ -137,9 +134,7 @@ export async function exportEntitySnapshots(
   if (filter.since) {
     snapshotQuery = snapshotQuery.gte("last_observation_at", filter.since);
   }
-  snapshotQuery = snapshotQuery
-    .order("last_observation_at", { ascending: false })
-    .limit(limit);
+  snapshotQuery = snapshotQuery.order("last_observation_at", { ascending: false }).limit(limit);
 
   const { data: snapshotsRaw, error: snapErr } = await snapshotQuery;
   if (snapErr) {
@@ -187,28 +182,18 @@ export async function exportEntitySnapshots(
   }
 
   const keep = (entityId: string): boolean => {
-    if (
-      !filter.observation_source &&
-      !filter.agent_sub &&
-      !filter.attribution_tier
-    ) {
+    if (!filter.observation_source && !filter.agent_sub && !filter.attribution_tier) {
       return true;
     }
     const rows = obsByEntity.get(entityId) ?? [];
     return rows.some((row) => {
-      if (
-        filter.observation_source &&
-        row.observation_source !== filter.observation_source
-      ) {
+      if (filter.observation_source && row.observation_source !== filter.observation_source) {
         return false;
       }
       if (filter.agent_sub || filter.attribution_tier) {
         const prov = coerceProvenance(row.provenance);
         if (filter.agent_sub && prov.agent_sub !== filter.agent_sub) return false;
-        if (
-          filter.attribution_tier &&
-          prov.attribution_tier !== filter.attribution_tier
-        ) {
+        if (filter.attribution_tier && prov.attribution_tier !== filter.attribution_tier) {
           return false;
         }
       }
@@ -231,8 +216,7 @@ export async function exportEntitySnapshots(
         observation_count: snap.observation_count,
         snapshot: snap.snapshot,
         provenance: snap.provenance ?? {},
-        observation_source_histogram:
-          buildObservationSourceHistogram(contributingObs),
+        observation_source_histogram: buildObservationSourceHistogram(contributingObs),
         attribution_fingerprint: buildAttributionFingerprint(contributingObs),
       } satisfies ExportedEntitySnapshot;
     });

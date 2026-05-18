@@ -29,7 +29,7 @@ export interface SemanticSearchEntitiesResult {
  * Uses sqlite-vec in local-only mode.
  */
 export async function semanticSearchEntities(
-  options: SemanticSearchEntitiesOptions,
+  options: SemanticSearchEntitiesOptions
 ): Promise<SemanticSearchEntitiesResult> {
   const {
     searchText,

@@ -63,7 +63,7 @@ export class RedactionGuardError extends Error {
 
 function scanExtraFields(
   extra: Record<string, string> | undefined,
-  salt: string,
+  salt: string
 ): { redacted?: Record<string, string>; hits: string[]; fields_redacted: number } {
   if (!extra || Object.keys(extra).length === 0) return { hits: [], fields_redacted: 0 };
   const redacted: Record<string, string> = {};
@@ -112,7 +112,7 @@ export function runRedactionGuard(input: RedactionGuardInput): RedactionGuardRes
     throw new RedactionGuardError(
       `Redaction guard refused to publish content with ${fields_redacted} field(s) containing potential PII (${hits.join(", ")}).`,
       hits,
-      fields_redacted,
+      fields_redacted
     );
   }
 

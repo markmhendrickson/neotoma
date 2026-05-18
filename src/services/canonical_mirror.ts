@@ -55,12 +55,7 @@ import {
 // Config
 // ============================================================================
 
-export type MirrorKind =
-  | "entities"
-  | "relationships"
-  | "sources"
-  | "timeline"
-  | "schemas";
+export type MirrorKind = "entities" | "relationships" | "sources" | "timeline" | "schemas";
 
 export const ALL_MIRROR_KINDS: MirrorKind[] = [
   "entities",
@@ -147,14 +142,12 @@ export function getMirrorConfig(): MirrorConfig {
     memory_export: {
       enabled: user?.memory_export?.enabled ?? defaults.memory_export.enabled,
       path: user?.memory_export?.path ?? defaults.memory_export.path,
-      limit_lines:
-        user?.memory_export?.limit_lines ?? defaults.memory_export.limit_lines,
+      limit_lines: user?.memory_export?.limit_lines ?? defaults.memory_export.limit_lines,
     },
   };
 
   if (process.env.NEOTOMA_MIRROR_ENABLED !== undefined) {
-    merged.enabled =
-      process.env.NEOTOMA_MIRROR_ENABLED.toLowerCase() === "true";
+    merged.enabled = process.env.NEOTOMA_MIRROR_ENABLED.toLowerCase() === "true";
   }
   if (process.env.NEOTOMA_MIRROR_PATH) merged.path = process.env.NEOTOMA_MIRROR_PATH;
   if (process.env.NEOTOMA_MIRROR_KINDS) {
@@ -163,8 +156,7 @@ export function getMirrorConfig(): MirrorConfig {
       .filter((k) => ALL_MIRROR_KINDS.includes(k));
   }
   if (process.env.NEOTOMA_MIRROR_GIT_ENABLED !== undefined) {
-    merged.git_enabled =
-      process.env.NEOTOMA_MIRROR_GIT_ENABLED.toLowerCase() === "true";
+    merged.git_enabled = process.env.NEOTOMA_MIRROR_GIT_ENABLED.toLowerCase() === "true";
   }
   if (process.env.NEOTOMA_MIRROR_MEMORY_EXPORT_ENABLED !== undefined) {
     merged.memory_export.enabled =
@@ -174,10 +166,7 @@ export function getMirrorConfig(): MirrorConfig {
     merged.memory_export.path = process.env.NEOTOMA_MIRROR_MEMORY_EXPORT_PATH;
   }
   if (process.env.NEOTOMA_MIRROR_MEMORY_EXPORT_LIMIT_LINES) {
-    const n = parseInt(
-      process.env.NEOTOMA_MIRROR_MEMORY_EXPORT_LIMIT_LINES,
-      10
-    );
+    const n = parseInt(process.env.NEOTOMA_MIRROR_MEMORY_EXPORT_LIMIT_LINES, 10);
     if (Number.isFinite(n) && n > 0) merged.memory_export.limit_lines = n;
   }
 
@@ -210,7 +199,10 @@ async function ensureDir(dir: string): Promise<void> {
   await fs.mkdir(dir, { recursive: true });
 }
 
-async function writeFileIfChanged(filePath: string, content: string): Promise<"written" | "unchanged"> {
+async function writeFileIfChanged(
+  filePath: string,
+  content: string
+): Promise<"written" | "unchanged"> {
   await ensureDir(path.dirname(filePath));
   try {
     const existing = await fs.readFile(filePath, "utf8");
@@ -299,11 +291,7 @@ function entityFilePath(
   cfg: MirrorConfig = getMirrorConfig()
 ): string {
   const p = mirrorPaths(cfg);
-  return path.join(
-    p.entities,
-    slugify(entityType),
-    `${entitySlug(entityId, canonicalName)}.md`
-  );
+  return path.join(p.entities, slugify(entityType), `${entitySlug(entityId, canonicalName)}.md`);
 }
 
 function relationshipFilePath(
@@ -415,10 +403,7 @@ export async function removeMirrorEntity(
   await regenerateTopIndex(c);
 }
 
-async function regenerateEntityTypeIndex(
-  entityType: string,
-  cfg: MirrorConfig
-): Promise<void> {
+async function regenerateEntityTypeIndex(entityType: string, cfg: MirrorConfig): Promise<void> {
   const p = mirrorPaths(cfg);
   const dir = path.join(p.entities, slugify(entityType));
   const indexPath = path.join(dir, "index.md");
@@ -457,9 +442,7 @@ async function regenerateEntityTypeIndex(
 async function regenerateEntitiesRootIndex(cfg: MirrorConfig): Promise<void> {
   const p = mirrorPaths(cfg);
   const indexPath = path.join(p.entities, "index.md");
-  const { data, error } = await db
-    .from("entity_snapshots")
-    .select("entity_type");
+  const { data, error } = await db.from("entity_snapshots").select("entity_type");
   if (error) return;
   const counts = new Map<string, number>();
   for (const row of data ?? []) {
@@ -547,13 +530,7 @@ export async function removeMirrorRelationship(
   const c = cfg ?? getMirrorConfig();
   if (!kindEnabled("relationships", c)) return;
   await removeIfPresent(
-    relationshipFilePath(
-      relationshipKey,
-      relationshipType,
-      sourceEntityId,
-      targetEntityId,
-      c
-    )
+    relationshipFilePath(relationshipKey, relationshipType, sourceEntityId, targetEntityId, c)
   );
   await regenerateRelationshipTypeIndex(relationshipType, c);
   await regenerateRelationshipsRootIndex(c);
@@ -562,7 +539,9 @@ export async function removeMirrorRelationship(
 
 async function buildEntityDisplayResolver(
   entityIds: string[]
-): Promise<(entityId: string) => import("../shared/entity_display_name.js").EntityDisplayInput | null> {
+): Promise<
+  (entityId: string) => import("../shared/entity_display_name.js").EntityDisplayInput | null
+> {
   const ids = [...new Set(entityIds)].filter(Boolean);
   if (ids.length === 0) return () => null;
   const { data } = await db
@@ -579,8 +558,7 @@ async function buildEntityDisplayResolver(
     if (!hit) return null;
     return {
       entity_type: hit.entity_type,
-      canonical_name:
-        (hit.snapshot?.canonical_name as string | undefined) ?? entityId,
+      canonical_name: (hit.snapshot?.canonical_name as string | undefined) ?? entityId,
       snapshot: hit.snapshot,
     };
   };
@@ -613,19 +591,14 @@ async function regenerateRelationshipTypeIndex(
     .sort((a: { label: string }, b: { label: string }) =>
       a.label < b.label ? -1 : a.label > b.label ? 1 : 0
     );
-  const rendered = renderIndexMarkdown(
-    `Relationships — ${relationshipType}`,
-    entries
-  );
+  const rendered = renderIndexMarkdown(`Relationships — ${relationshipType}`, entries);
   await writeFileIfChanged(indexPath, rendered);
 }
 
 async function regenerateRelationshipsRootIndex(cfg: MirrorConfig): Promise<void> {
   const p = mirrorPaths(cfg);
   const indexPath = path.join(p.relationships, "index.md");
-  const { data, error } = await db
-    .from("relationship_snapshots")
-    .select("relationship_type");
+  const { data, error } = await db.from("relationship_snapshots").select("relationship_type");
   if (error) return;
   const counts = new Map<string, number>();
   for (const row of data ?? []) {
@@ -684,10 +657,7 @@ export async function mirrorSource(source: MirrorSourceRow, cfg?: MirrorConfig):
   await regenerateTopIndex(c);
 }
 
-export async function removeMirrorSource(
-  sourceId: string,
-  cfg?: MirrorConfig
-): Promise<void> {
+export async function removeMirrorSource(sourceId: string, cfg?: MirrorConfig): Promise<void> {
   const c = cfg ?? getMirrorConfig();
   if (!kindEnabled("sources", c)) return;
   await removeIfPresent(sourceFilePath(sourceId, c));
@@ -724,10 +694,7 @@ async function regenerateSourcesIndex(cfg: MirrorConfig): Promise<void> {
 // Timeline hooks
 // ============================================================================
 
-export async function mirrorTimelineDay(
-  date: string,
-  cfg?: MirrorConfig
-): Promise<void> {
+export async function mirrorTimelineDay(date: string, cfg?: MirrorConfig): Promise<void> {
   const c = cfg ?? getMirrorConfig();
   if (!kindEnabled("timeline", c)) return;
 
@@ -741,19 +708,15 @@ export async function mirrorTimelineDay(
     .gte("event_timestamp", start)
     .lt("event_timestamp", end);
   if (error) return;
-  const events: RenderTimelineEventInput[] = (data ?? []).map(
-    (row: Record<string, unknown>) => ({
-      id: row.id as string,
-      event_type: row.event_type as string,
-      event_timestamp: row.event_timestamp as string,
-      source_id: (row.source_id as string | undefined) ?? null,
-      source_field: (row.source_field as string | undefined) ?? null,
-      entity_ids: Array.isArray(row.entity_ids)
-        ? (row.entity_ids as string[])
-        : null,
-      metadata: (row.metadata as Record<string, unknown> | undefined) ?? null,
-    })
-  );
+  const events: RenderTimelineEventInput[] = (data ?? []).map((row: Record<string, unknown>) => ({
+    id: row.id as string,
+    event_type: row.event_type as string,
+    event_timestamp: row.event_timestamp as string,
+    source_id: (row.source_id as string | undefined) ?? null,
+    source_field: (row.source_field as string | undefined) ?? null,
+    entity_ids: Array.isArray(row.entity_ids) ? (row.entity_ids as string[]) : null,
+    metadata: (row.metadata as Record<string, unknown> | undefined) ?? null,
+  }));
 
   const filePath = timelineFilePath(date, c);
   if (events.length === 0) {
@@ -776,9 +739,7 @@ function nextDay(date: string): string {
 async function regenerateTimelineIndex(cfg: MirrorConfig): Promise<void> {
   const p = mirrorPaths(cfg);
   const indexPath = path.join(p.timeline, "index.md");
-  const { data, error } = await db
-    .from("timeline_events")
-    .select("event_timestamp");
+  const { data, error } = await db.from("timeline_events").select("event_timestamp");
   if (error) return;
   const days = new Map<string, number>();
   for (const row of data ?? []) {
@@ -813,10 +774,7 @@ export interface MirrorSchemaRow {
   metadata?: { label?: string; description?: string; category?: string };
 }
 
-export async function mirrorSchema(
-  schema: MirrorSchemaRow,
-  cfg?: MirrorConfig
-): Promise<void> {
+export async function mirrorSchema(schema: MirrorSchemaRow, cfg?: MirrorConfig): Promise<void> {
   const c = cfg ?? getMirrorConfig();
   if (!kindEnabled("schemas", c)) return;
   const input: RenderSchemaInput = {
@@ -833,10 +791,7 @@ export async function mirrorSchema(
   await regenerateTopIndex(c);
 }
 
-export async function removeMirrorSchema(
-  entityType: string,
-  cfg?: MirrorConfig
-): Promise<void> {
+export async function removeMirrorSchema(entityType: string, cfg?: MirrorConfig): Promise<void> {
   const c = cfg ?? getMirrorConfig();
   if (!kindEnabled("schemas", c)) return;
   await removeIfPresent(schemaFilePath(entityType, c));
@@ -908,9 +863,7 @@ function emptyReport(): RebuildReport {
   return { kinds: [], counts };
 }
 
-export async function rebuildMirror(
-  options: RebuildOptions = {}
-): Promise<RebuildReport> {
+export async function rebuildMirror(options: RebuildOptions = {}): Promise<RebuildReport> {
   const cfg = getMirrorConfig();
   const report = emptyReport();
 
@@ -1014,7 +967,9 @@ async function rebuildEntities(
       last_observation_at: (row.last_observation_at as string | undefined) ?? null,
       provenance: (row.provenance as Record<string, string> | undefined) ?? null,
       canonical_name:
-        ((row.snapshot as Record<string, unknown> | undefined)?.canonical_name as string | undefined) ?? null,
+        ((row.snapshot as Record<string, unknown> | undefined)?.canonical_name as
+          | string
+          | undefined) ?? null,
       user_id: (row.user_id as string | undefined) ?? null,
     };
     const targetPath = entityFilePath(
@@ -1057,9 +1012,7 @@ async function rebuildEntities(
 
   if (opts.clean) {
     const removed = await cleanStale(
-      opts.entityType
-        ? path.join(p.entities, slugify(opts.entityType))
-        : p.entities,
+      opts.entityType ? path.join(p.entities, slugify(opts.entityType)) : p.entities,
       writtenPaths,
       /* preserveNames */ new Set(["index.md"])
     );
@@ -1150,11 +1103,7 @@ async function rebuildRelationships(
   }
 
   if (opts.clean) {
-    const removed = await cleanStale(
-      p.relationships,
-      writtenPaths,
-      new Set(["index.md"])
-    );
+    const removed = await cleanStale(p.relationships, writtenPaths, new Set(["index.md"]));
     report.counts.relationships.removed += removed;
   }
   for (const t of touchedTypes) await regenerateRelationshipTypeIndex(t, cfg);
@@ -1177,7 +1126,8 @@ async function rebuildSources(
       mime_type: (row.mime_type as string) ?? "application/octet-stream",
       file_name: (row.file_name as string | undefined) ?? null,
       original_filename: (row.original_filename as string | undefined) ?? null,
-      byte_size: (row.file_size as number | undefined) ?? (row.byte_size as number | undefined) ?? null,
+      byte_size:
+        (row.file_size as number | undefined) ?? (row.byte_size as number | undefined) ?? null,
       source_type: (row.source_type as string) ?? "unknown",
       source_agent_id: (row.source_agent_id as string | undefined) ?? null,
       source_metadata: (row.provenance as Record<string, unknown> | undefined) ?? null,
@@ -1206,11 +1156,7 @@ async function rebuildSources(
     report.counts.sources[result === "written" ? "written" : "unchanged"]++;
   }
   if (opts.clean) {
-    const removed = await cleanStale(
-      p.sources,
-      writtenPaths,
-      new Set(["index.md"])
-    );
+    const removed = await cleanStale(p.sources, writtenPaths, new Set(["index.md"]));
     report.counts.sources.removed += removed;
   }
   await regenerateSourcesIndex(cfg);
@@ -1222,9 +1168,7 @@ async function rebuildTimeline(
   report: RebuildReport
 ): Promise<void> {
   const p = mirrorPaths(cfg);
-  const { data, error } = await db
-    .from("timeline_events")
-    .select("*");
+  const { data, error } = await db.from("timeline_events").select("*");
   if (error) return;
   const byDay = new Map<string, RenderTimelineEventInput[]>();
   for (const row of (data ?? []) as Array<Record<string, unknown>>) {
@@ -1237,9 +1181,7 @@ async function rebuildTimeline(
       event_timestamp: ts,
       source_id: (row.source_id as string | undefined) ?? null,
       source_field: (row.source_field as string | undefined) ?? null,
-      entity_ids: Array.isArray(row.entity_ids)
-        ? (row.entity_ids as string[])
-        : null,
+      entity_ids: Array.isArray(row.entity_ids) ? (row.entity_ids as string[]) : null,
       metadata: (row.metadata as Record<string, unknown> | undefined) ?? null,
     };
     const list = byDay.get(date) ?? [];

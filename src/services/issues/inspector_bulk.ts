@@ -17,7 +17,7 @@ export type IssueBulkItemResult = {
 
 async function loadOwnedIssueSnapshot(
   entityId: string,
-  userId: string,
+  userId: string
 ): Promise<Record<string, unknown> | null> {
   const { data: ent, error: entErr } = await db
     .from("entities")
@@ -57,7 +57,7 @@ function issueStorePayload(
     closed_at: string | null;
     last_synced_at: string;
     data_source?: string;
-  },
+  }
 ): Record<string, unknown> {
   const labels = Array.isArray(snapshot.labels) ? snapshot.labels : [];
   const gh = parseGithubNumber(snapshot);
@@ -79,8 +79,7 @@ function issueStorePayload(
     last_synced_at: now,
     sync_pending: false,
     data_source:
-      patch.data_source ??
-      `inspector issues ${repo} #${gh || "local"} ${now.slice(0, 10)}`,
+      patch.data_source ?? `inspector issues ${repo} #${gh || "local"} ${now.slice(0, 10)}`,
   };
 }
 
@@ -92,7 +91,7 @@ async function persistIssueFromSnapshot(
     closed_at: string | null;
     last_synced_at: string;
     data_source?: string;
-  },
+  }
 ): Promise<void> {
   const { storeStructuredForApi } = await import("../../actions.js");
   const entity = issueStorePayload(snapshot, patch);
@@ -110,7 +109,7 @@ async function persistIssueFromSnapshot(
  */
 export async function bulkCloseIssues(
   userId: string,
-  entityIds: string[],
+  entityIds: string[]
 ): Promise<{ results: IssueBulkItemResult[] }> {
   const results: IssueBulkItemResult[] = [];
   for (const entityId of entityIds) {
@@ -170,7 +169,7 @@ export async function bulkCloseIssues(
  */
 export async function bulkRemoveIssues(
   userId: string,
-  entityIds: string[],
+  entityIds: string[]
 ): Promise<{ results: IssueBulkItemResult[] }> {
   const results: IssueBulkItemResult[] = [];
   for (const entityId of entityIds) {

@@ -31,8 +31,7 @@ function inferEntityType(headers: Set<string>, fileName?: string): string {
 
   if (
     lowerName.includes("transaction") ||
-    (headers.has("amount_usd") &&
-      (headers.has("transaction_date") || headers.has("posting_date")))
+    (headers.has("amount_usd") && (headers.has("transaction_date") || headers.has("posting_date")))
   ) {
     return "transaction";
   }
@@ -118,7 +117,9 @@ export function extractEntitiesFromCsvRows(
     entity_type: entityType,
     schema_version: "1.0",
     ...(fileName ? { import_source_file: fileName } : {}),
-    ...(entityType === "dataset_row" ? { row_index: index + 1, source_file: fileName || "csv_upload" } : {}),
+    ...(entityType === "dataset_row"
+      ? { row_index: index + 1, source_file: fileName || "csv_upload" }
+      : {}),
     ...row,
   }));
 }

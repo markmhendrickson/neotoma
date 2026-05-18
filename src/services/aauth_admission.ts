@@ -23,11 +23,7 @@
 
 import type { AAuthRequestContext } from "../crypto/agent_identity.js";
 import type { AAuthAdmissionContext, AAuthAdmissionReason } from "./protected_entity_types.js";
-import {
-  findActiveGrantByIdentity,
-  recordMatch,
-  type AgentGrant,
-} from "./agent_grants.js";
+import { findActiveGrantByIdentity, recordMatch, type AgentGrant } from "./agent_grants.js";
 import { logger } from "../utils/logger.js";
 
 export type { AAuthAdmissionContext, AAuthAdmissionReason };
@@ -55,7 +51,7 @@ export interface AdmissionResult extends AAuthAdmissionContext {
  * flowing through attribution-only paths.
  */
 export async function admitFromAAuthContext(
-  ctx: AAuthRequestContext | null,
+  ctx: AAuthRequestContext | null
 ): Promise<AdmissionResult> {
   if (!ctx || !ctx.verified) {
     return { admitted: false, reason: "not_signed" };

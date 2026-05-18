@@ -23,7 +23,10 @@ export interface CompareVersionsResult {
  * Rules mirror `neotoma compat`: major mismatch or |minor| > 2 ⇒ incompatible;
  * 1–2 minor drift ⇒ compatible + warning; unknown remote version ⇒ compatible + warning.
  */
-export function compareCliApiCompat(localVersion: string, remoteVersion: string): CompareVersionsResult {
+export function compareCliApiCompat(
+  localVersion: string,
+  remoteVersion: string
+): CompareVersionsResult {
   if (remoteVersion === "unknown" || remoteVersion.trim() === "") {
     return {
       compatible: true,

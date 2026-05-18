@@ -151,10 +151,7 @@ export async function processDeletionRequest(
   const request = requestData as DeletionRequest;
 
   // Update status to in_progress
-  await db
-    .from("deletion_requests")
-    .update({ status: "in_progress" })
-    .eq("id", deletionRequestId);
+  await db.from("deletion_requests").update({ status: "in_progress" }).eq("id", deletionRequestId);
 
   try {
     // Step 1: Soft deletion
@@ -166,10 +163,7 @@ export async function processDeletionRequest(
           request.user_id,
           request.reason
         );
-      } else if (
-        request.deletion_type === "relationship" &&
-        request.relationship_id
-      ) {
+      } else if (request.deletion_type === "relationship" && request.relationship_id) {
         // Parse relationship key to get components
         const parts = request.relationship_id.split(":");
         if (parts.length === 3) {
@@ -231,10 +225,7 @@ export async function processDeletionRequest(
     };
   } catch (err) {
     // Update status to rejected
-    await db
-      .from("deletion_requests")
-      .update({ status: "rejected" })
-      .eq("id", deletionRequestId);
+    await db.from("deletion_requests").update({ status: "rejected" }).eq("id", deletionRequestId);
 
     return {
       success: false,
@@ -252,19 +243,13 @@ export async function processDeletionRequest(
  * @param userId - User ID
  * @param entityId - Optional entity ID (if deleting specific entity)
  */
-export async function cryptographicErasure(
-  userId: string,
-  entityId?: string
-): Promise<void> {
+export async function cryptographicErasure(userId: string, entityId?: string): Promise<void> {
   // Generate encryption key for this user's data
   const encryptionKey = randomBytes(32); // 256-bit key
   const iv = randomBytes(16); // Initialization vector
 
   // Get observations to encrypt
-  let query = db
-    .from("observations")
-    .select("id, fields")
-    .eq("user_id", userId);
+  let query = db.from("observations").select("id, fields").eq("user_id", userId);
 
   if (entityId) {
     query = query.eq("entity_id", entityId);
@@ -280,8 +265,7 @@ export async function cryptographicErasure(
   for (const obs of observations || []) {
     const cipher = createCipheriv("aes-256-cbc", encryptionKey, iv);
     const fieldsString = JSON.stringify(obs.fields);
-    const encrypted =
-      cipher.update(fieldsString, "utf8", "base64") + cipher.final("base64");
+    const encrypted = cipher.update(fieldsString, "utf8", "base64") + cipher.final("base64");
 
     // Update observation with encrypted fields
     await db
@@ -305,10 +289,7 @@ export async function cryptographicErasure(
  * @param userId - User ID
  * @param entityId - Optional entity ID (if deleting specific entity)
  */
-export async function physicalDeletion(
-  userId: string,
-  entityId?: string
-): Promise<void> {
+export async function physicalDeletion(userId: string, entityId?: string): Promise<void> {
   // Delete observations
   let obsQuery = db.from("observations").delete().eq("user_id", userId);
 
@@ -333,10 +314,7 @@ export async function physicalDeletion(
       throw new Error(`Failed to delete snapshots: ${snapError.message}`);
     }
   } else {
-    const { error: snapError } = await db
-      .from("entity_snapshots")
-      .delete()
-      .eq("user_id", userId);
+    const { error: snapError } = await db.from("entity_snapshots").delete().eq("user_id", userId);
 
     if (snapError) {
       throw new Error(`Failed to delete snapshots: ${snapError.message}`);
@@ -350,9 +328,7 @@ export async function physicalDeletion(
     .eq("user_id", userId);
 
   if (relError) {
-    throw new Error(
-      `Failed to delete relationship observations: ${relError.message}`
-    );
+    throw new Error(`Failed to delete relationship observations: ${relError.message}`);
   }
 }
 

@@ -134,11 +134,7 @@ export async function createObservation(
     (row as Record<string, unknown>).provenance = attribution;
   }
 
-  const { data, error } = await db
-    .from("observations")
-    .insert(row)
-    .select()
-    .single();
+  const { data, error } = await db.from("observations").insert(row).select().single();
 
   if (error) {
     throw new Error(`Failed to create observation: ${error.message}`);
@@ -160,7 +156,8 @@ export async function listObservationsForEntity(
     .order("observed_at", { ascending: false });
 
   if (options?.limit) query = query.limit(options.limit);
-  if (options?.offset) query = query.range(options.offset, (options.offset ?? 0) + (options.limit ?? 50) - 1);
+  if (options?.offset)
+    query = query.range(options.offset, (options.offset ?? 0) + (options.limit ?? 50) - 1);
 
   const { data, error, count } = await query;
   if (error) throw new Error(`Failed to list observations: ${error.message}`);
@@ -212,10 +209,7 @@ export async function rewriteObservationEntityId(
   return data?.length || 0;
 }
 
-export async function hasObservationsForEntity(
-  entityId: string,
-  userId: string
-): Promise<boolean> {
+export async function hasObservationsForEntity(entityId: string, userId: string): Promise<boolean> {
   const { data, error } = await db
     .from("observations")
     .select("id")

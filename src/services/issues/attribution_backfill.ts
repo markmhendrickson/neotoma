@@ -38,10 +38,16 @@ export async function runAttributionBackfill(ops: Operations): Promise<BackfillR
     errors: [],
   };
 
-  const issuesResponse = await ops.retrieveEntities({
+  const issuesResponse = (await ops.retrieveEntities({
     entity_type: "issue",
     limit: 500,
-  }) as { entities?: Array<{ entity_id: string; snapshot?: Record<string, unknown>; provenance?: Record<string, unknown> }> };
+  })) as {
+    entities?: Array<{
+      entity_id: string;
+      snapshot?: Record<string, unknown>;
+      provenance?: Record<string, unknown>;
+    }>;
+  };
 
   const issues = issuesResponse?.entities ?? [];
 
@@ -67,7 +73,7 @@ export async function runAttributionBackfill(ops: Operations): Promise<BackfillR
         verified_via: "claim",
       };
 
-      await runWithExternalActor(actor, () =>
+      (await runWithExternalActor(actor, () =>
         ops.store({
           entities: [
             {
@@ -77,29 +83,40 @@ export async function runAttributionBackfill(ops: Operations): Promise<BackfillR
             } as any,
           ],
           idempotency_key: `backfill-issue-actor-${issue.entity_id}`,
-        }),
-      ) as StoreResult;
+        })
+      )) as StoreResult;
       result.issues_updated++;
 
-      const relatedResponse = await ops.retrieveRelatedEntities({
+      const relatedResponse = (await ops.retrieveRelatedEntities({
         entity_id: issue.entity_id,
         relationship_types: ["REFERS_TO"],
         direction: "outbound",
-      }) as { entities?: Array<{ entity_id: string; entity_type: string; snapshot?: Record<string, unknown> }> };
+      })) as {
+        entities?: Array<{
+          entity_id: string;
+          entity_type: string;
+          snapshot?: Record<string, unknown>;
+        }>;
+      };
 
-      const conversation = relatedResponse?.entities?.find(
-        (e) => e.entity_type === "conversation",
-      );
+      const conversation = relatedResponse?.entities?.find((e) => e.entity_type === "conversation");
       if (!conversation) continue;
 
-      const partsResponse = await ops.retrieveRelatedEntities({
+      const partsResponse = (await ops.retrieveRelatedEntities({
         entity_id: entityPrimaryId(conversation as { entity_id?: unknown; id?: unknown }),
         relationship_types: ["PART_OF"],
         direction: "inbound",
-      }) as { entities?: Array<{ entity_id: string; entity_type: string; snapshot?: Record<string, unknown>; provenance?: Record<string, unknown> }> };
+      })) as {
+        entities?: Array<{
+          entity_id: string;
+          entity_type: string;
+          snapshot?: Record<string, unknown>;
+          provenance?: Record<string, unknown>;
+        }>;
+      };
 
       const messages = (partsResponse?.entities ?? []).filter(
-        (e) => e.entity_type === "conversation_message",
+        (e) => e.entity_type === "conversation_message"
       );
 
       for (const msg of messages) {
@@ -115,7 +132,7 @@ export async function runAttributionBackfill(ops: Operations): Promise<BackfillR
           verified_via: "claim",
         };
 
-        await runWithExternalActor(msgActor, () =>
+        (await runWithExternalActor(msgActor, () =>
           ops.store({
             entities: [
               {
@@ -125,8 +142,8 @@ export async function runAttributionBackfill(ops: Operations): Promise<BackfillR
               } as any,
             ],
             idempotency_key: `backfill-msg-actor-${msg.entity_id}`,
-          }),
-        ) as StoreResult;
+          })
+        )) as StoreResult;
         result.messages_updated++;
       }
     } catch (err) {

@@ -62,9 +62,7 @@ export function writeLocalHttpPortFile(
     mkdirSync(dirname(profilePath), { recursive: true });
     writeFileSync(profilePath, `${Math.trunc(port)}\n`, "utf-8");
   } catch (err) {
-    logger.warn(
-      `[local_http_port_file] failed to write ${profilePath}: ${(err as Error).message}`,
-    );
+    logger.warn(`[local_http_port_file] failed to write ${profilePath}: ${(err as Error).message}`);
   }
   if (profile === "dev") {
     const legacyPath = localHttpPortFilePath(projectRoot);
@@ -73,7 +71,7 @@ export function writeLocalHttpPortFile(
       writeFileSync(legacyPath, `${Math.trunc(port)}\n`, "utf-8");
     } catch (err) {
       logger.warn(
-        `[local_http_port_file] failed to write legacy ${legacyPath}: ${(err as Error).message}`,
+        `[local_http_port_file] failed to write legacy ${legacyPath}: ${(err as Error).message}`
       );
     }
   }
@@ -102,10 +100,7 @@ export async function readLocalHttpPortFromFile(projectRoot: string): Promise<nu
   const paths: string[] =
     profile === "prod"
       ? [localHttpPortFilePathForProfile(projectRoot, "prod")]
-      : [
-          localHttpPortFilePathForProfile(projectRoot, "dev"),
-          localHttpPortFilePath(projectRoot),
-        ];
+      : [localHttpPortFilePathForProfile(projectRoot, "dev"), localHttpPortFilePath(projectRoot)];
 
   for (const filePath of paths) {
     const port = await readPortFromFilePath(filePath);

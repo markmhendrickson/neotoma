@@ -81,7 +81,7 @@ interface CaptureSingleResult {
 async function captureSingleFile(
   filePath: string,
   opts: PlansCaptureOpts,
-  api: NeotomaApiClient,
+  api: NeotomaApiClient
 ): Promise<CaptureSingleResult> {
   const { captureHarnessPlan } = await import("../services/plans/capture_harness_plan.js");
 
@@ -89,7 +89,9 @@ async function captureSingleFile(
   try {
     payload = await captureHarnessPlan({
       file_path: filePath,
-      ...(opts.source_message_entity_id ? { source_message_entity_id: opts.source_message_entity_id } : {}),
+      ...(opts.source_message_entity_id
+        ? { source_message_entity_id: opts.source_message_entity_id }
+        : {}),
       ...(opts.source_entity_id ? { source_entity_id: opts.source_entity_id } : {}),
       ...(opts.source_entity_type ? { source_entity_type: opts.source_entity_type } : {}),
       ...(opts.repository_root ? { repository_root: opts.repository_root } : {}),
@@ -110,7 +112,9 @@ async function captureSingleFile(
 
   const requestBody: Record<string, unknown> = {
     entities: payload.storePayload.entities,
-    ...(payload.storePayload.relationships ? { relationships: payload.storePayload.relationships } : {}),
+    ...(payload.storePayload.relationships
+      ? { relationships: payload.storePayload.relationships }
+      : {}),
     file_content: fileContent,
     mime_type: "text/markdown",
     original_filename: path.basename(filePath),
@@ -126,12 +130,14 @@ async function captureSingleFile(
   };
   // Use POST /store directly; the canonical store endpoint accepts combined
   // entities + file payloads.
-  const { data, error } = await (api as unknown as {
-    POST: (
-      path: "/store",
-      args: { body: Record<string, unknown> },
-    ) => Promise<{ data?: StoreOk; error?: unknown }>;
-  }).POST("/store", { body: requestBody });
+  const { data, error } = await (
+    api as unknown as {
+      POST: (
+        path: "/store",
+        args: { body: Record<string, unknown> }
+      ) => Promise<{ data?: StoreOk; error?: unknown }>;
+    }
+  ).POST("/store", { body: requestBody });
 
   if (error) {
     return {
@@ -146,18 +152,19 @@ async function captureSingleFile(
   const ok = (data ?? {}) as StoreOk;
   const planEntityId =
     ok.structured?.entities?.[0]?.entity_id ?? ok.entities?.[0]?.entity_id ?? null;
-  const assetEntityId =
-    ok.unstructured?.asset_entity_id ?? ok.asset_entity_id ?? null;
+  const assetEntityId = ok.unstructured?.asset_entity_id ?? ok.asset_entity_id ?? null;
 
   let embedsCreated = false;
   if (planEntityId && assetEntityId) {
     type RelOk = { relationship?: unknown };
-    const { error: relErr } = await (api as unknown as {
-      POST: (
-        path: "/create_relationship",
-        args: { body: Record<string, unknown> },
-      ) => Promise<{ data?: RelOk; error?: unknown }>;
-    }).POST("/create_relationship", {
+    const { error: relErr } = await (
+      api as unknown as {
+        POST: (
+          path: "/create_relationship",
+          args: { body: Record<string, unknown> }
+        ) => Promise<{ data?: RelOk; error?: unknown }>;
+      }
+    ).POST("/create_relationship", {
       body: {
         relationship_type: "EMBEDS",
         source_entity_id: planEntityId,
@@ -211,7 +218,7 @@ export async function plansCapture(opts: PlansCaptureOpts, api: NeotomaApiClient
         captured: results.filter((r) => r.entity_id),
         failed: results.filter((r) => !r.entity_id),
       },
-      true,
+      true
     );
     return;
   }
@@ -235,12 +242,14 @@ export async function plansCapture(opts: PlansCaptureOpts, api: NeotomaApiClient
 
 export async function plansList(opts: PlansListOpts, api: NeotomaApiClient): Promise<void> {
   type EntitiesResp = { entities?: Array<Record<string, unknown>>; total?: number };
-  const { data, error } = await (api as unknown as {
-    POST: (
-      path: "/retrieve_entities",
-      args: { body: Record<string, unknown> },
-    ) => Promise<{ data?: EntitiesResp; error?: unknown }>;
-  }).POST("/retrieve_entities", {
+  const { data, error } = await (
+    api as unknown as {
+      POST: (
+        path: "/retrieve_entities",
+        args: { body: Record<string, unknown> }
+      ) => Promise<{ data?: EntitiesResp; error?: unknown }>;
+    }
+  ).POST("/retrieve_entities", {
     body: {
       entity_type: "plan",
       limit: opts.limit ?? 50,
@@ -256,13 +265,21 @@ export async function plansList(opts: PlansListOpts, api: NeotomaApiClient): Pro
 
   const allEntities = data?.entities ?? [];
   const filtered = allEntities.filter((entity) => {
-    const snapshotCarrier = entity as { snapshot?: { snapshot?: Record<string, unknown> } | Record<string, unknown> };
+    const snapshotCarrier = entity as {
+      snapshot?: { snapshot?: Record<string, unknown> } | Record<string, unknown>;
+    };
     const snapshot =
       (snapshotCarrier.snapshot as { snapshot?: Record<string, unknown> } | undefined)?.snapshot ??
-      ((entity as { snapshot?: Record<string, unknown> }).snapshot ?? {});
-    if (opts.source_entity_id && (snapshot as Record<string, unknown>).source_entity_id !== opts.source_entity_id) return false;
+      (entity as { snapshot?: Record<string, unknown> }).snapshot ??
+      {};
+    if (
+      opts.source_entity_id &&
+      (snapshot as Record<string, unknown>).source_entity_id !== opts.source_entity_id
+    )
+      return false;
     if (opts.status && (snapshot as Record<string, unknown>).status !== opts.status) return false;
-    if (opts.harness && (snapshot as Record<string, unknown>).harness !== opts.harness) return false;
+    if (opts.harness && (snapshot as Record<string, unknown>).harness !== opts.harness)
+      return false;
     return true;
   });
 
@@ -275,11 +292,18 @@ export async function plansList(opts: PlansListOpts, api: NeotomaApiClient): Pro
     return;
   }
   for (const entity of filtered) {
-    const snapshotCarrier = entity as { snapshot?: { snapshot?: Record<string, unknown> } | Record<string, unknown> };
-    const snapshot =
-      ((snapshotCarrier.snapshot as { snapshot?: Record<string, unknown> } | undefined)?.snapshot ??
-        ((entity as { snapshot?: Record<string, unknown> }).snapshot ?? {})) as Record<string, unknown>;
-    const id = (entity as { entity_id?: string; id?: string }).entity_id ?? (entity as { id?: string }).id ?? "";
+    const snapshotCarrier = entity as {
+      snapshot?: { snapshot?: Record<string, unknown> } | Record<string, unknown>;
+    };
+    const snapshot = ((
+      snapshotCarrier.snapshot as { snapshot?: Record<string, unknown> } | undefined
+    )?.snapshot ??
+      (entity as { snapshot?: Record<string, unknown> }).snapshot ??
+      {}) as Record<string, unknown>;
+    const id =
+      (entity as { entity_id?: string; id?: string }).entity_id ??
+      (entity as { id?: string }).id ??
+      "";
     const title = String(snapshot.title ?? "");
     const status = String(snapshot.status ?? "");
     const harness = String(snapshot.harness ?? "");

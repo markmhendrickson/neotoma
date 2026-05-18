@@ -3,7 +3,12 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /** Relative to Neotoma package root (npm package or source checkout). */
-export const MCP_INSTRUCTIONS_DOC_SEGMENTS = ["docs", "developer", "mcp", "instructions.md"] as const;
+export const MCP_INSTRUCTIONS_DOC_SEGMENTS = [
+  "docs",
+  "developer",
+  "mcp",
+  "instructions.md",
+] as const;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);

@@ -49,9 +49,7 @@ export async function processAutoEnhancementQueue(): Promise<{
       return { processed: 0, succeeded: 0, failed: 0, skipped: 0 };
     }
 
-    logger.error(
-      `[AUTO_ENHANCE_QUEUE] Processing ${pendingItems.length} items`,
-    );
+    logger.error(`[AUTO_ENHANCE_QUEUE] Processing ${pendingItems.length} items`);
 
     // 2. Process each item
     for (const item of pendingItems as QueueItem[]) {
@@ -59,10 +57,7 @@ export async function processAutoEnhancementQueue(): Promise<{
 
       try {
         // Mark as processing
-        await db
-          .from("auto_enhancement_queue")
-          .update({ status: "processing" })
-          .eq("id", item.id);
+        await db.from("auto_enhancement_queue").update({ status: "processing" }).eq("id", item.id);
 
         // Schema-lag repair jobs take a separate path from auto-enhancement.
         if (item.job_type === "schema_lag_repair") {
@@ -105,12 +100,11 @@ export async function processAutoEnhancementQueue(): Promise<{
         // Check eligibility
         // Pass user_id as-is (could be UUID string or null)
         // The eligibility check will handle default UUID conversion
-        const eligibility =
-          await schemaRecommendationService.checkAutoEnhancementEligibility({
-            entity_type: item.entity_type,
-            fragment_key: item.fragment_key,
-            user_id: item.user_id || undefined,
-          });
+        const eligibility = await schemaRecommendationService.checkAutoEnhancementEligibility({
+          entity_type: item.entity_type,
+          fragment_key: item.fragment_key,
+          user_id: item.user_id || undefined,
+        });
 
         if (!eligibility.eligible) {
           // Mark as skipped
@@ -182,14 +176,11 @@ export async function processAutoEnhancementQueue(): Promise<{
 
         succeeded++;
         logger.error(
-          `[AUTO_ENHANCE_QUEUE] Successfully enhanced ${item.entity_type}.${item.fragment_key} and updated schema`,
+          `[AUTO_ENHANCE_QUEUE] Successfully enhanced ${item.entity_type}.${item.fragment_key} and updated schema`
         );
       } catch (error: any) {
         failed++;
-        logger.error(
-          `[AUTO_ENHANCE_QUEUE] Failed to process item ${item.id}:`,
-          error.message,
-        );
+        logger.error(`[AUTO_ENHANCE_QUEUE] Failed to process item ${item.id}:`, error.message);
 
         // Update retry count and mark as failed
         const retryCount = (item.retry_count || 0) + 1;
@@ -208,15 +199,12 @@ export async function processAutoEnhancementQueue(): Promise<{
     }
 
     logger.error(
-      `[AUTO_ENHANCE_QUEUE] Processed: ${processed}, Succeeded: ${succeeded}, Failed: ${failed}, Skipped: ${skipped}`,
+      `[AUTO_ENHANCE_QUEUE] Processed: ${processed}, Succeeded: ${succeeded}, Failed: ${failed}, Skipped: ${skipped}`
     );
 
     return { processed, succeeded, failed, skipped };
   } catch (error: any) {
-    logger.error(
-      `[AUTO_ENHANCE_QUEUE] Error processing queue:`,
-      error.message,
-    );
+    logger.error(`[AUTO_ENHANCE_QUEUE] Error processing queue:`, error.message);
     return { processed, succeeded, failed, skipped };
   }
 }
@@ -225,18 +213,13 @@ export async function processAutoEnhancementQueue(): Promise<{
  * Start the auto-enhancement processor (runs continuously)
  */
 export function startAutoEnhancementProcessor(intervalMs: number = 30000) {
-  logger.info(
-    `[AUTO_ENHANCE_QUEUE] Starting processor (interval: ${intervalMs}ms)`,
-  );
+  logger.info(`[AUTO_ENHANCE_QUEUE] Starting processor (interval: ${intervalMs}ms)`);
 
   const processInterval = setInterval(async () => {
     try {
       await processAutoEnhancementQueue();
     } catch (error: any) {
-      logger.error(
-        `[AUTO_ENHANCE_QUEUE] Processor error:`,
-        error.message,
-      );
+      logger.error(`[AUTO_ENHANCE_QUEUE] Processor error:`, error.message);
     }
   }, intervalMs);
 
@@ -250,9 +233,7 @@ export function startAutoEnhancementProcessor(intervalMs: number = 30000) {
 /**
  * Clean up old completed/skipped queue items (run periodically)
  */
-export async function cleanupOldQueueItems(
-  daysToKeep: number = 7,
-): Promise<number> {
+export async function cleanupOldQueueItems(daysToKeep: number = 7): Promise<number> {
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - daysToKeep);
 
@@ -269,8 +250,6 @@ export async function cleanupOldQueueItems(
   }
 
   const deletedCount = data?.length || 0;
-  logger.error(
-    `[AUTO_ENHANCE_QUEUE] Cleaned up ${deletedCount} old queue items`,
-  );
+  logger.error(`[AUTO_ENHANCE_QUEUE] Cleaned up ${deletedCount} old queue items`);
   return deletedCount;
 }

@@ -38,7 +38,7 @@ export async function isGhAuthenticated(): Promise<boolean> {
   try {
     const { exitCode } = await execFileAsync("gh", ["auth", "status"]).then(
       () => ({ exitCode: 0 }),
-      (err) => ({ exitCode: err.code ?? 1 }),
+      (err) => ({ exitCode: err.code ?? 1 })
     );
     return exitCode === 0;
   } catch {

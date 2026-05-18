@@ -144,7 +144,7 @@ function parseInstantEnd(input: string, fallback: number): number {
 export function resolveScorecardWindow(
   sinceRaw: string | undefined,
   untilRaw: string | undefined,
-  refMs: number,
+  refMs: number
 ): { sinceIso: string; untilIso: string; sinceLabel: string | null; untilLabel: string | null } {
   const untilMs = untilRaw?.trim() ? parseInstantEnd(untilRaw.trim(), refMs) : refMs;
   const sinceMs = sinceRaw?.trim()
@@ -178,12 +178,7 @@ type MutableCell = {
   missed: Map<string, number>;
 };
 
-function groupKey(
-  groupBy: string,
-  model: string,
-  harness: string,
-  profile: string,
-): string {
+function groupKey(groupBy: string, model: string, harness: string, profile: string): string {
   switch (groupBy) {
     case "model":
       return `m:${model}`;
@@ -199,7 +194,10 @@ function groupKey(
   }
 }
 
-function parseGroupKey(groupBy: string, key: string): { model: string; harness: string; profile: string } {
+function parseGroupKey(
+  groupBy: string,
+  key: string
+): { model: string; harness: string; profile: string } {
   const out = { model: "(unknown)", harness: "(unknown)", profile: "(unset)" };
   for (const part of key.split("|")) {
     const idx = part.indexOf(":");
@@ -229,16 +227,17 @@ function topMissed(m: Map<string, number>, n: number): Array<{ step: string; cou
 
 export function buildComplianceScorecard(
   userId: string,
-  params: ComplianceScorecardParams = {},
+  params: ComplianceScorecardParams = {}
 ): ComplianceScorecard {
   const refMs = params.ref_ms ?? Date.now();
   const { sinceIso, untilIso, sinceLabel, untilLabel } = resolveScorecardWindow(
     params.since,
     params.until,
-    refMs,
+    refMs
   );
 
-  const groupBy = params.group_by && GROUP_BY_VALUES.has(params.group_by) ? params.group_by : "model+harness";
+  const groupBy =
+    params.group_by && GROUP_BY_VALUES.has(params.group_by) ? params.group_by : "model+harness";
   const minTurns = Math.max(0, params.min_turns ?? 0);
   const minBackfillRate = params.min_backfill_rate;
   const topN = Math.min(50, Math.max(1, params.top_missed_steps ?? 5));
@@ -321,7 +320,9 @@ export function buildComplianceScorecard(
     }
 
     const dailyBackfillRate: Record<string, number> = {};
-    const days = [...new Set([...Object.keys(c.dailyTotal), ...Object.keys(c.dailyBackfilled)])].sort();
+    const days = [
+      ...new Set([...Object.keys(c.dailyTotal), ...Object.keys(c.dailyBackfilled)]),
+    ].sort();
     for (const d of days) {
       const tot = c.dailyTotal[d] ?? 0;
       dailyBackfillRate[d] = tot > 0 ? (c.dailyBackfilled[d] ?? 0) / tot : 0;

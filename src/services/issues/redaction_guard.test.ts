@@ -52,7 +52,7 @@ describe("runRedactionGuard", () => {
         title: "Reporter alice@example.com",
         body: "ok",
         mode: "guard",
-      }),
+      })
     ).toThrow(RedactionGuardError);
   });
 
@@ -62,7 +62,7 @@ describe("runRedactionGuard", () => {
         title: "Clean title",
         body: "Clean body",
         mode: "guard",
-      }),
+      })
     ).not.toThrow();
   });
 
@@ -71,7 +71,7 @@ describe("runRedactionGuard", () => {
       assertPublicEmissionIsClean({
         title: "Reporter alice@example.com",
         body: "ok",
-      }),
+      })
     ).toThrow(RedactionGuardError);
   });
 

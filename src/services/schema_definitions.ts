@@ -27,13 +27,7 @@ import type { SchemaDefinition, ReducerConfig } from "./schema_registry.js";
 export interface EntitySchemaMetadata {
   label: string;
   description: string;
-  category:
-    | "finance"
-    | "productivity"
-    | "knowledge"
-    | "health"
-    | "media"
-    | "agent_runtime";
+  category: "finance" | "productivity" | "knowledge" | "health" | "media" | "agent_runtime";
   aliases?: string[];
   primaryProperties?: string[]; // Optional: can derive from required fields
   guest_access_policy?: "closed" | "read_only" | "submit_only" | "submitter_scoped" | "open";
@@ -390,11 +384,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         status: { type: "string", required: false },
         transaction_id: { type: "string", required: false },
       },
-      canonical_name_fields: [
-        "merchant_name",
-        "date_purchased",
-        "amount_total",
-      ],
+      canonical_name_fields: ["merchant_name", "date_purchased", "amount_total"],
       temporal_fields: [
         { field: "date_purchased", event_type: "ReceiptIssued" },
         { field: "transaction_date", event_type: "TransactionDate" },
@@ -710,9 +700,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         import_source_file: { type: "string", required: false },
       },
       canonical_name_fields: ["snapshot_date", "account_id"],
-      temporal_fields: [
-        { field: "snapshot_date", event_type: "BalanceSnapshot" },
-      ],
+      temporal_fields: [{ field: "snapshot_date", event_type: "BalanceSnapshot" }],
     },
     reducer_config: {
       merge_policies: {
@@ -793,13 +781,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       // first (external_id, website, email, legal_name), falling through
       // to `name` as the last resort so name-only observations still
       // resolve deterministically.
-      canonical_name_fields: [
-        "external_id",
-        "website",
-        "email",
-        "legal_name",
-        "name",
-      ],
+      canonical_name_fields: ["external_id", "website", "email", "legal_name", "name"],
     },
     reducer_config: {
       merge_policies: {
@@ -1240,10 +1222,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       // R2: RFC 5322 message_id is the canonical strong identifier when
       // present. Fall back to (from, subject, sent_at) which uniquely
       // identifies the message within most mailboxes.
-      canonical_name_fields: [
-        "message_id",
-        { composite: ["from", "subject", "sent_at"] },
-      ],
+      canonical_name_fields: ["message_id", { composite: ["from", "subject", "sent_at"] }],
     },
     reducer_config: {
       merge_policies: {
@@ -1319,10 +1298,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       },
       // R2: title is a natural identifier when present; content is the
       // fallback so title-less scratchpads still resolve deterministically.
-      canonical_name_fields: [
-        "title",
-        { composite: ["source", "created_date"] },
-      ],
+      canonical_name_fields: ["title", { composite: ["source", "created_date"] }],
     },
     reducer_config: {
       merge_policies: {
@@ -1525,12 +1501,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         category: { type: "string", required: false },
         bank_provider: { type: "string", required: false },
       },
-      canonical_name_fields: [
-        "posting_date",
-        "category",
-        "amount_original",
-        "bank_provider",
-      ],
+      canonical_name_fields: ["posting_date", "category", "amount_original", "bank_provider"],
       temporal_fields: [
         { field: "posting_date", event_type: "TransactionPosted" },
         { field: "date", event_type: "TransactionDate" },
@@ -1580,13 +1551,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       // R2: ordered identity precedence. Contact records arrive with varied
       // identifiers depending on source (CRM export, email signature, chat
       // mention), so each strong identifier is a single-field rule.
-      canonical_name_fields: [
-        "email",
-        "phone",
-        "external_id",
-        "contact_id",
-        "name",
-      ],
+      canonical_name_fields: ["email", "phone", "external_id", "contact_id", "name"],
     },
     reducer_config: {
       merge_policies: {
@@ -2452,10 +2417,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         emitted_at: { type: "date", required: false },
         payload: { type: "object", required: false },
       },
-      canonical_name_fields: [
-        { composite: ["sensor_id", "emitted_at"] },
-        "sensor_id",
-      ],
+      canonical_name_fields: [{ composite: ["sensor_id", "emitted_at"] }, "sensor_id"],
       temporal_fields: [{ field: "emitted_at", event_type: "AgentSensorEmitted" }],
     },
     reducer_config: {
@@ -2472,13 +2434,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       // keep the registry-wide default order (sensor > workflow_state >
       // llm_summary > human > import) explicit so future edits don't
       // accidentally demote sensor writes below summaries.
-      observation_source_priority: [
-        "sensor",
-        "workflow_state",
-        "llm_summary",
-        "human",
-        "import",
-      ],
+      observation_source_priority: ["sensor", "workflow_state", "llm_summary", "human", "import"],
     },
   },
 
@@ -2700,7 +2656,9 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         hint_shown: { type: "boolean", required: false },
         harness: { type: "string", required: false },
       },
-      canonical_name_fields: [{ composite: ["turn_key", "tool_name", "error_class", "observed_at"] }],
+      canonical_name_fields: [
+        { composite: ["turn_key", "tool_name", "error_class", "observed_at"] },
+      ],
       name_collision_policy: "reject",
     },
     reducer_config: {
@@ -2960,11 +2918,16 @@ export function refineEntityTypeFromExtractedFields(
   if (keySet.size === 0) return currentEntityType;
 
   const candidates: SchemaCandidate[] =
-    candidateSchemas ?? Object.entries(ENTITY_SCHEMAS).map(([entity_type, s]) => ({ entity_type, schema_definition: s.schema_definition }));
+    candidateSchemas ??
+    Object.entries(ENTITY_SCHEMAS).map(([entity_type, s]) => ({
+      entity_type,
+      schema_definition: s.schema_definition,
+    }));
 
-  const currentSchema = candidates.find((c) => c.entity_type === currentEntityType) ?? getSchemaDefinition(currentEntityType);
-  const shouldRefineCurrentType =
-    GENERIC_ENTITY_TYPES.has(currentEntityType) || !currentSchema;
+  const currentSchema =
+    candidates.find((c) => c.entity_type === currentEntityType) ??
+    getSchemaDefinition(currentEntityType);
+  const shouldRefineCurrentType = GENERIC_ENTITY_TYPES.has(currentEntityType) || !currentSchema;
   if (!shouldRefineCurrentType) return currentEntityType;
 
   const currentScore = currentSchema
@@ -2978,7 +2941,12 @@ export function refineEntityTypeFromExtractedFields(
   for (const schema of candidates) {
     if (schema.entity_type === currentEntityType) continue;
     const s = scoreSchemaMatch(keySet, schema);
-    if (s.required >= 2 && (!bestOther || s.required > bestOther.required || (s.required === bestOther.required && s.optional > bestOther.optional))) {
+    if (
+      s.required >= 2 &&
+      (!bestOther ||
+        s.required > bestOther.required ||
+        (s.required === bestOther.required && s.optional > bestOther.optional))
+    ) {
       bestOther = { type: schema.entity_type, required: s.required, optional: s.optional };
     }
   }

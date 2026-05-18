@@ -7,9 +7,7 @@ import type { KeyExport, X25519KeyPair, Ed25519KeyPair } from "./types.js";
 /**
  * Export keypair to JSON format for sharing
  */
-export function exportKeyPair(
-  keyPair: X25519KeyPair | Ed25519KeyPair,
-): KeyExport {
+export function exportKeyPair(keyPair: X25519KeyPair | Ed25519KeyPair): KeyExport {
   return {
     privateKey: base64UrlEncode(keyPair.privateKey),
     publicKey: base64UrlEncode(keyPair.publicKey),
@@ -23,7 +21,7 @@ export function exportKeyPair(
  */
 export function exportKeyPairs(
   x25519KeyPair: X25519KeyPair,
-  ed25519KeyPair: Ed25519KeyPair,
+  ed25519KeyPair: Ed25519KeyPair
 ): { x25519: KeyExport; ed25519: KeyExport } {
   return {
     x25519: exportKeyPair(x25519KeyPair),
@@ -34,10 +32,7 @@ export function exportKeyPairs(
 /**
  * Import both X25519 and Ed25519 key pairs from exported format
  */
-export function importKeyPairs(exported: {
-  x25519: KeyExport;
-  ed25519: KeyExport;
-}): {
+export function importKeyPairs(exported: { x25519: KeyExport; ed25519: KeyExport }): {
   x25519: X25519KeyPair;
   ed25519: Ed25519KeyPair;
 } {
@@ -51,27 +46,18 @@ export function importKeyPairs(exported: {
  * Import keypair from JSON format
  * Validates key format and structure for security
  */
-export function importKeyPair(
-  exported: KeyExport,
-): X25519KeyPair | Ed25519KeyPair {
+export function importKeyPair(exported: KeyExport): X25519KeyPair | Ed25519KeyPair {
   // Validate export structure
   if (!exported || typeof exported !== "object") {
     throw new Error("Invalid key export: must be an object");
   }
 
   if (exported.type !== "x25519" && exported.type !== "ed25519") {
-    throw new Error(
-      `Invalid key type: ${exported.type}. Must be 'x25519' or 'ed25519'`,
-    );
+    throw new Error(`Invalid key type: ${exported.type}. Must be 'x25519' or 'ed25519'`);
   }
 
-  if (
-    typeof exported.privateKey !== "string" ||
-    typeof exported.publicKey !== "string"
-  ) {
-    throw new Error(
-      "Invalid key export: privateKey and publicKey must be strings",
-    );
+  if (typeof exported.privateKey !== "string" || typeof exported.publicKey !== "string") {
+    throw new Error("Invalid key export: privateKey and publicKey must be strings");
   }
 
   if (!exported.exportedAt || typeof exported.exportedAt !== "string") {
@@ -104,8 +90,7 @@ export function importKeyPair(
  * Mask private key for display (shows last 4 characters)
  */
 export function maskPrivateKey(privateKey: string | Uint8Array): string {
-  const str =
-    typeof privateKey === "string" ? privateKey : base64UrlEncode(privateKey);
+  const str = typeof privateKey === "string" ? privateKey : base64UrlEncode(privateKey);
   if (str.length <= 4) return "****";
   return "****" + str.slice(-4);
 }

@@ -21,9 +21,24 @@ type FieldSpec = Array<{
 
 const CONFIG_FIELDS: FieldSpec = [
   { name: "config_key", type: "string", required: true, description: "Stable config identifier" },
-  { name: "target_entity_type", type: "string", required: true, description: "Entity type this config applies to" },
-  { name: "access_policy", type: "string", required: true, description: "closed | read_only | submit_only | submitter_scoped | open" },
-  { name: "active", type: "boolean", required: true, description: "When false, generic submit rejects this type" },
+  {
+    name: "target_entity_type",
+    type: "string",
+    required: true,
+    description: "Entity type this config applies to",
+  },
+  {
+    name: "access_policy",
+    type: "string",
+    required: true,
+    description: "closed | read_only | submit_only | submitter_scoped | open",
+  },
+  {
+    name: "active",
+    type: "boolean",
+    required: true,
+    description: "When false, generic submit rejects this type",
+  },
   {
     name: "enable_conversation_threading",
     type: "boolean",

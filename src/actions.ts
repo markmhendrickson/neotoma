@@ -854,9 +854,7 @@ export function isLocalRequest(req: express.Request): boolean {
     }
     const untrusted = forwardedFor.filter((ip) => !isLoopbackAddress(ip) && !isTrustedProxyIP(ip));
     const debugTunnel = process.env.NEOTOMA_DEBUG_TUNNEL === "1";
-    const displayed = debugTunnel
-      ? untrusted.join(", ")
-      : untrusted.map(redactIpForLog).join(", ");
+    const displayed = debugTunnel ? untrusted.join(", ") : untrusted.map(redactIpForLog).join(", ");
     process.stderr.write(
       `[neotoma] isLocalRequest: loopback socket rejected because XFF contains untrusted IP(s): ${displayed}. ` +
         `Set NEOTOMA_TRUSTED_PROXY_IPS to trust these addresses` +
@@ -2741,7 +2739,7 @@ async function maybeStampGuestPrincipal(req: express.Request): Promise<boolean> 
 
 async function resolveRoutePrincipal(
   req: express.Request,
-  accept: ReadonlyArray<RoutePrincipal["kind"]>,
+  accept: ReadonlyArray<RoutePrincipal["kind"]>
 ): Promise<RoutePrincipal> {
   if (accept.includes("guest") && explicitGuestAccessTokenFromRequest(req)) {
     const guestPrincipal = buildGuestPrincipalFromRequest(req);
@@ -2765,7 +2763,7 @@ async function resolveRoutePrincipal(
     const userId = await getAuthenticatedUserId(
       req,
       ((req.body as { user_id?: string } | undefined)?.user_id ??
-        (req.query.user_id as string | undefined)) as string | undefined,
+        (req.query.user_id as string | undefined)) as string | undefined
     );
     return { kind: "user", userId };
   }
@@ -2792,7 +2790,7 @@ async function resolveRoutePrincipal(
  */
 export async function resolveGuestUserId(
   req: express.Request,
-  principal: RoutePrincipal,
+  principal: RoutePrincipal
 ): Promise<string | null> {
   if (principal.kind !== "guest") return null;
 
@@ -2819,7 +2817,7 @@ export async function resolveGuestUserId(
   }
 
   throw new Error(
-    "Not authenticated - guest principal cannot resolve a user_id: no valid token grant and not a local request",
+    "Not authenticated - guest principal cannot resolve a user_id: no valid token grant and not a local request"
   );
 }
 
@@ -2837,7 +2835,7 @@ async function assertValidGuestAccessToken(principal: GuestPrincipal): Promise<v
 async function resolveGuestScopedEntityAccess(
   principal: GuestPrincipal,
   entityId: string,
-  expectedEntityType?: string,
+  expectedEntityType?: string
 ): Promise<{ userId: string; entityType: string }> {
   await assertValidGuestAccessToken(principal);
 
@@ -2848,7 +2846,9 @@ async function resolveGuestScopedEntityAccess(
     .single();
 
   if (entityError || !entity || (expectedEntityType && entity.entity_type !== expectedEntityType)) {
-    throw new Error(expectedEntityType === "issue" ? "Issue entity not found." : "Entity not found.");
+    throw new Error(
+      expectedEntityType === "issue" ? "Issue entity not found." : "Entity not found."
+    );
   }
 
   const { resolveGuestReadAccess } = await import("./services/access_policy.js");
@@ -2864,7 +2864,8 @@ async function resolveGuestScopedEntityAccess(
 
   if (decision.scopeFilter === "submitter_only") {
     if (principal.guestId.accessToken) {
-      const { tokenGrantsAccessTo, hashGuestAccessToken } = await import("./services/guest_access_token.js");
+      const { tokenGrantsAccessTo, hashGuestAccessToken } =
+        await import("./services/guest_access_token.js");
       if (await tokenGrantsAccessTo(principal.guestId.accessToken, entityId)) {
         return { userId: entity.user_id, entityType: entity.entity_type };
       }
@@ -2882,7 +2883,10 @@ async function resolveGuestScopedEntityAccess(
               : rawFields && typeof rawFields === "object"
                 ? rawFields
                 : undefined;
-          if ((fields as { guest_access_token_hash?: string } | undefined)?.guest_access_token_hash === tokenHash) {
+          if (
+            (fields as { guest_access_token_hash?: string } | undefined)
+              ?.guest_access_token_hash === tokenHash
+          ) {
             return { userId: entity.user_id, entityType: entity.entity_type };
           }
         }
@@ -2893,7 +2897,10 @@ async function resolveGuestScopedEntityAccess(
           .eq("relationship_type", "REFERS_TO");
         for (const relationship of issueRelationships ?? []) {
           const conversationId = (relationship as { target_entity_id?: string }).target_entity_id;
-          if (conversationId && (await tokenGrantsAccessTo(principal.guestId.accessToken, conversationId))) {
+          if (
+            conversationId &&
+            (await tokenGrantsAccessTo(principal.guestId.accessToken, conversationId))
+          ) {
             return { userId: entity.user_id, entityType: entity.entity_type };
           }
         }
@@ -2905,7 +2912,9 @@ async function resolveGuestScopedEntityAccess(
       .select("id, agent_thumbprint")
       .eq("entity_id", entityId);
     const hasMatch = observations?.some((obs: { agent_thumbprint?: string }) => {
-      return Boolean(principal.guestId.thumbprint && obs.agent_thumbprint === principal.guestId.thumbprint);
+      return Boolean(
+        principal.guestId.thumbprint && obs.agent_thumbprint === principal.guestId.thumbprint
+      );
     });
     if (!hasMatch) {
       throw new AccessPolicyError({
@@ -3419,7 +3428,14 @@ app.get("/entities/:id", async (req, res) => {
     // OpenAPI + clients expect `EntitySnapshot` at the root (not `{ entity: ... }`).
     return res.json(entityWithProvenance);
   } catch (error) {
-    return handleApiError(req, res, error, "Failed to get entity", "DB_QUERY_FAILED", "APIError:entity_detail");
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to get entity",
+      "DB_QUERY_FAILED",
+      "APIError:entity_detail"
+    );
   }
 });
 
@@ -3605,7 +3621,7 @@ app.get("/entities/:id/observations", async (req, res) => {
       error,
       "Failed to get observations",
       "DB_QUERY_FAILED",
-      "APIError:entity_observations",
+      "APIError:entity_observations"
     );
   }
 });
@@ -3786,7 +3802,7 @@ app.get("/entities/:id/relationships", async (req, res) => {
       error,
       "Failed to get relationships",
       "DB_QUERY_FAILED",
-      "APIError:entity_relationships",
+      "APIError:entity_relationships"
     );
   }
 });
@@ -6113,9 +6129,7 @@ export async function storeStructuredForApi(params: {
     return t === "conversation_message" || t === "agent_message";
   }
 
-  function senderKindFromSnapshotOrFields(
-    snap: Record<string, unknown>,
-  ): string | undefined {
+  function senderKindFromSnapshotOrFields(snap: Record<string, unknown>): string | undefined {
     const raw = snap.sender_kind ?? snap.role;
     if (typeof raw === "string") return raw.toLowerCase().trim();
     return undefined;
@@ -6128,7 +6142,7 @@ export async function storeStructuredForApi(params: {
 
   function overlayConversationMessageFields(
     base: Record<string, unknown>,
-    incoming: Record<string, unknown>,
+    incoming: Record<string, unknown>
   ): Record<string, unknown> {
     const out: Record<string, unknown> = { ...base };
     for (const k of ["sender_kind", "role", "content", "turn_key"] as const) {
@@ -6158,8 +6172,7 @@ export async function storeStructuredForApi(params: {
         .eq("entity_id", r.entity_id)
         .eq("user_id", userId)
         .maybeSingle();
-      priorDb =
-        (priorSnapRow?.snapshot as Record<string, unknown> | null | undefined) ?? {};
+      priorDb = (priorSnapRow?.snapshot as Record<string, unknown> | null | undefined) ?? {};
       snapshotCache.set(r.entity_id, priorDb);
     }
 
@@ -6187,15 +6200,11 @@ export async function storeStructuredForApi(params: {
           prior_sender_kind: priorSender,
           incoming_sender_kind: incomingSender,
         },
-        hint:
-          'Set turn_key to "{conversation_id}:{turn_id}:assistant" for the assistant closing store; never reuse the user-phase turn_key without that suffix.',
+        hint: 'Set turn_key to "{conversation_id}:{turn_id}:assistant" for the assistant closing store; never reuse the user-phase turn_key without that suffix.',
       });
     }
 
-    rolledConversationMessage.set(
-      r.entity_id,
-      overlayConversationMessageFields(rolled, r.fields),
-    );
+    rolledConversationMessage.set(r.entity_id, overlayConversationMessageFields(rolled, r.fields));
   }
 
   if (issues.length > 0) {
@@ -7969,11 +7978,18 @@ const handleIssuesAddMessageHttp: express.RequestHandler = async (req, res) => {
     const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
     const userId =
       principal.kind === "guest"
-        ? (await resolveGuestScopedEntityAccess(principal, parsed.data.entity_id?.trim() || "", "issue")).userId
+        ? (
+            await resolveGuestScopedEntityAccess(
+              principal,
+              parsed.data.entity_id?.trim() || "",
+              "issue"
+            )
+          ).userId
         : await getAuthenticatedUserId(req, parsed.data.user_id);
     const { createOperations } = await import("./core/operations.js");
     const { NeotomaServer } = await import("./server.js");
-    const { addIssueMessage, appendGuestIssueMessage } = await import("./services/issues/issue_operations.js");
+    const { addIssueMessage, appendGuestIssueMessage } =
+      await import("./services/issues/issue_operations.js");
     const server = new NeotomaServer();
     const ops = createOperations({ server, userId });
     try {
@@ -7995,11 +8011,21 @@ const handleIssuesAddMessageHttp: express.RequestHandler = async (req, res) => {
               ...(parsed.data.guest_access_token
                 ? { guest_access_token: parsed.data.guest_access_token.trim() }
                 : {}),
-              ...(parsed.data.reporter_git_sha ? { reporter_git_sha: parsed.data.reporter_git_sha } : {}),
-              ...(parsed.data.reporter_git_ref ? { reporter_git_ref: parsed.data.reporter_git_ref } : {}),
-              ...(parsed.data.reporter_channel ? { reporter_channel: parsed.data.reporter_channel } : {}),
-              ...(parsed.data.reporter_app_version ? { reporter_app_version: parsed.data.reporter_app_version } : {}),
-              ...(parsed.data.entity_ids_to_link ? { entity_ids_to_link: parsed.data.entity_ids_to_link } : {}),
+              ...(parsed.data.reporter_git_sha
+                ? { reporter_git_sha: parsed.data.reporter_git_sha }
+                : {}),
+              ...(parsed.data.reporter_git_ref
+                ? { reporter_git_ref: parsed.data.reporter_git_ref }
+                : {}),
+              ...(parsed.data.reporter_channel
+                ? { reporter_channel: parsed.data.reporter_channel }
+                : {}),
+              ...(parsed.data.reporter_app_version
+                ? { reporter_app_version: parsed.data.reporter_app_version }
+                : {}),
+              ...(parsed.data.entity_ids_to_link
+                ? { entity_ids_to_link: parsed.data.entity_ids_to_link }
+                : {}),
             });
       logDebug("Success:issues_add_message", req, { message_entity_id: result.message_entity_id });
       return res.json(result);
@@ -8031,17 +8057,18 @@ const handleIssuesSubmitHttp: express.RequestHandler = async (req, res) => {
     const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
     const guestSubmitPayload = Boolean(
       parsed.data.github_url ||
-        parsed.data.github_number ||
-        parsed.data.author ||
-        parsed.data.local_issue_id ||
-        parsed.data.submission_timestamp,
+      parsed.data.github_number ||
+      parsed.data.author ||
+      parsed.data.local_issue_id ||
+      parsed.data.submission_timestamp
     );
     const userId =
       principal.kind === "guest" && !principal.accessToken
         ? ensureLocalDevUser().id
         : principal.kind === "guest" || guestSubmitPayload
-        ? (await resolveGuestUserId(req, principal)) ?? await getAuthenticatedUserId(req, parsed.data.user_id)
-        : await getAuthenticatedUserId(req, parsed.data.user_id);
+          ? ((await resolveGuestUserId(req, principal)) ??
+            (await getAuthenticatedUserId(req, parsed.data.user_id)))
+          : await getAuthenticatedUserId(req, parsed.data.user_id);
     const { createOperations } = await import("./core/operations.js");
     const { NeotomaServer } = await import("./server.js");
     const { submitIssue, submitGuestIssue } = await import("./services/issues/issue_operations.js");
@@ -8087,7 +8114,9 @@ const handleIssuesSubmitHttp: express.RequestHandler = async (req, res) => {
           reporter_app_version: parsed.data.reporter_app_version,
           reporter_ci_run_id: parsed.data.reporter_ci_run_id,
           reporter_patch_source_id: parsed.data.reporter_patch_source_id,
-          ...(parsed.data.entity_ids_to_link ? { entity_ids_to_link: parsed.data.entity_ids_to_link } : {}),
+          ...(parsed.data.entity_ids_to_link
+            ? { entity_ids_to_link: parsed.data.entity_ids_to_link }
+            : {}),
         });
       })();
       logDebug("Success:issues_submit", req, { entity_id: result.entity_id });
@@ -8102,7 +8131,7 @@ const handleIssuesSubmitHttp: express.RequestHandler = async (req, res) => {
       error,
       "Failed to submit issue",
       "ISSUE_SUBMIT_FAILED",
-      "APIError:issues_submit",
+      "APIError:issues_submit"
     );
   }
 };
@@ -8125,7 +8154,8 @@ const handleIssuesGetStatusHttp: express.RequestHandler = async (req, res) => {
         : await getAuthenticatedUserId(req, parsed.data.user_id);
     const { createOperations } = await import("./core/operations.js");
     const { NeotomaServer } = await import("./server.js");
-    const { getIssueStatus, loadIssueStatusFromGraph } = await import("./services/issues/issue_operations.js");
+    const { getIssueStatus, loadIssueStatusFromGraph } =
+      await import("./services/issues/issue_operations.js");
     const { loadIssuesConfig } = await import("./services/issues/config.js");
     const server = new NeotomaServer();
     const ops = createOperations({ server, userId });
@@ -8153,7 +8183,7 @@ const handleIssuesGetStatusHttp: express.RequestHandler = async (req, res) => {
       error,
       "Failed to get issue status",
       "ISSUE_STATUS_FAILED",
-      "APIError:issues_status",
+      "APIError:issues_status"
     );
   }
 };
@@ -8195,7 +8225,7 @@ const handleIssuesSyncHttp: express.RequestHandler = async (req, res) => {
       error,
       "Failed to sync issues",
       "ISSUE_SYNC_FAILED",
-      "APIError:issues_sync",
+      "APIError:issues_sync"
     );
   }
 };
@@ -8798,7 +8828,7 @@ app.post("/subscribe", guestWriteRateLimit, async (req, res) => {
     const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
     const userId =
       (await resolveGuestUserId(req, principal)) ??
-        await getAuthenticatedUserId(req, parsed.data.user_id);
+      (await getAuthenticatedUserId(req, parsed.data.user_id));
     const { subscribeUser } = await import("./services/subscriptions/subscription_actions.js");
     const result = await subscribeUser({
       userId,
@@ -8840,7 +8870,7 @@ app.post("/unsubscribe", guestWriteRateLimit, async (req, res) => {
     const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
     const userId =
       (await resolveGuestUserId(req, principal)) ??
-        await getAuthenticatedUserId(req, parsed.data.user_id);
+      (await getAuthenticatedUserId(req, parsed.data.user_id));
     const { unsubscribeUser } = await import("./services/subscriptions/subscription_actions.js");
     await unsubscribeUser({ userId, subscription_id: parsed.data.subscription_id });
     return res.json({ success: true });
@@ -8867,7 +8897,7 @@ app.post("/list_subscriptions", async (req, res) => {
     const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
     const userId =
       (await resolveGuestUserId(req, principal)) ??
-        await getAuthenticatedUserId(req, parsed.data.user_id);
+      (await getAuthenticatedUserId(req, parsed.data.user_id));
     const { listSubscriptionsForUser, redactSubscriptionForClient } =
       await import("./services/subscriptions/subscription_actions.js");
     const rows = await listSubscriptionsForUser(userId);
@@ -8898,7 +8928,7 @@ app.post("/get_subscription_status", async (req, res) => {
     const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
     const userId =
       (await resolveGuestUserId(req, principal)) ??
-        await getAuthenticatedUserId(req, parsed.data.user_id);
+      (await getAuthenticatedUserId(req, parsed.data.user_id));
     const { getSubscriptionStatus, redactSubscriptionForClient } =
       await import("./services/subscriptions/subscription_actions.js");
     const row = await getSubscriptionStatus({
@@ -9047,7 +9077,7 @@ app.get("/events/stream", async (req, res) => {
     const principal = await resolveRoutePrincipal(req, ["user", "guest"]);
     const userId =
       (await resolveGuestUserId(req, principal)) ??
-        await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+      (await getAuthenticatedUserId(req, req.query.user_id as string | undefined));
     const { getSubscriptionStatus } =
       await import("./services/subscriptions/subscription_actions.js");
     const { registerSseClient, getRingEntriesAfter } =
@@ -9459,14 +9489,8 @@ function tryListen(
       // exceed keepAliveTimeout to avoid a Node bug where the socket is
       // closed before the headers timeout fires.
       // Both values are configurable via env vars (milliseconds).
-      server.keepAliveTimeout = parseInt(
-        process.env.NEOTOMA_KEEPALIVE_TIMEOUT_MS ?? "120000",
-        10
-      );
-      server.headersTimeout = parseInt(
-        process.env.NEOTOMA_HEADERS_TIMEOUT_MS ?? "125000",
-        10
-      );
+      server.keepAliveTimeout = parseInt(process.env.NEOTOMA_KEEPALIVE_TIMEOUT_MS ?? "120000", 10);
+      server.headersTimeout = parseInt(process.env.NEOTOMA_HEADERS_TIMEOUT_MS ?? "125000", 10);
 
       resolve({ server, port: boundPort });
     });

@@ -81,10 +81,7 @@ function buildBaseHeaders(config: ProxyConfig): Record<string, string> {
   return headers;
 }
 
-function injectClientInfo(
-  message: Record<string, unknown>,
-  config: ProxyConfig,
-): void {
+function injectClientInfo(message: Record<string, unknown>, config: ProxyConfig): void {
   if (message.method !== "initialize") return;
   const params = (message.params ?? {}) as Record<string, unknown>;
   message.params = params;
@@ -97,7 +94,9 @@ function injectClientInfo(
   if (!clientInfo.version) {
     clientInfo.version = config.clientVersion;
   }
-  log(`initialize clientInfo injected: name=${String(clientInfo.name)} version=${String(clientInfo.version)}`);
+  log(
+    `initialize clientInfo injected: name=${String(clientInfo.name)} version=${String(clientInfo.version)}`
+  );
 }
 
 class SessionState {
@@ -138,7 +137,7 @@ interface ProxyLoopState {
 async function sendDownstream(
   config: ProxyConfig,
   headers: Record<string, string>,
-  body: string,
+  body: string
 ): Promise<Response> {
   if (config.aauthSigner) {
     try {
@@ -182,7 +181,7 @@ export function formatDownstreamErrorMessage(status: number, detail: string): st
 function emitErrorResponse(
   originalMessage: Record<string, unknown>,
   status: number,
-  detail: string,
+  detail: string
 ): void {
   const requestId = originalMessage.id;
   if (requestId === undefined) return;
@@ -253,7 +252,7 @@ async function forwardSseResponse(response: Response): Promise<void> {
 async function dispatchMessage(
   loopState: ProxyLoopState,
   config: ProxyConfig,
-  message: Record<string, unknown>,
+  message: Record<string, unknown>
 ): Promise<void> {
   injectClientInfo(message, config);
   const body = JSON.stringify(message);
@@ -280,20 +279,20 @@ async function dispatchMessage(
         loopState.lastInitializeBody
       ) {
         log(
-          "Downstream MCP session unknown on this instance — replaying initialize to downstream, then retrying this JSON-RPC message once (client stdout unchanged)",
+          "Downstream MCP session unknown on this instance — replaying initialize to downstream, then retrying this JSON-RPC message once (client stdout unchanged)"
         );
         loopState.session.clearSession();
         const reinitHeaders = buildBaseHeaders(config);
         const reinitResp = await sendDownstream(
           config,
           reinitHeaders,
-          loopState.lastInitializeBody,
+          loopState.lastInitializeBody
         );
         loopState.session.capture(reinitResp.headers);
         const reinitBodyText = await reinitResp.text();
         if (reinitResp.status >= 400) {
           log(
-            `Re-initialize after session loss failed: status=${reinitResp.status} body=${reinitBodyText.slice(0, 500)}`,
+            `Re-initialize after session loss failed: status=${reinitResp.status} body=${reinitBodyText.slice(0, 500)}`
           );
           emitErrorResponse(message, reinitResp.status, reinitBodyText);
           return;
@@ -303,14 +302,14 @@ async function dispatchMessage(
         if (resp.status >= 400) {
           const retryErr = await resp.text();
           log(
-            `Downstream error after session recovery: status=${resp.status} body=${retryErr.slice(0, 500)}`,
+            `Downstream error after session recovery: status=${resp.status} body=${retryErr.slice(0, 500)}`
           );
           emitErrorResponse(message, resp.status, retryErr);
           return;
         }
       } else {
         log(
-          `Downstream error status=${resp.status} content_type=${resp.headers.get("content-type") ?? ""} body=${errText.slice(0, 500)}`,
+          `Downstream error status=${resp.status} content_type=${resp.headers.get("content-type") ?? ""} body=${errText.slice(0, 500)}`
         );
         emitErrorResponse(message, resp.status, errText);
         return;
@@ -331,7 +330,7 @@ async function dispatchMessage(
 
 export async function runProxy(config: ProxyConfig): Promise<void> {
   log(
-    `Starting proxy: downstream=${config.downstreamUrl} client_name=${effectiveClientName(config)} version=${config.clientVersion} preflight=${config.sessionPreflight} fail_closed=${config.failClosed}`,
+    `Starting proxy: downstream=${config.downstreamUrl} client_name=${effectiveClientName(config)} version=${config.clientVersion} preflight=${config.sessionPreflight} fail_closed=${config.failClosed}`
   );
 
   if (config.sessionPreflight) {

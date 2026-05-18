@@ -65,7 +65,7 @@ export async function listObservationsForPeerSyncOutbound(params: {
   const tagged = new Set(
     snapRows
       .filter((row) => hasTaggedPeer(row.snapshot ?? {}, params.peerId!))
-      .map((row) => row.entity_id),
+      .map((row) => row.entity_id)
   );
   return localRows.filter((r) => tagged.has(r.entity_id));
 }

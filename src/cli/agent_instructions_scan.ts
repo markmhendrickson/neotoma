@@ -48,12 +48,7 @@ const PROJECT_INSTRUCTION_PATHS = [
 ] as const;
 
 /** File names or glob patterns to consider (we read files under the dirs above). */
-const _RULE_FILENAMES = [
-  "AGENTS.md",
-  "CLAUDE.md",
-  "*.mdc",
-  "*.md",
-];
+const _RULE_FILENAMES = ["AGENTS.md", "CLAUDE.md", "*.mdc", "*.md"];
 
 async function fileExists(filePath: string): Promise<boolean> {
   try {
@@ -69,10 +64,7 @@ async function fileExists(filePath: string): Promise<boolean> {
  * Does not recurse deeply (one level under dir, or exact file).
  * relPath is the project-relative path (e.g. "docs/developer") to allow special cases.
  */
-async function listInstructionFiles(
-  dir: string,
-  relPath?: string
-): Promise<string[]> {
+async function listInstructionFiles(dir: string, relPath?: string): Promise<string[]> {
   const files: string[] = [];
   try {
     const entries = await fs.readdir(dir, { withFileTypes: true });
@@ -219,11 +211,7 @@ export function buildEnvSpecificInstructions(body: string, env: "dev" | "prod"):
   if (firstHeadingMatch?.index != null) {
     const insertAt = firstHeadingMatch.index + firstHeadingMatch[0].length;
     return (
-      cleaned.slice(0, insertAt) +
-      "\n" +
-      envSection +
-      "\n\n" +
-      cleaned.slice(insertAt).trimStart()
+      cleaned.slice(0, insertAt) + "\n" + envSection + "\n\n" + cleaned.slice(insertAt).trimStart()
     );
   }
 
@@ -273,7 +261,11 @@ export async function autoUpdateCliInstructionsEnv(
 
 /** Normalize body for comparison (line endings, trailing whitespace). */
 function normalizeBody(body: string): string {
-  return body.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim().replace(/\n{3,}/g, "\n\n");
+  return body
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .trim()
+    .replace(/\n{3,}/g, "\n\n");
 }
 
 export interface ScanResultLocation {
@@ -408,14 +400,15 @@ export async function scanAgentInstructions(
   }
 
   const missingInProject = project.length > 0 && !project.some((p) => p.hasInstruction);
-  const missingInUser =
-    includeUserLevel && user.length > 0 && !user.some((u) => u.hasInstruction);
+  const missingInUser = includeUserLevel && user.length > 0 && !user.some((u) => u.hasInstruction);
 
   // Applied: exact rule file paths each IDE loads; compare content to current doc for staleness
   const canonicalBody = await loadCliAgentInstructions(projectRoot);
   const normalizedCanonical = normalizeBody(canonicalBody);
 
-  async function checkPath(p: string): Promise<{ exists: boolean; stale: boolean; symlink: boolean }> {
+  async function checkPath(
+    p: string
+  ): Promise<{ exists: boolean; stale: boolean; symlink: boolean }> {
     const exists = await fileExists(p);
     if (!exists) return { exists: false, stale: false, symlink: false };
     let symlink = false;
@@ -609,10 +602,7 @@ export async function createSymlinkToDoc(projectRoot: string, linkPath: string):
  * Create a symlink from a user-level rule path to the doc file (absolute target).
  * Use when the link is outside the repo (e.g. ~/.cursor/rules/). Removes existing file or symlink first.
  */
-export async function createUserSymlinkToDoc(
-  projectRoot: string,
-  linkPath: string
-): Promise<void> {
+export async function createUserSymlinkToDoc(projectRoot: string, linkPath: string): Promise<void> {
   const docPath = path.resolve(projectRoot, CLI_AGENT_INSTRUCTIONS_DOC_PATH);
   const docExists = await fileExists(docPath);
   if (!docExists) {
@@ -640,7 +630,11 @@ export async function writePreferCliRule(targetPath: string, content: string): P
 /**
  * Get user-level rule file path for each environment (platform-specific).
  */
-export function getUserAppliedRulePaths(): { cursor: string; claude: string; codex: string } | null {
+export function getUserAppliedRulePaths(): {
+  cursor: string;
+  claude: string;
+  codex: string;
+} | null {
   const platform = os.platform();
   const home = os.homedir();
   if (platform === "darwin" || platform === "linux") {
@@ -801,13 +795,19 @@ export async function offerAddPreferCliRule(
 ): Promise<{ added: string[]; skipped?: boolean }> {
   const added: string[] = [];
   const needProject =
-    (!result.appliedProject.cursor || result.staleProject.cursor) ||
-    (!result.appliedProject.claude || result.staleProject.claude) ||
-    (!result.appliedProject.codex || result.staleProject.codex);
+    !result.appliedProject.cursor ||
+    result.staleProject.cursor ||
+    !result.appliedProject.claude ||
+    result.staleProject.claude ||
+    !result.appliedProject.codex ||
+    result.staleProject.codex;
   const needUser =
-    (!result.appliedUser.cursor || result.staleUser.cursor) ||
-    (!result.appliedUser.claude || result.staleUser.claude) ||
-    (!result.appliedUser.codex || result.staleUser.codex);
+    !result.appliedUser.cursor ||
+    result.staleUser.cursor ||
+    !result.appliedUser.claude ||
+    result.staleUser.claude ||
+    !result.appliedUser.codex ||
+    result.staleUser.codex;
   if (!needProject && !needUser) return { added };
 
   if (options?.nonInteractive && !options.scope) return { added };

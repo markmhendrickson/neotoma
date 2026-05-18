@@ -88,7 +88,8 @@ function defaultWorkerCommand(root: string): { command: string; args: string[] }
 function resolveWorkerCommand(root: string): { command: string; args: string[] } {
   const defaults = defaultWorkerCommand(root);
   return {
-    command: process.env.NEOTOMA_MCP_DEV_WORKER_CMD || process.env.MCP_DEV_WORKER_CMD || defaults.command,
+    command:
+      process.env.NEOTOMA_MCP_DEV_WORKER_CMD || process.env.MCP_DEV_WORKER_CMD || defaults.command,
     args:
       parseArgsFromEnv("NEOTOMA_MCP_DEV_WORKER_ARGS") ??
       parseArgsFromEnv("MCP_DEV_WORKER_ARGS") ??
@@ -137,7 +138,7 @@ class McpDevShim {
 
   constructor(
     private readonly root: string,
-    private readonly workerCommand: { command: string; args: string[] },
+    private readonly workerCommand: { command: string; args: string[] }
   ) {}
 
   start(): void {
@@ -190,10 +191,8 @@ class McpDevShim {
     for (const watchPath of watchedPaths(this.root)) {
       if (!existsSync(watchPath)) continue;
       try {
-        const watcher = watch(
-          watchPath,
-          { recursive: true },
-          () => this.scheduleRestart(`change under ${path.relative(this.root, watchPath)}`),
+        const watcher = watch(watchPath, { recursive: true }, () =>
+          this.scheduleRestart(`change under ${path.relative(this.root, watchPath)}`)
         );
         this.watchers.push(watcher);
       } catch (error) {
@@ -226,7 +225,12 @@ class McpDevShim {
     } else if (message.method === "notifications/initialized") {
       this.lastInitializedNotification = message;
     } else if (this.interfaceChanged && message.method === "tools/call") {
-      writeJson(reconnectRequiredError(message.id ?? null, "The shim detected a changed tools/list surface after worker reload."));
+      writeJson(
+        reconnectRequiredError(
+          message.id ?? null,
+          "The shim detected a changed tools/list surface after worker reload."
+        )
+      );
       return;
     }
 
@@ -308,7 +312,8 @@ class McpDevShim {
 
     if (isSuppressed) {
       if (!this.workerReady) {
-        if (this.lastInitializedNotification) this.forwardToWorker(this.lastInitializedNotification);
+        if (this.lastInitializedNotification)
+          this.forwardToWorker(this.lastInitializedNotification);
         this.workerReady = true;
         this.requestToolListForHash();
         return;
@@ -331,7 +336,7 @@ class McpDevShim {
     this.interfaceChanged = true;
     writeJson(toolListChangedNotification());
     log(
-      "tool interface changed; sent notifications/tools/list_changed. Reconnect or reinitialize if the MCP client does not refresh tools.",
+      "tool interface changed; sent notifications/tools/list_changed. Reconnect or reinitialize if the MCP client does not refresh tools."
     );
     if (!isSuppressed) this.interfaceChanged = false;
   }

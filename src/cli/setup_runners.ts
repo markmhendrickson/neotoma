@@ -88,7 +88,13 @@ export function createDefaultSetupRunners(
     init: async () => {
       const doctor = await runDoctor({ cwd });
       if (doctor.data.initialized) {
-        return { id: "init", ok: true, changed: false, skipped: true, reason: "already-initialized" };
+        return {
+          id: "init",
+          ok: true,
+          changed: false,
+          skipped: true,
+          reason: "already-initialized",
+        };
       }
       if (dryRun) {
         return { id: "init", ok: true, changed: true, skipped: true, reason: "dry-run" };
@@ -118,7 +124,13 @@ export function createDefaultSetupRunners(
     },
     cliInstructionsConfigure: async () => {
       if (dryRun) {
-        return { id: "cli-instructions", ok: true, changed: true, skipped: true, reason: "dry-run" };
+        return {
+          id: "cli-instructions",
+          ok: true,
+          changed: true,
+          skipped: true,
+          reason: "dry-run",
+        };
       }
       const result = await configureCliInstructions({ cwd, scope: installScope });
       return {
@@ -145,7 +157,10 @@ export function createDefaultSetupRunners(
       if (dryRun) {
         return { id: "hooks", ok: true, changed: true, skipped: true, reason: "dry-run" };
       }
-      const { configs } = await scanForMcpConfigs(cwd, { includeUserLevel: true, userLevelFirst: false });
+      const { configs } = await scanForMcpConfigs(cwd, {
+        includeUserLevel: true,
+        userLevelFirst: false,
+      });
       const harnesses = inferHookHarnessesFromMcpConfigs(configs);
       if (harnesses.length === 0) {
         return {
@@ -158,7 +173,15 @@ export function createDefaultSetupRunners(
       }
       const results = [];
       for (const tool of harnesses) {
-        results.push(await runHooksInstall({ tool, cwd, dryRun: false, yes: Boolean(options.yes), force: false }));
+        results.push(
+          await runHooksInstall({
+            tool,
+            cwd,
+            dryRun: false,
+            yes: Boolean(options.yes),
+            force: false,
+          })
+        );
       }
       return {
         id: "hooks",

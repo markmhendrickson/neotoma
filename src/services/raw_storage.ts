@@ -7,10 +7,7 @@ import { fileURLToPath } from "node:url";
 import { config } from "../config.js";
 import { db } from "../db.js";
 import { generateDeterministicSourceId } from "./source_identity.js";
-import {
-  getCurrentAgentIdentity,
-  getCurrentAttribution,
-} from "./request_context.js";
+import { getCurrentAgentIdentity, getCurrentAttribution } from "./request_context.js";
 import { enforceAttributionPolicy } from "./attribution_policy.js";
 
 export interface RawStorageOptions {
@@ -47,11 +44,17 @@ export function computeContentHash(buffer: Buffer): string {
  * Storage path: sources/{user_id}/{content_hash}
  * Deduplication: Per-user uniqueness on (user_id, content_hash)
  */
-export async function storeRawContent(
-  options: RawStorageOptions
-): Promise<RawStorageResult> {
+export async function storeRawContent(options: RawStorageOptions): Promise<RawStorageResult> {
   enforceAttributionPolicy("sources", getCurrentAgentIdentity());
-  const { userId, fileBuffer, mimeType, originalFilename, sourceType, provenance = {}, idempotencyKey } = options;
+  const {
+    userId,
+    fileBuffer,
+    mimeType,
+    originalFilename,
+    sourceType,
+    provenance = {},
+    idempotencyKey,
+  } = options;
 
   // Compute content hash
   const contentHash = computeContentHash(fileBuffer);
@@ -228,11 +231,7 @@ export async function storeRawContent(
  * Get source metadata by ID
  */
 export async function getSourceMetadata(sourceId: string) {
-  const { data, error } = await db
-    .from("sources")
-    .select("*")
-    .eq("id", sourceId)
-    .single();
+  const { data, error } = await db.from("sources").select("*").eq("id", sourceId).single();
 
   if (error) {
     throw new Error(`Failed to get source metadata: ${error.message}`);
@@ -260,17 +259,12 @@ export async function downloadRawContent(
   storageUrl: string,
   bucketName: string = "sources"
 ): Promise<Buffer> {
-  const { data, error } = await db.storage
-    .from(bucketName)
-    .download(storageUrl);
+  const { data, error } = await db.storage.from(bucketName).download(storageUrl);
 
   if (error || !data) {
     const msg = error?.message ?? "Unknown error";
     if (msg.includes("ENOENT") || msg.includes("no such file or directory")) {
-      throw new SourceFileNotFoundError(
-        `Source file not found: ${msg}`,
-        storageUrl
-      );
+      throw new SourceFileNotFoundError(`Source file not found: ${msg}`, storageUrl);
     }
     throw new Error(`Failed to download content: ${msg}`);
   }

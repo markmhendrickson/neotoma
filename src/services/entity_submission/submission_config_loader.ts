@@ -34,12 +34,18 @@ function parseMirrors(raw: unknown): ExternalMirrorConfigEntry[] {
   return out;
 }
 
-function parseRecord(entityId: string, snapshot: Record<string, unknown>): SubmissionConfigRecord | null {
+function parseRecord(
+  entityId: string,
+  snapshot: Record<string, unknown>
+): SubmissionConfigRecord | null {
   const config_key = snapshot.config_key;
   const target_entity_type = snapshot.target_entity_type;
   if (typeof config_key !== "string" || typeof target_entity_type !== "string") return null;
   const ap = snapshot.access_policy;
-  const mode = typeof ap === "string" && VALID_MODES.has(ap as AccessPolicyMode) ? (ap as AccessPolicyMode) : "closed";
+  const mode =
+    typeof ap === "string" && VALID_MODES.has(ap as AccessPolicyMode)
+      ? (ap as AccessPolicyMode)
+      : "closed";
   const active = snapshot.active !== false;
   return {
     entity_id: entityId,
@@ -57,7 +63,7 @@ function parseRecord(entityId: string, snapshot: Record<string, unknown>): Submi
  * Load the active submission_config row for a target entity type (first match).
  */
 export async function getSubmissionConfigForTargetType(
-  targetEntityType: string,
+  targetEntityType: string
 ): Promise<SubmissionConfigRecord | null> {
   const { data: rows, error } = await db
     .from("entity_snapshots")

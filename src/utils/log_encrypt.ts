@@ -47,7 +47,7 @@ export function getLogKey(): Uint8Array | null {
   if (config.encryption.mnemonic) {
     const derived = deriveKeysFromMnemonic(
       config.encryption.mnemonic,
-      config.encryption.mnemonicPassphrase,
+      config.encryption.mnemonicPassphrase
     );
     cachedLogKey = derived.logKey;
     return cachedLogKey;
@@ -55,7 +55,7 @@ export function getLogKey(): Uint8Array | null {
 
   throw new Error(
     "Log encryption is enabled but no key source configured. " +
-    "Set NEOTOMA_KEY_FILE_PATH or NEOTOMA_MNEMONIC."
+      "Set NEOTOMA_KEY_FILE_PATH or NEOTOMA_MNEMONIC."
   );
 }
 

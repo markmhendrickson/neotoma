@@ -16,7 +16,9 @@ describe("local_http_port_file", () => {
     mkdirSync(root, { recursive: true });
     try {
       writeLocalHttpPortFile(root, 3181, "development");
-      expect(readFileSync(localHttpPortFilePathForProfile(root, "dev"), "utf-8").trim()).toBe("3181");
+      expect(readFileSync(localHttpPortFilePathForProfile(root, "dev"), "utf-8").trim()).toBe(
+        "3181"
+      );
       expect(readFileSync(localHttpPortFilePath(root), "utf-8").trim()).toBe("3181");
       expect(() => readFileSync(localHttpPortFilePathForProfile(root, "prod"), "utf-8")).toThrow();
     } finally {
@@ -29,7 +31,9 @@ describe("local_http_port_file", () => {
     mkdirSync(root, { recursive: true });
     try {
       writeLocalHttpPortFile(root, 3199, "production");
-      expect(readFileSync(localHttpPortFilePathForProfile(root, "prod"), "utf-8").trim()).toBe("3199");
+      expect(readFileSync(localHttpPortFilePathForProfile(root, "prod"), "utf-8").trim()).toBe(
+        "3199"
+      );
       expect(() => readFileSync(localHttpPortFilePath(root), "utf-8")).toThrow();
     } finally {
       rmSync(root, { recursive: true, force: true });
@@ -67,7 +71,9 @@ describe("local_http_port_file", () => {
     try {
       writeLocalHttpPortFile(root, 3080, "development");
       writeLocalHttpPortFile(root, 3180, "development");
-      expect(readFileSync(localHttpPortFilePathForProfile(root, "dev"), "utf-8").trim()).toBe("3180");
+      expect(readFileSync(localHttpPortFilePathForProfile(root, "dev"), "utf-8").trim()).toBe(
+        "3180"
+      );
       expect(readFileSync(localHttpPortFilePath(root), "utf-8").trim()).toBe("3180");
     } finally {
       rmSync(root, { recursive: true, force: true });

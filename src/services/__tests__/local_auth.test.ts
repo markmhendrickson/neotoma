@@ -19,11 +19,7 @@ describe("local_auth", () => {
     const user = localAuth.createLocalAuthUser("test@example.com", "password123");
     expect(user.email).toBe("test@example.com");
 
-    const authenticated = localAuth.authenticateLocalUser(
-      "test@example.com",
-      "password123",
-      false
-    );
+    const authenticated = localAuth.authenticateLocalUser("test@example.com", "password123", false);
     expect(authenticated.id).toBe(user.id);
     rmSync(tempDir, { recursive: true, force: true });
   });

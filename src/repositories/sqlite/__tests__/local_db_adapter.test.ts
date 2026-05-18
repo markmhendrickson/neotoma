@@ -137,24 +137,19 @@ describe("local db adapter", () => {
     const sourceId = nextId("src_local_test");
     const userId = nextId("user_local_test");
 
-    const { error } = await db
-      .from("timeline_events")
-      .insert({
-        id: eventId,
-        event_type: "SourceIngested",
-        event_timestamp: new Date().toISOString(),
-        source_id: sourceId,
-        source_field: "created_at",
-        created_at: new Date().toISOString(),
-        user_id: userId,
-      });
+    const { error } = await db.from("timeline_events").insert({
+      id: eventId,
+      event_type: "SourceIngested",
+      event_timestamp: new Date().toISOString(),
+      source_id: sourceId,
+      source_field: "created_at",
+      created_at: new Date().toISOString(),
+      user_id: userId,
+    });
 
     expect(error).toBeNull();
 
-    const { data: events } = await db
-      .from("timeline_events")
-      .select("*")
-      .eq("id", eventId);
+    const { data: events } = await db.from("timeline_events").select("*").eq("id", eventId);
 
     expect(events?.length).toBe(1);
 
@@ -214,16 +209,14 @@ describe("local db adapter", () => {
     const userId = nextId("user_ioerr_test");
     const contentHash = nextId("hash_ioerr");
 
-    const { error: insertError } = await db
-      .from("sources")
-      .insert({
-        id: sourceId,
-        user_id: userId,
-        content_hash: contentHash,
-        mime_type: "text/plain",
-        storage_url: "file:///tmp/ioerr.txt",
-        created_at: new Date().toISOString(),
-      });
+    const { error: insertError } = await db.from("sources").insert({
+      id: sourceId,
+      user_id: userId,
+      content_hash: contentHash,
+      mime_type: "text/plain",
+      storage_url: "file:///tmp/ioerr.txt",
+      created_at: new Date().toISOString(),
+    });
     expect(insertError).toBeNull();
 
     // Force stale handle state: delete SQLite files while adapter still has a cached connection.

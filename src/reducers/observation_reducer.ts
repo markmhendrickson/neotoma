@@ -43,12 +43,8 @@ export interface Observation {
  * sort last within their `source_priority` bucket without bypassing the
  * normal observed_at / id tie-break downstream.
  */
-function buildObservationSourceRank(
-  reducerConfig?: ReducerConfig,
-): Map<string, number> {
-  const order =
-    reducerConfig?.observation_source_priority ??
-    DEFAULT_OBSERVATION_SOURCE_PRIORITY;
+function buildObservationSourceRank(reducerConfig?: ReducerConfig): Map<string, number> {
+  const order = reducerConfig?.observation_source_priority ?? DEFAULT_OBSERVATION_SOURCE_PRIORITY;
   const rank = new Map<string, number>();
   order.forEach((value, index) => {
     rank.set(value, index);
@@ -58,7 +54,7 @@ function buildObservationSourceRank(
 
 function rankForObservationSource(
   obs: Pick<Observation, "observation_source">,
-  rank: Map<string, number>,
+  rank: Map<string, number>
 ): number {
   const value = obs.observation_source;
   if (!value) return Number.MAX_SAFE_INTEGER;
@@ -78,21 +74,17 @@ export interface EntitySnapshot {
   user_id: string;
 }
 
-type MergeStrategy =
-  | "last_write"
-  | "highest_priority"
-  | "most_specific"
-  | "merge_array";
+type MergeStrategy = "last_write" | "highest_priority" | "most_specific" | "merge_array";
 
 export class ObservationReducer {
   /**
    * Compute snapshot from observations
-   * 
+   *
    * Returns null if entity is deleted (has deletion observation with _deleted: true).
    */
   async computeSnapshot(
     entityId: string,
-    observations: Observation[],
+    observations: Observation[]
   ): Promise<EntitySnapshot | null> {
     if (observations.length === 0) {
       throw new Error(`No observations found for entity ${entityId}`);
@@ -132,7 +124,7 @@ export class ObservationReducer {
     // Load schema and merge policies (pass userId to support user-specific schemas)
     let schemaEntry: SchemaRegistryEntry | null = await schemaRegistry.loadActiveSchema(
       entityType,
-      userId,
+      userId
     );
     if (!schemaEntry) {
       const codeSchema = getSchemaDefinition(entityType);
@@ -150,9 +142,7 @@ export class ObservationReducer {
     }
     if (!schemaEntry) {
       // For v0.1.0, use default merge policies if no schema exists
-      console.warn(
-        `No active entity schema found for entity type ${entityType}, using defaults`,
-      );
+      console.warn(`No active entity schema found for entity type ${entityType}, using defaults`);
       return this.computeSnapshotWithDefaults(entityId, observations);
     }
 
@@ -192,7 +182,7 @@ export class ObservationReducer {
         strategy,
         tieBreaker,
         fieldDef,
-        observationSourceRank,
+        observationSourceRank
       );
 
       if (result && result.value !== undefined && result.value !== null) {
@@ -235,7 +225,7 @@ export class ObservationReducer {
 
   /**
    * Apply merge strategy to field
-   * 
+   *
    * Applies converters from the active schema to ensure snapshot values
    * conform to the schema type, even if observations have old types.
    */
@@ -245,14 +235,13 @@ export class ObservationReducer {
     strategy: MergeStrategy,
     tieBreaker: "observed_at" | "source_priority",
     fieldDef?: FieldDefinition,
-    observationSourceRank: Map<string, number> = buildObservationSourceRank(),
+    observationSourceRank: Map<string, number> = buildObservationSourceRank()
   ): { value: unknown; source_observation_id: string } | null {
     // Treat null as an explicit clear. Only undefined means the observation did
     // not carry this field and should be ignored by the reducer.
     const relevantObservations = observations.filter(
       (obs) =>
-        Object.prototype.hasOwnProperty.call(obs.fields, field) &&
-        obs.fields[field] !== undefined,
+        Object.prototype.hasOwnProperty.call(obs.fields, field) && obs.fields[field] !== undefined
     );
 
     if (relevantObservations.length === 0) {
@@ -272,7 +261,7 @@ export class ObservationReducer {
           field,
           relevantObservations,
           tieBreaker,
-          observationSourceRank,
+          observationSourceRank
         );
         break;
 
@@ -281,7 +270,7 @@ export class ObservationReducer {
           field,
           relevantObservations,
           tieBreaker,
-          observationSourceRank,
+          observationSourceRank
         );
         break;
 
@@ -299,11 +288,7 @@ export class ObservationReducer {
 
     // Apply converters if field definition exists and value doesn't match type
     if (fieldDef) {
-      const validationResult = validateFieldWithConverters(
-        field,
-        mergedResult.value,
-        fieldDef,
-      );
+      const validationResult = validateFieldWithConverters(field, mergedResult.value, fieldDef);
 
       // If conversion was applied, use converted value
       // If value already matches type, use as-is
@@ -327,7 +312,7 @@ export class ObservationReducer {
    */
   private lastWriteWins(
     field: string,
-    observations: Observation[],
+    observations: Observation[]
   ): { value: unknown; source_observation_id: string } {
     // Observations already sorted by observed_at DESC.
     // Callers (notably computeSnapshotWithDefaults) pre-filter observations
@@ -351,7 +336,7 @@ export class ObservationReducer {
     field: string,
     observations: Observation[],
     tieBreaker: "observed_at" | "source_priority",
-    observationSourceRank: Map<string, number>,
+    observationSourceRank: Map<string, number>
   ): { value: unknown; source_observation_id: string } {
     const sorted = [...observations].sort((a, b) => {
       // Primary: source_priority DESC
@@ -364,9 +349,7 @@ export class ObservationReducer {
       if (rankA !== rankB) return rankA - rankB;
       // Tie breaker
       if (tieBreaker === "observed_at") {
-        return (
-          new Date(b.observed_at).getTime() - new Date(a.observed_at).getTime()
-        );
+        return new Date(b.observed_at).getTime() - new Date(a.observed_at).getTime();
       }
       // source_priority is already the primary sort, so just use id
       return a.id.localeCompare(b.id);
@@ -385,7 +368,7 @@ export class ObservationReducer {
     field: string,
     observations: Observation[],
     tieBreaker: "observed_at" | "source_priority",
-    observationSourceRank: Map<string, number>,
+    observationSourceRank: Map<string, number>
   ): { value: unknown; source_observation_id: string } {
     const sorted = [...observations].sort((a, b) => {
       // Primary: specificity_score DESC
@@ -407,9 +390,7 @@ export class ObservationReducer {
       const rankB = rankForObservationSource(b, observationSourceRank);
       if (rankA !== rankB) return rankA - rankB;
       // Final: observed_at DESC
-      return (
-        new Date(b.observed_at).getTime() - new Date(a.observed_at).getTime()
-      );
+      return new Date(b.observed_at).getTime() - new Date(a.observed_at).getTime();
     });
 
     return {
@@ -420,7 +401,7 @@ export class ObservationReducer {
 
   /**
    * Merge Array strategy
-   * 
+   *
    * Note: For merge_array strategy, converters are applied to individual
    * array elements if fieldDef is provided. However, since merge_array
    * combines values from multiple observations, we apply converters to
@@ -429,7 +410,7 @@ export class ObservationReducer {
   private mergeArray(
     field: string,
     observations: Observation[],
-    fieldDef?: FieldDefinition,
+    fieldDef?: FieldDefinition
   ): { value: unknown; source_observation_id: string } {
     const values = new Set<unknown>();
     const observationIds: string[] = [];
@@ -453,11 +434,7 @@ export class ObservationReducer {
         } else {
           // Single value - apply converters if fieldDef exists
           if (fieldDef) {
-            const validationResult = validateFieldWithConverters(
-              field,
-              rawValue,
-              fieldDef,
-            );
+            const validationResult = validateFieldWithConverters(field, rawValue, fieldDef);
             if (!validationResult.shouldRouteToRawFragments) {
               values.add(validationResult.value);
             } else {
@@ -479,12 +456,12 @@ export class ObservationReducer {
 
   /**
    * Compute snapshot with default merge policies (when no schema exists)
-   * 
+   *
    * Returns null if entity is deleted.
    */
   private async computeSnapshotWithDefaults(
     entityId: string,
-    observations: Observation[],
+    observations: Observation[]
   ): Promise<EntitySnapshot | null> {
     if (observations.length === 0) {
       throw new Error(`No observations found for entity ${entityId}`);
@@ -536,8 +513,8 @@ export class ObservationReducer {
         sortedObservations.filter(
           (obs) =>
             Object.prototype.hasOwnProperty.call(obs.fields, field) &&
-            obs.fields[field] !== undefined,
-        ),
+            obs.fields[field] !== undefined
+        )
       );
 
       if (result.value !== undefined && result.value !== null) {

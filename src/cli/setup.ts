@@ -100,15 +100,15 @@ export interface RunSetupOptions {
  */
 function getSkillsTarget(tool: ToolId, cwd: string, scope: "project" | "user"): string | null {
   const harnessMap: Partial<Record<ToolId, { dir: string }>> = {
-    cursor:          { dir: ".cursor/skills" },
-    "claude-code":   { dir: ".claude/skills" },
+    cursor: { dir: ".cursor/skills" },
+    "claude-code": { dir: ".claude/skills" },
     "claude-desktop": { dir: ".claude/skills" },
-    codex:           { dir: ".codex/skills" },
-    openclaw:        { dir: ".openclaw/skills" },
+    codex: { dir: ".codex/skills" },
+    openclaw: { dir: ".openclaw/skills" },
     // MCP-only tools: no skills directory; setup writes MCP config only.
-    windsurf:        undefined,
-    continue:        undefined,
-    vscode:          undefined,
+    windsurf: undefined,
+    continue: undefined,
+    vscode: undefined,
   };
   const entry = harnessMap[tool];
   if (!entry) return null;
@@ -133,12 +133,24 @@ function getPublishedSkillsSource(): string {
 function installSkills(tool: ToolId, cwd: string, scope: "project" | "user"): SetupStepResult {
   const targetDir = getSkillsTarget(tool, cwd, scope);
   if (!targetDir) {
-    return { id: "skills", ok: true, changed: false, skipped: true, reason: `tool ${tool} has no skills directory` };
+    return {
+      id: "skills",
+      ok: true,
+      changed: false,
+      skipped: true,
+      reason: `tool ${tool} has no skills directory`,
+    };
   }
 
   const sourceDir = getPublishedSkillsSource();
   if (!existsSync(sourceDir)) {
-    return { id: "skills", ok: true, changed: false, skipped: true, reason: "no published skills directory found" };
+    return {
+      id: "skills",
+      ok: true,
+      changed: false,
+      skipped: true,
+      reason: "no published skills directory found",
+    };
   }
 
   let entries: string[];
@@ -147,11 +159,22 @@ function installSkills(tool: ToolId, cwd: string, scope: "project" | "user"): Se
       .filter((d) => d.isDirectory())
       .map((d) => d.name);
   } catch {
-    return { id: "skills", ok: false, changed: false, reason: "failed to read skills source directory" };
+    return {
+      id: "skills",
+      ok: false,
+      changed: false,
+      reason: "failed to read skills source directory",
+    };
   }
 
   if (entries.length === 0) {
-    return { id: "skills", ok: true, changed: false, skipped: true, reason: "no skills to install" };
+    return {
+      id: "skills",
+      ok: true,
+      changed: false,
+      skipped: true,
+      reason: "no skills to install",
+    };
   }
 
   mkdirSync(targetDir, { recursive: true });
@@ -194,7 +217,8 @@ export async function runSetup(options: RunSetupOptions = {}): Promise<SetupRepo
   const doctorBefore = await runDoctor({ cwd });
   let currentDoctor = doctorBefore;
 
-  const toolInput = typeof options.tool === "string" ? toolFromString(options.tool) : (options.tool ?? null);
+  const toolInput =
+    typeof options.tool === "string" ? toolFromString(options.tool) : (options.tool ?? null);
   const tool: ToolId | null = toolInput ?? doctorBefore.current_tool_hint;
 
   const steps: SetupStepResult[] = [];
@@ -204,11 +228,23 @@ export async function runSetup(options: RunSetupOptions = {}): Promise<SetupRepo
     steps.push(await options.runners.init());
     if (!dryRun) currentDoctor = await runDoctor({ cwd });
   } else if (currentDoctor.data.initialized) {
-    steps.push({ id: "init", ok: true, changed: false, skipped: true, reason: "already-initialized" });
+    steps.push({
+      id: "init",
+      ok: true,
+      changed: false,
+      skipped: true,
+      reason: "already-initialized",
+    });
   } else if (dryRun) {
     steps.push({ id: "init", ok: true, changed: true, skipped: true, reason: "dry-run" });
   } else {
-    steps.push({ id: "init", ok: false, changed: false, skipped: true, reason: "runner-not-provided" });
+    steps.push({
+      id: "init",
+      ok: false,
+      changed: false,
+      skipped: true,
+      reason: "runner-not-provided",
+    });
   }
 
   // Step 2: mcp configure
@@ -216,17 +252,39 @@ export async function runSetup(options: RunSetupOptions = {}): Promise<SetupRepo
     steps.push(await options.runners.mcpConfigure());
     if (!dryRun) currentDoctor = await runDoctor({ cwd });
   } else {
-    const hasMcp = Object.values(currentDoctor.mcp_servers_detected).some((c) => c.has_neotoma || c.has_neotoma_dev);
+    const hasMcp = Object.values(currentDoctor.mcp_servers_detected).some(
+      (c) => c.has_neotoma || c.has_neotoma_dev
+    );
     if (hasMcp) {
-      steps.push({ id: "mcp-configure", ok: true, changed: false, skipped: true, reason: "already-configured" });
+      steps.push({
+        id: "mcp-configure",
+        ok: true,
+        changed: false,
+        skipped: true,
+        reason: "already-configured",
+      });
     } else if (dryRun) {
-      steps.push({ id: "mcp-configure", ok: true, changed: true, skipped: true, reason: "dry-run" });
+      steps.push({
+        id: "mcp-configure",
+        ok: true,
+        changed: true,
+        skipped: true,
+        reason: "dry-run",
+      });
     } else {
-      steps.push({ id: "mcp-configure", ok: false, changed: false, skipped: true, reason: "runner-not-provided" });
+      steps.push({
+        id: "mcp-configure",
+        ok: false,
+        changed: false,
+        skipped: true,
+        reason: "runner-not-provided",
+      });
     }
   }
 
-  const existingMcp = Object.values(currentDoctor.mcp_servers_detected).some((c) => c.has_neotoma || c.has_neotoma_dev);
+  const existingMcp = Object.values(currentDoctor.mcp_servers_detected).some(
+    (c) => c.has_neotoma || c.has_neotoma_dev
+  );
   const mcpStep = steps.find((s) => s.id === "mcp-configure");
   const mcpConfigured = existingMcp || Boolean(mcpStep?.ok && !mcpStep.skipped);
 
@@ -244,11 +302,29 @@ export async function runSetup(options: RunSetupOptions = {}): Promise<SetupRepo
       ci.user.claude ||
       ci.user.codex;
     if (hasAny) {
-      steps.push({ id: "cli-instructions", ok: true, changed: false, skipped: true, reason: "already-configured" });
+      steps.push({
+        id: "cli-instructions",
+        ok: true,
+        changed: false,
+        skipped: true,
+        reason: "already-configured",
+      });
     } else if (dryRun) {
-      steps.push({ id: "cli-instructions", ok: true, changed: true, skipped: true, reason: "dry-run" });
+      steps.push({
+        id: "cli-instructions",
+        ok: true,
+        changed: true,
+        skipped: true,
+        reason: "dry-run",
+      });
     } else {
-      steps.push({ id: "cli-instructions", ok: false, changed: false, skipped: true, reason: "runner-not-provided" });
+      steps.push({
+        id: "cli-instructions",
+        ok: false,
+        changed: false,
+        skipped: true,
+        reason: "runner-not-provided",
+      });
     }
   }
 
@@ -324,7 +400,13 @@ export async function runSetup(options: RunSetupOptions = {}): Promise<SetupRepo
   if (options.skipSkills) {
     steps.push({ id: "skills", ok: true, changed: false, skipped: true, reason: "skip-skills" });
   } else if (!tool) {
-    steps.push({ id: "skills", ok: true, changed: false, skipped: true, reason: "tool not specified" });
+    steps.push({
+      id: "skills",
+      ok: true,
+      changed: false,
+      skipped: true,
+      reason: "tool not specified",
+    });
   } else if (dryRun) {
     steps.push({ id: "skills", ok: true, changed: true, skipped: true, reason: "dry-run" });
   } else {

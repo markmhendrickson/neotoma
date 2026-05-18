@@ -5,7 +5,12 @@
 
 import { createHash, randomUUID } from "node:crypto";
 
-import type { Operations, StoreEntityInput, StoreInput, StoreResult } from "../../core/operations.js";
+import type {
+  Operations,
+  StoreEntityInput,
+  StoreInput,
+  StoreResult,
+} from "../../core/operations.js";
 import type { GuestIdentity } from "../access_policy.js";
 import { assertGuestWriteAllowed } from "../access_policy.js";
 import { tokenGrantsAccessTo } from "../guest_access_token.js";
@@ -41,13 +46,13 @@ function idempotencyForSubmit(entityType: string, fields: Record<string, unknown
 
 export async function submitEntity(
   ops: Operations,
-  params: { userId: string } & SubmitEntityParams,
+  params: { userId: string } & SubmitEntityParams
 ): Promise<SubmitEntityResult> {
   const { userId, entity_type, fields, initial_message } = params;
   const cfg = await getSubmissionConfigForTargetType(entity_type);
   if (!cfg) {
     throw new Error(
-      `No active submission_config for entity_type "${entity_type}". Create an active submission_config row for this type (operator-seeded).`,
+      `No active submission_config for entity_type "${entity_type}". Create an active submission_config row for this type (operator-seeded).`
     );
   }
 
@@ -87,11 +92,11 @@ export async function submitEntity(
         content: msg,
         turn_key: `${entity_type}-submit:${randomUUID()}`,
         created_at: now,
-      } as StoreEntityInput,
+      } as StoreEntityInput
     );
     relationships.push(
       { relationship_type: "REFERS_TO", source_index: 0, target_index: 1 },
-      { relationship_type: "PART_OF", source_index: 2, target_index: 1 },
+      { relationship_type: "PART_OF", source_index: 2, target_index: 1 }
     );
   }
 
@@ -105,7 +110,7 @@ export async function submitEntity(
     },
     {
       runStore: (inp) => runWithExternalActor(actor, () => ops.store(inp)),
-    },
+    }
   )) as StoreResult;
 
   const structured = storeResult.structured?.entities ?? [];
@@ -114,7 +119,10 @@ export async function submitEntity(
 
   let guest_access_token: string | undefined;
   if (cfg.enable_guest_read_back && entity_id) {
-    const ids = cfg.enable_conversation_threading && conversation_id ? [entity_id, conversation_id] : [entity_id];
+    const ids =
+      cfg.enable_conversation_threading && conversation_id
+        ? [entity_id, conversation_id]
+        : [entity_id];
     guest_access_token = await mintGuestReadBackToken({
       entityIds: ids,
       userId,
@@ -147,7 +155,7 @@ export async function submitEntity(
 
 export async function addEntityMessage(
   ops: Operations,
-  params: { userId: string; entity_id: string; message: string },
+  params: { userId: string; entity_id: string; message: string }
 ): Promise<{ message_entity_id: string; conversation_id: string }> {
   const snap = (await ops.executeTool("retrieve_entity_snapshot", {
     entity_id: params.entity_id,
@@ -161,7 +169,10 @@ export async function addEntityMessage(
   if (!cfg?.enable_conversation_threading) {
     throw new Error(`submission_config for "${rootType}" does not enable conversation threading`);
   }
-  await assertGuestWriteAllowed(["conversation", "conversation_message"], guestIdentityFromContext());
+  await assertGuestWriteAllowed(
+    ["conversation", "conversation_message"],
+    guestIdentityFromContext()
+  );
 
   const resolved = await resolveConversationForRoot(ops, params.entity_id);
   const conversationId = resolved?.entity_id ?? "";
@@ -217,7 +228,7 @@ export async function getEntitySubmissionStatus(params: {
 
 export async function listEntitySubmissions(
   ops: Operations,
-  params: { entity_type: string; limit?: number; offset?: number },
+  params: { entity_type: string; limit?: number; offset?: number }
 ): Promise<unknown> {
   return ops.retrieveEntities({
     entity_type: params.entity_type,
@@ -228,7 +239,7 @@ export async function listEntitySubmissions(
 
 export async function syncEntitySubmissions(
   ops: Operations,
-  params: { entity_type?: string },
+  params: { entity_type?: string }
 ): Promise<unknown> {
   const t = params.entity_type ?? "issue";
   if (t === "issue") {

@@ -122,7 +122,7 @@ async function postWithCliAAuth(
     headers: Record<string, string>;
     body: string;
     signal: AbortSignal;
-  },
+  }
 ): Promise<Response> {
   const { cliSignedFetch } = await import("../../cli/aauth_signer.js");
   return await cliSignedFetch(url, request);
@@ -142,7 +142,7 @@ async function entityTaggedForPeer(entityId: string, peerId: string): Promise<bo
 
 async function shouldDeliverEventToPeer(
   peer: PeerConfigRecord,
-  event: SubstrateEvent,
+  event: SubstrateEvent
 ): Promise<boolean> {
   if (!peer.active) return false;
   if (peer.direction === "pull") return false;
@@ -228,7 +228,7 @@ export function queuePeerSyncDelivery(sub: SubscriptionRecord, event: SubstrateE
 
 async function deliverPeerSyncWithRetries(
   sub: SubscriptionRecord,
-  event: SubstrateEvent,
+  event: SubstrateEvent
 ): Promise<void> {
   const senderUrl = getNeotomaPublicBaseUrl();
   const senderPeerId = getLocalPeerIdForOutboundSync();
@@ -240,7 +240,7 @@ async function deliverPeerSyncWithRetries(
   }
 
   const peer = (await listPeersWithSecrets(sub.user_id)).find(
-    (p) => p.peer_id === sub.sync_peer_id,
+    (p) => p.peer_id === sub.sync_peer_id
   );
   if (!peer || !(await shouldDeliverEventToPeer(peer, event))) return;
   if (!peer.sync_target_user_id?.trim()) {

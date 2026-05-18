@@ -96,9 +96,7 @@ interface AssertCanWriteProtectedParams {
  * permitted to mutate a protected entity type. Returns silently for
  * unprotected types and for user-authenticated callers.
  */
-export function assertCanWriteProtected(
-  params: AssertCanWriteProtectedParams,
-): void {
+export function assertCanWriteProtected(params: AssertCanWriteProtectedParams): void {
   const { entity_type, op, identity, admission } = params;
   if (!isProtected(entity_type)) return;
 
@@ -120,10 +118,7 @@ export function assertCanWriteProtected(
 
   // Not admitted. If there is any agent identity at all, the caller is
   // an unrecognised agent and must not touch governance state.
-  if (
-    identity &&
-    (identity.sub || identity.thumbprint || identity.clientName)
-  ) {
+  if (identity && (identity.sub || identity.thumbprint || identity.clientName)) {
     throw new AgentCapabilityError({
       op,
       entityType: entity_type,
@@ -149,9 +144,7 @@ export function assertCanWriteProtectedBatch(params: {
   identity: AgentIdentity | null;
   admission: AAuthAdmissionContext | null;
 }): void {
-  const distinct = Array.from(
-    new Set((params.entity_types || []).filter(Boolean)),
-  );
+  const distinct = Array.from(new Set((params.entity_types || []).filter(Boolean)));
   for (const entity_type of distinct) {
     assertCanWriteProtected({
       entity_type,
@@ -165,7 +158,7 @@ export function assertCanWriteProtectedBatch(params: {
 function capabilitiesCover(
   caps: AgentCapabilityEntry[],
   op: AgentCapabilityOp,
-  entity_type: string,
+  entity_type: string
 ): boolean {
   for (const cap of caps) {
     if (cap.op !== op) continue;

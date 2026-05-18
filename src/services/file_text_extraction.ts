@@ -133,7 +133,10 @@ export async function extractTextFromBuffer(
           module as {
             PDFParse?: new (options: { data: Buffer }) => {
               getText(): Promise<{ text?: string }>;
-              getScreenshot(params?: { first?: number; imageDataUrl?: boolean }): Promise<{ pages: Array<{ dataUrl?: string }> }>;
+              getScreenshot(params?: {
+                first?: number;
+                imageDataUrl?: boolean;
+              }): Promise<{ pages: Array<{ dataUrl?: string }> }>;
               destroy(): Promise<void>;
             };
           }
@@ -196,11 +199,18 @@ async function ensurePdfCanvasPolyfill(): Promise<void> {
     if (canvas.ImageData) (globalThis as Record<string, unknown>).ImageData = canvas.ImageData;
     if (canvas.Path2D) (globalThis as Record<string, unknown>).Path2D = canvas.Path2D;
     pdfGlobalsPolyfilled = true;
-    pdfWorkerDebug = { wrapper_path_tried: "@napi-rs/canvas (globalThis polyfill)", configured: true };
+    pdfWorkerDebug = {
+      wrapper_path_tried: "@napi-rs/canvas (globalThis polyfill)",
+      configured: true,
+    };
     logger.debug("PDF canvas globals polyfilled from @napi-rs/canvas");
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    pdfWorkerDebug = { wrapper_path_tried: "@napi-rs/canvas (failed)", configured: false, set_worker_error: msg };
+    pdfWorkerDebug = {
+      wrapper_path_tried: "@napi-rs/canvas (failed)",
+      configured: false,
+      set_worker_error: msg,
+    };
     logger.warn("Failed to polyfill PDF canvas globals: %s", msg);
   }
 }
@@ -235,13 +245,18 @@ export async function getPdfFirstPageImageDataUrl(
   try {
     await ensurePdfCanvasPolyfill();
     const module = await import("pdf-parse");
-    const PdfParse = (module as { PDFParse?: unknown }).PDFParse ?? (module as { default?: unknown }).default;
+    const PdfParse =
+      (module as { PDFParse?: unknown }).PDFParse ?? (module as { default?: unknown }).default;
     if (!PdfParse) {
       return opts?.returnError ? { dataUrl: null, error: "PDFParse_not_found" } : null;
     }
     const PDFParseClass = PdfParse as {
       new (opts: { data: Buffer }): {
-        getScreenshot(params?: { first?: number; imageDataUrl?: boolean; imageBuffer?: boolean }): Promise<{
+        getScreenshot(params?: {
+          first?: number;
+          imageDataUrl?: boolean;
+          imageBuffer?: boolean;
+        }): Promise<{
           pages: Array<{ dataUrl?: string; data?: Uint8Array | Buffer }>;
         }>;
         destroy(): Promise<void>;

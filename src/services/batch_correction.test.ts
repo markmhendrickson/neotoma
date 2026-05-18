@@ -8,25 +8,16 @@
  */
 import { describe, expect, it } from "vitest";
 
-import {
-  diffSnapshotFields,
-  validateChangesAgainstSchema,
-} from "./batch_correction.ts";
+import { diffSnapshotFields, validateChangesAgainstSchema } from "./batch_correction.ts";
 
 describe("diffSnapshotFields", () => {
   it("returns empty array when desired matches current", () => {
-    const diff = diffSnapshotFields(
-      { name: "Alice", age: 30 },
-      { name: "Alice", age: 30 }
-    );
+    const diff = diffSnapshotFields({ name: "Alice", age: 30 }, { name: "Alice", age: 30 });
     expect(diff).toEqual([]);
   });
 
   it("detects scalar changes", () => {
-    const diff = diffSnapshotFields(
-      { name: "Alice", age: 31 },
-      { name: "Alice", age: 30 }
-    );
+    const diff = diffSnapshotFields({ name: "Alice", age: 31 }, { name: "Alice", age: 30 });
     expect(diff).toEqual([{ field: "age", value: 31 }]);
   });
 
@@ -54,9 +45,7 @@ describe("diffSnapshotFields", () => {
       { address: { city: "NYC", zip: "10001" } },
       { address: { city: "NYC", zip: "10002" } }
     );
-    expect(changed).toEqual([
-      { field: "address", value: { city: "NYC", zip: "10001" } },
-    ]);
+    expect(changed).toEqual([{ field: "address", value: { city: "NYC", zip: "10001" } }]);
   });
 
   it("tolerates null / undefined current snapshot", () => {
@@ -124,10 +113,7 @@ describe("validateChangesAgainstSchema", () => {
   });
 
   it("enforces enum membership", () => {
-    const errs = validateChangesAgainstSchema(
-      [{ field: "status", value: "archived" }],
-      schema
-    );
+    const errs = validateChangesAgainstSchema([{ field: "status", value: "archived" }], schema);
     expect(errs).toHaveLength(1);
     expect(errs[0].message).toMatch(/enum/);
   });
@@ -144,10 +130,7 @@ describe("validateChangesAgainstSchema", () => {
   });
 
   it("allows unknown fields (schemas are additive)", () => {
-    const errs = validateChangesAgainstSchema(
-      [{ field: "favorite_color", value: "blue" }],
-      schema
-    );
+    const errs = validateChangesAgainstSchema([{ field: "favorite_color", value: "blue" }], schema);
     expect(errs).toEqual([]);
   });
 

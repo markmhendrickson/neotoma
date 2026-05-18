@@ -44,24 +44,20 @@ export async function loadIssuesConfig(): Promise<IssuesConfig> {
   const cfg = await readConfig();
   const stored = cfg.issues ?? {};
 
-  const githubAuth: GitHubAuthMethod =
-    process.env.NEOTOMA_ISSUES_GITHUB_TOKEN ? "token" :
-    (stored.github_auth ?? DEFAULT_ISSUES_CONFIG.github_auth);
+  const githubAuth: GitHubAuthMethod = process.env.NEOTOMA_ISSUES_GITHUB_TOKEN
+    ? "token"
+    : (stored.github_auth ?? DEFAULT_ISSUES_CONFIG.github_auth);
 
-  const repo =
-    process.env.NEOTOMA_ISSUES_REPO ??
-    stored.repo ??
-    DEFAULT_ISSUES_CONFIG.repo;
+  const repo = process.env.NEOTOMA_ISSUES_REPO ?? stored.repo ?? DEFAULT_ISSUES_CONFIG.repo;
 
   const reportingMode: IssueReportingMode =
     (process.env.NEOTOMA_ISSUES_REPORTING_MODE as IssueReportingMode | undefined) ??
     stored.reporting_mode ??
     DEFAULT_ISSUES_CONFIG.reporting_mode;
 
-  const syncStalenessMs =
-    process.env.NEOTOMA_ISSUES_SYNC_STALENESS_MS
-      ? parseInt(process.env.NEOTOMA_ISSUES_SYNC_STALENESS_MS, 10)
-      : stored.sync_staleness_ms ?? DEFAULT_ISSUES_CONFIG.sync_staleness_ms;
+  const syncStalenessMs = process.env.NEOTOMA_ISSUES_SYNC_STALENESS_MS
+    ? parseInt(process.env.NEOTOMA_ISSUES_SYNC_STALENESS_MS, 10)
+    : (stored.sync_staleness_ms ?? DEFAULT_ISSUES_CONFIG.sync_staleness_ms);
 
   // When the env var is **absent**, fall back to stored config then the product
   // default operator URL. When it is **present** (including empty string), honor
@@ -81,7 +77,7 @@ export async function loadIssuesConfig(): Promise<IssuesConfig> {
   const storedTarget =
     typeof storedRaw === "string" && storedRaw.length > 0 ? storedRaw : undefined;
   const targetUrl =
-    envTarget !== undefined ? envTarget : storedTarget ?? DEFAULT_ISSUES_TARGET_URL;
+    envTarget !== undefined ? envTarget : (storedTarget ?? DEFAULT_ISSUES_TARGET_URL);
   const envAuthorAliasRaw = process.env.NEOTOMA_ISSUES_AUTHOR_ALIAS?.trim();
   const envAuthorAlias =
     envAuthorAliasRaw && envAuthorAliasRaw.length > 0 ? envAuthorAliasRaw : undefined;
@@ -106,9 +102,7 @@ export async function loadIssuesConfig(): Promise<IssuesConfig> {
 /**
  * Persist partial updates to the issues config section.
  */
-export async function updateIssuesConfig(
-  updates: Partial<IssuesConfig>,
-): Promise<IssuesConfig> {
+export async function updateIssuesConfig(updates: Partial<IssuesConfig>): Promise<IssuesConfig> {
   const cfg = await readConfig();
   const current = cfg.issues ?? {};
   const merged = {

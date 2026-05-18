@@ -53,8 +53,7 @@ export async function resolveSyncConflict(params: {
   if (params.strategy === "prefer_local" || params.strategy === "last_write_wins") {
     return {
       ok: true,
-      message:
-        `${params.strategy}: local reducer snapshot retained. Use correct for field-level overrides if needed.`,
+      message: `${params.strategy}: local reducer snapshot retained. Use correct for field-level overrides if needed.`,
     };
   }
 

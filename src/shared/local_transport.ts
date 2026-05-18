@@ -91,7 +91,7 @@ export function resolveLocalTransportEnv(baseUrl?: string): "production" | "deve
  */
 function warnOnEnvBaseUrlMismatch(
   resolvedEnv: "production" | "development",
-  baseUrl?: string,
+  baseUrl?: string
 ): void {
   const port = portFromBaseUrl(baseUrl);
   if (port == null) return;
@@ -107,7 +107,7 @@ function warnOnEnvBaseUrlMismatch(
   process.stderr.write(
     `Warning: local transport env mismatch. Running API at :${port} serves ${apiDb}, ` +
       `but local transport will spawn with ${localDb}. Reads and writes may target different ` +
-      `SQLite files. Use ${fix} to align, or set NEOTOMA_ENV explicitly.\n`,
+      `SQLite files. Use ${fix} to align, or set NEOTOMA_ENV explicitly.\n`
   );
 }
 

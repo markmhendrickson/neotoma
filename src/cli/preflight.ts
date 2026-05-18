@@ -101,7 +101,8 @@ export async function runPreflight(options: RunPreflightOptions = {}): Promise<P
   const apply = options.apply ?? false;
   const dryRun = options.dryRun ?? false;
 
-  const toolInput = typeof options.tool === "string" ? toolFromString(options.tool) : (options.tool ?? null);
+  const toolInput =
+    typeof options.tool === "string" ? toolFromString(options.tool) : (options.tool ?? null);
   const tool: ToolId | null = toolInput;
 
   if (!tool) {
@@ -111,13 +112,20 @@ export async function runPreflight(options: RunPreflightOptions = {}): Promise<P
       dry_run: dryRun,
       patches: [],
       already_ok: false,
-      copy_paste_block: "Specify a tool with --tool <tool>. Supported: claude-code, cursor, codex, openclaw, claude-desktop, windsurf, continue, vscode",
+      copy_paste_block:
+        "Specify a tool with --tool <tool>. Supported: claude-code, cursor, codex, openclaw, claude-desktop, windsurf, continue, vscode",
       overall_ok: false,
     };
   }
 
   // Tools that have no writable allowlist file.
-  const noAllowlistTools: ToolId[] = ["claude-desktop", "openclaw", "windsurf", "continue", "vscode"];
+  const noAllowlistTools: ToolId[] = [
+    "claude-desktop",
+    "openclaw",
+    "windsurf",
+    "continue",
+    "vscode",
+  ];
   if (noAllowlistTools.includes(tool)) {
     const block = buildCopyPasteBlock(tool);
     return {

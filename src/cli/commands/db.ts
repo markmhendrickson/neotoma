@@ -13,11 +13,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { Command } from "commander";
 import Database, { type SqliteDatabase } from "../../repositories/sqlite/sqlite_driver.js";
-import {
-  encryptColumn,
-  decryptColumn,
-  isEncryptedColumn,
-} from "../../crypto/column_encryption.js";
+import { encryptColumn, decryptColumn, isEncryptedColumn } from "../../crypto/column_encryption.js";
 import { deriveKeys, deriveKeysFromMnemonic, hexToKey } from "../../crypto/key_derivation.js";
 
 /** Columns to migrate — mirrors ENCRYPTED_COLUMNS in local_db_adapter.ts. */
@@ -97,9 +93,7 @@ function migrateColumn(
     [col: string]: unknown;
   }>;
 
-  const update = dryRun
-    ? null
-    : db.prepare(`UPDATE ${table} SET ${column} = ? WHERE rowid = ?`);
+  const update = dryRun ? null : db.prepare(`UPDATE ${table} SET ${column} = ? WHERE rowid = ?`);
 
   for (const row of rows) {
     const value = row[column];
@@ -157,9 +151,7 @@ export function runMigrateEncryption(opts: MigrateOpts): ColumnResult[] {
     for (const [table, columns] of Object.entries(ENCRYPTED_COLUMNS)) {
       // Skip tables that don't exist in this database.
       const tableExists = db
-        .prepare(
-          `SELECT name FROM sqlite_master WHERE type='table' AND name=?`
-        )
+        .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name=?`)
         .get(table);
       if (!tableExists) continue;
 
@@ -184,9 +176,7 @@ export function runMigrateEncryption(opts: MigrateOpts): ColumnResult[] {
   db.close();
 
   if (allErrors.length > 0) {
-    throw new Error(
-      `Migration completed with errors:\n${allErrors.join("\n")}`
-    );
+    throw new Error(`Migration completed with errors:\n${allErrors.join("\n")}`);
   }
 
   return results;
@@ -320,9 +310,7 @@ export function registerDbCommand(program: Command, hooks: DbCliHooks): void {
             `Dry run: scanning ${path.basename(dbPath)} for rows to ${direction}...\n`
           );
         } else {
-          process.stdout.write(
-            `Migrating ${path.basename(dbPath)} (${direction})...\n`
-          );
+          process.stdout.write(`Migrating ${path.basename(dbPath)} (${direction})...\n`);
         }
 
         try {

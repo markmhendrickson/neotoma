@@ -31,7 +31,10 @@ export interface PeerConfigRecord {
   consecutive_failures?: number;
 }
 
-function parsePeerSnapshot(entityId: string, snap: Record<string, unknown>): PeerConfigRecord | null {
+function parsePeerSnapshot(
+  entityId: string,
+  snap: Record<string, unknown>
+): PeerConfigRecord | null {
   const peer_id = snap.peer_id;
   if (typeof peer_id !== "string" || !peer_id) return null;
   const toStrArray = (v: unknown): string[] =>
@@ -110,7 +113,7 @@ export async function listPeersWithSecrets(userId: string): Promise<PeerConfigRe
 
 export async function getPeerSecretForVerification(
   userId: string,
-  senderPeerId: string,
+  senderPeerId: string
 ): Promise<string | null> {
   const peers = await listPeersWithSecrets(userId);
   const hit = peers.find((p) => p.peer_id === senderPeerId && p.active);
@@ -121,7 +124,7 @@ export async function getPeerSecretForVerification(
 export async function getPeerForAAuthVerification(
   userId: string,
   senderPeerId: string,
-  thumbprint: string | undefined,
+  thumbprint: string | undefined
 ): Promise<PeerConfigRecord | null> {
   if (!thumbprint) return null;
   const peers = await listPeersWithSecrets(userId);
@@ -154,7 +157,7 @@ export async function addPeerForUser(params: {
 
   const shared_secret =
     params.auth_method === "shared_secret"
-      ? (params.shared_secret?.trim() || randomBytes(32).toString("hex"))
+      ? params.shared_secret?.trim() || randomBytes(32).toString("hex")
       : undefined;
 
   const { storeStructuredForApi } = await import("../../actions.js");

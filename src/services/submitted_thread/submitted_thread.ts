@@ -9,10 +9,17 @@
  * paths are covered by service + integration tests.
  */
 
-import type { Operations, StoreEntityInput, StoreInput, StoreResult } from "../../core/operations.js";
+import type {
+  Operations,
+  StoreEntityInput,
+  StoreInput,
+  StoreResult,
+} from "../../core/operations.js";
 import { generateGuestAccessToken, hashGuestAccessToken } from "../guest_access_token.js";
 
-export function entitySnapshotPayload(entity: { snapshot?: Record<string, unknown> }): Record<string, unknown> {
+export function entitySnapshotPayload(entity: {
+  snapshot?: Record<string, unknown>;
+}): Record<string, unknown> {
   const snapshot = entity.snapshot ?? {};
   return snapshot.snapshot && typeof snapshot.snapshot === "object"
     ? (snapshot.snapshot as Record<string, unknown>)
@@ -24,7 +31,7 @@ export function entitySnapshotPayload(entity: { snapshot?: Record<string, unknow
  */
 export async function resolveConversationForRoot(
   ops: Operations,
-  rootEntityId: string,
+  rootEntityId: string
 ): Promise<{ entity_id: string; snapshot: Record<string, unknown> } | null> {
   const related = (await ops.retrieveRelatedEntities({
     entity_id: rootEntityId,
@@ -51,7 +58,7 @@ export async function resolveConversationForRoot(
 export async function storeRootWithThread(
   ops: Operations,
   input: StoreInput,
-  options?: { runStore?: (inp: StoreInput) => Promise<StoreResult> | StoreResult },
+  options?: { runStore?: (inp: StoreInput) => Promise<StoreResult> | StoreResult }
 ): Promise<StoreResult> {
   const run = options?.runStore ?? ((inp: StoreInput) => ops.store(inp));
   return Promise.resolve(run(input));
@@ -67,7 +74,7 @@ export async function mintGuestReadBackToken(params: {
 
 export async function persistGuestTokenHashOnIssue(
   ops: Operations,
-  params: { issueEntityId: string; token: string; idempotency_key: string },
+  params: { issueEntityId: string; token: string; idempotency_key: string }
 ): Promise<void> {
   await ops.store({
     entities: [
@@ -112,7 +119,7 @@ export async function appendMessageToConversation(
         conversationExtend: StoreEntityInput;
         message: StoreEntityInput;
         idempotency_key: string;
-      },
+      }
 ): Promise<{ message_entity_id: string }> {
   if (params.strategy === "standalone_then_part_of") {
     const runStore = params.runStore ?? ((inp: StoreInput) => ops.store(inp));
@@ -120,7 +127,7 @@ export async function appendMessageToConversation(
       runStore({
         entities: [params.message],
         idempotency_key: params.idempotency_key,
-      }),
+      })
     );
     const message_entity_id = structuredEntityIdAt(storeResult, 0);
     if (message_entity_id) {
@@ -152,7 +159,7 @@ export async function bootstrapConversationThreadForRoot(
     message: StoreEntityInput;
     idempotency_key: string;
     runStore?: (inp: StoreInput) => Promise<StoreResult> | StoreResult;
-  },
+  }
 ): Promise<{ conversation_id: string; message_entity_id: string }> {
   const entities: StoreInput["entities"] = [
     {
@@ -162,14 +169,16 @@ export async function bootstrapConversationThreadForRoot(
     } as StoreEntityInput,
     params.message,
   ];
-  const relationships: StoreInput["relationships"] = [{ relationship_type: "PART_OF", source_index: 1, target_index: 0 }];
+  const relationships: StoreInput["relationships"] = [
+    { relationship_type: "PART_OF", source_index: 1, target_index: 0 },
+  ];
   const runStore = params.runStore ?? ((inp: StoreInput) => ops.store(inp));
   const storeResult = await Promise.resolve(
     runStore({
       entities,
       relationships,
       idempotency_key: params.idempotency_key,
-    }),
+    })
   );
   const conversation_id = structuredEntityIdAt(storeResult, 0);
   const message_entity_id = structuredEntityIdAt(storeResult, 1);

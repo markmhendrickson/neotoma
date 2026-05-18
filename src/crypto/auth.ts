@@ -13,10 +13,9 @@ import type { Ed25519KeyPair } from "./types.js";
  */
 export function signRequest(
   body: Uint8Array | string,
-  keyPair: Ed25519KeyPair,
+  keyPair: Ed25519KeyPair
 ): { signature: string; bearerToken: string } {
-  const message =
-    typeof body === "string" ? new TextEncoder().encode(body) : body;
+  const message = typeof body === "string" ? new TextEncoder().encode(body) : body;
   const signature = signMessage(message, keyPair.privateKey);
 
   // Base64url encode signature
@@ -32,11 +31,10 @@ export function signRequest(
 export function verifyRequest(
   body: Uint8Array | string,
   signature: string,
-  bearerToken: string,
+  bearerToken: string
 ): boolean {
   try {
-    const message =
-      typeof body === "string" ? new TextEncoder().encode(body) : body;
+    const message = typeof body === "string" ? new TextEncoder().encode(body) : body;
     const signatureBytes = base64UrlDecode(signature);
     if (signatureBytes.length === 0) {
       return false; // Invalid signature encoding
@@ -55,10 +53,7 @@ export function verifyRequest(
  * Create Authorization header value with signature
  * Format: Bearer <token> Signature <signature>
  */
-export function createAuthHeader(
-  body: Uint8Array | string,
-  keyPair: Ed25519KeyPair,
-): string {
+export function createAuthHeader(body: Uint8Array | string, keyPair: Ed25519KeyPair): string {
   const { signature, bearerToken } = signRequest(body, keyPair);
   return `Bearer ${bearerToken} Signature ${signature}`;
 }
@@ -74,12 +69,9 @@ export function parseAuthHeader(header: string): {
   const bearerIndex = parts.indexOf("Bearer");
   const signatureIndex = parts.indexOf("Signature");
 
-  const bearerToken =
-    bearerIndex >= 0 && parts[bearerIndex + 1] ? parts[bearerIndex + 1] : "";
+  const bearerToken = bearerIndex >= 0 && parts[bearerIndex + 1] ? parts[bearerIndex + 1] : "";
   const signature =
-    signatureIndex >= 0 && parts[signatureIndex + 1]
-      ? parts[signatureIndex + 1]
-      : undefined;
+    signatureIndex >= 0 && parts[signatureIndex + 1] ? parts[signatureIndex + 1] : undefined;
 
   return { bearerToken, signature };
 }

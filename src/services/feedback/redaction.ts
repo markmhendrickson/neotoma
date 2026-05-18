@@ -30,10 +30,8 @@ const PHONE_RE = /(?<!\d)(?:\+?\d[\s\-().]?){7,15}\d(?!\d)/g;
 const ENTITY_ID_RE = /\bent_[a-f0-9]{24}\b/g;
 const TOKEN_RE =
   /\b(?:sk-[a-zA-Z0-9_-]{16,}|ghp_[a-zA-Z0-9]{20,}|gho_[a-zA-Z0-9]{20,}|AKIA[0-9A-Z]{16}|Bearer\s+[A-Za-z0-9._~+/=-]{16,})/g;
-const UUID_RE =
-  /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
-const HOME_PATH_RE =
-  /(?:\/Users\/[^/\s"']+|\/home\/[^/\s"']+|C:\\\\Users\\\\[^\\\s"']+)/g;
+const UUID_RE = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
+const HOME_PATH_RE = /(?:\/Users\/[^/\s"']+|\/home\/[^/\s"']+|C:\\\\Users\\\\[^\\\s"']+)/g;
 /**
  * Pre-existing hash-suffixed placeholder: <NAME:a3f9>, <EMAIL:b21c>. When a
  * scanner finds one that is already well-formed, preserve it rather than
@@ -57,7 +55,7 @@ export function isExistingPlaceholder(value: string): boolean {
 export function makePlaceholder(
   label: "EMAIL" | "PHONE" | "TOKEN" | "UUID" | "PATH",
   matched: string,
-  salt: string,
+  salt: string
 ): string {
   const hash = createHash("sha256")
     .update(salt + ":" + matched)
@@ -84,9 +82,7 @@ function isIsoDateLiteral(value: string): boolean {
   }
   const date = new Date(Date.UTC(year, month - 1, day));
   return (
-    date.getUTCFullYear() === year &&
-    date.getUTCMonth() === month - 1 &&
-    date.getUTCDate() === day
+    date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
   );
 }
 

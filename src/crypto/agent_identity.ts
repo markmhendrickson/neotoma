@@ -150,14 +150,7 @@ export interface AAuthRequestContext {
 export interface AttestationRevocationDiagnosticsField {
   checked: boolean;
   status?: "good" | "revoked" | "unknown";
-  source?:
-    | "disabled"
-    | "cache"
-    | "apple"
-    | "ocsp"
-    | "crl"
-    | "no_endpoint"
-    | "error";
+  source?: "disabled" | "cache" | "apple" | "ocsp" | "crl" | "no_endpoint" | "error";
   detail?: string;
   mode?: "disabled" | "log_only" | "enforce";
   demoted?: boolean;
@@ -191,10 +184,7 @@ export interface AttributionDecisionDiagnostics {
   attestation?:
     | {
         verified: true;
-        format:
-          | "apple-secure-enclave"
-          | "webauthn-packed"
-          | "tpm2";
+        format: "apple-secure-enclave" | "webauthn-packed" | "tpm2";
         /**
          * Revocation evidence captured by the attestation verifier when
          * `NEOTOMA_AAUTH_REVOCATION_MODE` is `log_only` or `enforce`.
@@ -204,11 +194,7 @@ export interface AttributionDecisionDiagnostics {
       }
     | {
         verified: false;
-        format:
-          | "apple-secure-enclave"
-          | "webauthn-packed"
-          | "tpm2"
-          | "unknown";
+        format: "apple-secure-enclave" | "webauthn-packed" | "tpm2" | "unknown";
         reason:
           | "not_present"
           | "unsupported_format"
@@ -242,9 +228,7 @@ export interface AttributionDecisionDiagnostics {
  * (e.g. log lines that want to flag "looks SE-ish") and MUST NOT be used
  * to set {@link AttributionTier}. Will be removed once no callers remain.
  */
-export function algorithmLooksHardwareBacked(
-  algorithm: string | undefined
-): boolean {
+export function algorithmLooksHardwareBacked(algorithm: string | undefined): boolean {
   if (!algorithm) return false;
   const normalised = algorithm.toUpperCase();
   return normalised === "ES256" || normalised === "EDDSA";
@@ -254,14 +238,7 @@ export function algorithmLooksHardwareBacked(
  * Generic clientInfo names that should NOT count as self-identification.
  * Kept lowercase; comparison is case-insensitive.
  */
-const GENERIC_CLIENT_NAMES = new Set([
-  "",
-  "mcp",
-  "client",
-  "mcp-client",
-  "unknown",
-  "anonymous",
-]);
+const GENERIC_CLIENT_NAMES = new Set(["", "mcp", "client", "mcp-client", "unknown", "anonymous"]);
 
 /**
  * Reason codes surfaced when {@link normaliseClientNameWithReason} drops an
@@ -269,15 +246,10 @@ const GENERIC_CLIENT_NAMES = new Set([
  * integrators can tell "I didn't send a name" from "I sent something that
  * was too generic to be attribution".
  */
-export type ClientNameNormalisationReason =
-  | "too_generic"
-  | "empty"
-  | "not_a_string";
+export type ClientNameNormalisationReason = "too_generic" | "empty" | "not_a_string";
 
 /** Normalise a self-reported client name to `undefined` when too generic. */
-export function normaliseClientName(
-  name: string | null | undefined
-): string | undefined {
+export function normaliseClientName(name: string | null | undefined): string | undefined {
   return normaliseClientNameWithReason(name).value;
 }
 
@@ -288,9 +260,10 @@ export function normaliseClientName(
  * diagnostics path; the legacy {@link normaliseClientName} stays as the
  * thin compatibility shim for existing call sites.
  */
-export function normaliseClientNameWithReason(
-  name: string | null | undefined
-): { value: string | undefined; reason?: ClientNameNormalisationReason } {
+export function normaliseClientNameWithReason(name: string | null | undefined): {
+  value: string | undefined;
+  reason?: ClientNameNormalisationReason;
+} {
   if (name === null || name === undefined) return { value: undefined };
   if (typeof name !== "string") return { value: undefined, reason: "not_a_string" };
   const trimmed = name.trim();
@@ -311,9 +284,7 @@ export function normaliseClientNameWithReason(
  * middleware, which has access to the `cnf.attestation` envelope and the
  * operator allowlist; pure derivation cannot make those calls.
  */
-export function deriveAttributionTier(
-  input: Omit<AgentIdentity, "tier">
-): AttributionTier {
+export function deriveAttributionTier(input: Omit<AgentIdentity, "tier">): AttributionTier {
   const aauthVerified = !!(input.publicKey && input.thumbprint);
   if (aauthVerified) {
     return "software";
@@ -401,11 +372,7 @@ export function mergeAttributionIntoProvenance(
     } catch {
       // Malformed JSON — fall through to empty base so we never throw.
     }
-  } else if (
-    existing &&
-    typeof existing === "object" &&
-    !Array.isArray(existing)
-  ) {
+  } else if (existing && typeof existing === "object" && !Array.isArray(existing)) {
     base = { ...(existing as Record<string, unknown>) };
   }
   if (Object.keys(attribution).length === 0) return base;
@@ -453,19 +420,15 @@ export function getAgentIdentityFromRequest(
   const clientName = normaliseClientName(extra?.clientName);
   const clientVersion = extra?.clientVersion ?? undefined;
   const connectionId = extra?.connectionId ?? undefined;
-  const hasAnything =
-    !!aauth?.verified || !!clientName || !!clientVersion || !!connectionId;
+  const hasAnything = !!aauth?.verified || !!clientName || !!clientVersion || !!connectionId;
   if (!hasAnything) return null;
   // Prefer the tier resolved by the AAuth middleware (which has the
   // attestation envelope and operator allowlist in scope) over the
   // pure-derivation fallback. `createAgentIdentity` will only run
   // `deriveAttributionTier` when `tier` is undefined.
-  const decision = (
-    req as Request & { attributionDecision?: AttributionDecisionDiagnostics }
-  ).attributionDecision;
-  const decisionTier = decision?.signature_verified
-    ? decision.resolved_tier
-    : undefined;
+  const decision = (req as Request & { attributionDecision?: AttributionDecisionDiagnostics })
+    .attributionDecision;
+  const decisionTier = decision?.signature_verified ? decision.resolved_tier : undefined;
   return createAgentIdentity({
     publicKey: aauth?.publicKey,
     thumbprint: aauth?.thumbprint,

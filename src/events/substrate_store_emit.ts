@@ -4,7 +4,7 @@ import type { SubstrateEvent } from "./types.js";
 
 export function shallowFieldsChanged(
   before: Record<string, unknown>,
-  after: Record<string, unknown>,
+  after: Record<string, unknown>
 ): string[] {
   const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
   const changed: string[] = [];
@@ -121,11 +121,7 @@ export function emitEntityLifecycle(params: {
   user_id: string;
   entity_id: string;
   entity_type: string;
-  event_type:
-    | "entity.deleted"
-    | "entity.restored"
-    | "entity.merged"
-    | "entity.split";
+  event_type: "entity.deleted" | "entity.restored" | "entity.merged" | "entity.split";
   timestamp: string;
   observation_id?: string;
   source_id?: string;

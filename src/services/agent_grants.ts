@@ -41,11 +41,7 @@ import {
 export type AgentGrantStatus = "active" | "suspended" | "revoked";
 
 const GRANT_ENTITY_TYPE = "agent_grant";
-const ALLOWED_STATUSES: ReadonlySet<AgentGrantStatus> = new Set([
-  "active",
-  "suspended",
-  "revoked",
-]);
+const ALLOWED_STATUSES: ReadonlySet<AgentGrantStatus> = new Set(["active", "suspended", "revoked"]);
 const ALLOWED_OPS: ReadonlySet<AgentCapabilityOp> = new Set([
   "store",
   "store_structured",
@@ -179,14 +175,12 @@ function trimOrNull(value: unknown): string | null {
  * array so callers can pass the result straight to the entity store
  * without worrying about prototype pollution or extra fields.
  */
-export function validateCapabilities(
-  raw: unknown,
-): AgentCapabilityEntry[] {
+export function validateCapabilities(raw: unknown): AgentCapabilityEntry[] {
   if (raw === undefined || raw === null) return [];
   if (!Array.isArray(raw)) {
     throw new AgentGrantValidationError(
       "capabilities must be an array of { op, entity_types }",
-      "capabilities",
+      "capabilities"
     );
   }
   const out: AgentCapabilityEntry[] = [];
@@ -194,21 +188,21 @@ export function validateCapabilities(
     if (!isPlainObject(entry)) {
       throw new AgentGrantValidationError(
         `capabilities[${i}] must be an object with op and entity_types`,
-        `capabilities[${i}]`,
+        `capabilities[${i}]`
       );
     }
     const op = entry.op;
     if (typeof op !== "string" || !ALLOWED_OPS.has(op as AgentCapabilityOp)) {
       throw new AgentGrantValidationError(
         `capabilities[${i}].op must be one of: ${Array.from(ALLOWED_OPS).join(", ")}`,
-        `capabilities[${i}].op`,
+        `capabilities[${i}].op`
       );
     }
     const types = entry.entity_types;
     if (!Array.isArray(types) || types.length === 0) {
       throw new AgentGrantValidationError(
         `capabilities[${i}].entity_types must be a non-empty array of strings`,
-        `capabilities[${i}].entity_types`,
+        `capabilities[${i}].entity_types`
       );
     }
     const normalisedTypes: string[] = [];
@@ -216,7 +210,7 @@ export function validateCapabilities(
       if (typeof t !== "string" || t.trim().length === 0) {
         throw new AgentGrantValidationError(
           `capabilities[${i}].entity_types[${j}] must be a non-empty string`,
-          `capabilities[${i}].entity_types[${j}]`,
+          `capabilities[${i}].entity_types[${j}]`
         );
       }
       normalisedTypes.push(t.trim());
@@ -236,13 +230,13 @@ function validateIdentityMatch(match: AgentGrantMatch): AgentGrantMatch {
   if (!sub && !thumbprint) {
     throw new AgentGrantValidationError(
       "Grant must declare at least one of match_sub or match_thumbprint",
-      "match",
+      "match"
     );
   }
   if (iss && !sub) {
     throw new AgentGrantValidationError(
       "match_iss requires match_sub (iss alone is not a valid identity)",
-      "match_iss",
+      "match_iss"
     );
   }
   return { match_sub: sub, match_iss: iss, match_thumbprint: thumbprint };
@@ -252,7 +246,7 @@ function validateStatus(value: unknown): AgentGrantStatus {
   if (typeof value !== "string" || !ALLOWED_STATUSES.has(value as AgentGrantStatus)) {
     throw new AgentGrantValidationError(
       `status must be one of: ${Array.from(ALLOWED_STATUSES).join(", ")}`,
-      "status",
+      "status"
     );
   }
   return value as AgentGrantStatus;
@@ -263,7 +257,7 @@ function validateLabel(raw: unknown): string {
   if (!label) {
     throw new AgentGrantValidationError(
       "label is required and must be a non-empty string",
-      "label",
+      "label"
     );
   }
   return label;
@@ -321,7 +315,7 @@ function snapshotToGrant(
   entity_id: string,
   user_id: string,
   snapshot: Record<string, unknown>,
-  meta: { created_at?: string; last_observation_at?: string },
+  meta: { created_at?: string; last_observation_at?: string }
 ): AgentGrant {
   const status = validateStatus(snapshot.status);
   const capabilities = validateCapabilities(snapshot.capabilities);
@@ -365,7 +359,7 @@ async function getGrantOwner(grantId: string): Promise<string | null> {
  */
 export async function listGrantsForUser(
   userId: string,
-  filters: ListGrantsFilters = {},
+  filters: ListGrantsFilters = {}
 ): Promise<AgentGrant[]> {
   const rows = await queryEntities({
     userId,
@@ -381,16 +375,14 @@ export async function listGrantsForUser(
         snapshotToGrant(row.entity_id, userId, row.snapshot ?? {}, {
           created_at: row.created_at,
           last_observation_at: row.last_observation_at,
-        }),
+        })
       );
     } catch {
       // Malformed grant snapshot — skip rather than break the list.
     }
   }
   const wanted = filters.status ?? "all";
-  const filtered = grants.filter((g) =>
-    wanted === "all" ? true : g.status === wanted,
-  );
+  const filtered = grants.filter((g) => (wanted === "all" ? true : g.status === wanted));
   if (filters.query) {
     const q = filters.query.toLowerCase();
     return filtered.filter((g) => {
@@ -404,10 +396,7 @@ export async function listGrantsForUser(
   return filtered;
 }
 
-export async function getGrant(
-  userId: string,
-  grantId: string,
-): Promise<AgentGrant | null> {
+export async function getGrant(userId: string, grantId: string): Promise<AgentGrant | null> {
   const owner = await getGrantOwner(grantId);
   if (!owner) return null;
   if (owner !== userId) return null;
@@ -509,9 +498,7 @@ async function scanForGrant(input: {
 
   candidates.sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score;
-    return (b.last_observation_at ?? "").localeCompare(
-      a.last_observation_at ?? "",
-    );
+    return (b.last_observation_at ?? "").localeCompare(a.last_observation_at ?? "");
   });
 
   for (const cand of candidates) {
@@ -543,9 +530,7 @@ interface InternalGrantWrite {
   intentTargetEntityId?: string;
 }
 
-async function writeGrantEntity(
-  params: InternalGrantWrite,
-): Promise<AgentGrant> {
+async function writeGrantEntity(params: InternalGrantWrite): Promise<AgentGrant> {
   // Lazy import to break the actions.ts ↔ services cycle.
   const { storeStructuredForApi } = await import("../actions.js");
   const result = await storeStructuredForApi({
@@ -567,9 +552,7 @@ async function writeGrantEntity(
   const entityId = created[0].entity_id;
   const grant = await getGrant(params.userId, entityId);
   if (!grant) {
-    throw new Error(
-      `Grant entity ${entityId} not visible after write (snapshot pipeline)`,
-    );
+    throw new Error(`Grant entity ${entityId} not visible after write (snapshot pipeline)`);
   }
   invalidateGrantCache(grant);
   return grant;
@@ -580,16 +563,11 @@ async function writeGrantEntity(
  * Status defaults to `active`. Idempotent on the canonical-name key
  * derived from the identity match.
  */
-export async function createGrant(
-  userId: string,
-  draft: AgentGrantDraft,
-): Promise<AgentGrant> {
+export async function createGrant(userId: string, draft: AgentGrantDraft): Promise<AgentGrant> {
   const match = validateIdentityMatch(draft);
   const label = validateLabel(draft.label);
   const capabilities = validateCapabilities(draft.capabilities ?? []);
-  const status: AgentGrantStatus = draft.status
-    ? validateStatus(draft.status)
-    : "active";
+  const status: AgentGrantStatus = draft.status ? validateStatus(draft.status) : "active";
   const fields: Record<string, unknown> = {
     label,
     capabilities,
@@ -616,7 +594,7 @@ export async function createGrant(
 export async function updateGrantFields(
   userId: string,
   grantId: string,
-  changes: AgentGrantUpdate,
+  changes: AgentGrantUpdate
 ): Promise<AgentGrant> {
   const existing = await getGrant(userId, grantId);
   if (!existing) {
@@ -625,8 +603,7 @@ export async function updateGrantFields(
   const next: AgentGrantMatch = {
     match_sub: changes.match_sub ?? existing.match_sub ?? null,
     match_iss: changes.match_iss ?? existing.match_iss ?? null,
-    match_thumbprint:
-      changes.match_thumbprint ?? existing.match_thumbprint ?? null,
+    match_thumbprint: changes.match_thumbprint ?? existing.match_thumbprint ?? null,
   };
   if (
     changes.match_sub !== undefined ||
@@ -646,10 +623,7 @@ export async function updateGrantFields(
   const correctionFields: Array<[string, unknown]> = [];
   if (changes.label !== undefined) correctionFields.push(["label", changes.label.trim()]);
   if (changes.capabilities !== undefined) {
-    correctionFields.push([
-      "capabilities",
-      validateCapabilities(changes.capabilities),
-    ]);
+    correctionFields.push(["capabilities", validateCapabilities(changes.capabilities)]);
   }
   if (changes.notes !== undefined) {
     correctionFields.push(["notes", trimOrNull(changes.notes)]);
@@ -661,10 +635,7 @@ export async function updateGrantFields(
     correctionFields.push(["match_iss", trimOrNull(changes.match_iss)]);
   }
   if (changes.match_thumbprint !== undefined) {
-    correctionFields.push([
-      "match_thumbprint",
-      trimOrNull(changes.match_thumbprint),
-    ]);
+    correctionFields.push(["match_thumbprint", trimOrNull(changes.match_thumbprint)]);
   }
 
   for (const [field, value] of correctionFields) {
@@ -689,7 +660,7 @@ export async function updateGrantFields(
 export async function setStatus(
   userId: string,
   grantId: string,
-  next: AgentGrantStatus,
+  next: AgentGrantStatus
 ): Promise<AgentGrant> {
   validateStatus(next);
   const existing = await getGrant(userId, grantId);

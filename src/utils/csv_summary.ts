@@ -20,23 +20,8 @@ interface RowSummaryParams {
   properties: Record<string, unknown>;
 }
 
-const LABEL_FIELDS = [
-  "name",
-  "title",
-  "exercise",
-  "summary",
-  "note",
-  "description",
-  "item",
-];
-const DATE_FIELDS = [
-  "date",
-  "day",
-  "created",
-  "created_at",
-  "timestamp",
-  "time",
-];
+const LABEL_FIELDS = ["name", "title", "exercise", "summary", "note", "description", "item"];
+const DATE_FIELDS = ["date", "day", "created", "created_at", "timestamp", "time"];
 const QUANTITY_FIELDS = [
   "amount",
   "total",
@@ -57,20 +42,17 @@ const MAX_SUMMARY_LENGTH = 220;
 function cleanValue(value: Primitive): string | undefined {
   if (value === null || value === undefined) return undefined;
   if (typeof value === "boolean") return value ? "yes" : "no";
-  if (typeof value === "number")
-    return Number.isFinite(value) ? value.toString() : undefined;
+  if (typeof value === "number") return Number.isFinite(value) ? value.toString() : undefined;
   const trimmed = String(value).trim();
   return trimmed.length ? trimmed : undefined;
 }
 
 function findFieldValue(
   props: Record<string, unknown>,
-  candidates: string[],
+  candidates: string[]
 ): { key: string; value: string } | null {
   for (const candidate of candidates) {
-    const key = Object.keys(props).find(
-      (k) => k.toLowerCase() === candidate.toLowerCase(),
-    );
+    const key = Object.keys(props).find((k) => k.toLowerCase() === candidate.toLowerCase());
     if (!key) continue;
     const value = cleanValue(props[key] as Primitive);
     if (value) {
@@ -98,15 +80,13 @@ function formatDate(value: string): string | null {
 
 export function summarizeDatasetRecord(params: DatasetSummaryParams): string {
   const { fileName = "dataset", rowCount, truncated = false, samples } = params;
-  const sampleProps = samples.flatMap((sample) =>
-    Object.keys(sample.properties || {}),
-  );
+  const sampleProps = samples.flatMap((sample) => Object.keys(sample.properties || {}));
   const headers = Array.from(
     new Set(
       sampleProps
         .filter((key) => key !== "csv_origin")
-        .filter((key) => typeof key === "string" && key.trim().length > 0),
-    ),
+        .filter((key) => typeof key === "string" && key.trim().length > 0)
+    )
   );
 
   const typeCounts = new Map<string, number>();
@@ -117,9 +97,7 @@ export function summarizeDatasetRecord(params: DatasetSummaryParams): string {
     }
   });
 
-  const headerSnippet = headers.length
-    ? headers.slice(0, 4).join(", ")
-    : "columns detected";
+  const headerSnippet = headers.length ? headers.slice(0, 4).join(", ") : "columns detected";
   const typeSnippet = [...typeCounts.entries()]
     .sort((a, b) => b[1] - a[1])
     .slice(0, 2)
@@ -143,10 +121,7 @@ export function summarizeDatasetRecord(params: DatasetSummaryParams): string {
 
 export function summarizeCsvRowRecord(params: RowSummaryParams): string {
   const { rowIndex, type, properties } = params;
-  const props: Record<string, Primitive> = { ...properties } as Record<
-    string,
-    Primitive
-  >;
+  const props: Record<string, Primitive> = { ...properties } as Record<string, Primitive>;
   delete props.csv_origin;
 
   const label = findFieldValue(props, LABEL_FIELDS);
@@ -178,11 +153,10 @@ export function summarizeCsvRowRecord(params: RowSummaryParams): string {
     parts.push(...secondary);
   }
 
-  const rowLabel =
-    type
-      .split("_")
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(" ");
+  const rowLabel = type
+    .split("_")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
   const prefix = label ? "" : `${rowLabel} row ${rowIndex + 1}`;
   const assembled = prefix ? [prefix, ...parts] : parts;
   const summary = assembled.join(parts.length ? " — " : "");

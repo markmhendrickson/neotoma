@@ -1,6 +1,6 @@
 /**
  * Schema Icon Service
- * 
+ *
  * Automatically generates icons for entity schemas by:
  * 1. Matching entity types to Lucide icons using AI semantic matching
  * 2. Generating custom SVG icons when no good match exists
@@ -10,15 +10,9 @@
 import OpenAI from "openai";
 import { config } from "../config.js";
 import type { IconMetadata, SchemaMetadata } from "./schema_registry.js";
-import { 
-  ALL_LUCIDE_ICONS, 
-  getSuggestedIcon, 
-  isValidLucideIcon 
-} from "../utils/lucide_icons.js";
+import { ALL_LUCIDE_ICONS, getSuggestedIcon, isValidLucideIcon } from "../utils/lucide_icons.js";
 
-const openai = config.openaiApiKey
-  ? new OpenAI({ apiKey: config.openaiApiKey })
-  : null;
+const openai = config.openaiApiKey ? new OpenAI({ apiKey: config.openaiApiKey }) : null;
 
 // In-memory cache for icon mappings
 const iconCache = new Map<string, IconMetadata>();
@@ -34,13 +28,13 @@ export async function generateIconForEntityType(
   if (!config.iconGeneration.enabled) {
     return getDefaultIcon();
   }
-  
+
   // Check cache first
   const cacheKey = `${entityType}:${metadata?.description || ""}`;
   if (iconCache.has(cacheKey)) {
     return iconCache.get(cacheKey)!;
   }
-  
+
   try {
     // Try pattern-based matching first (fast, no AI)
     const suggestedIcon = getSuggestedIcon(entityType);
@@ -54,11 +48,15 @@ export async function generateIconForEntityType(
       iconCache.set(cacheKey, iconMetadata);
       return iconMetadata;
     }
-    
+
     // Use AI to match to Lucide icon
     if (openai) {
-      const match = await matchLucideIcon(entityType, metadata?.description || "", metadata?.category);
-      
+      const match = await matchLucideIcon(
+        entityType,
+        metadata?.description || "",
+        metadata?.category
+      );
+
       if (match && match.confidence >= config.iconGeneration.confidenceThreshold) {
         const iconMetadata: IconMetadata = {
           icon_type: "lucide",
@@ -69,7 +67,7 @@ export async function generateIconForEntityType(
         iconCache.set(cacheKey, iconMetadata);
         return iconMetadata;
       }
-      
+
       // Generate custom SVG if no good match
       const svg = await generateCustomSVGIcon(entityType, metadata?.description || "");
       const iconMetadata: IconMetadata = {
@@ -82,7 +80,7 @@ export async function generateIconForEntityType(
       iconCache.set(cacheKey, iconMetadata);
       return iconMetadata;
     }
-    
+
     // Fallback to default icon
     return getDefaultIcon();
   } catch (error) {
@@ -102,7 +100,7 @@ async function matchLucideIcon(
   if (!openai) {
     return null;
   }
-  
+
   const prompt = `You are an icon matching expert. Match the entity type to the most appropriate Lucide icon.
 
 Entity Type: ${entityType}
@@ -132,30 +130,33 @@ Respond with ONLY a JSON object in this exact format:
       max_tokens: 150,
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content: "You are an expert at matching entity types to appropriate icons." },
+        {
+          role: "system",
+          content: "You are an expert at matching entity types to appropriate icons.",
+        },
         { role: "user", content: prompt },
       ],
     });
-    
+
     const content = response.choices?.[0]?.message?.content?.trim();
     if (!content) {
       return null;
     }
-    
+
     const parsed = JSON.parse(content);
-    
+
     // Validate response
     if (!parsed.iconName || typeof parsed.confidence !== "number") {
       console.error("[ICON_SERVICE] Invalid AI response:", parsed);
       return null;
     }
-    
+
     // Validate icon name exists
     if (!isValidLucideIcon(parsed.iconName)) {
       console.warn(`[ICON_SERVICE] AI suggested invalid icon: ${parsed.iconName}`);
       return null;
     }
-    
+
     return {
       iconName: parsed.iconName,
       confidence: parsed.confidence,
@@ -169,14 +170,11 @@ Respond with ONLY a JSON object in this exact format:
 /**
  * Generate custom SVG icon using AI
  */
-async function generateCustomSVGIcon(
-  entityType: string,
-  description: string
-): Promise<string> {
+async function generateCustomSVGIcon(entityType: string, description: string): Promise<string> {
   if (!openai) {
     return getDefaultSVG();
   }
-  
+
   const prompt = `Generate a minimal, line-based SVG icon for the following entity type. The icon should match the Lucide icon aesthetic: simple, clean lines with 1.5-2px stroke width.
 
 Entity Type: ${entityType}
@@ -199,23 +197,26 @@ Respond with ONLY the SVG code, no additional text or explanations. The SVG shou
       temperature: 0.3,
       max_tokens: 500,
       messages: [
-        { role: "system", content: "You are an expert SVG icon designer. Generate clean, minimal SVG icons." },
+        {
+          role: "system",
+          content: "You are an expert SVG icon designer. Generate clean, minimal SVG icons.",
+        },
         { role: "user", content: prompt },
       ],
     });
-    
+
     const content = response.choices?.[0]?.message?.content?.trim();
     if (!content) {
       return getDefaultSVG();
     }
-    
+
     // Extract SVG from response (in case there's extra text)
     const svgMatch = content.match(/<svg[^>]*>[\s\S]*<\/svg>/i);
     if (!svgMatch) {
       console.warn("[ICON_SERVICE] No SVG found in AI response");
       return getDefaultSVG();
     }
-    
+
     return svgMatch[0];
   } catch (error) {
     console.error("[ICON_SERVICE] Failed to generate custom SVG:", error);

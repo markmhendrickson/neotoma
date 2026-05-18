@@ -37,7 +37,7 @@ vi.mock("../db.js", () => {
             order: (_col2: string, _opts: unknown) => {
               return Promise.resolve({
                 data: rowsForTable(table).filter(
-                  (o) => o.entity_type === "guest_access_token" && o[_col] === _val,
+                  (o) => o.entity_type === "guest_access_token" && o[_col] === _val
                 ),
                 error: null,
               });
@@ -78,9 +78,7 @@ describe("Guest Access Token Service", () => {
         userId: "user-1",
         thumbprint: "thumb-1",
       });
-      expect(token).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-      );
+      expect(token).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
       expect(mockDbState.observations[0]?.fields).toMatchObject({
         ttl_seconds: 30 * 24 * 60 * 60,
         revoked_at: null,
@@ -94,7 +92,7 @@ describe("Guest Access Token Service", () => {
         generateGuestAccessToken({
           entityIds: ["entity-1"],
           userId: "user-1",
-        }),
+        })
       ).rejects.toThrow(/Failed to persist guest access token entity/);
       expect(mockDbState.observations).toHaveLength(0);
     });
@@ -106,7 +104,7 @@ describe("Guest Access Token Service", () => {
         generateGuestAccessToken({
           entityIds: ["entity-1"],
           userId: "user-1",
-        }),
+        })
       ).rejects.toThrow(/Failed to persist guest access token observation/);
     });
   });

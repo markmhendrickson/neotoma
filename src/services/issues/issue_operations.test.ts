@@ -167,7 +167,7 @@ describe("Issue Operations (Neotoma-canonical)", () => {
           visibility: "public",
           githubUrl: "https://github.com/test/repo/issues/42",
           githubNumber: 42,
-        }),
+        })
       );
       expect(result.pushed_to_github).toBe(true);
       expect(result.submitted_to_neotoma).toBe(true);
@@ -192,7 +192,7 @@ describe("Issue Operations (Neotoma-canonical)", () => {
 
       expect(mockCreateIssue).not.toHaveBeenCalled();
       expect(mockSubmitIssueToRemote).toHaveBeenCalledWith(
-        expect.objectContaining({ visibility: "private" }),
+        expect.objectContaining({ visibility: "private" })
       );
       const storeInput = mockStore.mock.calls[0]?.[0] as {
         entities: Array<Record<string, unknown>>;
@@ -233,7 +233,7 @@ describe("Issue Operations (Neotoma-canonical)", () => {
         expect.objectContaining({
           visibility: "private",
           author: "cursor-agent-mark",
-        }),
+        })
       );
       const storeInput = mockStore.mock.calls[0]?.[0] as {
         entities: Array<Record<string, unknown>>;
@@ -280,7 +280,9 @@ describe("Issue Operations (Neotoma-canonical)", () => {
 
       expect(mockStore).toHaveBeenCalled();
       expect(result.submitted_to_neotoma).toBe(false);
-      expect(result.remote_submission_error).toMatch(/Remote submission to .+ failed: Network error/);
+      expect(result.remote_submission_error).toMatch(
+        /Remote submission to .+ failed: Network error/
+      );
       expect(result.entity_id).toBeTruthy();
     });
 
@@ -335,8 +337,16 @@ describe("Issue Operations (Neotoma-canonical)", () => {
 
       expect(mockCreateRelationships).toHaveBeenCalledWith({
         relationships: [
-          { relationship_type: "REFERS_TO", source_entity_id: "local-issue-1", target_entity_id: "entity-a" },
-          { relationship_type: "REFERS_TO", source_entity_id: "local-issue-1", target_entity_id: "entity-b" },
+          {
+            relationship_type: "REFERS_TO",
+            source_entity_id: "local-issue-1",
+            target_entity_id: "entity-a",
+          },
+          {
+            relationship_type: "REFERS_TO",
+            source_entity_id: "local-issue-1",
+            target_entity_id: "entity-b",
+          },
         ],
       });
     });
@@ -411,7 +421,7 @@ describe("Issue Operations (Neotoma-canonical)", () => {
               title: "Guest issue",
               body: "Guest body",
               visibility: "private",
-            }),
+            })
         );
 
         expect(initialStoreBypass).toBe(true);
@@ -421,14 +431,14 @@ describe("Issue Operations (Neotoma-canonical)", () => {
             entityIds: ["guest-issue-1", "guest-conv-1"],
             userId: "operator-user",
             thumbprint: "thumb-123",
-          }),
+          })
         );
         expect(result).toEqual(
           expect.objectContaining({
             issue_entity_id: "guest-issue-1",
             conversation_id: "guest-conv-1",
             guest_access_token: "guest-token",
-          }),
+          })
         );
       } finally {
         if (previousIssuePolicy === undefined) {
@@ -471,7 +481,7 @@ describe("Issue Operations (Neotoma-canonical)", () => {
           body: "Follow-up comment",
           githubIssueNumber: 1,
           issue_entity_id: "local-issue-1",
-        }),
+        })
       );
     });
 
@@ -511,7 +521,7 @@ describe("Issue Operations (Neotoma-canonical)", () => {
           body: "Via entity id",
           githubIssueNumber: 2,
           issue_entity_id: "ent-issue-special",
-        }),
+        })
       );
     });
 
@@ -548,7 +558,7 @@ describe("Issue Operations (Neotoma-canonical)", () => {
           local_issue_id: "local-private-1",
           guest_access_token: "guest-token",
           remote_conversation_id: "conv-remote-private-1",
-        }),
+        })
       );
       expect(mockAddIssueComment).not.toHaveBeenCalled();
       expect(mockStore).toHaveBeenCalledTimes(1);
@@ -561,7 +571,7 @@ describe("Issue Operations (Neotoma-canonical)", () => {
               last_message_author: "remote",
             }),
           ],
-        }),
+        })
       );
       expect(result).toEqual({
         github_comment_id: null,
@@ -593,7 +603,7 @@ describe("Issue Operations (Neotoma-canonical)", () => {
       expect(result.github_comment_id).toBe("789");
       expect(result.submitted_to_neotoma).toBe(false);
       expect(result.remote_submission_error).toMatch(
-        /Remote issue message submission to https:\/\/neotoma\.example\.com failed: ECONNREFUSED/,
+        /Remote issue message submission to https:\/\/neotoma\.example\.com failed: ECONNREFUSED/
       );
     });
 
@@ -619,8 +629,16 @@ describe("Issue Operations (Neotoma-canonical)", () => {
 
       expect(mockCreateRelationships).toHaveBeenCalledWith({
         relationships: [
-          { relationship_type: "REFERS_TO", source_entity_id: "local-issue-1", target_entity_id: "target-entity-x" },
-          { relationship_type: "REFERS_TO", source_entity_id: "local-issue-1", target_entity_id: "target-entity-y" },
+          {
+            relationship_type: "REFERS_TO",
+            source_entity_id: "local-issue-1",
+            target_entity_id: "target-entity-x",
+          },
+          {
+            relationship_type: "REFERS_TO",
+            source_entity_id: "local-issue-1",
+            target_entity_id: "target-entity-y",
+          },
         ],
       });
     });
@@ -643,9 +661,7 @@ describe("Issue Operations (Neotoma-canonical)", () => {
       });
       mockRetrieveRelatedEntities
         .mockResolvedValueOnce({
-          entities: [
-            { entity_id: "conv-1", entity_type: "conversation", snapshot: {} },
-          ],
+          entities: [{ entity_id: "conv-1", entity_type: "conversation", snapshot: {} }],
         })
         .mockResolvedValueOnce({
           entities: [
@@ -896,9 +912,7 @@ describe("Issue Operations (Neotoma-canonical)", () => {
         author: "maintainer",
         created_at: "2026-05-01T00:00:00Z",
         closed_at: null,
-        messages: [
-          { author: "local", body: "original body", created_at: "2026-05-01T01:00:00Z" },
-        ],
+        messages: [{ author: "local", body: "original body", created_at: "2026-05-01T01:00:00Z" }],
       });
       mockRetrieveEntitySnapshot.mockImplementation(async (input: { entity_id: string }) => ({
         entity_type: "issue",
@@ -1031,7 +1045,7 @@ describe("Issue Operations (Neotoma-canonical)", () => {
         new IssueTransportError({
           code: "ERR_REMOTE_ISSUE_READ_FAILED",
           message: "Remote issue read-through failed for remote-canonical",
-        }),
+        })
       );
       mockRetrieveEntitySnapshot.mockImplementation(async (input: { entity_id: string }) => ({
         entity_type: "issue",
@@ -1109,7 +1123,7 @@ describe("Issue Operations (Neotoma-canonical)", () => {
           title: "No reporter env",
           body: "body",
           visibility: "public",
-        }),
+        })
       ).rejects.toMatchObject({
         name: "IssueValidationError",
         code: "ERR_REPORTER_ENVIRONMENT_REQUIRED",
@@ -1138,7 +1152,7 @@ describe("Issue Operations (Neotoma-canonical)", () => {
           body: "body",
           visibility: "public",
           reporter_git_sha: "deadbeef",
-        }),
+        })
       ).resolves.toBeTruthy();
     });
 
@@ -1190,7 +1204,7 @@ describe("Issue Operations (Neotoma-canonical)", () => {
       expect(mockCreateIssue).toHaveBeenCalledWith(
         expect.objectContaining({
           title: "Public test via unsigned-dev 2026-05-12T07-10 flow3",
-        }),
+        })
       );
       const remoteCall = mockSubmitIssueToRemote.mock.calls[0]?.[0] as { title: string };
       expect(remoteCall.title).toBe("Public test via unsigned-dev 2026-05-12T07-10 flow3");
@@ -1255,7 +1269,7 @@ describe("Issue Operations (Neotoma-canonical)", () => {
         snapshot: { github_number: 7, title: "t" },
       });
       await expect(resolveIssueRow(ops, { entity_id: "ent-x", issue_number: 99 })).rejects.toThrow(
-        /does not match github_number/,
+        /does not match github_number/
       );
     });
   });

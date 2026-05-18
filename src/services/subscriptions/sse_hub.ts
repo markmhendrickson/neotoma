@@ -7,7 +7,7 @@ import { subscriptionMatchesEvent } from "./subscription_types.js";
 
 const BUFFER_CAP = Math.min(
   10_000,
-  Math.max(100, parseInt(process.env.NEOTOMA_SSE_EVENT_BUFFER ?? "1000", 10) || 1000),
+  Math.max(100, parseInt(process.env.NEOTOMA_SSE_EVENT_BUFFER ?? "1000", 10) || 1000)
 );
 
 type RingEntry = { id: string; event: SubstrateEvent };
@@ -60,12 +60,9 @@ export function broadcastSubstrateEventToSse(event: SubstrateEvent, eventRingId:
 
 export function replayRingAfterLastId(
   lastEventId: string | undefined,
-  filter: (ev: SubstrateEvent) => boolean,
+  filter: (ev: SubstrateEvent) => boolean
 ): void {
-  const startIdx =
-    lastEventId === undefined
-      ? 0
-      : ring.findIndex((e) => e.id === lastEventId) + 1;
+  const startIdx = lastEventId === undefined ? 0 : ring.findIndex((e) => e.id === lastEventId) + 1;
   const from = startIdx < 0 ? 0 : startIdx;
   for (let i = from; i < ring.length; i++) {
     const e = ring[i]!;
@@ -78,10 +75,9 @@ export function replayRingAfterLastId(
 
 export function getRingEntriesAfter(
   lastEventId: string | undefined,
-  filter: (ev: SubstrateEvent) => boolean,
+  filter: (ev: SubstrateEvent) => boolean
 ): RingEntry[] {
-  const startIdx =
-    lastEventId === undefined ? 0 : ring.findIndex((e) => e.id === lastEventId) + 1;
+  const startIdx = lastEventId === undefined ? 0 : ring.findIndex((e) => e.id === lastEventId) + 1;
   const from = startIdx < 0 ? 0 : startIdx;
   const out: RingEntry[] = [];
   for (let i = from; i < ring.length; i++) {

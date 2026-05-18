@@ -8,10 +8,7 @@
 
 import { db } from "../db.js";
 import { rewriteObservationEntityId } from "./observation_storage.js";
-import {
-  emitEntityLifecycle,
-  emitEntitySnapshotChange,
-} from "../events/substrate_store_emit.js";
+import { emitEntityLifecycle, emitEntitySnapshotChange } from "../events/substrate_store_emit.js";
 
 export interface MergeEntitiesParams {
   fromEntityId: string;
@@ -55,11 +52,7 @@ export async function mergeEntities(params: MergeEntitiesParams): Promise<MergeR
     throw new EntityAlreadyMergedError("Target entity already merged");
   }
 
-  const observations_moved = await rewriteObservationEntityId(
-    fromEntityId,
-    toEntityId,
-    userId
-  );
+  const observations_moved = await rewriteObservationEntityId(fromEntityId, toEntityId, userId);
 
   const merged_at = new Date().toISOString();
 
@@ -80,11 +73,7 @@ export async function mergeEntities(params: MergeEntitiesParams): Promise<MergeR
     observations_rewritten: observations_moved,
   });
 
-  await db
-    .from("entity_snapshots")
-    .delete()
-    .eq("entity_id", fromEntityId)
-    .eq("user_id", userId);
+  await db.from("entity_snapshots").delete().eq("entity_id", fromEntityId).eq("user_id", userId);
 
   const fromType = (fromEntity as { entity_type: string }).entity_type;
   const toType = (toEntity as { entity_type: string }).entity_type;

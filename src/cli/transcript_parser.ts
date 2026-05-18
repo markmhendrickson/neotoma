@@ -12,7 +12,16 @@ import path from "node:path";
 // Types
 // ---------------------------------------------------------------------------
 
-export type TranscriptSource = "chatgpt" | "claude" | "slack" | "discord" | "meeting" | "claude-code" | "codex" | "cursor" | "other";
+export type TranscriptSource =
+  | "chatgpt"
+  | "claude"
+  | "slack"
+  | "discord"
+  | "meeting"
+  | "claude-code"
+  | "codex"
+  | "cursor"
+  | "other";
 
 export interface ParsedMessage {
   timestamp: string | null;
@@ -60,7 +69,8 @@ export function detectSource(filePath: string, content?: string): TranscriptSour
   if (
     (ext === ".db" && normalized.includes("/.cursor/chats/")) ||
     (ext === ".vscdb" && normalized.includes("/Cursor/User/globalStorage/"))
-  ) return "cursor";
+  )
+    return "cursor";
 
   if (basename === "conversations.json" || basename.includes("chatgpt")) return "chatgpt";
   if (basename.includes("claude")) return "claude";
@@ -74,8 +84,10 @@ export function detectSource(filePath: string, content?: string): TranscriptSour
     if (firstLine) {
       try {
         const obj = JSON.parse(firstLine);
-        if (obj.type && obj.message?.role !== undefined && obj.message?.content !== undefined) return "claude-code";
-        if (obj.timestamp !== undefined && obj.type !== undefined && obj.payload !== undefined) return "codex";
+        if (obj.type && obj.message?.role !== undefined && obj.message?.content !== undefined)
+          return "claude-code";
+        if (obj.timestamp !== undefined && obj.type !== undefined && obj.payload !== undefined)
+          return "codex";
       } catch {
         // Not valid JSON line
       }
@@ -116,10 +128,7 @@ function parseChatGptExport(content: string): ParsedConversation[] {
       const nodes = Object.values(conv.mapping) as any[];
       const sorted = nodes
         .filter((n: any) => n?.message?.content?.parts?.length > 0)
-        .sort(
-          (a: any, b: any) =>
-            (a.message?.create_time ?? 0) - (b.message?.create_time ?? 0),
-        );
+        .sort((a: any, b: any) => (a.message?.create_time ?? 0) - (b.message?.create_time ?? 0));
 
       for (const node of sorted) {
         const msg = node.message;
@@ -135,17 +144,16 @@ function parseChatGptExport(content: string): ParsedConversation[] {
 
         const authorRole = msg.author?.role ?? "unknown";
         messages.push({
-          timestamp: msg.create_time
-            ? new Date(msg.create_time * 1000).toISOString()
-            : null,
-          author: msg.author?.role === "user" ? "user" : msg.author?.role ?? "unknown",
-          role: authorRole === "user"
-            ? "user"
-            : authorRole === "assistant"
-              ? "assistant"
-              : authorRole === "system"
-                ? "system"
-                : "unknown",
+          timestamp: msg.create_time ? new Date(msg.create_time * 1000).toISOString() : null,
+          author: msg.author?.role === "user" ? "user" : (msg.author?.role ?? "unknown"),
+          role:
+            authorRole === "user"
+              ? "user"
+              : authorRole === "assistant"
+                ? "assistant"
+                : authorRole === "system"
+                  ? "system"
+                  : "unknown",
           content: textContent,
         });
       }
@@ -157,12 +165,8 @@ function parseChatGptExport(content: string): ParsedConversation[] {
         title: conv.title ?? "Untitled conversation",
         source: "chatgpt",
         messages,
-        createdAt: conv.create_time
-          ? new Date(conv.create_time * 1000).toISOString()
-          : null,
-        updatedAt: conv.update_time
-          ? new Date(conv.update_time * 1000).toISOString()
-          : null,
+        createdAt: conv.create_time ? new Date(conv.create_time * 1000).toISOString() : null,
+        updatedAt: conv.update_time ? new Date(conv.update_time * 1000).toISOString() : null,
       });
     }
   }
@@ -454,7 +458,10 @@ function parseCodexTranscript(content: string, filePath: string): ParsedConversa
         text = rawContent;
       } else if (Array.isArray(rawContent)) {
         text = rawContent
-          .filter((b: any) => (b.type === "text" || b.type === "output_text") && typeof b.text === "string")
+          .filter(
+            (b: any) =>
+              (b.type === "text" || b.type === "output_text") && typeof b.text === "string"
+          )
           .map((b: any) => b.text)
           .join("\n")
           .trim();
@@ -514,7 +521,9 @@ async function parseCursorTranscript(dbPath: string): Promise<ParsedConversation
       // Global state.vscdb: cursorDiskKV table with messageRequestContext:{conv_id}:{msg_id} keys
       let rows: any[];
       try {
-        rows = db.prepare("SELECT key, value FROM cursorDiskKV WHERE key LIKE 'messageRequestContext:%'").all();
+        rows = db
+          .prepare("SELECT key, value FROM cursorDiskKV WHERE key LIKE 'messageRequestContext:%'")
+          .all();
       } catch {
         return conversations;
       }
@@ -585,7 +594,9 @@ async function parseCursorTranscript(dbPath: string): Promise<ParsedConversation
       // Per-workspace store.db: meta table for name, blobs table for message payloads
       let convName: string | null = null;
       try {
-        const metaRow = db.prepare("SELECT value FROM meta WHERE key = 'name'").get() as { value: string } | null;
+        const metaRow = db.prepare("SELECT value FROM meta WHERE key = 'name'").get() as {
+          value: string;
+        } | null;
         if (metaRow?.value) {
           try {
             convName = JSON.parse(metaRow.value);
@@ -653,7 +664,8 @@ async function parseCursorTranscript(dbPath: string): Promise<ParsedConversation
       if (messages.length > 0) {
         const convId = path.basename(path.dirname(dbPath));
         const firstUser = messages.find((m) => m.role === "user");
-        const title = convName ?? (firstUser ? firstUser.content.slice(0, 80).replace(/\n/g, " ") : convId);
+        const title =
+          convName ?? (firstUser ? firstUser.content.slice(0, 80).replace(/\n/g, " ") : convId);
         conversations.push({
           id: `cursor-${convId}`,
           title,
@@ -676,7 +688,7 @@ async function parseCursorTranscript(dbPath: string): Promise<ParsedConversation
 // ---------------------------------------------------------------------------
 
 export async function parseTranscript(
-  options: IngestTranscriptOptions,
+  options: IngestTranscriptOptions
 ): Promise<TranscriptParseResult> {
   const resolvedPath = path.resolve(options.filePath);
   const ext = path.extname(resolvedPath).toLowerCase();
@@ -734,7 +746,7 @@ export async function parseTranscript(
     conversations = conversations.filter(
       (c) =>
         c.title.toLowerCase().includes(filterLower) ||
-        c.messages.some((m) => m.content.toLowerCase().includes(filterLower)),
+        c.messages.some((m) => m.content.toLowerCase().includes(filterLower))
     );
   }
 
@@ -762,7 +774,9 @@ export function formatTranscriptPreview(result: TranscriptParseResult): string {
   }
 
   const lines: string[] = [];
-  lines.push(`Parsed ${result.conversations.length} conversation${result.conversations.length === 1 ? "" : "s"} from ${path.basename(result.filePath)} (${result.source})\n`);
+  lines.push(
+    `Parsed ${result.conversations.length} conversation${result.conversations.length === 1 ? "" : "s"} from ${path.basename(result.filePath)} (${result.source})\n`
+  );
   lines.push(`Total messages: ${result.totalMessages}\n`);
 
   for (const conv of result.conversations.slice(0, 10)) {
@@ -778,7 +792,9 @@ export function formatTranscriptPreview(result: TranscriptParseResult): string {
     for (const msg of conv.messages.slice(0, 3)) {
       const preview = msg.content.slice(0, 80).replace(/\n/g, " ");
       const ts = msg.timestamp ? msg.timestamp.split("T")[0] : "";
-      lines.push(`    ${ts ? `[${ts}] ` : ""}${msg.author}: ${preview}${msg.content.length > 80 ? "..." : ""}`);
+      lines.push(
+        `    ${ts ? `[${ts}] ` : ""}${msg.author}: ${preview}${msg.content.length > 80 ? "..." : ""}`
+      );
     }
 
     if (conv.messages.length > 3) {
@@ -799,7 +815,7 @@ export function formatTranscriptPreview(result: TranscriptParseResult): string {
  * Convert parsed conversations to Neotoma entity format for storage.
  */
 export function conversationsToEntities(
-  conversations: ParsedConversation[],
+  conversations: ParsedConversation[]
 ): Array<Record<string, unknown>> {
   const entities: Array<Record<string, unknown>> = [];
 

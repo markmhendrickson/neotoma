@@ -76,7 +76,7 @@ export class LocalSandboxReportTransport implements SandboxReportTransport {
 
   async submit(
     rawArgs: SubmitSandboxReportArgs,
-    submitterIp: string,
+    submitterIp: string
   ): Promise<SandboxReportSubmitResponse> {
     const args = sanitizeInput(rawArgs);
     if (!args.description.trim()) {
@@ -145,8 +145,7 @@ export class LocalSandboxReportTransport implements SandboxReportTransport {
     if (!record) {
       throw new Error("sandbox report not found for access_token");
     }
-    record.consecutive_same_status_polls =
-      (record.consecutive_same_status_polls ?? 0) + 1;
+    record.consecutive_same_status_polls = (record.consecutive_same_status_polls ?? 0) + 1;
     await this.store().upsert(record);
     return projectStatus(record);
   }
@@ -156,12 +155,12 @@ export class HttpSandboxReportTransport implements SandboxReportTransport {
   constructor(
     private readonly forwardUrl: string,
     private readonly bearer: string,
-    private readonly fetchImpl: typeof fetch = fetch,
+    private readonly fetchImpl: typeof fetch = fetch
   ) {}
 
   async submit(
     rawArgs: SubmitSandboxReportArgs,
-    submitterIp: string,
+    submitterIp: string
   ): Promise<SandboxReportSubmitResponse> {
     const args = sanitizeInput(rawArgs);
     const res = await this.fetchImpl(this.forwardUrl, {

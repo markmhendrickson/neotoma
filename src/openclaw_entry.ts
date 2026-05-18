@@ -122,7 +122,11 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
-function makeIdempotencyKey(sessionId: string | undefined, turnId: string | undefined, suffix: string) {
+function makeIdempotencyKey(
+  sessionId: string | undefined,
+  turnId: string | undefined,
+  suffix: string
+) {
   const safeSession = sessionId?.trim() || "openclaw-unknown";
   const safeTurn = turnId?.trim() || String(Date.now());
   return `conversation-${safeSession}-${safeTurn}-${suffix}`;
@@ -139,7 +143,7 @@ function harnessProvenance(extra: Record<string, unknown> = {}): Record<string, 
 
 async function withServerUser<T>(
   cfg: NeotomaPluginConfig,
-  fn: (server: NeotomaServer, userId: string) => Promise<T>,
+  fn: (server: NeotomaServer, userId: string) => Promise<T>
 ): Promise<T> {
   const server = await ensureServer(cfg);
   const { ensureLocalDevUser } = await import("./services/local_auth.js");
@@ -152,7 +156,7 @@ async function storeEntities(
   userId: string,
   entities: Array<Record<string, unknown>>,
   idempotencyKey: string,
-  relationships?: Array<Record<string, unknown>>,
+  relationships?: Array<Record<string, unknown>>
 ): Promise<void> {
   const server = await ensureServer(cfg);
   const payload: Record<string, unknown> = {
@@ -180,7 +184,7 @@ async function recordConversationTurn(
     startedAt?: string;
     endedAt?: string;
     extra?: Record<string, unknown>;
-  },
+  }
 ): Promise<void> {
   const entity: Record<string, unknown> = {
     entity_type: "conversation_turn",
@@ -209,7 +213,7 @@ async function recordConversationTurn(
     cfg,
     userId,
     [entity],
-    makeIdempotencyKey(params.sessionId, params.turnId, "turn"),
+    makeIdempotencyKey(params.sessionId, params.turnId, "turn")
   );
 }
 
@@ -225,11 +229,11 @@ function scrubErrorMessage(raw: unknown): string {
   text = text.replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, "<EMAIL>");
   text = text.replace(
     new RegExp("\\b(?:sk|pk|ghp|ghs|ntk|aa)_[A-Za-z0-9_-]{16,}\\b", "g"),
-    "<TOKEN>",
+    "<TOKEN>"
   );
   text = text.replace(
     new RegExp("\\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\b", "gi"),
-    "<UUID>",
+    "<UUID>"
   );
   if (process.env.HOME) {
     text = text.split(process.env.HOME).join("<HOME>");
@@ -281,7 +285,7 @@ function truncateForStore(text: string): { content: string; truncated: boolean }
 function resolveMessageTurnId(
   event: Record<string, unknown>,
   ctx: MessageHookContext,
-  role: "user" | "assistant",
+  role: "user" | "assistant"
 ): string {
   const fromCtx =
     (typeof ctx.messageId === "string" && ctx.messageId.trim()) ||
@@ -311,7 +315,9 @@ function classifyErrorMessage(raw: unknown): string {
   const errCode = text.match(new RegExp("\\bERR_[A-Z0-9_]+\\b"));
   if (errCode) return errCode[0];
   const sysCode = text.match(
-    new RegExp("\\b(ECONNREFUSED|ENOTFOUND|ECONNRESET|ETIMEDOUT|EACCES|EPIPE|EPERM|EEXIST|ENOENT)\\b"),
+    new RegExp(
+      "\\b(ECONNREFUSED|ENOTFOUND|ECONNRESET|ETIMEDOUT|EACCES|EPIPE|EPERM|EEXIST|ENOENT)\\b"
+    )
   );
   if (sysCode) return sysCode[1];
   const httpCode = text.match(new RegExp("\\bHTTP\\s*(\\d{3})\\b", "i"));
@@ -327,7 +333,10 @@ interface PluginApi {
     name: string;
     description: string;
     parameters: Record<string, unknown>;
-    execute(id: string, params: Record<string, unknown>): Promise<{
+    execute(
+      id: string,
+      params: Record<string, unknown>
+    ): Promise<{
       content: Array<{ type: string; text: string }>;
     }>;
   }): void;
@@ -352,9 +361,9 @@ interface PluginApi {
         ? ToolContext
         : K extends "message_received" | "message_sent"
           ? MessageHookContext
-          : SessionContext,
+          : SessionContext
     ) => Promise<void> | void,
-    opts?: { priority?: number },
+    opts?: { priority?: number }
   ): void;
   logger?: {
     warn(message: string): void;
@@ -415,7 +424,7 @@ const neotomaPlugin = {
                   ...harnessProvenance({ hook_event: "session_start" }),
                 },
               ],
-              makeIdempotencyKey(event.sessionId, "session", "start"),
+              makeIdempotencyKey(event.sessionId, "session", "start")
             );
             await recordConversationTurn(pluginConfig, userId, {
               sessionId: event.sessionId,
@@ -431,7 +440,7 @@ const neotomaPlugin = {
           api.logger?.warn(`Neotoma session_start hook failed: ${String(error)}`);
         }
       },
-      { priority: 50 },
+      { priority: 50 }
     );
 
     api.on?.(
@@ -462,7 +471,7 @@ const neotomaPlugin = {
                   ...harnessProvenance({ hook_event: "session_end" }),
                 },
               ],
-              makeIdempotencyKey(event.sessionId, "session-end", "event"),
+              makeIdempotencyKey(event.sessionId, "session-end", "event")
             );
             await recordConversationTurn(pluginConfig, userId, {
               sessionId: event.sessionId,
@@ -483,7 +492,7 @@ const neotomaPlugin = {
           api.logger?.warn(`Neotoma session_end hook failed: ${String(error)}`);
         }
       },
-      { priority: 50 },
+      { priority: 50 }
     );
 
     api.on?.(
@@ -531,7 +540,7 @@ const neotomaPlugin = {
                 },
               ],
               makeIdempotencyKey(sessionId, turnId, "inbound-msg"),
-              [{ relationship_type: "PART_OF", source_index: 1, target_index: 0 }],
+              [{ relationship_type: "PART_OF", source_index: 1, target_index: 0 }]
             );
             await recordConversationTurn(pluginConfig, userId, {
               sessionId,
@@ -549,7 +558,7 @@ const neotomaPlugin = {
           api.logger?.warn(`Neotoma message_received hook failed: ${String(error)}`);
         }
       },
-      { priority: 50 },
+      { priority: 50 }
     );
 
     api.on?.(
@@ -587,14 +596,13 @@ const neotomaPlugin = {
                   content,
                   turn_key: `${sessionId}:${turnId}:assistant`,
                   observed_at: observedAt,
-                  delivery_ok:
-                    typeof event.success === "boolean" ? event.success : undefined,
+                  delivery_ok: typeof event.success === "boolean" ? event.success : undefined,
                   content_truncated: truncated || undefined,
                   ...harnessProvenance({ hook_event: "message_sent" }),
                 },
               ],
               makeIdempotencyKey(sessionId, turnId, "outbound-msg"),
-              [{ relationship_type: "PART_OF", source_index: 1, target_index: 0 }],
+              [{ relationship_type: "PART_OF", source_index: 1, target_index: 0 }]
             );
             await recordConversationTurn(pluginConfig, userId, {
               sessionId,
@@ -612,7 +620,7 @@ const neotomaPlugin = {
           api.logger?.warn(`Neotoma message_sent hook failed: ${String(error)}`);
         }
       },
-      { priority: 50 },
+      { priority: 50 }
     );
 
     api.on?.(
@@ -644,7 +652,7 @@ const neotomaPlugin = {
                   ...harnessProvenance({ hook_event: "after_tool_call" }),
                 },
               ],
-              makeIdempotencyKey(ctx.sessionId, turnId, `tool-failure-${event.toolName}`),
+              makeIdempotencyKey(ctx.sessionId, turnId, `tool-failure-${event.toolName}`)
             );
             if (ctx.sessionId) {
               await recordConversationTurn(pluginConfig, userId, {
@@ -666,7 +674,7 @@ const neotomaPlugin = {
           api.logger?.warn(`Neotoma after_tool_call hook failed: ${String(error)}`);
         }
       },
-      { priority: 50 },
+      { priority: 50 }
     );
   },
 };
