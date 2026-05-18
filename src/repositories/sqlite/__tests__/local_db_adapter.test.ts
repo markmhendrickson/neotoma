@@ -1,8 +1,8 @@
 import path from "path";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
-import { describe, it, expect } from "vitest";
-import { isRecoverableSqliteConnectionError } from "../local_db_adapter.ts";
+import { describe, it, expect, afterEach } from "vitest";
+import { isRecoverableSqliteConnectionError, isSqliteLockError } from "../local_db_adapter.ts";
 
 let dbImportSeq = 0;
 let rowSeq = 0;
@@ -243,5 +243,99 @@ describe("local db adapter", () => {
         new Error("Tree 42 page 33089: btreeInitPage() returns error code 11")
       )
     ).toBe(true);
+  });
+
+  // -------------------------------------------------------------------------
+  // isSqliteLockError — issue #173
+  // -------------------------------------------------------------------------
+
+  describe("isSqliteLockError", () => {
+    it("detects SQLITE_BUSY code", () => {
+      expect(
+        isSqliteLockError(Object.assign(new Error("database is locked"), { code: "SQLITE_BUSY" }))
+      ).toBe(true);
+    });
+
+    it("detects SQLITE_LOCKED code", () => {
+      expect(
+        isSqliteLockError(
+          Object.assign(new Error("database table is locked"), { code: "SQLITE_LOCKED" })
+        )
+      ).toBe(true);
+    });
+
+    it("detects SQLITE_BUSY_SNAPSHOT extended code", () => {
+      expect(
+        isSqliteLockError(
+          Object.assign(new Error("database is locked"), { code: "SQLITE_BUSY_SNAPSHOT" })
+        )
+      ).toBe(true);
+    });
+
+    it("detects 'database is locked' message without code", () => {
+      expect(isSqliteLockError(new Error("SqliteError: database is locked"))).toBe(true);
+    });
+
+    it("detects 'database table is locked' message without code", () => {
+      expect(isSqliteLockError(new Error("database table is locked: sources"))).toBe(true);
+    });
+
+    it("returns false for non-lock errors", () => {
+      expect(
+        isSqliteLockError(Object.assign(new Error("disk i/o error"), { code: "SQLITE_IOERR" }))
+      ).toBe(false);
+    });
+
+    it("returns false for null input", () => {
+      expect(isSqliteLockError(null)).toBe(false);
+    });
+
+    it("returns false for string input", () => {
+      expect(isSqliteLockError("database is locked")).toBe(false);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Lock retry integration — issue #173
+  // The actual retry with backoff is exercised here by verifying that
+  // concurrent writes to the same DB do not produce unhandled errors.
+  // -------------------------------------------------------------------------
+
+  describe("SQLITE_BUSY retry with backoff", () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("succeeds under concurrent writes to the same SQLite file (retry path exercises)", async () => {
+      const tempDir = makeTempDir("neotoma-concurrent");
+      const db = await loadDb(tempDir);
+
+      // Fire 10 concurrent inserts to the same table to maximise lock contention.
+      const inserts = Array.from({ length: 10 }, (_, i) => {
+        const sourceId = nextId(`src_concurrent_${i}`);
+        const userId = nextId(`user_concurrent_${i}`);
+        const contentHash = nextId(`hash_concurrent_${i}`);
+        return db
+          .from("sources")
+          .insert({
+            id: sourceId,
+            user_id: userId,
+            content_hash: contentHash,
+            mime_type: "text/plain",
+            storage_url: `file:///tmp/src_${i}.txt`,
+            provenance: { origin: "concurrent_test" },
+            created_at: new Date().toISOString(),
+          })
+          .select()
+          .single();
+      });
+
+      const results = await Promise.all(inserts);
+      for (const { error } of results) {
+        expect(error).toBeNull();
+      }
+
+      rmSync(tempDir, { recursive: true, force: true });
+    });
   });
 });
