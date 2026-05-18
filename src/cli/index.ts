@@ -13674,11 +13674,13 @@ program
     // When an explicit idempotency key is provided without an explicit turn key,
     // derive the turn key from the idempotency key so that repeated calls with the
     // same idempotency key produce identical entity content (required for replay).
-    const turnKey = opts.turnKey ?? (opts.idempotencyKey ? `chat:${opts.idempotencyKey}` : `chat:${timestampMs}`);
+    const turnKey =
+      opts.turnKey ?? (opts.idempotencyKey ? `chat:${opts.idempotencyKey}` : `chat:${timestampMs}`);
     const conversationId =
       opts.conversationId ??
-      (opts.turnKey ?? opts.idempotencyKey ? deriveConversationIdFromTurnKey(turnKey) : turnKey);
-    const idempotencyKey = opts.idempotencyKey ?? `conversation-chat-${timestampMs}-${randomUUID()}`;
+      ((opts.turnKey ?? opts.idempotencyKey) ? deriveConversationIdFromTurnKey(turnKey) : turnKey);
+    const idempotencyKey =
+      opts.idempotencyKey ?? `conversation-chat-${timestampMs}-${randomUUID()}`;
 
     let extractedEntities: Array<Record<string, unknown>> = [];
     if (opts.entities) {
