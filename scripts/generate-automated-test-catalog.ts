@@ -376,13 +376,34 @@ function generateCatalog(): string {
   ].join("\n");
 }
 
+function stripFrontmatter(content: string): string {
+  if (!content.startsWith("---\n")) return content;
+  const rest = content.slice(4);
+  const endIdx = rest.indexOf("\n---\n");
+  if (endIdx < 0) return content;
+  // Strip the leading newline that follows the closing --- fence
+  const body = rest.slice(endIdx + 5);
+  return body.startsWith("\n") ? body.slice(1) : body;
+}
+
+function extractFrontmatterBlock(content: string): string {
+  if (!content.startsWith("---\n")) return "";
+  const rest = content.slice(4);
+  const endIdx = rest.indexOf("\n---\n");
+  if (endIdx < 0) return "";
+  return "---\n" + rest.slice(0, endIdx) + "\n---\n";
+}
+
 function main(): void {
   const next = generateCatalog();
   const current = fs.existsSync(outputPath) ? fs.readFileSync(outputPath, "utf8") : "";
   const checkOnly = process.argv.includes("--check");
 
+  // Compare without frontmatter so validate:test-catalog passes when frontmatter
+  // has been added by docs_frontmatter_backfill.ts after generation.
+  const currentBody = stripFrontmatter(current);
   if (checkOnly) {
-    if (current === next) {
+    if (currentBody === next) {
       console.log("✅ Automated test catalog is up to date.");
       return;
     }
@@ -390,7 +411,10 @@ function main(): void {
     process.exit(1);
   }
 
-  fs.writeFileSync(outputPath, next);
+  // Preserve any existing frontmatter so the file stays idempotent with
+  // docs_frontmatter_backfill.ts after regeneration.
+  const frontmatter = extractFrontmatterBlock(current);
+  fs.writeFileSync(outputPath, frontmatter ? frontmatter + "\n" + next : next);
   console.log(`✅ Wrote automated test catalog to ${path.relative(repoRoot, outputPath)}`);
 }
 
