@@ -453,6 +453,7 @@ flowchart TD
 - `tests/cli/config.test.ts`
 - `tests/cli/cursor_hooks_global.test.ts`
 - `tests/cli/db_migrate_encryption.test.ts`
+- `tests/cli/db_migrate_env_split.test.ts`
 - `tests/cli/db_repair_schema_lag.test.ts`
 - `tests/cli/discover_to_parse_roundtrip.test.ts`
 - `tests/cli/discovery_harness.test.ts`

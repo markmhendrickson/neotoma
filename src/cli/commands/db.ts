@@ -10,6 +10,7 @@
  */
 
 import { readFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import type { Command } from "commander";
 import Database, { type SqliteDatabase } from "../../repositories/sqlite/sqlite_driver.js";
@@ -346,4 +347,38 @@ export function registerDbCommand(program: Command, hooks: DbCliHooks): void {
         }
       }
     );
+
+  dbCommand
+    .command("migrate-env-split")
+    .description(
+      "Detect and repair data written to the dev database (neotoma.db) instead of the " +
+        "production database (neotoma.prod.db). This is the common pattern for users who " +
+        "ran Neotoma before v0.13.x, when npm-installed builds defaulted to the dev DB. " +
+        "Use --dry-run to inspect without writing anything. Pass --yes to execute the rename."
+    )
+    .option(
+      "--data-dir <path>",
+      "Path to the Neotoma data directory (default: resolved from NEOTOMA_DATA_DIR or config)"
+    )
+    .option("--dry-run", "Report what would happen without writing any files", false)
+    .option("--yes", "Execute the migration (required to write files)", false)
+    .action(async (opts: { dataDir?: string; dryRun?: boolean; yes?: boolean }) => {
+      const { migrateEnvSplit } = await import("./db_migrate_env_split.js");
+      const dataDir =
+        opts.dataDir ?? process.env.NEOTOMA_DATA_DIR ?? path.join(os.homedir(), "neotoma", "data");
+      try {
+        const result = await migrateEnvSplit({
+          dataDir,
+          dryRun: opts.dryRun ?? false,
+          yes: opts.yes ?? false,
+        });
+        if (result.action_taken === "none" && !result.renamed) {
+          // Non-rename outcomes: exit 0 always (nothing wrong, or both-have-data advisory).
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        process.stderr.write(`Error: ${msg}\n`);
+        process.exit(1);
+      }
+    });
 }

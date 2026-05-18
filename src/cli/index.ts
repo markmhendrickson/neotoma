@@ -7833,6 +7833,27 @@ cliCommand
       const applyResult = opts.yes
         ? await applyCliInstructions(result, { scope })
         : { added: [] as string[], skipped: true };
+
+      // For dist/ (npm-installed) builds, persist preferred_env=prod so the local
+      // transport defaults to the production DB even in sessions where NEOTOMA_ENV
+      // and port inference produce no signal. Source checkouts skip this write —
+      // developers intentionally work against the dev DB.
+      if (opts.yes) {
+        const cliDir = path.dirname(fileURLToPath(import.meta.url));
+        const isDistBuild =
+          cliDir.includes("/dist/") || process.env.NEOTOMA_TEST_SIMULATE_DIST_BUILD === "1";
+        if (isDistBuild) {
+          try {
+            const existingConfig = await readConfig();
+            if (existingConfig.preferred_env !== "prod") {
+              await writeConfig({ ...existingConfig, preferred_env: "prod" });
+            }
+          } catch {
+            // Non-fatal: preferred_env is an optimization, not required for cli config.
+          }
+        }
+      }
+
       const payload = {
         projectRoot: result.projectRoot,
         applied: result.applied,
