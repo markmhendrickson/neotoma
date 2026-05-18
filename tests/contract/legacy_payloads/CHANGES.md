@@ -21,3 +21,7 @@ Format: one bullet per flip, keyed by the Neotoma version that introduced the ne
 
 - `v0.12.x/store_relationship_non_ent_entity_id` flipped from valid to rejected: store relationship ids now require ent_ prefix.
 - `v0.12.x/issues_submit_without_reporter_env` seeded as `rejected`. `submit_issue` now requires at least one of `reporter_git_sha` or `reporter_app_version`; submissions missing both fail with `error_code: ERR_REPORTER_ENVIRONMENT_REQUIRED` and a structured `details.acceptable_field_groups` envelope listing the alternatives. Release supplement: `docs/releases/in_progress/v0.12.0/github_release_supplement.md` § Breaking changes.
+
+## v0.13.0
+
+- `v0.13.x/create_relationship_extra_fields` seeded as `rejected`. `POST /create_relationship` previously declared an open schema in OpenAPI; the handler has always rejected undeclared fields via Zod. The spec now declares `additionalProperties: false` with the three required fields and three optional fields, matching handler behavior. Callers sending extra fields were already receiving 400 errors; this fixture documents that the outcome is unchanged. Release supplement: `docs/releases/in_progress/v0.13.0/github_release_supplement.md` § Breaking changes.

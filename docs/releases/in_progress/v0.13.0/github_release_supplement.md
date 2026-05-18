@@ -42,7 +42,8 @@ v0.13.0 is a substantial feature release. The headline additions are **schema-le
 - `submit_issue` and `add_issue_message` accept a new optional `entity_ids_to_link: string[]`; the server creates `REFERS_TO` relationships from the issue (or message) to the referenced entities in the same operation, so callers no longer need a follow-up relationship write (#131, #146, #147).
 - `add_issue_message` result schema adds `remote_submission_error: string | null`. Non-null when remote Neotoma append failed after local and/or GitHub side effects were already recorded.
 - HTTP `keepAliveTimeout` extended to prevent MCP session drops behind reverse proxies (#148).
-- No endpoints removed. No request shape tightening. No closed `additionalProperties` flipped. No required fields added. No type narrowings. **No breaking changes.**
+- No endpoints removed. No type narrowings on existing declared fields.
+- **`POST /create_relationship` schema corrected** — the OpenAPI spec previously declared an open schema (`additionalProperties: true`, no properties). The handler has always validated `relationship_type`, `source_entity_id`, and `target_entity_id` as required via `CreateRelationshipRequestSchema` (Zod), so behavior is unchanged. The spec now matches the handler: `additionalProperties: false`, three required fields declared, three optional fields (`source_id`, `metadata`, `user_id`) declared. Clients sending undeclared extra fields to this endpoint were already rejected by the handler; this change makes the schema contract match that reality. See Breaking changes section.
 
 ## Behavior changes
 
@@ -166,4 +167,4 @@ No new security advisories opened for this release.
 
 ## Breaking changes
 
-No breaking changes.
+- **`POST /create_relationship` — schema documentation corrected, `additionalProperties: false` now enforced at the OpenAPI level.** The request body schema previously declared `type: object, additionalProperties: true` with no fields. The handler has always required `relationship_type`, `source_entity_id`, and `target_entity_id` and rejected unknown fields via Zod validation. The OpenAPI spec is now aligned with that behavior. Migration: ensure callers send only the declared fields (`relationship_type`, `source_entity_id`, `target_entity_id`, optional `source_id`, `metadata`, `user_id`). Any caller already compliant with the Zod validation is unaffected.

@@ -3796,7 +3796,28 @@ paths:
           application/json:
             schema:
               type: object
-              additionalProperties: true
+              required: [relationship_type, source_entity_id, target_entity_id]
+              additionalProperties: false
+              properties:
+                relationship_type:
+                  type: string
+                  enum: [PART_OF, CORRECTS, REFERS_TO, SETTLES, DUPLICATE_OF, DEPENDS_ON, SUPERSEDES, EMBEDS, works_at, owns, manages, part_of, related_to, depends_on, references, transacted_with, member_of, reports_to, located_at, created_by, funded_by, acquired_by, subsidiary_of, partner_of, competitor_of, supplies_to, contracted_with, invested_in]
+                source_entity_id:
+                  type: string
+                  description: Entity ID of the relationship source
+                target_entity_id:
+                  type: string
+                  description: Entity ID of the relationship target
+                source_id:
+                  type: string
+                  description: Optional source provenance ID
+                metadata:
+                  type: object
+                  additionalProperties: true
+                  description: Optional key-value metadata for the relationship
+                user_id:
+                  type: string
+                  description: Optional. Inferred from authentication if omitted.
       responses:
         '200':
           description: Relationship created
