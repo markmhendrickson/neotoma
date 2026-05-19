@@ -93,6 +93,22 @@ These before/after examples show what storage looks like in practice. "Before" i
 - Before: You have an ongoing billing dispute with a vendor. Details are scattered across emails, chat messages, and phone call notes. Reconstructing the timeline requires manual archaeology.
 - After: Agent stores each interaction as an observation on the dispute entity. `{ entity_type: "dispute", vendor: "Acme Billing", status: "open", amount_disputed: 250.00 }` with observations for each touchpoint. The full timeline is queryable: "What did we know about this dispute on March 15?"
 
+## Store-first protocol for external tool actions
+
+When an agent is about to execute a write action in an external tool — sending an email, creating a GitHub issue, posting a Slack message, booking a calendar event, triggering a webhook, or any equivalent operation that mutates state outside Neotoma — it MUST store the intent as a Neotoma entity BEFORE executing the action.
+
+This is not optional. The store step is non-negotiable regardless of how simple or low-risk the external action appears.
+
+The three-step sequence is:
+
+1. **Store intent.** Store an entity capturing what will be done, to whom, and with what content. Use the most specific entity_type (e.g. `email_draft`, `issue`, `event`, `message`). Set `status: "pending"`.
+2. **Execute the external action.** Call the external tool only after the store returns successfully.
+3. **Update entity status.** After the external action completes or fails, update the stored entity with the outcome (`status: "sent"`, `status: "created"`, `status: "failed"`, plus any external IDs returned).
+
+If the external action fails, the stored entity remains as durable evidence of the intent. If the action succeeds, the entity records what was done, when, and to whom — traceable and auditable.
+
+This protocol extends the general store-first rule (which applies to reading external data) to cover writes. The agent instructions in `docs/developer/mcp/instructions.md` define the full binding rule and entity-type mapping under `[STORE-FIRST PROTOCOL]`.
+
 ## What NOT to store
 
 | Condition | Reason |
