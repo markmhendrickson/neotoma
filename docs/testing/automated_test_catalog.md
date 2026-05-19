@@ -61,10 +61,10 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **393**
+- Total automated test files: **392**
 - Backend and repo Vitest files: **359**
 - Frontend Vitest files: **9**
-- Playwright spec files: **25**
+- Playwright spec files: **24**
 
 ### Suite counts
 | Suite | Files |
@@ -83,7 +83,7 @@ flowchart TD
 | Vitest shared-environment tests | 1 |
 | Frontend Vitest tests | 9 |
 | Playwright E2E tests | 22 |
-| Playwright Inspector E2E tests | 3 |
+| Playwright Inspector E2E tests | 2 |
 | Tests Scripts | 1 |
 
 ## Primary validation commands
@@ -594,8 +594,7 @@ flowchart TD
 **Runner:** `playwright`
 **Command:** `npm run test:e2e:inspector`
 **Requirements:** Inspector bundle built before execution.
-**Files (3):**
-- `playwright/tests/inspector/docs_hierarchy.spec.ts`
+**Files (2):**
 - `playwright/tests/inspector/inspector-entity-detail.spec.ts`
 - `playwright/tests/inspector/inspector-issues.spec.ts`
 
