@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
-import { LiveRelativeTime } from "@/components/shared/live_relative_time";
+import { formatDate } from "@/lib/utils";
 import { absoluteDateTime, dayBucketLabel, humanizeKey, shortId, truncate } from "@/lib/humanize";
 import { AgentBadge } from "./agent_badge";
 import type { Observation } from "@/types/api";
@@ -79,12 +79,8 @@ function TimelineRow({
     <li className="relative ml-1 pb-4 last:pb-0">
       <span className="absolute -left-[21px] top-1.5 h-2 w-2 rounded-full bg-primary" aria-hidden="true" />
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <span className="text-sm font-medium" title={absoluteDateTime(when)}>
-          {when && !Number.isNaN(Date.parse(when)) ? (
-            <LiveRelativeTime iso={when} title={false} />
-          ) : (
-            absoluteDateTime(when) || "—"
-          )}
+        <span className="text-sm font-medium" title={absoluteDateTime(when) || undefined}>
+          {formatDate(when)}
         </span>
         {sourceLabel ? (
           <SourceChip

@@ -9,6 +9,7 @@ import { JsonViewer } from "@/components/shared/json_viewer";
 import { formatDate } from "@/lib/utils";
 import { showBackgroundQueryRefresh, showInitialQuerySkeleton } from "@/lib/query_loading";
 import { QueryRefreshIndicator } from "@/components/shared/query_refresh_indicator";
+import { PinPrimitiveButton } from "@/components/shared/pin_primitive_button";
 
 export default function TimelineEventDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -34,7 +35,17 @@ export default function TimelineEventDetailPage() {
     <PageShell
       title={ev.event_type || "Event"}
       description={`Timeline Event · ${formatDate(ev.event_timestamp)}`}
-      actions={showBackgroundQueryRefresh(event) ? <QueryRefreshIndicator /> : undefined}
+      actions={
+        <div className="flex flex-wrap items-center gap-2">
+          {showBackgroundQueryRefresh(event) ? <QueryRefreshIndicator /> : null}
+          <PinPrimitiveButton
+            kind="timeline_event"
+            href={`/timeline/${encodeURIComponent(ev.id)}`}
+            label={ev.event_type || ev.id}
+            subtitle={formatDate(ev.event_timestamp)}
+          />
+        </div>
+      }
     >
       <div className="grid gap-4 md:grid-cols-2">
         <Card>

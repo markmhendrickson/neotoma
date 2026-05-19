@@ -257,6 +257,7 @@ export interface RelatedEntityExpansion {
   provenance?: Record<string, unknown>;
   raw_fragments?: Record<string, unknown>;
   entity_type_label?: string | null;
+  last_observation_at?: string;
 }
 
 export interface EntityRelationshipsResponse {
@@ -658,6 +659,8 @@ export interface StoreRelationship {
 }
 
 export interface StoreResponse {
+  source_id?: string;
+  entities?: Array<{ entity_id: string; entity_type: string; observation_id?: string }>;
   structured?: {
     success: boolean;
     entities: Array<{ entity_id: string; entity_type: string; observation_id: string }>;

@@ -99,7 +99,7 @@ export default function ObservationsPage() {
   return (
     <PageShell
       title="Observations"
-      description={query.data ? `${query.data.total.toLocaleString()} total` : undefined}
+      meta={query.data ? `${query.data.total.toLocaleString()} total` : undefined}
       actions={
         <div className="flex flex-wrap items-center gap-3">
           {showBackgroundQueryRefresh(query) ? <QueryRefreshIndicator /> : null}

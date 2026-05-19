@@ -1,5 +1,4 @@
 import { Link, useParams } from "react-router-dom";
-import { MessageSquareText } from "lucide-react";
 import { PageShell } from "@/components/layout/page_shell";
 import { ListSkeleton, QueryErrorAlert } from "@/components/shared/query_status";
 import { TypeBadge } from "@/components/shared/type_badge";
@@ -200,7 +199,6 @@ export default function ConversationDetailPage() {
   return (
     <PageShell
       title={title}
-      titleIcon={<MessageSquareText className="h-5 w-5" aria-hidden />}
       description={
         showInitialSkeleton
           ? "Loading…"

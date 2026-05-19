@@ -32,6 +32,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Circle, RefreshCw } from "lucide-react";
 import { showBackgroundQueryRefresh, showInitialQuerySkeleton } from "@/lib/query_loading";
 import { QueryRefreshIndicator } from "@/components/shared/query_refresh_indicator";
+import { InspectorThemeToggle } from "@/components/shared/inspector_theme_toggle";
 
 const LOCAL_PROXY_PLACEHOLDER = "/api";
 
@@ -75,6 +76,18 @@ export default function SettingsPage() {
       <div className="grid min-w-0 gap-6 lg:grid-cols-2">
         <Card className="min-w-0">
           <CardHeader>
+            <CardTitle className="text-base">Appearance</CardTitle>
+          </CardHeader>
+          <CardContent className="min-w-0 space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Choose how the Inspector looks on this device.
+            </p>
+            <InspectorThemeToggle showLabels className="border-border bg-muted/40" />
+          </CardContent>
+        </Card>
+
+        <Card className="min-w-0">
+          <CardHeader>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <CardTitle className="text-base">Server Info</CardTitle>
               {showBackgroundQueryRefresh(serverInfo) ? <QueryRefreshIndicator /> : null}
@@ -88,6 +101,12 @@ export default function SettingsPage() {
               </div>
             ) : serverInfo.data ? (
               <>
+                <div className="flex min-w-0 justify-between gap-2">
+                  <span className="shrink-0 text-muted-foreground">API</span>
+                  <span className={health.data?.ok ? "text-green-600" : "text-red-600"}>
+                    {health.data?.ok ? "Healthy" : "Unreachable"}
+                  </span>
+                </div>
                 <div className="flex min-w-0 justify-between gap-2">
                   <span className="shrink-0 text-muted-foreground">HTTP Port</span>
                   <span className="min-w-0 text-right">{serverInfo.data.httpPort}</span>

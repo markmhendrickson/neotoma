@@ -15,6 +15,7 @@ import { formatDate } from "@/lib/utils";
 import { QueryRefreshIndicator } from "@/components/shared/query_refresh_indicator";
 import { toast } from "sonner";
 import { Trash2, RotateCcw } from "lucide-react";
+import { PinPrimitiveButton } from "@/components/shared/pin_primitive_button";
 
 export default function RelationshipDetailPage() {
   const { key } = useParams<{ key: string }>();
@@ -53,6 +54,14 @@ export default function RelationshipDetailPage() {
       actions={
         <div className="flex flex-wrap items-center gap-2">
           {showBackgroundQueryRefresh(snapshot) ? <QueryRefreshIndicator /> : null}
+          {key ? (
+            <PinPrimitiveButton
+              kind="relationship"
+              href={`/relationships/${encodeURIComponent(key)}`}
+              label={s.relationship_type}
+              subtitle={`${s.source_entity_id} → ${s.target_entity_id}`}
+            />
+          ) : null}
           <ConfirmDialog
             trigger={<Button variant="outline" size="sm"><Trash2 className="h-3 w-3 mr-1" /> Delete</Button>}
             title="Delete Relationship"

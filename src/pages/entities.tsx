@@ -1,14 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useEntitiesQuery } from "@/hooks/use_entities";
-import { useStats } from "@/hooks/use_stats";
 import { useAgentGrants } from "@/hooks/use_agents";
 import { PageShell } from "@/components/layout/page_shell";
+import type { HeaderSearchContextValue } from "@/components/layout/page_title_context";
 import { DataTableSkeleton, QueryErrorAlert } from "@/components/shared/query_status";
 import { DataTable } from "@/components/ui/data-table";
 import { TypeBadge } from "@/components/shared/type_badge";
 import { OffsetPagination as Pagination } from "@/components/ui/pagination";
-import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { showBackgroundQueryRefresh, showInitialQuerySkeleton } from "@/lib/query_loading";
@@ -16,8 +15,24 @@ import { formatDate, truncateId } from "@/lib/utils";
 import { QueryRefreshIndicator } from "@/components/shared/query_refresh_indicator";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { EntitySnapshot } from "@/types/api";
-import { Search } from "lucide-react";
 import { EntityListAdmissionCell } from "@/components/shared/entity_list_admission_cell";
+import { EntityTypeSelect } from "@/components/shared/entity_type_select";
+import { EntityTableColumnToggle } from "@/components/shared/entity_table_column_toggle";
+import { FieldValue } from "@/components/shared/field_value";
+import { PinPrimitiveButton } from "@/components/shared/pin_primitive_button";
+import { entityTypeFilterPinHref } from "@/lib/pinned_primitives";
+import { entityTypeListPath, pluralizeEntityTypeLabel } from "@/lib/entity_type_labels";
+import { humanizeKey } from "@/lib/humanize";
+import { useSchemaByType, useSchemas } from "@/hooks/use_schemas";
+import {
+  buildEntitiesListColumnConfig,
+  buildVisibleEntitySortOptions,
+  DEFAULT_ENTITIES_LIST_COLUMN_VISIBILITY,
+  schemaFieldKeys,
+  snapshotFieldColumnId,
+} from "@/lib/entity_table_columns";
+import type { EntitySchema } from "@/types/api";
+import type { VisibilityState } from "@tanstack/react-table";
 
 const PAGE_SIZE = 25;
 
@@ -25,9 +40,10 @@ function entityRowId(row: EntitySnapshot): string {
   return row.entity_id ?? row.id ?? "";
 }
 
-export default function EntitiesPage() {
+export default function EntitiesPage({ typeSlug }: { typeSlug?: string } = {}) {
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const initialType = searchParams.get("type") || "";
+  const initialType = typeSlug?.trim() || searchParams.get("type") || "";
   const initialSearch = searchParams.get("search") || "";
   const [search, setSearch] = useState(initialSearch);
   const [entityType, setEntityType] = useState(initialType);
@@ -35,21 +51,51 @@ export default function EntitiesPage() {
   const [sortBy, setSortBy] = useState("last_observation_at");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [identityBasis, setIdentityBasis] = useState<string>("");
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(
+    DEFAULT_ENTITIES_LIST_COLUMN_VISIBILITY,
+  );
 
-  const stats = useStats();
   const grantsQ = useAgentGrants({ status: "all" });
+  const schemasQ = useSchemas();
+  const schemaQ = useSchemaByType(entityType || undefined);
   const admissionGrants = grantsQ.data?.grants ?? [];
-  const entityTypes = stats.data ? Object.keys(stats.data.entities_by_type).sort() : [];
-  const [typeSelectQuery, setTypeSelectQuery] = useState("");
 
-  const filteredEntityTypes = useMemo(() => {
-    const q = typeSelectQuery.trim().toLowerCase();
-    const list = !q ? entityTypes : entityTypes.filter((t) => t.toLowerCase().includes(q));
-    if (entityType && entityTypes.includes(entityType) && !list.includes(entityType)) {
-      return [entityType, ...list];
+  const listColumnConfig = useMemo(
+    () => buildEntitiesListColumnConfig(entityType ? schemaQ.data : null),
+    [entityType, schemaQ.data],
+  );
+
+  const visibleSortOptions = useMemo(
+    () =>
+      buildVisibleEntitySortOptions(
+        listColumnConfig.columnIds,
+        columnVisibility,
+        listColumnConfig.columnLabels,
+      ),
+    [listColumnConfig.columnIds, listColumnConfig.columnLabels, columnVisibility],
+  );
+
+  useEffect(() => {
+    if (search || visibleSortOptions.length === 0) return;
+    const allowed = new Set(visibleSortOptions.map((o) => o.value));
+    if (!allowed.has(sortBy)) {
+      setSortBy(visibleSortOptions[0]?.value ?? "last_observation_at");
     }
-    return list;
-  }, [entityTypes, typeSelectQuery, entityType]);
+  }, [search, sortBy, visibleSortOptions]);
+
+  const schemaLabelByType = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const schema of schemasQ.data?.schemas ?? []) {
+      const label =
+        schema.metadata && typeof schema.metadata === "object"
+          ? (schema.metadata as Record<string, unknown>).label
+          : undefined;
+      if (typeof label === "string" && label.trim()) {
+        map.set(schema.entity_type, label.trim());
+      }
+    }
+    return map;
+  }, [schemasQ.data?.schemas]);
 
   useEffect(() => {
     setSearch(initialSearch);
@@ -60,6 +106,32 @@ export default function EntitiesPage() {
     setEntityType(initialType);
     setOffset(0);
   }, [initialType]);
+
+  useEffect(() => {
+    setColumnVisibility(buildEntitiesListColumnConfig(entityType ? schemaQ.data : null).defaultVisibility);
+  }, [entityType, schemaQ.data]);
+
+  const pluralTypeTitle = useMemo(() => {
+    if (!entityType) return null;
+    return pluralizeEntityTypeLabel(entityType, schemaLabelByType.get(entityType));
+  }, [entityType, schemaLabelByType]);
+
+  function navigateForEntityType(nextType: string) {
+    const params = new URLSearchParams(searchParams);
+    params.delete("type");
+    const search = params.toString();
+    if (nextType) {
+      navigate({
+        pathname: entityTypeListPath(nextType),
+        search: search ? `?${search}` : "",
+      });
+      return;
+    }
+    navigate({
+      pathname: "/entities",
+      search: search ? `?${search}` : "",
+    });
+  }
 
   const query = useEntitiesQuery({
     search: search || undefined,
@@ -78,9 +150,46 @@ export default function EntitiesPage() {
         | "target_id") || undefined,
   });
 
-  const columns: ColumnDef<EntitySnapshot, unknown>[] = useMemo(
-    () => [
+  const headerSearch = useMemo<HeaderSearchContextValue>(
+    () => ({
+      value: search,
+      onValueChange: (nextSearch) => {
+        setSearch(nextSearch);
+        setOffset(0);
+      },
+      onSubmit: () => setOffset(0),
+      placeholder: "Search entities...",
+      ariaLabel: "Search entities",
+      contextLabel: pluralTypeTitle ? `Top ${pluralTypeTitle.toLowerCase()}` : "Top entity matches",
+      suggestions: (query.data?.entities ?? []).slice(0, 4).map((entity) => {
+        const eid = entityRowId(entity);
+        const label = String(
+          entity.canonical_name || entity.snapshot?.name || entity.snapshot?.title || truncateId(eid),
+        );
+
+        return {
+          id: eid,
+          label,
+          to: `/entities/${encodeURIComponent(eid)}`,
+          meta: (
+            <>
+              <TypeBadge type={entity.entity_type} humanize className="max-w-[9rem] truncate" />
+              <span className="truncate font-mono text-[11px] text-muted-foreground">
+                {truncateId(eid, 12)}
+              </span>
+            </>
+          ),
+        };
+      }),
+      isLoading: query.isFetching,
+    }),
+    [entityType, pluralTypeTitle, query.data?.entities, query.isFetching, search],
+  );
+
+  const columns: ColumnDef<EntitySnapshot, unknown>[] = useMemo(() => {
+    const fixed: ColumnDef<EntitySnapshot, unknown>[] = [
       {
+        id: "name",
         header: "Name",
         accessorFn: (row) =>
           row.canonical_name || row.snapshot?.name || row.snapshot?.title || entityRowId(row),
@@ -92,114 +201,102 @@ export default function EntitiesPage() {
                 row.original.canonical_name ||
                   row.original.snapshot?.name ||
                   row.original.snapshot?.title ||
-                  truncateId(eid)
+                  truncateId(eid),
               )}
             </Link>
           );
         },
       },
       {
+        id: "type",
         header: "Type",
         accessorKey: "entity_type",
         cell: ({ getValue }) => <TypeBadge type={getValue() as string} />,
       },
       {
-        header: "Admission",
         id: "admission",
+        header: "Admission",
         cell: ({ row }) => <EntityListAdmissionCell row={row.original} grants={admissionGrants} />,
       },
       {
+        id: "observations",
         header: "Observations",
         accessorKey: "observation_count",
         cell: ({ getValue }) => getValue() ?? "—",
       },
       {
+        id: "last_observation_at",
         header: "Last Observation",
         accessorKey: "last_observation_at",
         cell: ({ getValue }) => formatDate(getValue() as string),
       },
       {
+        id: "entity_id",
         header: "ID",
         accessorFn: (row) => entityRowId(row),
         cell: ({ getValue }) => (
           <span className="font-mono text-xs text-muted-foreground">{truncateId(getValue() as string, 12)}</span>
         ),
       },
-    ],
-    [admissionGrants],
-  );
+    ];
+
+    const schema = entityType ? schemaQ.data : null;
+    const fieldKeys = schemaFieldKeys(schema);
+    const snapshotColumns = fieldKeys.map((fieldKey) =>
+      schemaFieldColumnDef(fieldKey, schema),
+    );
+
+    return [...fixed, ...snapshotColumns];
+  }, [admissionGrants, entityType, schemaQ.data]);
 
   return (
     <PageShell
-      title="Entities"
-      description={query.data ? `${query.data.total.toLocaleString()} total` : undefined}
+      title={pluralTypeTitle ?? "Entities"}
+      meta={query.data ? `${query.data.total.toLocaleString()} total` : undefined}
+      search={headerSearch}
       actions={
-        showBackgroundQueryRefresh(query) || showBackgroundQueryRefresh(grantsQ) ? (
-          <QueryRefreshIndicator />
-        ) : undefined
+        <>
+          {entityType ? (
+            <>
+              <PinPrimitiveButton
+                kind="entity_type"
+                href={entityTypeFilterPinHref(entityType)}
+                label={pluralTypeTitle ?? entityType}
+                entity_type={entityType}
+                size="sm"
+              />
+              <Button variant="outline" size="sm" asChild>
+                <Link to="/entity-types">All types</Link>
+              </Button>
+            </>
+          ) : null}
+          {showBackgroundQueryRefresh(query) || showBackgroundQueryRefresh(grantsQ) ? (
+            <QueryRefreshIndicator />
+          ) : null}
+        </>
       }
     >
       <div className="flex flex-wrap items-end gap-3">
-        <div className="flex-1 min-w-[200px] max-w-sm">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search entities…"
-              value={search}
-              onChange={(e) => { setSearch(e.target.value); setOffset(0); }}
-              className="pl-9"
-            />
-          </div>
-        </div>
-        <Select
-          value={entityType || "__all__"}
-          onValueChange={(v) => {
-            setEntityType(v === "__all__" ? "" : v);
+        <EntityTypeSelect
+          value={entityType}
+          onValueChange={(nextType) => {
+            setEntityType(nextType);
             setOffset(0);
+            navigateForEntityType(nextType);
           }}
-          onOpenChange={(open) => {
-            if (!open) setTypeSelectQuery("");
-          }}
-        >
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="All types" />
-          </SelectTrigger>
-          <SelectContent className="max-h-80 min-w-[var(--radix-select-trigger-width)] sm:min-w-[16rem]">
-            <div
-              className="sticky top-0 z-10 border-b bg-popover p-2"
-              onPointerDown={(e) => e.stopPropagation()}
-              onKeyDown={(e) => e.stopPropagation()}
-            >
-              <Input
-                placeholder="Search types…"
-                value={typeSelectQuery}
-                onChange={(e) => setTypeSelectQuery(e.target.value)}
-                className="h-8"
-                autoComplete="off"
-              />
-            </div>
-            <SelectItem value="__all__">All types</SelectItem>
-            {filteredEntityTypes.map((t) => (
-              <SelectItem key={t} value={t}>
-                {t}
-              </SelectItem>
-            ))}
-            {filteredEntityTypes.length === 0 && typeSelectQuery.trim() !== "" ? (
-              <div className="px-2 py-4 text-center text-sm text-muted-foreground">No matching types</div>
-            ) : null}
-          </SelectContent>
-        </Select>
+        />
         {!search && (
           <>
             <Select value={sortBy} onValueChange={setSortBy}>
               <SelectTrigger className="w-[180px]">
-                <SelectValue />
+                <SelectValue placeholder="Sort by" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="last_observation_at">Last observed</SelectItem>
-                <SelectItem value="canonical_name">Name</SelectItem>
-                <SelectItem value="observation_count">Observation count</SelectItem>
-                <SelectItem value="entity_id">Entity ID</SelectItem>
+                {visibleSortOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <Button variant="outline" size="sm" onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}>
@@ -226,6 +323,12 @@ export default function EntitiesPage() {
             <SelectItem value="target_id">target_id</SelectItem>
           </SelectContent>
         </Select>
+        <EntityTableColumnToggle
+          columnIds={listColumnConfig.columnIds}
+          columnLabels={listColumnConfig.columnLabels}
+          columnVisibility={columnVisibility}
+          onColumnVisibilityChange={setColumnVisibility}
+        />
       </div>
 
       {showInitialQuerySkeleton(query) ? (
@@ -234,7 +337,12 @@ export default function EntitiesPage() {
         <QueryErrorAlert title="Could not load entities">{query.error.message}</QueryErrorAlert>
       ) : (
         <>
-          <DataTable columns={columns} data={query.data?.entities ?? []} />
+          <DataTable
+            columns={columns}
+            data={query.data?.entities ?? []}
+            columnVisibility={columnVisibility}
+            onColumnVisibilityChange={setColumnVisibility}
+          />
           {query.data && query.data.total > PAGE_SIZE && (
             <Pagination offset={offset} limit={PAGE_SIZE} total={query.data.total} onPageChange={setOffset} />
           )}
@@ -242,4 +350,26 @@ export default function EntitiesPage() {
       )}
     </PageShell>
   );
+}
+
+function schemaFieldColumnDef(
+  fieldKey: string,
+  schema: EntitySchema | null | undefined,
+): ColumnDef<EntitySnapshot, unknown> {
+  const typeHint =
+    (schema?.schema_definition?.fields?.[fieldKey] as { type?: string } | undefined)?.type ??
+    (schema?.field_summary?.[fieldKey] as { type?: string } | undefined)?.type;
+
+  return {
+    id: snapshotFieldColumnId(fieldKey),
+    header: humanizeKey(fieldKey),
+    accessorFn: (row) => {
+      const snap =
+        row.snapshot && typeof row.snapshot === "object"
+          ? (row.snapshot as Record<string, unknown>)
+          : null;
+      return snap?.[fieldKey];
+    },
+    cell: ({ getValue }) => <FieldValue value={getValue()} typeHint={typeHint} />,
+  };
 }

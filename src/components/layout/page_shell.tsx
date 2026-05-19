@@ -1,37 +1,40 @@
 import { ReactNode } from "react";
+import {
+  type HeaderSearchContextValue,
+  usePageShellHeaderActions,
+  usePageShellHeaderMeta,
+  usePageShellHeaderSearch,
+  usePageShellTitle,
+} from "./page_title_context";
 
 interface PageShellProps {
-  title: string;
-  /** Optional icon or glyph rendered to the left of the title (e.g. page-specific Lucide icon). */
-  titleIcon?: ReactNode;
+  /** Registered with the header breadcrumb via `page_title_context`; not rendered in-page. */
+  title?: string;
+  /** Short count or status line shown in the top header (right), not in the page body. */
+  meta?: ReactNode;
   description?: ReactNode;
   actions?: ReactNode;
-  children: ReactNode;
+  search?: HeaderSearchContextValue;
+  children?: ReactNode;
 }
 
-export function PageShell({ title, titleIcon, description, actions, children }: PageShellProps) {
+export function PageShell({ title, meta, description, actions, search, children }: PageShellProps) {
+  usePageShellTitle(title);
+  usePageShellHeaderMeta(meta);
+  usePageShellHeaderActions(actions);
+  usePageShellHeaderSearch(search);
+
   return (
-    <div className="min-w-0 flex-1 space-y-6 p-6">
-      <div className="flex items-start justify-between gap-4">
+    <div className="min-w-0 flex-1 space-y-6 p-6 pb-10">
+      {description ? (
         <div className="min-w-0">
-          {titleIcon ? (
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="flex shrink-0 text-muted-foreground [&_svg]:block">{titleIcon}</span>
-              <h1 className="min-w-0 text-2xl font-bold tracking-tight">{title}</h1>
-            </div>
+          {typeof description === "string" ? (
+            <p className="text-muted-foreground">{description}</p>
           ) : (
-            <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
+            <div className="text-muted-foreground mt-1">{description}</div>
           )}
-          {description ? (
-            typeof description === "string" ? (
-              <p className="text-muted-foreground mt-1">{description}</p>
-            ) : (
-              <div className="text-muted-foreground mt-1">{description}</div>
-            )
-          ) : null}
         </div>
-        {actions && <div className="flex items-center gap-2">{actions}</div>}
-      </div>
+      ) : null}
       {children}
     </div>
   );

@@ -4,12 +4,16 @@ import { FieldValue } from "@/components/shared/field_value";
 import { InlineSkeleton } from "@/components/shared/query_status";
 import { JsonViewer } from "@/components/shared/json_viewer";
 import { AgentBadge } from "@/components/shared/agent_badge";
+import { MarkdownBodySheet } from "@/components/shared/markdown_body_sheet";
+import { Button } from "@/components/ui/button";
 import { useFieldProvenance } from "@/hooks/use_entities";
 import { humanizeKey, shortId } from "@/lib/humanize";
+import { isLikelyMarkdownFieldValue } from "@/lib/markdown_body";
 import { orderedSnapshotKeys } from "@/lib/snapshot_ordering";
 import type { EntitySchema, Observation, Source } from "@/types/api";
-import { Info } from "lucide-react";
+import { FileText, PanelRight, TriangleAlert } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { showBackgroundQueryRefresh, showInitialQuerySkeleton } from "@/lib/query_loading";
 
 interface SnapshotFieldListProps {
@@ -18,10 +22,77 @@ interface SnapshotFieldListProps {
   schema?: EntitySchema | null;
   /**
    * When true, show developer details (raw keys, provenance panel by default,
-   * schema/content hashes). In friendly mode a small "Sources" chip reveals
-   * provenance inline.
+   * schema/content hashes). In friendly mode a provenance icon reveals sources inline.
    */
   developerView?: boolean;
+}
+
+interface RawFragmentsFieldListProps {
+  rawFragments: Record<string, unknown>;
+  developerView?: boolean;
+}
+
+const RAW_FRAGMENT_TOOLTIP =
+  "Raw fragment: value stored outside this entity type's declared schema. It is preserved in Neotoma but not shown as a schema field above.";
+
+/** Matches icon button height (h-7) so labels, values, and actions share one row band. */
+const FIELD_ROW_BAND = "min-h-7";
+const FIELD_ROW_VALUE_CLASS = "leading-7";
+
+/** Declared-schema overflow fields; rendered below the snapshot field list. */
+export function RawFragmentsFieldList({
+  rawFragments,
+  developerView,
+}: RawFragmentsFieldListProps) {
+  const keys = Object.keys(rawFragments).sort();
+  if (keys.length === 0) return null;
+
+  const labelClassName = developerView
+    ? "font-mono text-xs text-purple-700"
+    : "text-xs uppercase tracking-wide text-muted-foreground";
+
+  return (
+    <dl className="divide-y border-t">
+      {keys.map((key) => (
+        <div
+          key={key}
+          className="grid gap-1 py-2 sm:grid-cols-[180px_1fr] sm:items-start"
+        >
+          <dt className={cn("min-w-0", FIELD_ROW_BAND, "flex items-center")}>
+            <div className={cn("break-words", FIELD_ROW_VALUE_CLASS, labelClassName)}>
+              {developerView ? key : humanizeKey(key)}
+            </div>
+          </dt>
+          <dd className="min-w-0">
+            <div className={cn("flex items-center justify-between gap-2", FIELD_ROW_BAND)}>
+              <div className="min-w-0 flex-1">
+                <FieldValue
+                  value={rawFragments[key]}
+                  className={FIELD_ROW_VALUE_CLASS}
+                />
+              </div>
+              <div className="flex shrink-0 items-center gap-0.5">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span
+                      className="inline-flex h-7 w-7 shrink-0 cursor-default items-center justify-center text-amber-600 dark:text-amber-500"
+                      aria-label={`Raw field: ${key}`}
+                    >
+                      <TriangleAlert className="h-3.5 w-3.5" aria-hidden />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-xs text-xs">
+                    <p className="font-mono">{key}</p>
+                    <p className="mt-1 text-muted-foreground">{RAW_FRAGMENT_TOOLTIP}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+            </div>
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
 }
 
 export function SnapshotFieldList({
@@ -74,6 +145,7 @@ function FieldRow({
   developerView?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [markdownSheetOpen, setMarkdownSheetOpen] = useState(false);
   const provenance = useFieldProvenance(open ? entityId : undefined, open ? fieldKey : undefined);
 
   const fieldDef = schema?.schema_definition?.fields?.[fieldKey] as
@@ -87,26 +159,86 @@ function FieldRow({
     ? "font-mono text-xs text-purple-700"
     : "text-xs uppercase tracking-wide text-muted-foreground";
 
+  const showMarkdownSidebar = isLikelyMarkdownFieldValue(value);
+  const hasFieldDescription = Boolean(fieldDef?.description && !developerView);
+
   return (
     <div className="grid gap-1 py-2 sm:grid-cols-[180px_1fr] sm:items-start">
-      <dt className="min-w-0">
-        <div className={cn("break-words", labelClassName)}>{label}</div>
-        {fieldDef?.description && !developerView ? (
-          <div className="mt-0.5 text-xs text-muted-foreground">{fieldDef.description}</div>
+      <dt
+        className={cn(
+          "min-w-0",
+          !hasFieldDescription && cn(FIELD_ROW_BAND, "flex items-center"),
+        )}
+      >
+        <div
+          className={cn(
+            "break-words",
+            !hasFieldDescription && FIELD_ROW_VALUE_CLASS,
+            labelClassName,
+          )}
+        >
+          {label}
+        </div>
+        {hasFieldDescription ? (
+          <div className="mt-0.5 text-xs text-muted-foreground">{fieldDef?.description}</div>
         ) : null}
       </dt>
       <dd className="min-w-0 space-y-1">
-        <FieldValue value={value} typeHint={typeHint} />
-        <div className="flex items-center gap-2 pt-0.5">
-          <button
-            type="button"
-            onClick={() => setOpen((v) => !v)}
-            className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
-            title="Show provenance chain for this field"
-          >
-            <Info className="h-3 w-3" />
-            {open ? "Hide sources" : "Sources"}
-          </button>
+        <div className={cn("flex items-center justify-between gap-2", FIELD_ROW_BAND)}>
+          <div className="min-w-0 flex-1">
+            <FieldValue value={value} typeHint={typeHint} className={FIELD_ROW_VALUE_CLASS} />
+          </div>
+          <div className="flex shrink-0 items-center gap-0.5">
+            {showMarkdownSidebar ? (
+              <>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground"
+                      aria-label="Open in sidebar"
+                      onClick={() => {
+                        window.setTimeout(() => setMarkdownSheetOpen(true), 0);
+                      }}
+                    >
+                      <PanelRight className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Open in sidebar</TooltipContent>
+                </Tooltip>
+                <MarkdownBodySheet
+                  open={markdownSheetOpen}
+                  onOpenChange={setMarkdownSheetOpen}
+                  title={label}
+                  description={fieldDef?.description}
+                  content={value as string}
+                />
+              </>
+            ) : null}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className={cn(
+                    "h-7 w-7 shrink-0 text-muted-foreground",
+                    open && "bg-muted text-foreground",
+                  )}
+                  onClick={() => setOpen((v) => !v)}
+                  aria-label={open ? "Hide field sources" : "Show field sources"}
+                  aria-pressed={open}
+                >
+                  <FileText className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {open ? "Hide field sources" : "Show field sources"}
+              </TooltipContent>
+            </Tooltip>
+          </div>
         </div>
         {open ? (
           <div className="rounded border border-dashed bg-muted/30 p-2">

@@ -20,10 +20,13 @@ export function useEntityById(id: string | undefined) {
   });
 }
 
-export function useEntityObservations(id: string | undefined) {
+export function useEntityObservations(
+  id: string | undefined,
+  options?: { limit?: number; offset?: number },
+) {
   return useQuery({
-    queryKey: ["entity-observations", id],
-    queryFn: () => getEntityObservations(id!),
+    queryKey: ["entity-observations", id, options?.limit ?? null, options?.offset ?? null],
+    queryFn: () => getEntityObservations(id!, options),
     enabled: isApiUrlConfigured() && !!id,
   });
 }

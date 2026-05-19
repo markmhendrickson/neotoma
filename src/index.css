@@ -21,12 +21,13 @@
 
 @layer base {
   :root {
-    /* Surfaces — warm cream */
-    --background: 38 22% 98%;             /* Warm off-white / cream */
+    /* Surfaces — warm cream; higher lightness = more elevated (overlay), lower = more inset.
+       Depth ladder: sidebar (darkest) → body → cards / floating UI (lightest). */
+    --background: 38 14% 98%;             /* Main body (header + content canvas) */
     --foreground: 28 22% 18%;             /* Warm dark brown */
-    --card: 35 20% 96%;                   /* Light warm grey */
+    --card: 38 10% 100%;                  /* Elevated body children (panels, dialogs) */
     --card-foreground: 28 22% 18%;
-    --popover: 38 22% 98%;
+    --popover: 38 8% 100%;               /* Floating overlays (menus, tooltips) */
     --popover-foreground: 28 22% 18%;
 
     /* Action — brick / terracotta */
@@ -34,11 +35,13 @@
     --primary-foreground: 0 0% 100%;
 
     /* Secondary / muted / accent — warm tan */
-    --secondary: 35 18% 94%;
+    --secondary: 38 12% 99%;              /* Subtle wells on the body (between body and card) */
     --secondary-foreground: 28 22% 18%;
-    --muted: 35 18% 94%;
+    --muted: 38 12% 99%;                 /* Table stripes, recessed blocks on the body */
     --muted-foreground: 28 14% 44%;
-    --accent: 35 18% 92%;
+    --skeleton: 32 14% 84%;              /* Loading placeholders — darker than muted for contrast */
+    --inset: 32 12% 90%;                 /* Recessed bands (table header, loading wells) */
+    --accent: 35 12% 94%;                 /* Hover / pressed troughs (deepest inset) */
     --accent-foreground: 28 22% 18%;
 
     /* Status */
@@ -46,8 +49,8 @@
     --destructive-foreground: 0 0% 100%;
 
     /* Borders / inputs / focus ring */
-    --border: 32 18% 88%;
-    --input: 32 18% 88%;
+    --border: 32 10% 93%;
+    --input: 32 10% 93%;
     --ring: 12 48% 38%;
 
     --radius: 0.5rem;
@@ -55,20 +58,20 @@
     /* Sidebar — inspector uses `--sidebar` (singular) where the marketing
        site uses `--sidebar-background`. Tailwind config maps both to
        `bg-sidebar`. Values match the canonical sidebar registry. */
-    --sidebar: 35 20% 96%;
-    --sidebar-foreground: 28 22% 18%;
-    --sidebar-accent: 35 18% 92%;
-    --sidebar-accent-foreground: 28 22% 18%;
-    --sidebar-border: 32 18% 88%;
+    --sidebar: 35 12% 95%;               /* Darkest inset — nav rail */
+    --sidebar-foreground: 28 26% 14%;     /* Slightly darker than body text for contrast on the rail */
+    --sidebar-accent: 35 10% 92%;
+    --sidebar-accent-foreground: 28 26% 14%;
+    --sidebar-border: 32 10% 93%;
   }
 
   .dark {
-    /* Surfaces — deep slate */
-    --background: 222 47% 11%;
-    --foreground: 210 40% 95%;
-    --card: 217 33% 18%;
-    --card-foreground: 210 40% 95%;
-    --popover: 222 47% 11%;
+    /* Surfaces — deep slate; sidebar darkest → body → cards / popover lightest */
+    --background: 222 36% 16%;
+    --foreground: 210 36% 97%;
+    --card: 217 24% 22%;
+    --card-foreground: 210 36% 97%;
+    --popover: 217 22% 26%;
     --popover-foreground: 210 40% 95%;
 
     /* Action — brighter blue */
@@ -76,36 +79,65 @@
     --primary-foreground: 0 0% 100%;
 
     /* Secondary / muted / accent */
-    --secondary: 217 33% 25%;
-    --secondary-foreground: 210 40% 95%;
-    --muted: 217 33% 25%;
-    --muted-foreground: 215 20% 65%;
-    --accent: 217 33% 25%;
-    --accent-foreground: 210 40% 95%;
+    --secondary: 217 24% 29%;
+    --secondary-foreground: 210 36% 97%;
+    --muted: 217 24% 29%;
+    --muted-foreground: 215 16% 70%;
+    --skeleton: 217 26% 36%;
+    --inset: 217 24% 24%;
+    --accent: 217 24% 29%;
+    --accent-foreground: 210 36% 97%;
 
     /* Status */
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
 
     /* Borders / inputs / focus ring */
-    --border: 217 33% 25%;
-    --input: 217 33% 25%;
+    --border: 217 22% 30%;
+    --input: 217 22% 30%;
     --ring: 217 91% 60%;
 
     /* Sidebar */
-    --sidebar: 217 33% 18%;
-    --sidebar-foreground: 210 40% 95%;
-    --sidebar-accent: 217 33% 25%;
-    --sidebar-accent-foreground: 210 40% 95%;
-    --sidebar-border: 217 33% 25%;
+    --sidebar: 222 38% 13%;
+    --sidebar-foreground: 210 32% 90%;
+    --sidebar-accent: 217 24% 18%;
+    --sidebar-accent-foreground: 210 32% 90%;
+    --sidebar-border: 217 22% 30%;
   }
 }
 
 @layer base {
+  /*
+   * Compact UI scale — match frontend design system (13px body at 16px root).
+   * Slightly bumped from pure Claude Code density: 0.875rem ≈ 14px body text.
+   * Tailwind `rem` utilities still derive from 16px root.
+   */
+  html {
+    font-size: 16px;
+  }
+
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground;
+    font-family:
+      Inter,
+      system-ui,
+      -apple-system,
+      BlinkMacSystemFont,
+      "Segoe UI",
+      sans-serif;
+    font-size: 0.875rem;
+    line-height: 1.5;
+  }
+
+  code,
+  pre,
+  .font-mono {
+    font-family: "JetBrains Mono", "Fira Code", "Roboto Mono", "Courier New", monospace;
+    font-size: 0.875rem;
+    line-height: 1.5;
   }
 }

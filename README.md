@@ -2,11 +2,19 @@
 
 A React SPA for inspecting and managing all data stored in a Neotoma instance. Provides full-coverage UI for every Neotoma REST API endpoint: browsing entities, observations, sources, relationships, schemas, timeline events, and interpretations, with an interactive graph explorer and top-level dashboard analytics.
 
-## Architecture: Bundled at `/inspector`
+## Architecture: Bundled into the Neotoma server
 
-The Inspector is always bundled into the Neotoma server build and served at `/inspector` on the same origin. There is no separate deployment, no GitHub Pages, no external URL to configure. `npm run dev` in the parent repo and the Inspector is live at `localhost:3080/inspector`.
+The Inspector is always bundled into the Neotoma server build and served at `/`
+on the same origin by default. There is no separate deployment, no GitHub
+Pages, no external URL to configure. `npm run dev` in the parent repo and the
+Inspector is live at `localhost:3080/`.
 
-The build that ships in the npm tarball lives at `<neotoma-package>/dist/inspector` (and `/app/inspector` inside the Docker image). `VITE_PUBLIC_BASE_PATH=/inspector/` is set at build time; `VITE_NEOTOMA_API_URL` is intentionally left unset so the Inspector uses relative same-origin URLs at runtime.
+The build that ships in the npm tarball lives at
+`<neotoma-package>/dist/inspector` (and `/app/inspector` inside the Docker
+image). `VITE_PUBLIC_BASE_PATH=/` is set at build time; `VITE_NEOTOMA_API_URL`
+is intentionally left unset so the Inspector uses relative same-origin URLs at
+runtime. Set `NEOTOMA_INSPECTOR_BASE_PATH=/inspector` only when a deployment
+needs the legacy subpath mount.
 
 ## Quick Start
 
@@ -24,7 +32,12 @@ npm run dev -- --env prod
 npm run build
 ```
 
-Vite defaults to **`base: /inspector/`** when `VITE_PUBLIC_BASE_PATH` is unset, so the dev server is at **`http://localhost:5175/inspector/`** (port **5175** avoids clashing with the repo root marketing Vite dev server, which often runs on **5173**/**5174**). Override the dev port with **`VITE_INSPECTOR_DEV_PORT`** or **`INSPECTOR_DEV_PORT`**. Override `VITE_PUBLIC_BASE_PATH=/` for a root-hosted build.
+Vite defaults to **`base: /`** when `VITE_PUBLIC_BASE_PATH` is unset, so the dev
+server is at **`http://localhost:5175/`** (port **5175** avoids clashing with
+the repo root marketing Vite dev server, which often runs on
+**5173**/**5174**). Override the dev port with **`VITE_INSPECTOR_DEV_PORT`** or
+**`INSPECTOR_DEV_PORT`**. Set `VITE_PUBLIC_BASE_PATH=/inspector/` only when
+testing the legacy subpath mount.
 
 ## Configuration
 
@@ -47,9 +60,14 @@ Saved API URLs and auth tokens are scoped per environment (`dev` / `prod`), so s
 
 ## Sandbox mode & session handoff
 
-On the hosted sandbox (`sandbox.neotoma.io`), the Inspector is served at `/inspector` on the same origin as the API. Ephemeral sessions are created via the landing page pack picker and handed off to the Inspector via a one-time code in the hash fragment:
+On the hosted sandbox (`sandbox.neotoma.io`), the Inspector is served at `/` on
+the same origin as the API. Ephemeral sessions are created via the landing page
+pack picker and handed off to the Inspector via a one-time code in the hash
+fragment:
 
-1. **Sandbox handoff (default for visitors).** Users start at `sandbox.neotoma.io/`, pick a fixture pack (generic, empty, or a use case), and are redirected to `/inspector#session=<one_time_code>`.
+1. **Sandbox handoff (default for visitors).** Users start at
+   `sandbox.neotoma.io/`, pick a fixture pack (generic, empty, or a use case),
+   and stay on `/#session=<one_time_code>`.
 
    `src/lib/sandbox_session.ts` (`consumeSandboxSessionHandoff`) runs on boot, POSTs `/sandbox/session/redeem` (same-origin), stores the returned bearer via `setApiUrl` / `setAuthToken`, scrubs the hash, and reloads. The `SandboxBanner` then shows the active pack id + expiry countdown + Reset / End-session controls.
 

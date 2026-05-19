@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import { Repeat } from "lucide-react";
 import { Link } from "react-router-dom";
 import { PageShell } from "@/components/layout/page_shell";
 import { ListSkeleton, QueryErrorAlert } from "@/components/shared/query_status";
@@ -80,7 +79,6 @@ export default function TurnsPage() {
   return (
     <PageShell
       title="Turns"
-      titleIcon={<Repeat className="h-5 w-5" aria-hidden />}
       description="Per-turn telemetry accreted from Neotoma harness hooks. One row per (session_id, turn_id) — covers conversation_turn plus the legacy turn_compliance / turn_activity aliases."
       actions={showBackgroundQueryRefresh(turns) ? <QueryRefreshIndicator /> : undefined}
     >

@@ -120,7 +120,7 @@ export function absoluteDateTime(ts: string | undefined | null): string {
   try {
     const d = new Date(ts);
     if (isNaN(d.getTime())) return "";
-    return d.toLocaleString();
+    return d.toISOString().slice(0, 10);
   } catch {
     return "";
   }
@@ -273,10 +273,23 @@ export function isLikelyMachineCanonicalName(name: string | null | undefined): b
   return false;
 }
 
+/** Loose key for comparing identity canonical_name to snapshot display titles. */
+function canonicalNameDisplayKey(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function canonicalNameMatchesFriendlyTitle(canonicalName: string, friendly: string): boolean {
+  const a = canonicalNameDisplayKey(canonicalName);
+  const b = canonicalNameDisplayKey(friendly);
+  if (!a || !b) return false;
+  return a === b;
+}
+
 /**
- * Best-effort headline for entity detail pages and lists: prefers a real
- * title from the snapshot when `canonical_name` is missing or machine-like,
- * then falls back to type + short id.
+ * Best-effort headline for entity detail pages and lists: prefers snapshot
+ * `name` / `title` (preserving user casing) when it matches the stored
+ * identity `canonical_name`, uses human canonical_name when it differs,
+ * and falls back when canonical_name is missing or machine-like.
  */
 export function entityDisplayHeadline(input: {
   canonical_name?: string | null;
@@ -293,6 +306,9 @@ export function entityDisplayHeadline(input: {
   const friendly = snapshotFriendlyTitle(snap);
   const cn = typeof input.canonical_name === "string" ? input.canonical_name.trim() : "";
 
+  if (friendly && cn && canonicalNameMatchesFriendlyTitle(cn, friendly)) {
+    return friendly;
+  }
   if (cn && !isLikelyMachineCanonicalName(cn)) return cn;
   if (friendly) return friendly;
   if (cn) return cn;

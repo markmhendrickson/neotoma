@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import { ShieldCheck } from "lucide-react";
 import { PageShell } from "@/components/layout/page_shell";
 import { ListSkeleton, QueryErrorAlert } from "@/components/shared/query_status";
 import { Label } from "@/components/ui/label";
@@ -79,7 +78,6 @@ export default function ComplianceDashboardPage() {
   return (
     <PageShell
       title="Compliance scorecard"
-      titleIcon={<ShieldCheck className="h-5 w-5" aria-hidden />}
       description="Per-(model × harness × profile) backfill rate from turn_compliance observations. Lower is better."
       actions={showBackgroundQueryRefresh(card) ? <QueryRefreshIndicator /> : undefined}
     >

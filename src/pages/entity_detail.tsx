@@ -14,7 +14,6 @@ import {
   useRestoreEntity,
   useMergeEntities,
 } from "@/hooks/use_mutations";
-import { useBatchCorrect, useEntityMarkdown } from "@/hooks/use_entity_markdown";
 import { getSourceById } from "@/api/endpoints/sources";
 import { PageShell } from "@/components/layout/page_shell";
 import {
@@ -22,23 +21,10 @@ import {
   GraphAreaSkeleton,
   ListSkeleton,
   QueryErrorAlert,
-  InlineSkeleton,
 } from "@/components/shared/query_status";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
-  DialogDescription,
-} from "@/components/ui/dialog";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Badge } from "@/components/ui/badge";
 import { EntityLink } from "@/components/shared/entity_link";
 import { JsonViewer } from "@/components/shared/json_viewer";
 import { AttributionCard } from "@/components/shared/attribution_card";
@@ -54,63 +40,32 @@ import {
   SubmissionConfigNervousCard,
   SubscriptionNervousCard,
 } from "@/components/shared/nervous_system_entity_preview";
-import { SnapshotFieldList } from "@/components/shared/snapshot_field_list";
+import {
+  RawFragmentsFieldList,
+  SnapshotFieldList,
+} from "@/components/shared/snapshot_field_list";
 import { ObservationTimeline } from "@/components/shared/observation_timeline";
 import { RelationshipPanel } from "@/components/shared/relationship_panel";
 import { CopyIdButton } from "@/components/shared/copy_id_button";
-import { FieldValue } from "@/components/shared/field_value";
-import { entityDisplayHeadline, humanizeEntityType, humanizeKey, shortId, truncate } from "@/lib/humanize";
+import { entityDisplayHeadline, humanizeEntityType } from "@/lib/humanize";
 import { showBackgroundQueryRefresh, showInitialQuerySkeleton } from "@/lib/query_loading";
-import { QueryRefreshIndicator } from "@/components/shared/query_refresh_indicator";
-import { toast } from "sonner";
-import { Trash2, RotateCcw, GitMerge, FileText } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { EntityDetailActionsMenu } from "@/components/shared/entity_detail_actions_menu";
+import { ChevronDown, FileText } from "lucide-react";
+import { SourceInlinePreview } from "@/components/shared/source_inline_preview";
+import {
+  sourceDisplaySummary,
+  sourceDisplayTitle,
+  sourcePreviewChips,
+} from "@/lib/source_display";
+import { useMemo } from "react";
 import type { Source } from "@/types/api";
-
-type MarkdownPreviewMode = "formatted" | "raw";
-
-function EntityMarkdownPreview({
-  content,
-  viewMode,
-}: {
-  content: string;
-  viewMode: MarkdownPreviewMode;
-}) {
-  if (viewMode === "raw") {
-    return (
-      <pre className="max-h-[480px] overflow-auto rounded bg-muted/50 p-3 font-mono text-xs whitespace-pre-wrap">
-        {content}
-      </pre>
-    );
-  }
-
-  return (
-    <div className="max-h-[480px] overflow-auto rounded bg-muted/30 p-4">
-      <div className="prose prose-sm dark:prose-invert max-w-none prose-pre:bg-muted/40 prose-pre:border prose-pre:border-border prose-a:text-primary prose-code:rounded prose-code:border prose-code:border-border prose-code:bg-muted/50 prose-code:px-1 prose-code:py-0.5 prose-code:text-[0.875em] prose-code:before:content-none prose-code:after:content-none">
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
-          components={{
-            a: ({ href, children, ...props }) => (
-              <a href={href ?? "#"} target="_blank" rel="noopener noreferrer" {...props}>
-                {children}
-              </a>
-            ),
-          }}
-        >
-          {content}
-        </ReactMarkdown>
-      </div>
-    </div>
-  );
-}
-
 export default function EntityDetailPage() {
-  const { id } = useParams<{ id: string }>();
+  const { segment: id } = useParams<{ segment: string }>();
 
   const entity = useEntityById(id);
-  const observations = useEntityObservations(id);
+  const TIMELINE_PREVIEW_LIMIT = 3;
+  const observations = useEntityObservations(id, { limit: TIMELINE_PREVIEW_LIMIT });
+  const observationsForSources = useEntityObservations(id, { limit: 100 });
   const relationships = useEntityRelationships(id, { expand_entities: true });
   const grantsQ = useAgentGrants({ status: "all" });
 
@@ -133,47 +88,21 @@ export default function EntityDetailPage() {
   const restoreMut = useRestoreEntity();
   const mergeMut = useMergeEntities();
 
-  const [mergeTarget, setMergeTarget] = useState("");
-  const [markdownPreviewMode, setMarkdownPreviewMode] =
-    useState<MarkdownPreviewMode>("formatted");
-
-  const entityIdForEdit = e?.entity_id ?? e?.id ?? id ?? "";
-  const markdownQuery = useEntityMarkdown(entityIdForEdit);
-  const batchCorrectMut = useBatchCorrect(entityIdForEdit);
-  const initialSnapshot = useMemo(
-    () =>
-      e?.snapshot && typeof e.snapshot === "object"
-        ? (e.snapshot as Record<string, unknown>)
-        : {},
-    [e?.snapshot],
-  );
-  const [draft, setDraft] = useState<Record<string, string>>({});
-  const [expectedLastObservationAt, setExpectedLastObservationAt] = useState<string | null>(null);
-  useEffect(() => {
-    if (!e) return;
-    const next: Record<string, string> = {};
-    for (const [k, v] of Object.entries(initialSnapshot)) {
-      next[k] = v === null || v === undefined ? "" : typeof v === "string" ? v : JSON.stringify(v);
-    }
-    setDraft(next);
-    setExpectedLastObservationAt(e.last_observation_at ?? null);
-  }, [e, initialSnapshot]);
-
   const relatedSourceIds = useMemo(
     () =>
       Array.from(
         new Set(
-          (observations.data?.observations ?? [])
+          (observationsForSources.data?.observations ?? [])
             .map((observation) => observation.source_id)
             .filter((sourceId): sourceId is string => typeof sourceId === "string" && sourceId.trim().length > 0),
         ),
       ),
-    [observations.data?.observations],
+    [observationsForSources.data?.observations],
   );
 
   const latestObservationProvenance = useMemo<Record<string, unknown> | null>(
     () => {
-      const obs = observations.data?.observations ?? [];
+      const obs = observationsForSources.data?.observations ?? [];
       for (const observation of obs) {
         const prov = observation.provenance;
         if (prov && typeof prov === "object") {
@@ -182,7 +111,7 @@ export default function EntityDetailPage() {
       }
       return null;
     },
-    [observations.data?.observations],
+    [observationsForSources.data?.observations],
   );
   const relatedSourceQueries = useQueries({
     queries: relatedSourceIds.map((sourceId) => ({
@@ -199,67 +128,6 @@ export default function EntityDetailPage() {
     relatedSourceIds.length > 0 &&
     relatedSources.length === 0 &&
     relatedSourceQueries.some((query) => showInitialQuerySkeleton(query));
-
-  function parseDraftValue(raw: string, previous: unknown): unknown {
-    if (typeof previous === "string" || previous === null || previous === undefined) {
-      return raw;
-    }
-    if (typeof previous === "boolean") {
-      if (raw === "true") return true;
-      if (raw === "false") return false;
-      return raw;
-    }
-    try {
-      return JSON.parse(raw);
-    } catch {
-      return raw;
-    }
-  }
-
-  function handleSaveEdit(overwrite = false) {
-    if (!e) return;
-    const changes: Array<{ field: string; value: unknown }> = [];
-    for (const [field, raw] of Object.entries(draft)) {
-      const next = parseDraftValue(raw, initialSnapshot[field]);
-      const prev = initialSnapshot[field];
-      if (JSON.stringify(next) !== JSON.stringify(prev)) {
-        changes.push({ field, value: next });
-      }
-    }
-    if (changes.length === 0) {
-      toast.info("No changes to save");
-      return;
-    }
-    batchCorrectMut.mutate(
-      {
-        changes,
-        expected_last_observation_at: expectedLastObservationAt,
-        overwrite,
-        idempotency_prefix: `edit-${entityIdForEdit}-${Date.now()}`,
-      },
-      {
-        onSuccess: (res) => {
-          if (res.status === "conflict") {
-            toast.warning(
-              `Entity changed while you were editing. Choose Overwrite to apply anyway.`,
-              { duration: 8000 },
-            );
-          } else if (res.status === "validation_error") {
-            const msg = (res.validation_errors ?? [])
-              .map((v) => `${v.field}: ${v.message}`)
-              .join("; ");
-            toast.error(`Validation failed: ${msg}`);
-          } else {
-            toast.success(`Applied ${res.applied.length} correction(s)`);
-            if (res.last_observation_at) {
-              setExpectedLastObservationAt(res.last_observation_at);
-            }
-          }
-        },
-        onError: (err) => toast.error(`Batch correction failed: ${err.message}`),
-      },
-    );
-  }
 
   if (showInitialQuerySkeleton(entity)) {
     return (
@@ -297,6 +165,7 @@ export default function EntityDetailPage() {
     entity_id: entityId,
     id: e.id,
   });
+  const pageHeading = displayName;
   const schemaLabel =
     e.entity_type_label ||
     (schema?.metadata && typeof schema.metadata === "object"
@@ -305,19 +174,32 @@ export default function EntityDetailPage() {
   const humanType = humanizeEntityType(e.entity_type, schemaLabel);
 
   const observationCount =
-    observations.data?.observations?.length ?? e.observation_count ?? 0;
+    observations.data?.total ?? e.observation_count ?? observations.data?.observations?.length ?? 0;
+  const timelinePreview = observations.data?.observations ?? [];
+  const hasMoreTimeline = observationCount > timelinePreview.length;
   const relationshipCount = relationships.data?.relationships?.length ?? 0;
 
   const entityPageRefreshing =
     showBackgroundQueryRefresh(entity) ||
     showBackgroundQueryRefresh(observations) ||
     showBackgroundQueryRefresh(relationships) ||
-    showBackgroundQueryRefresh(markdownQuery) ||
     showBackgroundQueryRefresh(graph) ||
     showBackgroundQueryRefresh(schemaQuery) ||
     showBackgroundQueryRefresh(grantsQ);
 
   const admissionGrants = grantsQ.data?.grants ?? [];
+
+  const pageActions = (
+    <EntityDetailActionsMenu
+      entityId={entityId}
+      entityType={e.entity_type}
+      displayName={displayName}
+      showRefresh={entityPageRefreshing}
+      deleteMut={deleteMut}
+      restoreMut={restoreMut}
+      mergeMut={mergeMut}
+    />
+  );
 
   const createdAt = e.created_at ?? e.computed_at;
   const header = (
@@ -331,6 +213,7 @@ export default function EntityDetailPage() {
       <EntityOverviewStatsRow
         observationCount={observationCount}
         relationshipCount={relationshipCount}
+        sourceCount={relatedSourceIds.length}
         lastUpdated={e.last_observation_at}
         createdAt={createdAt}
       />
@@ -338,87 +221,11 @@ export default function EntityDetailPage() {
   );
 
   return (
-    <PageShell
-      title={displayName}
-      description={header}
-      actions={
-        <div className="flex flex-wrap items-center gap-3">
-          {entityPageRefreshing ? <QueryRefreshIndicator /> : null}
-          <Dialog>
-            <DialogTrigger asChild>
-              <Button variant="outline" size="sm">
-                <GitMerge className="h-3 w-3 mr-1" /> Merge
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Merge Entity</DialogTitle>
-                <DialogDescription>
-                  Merge this entity into another (target).
-                </DialogDescription>
-              </DialogHeader>
-              <div>
-                <Label>Target Entity ID</Label>
-                <Input
-                  value={mergeTarget}
-                  onChange={(ev) => setMergeTarget(ev.target.value)}
-                  placeholder="target entity ID"
-                />
-              </div>
-              <DialogFooter>
-                <Button
-                  onClick={() => {
-                    if (!mergeTarget) return;
-                    mergeMut.mutate(
-                      { from: entityId, to: mergeTarget },
-                      { onSuccess: () => toast.success("Merged successfully") },
-                    );
-                  }}
-                >
-                  Merge
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
-          <ConfirmDialog
-            trigger={
-              <Button variant="outline" size="sm">
-                <Trash2 className="h-3 w-3 mr-1" /> Delete
-              </Button>
-            }
-            title="Delete Entity"
-            description={`Soft-delete "${displayName}"? This is reversible.`}
-            confirmLabel="Delete"
-            variant="destructive"
-            showReason
-            onConfirm={(reason) =>
-              deleteMut.mutate(
-                { id: entityId, type: e.entity_type, reason },
-                { onSuccess: () => toast.success("Entity deleted") },
-              )
-            }
-          />
-          <ConfirmDialog
-            trigger={
-              <Button variant="outline" size="sm">
-                <RotateCcw className="h-3 w-3 mr-1" /> Restore
-              </Button>
-            }
-            title="Restore Entity"
-            description={`Restore "${displayName}"?`}
-            confirmLabel="Restore"
-            showReason
-            onConfirm={(reason) =>
-              restoreMut.mutate(
-                { id: entityId, type: e.entity_type, reason },
-                { onSuccess: () => toast.success("Entity restored") },
-              )
-            }
-          />
-        </div>
-      }
-    >
+    <PageShell title={displayName} actions={pageActions}>
+      <div className="space-y-2">
+        <h1 className="text-2xl font-semibold tracking-tight break-words">{pageHeading}</h1>
+        {header}
+      </div>
       {e.entity_type === "conversation" ? (
         <div className="rounded-lg border bg-muted/40 px-4 py-3 text-sm">
           <Link
@@ -449,27 +256,77 @@ export default function EntityDetailPage() {
         }
       >
         <div className="space-y-4">
-          <h2 className="text-lg font-semibold">All fields</h2>
           <SnapshotFieldList
             entityId={entityId}
             snapshot={snapshot}
             schema={schema}
             developerView={false}
           />
+          {e.raw_fragments && Object.keys(e.raw_fragments).length > 0 ? (
+            <RawFragmentsFieldList rawFragments={e.raw_fragments} />
+          ) : null}
         </div>
       </EntityOverviewCard>
 
-      <EntityAdmissionGrantsSection
-        entityType={e.entity_type}
-        entityId={entityId}
-        grants={admissionGrants}
-        grantsLoading={showInitialQuerySkeleton(grantsQ)}
-        grantsError={grantsQ.error ? (grantsQ.error as Error) : null}
-      />
+      <section className="space-y-4">
+        <h2 className="text-lg font-semibold">Relationships</h2>
+        {showInitialQuerySkeleton(relationships) ? (
+          <ListSkeleton rows={4} />
+        ) : (
+          <Card>
+            <CardContent className="pt-6">
+              <RelationshipPanel
+                entityId={entityId}
+                data={relationships.data}
+                developerView={false}
+              />
+              <div className="mt-4">
+                <Link to={`/graph?node=${encodeURIComponent(entityId)}`}>
+                  <Button variant="outline" size="sm">
+                    Open in graph explorer
+                  </Button>
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </section>
+
+      <section className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-semibold">Timeline</h2>
+          {hasMoreTimeline ? (
+            <Link
+              to={`/entities/${encodeURIComponent(entityId)}/timeline`}
+              className="text-sm font-medium text-primary hover:underline"
+            >
+              View full timeline ({observationCount.toLocaleString()})
+            </Link>
+          ) : null}
+        </div>
+        {showInitialQuerySkeleton(observations) ? (
+          <ListSkeleton rows={3} />
+        ) : (
+          <Card>
+            <CardContent className="pt-6">
+              <ObservationTimeline observations={timelinePreview} developerView={false} />
+              {hasMoreTimeline ? (
+                <div className="mt-4 border-t pt-4">
+                  <Button variant="outline" size="sm" asChild>
+                    <Link to={`/entities/${encodeURIComponent(entityId)}/timeline`}>
+                      Open full timeline
+                    </Link>
+                  </Button>
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
+        )}
+      </section>
 
       <div className="space-y-8">
         <section className="space-y-4">
-          <h2 className="text-lg font-semibold">Sources ({relatedSourceIds.length})</h2>
+          <h2 className="text-lg font-semibold">Sources</h2>
           {relatedSourcesError ? (
             <QueryErrorAlert title="Could not load sources">{relatedSourcesError.message}</QueryErrorAlert>
           ) : relatedSourcesLoading ? (
@@ -489,111 +346,25 @@ export default function EntityDetailPage() {
           )}
         </section>
 
-        <section className="space-y-4">
-          <h2 className="text-lg font-semibold">
-            Timeline ({observations.data?.observations?.length ?? "…"})
-          </h2>
-          {showInitialQuerySkeleton(observations) ? (
-            <ListSkeleton rows={5} />
-          ) : (
+        <details className="group space-y-4">
+          <summary className="flex cursor-pointer list-none items-center gap-2 text-lg font-semibold [&::-webkit-details-marker]:hidden">
+            More
+            <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+          </summary>
+          <div className="grid gap-4 pt-2">
+            <EntityAdmissionGrantsSection
+              entityType={e.entity_type}
+              entityId={entityId}
+              grants={admissionGrants}
+              grantsLoading={showInitialQuerySkeleton(grantsQ)}
+              grantsError={grantsQ.error ? (grantsQ.error as Error) : null}
+            />
             <Card>
-              <CardContent className="pt-6">
-                <ObservationTimeline
-                  observations={observations.data?.observations ?? []}
-                  developerView={false}
-                />
-              </CardContent>
-            </Card>
-          )}
-        </section>
-
-        <section className="space-y-4">
-          <h2 className="text-lg font-semibold">
-            Relationships ({relationships.data?.relationships?.length ?? "…"})
-          </h2>
-          {showInitialQuerySkeleton(relationships) ? (
-            <ListSkeleton rows={4} />
-          ) : (
-            <Card>
-              <CardContent className="pt-6">
-                <RelationshipPanel
-                  entityId={entityId}
-                  data={relationships.data}
-                  developerView={false}
-                />
-                <div className="mt-4">
-                  <Link to={`/graph?node=${encodeURIComponent(entityId)}`}>
-                    <Button variant="outline" size="sm">
-                      Open in graph explorer
-                    </Button>
-                  </Link>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </section>
-
-        <section className="space-y-4">
-          <h2 className="text-lg font-semibold">Advanced</h2>
-          <div className="grid gap-4">
-            <Card>
-              <CardHeader>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="space-y-1">
-                    <CardTitle className="text-base">Markdown preview</CardTitle>
-                    <p className="text-xs text-muted-foreground">
-                      What agents see via MCP <code>retrieve_entity_snapshot</code>
-                      and what lands in the filesystem mirror.
-                    </p>
-                  </div>
-                  <div
-                    className="inline-flex rounded-md border border-border bg-muted/30 p-0.5 text-xs"
-                    role="group"
-                    aria-label="Markdown preview display mode"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setMarkdownPreviewMode("formatted")}
-                      className={`rounded px-2 py-1 font-medium transition-colors ${
-                        markdownPreviewMode === "formatted"
-                          ? "bg-background text-foreground shadow-sm"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      Formatted
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setMarkdownPreviewMode("raw")}
-                      className={`rounded px-2 py-1 font-medium transition-colors ${
-                        markdownPreviewMode === "raw"
-                          ? "bg-background text-foreground shadow-sm"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      Raw
-                    </button>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {showInitialQuerySkeleton(markdownQuery) ? (
-                  <InlineSkeleton className="h-24 w-full max-w-2xl" />
-                ) : markdownQuery.error ? (
-                  <QueryErrorAlert title="Could not load markdown preview">
-                    {markdownQuery.error.message}
-                  </QueryErrorAlert>
-                ) : (
-                  <EntityMarkdownPreview
-                    content={markdownQuery.data ?? ""}
-                    viewMode={markdownPreviewMode}
-                  />
-                )}
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Identity</CardTitle>
+              <CardHeader className="space-y-1">
+                <CardTitle className="text-base">Record metadata</CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  Stable identifiers and reducer timestamps for this row — not business fields from the snapshot.
+                </p>
               </CardHeader>
               <CardContent>
                 <dl className="grid grid-cols-1 gap-y-2 text-sm sm:grid-cols-[200px_1fr]">
@@ -622,16 +393,6 @@ export default function EntityDetailPage() {
                 </dl>
               </CardContent>
             </Card>
-            {e.raw_fragments && Object.keys(e.raw_fragments).length > 0 ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Raw fragments</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <JsonViewer data={e.raw_fragments} />
-                </CardContent>
-              </Card>
-            ) : null}
             <AttributionCard
               provenance={latestObservationProvenance}
               title="Latest write attribution"
@@ -695,64 +456,8 @@ export default function EntityDetailPage() {
                 </div>
               </CardContent>
             </Card>
-
-            <div className="space-y-4 border-t pt-6">
-              <h2 className="text-lg font-semibold">Correct</h2>
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Correct fields</CardTitle>
-                  <p className="text-xs text-muted-foreground">
-                    Each saved change becomes a <code>correct()</code> observation
-                    with the highest priority. Changes are applied atomically and
-                    go through the same validation as the CLI{" "}
-                    <code>neotoma edit</code>.
-                  </p>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {Object.keys(draft).length === 0 ? (
-                      <p className="text-sm text-muted-foreground">
-                        No editable fields yet. Snapshot is empty.
-                      </p>
-                    ) : (
-                      Object.entries(draft).map(([field, value]) => (
-                        <EditField
-                          key={field}
-                          field={field}
-                          value={value}
-                          previous={initialSnapshot[field]}
-                          schema={schema}
-                          onChange={(next) =>
-                            setDraft((prev) => ({ ...prev, [field]: next }))
-                          }
-                        />
-                      ))
-                    )}
-                  </div>
-                  <div className="mt-4 flex items-center gap-2">
-                    <Button
-                      size="sm"
-                      onClick={() => handleSaveEdit(false)}
-                      disabled={batchCorrectMut.isPending}
-                    >
-                      {batchCorrectMut.isPending ? "Saving…" : "Save changes"}
-                    </Button>
-                    {batchCorrectMut.data?.status === "conflict" && (
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => handleSaveEdit(true)}
-                        disabled={batchCorrectMut.isPending}
-                      >
-                        Overwrite
-                      </Button>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
           </div>
-        </section>
+        </details>
       </div>
     </PageShell>
   );
@@ -778,232 +483,34 @@ function SourceCard({ source }: { source: Source }) {
   return (
     <Card>
       <CardContent className="pt-6">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
+        <div className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-3">
+          <div className="col-start-1 row-start-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
               <FileText className="h-4 w-4 text-muted-foreground" />
               <Link
                 to={`/sources/${encodeURIComponent(source.id)}`}
                 className="min-w-0 truncate text-sm font-medium text-primary hover:underline"
                 title={source.id}
               >
-                {sourceTitle(source)}
+                {sourceDisplayTitle(source)}
               </Link>
             </div>
-            <p className="mt-1 text-sm text-muted-foreground">{sourceDetail(source)}</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {sourcePreviewChips(source).map((chip) => (
-                <span
-                  key={`${source.id}-${chip}`}
-                  className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
-                >
-                  {chip}
-                </span>
-              ))}
-            </div>
+            <p className="mt-1 text-sm text-muted-foreground">{sourceDisplaySummary(source)}</p>
           </div>
-          <span className="font-mono text-xs text-muted-foreground">{shortId(source.id, 10)}</span>
+          <SourceInlinePreview source={source} />
+          <div className="col-span-2 flex flex-wrap gap-2">
+            {sourcePreviewChips(source).slice(0, 5).map((chip) => (
+              <Badge
+                key={`${source.id}-${chip}`}
+                variant="secondary"
+                className="font-normal text-muted-foreground"
+              >
+                {chip}
+              </Badge>
+            ))}
+          </div>
         </div>
       </CardContent>
     </Card>
   );
-}
-
-function EditField({
-  field,
-  value,
-  previous,
-  schema,
-  onChange,
-}: {
-  field: string;
-  value: string;
-  previous: unknown;
-  schema: ReturnType<typeof useSchemaByType>["data"] | null;
-  onChange: (next: string) => void;
-}) {
-  const fieldDef = schema?.schema_definition?.fields?.[field] as
-    | { type?: string; description?: string }
-    | undefined;
-  const summary = schema?.field_summary?.[field] as { type?: string } | undefined;
-  const type = fieldDef?.type ?? summary?.type ?? inferTypeFromValue(previous);
-  const label = humanizeKey(field);
-  const helper = fieldDef?.description;
-
-  if (type === "boolean") {
-    const parsed =
-      value === "true" ? true : value === "false" ? false : Boolean(previous);
-    return (
-      <div className="grid gap-1">
-        <Label htmlFor={`edit-${field}`}>{label}</Label>
-        <div className="flex items-center gap-2">
-          <Switch
-            id={`edit-${field}`}
-            checked={parsed}
-            onCheckedChange={(v) => onChange(v ? "true" : "false")}
-          />
-          <span className="text-xs text-muted-foreground">
-            Current: <FieldValue value={previous} />
-          </span>
-        </div>
-        {helper ? (
-          <p className="text-xs text-muted-foreground">{helper}</p>
-        ) : null}
-      </div>
-    );
-  }
-
-  if (type === "date") {
-    const asDate = toDateInputValue(value);
-    return (
-      <div className="grid gap-1">
-        <Label htmlFor={`edit-${field}`}>{label}</Label>
-        <Input
-          id={`edit-${field}`}
-          type="date"
-          value={asDate}
-          onChange={(ev) => onChange(ev.target.value)}
-        />
-        {helper ? (
-          <p className="text-xs text-muted-foreground">{helper}</p>
-        ) : null}
-      </div>
-    );
-  }
-
-  if (type === "number") {
-    return (
-      <div className="grid gap-1">
-        <Label htmlFor={`edit-${field}`}>{label}</Label>
-        <Input
-          id={`edit-${field}`}
-          type="number"
-          value={value}
-          onChange={(ev) => onChange(ev.target.value)}
-        />
-        {helper ? (
-          <p className="text-xs text-muted-foreground">{helper}</p>
-        ) : null}
-      </div>
-    );
-  }
-
-  if (type === "array" || type === "object") {
-    return (
-      <div className="grid gap-1">
-        <Label htmlFor={`edit-${field}`} className="flex items-center gap-2">
-          {label}
-          <span className="text-[11px] font-normal uppercase tracking-wide text-muted-foreground">
-            (advanced)
-          </span>
-        </Label>
-        <textarea
-          id={`edit-${field}`}
-          value={value}
-          onChange={(ev) => onChange(ev.target.value)}
-          rows={4}
-          className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs shadow-sm"
-          placeholder={type === "array" ? "[…]" : "{…}"}
-        />
-        {helper ? (
-          <p className="text-xs text-muted-foreground">{helper}</p>
-        ) : (
-          <p className="text-xs text-muted-foreground">
-            JSON {type}. Invalid JSON is stored as the raw string.
-          </p>
-        )}
-      </div>
-    );
-  }
-
-  const isLong = value.length > 80 || value.includes("\n");
-  return (
-    <div className="grid gap-1">
-      <Label htmlFor={`edit-${field}`}>{label}</Label>
-      {isLong ? (
-        <textarea
-          id={`edit-${field}`}
-          value={value}
-          onChange={(ev) => onChange(ev.target.value)}
-          rows={3}
-          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm"
-          placeholder={helper}
-        />
-      ) : (
-        <Input
-          id={`edit-${field}`}
-          value={value}
-          onChange={(ev) => onChange(ev.target.value)}
-          placeholder={helper}
-        />
-      )}
-      {helper ? (
-        <p className="text-xs text-muted-foreground">{helper}</p>
-      ) : null}
-    </div>
-  );
-}
-
-function inferTypeFromValue(v: unknown): string {
-  if (typeof v === "boolean") return "boolean";
-  if (typeof v === "number") return "number";
-  if (Array.isArray(v)) return "array";
-  if (v !== null && typeof v === "object") return "object";
-  return "string";
-}
-
-function toDateInputValue(raw: string): string {
-  if (!raw) return "";
-  const d = new Date(raw);
-  if (isNaN(d.getTime())) return "";
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-function sourceTitle(source: Source): string {
-  if (source.original_filename?.trim()) return source.original_filename.trim();
-  const inferred = firstStringValue(source.provenance, ["title", "name", "file_name", "filename"]);
-  if (inferred) return inferred;
-  return `Source ${shortId(source.id, 10)}`;
-}
-
-function sourceDetail(source: Source): string {
-  const summary = firstStringValue(source.provenance, [
-    "summary",
-    "description",
-    "content",
-    "conversation_title",
-    "prompt",
-  ]);
-  if (summary) return truncate(summary, 140);
-
-  const type = source.source_type || "source";
-  const mime = source.mime_type || "unknown format";
-  return `${humanizeKey(type)} · ${mime}`;
-}
-
-function sourcePreviewChips(source: Source): string[] {
-  const chips: string[] = [];
-  if (source.source_type) chips.push(`Type: ${humanizeKey(source.source_type)}`);
-  if (source.mime_type) chips.push(`MIME: ${source.mime_type}`);
-  if (source.file_size) chips.push(`Size: ${(source.file_size / 1024).toFixed(1)} KB`);
-  if (source.created_at) chips.push(`Created: ${source.created_at.slice(0, 10)}`);
-  return chips.slice(0, 4);
-}
-
-function firstStringValue(
-  record: Record<string, unknown> | undefined,
-  keys: string[],
-): string | undefined {
-  if (!record) return undefined;
-  for (const key of keys) {
-    const value = record[key];
-    if (typeof value === "string") {
-      const compact = value.replace(/\s+/g, " ").trim();
-      if (compact) return compact;
-    }
-  }
-  return undefined;
 }

@@ -12,8 +12,9 @@
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import type { ColumnDef } from "@tanstack/react-table";
-import { ArrowLeft, KeyRound, Plus } from "lucide-react";
+import { ArrowLeft, Plus } from "lucide-react";
 import { PageShell } from "@/components/layout/page_shell";
+import type { HeaderSearchContextValue } from "@/components/layout/page_title_context";
 import {
   DataTableSkeleton,
   QueryErrorAlert,
@@ -21,7 +22,6 @@ import {
 import { DataTable } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -127,6 +127,18 @@ export default function AgentGrantsPage() {
 
   const grants = grantsQ.data?.grants ?? [];
 
+  const headerSearch = useMemo<HeaderSearchContextValue>(
+    () => ({
+      value: query,
+      onValueChange: (nextSearch) => {
+        setQuery(nextSearch);
+      },
+      placeholder: "Search by label, subject, thumbprint…",
+      ariaLabel: "Search agent grants",
+    }),
+    [query],
+  );
+
   const columns: ColumnDef<AgentGrant, unknown>[] = [
     {
       header: "Label",
@@ -198,7 +210,6 @@ export default function AgentGrantsPage() {
   return (
     <PageShell
       title="Agent grants"
-      titleIcon={<KeyRound className="h-5 w-5" />}
       description={
         <span>
           First-class records that admit a verified AAuth identity as the
@@ -207,6 +218,7 @@ export default function AgentGrantsPage() {
           history doubles as the audit log.
         </span>
       }
+      search={headerSearch}
       actions={
         <div className="flex flex-wrap items-center gap-2">
           {showBackgroundQueryRefresh(grantsQ) ? <QueryRefreshIndicator /> : null}
@@ -248,12 +260,6 @@ export default function AgentGrantsPage() {
       }
     >
       <div className="flex flex-wrap items-end gap-3">
-        <Input
-          placeholder="Search by label, subject, thumbprint…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className="w-[320px]"
-        />
         <div className="grid gap-1.5">
           <span className="text-xs text-muted-foreground">Status</span>
           <Select

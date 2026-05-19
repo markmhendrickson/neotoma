@@ -1,12 +1,21 @@
-import { lazy, Suspense } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { lazy } from "react";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AppLayout } from "@/components/layout/app_layout";
-import { Skeleton } from "@/components/ui/skeleton";
 
+const HomePage = lazy(() => import("@/pages/home"));
+const FaqPage = lazy(() => import("@/pages/faq"));
 const DashboardPage = lazy(() => import("@/pages/dashboard"));
+const DocsPage = lazy(() => import("@/pages/docs"));
 const SearchPage = lazy(() => import("@/pages/search"));
+const EntityTypesPage = lazy(() => import("@/pages/entity_types"));
 const EntitiesPage = lazy(() => import("@/pages/entities"));
 const EntityDetailPage = lazy(() => import("@/pages/entity_detail"));
+const EntitySegmentPage = lazy(() => import("@/pages/entity_segment_page"));
+const EntityCorrectPage = lazy(() => import("@/pages/entity_correct"));
+const EntityTimelinePage = lazy(() => import("@/pages/entity_timeline"));
+const EntityRelationshipsByTypePage = lazy(
+  () => import("@/pages/entity_relationships_by_type"),
+);
 const ObservationsPage = lazy(() => import("@/pages/observations"));
 const SourcesPage = lazy(() => import("@/pages/sources"));
 const SourceDetailPage = lazy(() => import("@/pages/source_detail"));
@@ -37,58 +46,68 @@ const SubscriptionsPage = lazy(() => import("@/pages/subscriptions"));
 const PeersPage = lazy(() => import("@/pages/peers"));
 const PeerDetailPage = lazy(() => import("@/pages/peer_detail"));
 
-function PageLoader() {
-  return (
-    <div className="flex flex-col items-center justify-center gap-4 p-12" aria-busy aria-label="Loading page">
-      <Skeleton className="h-9 w-56" />
-      <Skeleton className="h-4 w-72 max-w-[90vw]" />
-      <Skeleton className="h-4 w-48 max-w-[70vw]" />
-    </div>
-  );
+function InspectorRedirect() {
+  const location = useLocation();
+  const subPath = location.pathname.replace(/^\/inspector\/?/, "/");
+  const target = subPath === "/" ? "/analytics" : subPath;
+  return <Navigate to={target + location.search + location.hash} replace />;
 }
 
 export default function App() {
   return (
-    <Suspense fallback={<PageLoader />}>
-      <Routes>
-        <Route element={<AppLayout />}>
-          <Route path="/" element={<DashboardPage />} />
-          <Route path="/search" element={<SearchPage />} />
-          <Route path="/entities" element={<EntitiesPage />} />
-          <Route path="/entities/:id" element={<EntityDetailPage />} />
-          <Route path="/observations" element={<ObservationsPage />} />
-          <Route path="/sources" element={<SourcesPage />} />
-          <Route path="/sources/:id" element={<SourceDetailPage />} />
-          <Route path="/relationships" element={<RelationshipsPage />} />
-          <Route path="/relationships/:key" element={<RelationshipDetailPage />} />
-          <Route path="/graph" element={<GraphExplorerPage />} />
-          <Route path="/schemas" element={<SchemasPage />} />
-          <Route path="/schemas/:entityType" element={<SchemaDetailPage />} />
-          <Route path="/activity" element={<RecentActivityPage />} />
-          <Route path="/feedback" element={<Navigate to="/issues" replace />} />
-          <Route path="/feedback/admin-unlock" element={<Navigate to="/issues" replace />} />
-          <Route path="/issues" element={<IssuesPage />} />
-          <Route path="/issues/:number" element={<IssueDetailPage />} />
-          <Route path="/conversations/:conversationId" element={<ConversationDetailPage />} />
-          <Route path="/conversations" element={<RecentConversationsPage />} />
-          <Route path="/turns" element={<TurnsPage />} />
-          <Route path="/turns/:turnKey" element={<TurnDetailPage />} />
-          <Route path="/timeline" element={<TimelinePage />} />
-          <Route path="/timeline/:id" element={<TimelineEventDetailPage />} />
-          <Route path="/interpretations" element={<InterpretationsPage />} />
-          <Route path="/agents" element={<AgentsPage />} />
-          <Route path="/agents/grants" element={<AgentGrantsPage />} />
-          <Route path="/agents/grants/:id" element={<AgentGrantDetailPage />} />
-          <Route path="/agents/:key" element={<AgentDetailPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/sandbox" element={<SandboxPage />} />
-          <Route path="/access-policies" element={<AccessPoliciesPage />} />
-          <Route path="/subscriptions" element={<SubscriptionsPage />} />
-          <Route path="/peers" element={<PeersPage />} />
-          <Route path="/peers/:peerId" element={<PeerDetailPage />} />
-          <Route path="/compliance" element={<ComplianceDashboardPage />} />
-        </Route>
-      </Routes>
-    </Suspense>
+    <Routes>
+      <Route element={<AppLayout />}>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/faq" element={<FaqPage />} />
+        <Route path="/analytics" element={<DashboardPage />} />
+        <Route path="/dashboard" element={<Navigate to="/analytics" replace />} />
+        <Route path="/docs" element={<DocsPage />} />
+        <Route path="/docs/*" element={<DocsPage />} />
+        <Route path="/search/:query" element={<SearchPage />} />
+        <Route path="/search" element={<SearchPage />} />
+        <Route path="/entity-types" element={<EntityTypesPage />} />
+        <Route path="/entities" element={<EntitiesPage />} />
+        <Route path="/entities/:segment/correct" element={<EntityCorrectPage />} />
+        <Route path="/entities/:segment/timeline" element={<EntityTimelinePage />} />
+        <Route
+          path="/entities/:segment/relationships/:relationshipType/:relatedEntityType"
+          element={<EntityRelationshipsByTypePage />}
+        />
+        <Route path="/entities/:segment" element={<EntitySegmentPage />} />
+        <Route path="/observations" element={<ObservationsPage />} />
+        <Route path="/sources" element={<SourcesPage />} />
+        <Route path="/sources/:id" element={<SourceDetailPage />} />
+        <Route path="/relationships" element={<RelationshipsPage />} />
+        <Route path="/relationships/:key" element={<RelationshipDetailPage />} />
+        <Route path="/graph" element={<GraphExplorerPage />} />
+        <Route path="/schemas" element={<SchemasPage />} />
+        <Route path="/schemas/:entityType" element={<SchemaDetailPage />} />
+        <Route path="/activity" element={<RecentActivityPage />} />
+        <Route path="/feedback" element={<Navigate to="/issues" replace />} />
+        <Route path="/feedback/admin-unlock" element={<Navigate to="/issues" replace />} />
+        <Route path="/issues" element={<IssuesPage />} />
+        <Route path="/issues/:number" element={<IssueDetailPage />} />
+        <Route path="/conversations/:conversationId" element={<ConversationDetailPage />} />
+        <Route path="/conversations" element={<RecentConversationsPage />} />
+        <Route path="/turns" element={<TurnsPage />} />
+        <Route path="/turns/:turnKey" element={<TurnDetailPage />} />
+        <Route path="/timeline" element={<TimelinePage />} />
+        <Route path="/timeline/:id" element={<TimelineEventDetailPage />} />
+        <Route path="/interpretations" element={<InterpretationsPage />} />
+        <Route path="/agents" element={<AgentsPage />} />
+        <Route path="/agents/grants" element={<AgentGrantsPage />} />
+        <Route path="/agents/grants/:id" element={<AgentGrantDetailPage />} />
+        <Route path="/agents/:key" element={<AgentDetailPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/sandbox" element={<SandboxPage />} />
+        <Route path="/access-policies" element={<AccessPoliciesPage />} />
+        <Route path="/subscriptions" element={<SubscriptionsPage />} />
+        <Route path="/peers" element={<PeersPage />} />
+        <Route path="/peers/:peerId" element={<PeerDetailPage />} />
+        <Route path="/compliance" element={<ComplianceDashboardPage />} />
+        <Route path="/inspector" element={<InspectorRedirect />} />
+        <Route path="/inspector/*" element={<InspectorRedirect />} />
+      </Route>
+    </Routes>
   );
 }

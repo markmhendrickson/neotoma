@@ -10,6 +10,7 @@ import { issueEntityMatchesSegment } from "@/utils/issue_navigation";
 import type { EntitySnapshot, RelatedEntityExpansion } from "@/types/api";
 import { bulkCloseIssues, bulkRemoveIssues, issuesAddMessage } from "@/api/endpoints/issues";
 import { IssueAuthorLine } from "@/components/shared/issue_author_attribution";
+import { formatDate } from "@/lib/utils";
 
 type RelRow = {
   relationship_type: string;
@@ -511,7 +512,7 @@ export default function IssueDetailPage() {
             }
           />
           {typeof issueCreatedAt === "string" && issueCreatedAt ? (
-            <span>Submitted {new Date(issueCreatedAt).toLocaleString()}</span>
+            <span>Submitted {formatDate(issueCreatedAt)}</span>
           ) : null}
         </div>
       </div>
@@ -626,7 +627,7 @@ export default function IssueDetailPage() {
                 onClick={() => setConversationBodyView("formatted")}
                 className={`rounded px-2 py-1 font-medium transition-colors ${
                   conversationBodyView === "formatted"
-                    ? "bg-background text-foreground shadow-sm"
+                    ? "bg-card text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
@@ -637,7 +638,7 @@ export default function IssueDetailPage() {
                 onClick={() => setConversationBodyView("raw")}
                 className={`rounded px-2 py-1 font-medium transition-colors ${
                   conversationBodyView === "raw"
-                    ? "bg-background text-foreground shadow-sm"
+                    ? "bg-card text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
@@ -677,7 +678,7 @@ export default function IssueDetailPage() {
                     triggerClassName="font-medium text-foreground cursor-help border-b border-dotted border-muted-foreground/40 hover:border-muted-foreground/70"
                   />
                   {msg.created_at && Number.isFinite(Date.parse(msg.created_at)) ? (
-                    <span>{new Date(msg.created_at).toLocaleString()}</span>
+                    <span>{formatDate(msg.created_at)}</span>
                   ) : null}
                 </div>
                 <ConversationMessageBody content={msg.content} viewMode={conversationBodyView} />

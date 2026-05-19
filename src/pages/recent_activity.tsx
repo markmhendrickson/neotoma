@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Activity, Filter, ListFilter, MoreHorizontal } from "lucide-react";
+import { Filter, ListFilter, MoreHorizontal } from "lucide-react";
 import { PageShell } from "@/components/layout/page_shell";
 import { ListSkeleton, QueryErrorAlert } from "@/components/shared/query_status";
 import { RecentRecordsFeed } from "@/components/shared/recent_records_feed";
@@ -129,7 +129,6 @@ export default function RecentActivityPage() {
   return (
     <PageShell
       title="Activity"
-      titleIcon={<Activity className="h-5 w-5" strokeWidth={1.75} aria-hidden />}
     >
       <div className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">

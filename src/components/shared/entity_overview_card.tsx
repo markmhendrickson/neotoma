@@ -1,10 +1,12 @@
+import type { LucideIcon } from "lucide-react";
+import { Calendar, Clock, FileStack, GitBranch, Layers } from "lucide-react";
 import type { ReactNode } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn, formatDateYmd } from "@/lib/utils";
 import { TypeBadge } from "@/components/shared/type_badge";
 import { EntityLink } from "@/components/shared/entity_link";
 import { FieldValue } from "@/components/shared/field_value";
-import { LiveRelativeTime } from "@/components/shared/live_relative_time";
 import { humanizeKey, absoluteDateTime, entityDisplayHeadline } from "@/lib/humanize";
 import { pickPrimaryFields } from "@/lib/snapshot_ordering";
 import type { EntitySnapshot, EntitySchema } from "@/types/api";
@@ -101,6 +103,8 @@ export function EntityOverviewCard({
   const fieldLabel = (k: string): string => humanizeKey(k);
 
   const hasHeaderContent = showHeroTitle || showTypeBadge || mergedInto != null;
+  /** Snapshot-only body: row `py-2` (8px) + `pt-4`/`pb-4` (16px) = 24px, matching `px-6`. */
+  const snapshotOnlyBody = omitPrimaryFields && children != null && !hasHeaderContent;
 
   return (
     <Card>
@@ -135,8 +139,11 @@ export function EntityOverviewCard({
       <CardContent
         className={cn(
           "space-y-4",
-          !hasHeaderContent ? "pt-6" : undefined,
-          omitPrimaryFields && children ? "pt-6" : undefined,
+          snapshotOnlyBody
+            ? "px-6 pb-4 pt-4"
+            : !hasHeaderContent || (omitPrimaryFields && children)
+              ? "pt-6"
+              : undefined,
         )}
       >
         {!omitPrimaryFields ? (
@@ -155,7 +162,7 @@ export function EntityOverviewCard({
             </dl>
           ) : (
             <p className="text-sm text-muted-foreground">
-              No primary fields yet. Head to All fields for the full snapshot.
+              No primary fields yet. See the field list below for the full snapshot.
             </p>
           )
         ) : null}
@@ -173,58 +180,94 @@ export function EntityOverviewCard({
   );
 }
 
-/** Inline stats for entity headers (observations, relationships, timestamps). */
+/** Inline stats for entity headers (graph primitives + timestamps). */
 export function EntityOverviewStatsRow({
   observationCount,
   relationshipCount,
+  sourceCount,
   lastUpdated,
   createdAt,
 }: {
   observationCount?: number;
   relationshipCount?: number;
+  sourceCount?: number;
   lastUpdated?: string | null;
   createdAt?: string | null;
 }) {
   return (
     <>
-      <Stat label="Observations" value={numberLabel(observationCount)} />
-      <Stat label="Relationships" value={numberLabel(relationshipCount)} />
-      <Stat
-        label="Last updated"
-        value={
-          lastUpdated ? (
-            <LiveRelativeTime iso={lastUpdated} title={false} className="font-medium" />
-          ) : (
-            "—"
-          )
-        }
-        title={lastUpdated ? absoluteDateTime(lastUpdated) : undefined}
+      <IconCountStat
+        icon={Layers}
+        count={observationCount}
+        tooltip="Observations linked to this entity"
+      />
+      <IconCountStat
+        icon={GitBranch}
+        count={relationshipCount}
+        tooltip="Relationships in the graph neighborhood"
+      />
+      <IconCountStat
+        icon={FileStack}
+        count={sourceCount}
+        tooltip="Distinct sources referenced by observations"
+      />
+      <IconValueStat
+        icon={Clock}
+        value={lastUpdated ? formatDateYmd(lastUpdated) : "—"}
+        tooltip={lastUpdated ? absoluteDateTime(lastUpdated) : "Last updated"}
       />
       {createdAt ? (
-        <Stat
-          label="Created"
-          value={<LiveRelativeTime iso={createdAt} title={false} className="font-medium" />}
-          title={absoluteDateTime(createdAt)}
+        <IconValueStat
+          icon={Calendar}
+          value={formatDateYmd(createdAt)}
+          tooltip={absoluteDateTime(createdAt)}
         />
       ) : null}
     </>
   );
 }
 
-function Stat({
-  label,
-  value,
-  title,
+function IconCountStat({
+  icon: Icon,
+  count,
+  tooltip,
 }: {
-  label: string;
-  value: ReactNode;
-  title?: string;
+  icon: LucideIcon;
+  count?: number;
+  tooltip: string;
 }) {
   return (
-    <div className="flex items-baseline gap-2" title={title}>
-      <span className="text-xs uppercase tracking-wide text-muted-foreground">{label}</span>
-      <span className={typeof value === "string" ? "font-medium" : undefined}>{value}</span>
-    </div>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className="flex items-center gap-1.5 text-sm">
+          <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+          <span className="font-medium tabular-nums">{numberLabel(count)}</span>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent>{tooltip}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+function IconValueStat({
+  icon: Icon,
+  value,
+  tooltip,
+}: {
+  icon: LucideIcon;
+  value: ReactNode;
+  tooltip: string;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className="flex items-center gap-1.5 text-sm">
+          <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+          <span className={typeof value === "string" ? "font-medium" : undefined}>{value}</span>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent>{tooltip}</TooltipContent>
+    </Tooltip>
   );
 }
 

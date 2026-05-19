@@ -16,9 +16,16 @@ function sameOriginAsWindow(url: string): boolean {
   }
 }
 
+type PdfDocumentInput = Blob | ArrayBuffer | Uint8Array;
+
 interface PdfJsInlinePreviewProps {
-  /** Blob object URL or absolute HTTP(S) URL the worker can fetch. */
-  documentUrl: string;
+  /** Absolute HTTP(S) URL the worker can fetch (same-origin or CORS-enabled). */
+  documentUrl?: string;
+  /**
+   * In-memory PDF bytes. Prefer this over `documentUrl` when the file was
+   * fetched via authenticated API — avoids CSP `connect-src` blocking `blob:` fetches.
+   */
+  documentData?: PdfDocumentInput;
 }
 
 /**
@@ -26,25 +33,73 @@ interface PdfJsInlinePreviewProps {
  * Chrome’s built-in PDF viewer inside an iframe consumes the browser Back stack;
  * canvas rendering avoids that while still offering a full-document escape hatch.
  */
-export function PdfJsInlinePreview({ documentUrl }: PdfJsInlinePreviewProps) {
+async function toUint8Array(data: PdfDocumentInput): Promise<Uint8Array> {
+  if (data instanceof Uint8Array) return data;
+  if (data instanceof ArrayBuffer) return new Uint8Array(data);
+  const buffer = await data.arrayBuffer();
+  return new Uint8Array(buffer);
+}
+
+export function PdfJsInlinePreview({ documentUrl, documentData }: PdfJsInlinePreviewProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [numPages, setNumPages] = useState(0);
 
+  async function openFullPdf() {
+    if (documentUrl) {
+      window.open(documentUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+    if (!documentData) return;
+    const bytes = await toUint8Array(documentData);
+    const blob = new Blob([bytes], { type: "application/pdf" });
+    const url = URL.createObjectURL(blob);
+    const opened = window.open(url, "_blank", "noopener,noreferrer");
+    if (!opened) {
+      setErrorMessage("Pop-up blocked. Allow pop-ups to open the full PDF.");
+      setStatus("error");
+    }
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  }
+
   useEffect(() => {
+    if (!documentUrl && !documentData) {
+      setStatus("error");
+      setErrorMessage("No PDF source provided.");
+      return;
+    }
+
     let cancelled = false;
     let pdfDoc: PDFDocumentProxy | null = null;
-    const loadingTask = getDocument({
-      url: documentUrl,
-      withCredentials: sameOriginAsWindow(documentUrl),
-    });
+    let loadingTask: ReturnType<typeof getDocument> | null = null;
+
+    async function startLoadingTask() {
+      if (documentData) {
+        const bytes = await toUint8Array(documentData);
+        if (cancelled) return null;
+        return getDocument({ data: bytes });
+      }
+      if (documentUrl) {
+        return getDocument({
+          url: documentUrl,
+          withCredentials: sameOriginAsWindow(documentUrl),
+        });
+      }
+      return null;
+    }
 
     async function run() {
       setStatus("loading");
       setErrorMessage(null);
       setNumPages(0);
+
+      loadingTask = await startLoadingTask();
+      if (!loadingTask || cancelled) {
+        loadingTask?.destroy();
+        return;
+      }
 
       const canvas = canvasRef.current;
       if (canvas) {
@@ -101,9 +156,9 @@ export function PdfJsInlinePreview({ documentUrl }: PdfJsInlinePreviewProps) {
     return () => {
       cancelled = true;
       void pdfDoc?.destroy().catch(() => {});
-      loadingTask.destroy();
+      loadingTask?.destroy();
     };
-  }, [documentUrl]);
+  }, [documentUrl, documentData]);
 
   return (
     <div className="space-y-3">
@@ -111,11 +166,9 @@ export function PdfJsInlinePreview({ documentUrl }: PdfJsInlinePreviewProps) {
         <p className="max-w-xl text-xs text-muted-foreground">
           Page 1 is drawn with PDF.js (no PDF iframe), so the browser Back button returns to the prior app route.
         </p>
-        <Button variant="outline" size="sm" asChild>
-          <a href={documentUrl} target="_blank" rel="noopener noreferrer">
-            <ExternalLink className="mr-1 inline h-3 w-3 align-middle" />
-            Open full PDF
-          </a>
+        <Button variant="outline" size="sm" type="button" onClick={() => void openFullPdf()}>
+          <ExternalLink className="mr-1 inline h-3 w-3 align-middle" />
+          Open full PDF
         </Button>
       </div>
 

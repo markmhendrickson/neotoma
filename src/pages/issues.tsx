@@ -12,6 +12,7 @@ import {
 } from "@/utils/issue_navigation";
 import { bulkCloseIssues, bulkRemoveIssues } from "@/api/endpoints/issues";
 import { IssueAuthorLine } from "@/components/shared/issue_author_attribution";
+import { formatDate } from "@/lib/utils";
 import type { EntitySnapshot } from "@/types/api";
 
 function rowEntityId(issue: EntitySnapshot): string {
@@ -37,8 +38,8 @@ function submittedAtMs(issue: EntitySnapshot): number {
 function formatSubmitted(issue: EntitySnapshot): string | null {
   const raw = submittedAtRaw(issue);
   if (!raw) return null;
-  const d = new Date(raw);
-  return Number.isFinite(d.getTime()) ? d.toLocaleString() : null;
+  const formatted = formatDate(raw);
+  return formatted === "—" ? null : formatted;
 }
 
 export default function IssuesPage() {

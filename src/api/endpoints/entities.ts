@@ -23,8 +23,24 @@ export function getEntityById(id: string) {
   return get<EntityDetailResponse>(`/entities/${encodeURIComponent(id)}`).then(unwrapEntityDetail);
 }
 
-export function getEntityObservations(id: string) {
-  return get<{ observations: Observation[] }>(`/entities/${encodeURIComponent(id)}/observations`);
+export type EntityObservationsResponse = {
+  observations: Observation[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export function getEntityObservations(
+  id: string,
+  options?: { limit?: number; offset?: number },
+) {
+  const params = new URLSearchParams();
+  if (options?.limit != null) params.set("limit", String(options.limit));
+  if (options?.offset != null) params.set("offset", String(options.offset));
+  const qs = params.toString();
+  return get<EntityObservationsResponse>(
+    `/entities/${encodeURIComponent(id)}/observations${qs ? `?${qs}` : ""}`,
+  );
 }
 
 export function getEntityRelationships(

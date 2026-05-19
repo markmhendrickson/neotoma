@@ -2,7 +2,10 @@ import { buildApiUrl, get, getBlob, getText, post } from "../client";
 import type { Source, SourceRelationshipsResponse, StoreRequest, StoreResponse } from "@/types/api";
 
 export function listSources(params?: { search?: string; mime_type?: string; source_type?: string; limit?: number; offset?: number }) {
-  return get<{ sources: Source[] }>("/sources", params as Record<string, string | number>);
+  return get<{ sources: Source[]; total?: number; limit?: number; offset?: number }>(
+    "/sources",
+    params as Record<string, string | number>,
+  );
 }
 
 export function getSourceById(id: string) {

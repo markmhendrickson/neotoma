@@ -43,12 +43,10 @@ function basePathTrailingSlashRedirectPlugin(base: string): Plugin | null {
 
 export default defineConfig(() => {
   const apiUrl = getDefaultApiUrl();
-  // Default `/inspector/` matches how Neotoma mounts the bundled SPA. Without
-  // this, `vite build` emits `/assets/...` and the browser loads HTML (wrong
-  // MIME) for CSS/JS. Override with `VITE_PUBLIC_BASE_PATH=/` (or a repo path)
-  // for GitHub Pages and other hosts — see `inspector/README.md`.
+  // Default `/` serves the SPA at the server root. Override with
+  // `VITE_PUBLIC_BASE_PATH=/inspector/` to restore the legacy sub-path mount.
   const explicitBase = process.env.VITE_PUBLIC_BASE_PATH?.trim();
-  const base = normalizeBasePath(explicitBase ?? "/inspector/");
+  const base = normalizeBasePath(explicitBase ?? "/");
   /** When set (e.g. `../dist/inspector`), `vite build --watch` updates the tree the API serves first. */
   const outDirFromEnv = process.env.NEOTOMA_INSPECTOR_OUT_DIR?.trim();
   const buildOutDir = outDirFromEnv

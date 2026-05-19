@@ -45,8 +45,8 @@ export function DashboardStatsSkeleton() {
 /** Table-shaped placeholder (entities, observations, etc.). */
 export function DataTableSkeleton({ rows = 10, cols = 5 }: { rows?: number; cols?: number }) {
   return (
-    <div className="space-y-2 rounded-md border" aria-hidden>
-      <div className="flex gap-4 border-b bg-muted/40 p-3">
+    <div className="space-y-2 overflow-hidden rounded-md border bg-card text-card-foreground" aria-hidden>
+      <div className="flex gap-4 border-b bg-inset p-3">
         {Array.from({ length: cols }).map((_, i) => (
           <Skeleton key={i} className="h-4 flex-1" />
         ))}
@@ -64,6 +64,44 @@ export function DataTableSkeleton({ rows = 10, cols = 5 }: { rows?: number; cols
 
 export function InlineSkeleton({ className }: { className?: string }) {
   return <Skeleton className={cn("inline-block h-4 w-32 align-middle", className)} aria-hidden />;
+}
+
+/** Card grid placeholder for overview routes and compact directory pages. */
+export function CardGridSkeleton({
+  cards = 8,
+  className,
+}: {
+  cards?: number;
+  className?: string;
+}) {
+  return (
+    <div className={cn("grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4", className)} aria-hidden>
+      {Array.from({ length: cards }).map((_, i) => (
+        <div key={i} className="flex items-center gap-3 rounded-md border px-3 py-2">
+          <Skeleton className="h-4 w-4 shrink-0" />
+          <Skeleton className="h-4 min-w-0 flex-1" />
+          <Skeleton className="h-4 w-10 shrink-0" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Lazy route fallback that preserves page shape while the chunk loads. */
+export function PageRouteSkeleton() {
+  return (
+    <div className="min-w-0 flex-1 space-y-6 p-6 pb-10" aria-busy aria-label="Loading page">
+      <div className="space-y-2">
+        <Skeleton className="h-5 w-56" />
+        <Skeleton className="h-4 w-80 max-w-full" />
+      </div>
+      <DashboardStatsSkeleton />
+      <div className="grid gap-4 md:grid-cols-2">
+        <Skeleton className="h-56 rounded-lg" />
+        <Skeleton className="h-56 rounded-lg" />
+      </div>
+    </div>
+  );
 }
 
 /** Large bordered region (e.g. graph canvas). */
@@ -84,7 +122,7 @@ export function DetailPageSkeleton() {
 export function GraphAreaSkeleton() {
   return (
     <div
-      className="flex h-[min(70vh,560px)] w-full items-center justify-center rounded-md border bg-muted/20 p-8"
+      className="flex h-[min(70vh,560px)] w-full items-center justify-center rounded-md border bg-inset p-8"
       aria-hidden
     >
       <div className="flex w-full max-w-md flex-col items-center gap-3">

@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { MessageSquareText } from "lucide-react";
 import { PageShell } from "@/components/layout/page_shell";
 import { QueryRefreshIndicator } from "@/components/shared/query_refresh_indicator";
 import { ListSkeleton, QueryErrorAlert } from "@/components/shared/query_status";
@@ -181,7 +180,6 @@ export default function RecentConversationsPage() {
   return (
     <PageShell
       title="Conversations"
-      titleIcon={<MessageSquareText className="h-5 w-5" aria-hidden />}
       actions={showBackgroundRefresh ? <QueryRefreshIndicator /> : undefined}
     >
       <div className="space-y-4">
@@ -408,7 +406,7 @@ function ConversationTurnGroupCard({
   const activityAt = group.messages[group.messages.length - 1]?.activity_at ?? firstMessage?.activity_at;
 
   return (
-    <section className="rounded-md border bg-background">
+    <section className="rounded-md border bg-muted">
       <div className="border-b px-3 py-2">
         <div className="flex flex-wrap items-center gap-2">
           <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide">
@@ -472,7 +470,7 @@ function MessageCard({
       ? "border-primary/25 bg-primary/5"
       : variant === "agent"
         ? "border-muted bg-muted/20"
-        : "border bg-background";
+        : "border bg-card";
 
   return (
     <details className={`rounded-md ${boxTone}`}>

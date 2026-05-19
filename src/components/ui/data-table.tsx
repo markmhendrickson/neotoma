@@ -1,6 +1,8 @@
 import {
   flexRender,
   type ColumnDef,
+  type OnChangeFn,
+  type VisibilityState,
   useReactTable,
   getCoreRowModel,
 } from "@tanstack/react-table";
@@ -11,6 +13,8 @@ interface DataTableProps<TData> {
   data: TData[];
   className?: string;
   emptyLabel?: string;
+  columnVisibility?: VisibilityState;
+  onColumnVisibilityChange?: OnChangeFn<VisibilityState>;
 }
 
 /**
@@ -26,19 +30,23 @@ export function DataTable<TData>({
   data,
   className,
   emptyLabel = "No data",
+  columnVisibility,
+  onColumnVisibilityChange,
 }: DataTableProps<TData>) {
   const table = useReactTable({
     data,
     columns,
     getCoreRowModel: getCoreRowModel(),
+    state: columnVisibility !== undefined ? { columnVisibility } : undefined,
+    onColumnVisibilityChange,
   });
 
   return (
-    <div className={cn("rounded-md border", className)}>
-      <table className="w-full text-sm">
+    <div className={cn("overflow-hidden rounded-md border bg-card text-card-foreground", className)}>
+      <table className="w-full bg-card text-inherit text-sm">
         <thead>
           {table.getHeaderGroups().map((hg) => (
-            <tr key={hg.id} className="border-b bg-muted/50">
+            <tr key={hg.id} className="border-b bg-inset">
               {hg.headers.map((header) => (
                 <th
                   key={header.id}
@@ -57,10 +65,10 @@ export function DataTable<TData>({
         </thead>
         <tbody>
           {table.getRowModel().rows.length === 0 ? (
-            <tr>
+            <tr className="bg-card">
               <td
-                colSpan={columns.length}
-                className="px-4 py-8 text-center text-muted-foreground"
+                colSpan={table.getVisibleLeafColumns().length || columns.length}
+                className="bg-card px-4 py-8 text-center text-muted-foreground"
               >
                 {emptyLabel}
               </td>
@@ -69,7 +77,7 @@ export function DataTable<TData>({
             table.getRowModel().rows.map((row) => (
               <tr
                 key={row.id}
-                className="border-b transition-colors hover:bg-muted/50"
+                className="border-b bg-card transition-colors hover:bg-muted/50"
               >
                 {row.getVisibleCells().map((cell) => (
                   <td key={cell.id} className="px-4 py-3">

@@ -75,7 +75,11 @@ export default function RelationshipsPage() {
   return (
     <PageShell
       title="Relationships"
-      description={relationships.data ? `${relationships.data.relationships.length} total` : undefined}
+      meta={
+        relationships.data
+          ? `${relationships.data.relationships.length.toLocaleString()} total`
+          : undefined
+      }
       actions={
         <div className="flex flex-wrap items-center gap-3">
           {showBackgroundQueryRefresh(relationships) ? <QueryRefreshIndicator /> : null}

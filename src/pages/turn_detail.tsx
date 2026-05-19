@@ -1,5 +1,4 @@
 import { useParams, Link } from "react-router-dom";
-import { Repeat } from "lucide-react";
 import { PageShell } from "@/components/layout/page_shell";
 import {
   DetailPageSkeleton,
@@ -73,7 +72,6 @@ export default function TurnDetailPage() {
   return (
     <PageShell
       title={turn.turn_key ?? shortId(turn.entity_id, 12)}
-      titleIcon={<Repeat className="h-5 w-5" aria-hidden />}
       description={turn.harness ? `${turn.harness} turn` : undefined}
       actions={showBackgroundQueryRefresh(detail) ? <QueryRefreshIndicator /> : undefined}
     >
@@ -273,7 +271,7 @@ function TurnMessageGroupCard({
   const activityAt = group.messages[group.messages.length - 1]?.activity_at ?? firstMessage?.activity_at;
 
   return (
-    <section className="rounded-lg border bg-background">
+    <section className="rounded-lg border bg-muted">
       <div className="border-b px-4 py-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className="rounded bg-muted px-2 py-0.5 text-xs font-semibold uppercase tracking-wide">

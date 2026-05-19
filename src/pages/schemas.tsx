@@ -4,6 +4,7 @@ import { useSchemas } from "@/hooks/use_schemas";
 import { useAgentGrants } from "@/hooks/use_agents";
 import { useRegisterSchema } from "@/hooks/use_mutations";
 import { PageShell } from "@/components/layout/page_shell";
+import type { HeaderSearchContextValue } from "@/components/layout/page_title_context";
 import { DataTableSkeleton, QueryErrorAlert } from "@/components/shared/query_status";
 import { DataTable } from "@/components/ui/data-table";
 import { OffsetPagination } from "@/components/ui/pagination";
@@ -132,23 +133,37 @@ export default function SchemasPage() {
     [grantCountByType],
   );
 
-  const description = useMemo(() => {
+  const headerMeta = useMemo(() => {
     if (!schemas.data) return undefined;
     const total = schemas.data.total ?? schemas.data.schemas.length;
     const q = searchQuery.trim();
-    const matchPart =
-      q && filteredSchemas.length !== total
-        ? `${filteredSchemas.length} of ${total} match — `
-        : q && filteredSchemas.length === total
-          ? `${total} match — `
-          : `${total} registered — `;
-    return `${matchPart}Admission grants column counts agent_grant capabilities that list each entity_type (or *).`;
+    if (q && filteredSchemas.length !== total) {
+      return `${filteredSchemas.length.toLocaleString()} of ${total.toLocaleString()} match`;
+    }
+    if (q && filteredSchemas.length === total) {
+      return `${total.toLocaleString()} match`;
+    }
+    return `${total.toLocaleString()} registered`;
   }, [schemas.data, searchQuery, filteredSchemas.length]);
+
+  const headerSearch = useMemo<HeaderSearchContextValue>(
+    () => ({
+      value: searchQuery,
+      onValueChange: (nextSearch) => {
+        setSearchQuery(nextSearch);
+      },
+      placeholder: "Search entity type, version, field name…",
+      ariaLabel: "Filter schemas",
+    }),
+    [searchQuery],
+  );
 
   return (
     <PageShell
       title="Schemas"
-      description={description}
+      meta={headerMeta}
+      description="Admission grants column counts agent_grant capabilities that list each entity_type (or *)."
+      search={headerSearch}
       actions={
         <div className="flex flex-wrap items-center gap-3">
           {showBackgroundQueryRefresh(schemas) || showBackgroundQueryRefresh(grantsQ) ? (
@@ -184,14 +199,7 @@ export default function SchemasPage() {
         <QueryErrorAlert title="Could not load schemas">{schemas.error.message}</QueryErrorAlert>
       ) : (
         <div className="space-y-4">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <Input
-              placeholder="Search entity type, version, field name…"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full min-w-[200px] max-w-md"
-              aria-label="Filter schemas"
-            />
+          <div className="flex flex-wrap items-end justify-end gap-3">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs text-muted-foreground">Rows per page</span>
               <div className="flex rounded-md border border-border p-0.5">
