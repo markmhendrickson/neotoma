@@ -664,6 +664,7 @@ export const IssuesSubmitRequestSchema = z.object({
   local_issue_id: z.string().optional(),
   submission_timestamp: z.string().optional(),
   entity_ids_to_link: z.array(z.string().min(1)).optional(),
+  conversation_turn_id: z.string().min(1).optional(),
   user_id: z.string().optional(),
 });
 
@@ -682,6 +683,17 @@ export const IssuesGetStatusRequestSchema = z
       (typeof v.issue_number === "number" && v.issue_number > 0),
     { message: "Provide entity_id or issue_number" }
   );
+
+/** JSONL batch import (HTTP + CLI parity with MCP import_issues_from_jsonl). */
+export const IssuesImportFromJsonlRequestSchema = z
+  .object({
+    jsonl: z.string().optional(),
+    file_path: z.string().optional(),
+    user_id: z.string().optional(),
+  })
+  .refine((v) => typeof v.jsonl === "string" || typeof v.file_path === "string", {
+    message: "Provide jsonl or file_path",
+  });
 
 /** GitHub mirror ingest (HTTP + CLI parity with MCP sync_issues). */
 export const IssuesSyncRequestSchema = z.object({
