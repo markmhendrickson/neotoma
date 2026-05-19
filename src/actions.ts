@@ -132,6 +132,7 @@ import {
   IssuesBulkEntityIdsRequestSchema,
   IssuesAddMessageRequestSchema,
   IssuesGetStatusRequestSchema,
+  IssuesImportFromJsonlRequestSchema,
   IssuesSubmitRequestSchema,
   IssuesSyncRequestSchema,
   EntitiesQueryRequestSchema,
@@ -6381,6 +6382,36 @@ export async function storeStructuredForApi(params: {
           }`
         );
       }
+
+      // Schema-driven derived-entity extraction: if the entity's active schema
+      // declares `derived_entities`, evaluate each rule and create matching
+      // entities linked back to the source entity. Non-fatal: failures are
+      // logged and skipped, never blocking the primary store.
+      if (commit) {
+        try {
+          const { schemaRegistry: schemaReg2 } = await import("./services/schema_registry.js");
+          const schemaEntry2 = await schemaReg2.loadActiveSchema(r.entity_type, userId);
+          if (schemaEntry2?.schema_definition?.derived_entities?.length) {
+            const { extractDerivedEntities } =
+              await import("./services/schema_derived_entity_extraction.js");
+            await extractDerivedEntities({
+              entityId: r.entity_id,
+              entityType: r.entity_type,
+              fields: r.fields,
+              schema: schemaEntry2.schema_definition,
+              userId,
+              sourceId: observationSourceId,
+              idempotencyKey,
+            });
+          }
+        } catch (derivedErr) {
+          logger.warn(
+            `Derived entity extraction failed for ${r.entity_type}/${r.entity_id}: ${
+              derivedErr instanceof Error ? derivedErr.message : String(derivedErr)
+            }`
+          );
+        }
+      }
     }
 
     createdEntities.push({
@@ -8218,6 +8249,9 @@ const handleIssuesSubmitHttp: express.RequestHandler = async (req, res) => {
           ...(parsed.data.entity_ids_to_link
             ? { entity_ids_to_link: parsed.data.entity_ids_to_link }
             : {}),
+          ...(parsed.data.conversation_turn_id
+            ? { conversation_turn_id: parsed.data.conversation_turn_id }
+            : {}),
         });
       })();
       logDebug("Success:issues_submit", req, { entity_id: result.entity_id });
@@ -8335,6 +8369,48 @@ const handleIssuesSyncHttp: express.RequestHandler = async (req, res) => {
 };
 app.post("/issues/sync", handleIssuesSyncHttp);
 app.post("/api/issues/sync", handleIssuesSyncHttp);
+
+// POST /issues/import — JSONL batch ingestion (MCP import_issues_from_jsonl parity)
+const handleIssuesImportFromJsonlHttp: express.RequestHandler = async (req, res) => {
+  const parsed = IssuesImportFromJsonlRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn("ValidationError:issues_import_from_jsonl", req, { issues: parsed.error.issues });
+    return sendValidationError(res, parsed.error.issues);
+  }
+  try {
+    const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+    const { createOperations } = await import("./core/operations.js");
+    const { NeotomaServer } = await import("./server.js");
+    const { importIssuesFromJsonl } = await import("./services/issues/import_from_jsonl.js");
+    const server = new NeotomaServer();
+    const ops = createOperations({ server, userId });
+    try {
+      const result = await importIssuesFromJsonl(ops, {
+        jsonl: parsed.data.jsonl,
+        filePath: parsed.data.file_path,
+      });
+      logDebug("Success:issues_import_from_jsonl", req, {
+        imported: result.imported,
+        skipped: result.skipped,
+        error_count: result.errors.length,
+      });
+      return res.json(result);
+    } finally {
+      await ops.dispose();
+    }
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to import issues from JSONL",
+      "ISSUES_IMPORT_FAILED",
+      "APIError:issues_import_from_jsonl"
+    );
+  }
+};
+app.post("/issues/import", handleIssuesImportFromJsonlHttp);
+app.post("/api/issues/import", handleIssuesImportFromJsonlHttp);
 
 // POST /restore_entity - Restore soft-deleted entity
 app.post("/restore_entity", async (req, res) => {

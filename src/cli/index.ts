@@ -9086,6 +9086,24 @@ issuesCommand
   });
 
 issuesCommand
+  .command("import")
+  .description("Bulk-import issues from a JSONL file into local Neotoma")
+  .requiredOption("--from-jsonl <file>", "Path to a JSONL file (one issue JSON object per line)")
+  .action(async (opts) => {
+    const { issuesImport } = await import("./issues.js");
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({
+      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      token,
+    });
+    await issuesImport(
+      { fromJsonl: opts.fromJsonl, json: Boolean((program.opts() as { json?: boolean }).json) },
+      api
+    );
+  });
+
+issuesCommand
   .command("sync")
   .description("Full sync of issues from GitHub into local Neotoma")
   .option("--since <date>", "Only sync issues updated after this ISO date")

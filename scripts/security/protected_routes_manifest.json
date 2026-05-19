@@ -514,6 +514,18 @@
       ]
     },
     {
+      "path": "/issues/import",
+      "method": "POST",
+      "operation_id": "importIssuesFromJsonl",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
       "path": "/issues/status",
       "method": "POST",
       "operation_id": "issuesGetStatus",

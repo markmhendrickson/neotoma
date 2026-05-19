@@ -255,6 +255,80 @@ export interface SchemaDefinition {
     /** Human-readable warning message included in the response. */
     message: string;
   }>;
+
+  /**
+   * Schema-driven rules that auto-extract derived entities when an observation
+   * of this type is stored. Each rule specifies conditions on the stored
+   * payload and, when all conditions match, creates a new entity of the
+   * declared `derived_entity_type` and links it to the source entity via the
+   * declared `relationship_type` (defaults to `REFERS_TO`).
+   *
+   * Rules are evaluated after the primary entity has been committed. Failures
+   * are non-fatal: logged as warnings and skipped, never blocking the primary
+   * store.
+   *
+   * Example (awaiting-reply task from outbound email):
+   * ```ts
+   * derived_entities: [{
+   *   conditions: [
+   *     { field: "direction", op: "eq", value: "outbound" },
+   *     { field: "body", op: "matches_any_pattern", patterns: [
+   *       "\\?",
+   *       "please let me know",
+   *       "looking forward to hearing",
+   *       "please reply",
+   *       "awaiting your response",
+   *     ]},
+   *   ],
+   *   derived_entity_type: "task",
+   *   derived_fields: {
+   *     title: { template: "Awaiting reply: {{subject}}" },
+   *     task_type: { value: "awaiting_reply" },
+   *     status: { value: "pending" },
+   *     due_context: { value: "reply expected" },
+   *   },
+   *   relationship_type: "REFERS_TO",
+   * }]
+   * ```
+   */
+  derived_entities?: Array<{
+    /**
+     * All conditions must pass for this rule to fire. An empty conditions
+     * array means the rule always fires.
+     */
+    conditions: Array<{
+      /** Field on the stored payload to evaluate. */
+      field: string;
+      /** Comparison operator. */
+      op:
+        | "eq" // strict equality (string/number/boolean)
+        | "neq" // not equal
+        | "present" // field is present and non-null/non-empty
+        | "absent" // field is missing or null/empty
+        | "matches_any_pattern"; // case-insensitive substring/regex match against any pattern
+      /** Value to compare against (used by eq / neq). */
+      value?: unknown;
+      /**
+       * Patterns for matches_any_pattern. A pattern is a case-insensitive
+       * substring or JS RegExp source string. The condition passes when at
+       * least one pattern matches the field's string value.
+       */
+      patterns?: string[];
+    }>;
+    /** Entity type of the entity to extract. */
+    derived_entity_type: string;
+    /**
+     * Fields to set on the derived entity. Each entry is either a literal
+     * value or a template string (using `{{field}}` placeholders resolved
+     * from the source entity's stored payload).
+     */
+    derived_fields: Record<string, { value: unknown } | { template: string }>;
+    /**
+     * Relationship type to create between the source entity (as `source`)
+     * and the derived entity (as `target`). Defaults to `"REFERS_TO"`.
+     */
+    relationship_type?: string;
+  }>;
 }
 
 /** Known opt-out tokens for {@link SchemaDefinition.identity_opt_out}. */
@@ -1993,6 +2067,68 @@ export class SchemaRegistryService {
         definition.agent_instructions.trim().length === 0
       ) {
         throw new Error("agent_instructions must be a non-empty string when present");
+      }
+    }
+
+    if (definition.derived_entities !== undefined) {
+      if (!Array.isArray(definition.derived_entities)) {
+        throw new Error("derived_entities must be an array");
+      }
+      const validOps = ["eq", "neq", "present", "absent", "matches_any_pattern"];
+      for (let i = 0; i < definition.derived_entities.length; i++) {
+        const rule = definition.derived_entities[i];
+        if (!rule || typeof rule !== "object") {
+          throw new Error(`derived_entities[${i}] must be an object`);
+        }
+        if (!Array.isArray(rule.conditions)) {
+          throw new Error(`derived_entities[${i}].conditions must be an array`);
+        }
+        for (let j = 0; j < rule.conditions.length; j++) {
+          const cond = rule.conditions[j];
+          if (typeof cond.field !== "string" || !cond.field.trim()) {
+            throw new Error(
+              `derived_entities[${i}].conditions[${j}].field must be a non-empty string`
+            );
+          }
+          if (!validOps.includes(cond.op)) {
+            throw new Error(
+              `derived_entities[${i}].conditions[${j}].op must be one of: ${validOps.join(", ")}`
+            );
+          }
+          if (
+            cond.op === "matches_any_pattern" &&
+            (!Array.isArray(cond.patterns) || cond.patterns.length === 0)
+          ) {
+            throw new Error(
+              `derived_entities[${i}].conditions[${j}] with op "matches_any_pattern" must have a non-empty patterns array`
+            );
+          }
+        }
+        if (typeof rule.derived_entity_type !== "string" || !rule.derived_entity_type.trim()) {
+          throw new Error(`derived_entities[${i}].derived_entity_type must be a non-empty string`);
+        }
+        if (!rule.derived_fields || typeof rule.derived_fields !== "object") {
+          throw new Error(`derived_entities[${i}].derived_fields must be an object`);
+        }
+        for (const [fieldKey, fieldSpec] of Object.entries(rule.derived_fields)) {
+          if (
+            !fieldSpec ||
+            typeof fieldSpec !== "object" ||
+            (!("value" in fieldSpec) && !("template" in fieldSpec))
+          ) {
+            throw new Error(
+              `derived_entities[${i}].derived_fields.${fieldKey} must be { value: ... } or { template: "..." }`
+            );
+          }
+          if (
+            "template" in fieldSpec &&
+            (typeof fieldSpec.template !== "string" || fieldSpec.template.trim().length === 0)
+          ) {
+            throw new Error(
+              `derived_entities[${i}].derived_fields.${fieldKey}.template must be a non-empty string`
+            );
+          }
+        }
       }
     }
   }

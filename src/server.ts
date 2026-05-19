@@ -978,6 +978,7 @@ export class NeotomaServer {
       reporter_ci_run_id: z.string().optional(),
       reporter_patch_source_id: z.string().optional(),
       entity_ids_to_link: z.array(z.string().min(1)).optional(),
+      conversation_turn_id: z.string().min(1).optional(),
     });
     const parsed = schema.parse(args ?? {});
 
@@ -1008,6 +1009,9 @@ export class NeotomaServer {
         reporter_ci_run_id: parsed.reporter_ci_run_id,
         reporter_patch_source_id: parsed.reporter_patch_source_id,
         ...(parsed.entity_ids_to_link ? { entity_ids_to_link: parsed.entity_ids_to_link } : {}),
+        ...(parsed.conversation_turn_id
+          ? { conversation_turn_id: parsed.conversation_turn_id }
+          : {}),
       });
 
       return this.buildTextResponse({
