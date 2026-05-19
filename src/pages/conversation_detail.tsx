@@ -18,6 +18,7 @@ import { useRecentConversation } from "@/hooks/use_recent_conversation";
 import { useConversationTurnIndex } from "@/hooks/use_conversation_turn_index";
 import { TurnAnchorSections } from "@/components/conversation/turn_anchor_sections";
 import { TurnTimelineSidebar } from "@/components/conversation/turn_timeline_sidebar";
+import { WidgetHostDiscoveryPrompt } from "@/components/conversation/widget_host_discovery_prompt";
 import { showBackgroundQueryRefresh, showInitialQuerySkeleton } from "@/lib/query_loading";
 import { absoluteDateTime, shortId } from "@/lib/humanize";
 import { QueryRefreshIndicator } from "@/components/shared/query_refresh_indicator";
@@ -264,6 +265,8 @@ export default function ConversationDetailPage() {
                 className="lg:sticky lg:top-4 lg:self-start"
               />
               <div className="space-y-6">
+                <WidgetHostDiscoveryPrompt />
+
                 <section className="space-y-3">
                   <h2 className="text-lg font-semibold">Turn anchors</h2>
                   <p className="text-xs text-muted-foreground">
