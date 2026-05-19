@@ -140,6 +140,66 @@ fi
 
 If the review had Blocking items and zero substantive (non-housekeeping) commits landed after it, **the PR is review-blocked**. Post a summary comment listing the unaddressed findings and request fixes; do not merge.
 
+
+### Step 1d: Check Agentic Behavior Eval Coverage (Merge Blocker)
+
+A PR that changes agentic behavior — the instructions agents receive, the tools they can call, or the flows they execute — must demonstrate eval coverage before it can be merged.
+
+**Detect agentic behavior changes.** A PR is _agentic-behavior-adjacent_ if its diff touches any of:
+- `docs/developer/mcp/instructions.md`
+- `src/tool_definitions.ts`
+- `src/server.ts`
+- `.cursor/skills/*/SKILL.md`
+- `.claude/skills/*/SKILL.md`
+- Any file whose path contains `agent_instructions`
+- Any file under `src/services/` whose name contains `agent` or `instruction`
+
+Detection command:
+```bash
+gh pr diff <number> --name-only | grep -E \
+  'docs/developer/mcp/instructions\.md|src/tool_definitions\.ts|src/server\.ts|\.cursor/skills/.*/SKILL\.md|\.claude/skills/.*/SKILL\.md|agent_instructions'
+```
+
+If the command produces any output, the PR is agentic-behavior-adjacent.
+
+**Check for eval evidence.** A PR satisfies the eval requirement if _at least one_ of the following is true:
+
+1. **PR body references evals.** The PR description body (not just title) contains at least one of: `eval`, `agentic eval`, `agentic_eval`, `scenario`, `tier 1`, `tier 2`.
+   ```bash
+   gh pr view <number> --json body --jq '.body' | grep -iE 'eval|agentic_eval|scenario|tier 1|tier 2'
+   ```
+
+2. **Linked issue references evals.** Any issue closed by the PR (from `gh pr view <number> --json closingIssuesReferences`) has a body or comment referencing eval coverage.
+
+3. **New or modified eval fixture.** The diff includes a file under `tests/fixtures/agentic_eval/`.
+   ```bash
+   gh pr diff <number> --name-only | grep 'tests/fixtures/agentic_eval/'
+   ```
+
+4. **Human reviewer confirmed evals pass.** A human reviewer (non-bot) posted a comment containing `eval coverage confirmed`, `evals pass`, or `evals verified` (case-insensitive).
+   ```bash
+   gh pr view <number> --json comments --jq '.comments[] | select(.author.login != "github-actions[bot]") | select(.body | test("eval coverage confirmed|evals pass|evals verified"; "i")) | .body'
+   ```
+
+**If no eval evidence is found, the PR is eval-blocked.** Post a comment on the PR:
+
+```
+This PR modifies agentic behavior (agent instructions, MCP tool definitions, skill files, or related paths) and does not yet have eval coverage.
+
+**Before this PR can be merged, please provide at least one of:**
+
+1. Update the PR description to reference passing evals (mention `eval`, `agentic eval`, `scenario`, or `tier 1`/`tier 2`).
+2. Add or update an eval fixture in `tests/fixtures/agentic_eval/` that covers the changed behavior.
+3. Post a comment confirming evals pass: `eval coverage confirmed` or `evals pass`.
+
+See [docs/developer/eval_requirements.md](../docs/developer/eval_requirements.md) for how to write an eval fixture and what counts as eval evidence.
+```
+
+**If eval evidence is found, continue to Step 2.** Note this in the per-PR summary as "Eval coverage: ✓".
+
+_Note: a commit message referencing evals (e.g. `test: add eval fixture for …`) is not by itself eval evidence unless the commit also adds/modifies a fixture file under `tests/fixtures/agentic_eval/`._
+
+
 ### Step 2: Classify Each PR
 
 For each open PR, determine:
@@ -163,6 +223,7 @@ For each open PR, determine:
    - `mergeable` is `MERGEABLE`
    - Security gates pass (see Step 3)
    - **No unaddressed review blockers from Step 1c.** A PR with Blocking findings from the most recent substantive `github-actions[bot]` review and no substantive (non-housekeeping) commits or `Waiver:` comments since is **review-blocked** and must not be merged.
+   - **Eval coverage present for agentic-behavior-adjacent PRs (Step 1d).** A PR that touches agent instructions, MCP tool definitions, skill files, or related agentic flows is **eval-blocked** until eval evidence is provided.
    - **Closure comments drafted for every linked issue (Step 4).** A merge that closes issues without a closure narrative loses the resolution trail. The closure comment must be posted before `gh pr merge`.
 
 ### Step 3: Run Security Gates
@@ -293,6 +354,7 @@ For each PR that cannot be merged, take the appropriate action:
 - **CI failing**: Post a comment summarizing which checks failed. Do not merge.
 - **Security gate errors (G2/G3)**: Post a comment with the specific `security:lint` errors or manifest/auth-matrix failures. Do not merge.
 - **Review-blocked (Step 1c)**: Post a comment listing the unaddressed Blocking findings from the most recent review, quoting the relevant lines and naming the file paths. Request that the author either land substantive fix commits, post `Waiver: <reason>` comments per finding, or re-request `@claude review` after the fixes. Do not merge.
+- **Eval-blocked (Step 1d)**: Post the standard eval-coverage-required comment (see Step 1d comment template). Do not merge until at least one of the four eval-evidence criteria is satisfied.
 - **Awaiting review**: Note in the summary report. Do not post a comment unless explicitly requested.
 - **Merge conflicts**: Post a comment asking the author to rebase.
 - **Draft**: Skip. Report in summary.
@@ -337,9 +399,11 @@ The `/release` Step 3.5 re-runs G2 and G3 against the exact release commit as a 
 - Never merge if CI is failing or pending unless the user explicitly instructs.
 - Never merge if G2 or G3 produce errors on a security-adjacent PR.
 - **Never merge a PR that is review-blocked per Step 1c.** A substantive `github-actions[bot]` review with Blocking findings followed only by housekeeping commits is **not** a green light. The author must either (a) land non-housekeeping fix commits, (b) post `Waiver: <reason>` comments per deferred finding, or (c) trigger a re-review whose verdict is `approve`.
+- **Never merge a PR that is eval-blocked per Step 1d.** A PR touching agentic behavior (agent instructions, MCP tool definitions, skill files, or store/correction flows) without eval evidence is not merge-eligible. The author must satisfy at least one eval-evidence criterion before merge.
 - Always run G2 and G3 before merging a security-adjacent PR.
 - Always report security gate results in the summary, even when advisory.
 - Always run Step 1c (Audit Existing Review Findings) for every non-draft PR before classification in Step 2.
+- Always run Step 1d (Check Agentic Behavior Eval Coverage) for every non-draft PR before classification in Step 2.
 - Always run Step 4 (Post issue-closure comments) before `gh pr merge` for every PR that closes a linked issue. Auto-close alone does not produce a resolution trail.
 - After merge, manually close any issue that the PR resolved but GitHub did not auto-close (the auto-close-gap case: closure verb in body/commit but issue not in `closingIssuesReferences`).
 - Never post `@claude review` on a `claude/*` branch PR — the workflow already runs on `opened` for those.
@@ -357,6 +421,7 @@ The `/release` Step 3.5 re-runs G2 and G3 against the exact release commit as a 
 - Force-pushing or rebasing shared branches
 - Spamming `@claude review` on every push — only request when the diff genuinely warrants a holistic re-review (≥3 new commits since last request)
 - **Merging on the strength of a review timestamp alone.** A review was _posted_ does not mean its findings were _addressed_. Verify via Step 1c.
+- **Merging an eval-blocked PR.** A PR touching agentic behavior without eval evidence is not merge-eligible regardless of CI status or human approvals.
 - **Counting `chore: regenerate test catalog` / `prettier` / rebase-merge commits as "post-review fixes."** They are housekeeping and do not clear review blockers.
 - **Treating placeholder review comments (`I'll analyze this and get back to you.` with 0 output tokens) as completed reviews.** Re-trigger and wait for a substantive review.
 - **Merging a PR that closes issues without first posting a closure-narrative comment on each linked issue (Step 4).** The GitHub auto-close link is not a resolution trail.
