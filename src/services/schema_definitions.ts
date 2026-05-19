@@ -3113,6 +3113,59 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       },
     },
   },
+
+  pull_request: {
+    entity_type: "pull_request",
+    schema_version: "1.0",
+    metadata: {
+      label: "Pull Request",
+      description:
+        "A GitHub pull request referenced in email, chat, or other external records. " +
+        "Use for PRs extracted from email notifications, code-review emails, or other " +
+        "external sources. Identity is repo + number (e.g. 'markmhendrickson/neotoma#42').",
+      category: "productivity",
+      aliases: ["pr", "github_pr", "merge_request"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: false },
+        number: { type: "number", required: true },
+        repo: { type: "string", required: true },
+        url: { type: "string", required: false },
+        title: { type: "string", required: false, preserveCase: true },
+        body: { type: "string", required: false, preserveCase: true },
+        status: { type: "string", required: false },
+        author: { type: "string", required: false },
+        base_branch: { type: "string", required: false },
+        head_branch: { type: "string", required: false },
+        created_at: { type: "date", required: false },
+        merged_at: { type: "date", required: false },
+        closed_at: { type: "date", required: false },
+        data_source: { type: "string", required: false },
+        source_quote: { type: "string", required: false, preserveCase: true },
+      },
+      // R2: PRs are uniquely identified by repo + number (same pattern as issues).
+      canonical_name_fields: [{ composite: ["number", "repo"] }, "url"],
+      temporal_fields: [
+        { field: "created_at", event_type: "pull_request_created" },
+        { field: "merged_at", event_type: "pull_request_merged" },
+        { field: "closed_at", event_type: "pull_request_closed" },
+      ],
+    },
+    reducer_config: {
+      merge_policies: {
+        title: { strategy: "last_write" },
+        body: { strategy: "last_write" },
+        status: { strategy: "last_write" },
+        url: { strategy: "last_write" },
+        author: { strategy: "last_write" },
+        base_branch: { strategy: "last_write" },
+        head_branch: { strategy: "last_write" },
+        merged_at: { strategy: "last_write" },
+        closed_at: { strategy: "last_write" },
+      },
+    },
+  },
 };
 
 /**
