@@ -5873,7 +5873,7 @@ export async function storeStructuredForApi(params: {
     // silently skipping the write. See docs/architecture/idempotence_pattern.md.
     if (existingSource.content_hash && existingSource.content_hash !== incomingContentHash) {
       const mismatchErr = new Error(
-        `Idempotency key "${idempotencyKey}" was already used with different content. ` +
+        `ERR_IDEMPOTENCY_MISMATCH: idempotency_key "${idempotencyKey}" was already used with different content. ` +
           "Use a new idempotency_key for a different payload."
       ) as Error & { code: string; hint: string };
       mismatchErr.code = "ERR_IDEMPOTENCY_MISMATCH";
@@ -6767,6 +6767,11 @@ async function handleStorePost(
         },
       });
     }
+    if (error && typeof error === "object" && errCode === "ERR_IDEMPOTENCY_COLLISION") {
+      const message = error instanceof Error ? error.message : String(error);
+      logWarn("IdempotencyCollision:store", req, { message });
+      return sendError(res, 409, "ERR_IDEMPOTENCY_COLLISION", message);
+    }
     if (error && typeof error === "object" && errCode === "ERR_STORE_RESOLUTION_FAILED") {
       const err = error as {
         message: string;
@@ -6789,11 +6794,6 @@ async function handleStorePost(
           issues: err.issues ?? [],
         },
       });
-    }
-    if (error && typeof error === "object" && errCode === "ERR_IDEMPOTENCY_COLLISION") {
-      const message = error instanceof Error ? error.message : String(error);
-      logWarn("IdempotencyCollision:store", req, { message });
-      return sendError(res, 409, "ERR_IDEMPOTENCY_COLLISION", message);
     }
     if (error && typeof error === "object" && errCode === "ERR_FLAT_PACKED_ROWS") {
       const err = error as {

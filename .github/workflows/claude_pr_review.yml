@@ -42,7 +42,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
 
       - name: Check diff size
         id: diff_check
@@ -89,6 +89,7 @@ jobs:
           timeout_minutes: 30
           max_turns: 30
           trigger_phrase: "@claude review"
+          allowed_tools: "Edit,MultiEdit,Glob,Grep,LS,Read,Write,mcp__github_comment__update_claude_comment,Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git rm:*),Bash(git fetch:*)"
           direct_prompt: |
             Before reviewing, read docs/developer/pr_review_reading_list.md.
             It tells you which docs to always read and which to read based on what paths changed in this PR.
