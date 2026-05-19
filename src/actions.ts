@@ -7909,7 +7909,10 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
               .in("id", relatedEntityIds);
 
             if (!relatedEntitiesError) {
-              result.related_entities = relatedEntities || [];
+              result.related_entities = (relatedEntities || []).map(({ id, ...rest }: any) => ({
+                entity_id: id,
+                ...rest,
+              }));
             }
           }
         }
