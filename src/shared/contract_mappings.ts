@@ -342,6 +342,14 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     cliCommand: "schemas get",
   },
   {
+    operationId: "describeEntityType",
+    method: "post",
+    path: "/schemas/describe",
+    adapter: "both",
+    mcpTool: "describe_entity_type",
+    cliCommand: "schemas describe <entityType>",
+  },
+  {
     operationId: "listInterpretations",
     method: "get",
     path: "/interpretations",
@@ -782,6 +790,7 @@ export const MCP_TOOL_TO_OPERATION_ID: Record<string, string> = {
   retrieve_entities: "queryEntities",
   list_timeline_events: "listTimeline",
   list_entity_types: "listSchemas",
+  describe_entity_type: "describeEntityType",
   merge_entities: "mergeEntities",
   split_entity: "splitEntity",
   list_potential_duplicates: "listPotentialDuplicates",

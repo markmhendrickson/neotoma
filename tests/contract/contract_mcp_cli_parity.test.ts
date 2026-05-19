@@ -67,6 +67,7 @@ const DATA_OPERATION_MCP_TOOLS = [
   "delete_relationship",
   "restore_relationship",
   "list_entity_types",
+  "describe_entity_type",
   "analyze_schema_candidates",
   "get_schema_recommendations",
   "update_schema_incremental",

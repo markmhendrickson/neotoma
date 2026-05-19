@@ -27,6 +27,7 @@ import {
   CreateInterpretationRequestSchema,
   CreateRelationshipsRequestSchema,
   CreateRelationshipRequestSchema,
+  DescribeEntityTypeRequestSchema,
   EntitySnapshotRequestSchema,
   FieldProvenanceRequestSchema,
   GetSchemaRecommendationsRequestSchema,
@@ -1726,6 +1727,8 @@ export class NeotomaServer {
         return await this.getEntityTypeCounts(args);
       case "list_entity_types":
         return await this.listEntityTypes(args);
+      case "describe_entity_type":
+        return await this.describeEntityType(args);
       case "analyze_schema_candidates":
         return await this.analyzeSchemaCandidates(args);
       case "get_schema_recommendations":
@@ -3445,6 +3448,51 @@ export class NeotomaServer {
       return this.buildTextResponse(responseData);
     } catch (error: any) {
       throw new McpError(ErrorCode.InternalError, `Failed to list entity types: ${error.message}`);
+    }
+  }
+
+  /**
+   * Describe the full SchemaDefinition for a given entity_type (#247).
+   * Returns registered=false and empty field_names when no schema is found.
+   */
+  private async describeEntityType(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const parsed = DescribeEntityTypeRequestSchema.parse(args);
+
+    const { SchemaRegistryService } = await import("./services/schema_registry.js");
+    const schemaRegistry = new SchemaRegistryService();
+
+    const userId = this.getAuthenticatedUserId(parsed.user_id);
+
+    try {
+      const entry = await schemaRegistry.loadActiveSchema(parsed.entity_type, userId ?? undefined);
+
+      if (!entry) {
+        return this.buildTextResponse({
+          entity_type: parsed.entity_type,
+          registered: false,
+          field_names: [],
+          schema_definition: null,
+          reducer_config: null,
+        });
+      }
+
+      const fieldNames = Object.keys(entry.schema_definition?.fields ?? {}).sort();
+
+      return this.buildTextResponse({
+        entity_type: entry.entity_type,
+        registered: true,
+        schema_version: entry.schema_version,
+        field_names: fieldNames,
+        schema_definition: entry.schema_definition,
+        reducer_config: entry.reducer_config,
+      });
+    } catch (error: any) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to describe entity type: ${error.message}`
+      );
     }
   }
 

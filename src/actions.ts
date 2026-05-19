@@ -3903,6 +3903,48 @@ app.get("/schemas", async (req, res) => {
   }
 });
 
+// POST /schemas/describe - Describe entity type schema (#247)
+// Must be registered before /schemas/:entity_type so "describe" does not match :entity_type.
+app.post("/schemas/describe", async (req, res) => {
+  try {
+    const userId = await getAuthenticatedUserId(req, req.body?.user_id as string | undefined);
+    const entityType = req.body?.entity_type as string | undefined;
+    if (!entityType || typeof entityType !== "string") {
+      return sendError(res, 400, "VALIDATION_ERROR", "entity_type is required");
+    }
+    const { SchemaRegistryService } = await import("./services/schema_registry.js");
+    const schemaRegistry = new SchemaRegistryService();
+    const entry = await schemaRegistry.loadActiveSchema(entityType, userId ?? undefined);
+    if (!entry) {
+      return res.json({
+        entity_type: entityType,
+        registered: false,
+        field_names: [],
+        schema_definition: null,
+        reducer_config: null,
+      });
+    }
+    const fieldNames = Object.keys(entry.schema_definition?.fields ?? {}).sort();
+    return res.json({
+      entity_type: entry.entity_type,
+      registered: true,
+      schema_version: entry.schema_version,
+      field_names: fieldNames,
+      schema_definition: entry.schema_definition,
+      reducer_config: entry.reducer_config,
+    });
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to describe entity type",
+      "DB_QUERY_FAILED",
+      "APIError:schemas_describe"
+    );
+  }
+});
+
 // GET /api/schemas/:entity_type - Get specific schema (FU-XXX)
 app.get("/schemas/:entity_type", async (req, res) => {
   try {

@@ -1107,6 +1107,34 @@ components:
         field_summary:
           type: object
           additionalProperties: true
+    DescribeEntityTypeResponse:
+      type: object
+      properties:
+        entity_type:
+          type: string
+          description: The entity type that was described.
+        registered:
+          type: boolean
+          description: Whether a schema is registered for this entity type.
+        schema_version:
+          type: string
+          description: Active schema version. Omitted when registered is false.
+        field_names:
+          type: array
+          items:
+            type: string
+          description: Sorted list of declared field names. Empty when registered is false.
+        schema_definition:
+          type: object
+          additionalProperties: true
+          description: |
+            Full SchemaDefinition object including fields, canonical_name_fields,
+            temporal_fields, reference_fields, aliases, merge_policies, and all
+            other declared schema properties. Null when registered is false.
+        reducer_config:
+          type: object
+          additionalProperties: true
+          description: Reducer configuration with merge policies. Null when registered is false.
     Interpretation:
       type: object
       properties:
@@ -3828,6 +3856,42 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/EntitySchema" }
+
+  /schemas/describe:
+    post:
+      summary: Describe entity type schema
+      description: |
+        Return the full SchemaDefinition for a given entity_type — fields,
+        canonical_name_fields, temporal_fields, reference_fields, aliases,
+        merge_policies, and all other declared schema properties. Agents use
+        this tool for schema introspection before storing or correcting data so
+        they know exactly which fields an entity type supports without trial
+        and error. Returns registered=false and field_names=[] when the
+        entity_type has no registered schema.
+      operationId: describeEntityType
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - entity_type
+              properties:
+                entity_type:
+                  type: string
+                  description: Entity type to describe (e.g. contact, task, transaction).
+                user_id:
+                  type: string
+                  description: Optional. Inferred from authentication when omitted.
+      responses:
+        "200":
+          description: Schema description
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DescribeEntityTypeResponse"
 
   /interpretations:
     get:

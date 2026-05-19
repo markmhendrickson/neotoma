@@ -649,6 +649,14 @@ export function buildToolDefinitions(
       inputSchema: getOpenApiInputSchemaOrThrow("list_entity_types"),
     },
     {
+      name: "describe_entity_type",
+      description: desc(
+        "describe_entity_type",
+        "Return the full SchemaDefinition for a given entity_type — fields, canonical_name_fields, temporal_fields, reference_fields, aliases, merge_policies, and all other declared schema properties. Use this tool for schema introspection to discover exactly which fields an entity type supports before storing or correcting data. Returns registered=false and empty field_names when the entity_type has no registered schema."
+      ),
+      inputSchema: getOpenApiInputSchemaOrThrow("describe_entity_type"),
+    },
+    {
       name: "analyze_schema_candidates",
       description: desc(
         "analyze_schema_candidates",
@@ -1310,6 +1318,7 @@ export const NEOTOMA_TOOL_NAMES = [
   "restore_relationship",
   "get_entity_type_counts",
   "list_entity_types",
+  "describe_entity_type",
   "analyze_schema_candidates",
   "get_schema_recommendations",
   "update_schema_incremental",

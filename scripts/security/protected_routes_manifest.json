@@ -1024,6 +1024,18 @@
       ]
     },
     {
+      "path": "/schemas/describe",
+      "method": "POST",
+      "operation_id": "describeEntityType",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
       "path": "/schemas/{entity_type}",
       "method": "GET",
       "operation_id": "getSchemaByEntityType",
