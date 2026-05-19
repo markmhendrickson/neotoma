@@ -3544,6 +3544,11 @@ export class NeotomaServer {
         user_id: parsed.user_specific ? userId : undefined,
         activate: parsed.activate,
         migrate_existing: parsed.migrate_existing,
+        // For global schemas user_id above is undefined, but migrate_existing must
+        // still scope to the authenticated caller so raw_fragments stored by this
+        // user are promoted.  Pass the resolved userId whenever we are doing a
+        // migration, regardless of user_specific.
+        migrate_user_id: parsed.migrate_existing ? userId : undefined,
       });
 
       return this.buildTextResponse({

@@ -857,6 +857,13 @@ export class SchemaRegistryService {
     user_specific?: boolean;
     user_id?: string;
     migrate_existing?: boolean; // Only for backfilling historical data
+    /**
+     * When migrate_existing is true, use this user_id as the scope for the
+     * raw_fragments query instead of options.user_id. Needed for global schemas
+     * (user_specific: false) where options.user_id is undefined but raw_fragments
+     * were stored by a specific authenticated user.
+     */
+    migrate_user_id?: string;
     activate?: boolean; // Default: true - activate immediately so new data uses updated schema
     force?: boolean;
   }): Promise<SchemaRegistryEntry> {
@@ -1063,7 +1070,9 @@ export class SchemaRegistryService {
         await this.migrateRawFragmentsToObservations({
           entity_type: options.entity_type,
           field_names: fieldNamesToMigrate,
-          user_id: options.user_id,
+          // migrate_user_id takes precedence: for global schemas the caller passes
+          // the authenticated user's id here while options.user_id is undefined.
+          user_id: options.migrate_user_id ?? options.user_id,
         });
       }
     }

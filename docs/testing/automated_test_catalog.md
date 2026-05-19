@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **386**
-- Backend and repo Vitest files: **353**
+- Total automated test files: **387**
+- Backend and repo Vitest files: **354**
 - Frontend Vitest files: **9**
 - Playwright spec files: **24**
 
@@ -72,7 +72,7 @@ flowchart TD
 | Vitest unit tests | 93 |
 | Vitest service tests | 33 |
 | Source-adjacent tests | 45 |
-| Vitest integration tests | 104 |
+| Vitest integration tests | 105 |
 | Vitest CLI tests | 59 |
 | Vitest contract tests | 10 |
 | Vitest security tests | 1 |
@@ -299,7 +299,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (104):**
+**Files (105):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_resource_metadata.test.ts`
 - `tests/integration/aauth_revocation_e2e.test.ts`
@@ -378,6 +378,7 @@ flowchart TD
 - `tests/integration/payload_compiler.test.ts`
 - `tests/integration/payload/payload_submission.test.ts`
 - `tests/integration/peer_sync.test.ts`
+- `tests/integration/plan_body_raw_fragment_backfill.test.ts`
 - `tests/integration/process_issues_skill.test.ts`
 - `tests/integration/public_key_registry.test.ts`
 - `tests/integration/record_activity_attribution.test.ts`

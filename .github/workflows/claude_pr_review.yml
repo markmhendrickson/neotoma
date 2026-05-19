@@ -87,7 +87,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           model: claude-opus-4-7
           timeout_minutes: 30
-          max_turns: 15
+          max_turns: 30
           trigger_phrase: "@claude review"
           direct_prompt: |
             Before reviewing, read docs/developer/pr_review_reading_list.md.
