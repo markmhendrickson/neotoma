@@ -1,5 +1,6 @@
 #!/usr/bin/env tsx
 
+import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -151,24 +152,18 @@ const suiteMeta: Record<string, SuiteMeta> = {
 };
 
 function walk(relativeDir: string): string[] {
-  const absoluteDir = path.join(repoRoot, relativeDir);
-  if (!fs.existsSync(absoluteDir)) return [];
-
-  const out: string[] = [];
-  const stack = [absoluteDir];
-  while (stack.length > 0) {
-    const current = stack.pop()!;
-    const entries = fs.readdirSync(current, { withFileTypes: true });
-    for (const entry of entries) {
-      const absolute = path.join(current, entry.name);
-      if (entry.isDirectory()) {
-        stack.push(absolute);
-        continue;
-      }
-      out.push(path.relative(repoRoot, absolute).split(path.sep).join("/"));
-    }
+  try {
+    const output = execSync(`git ls-files -- "${relativeDir}"`, {
+      cwd: repoRoot,
+      encoding: "utf-8",
+    });
+    return output
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+  } catch {
+    return [];
   }
-  return out;
 }
 
 function isAutomatedTestFile(relativePath: string): boolean {
