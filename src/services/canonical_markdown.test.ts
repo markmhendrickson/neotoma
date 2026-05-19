@@ -360,6 +360,15 @@ describe("renderProfileEntity", () => {
       expect(md).not.toContain("body:");
     });
 
+    it("does not emit a ## body section heading when content_field is 'body' (#262)", () => {
+      const md = renderProfileEntity(snapshotWithBody, meta, {
+        render_mode: "frontmatter_content",
+        content_field: "body",
+      });
+      // The field named "body" must never produce a visible ## body heading.
+      expect(md).not.toContain("## body");
+    });
+
     it("falls back to ## sections when body field is absent", () => {
       const md = renderProfileEntity(snapshotWithoutBody, meta, {
         render_mode: "frontmatter_content",
