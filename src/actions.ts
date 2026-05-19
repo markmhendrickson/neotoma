@@ -8219,6 +8219,9 @@ const handleIssuesSubmitHttp: express.RequestHandler = async (req, res) => {
           ...(parsed.data.entity_ids_to_link
             ? { entity_ids_to_link: parsed.data.entity_ids_to_link }
             : {}),
+          ...(parsed.data.conversation_turn_id
+            ? { conversation_turn_id: parsed.data.conversation_turn_id }
+            : {}),
         });
       })();
       logDebug("Success:issues_submit", req, { entity_id: result.entity_id });

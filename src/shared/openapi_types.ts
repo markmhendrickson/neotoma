@@ -5710,6 +5710,8 @@ export interface operations {
           submission_timestamp?: string;
           /** @description Entity IDs to link to this issue via REFERS_TO relationships. Created server-side in the same operation as issue creation. */
           entity_ids_to_link?: string[];
+          /** @description Entity ID of the conversation turn (conversation_message entity) where this issue was observed. When provided, a REFERS_TO relationship is created from the filed issue entity to this conversation turn entity, making the origin of the issue traceable. */
+          conversation_turn_id?: string;
           user_id?: string;
         };
       };
@@ -5802,7 +5804,7 @@ export interface operations {
           /** @description Absolute path to a JSONL file on the server's local filesystem. Mutually exclusive with jsonl. */
           file_path?: string;
           user_id?: string;
-        } & (unknown | unknown);
+        };
       };
     };
     responses: {

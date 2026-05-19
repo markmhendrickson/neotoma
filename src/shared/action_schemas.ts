@@ -664,6 +664,7 @@ export const IssuesSubmitRequestSchema = z.object({
   local_issue_id: z.string().optional(),
   submission_timestamp: z.string().optional(),
   entity_ids_to_link: z.array(z.string().min(1)).optional(),
+  conversation_turn_id: z.string().min(1).optional(),
   user_id: z.string().optional(),
 });
 

@@ -1028,6 +1028,11 @@ export function buildToolDefinitions(
             type: "string",
             description: "Optional source id for reporter patch artifact.",
           },
+          conversation_turn_id: {
+            type: "string",
+            description:
+              "Entity ID of the conversation turn (conversation_message entity) where this issue was observed. When provided, a REFERS_TO relationship is created from the filed issue to the conversation turn so the origin is traceable.",
+          },
         },
         required: ["title", "body"],
         // Keep the top-level schema to a plain object for Codex/OpenAI
