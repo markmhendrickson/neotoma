@@ -58,6 +58,54 @@ v0.13.0 is a substantial feature release. The headline additions are **schema-le
 - **Untrusted `X-Forwarded-For` IPs are redacted in log lines.** `isLocalRequest` log output no longer leaks raw client IPs from spoofed headers (PII hardening).
 - **Neotoma entity IDs carved out of phone-number PII redaction.** Entity IDs of the form `ent_*` are no longer mistakenly matched as phone numbers (#130, #134).
 
+## MCP agent instructions changes
+
+`docs/developer/mcp/instructions.md` received significant additions in this release. The file is the behavioral contract the Neotoma MCP server sends to clients at runtime, so these changes take effect without any code changes on the agent side — as soon as the server is updated, connected agents receive the updated instructions.
+
+### New mandatory rules
+
+- **Image-only message compliance.** When the user message contains only an image or screenshot (no text), all five turn-lifecycle steps still MUST execute. Agents must store a `conversation_message` describing the image and extract any entities visible in it (tasks, events, contacts, transactions). (#93, #95)
+
+- **Short-pass compliance.** Doc-only edits, `neotoma cli config`, single-file lint tweaks, and other minimal turns are explicitly NOT exempt from steps 1–5. Rationalizing a store skip as "analysis-only", "in-session bookkeeping", or "just an evaluation" is FORBIDDEN. (#93)
+
+- **PII stripping checklist before issue filing.** A mandatory six-point checklist must be completed before every `submit_issue` or `add_issue_message` call: strip names/emails/phones, replace private identifiers with `ent_*` IDs or generic labels, redact credentials and verbatim sensitive data, and re-read the body before calling. (#139)
+
+- **Issue entity linking after filing.** Immediately after `submit_issue` returns, agents MUST call `create_relationships` with REFERS_TO edges to every Neotoma entity that motivated or is referenced by the issue. Likewise for `add_issue_message`. Previously these edges were optional. (#131, #135)
+
+- **Schema-level and per-entity agent instructions.** When `retrieve_entities` or `retrieve_entity_snapshot` returns a `schema_instructions` or `entity_instructions` field, agents MUST treat those strings as behavioral context and apply them to the current turn. FORBIDDEN: ignoring these fields when present. (#129, #146)
+
+- **Schema-first store for unfamiliar types.** Before the first `store` for an entity_type the agent has not used this session and that is not in the common-types short list, call `list_entity_types` with a keyword to discover whether a registered schema exists. FORBIDDEN: storing with an unfamiliar entity_type via intuited fields without a schema check. (#160, #174, #175, #176, #196, #208)
+
+- **Unknown-fields mandatory repair.** If any entity in a store response has `unknown_fields_count > 0`, agents must immediately re-store or `correct` those entities using declared field names before proceeding to the closing assistant store. (#185, #187)
+
+- **Automated sender extraction.** For every sender of an external-source record (email, notification, invoice), agents must create or match a `contact` entity for the sender address AND an `organization`/`company` entity for the underlying service, even for automated senders (no-reply, alerts, invoicing addresses). FORBIDDEN: extracting only the transactional payload without persisting the organization and sender contact. (#198)
+
+- **Session UUID bridge (Claude Code).** In Claude Code contexts, agents must call `get_session_identity` once per session and include `session_uuid` on the slug-keyed `conversation` entity. This coalesces the hook-created UUID entity with the agent-created slug entity so hook-written timeline events correlate with MCP conversation data. FORBIDDEN: omitting `session_uuid` when `get_session_identity` is available and returns a value. (#145, #153, #256)
+
+- **Proactive auto-file mandate.** When `issues.reporting_mode` is `proactive`, agents MUST call `submit_issue` for every qualifying finding in the same turn with no user confirmation prompt. FORBIDDEN: pausing to ask "should I file this?" when proactive mode is set. (#250)
+
+- **Retrieval-first for common query types.** When the user asks about tasks, schedule, contacts, notes, issues, events, finances, decisions, or commitments, agents MUST run a bounded Neotoma retrieval pass before answering or falling back to native integrations. (#97, #99)
+
+- **Named entity-type routing.** When the user asks about a named entity type ("newest plans", "my tasks", "open issues"), agents must call `retrieve_entities` with the matching `entity_type` directly. FORBIDDEN: searching conversation history as a substitute for a direct entity query. (#228)
+
+- **Artifact store triggers.** When a concrete artifact is approved or finalized in conversation (plan, schema_design, decision_record, feature_spec, etc.), agents must store it in the same turn without waiting for an explicit save instruction. FORBIDDEN: ending a turn where an artifact was finalized without storing it.
+
+- **`TodoWrite` is session-local.** The host tool `TodoWrite` does NOT satisfy the Neotoma store protocol. Persistent follow-up tasks must also be stored via `entity_type: "task"` in Neotoma. FORBIDDEN: using `TodoWrite` alone to record tasks that should persist beyond the current session.
+
+### Clarifications and fixes
+
+- **Fallback turn_key scoping.** Bare `chat:<turn>` turn_keys are now explicitly FORBIDDEN — they reuse across sessions and cause cross-session entity merges. The correct fallback is a session-epoch-scoped key (`chat-<session_epoch_ms>:<turn>`). (#127)
+
+- **Conversation entity maintenance.** When a conversation pivots materially in scope, agents must update `title` and `scope_summary` on the existing conversation entity. FORBIDDEN: minting a new conversation entity or new `conversation_id` to represent the new scope.
+
+- **Tool deregistration recovery.** When a tool call fails with "tool 'Neotoma:X' is not registered", agents must call `tool_search` to reload it and retry. This is a client-side cache eviction, not a server-side removal.
+
+- **`parse_file` is not file retention.** `parse_file` is a read-only inspection tool that writes nothing to Neotoma. Retention requires a subsequent `store` call with `file_path` or `file_content+mime_type`. FORBIDDEN: treating a successful `parse_file` call as sufficient persistence.
+
+- **Transport precedence.** When both `neotoma` (prod) and `neotoma-dev` MCP servers are connected, default to `neotoma` for all retrieval and store operations. Dev and prod are separate SQLite databases — data written to one is not visible in the other.
+
+- **Harness table added.** A new table of supported harnesses (Claude Code, Cursor, Codex, Continue, Windsurf, VS Code, Claude Desktop, Letta) with their configuration paths was added to the onboarding section. (`98d0907da`)
+
 ## Docs site & CI / tooling
 
 - **MCP integration guides added** for Continue, Windsurf, VS Code, and Letta. Each guide ships with a frontend subpage (`NeotomaWithContinuePage`, `NeotomaWithLettaPage`, `NeotomaWithVSCodePage`, `NeotomaWithWindsurfPage`) and a docs site MDX page.
@@ -89,7 +137,7 @@ v0.13.0 is a substantial feature release. The headline additions are **schema-le
 - **`src/services/schema_registry.ts`** — validates and persists `SchemaDefinition.agent_instructions`.
 - **`src/services/schema_recommendation.ts`** — `trusted_source_relaxation` config plus `TRUSTED_OBSERVATION_SOURCES = {llm_summary, import, sync}` allowlist.
 - **`src/server.ts`** — MCP instruction body refreshed (schema/fidelity, display rule, product-bug repair, issue reporting QA tightened); `entity_ids_to_link` plumbing on `submit_issue` and `add_issue_message`.
-- **MCP instruction file (`docs/developer/mcp/instructions.md`)** — major narrative refresh covering schema-instruction handling, retrieval-first behavior, image-only compliance, and global-conservative reducer policy (#97, #99, #93, #95). **PII stripping checklist** added to `[GUEST ENTITY SUBMISSION]` section: agents must strip names, emails, private identifiers, credentials, and sensitive field excerpts before every `submit_issue` or `add_issue_message` call (#139).
+- **MCP instruction file (`docs/developer/mcp/instructions.md`)** — see _MCP agent instructions changes_ section above for the full list of new mandatory rules and clarifications.
 - **`scripts/backfill_harness_transcripts.ts`** — loads `.env.production` for `NEOTOMA_BEARER_TOKEN`, surfaces child-process stderr on failure, accepts `--base-url` and explicit env injection.
 - **`scripts/audit_raw_fragments_schema_lag.ts`** — expanded from stub to full audit script for diagnosing raw_fragments rows misrouted by the schema-projection-lag bug (issue #142, fixed on main).
 - **`scripts/check_migration_run.ts`** (new) — operational helper for verifying a migration run completed and stored correctly.
@@ -146,7 +194,7 @@ v0.13.0 is a substantial feature release. The headline additions are **schema-le
 ## Security hardening
 
 `npm run security:classify-diff -- --base v0.12.1 --head HEAD` flagged `sensitive=true`. Concerns:
-- **openapi-security** — response field additions (`schema_instructions`, `entity_instructions`, `entity_ids_to_link`, `remote_submission_error`) on existing secured endpoints. No security blocks changed. No new unauthenticated endpoints.
+- **openapi-security** — response field additions (`schema_instructions`, `entity_instructions`, `entity_ids_to_link`, `remote_submission_error`) on existing secured endpoints. No security blocks changed. No new unauthenticated endpoints introduced.
 - **auth-middleware** — `src/actions.ts` modified for the timeline determinism fix only. `isLocalRequest`, `forwardedForValues`, `LOCAL_DEV_USER_ID`, and `assertExplicitlyTrusted` are unchanged from v0.12.1.
 
 Review artifact: [`docs/releases/in_progress/v0.13.0/security_review.md`](./security_review.md)
@@ -157,14 +205,104 @@ Review artifact: [`docs/releases/in_progress/v0.13.0/security_review.md`](./secu
 - G3 (`security:manifest:check` + `test:security:auth-matrix`): manifest in sync (106 routes, 97 protected, 7 runtime-only unauth with stated reasons); auth matrix 16/16 pass.
 - G4 (`security:ai-review`): review filled; sign-off verdict `with-caveats`. Caveat: `NEOTOMA_TRUSTED_PROXY_IPS` CGNAT residual risk documented in `docs/security/threat_model.md`; no new code in v0.13.0 touches this surface.
 
-Operational hardening landing in this release:
-- Untrusted XFF IPs redacted in `isLocalRequest` rejection logs (PII).
-- `NEOTOMA_TRUSTED_PROXY_IPS` discovery messages documented for CGNAT / Warp / Cloudflare Tunnel scenarios.
-- `cursor-hooks` plugin no longer ships a hardcoded dev-local token in the published artifact.
-- Cloud-fronted caller auth section added to the tunnel guide.
+**Operational hardening in this release:**
+
+- **`/docs` route — fail-closed visibility and XSS-safe rendering.** The new server-rendered `GET /docs` / `GET /docs/*` route is the only new unauthenticated public route in this release. It was hardened before exposure: unmapped `docs/*/` subtrees default to `visibility: "internal"` (fail-closed, not fail-open); `docs/private/` is never served regardless of configuration; rendered markdown escapes text boundaries; inline links with unsafe schemes (`javascript:`, `data:`, protocol-relative) are rewritten to `#`; `Cache-Control: public, max-age=60` with an in-process mtime-keyed cache. Registered in `protected_routes_manifest.json` with a stated `reason`. Addressed the fail-open default found in PR #178 review.
+
+- **`sync_issues --push` PII redaction at the GitHub API boundary.** The new push leg of `sync_issues` mirrors local public Neotoma issue entities to GitHub. Before calling `github.createIssue`, it runs `runRedactionGuard(mode: "scan")` on the issue title and body — the same redaction path used by `submitIssue` — so private identifiers, names, and sensitive content are stripped before any data leaves the local instance. Push failures are non-fatal and do not block the pull leg.
+
+- **Hardcoded credential removed from `cursor-hooks` published artifact.** The `@neotoma/cursor-hooks` npm package was shipping `Authorization: Bearer dev-local` in the client code included in the published artifact. Every consumer of the package was sending this hardcoded token to the Neotoma server on every hook call. The fix vendors the `neotoma-client` source directly into the plugin and omits the `Authorization` header entirely when no token is configured.
+
+- **Draft GitHub Release + RC branch flow.** Releases now stage as draft GitHub Releases and publish only after sandbox deployment is verified. This closes the window where a release could appear as "latest" on GitHub before the deployed surface matched the release body. A new RC branch + PR step opens `release/vX.Y.Z` → `main` for public review before the execute step runs.
+
+- **Untrusted XFF IPs redacted in `isLocalRequest` rejection logs** (PII hardening). `NEOTOMA_TRUSTED_PROXY_IPS` discovery messages documented for CGNAT / Warp / Cloudflare Tunnel scenarios.
+
+- **Cloud-fronted caller auth section** added to the tunnel guide with an advisory operational note covering Cloudflare Tunnel topology.
 
 No new security advisories opened for this release.
 
 ## Breaking changes
 
 - **`POST /create_relationship` — schema documentation corrected, `additionalProperties: false` now enforced at the OpenAPI level.** The request body schema previously declared `type: object, additionalProperties: true` with no fields. The handler has always required `relationship_type`, `source_entity_id`, and `target_entity_id` and rejected unknown fields via Zod validation. The OpenAPI spec is now aligned with that behavior. Migration: ensure callers send only the declared fields (`relationship_type`, `source_entity_id`, `target_entity_id`, optional `source_id`, `metadata`, `user_id`). Any caller already compliant with the Zod validation is unaffected.
+
+## Upgrading from v0.12.x — repair and migration guide
+
+Most upgrades are drop-in. The items below are opt-in repair and migration commands for deployments that were running during the affected window and may have accumulated data-quality issues from bugs fixed in this release. None are required if you are installing v0.13.0 fresh.
+
+### 1. Repair misrouted `raw_fragments` rows (schema-projection lag) — recommended for all existing deployments
+
+**Bug:** When `registerSchema` was called with `activate: true`, prior active schema rows for the same entity type were not deactivated. `loadGlobalSchema` uses `.single()`, so a second active row caused an error and new observations were silently routed to `raw_fragments` instead of the entity snapshot. Any entity type that was re-registered (e.g. during onboarding or version upgrades) was affected. (#142)
+
+**Impact:** Entity snapshots for affected types are incomplete — fields that should be first-class observations are in `raw_fragments` and invisible to retrieval and the reducer.
+
+**Fix (automatic on server start):** `queueSchemaLagRepair` runs on startup in v0.13.0 and queues a background audit. To verify the repair or run it on large databases, run manually:
+
+```
+neotoma db repair-schema-lag
+```
+
+Options: `--dry-run` audits without writing; `--types <types>` limits to specific entity types; `--rollback <run_id>` reverses a prior run. The repair is fully reversible.
+
+### 2. Migrate npm installs to production database — required for npm-installed deployments that pre-date this release
+
+**Bug:** Prior npm installs defaulted to the dev database (`neotoma.db`). v0.13.0 defaults to the production database (`neotoma.prod.db`). Existing deployments will appear empty after upgrading because the server now opens a different file. (#172)
+
+**Fix:**
+
+```
+neotoma db migrate-env-split
+```
+
+Run once immediately after upgrading. Self-hosted installs that set `NEOTOMA_DATA_DIR` explicitly are unaffected.
+
+### 3. Repair accidentally-plural entity types — if applicable
+
+**Bug:** The naming convention requires singular `entity_type` names. Deployments with plural types (e.g. `posts`, `transactions`) have fragmented entity graphs — queries for the singular canonical form will miss records stored under the plural variant. (#162)
+
+Check first with `neotoma schemas list`. If any types are plural, run:
+
+```
+neotoma schemas repair-plural-types
+```
+
+This coalesces plural types to the canonical singular form and declares the plural as an alias so existing references remain resolvable.
+
+### 4. Clean up duplicate conversation entities from session UUID bridge — Claude Code users
+
+**Bug:** Before the session UUID bridge fix, the Claude Code SessionStart hook and the MCP agent each created a separate `conversation` entity for the same session — one keyed by raw UUID, one by slug — that were never coalesced. (#145, #153, #256)
+
+v0.13.0 prevents new duplicates automatically. To clean up historical ones, use the `list_potential_duplicates` MCP tool (or Inspector → Entities) to identify duplicate `conversation` pairs and merge them with `merge_entities`. This is cosmetic but improves timeline coherence and reduces entity count.
+
+### 5. Encrypt existing data at rest — optional, self-hosted only
+
+v0.13.0 ships `db migrate-encryption` for deployments that want to encrypt existing SQLite data. This is opt-in; the database is not encrypted by default.
+
+```
+neotoma db migrate-encryption encrypt
+neotoma db migrate-encryption decrypt   # reverses it
+```
+
+Requires `NEOTOMA_KEY_FILE_PATH` or `NEOTOMA_MNEMONIC` (+ optional `NEOTOMA_MNEMONIC_PASSPHRASE`). Both directions are idempotent.
+
+### 6. Re-import harness transcripts to pick up previously missed conversations — optional
+
+**Bug:** The transcript parser missed several conversation shapes across Claude Code, Codex, and Cursor (hex-encoded blobs, malformed JSON turns, `state.vscdb` format). Sessions imported before this release may be incomplete. (#143)
+
+```
+neotoma onboarding import-transcripts
+```
+
+The importer is idempotent — already-imported conversations are matched by stable identity and updated rather than duplicated.
+
+---
+
+**Summary**
+
+| # | Command | Who should run it | Required? |
+|---|---------|-------------------|-----------|
+| 1 | `neotoma db repair-schema-lag` | All existing deployments | Recommended |
+| 2 | `neotoma db migrate-env-split` | npm installs pre-dating v0.13.0 | Required if affected |
+| 3 | `neotoma schemas repair-plural-types` | Anyone with plural entity type names | If applicable |
+| 4 | Merge duplicate `conversation` entities via Inspector | Claude Code users | Cosmetic/optional |
+| 5 | `neotoma db migrate-encryption encrypt` | Self-hosted, opt-in encryption | Optional |
+| 6 | `neotoma onboarding import-transcripts` | Any harness transcript user | Optional |
