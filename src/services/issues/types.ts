@@ -42,6 +42,12 @@ export interface IssueCreateParams {
    * Created server-side in the same operation as issue creation.
    */
   entity_ids_to_link?: string[];
+  /**
+   * Optional entity ID of the conversation turn (conversation_message entity) where this issue
+   * was observed. When provided, a REFERS_TO relationship is created from the filed issue entity
+   * to this conversation turn entity, making the origin of the issue traceable.
+   */
+  conversation_turn_id?: string;
 }
 
 export interface IssueMessageParams {
