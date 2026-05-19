@@ -1,6 +1,6 @@
 ---
 name: process_prs
-description: Process open pull requests — triage readiness, run security checks, request Opus review on substantial PRs, merge eligible PRs, detect release PRs and hand off to /release.
+description: Process open pull requests — triage readiness, run security checks, request Opus review on substantial PRs, post per-issue closure-narrative comments, merge eligible PRs, and detect release PRs and hand off to /release.
 triggers:
   - process prs
   - /process_prs
@@ -8,6 +8,8 @@ triggers:
   - triage prs
   - review open prs
 ---
+
+<!-- Source: .cursor/skills/process-prs/SKILL.md -->
 
 # Process PRs
 
@@ -161,6 +163,7 @@ For each open PR, determine:
    - `mergeable` is `MERGEABLE`
    - Security gates pass (see Step 3)
    - **No unaddressed review blockers from Step 1c.** A PR with Blocking findings from the most recent substantive `github-actions[bot]` review and no substantive (non-housekeeping) commits or `Waiver:` comments since is **review-blocked** and must not be merged.
+   - **Closure comments drafted for every linked issue (Step 4).** A merge that closes issues without a closure narrative loses the resolution trail. The closure comment must be posted before `gh pr merge`.
 
 ### Step 3: Run Security Gates
 
@@ -191,9 +194,83 @@ Run `npm run security:lint` and report results. Do not block merge on warnings, 
 
 **Do not run** `security:classify-diff`, `security:ai-review`, or the deployed probes (`deployed_probes.sh`) — those are release-scoped gates that run in `/release` Step 3.5 and Step 5.
 
-### Step 4: Merge Eligible PRs
+### Step 4: Post issue-closure comments on linked issues (before merge)
 
-For each PR that passes all merge-eligibility criteria:
+For each PR that passes all merge-eligibility criteria, **before** running `gh pr merge`, walk every issue the PR claims to close and post a closure-narrative comment on it. This memorializes the work and forces a final verification that every original ask was addressed.
+
+The auto-close behavior of GitHub (`Closes #N` in PR body) only posts a generic merge-link comment. That is not sufficient: it does not verify that each bullet of the issue body was addressed, does not reconcile review-thread follow-ups, and does not call out explicit deferrals.
+
+**Detect the linked issues:**
+
+```bash
+# Issues GitHub auto-tracks (must be in body via "Closes/Fixes/Resolves #N")
+gh pr view <number> --json closingIssuesReferences --jq '[.closingIssuesReferences[].number]'
+
+# Also scan the PR body and commit messages for bare references that GitHub did
+# not parse (e.g. "fix bugs #168 #170 #171 #172" — only #168 auto-closes).
+gh pr view <number> --json body,commits --jq '.body, (.commits[].messageHeadline), (.commits[].messageBody // "")' \
+  | grep -oE '(closes|close|fixes|fix|resolves|resolve)\s+#[0-9]+' -i | sort -u
+
+# Any issue listed here that is NOT in closingIssuesReferences will not be
+# auto-closed at merge time — flag it for manual `gh issue close` after merge.
+```
+
+**Closure comment shape (uniform across PRs):**
+
+```
+Resolved by PR #<pr> (merged <yyyy-mm-dd>). Shipping in **v<version>**.
+
+## What the issue asked for
+
+<bullets quoted from the issue's Expected / Proposed fix / Acceptance / Problem section>
+
+## How it was addressed
+
+<concrete description of the fix: bullets from the PR's Summary section,
+ideally referencing file:line or commit SHA for each ask. If the PR closes
+multiple issues, include only the bullet that pertains to *this* issue.>
+
+<If review-thread follow-ups for this PR landed in a separate cleanup PR,
+note that explicitly: "Review-thread follow-ups for PR #X were addressed in
+cleanup batch PR #Y.">
+
+## Verification
+
+<bullets from the PR's Verification / Test plan section, with checkboxes
+ticked since the PR has merged.>
+
+## Deferred / out of scope (if applicable)
+
+<bullets describing any original-issue ask or review-comment ask that was
+NOT addressed by this PR, with a link to the follow-up issue or a written
+reason for the deferral.>
+```
+
+**Operationally:**
+
+1. For each linked issue, read the issue body (`gh issue view <iss>`) and the PR body (`gh pr view <pr>`).
+2. Build the comment per the shape above. Quote the issue's original asks verbatim where possible.
+3. Verify that every original ask appears in the "How it was addressed" or "Deferred" section. If any ask is unaccounted for, **do not merge** — push back on the PR author or file a follow-up issue.
+4. Post the comment:
+
+   ```bash
+   gh issue comment <iss> --body-file <draft.md>
+   ```
+
+5. If the issue is in the "auto-close gap" list from the detection step (closure verb in body/commit but not in `closingIssuesReferences`), close it manually after merge:
+
+   ```bash
+   gh issue close <iss> --reason completed
+   ```
+
+**Skip the closure comment for:**
+
+- Issues that are purely process/governance (e.g. "we should be more rigorous about commit-message scopes") — leave open with a comment explaining why.
+- Trivial single-line fixes where the PR title + auto-close comment are obviously sufficient. The judgment call: would a reader landing on this issue six months from now want a narrative, or is the linked PR self-evidently dispositive? Default to writing the comment — narratives age better than diffs.
+
+### Step 4c: Merge Eligible PRs
+
+For each PR that passes all merge-eligibility criteria AND has closure comments posted on every linked issue:
 
 ```bash
 gh pr merge <number> --merge --delete-branch
@@ -201,10 +278,12 @@ gh pr merge <number> --merge --delete-branch
 
 Use `--merge` (no-ff merge) to preserve PR history. Use `--squash` only if the PR branch has a single logical commit and the repo convention allows it. Do not rebase-merge.
 
-After merging, confirm the merge succeeded:
+After merging, confirm the merge succeeded and manually close any auto-close-gap issues identified in Step 4:
 
 ```bash
 gh pr view <number> --json state,mergedAt
+# For each issue in the auto-close gap list:
+gh issue close <iss> --reason completed
 ```
 
 ### Step 5: Handle Blocked PRs
@@ -261,6 +340,8 @@ The `/release` Step 3.5 re-runs G2 and G3 against the exact release commit as a 
 - Always run G2 and G3 before merging a security-adjacent PR.
 - Always report security gate results in the summary, even when advisory.
 - Always run Step 1c (Audit Existing Review Findings) for every non-draft PR before classification in Step 2.
+- Always run Step 4 (Post issue-closure comments) before `gh pr merge` for every PR that closes a linked issue. Auto-close alone does not produce a resolution trail.
+- After merge, manually close any issue that the PR resolved but GitHub did not auto-close (the auto-close-gap case: closure verb in body/commit but issue not in `closingIssuesReferences`).
 - Never post `@claude review` on a `claude/*` branch PR — the workflow already runs on `opened` for those.
 - Never post `@claude review` more than once per batch run on the same PR.
 - Do not post `@claude review` on trivially small PRs (≤5 files, ≤150 lines, no contract surface changes, not security-adjacent).
@@ -278,3 +359,5 @@ The `/release` Step 3.5 re-runs G2 and G3 against the exact release commit as a 
 - **Merging on the strength of a review timestamp alone.** A review was _posted_ does not mean its findings were _addressed_. Verify via Step 1c.
 - **Counting `chore: regenerate test catalog` / `prettier` / rebase-merge commits as "post-review fixes."** They are housekeeping and do not clear review blockers.
 - **Treating placeholder review comments (`I'll analyze this and get back to you.` with 0 output tokens) as completed reviews.** Re-trigger and wait for a substantive review.
+- **Merging a PR that closes issues without first posting a closure-narrative comment on each linked issue (Step 4).** The GitHub auto-close link is not a resolution trail.
+- **Leaving issues open that the merged PR resolved.** When detection in Step 4 surfaces an auto-close gap (closure verb in body/commit but issue not in `closingIssuesReferences`), close the issue manually after merge with `gh issue close <iss> --reason completed` and a comment linking the resolving PR.
