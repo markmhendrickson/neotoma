@@ -235,6 +235,20 @@ function buildSchemaDefinition(): SchemaDefinition {
       "title",
     ],
     temporal_fields: [{ field: "created_at", event_type: "plan_created" }],
+    agent_instructions:
+      "Plans are stored as Neotoma entities — the canonical source of truth. " +
+      "Do NOT write plan markdown files directly to docs/plans/ or any other filesystem path. " +
+      "docs/plans/ is a mirror output directory populated automatically by the mirror process " +
+      "(`neotoma mirror rebuild --profile neotoma-plans`); writing there directly causes " +
+      "drift or conflicts when the mirror next runs. " +
+      "To create or update a plan: store it as a `plan` entity via the store tool. " +
+      "Set `slug` to a kebab-case identifier so the mirror can derive a stable filename. " +
+      "Set `plan_file_path` only when referencing a harness-authored file that already " +
+      "exists on disk (e.g. a Cursor .plan.md file); leave it null for agent-authored plans. " +
+      "Always set `status` to one of: draft | awaiting_input | approved | executing | " +
+      "executed | abandoned | superseded. " +
+      "Set `decision_required: true` and populate `decision_blockers` whenever the plan " +
+      "cannot proceed without a human choice.",
   };
 }
 
@@ -281,19 +295,50 @@ export async function seedPlanSchema(options?: {
 
   const existingFieldNames = new Set(Object.keys(existing.schema_definition.fields ?? {}));
   const missing = PLAN_FIELDS.filter((spec) => !existingFieldNames.has(spec.name));
-  if (missing.length === 0) return existing;
+  // Only backfill agent_instructions when it was never set (undefined). Once set, it
+  // is owned by the operator/schema author and should not be silently overwritten on
+  // every boot.
+  const needsInstructions = existing.schema_definition.agent_instructions === undefined;
 
-  return await registry.updateSchemaIncremental({
-    entity_type: PLAN_ENTITY_TYPE,
-    fields_to_add: missing.map((spec) => ({
-      field_name: spec.name,
-      field_type: spec.type,
-      required: spec.required === true,
-      reducer_strategy: spec.reducer ?? "last_write",
-    })),
-    user_specific: false,
-    activate: true,
-  });
+  if (missing.length === 0 && !needsInstructions) return existing;
+
+  if (missing.length > 0) {
+    await registry.updateSchemaIncremental({
+      entity_type: PLAN_ENTITY_TYPE,
+      fields_to_add: missing.map((spec) => ({
+        field_name: spec.name,
+        field_type: spec.type,
+        required: spec.required === true,
+        reducer_strategy: spec.reducer ?? "last_write",
+      })),
+      user_specific: false,
+      activate: true,
+    });
+  }
+
+  // Patch agent_instructions onto the live schema definition when it's absent or stale.
+  // updateSchemaIncremental preserves the existing definition via spread, so we write
+  // directly to the registry row here.
+  if (needsInstructions) {
+    const current = await registry.loadGlobalSchema(PLAN_ENTITY_TYPE);
+    if (current) {
+      const patched: SchemaDefinition = {
+        ...current.schema_definition,
+        agent_instructions: definition.agent_instructions,
+      };
+      return await registry.register({
+        entity_type: PLAN_ENTITY_TYPE,
+        schema_version: current.schema_version,
+        schema_definition: patched,
+        reducer_config: current.reducer_config,
+        user_specific: false,
+        activate: true,
+        metadata: current.metadata ?? undefined,
+      });
+    }
+  }
+
+  return (await registry.loadGlobalSchema(PLAN_ENTITY_TYPE))!;
 }
 
 export const PLAN_FIELD_SPECS: ReadonlyArray<{

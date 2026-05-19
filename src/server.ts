@@ -5114,6 +5114,45 @@ export class NeotomaServer {
       }
     }
 
+    // Post-store mirror hook: write profile-matched entities (e.g. plan → docs/plans/)
+    // immediately after every successful store so the mirror is never stale by more
+    // than one operation. Best-effort — a mirror failure never blocks the store response.
+    if (commit) {
+      try {
+        const { getMirrorConfig, mirrorEntity } = await import("./services/canonical_mirror.js");
+        const mirrorCfg = getMirrorConfig();
+        const profileTypes = new Set(
+          (mirrorCfg.profiles ?? []).map((p) => p.entity_type).filter(Boolean)
+        );
+        for (const e of createdEntities) {
+          if (!profileTypes.has(e.entityType)) continue;
+          const snapshot = snapshotByEntityId.get(e.entityId) ?? null;
+          if (!snapshot) continue;
+          mirrorEntity(
+            {
+              entity_id: e.entityId,
+              entity_type: e.entityType,
+              schema_version: "1.0",
+              snapshot,
+              canonical_name: e.canonicalName,
+              user_id: userId,
+            },
+            mirrorCfg
+          ).catch((mirrorErr: unknown) => {
+            logger.warn(
+              `[STORE] post-store mirror failed for ${e.entityType}/${e.entityId}: ` +
+                (mirrorErr instanceof Error ? mirrorErr.message : String(mirrorErr))
+            );
+          });
+        }
+      } catch (mirrorImportErr) {
+        logger.warn(
+          `[STORE] post-store mirror hook skipped: ` +
+            (mirrorImportErr instanceof Error ? mirrorImportErr.message : String(mirrorImportErr))
+        );
+      }
+    }
+
     return this.buildTextResponse({
       source_id: storageResult.sourceId,
       entities: createdEntities.map((e, idx) => ({
