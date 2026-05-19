@@ -4249,7 +4249,49 @@ paths:
           application/json:
             schema:
               type: object
-              additionalProperties: true
+              additionalProperties: false
+              properties:
+                entity_id:
+                  type: string
+                  description: |
+                    Entity ID to find relationships for (either as source or target,
+                    depending on `direction`). At least one of `entity_id`,
+                    `source_entity_id`, `target_entity_id`, or `relationship_type`
+                    must be provided.
+                source_entity_id:
+                  type: string
+                  description: |
+                    Filter to relationships where this entity is the source.
+                    Can be combined with `target_entity_id` and/or
+                    `relationship_type`.
+                target_entity_id:
+                  type: string
+                  description: |
+                    Filter to relationships where this entity is the target.
+                    Can be combined with `source_entity_id` and/or
+                    `relationship_type`.
+                relationship_type:
+                  type: string
+                  description: |
+                    Filter to relationships of this type. Can be used alone or
+                    combined with `source_entity_id` / `target_entity_id`.
+                direction:
+                  type: string
+                  enum: [inbound, outbound, incoming, outgoing, both]
+                  description: |
+                    Direction filter when `entity_id` is supplied. Ignored when
+                    only `source_entity_id` / `target_entity_id` are used.
+                limit:
+                  type: integer
+                  minimum: 1
+                  description: Maximum number of relationships to return (default 100).
+                offset:
+                  type: integer
+                  minimum: 0
+                  description: Number of relationships to skip for pagination (default 0).
+                user_id:
+                  type: string
+                  description: Optional user_id override.
       responses:
         "200":
           description: Relationships
@@ -4262,6 +4304,13 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/RelationshipSnapshot"
+                  total:
+                    type: integer
+                    description: Total number of matching relationships before pagination.
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
 
   /retrieve_entity_by_identifier:
     post:

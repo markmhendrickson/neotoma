@@ -5374,7 +5374,42 @@ export interface operations {
     requestBody: {
       content: {
         "application/json": {
-          [key: string]: unknown;
+          /**
+           * @description Entity ID to find relationships for (either as source or target,
+           *     depending on `direction`). At least one of `entity_id`,
+           *     `source_entity_id`, `target_entity_id`, or `relationship_type`
+           *     must be provided.
+           */
+          entity_id?: string;
+          /**
+           * @description Filter to relationships where this entity is the source.
+           *     Can be combined with `target_entity_id` and/or
+           *     `relationship_type`.
+           */
+          source_entity_id?: string;
+          /**
+           * @description Filter to relationships where this entity is the target.
+           *     Can be combined with `source_entity_id` and/or
+           *     `relationship_type`.
+           */
+          target_entity_id?: string;
+          /**
+           * @description Filter to relationships of this type. Can be used alone or
+           *     combined with `source_entity_id` / `target_entity_id`.
+           */
+          relationship_type?: string;
+          /**
+           * @description Direction filter when `entity_id` is supplied. Ignored when
+           *     only `source_entity_id` / `target_entity_id` are used.
+           * @enum {string}
+           */
+          direction?: "inbound" | "outbound" | "incoming" | "outgoing" | "both";
+          /** @description Maximum number of relationships to return (default 100). */
+          limit?: number;
+          /** @description Number of relationships to skip for pagination (default 0). */
+          offset?: number;
+          /** @description Optional user_id override. */
+          user_id?: string;
         };
       };
     };
@@ -5387,6 +5422,10 @@ export interface operations {
         content: {
           "application/json": {
             relationships?: components["schemas"]["RelationshipSnapshot"][];
+            /** @description Total number of matching relationships before pagination. */
+            total?: number;
+            limit?: number;
+            offset?: number;
           };
         };
       };

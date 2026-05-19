@@ -2765,94 +2765,61 @@ export class NeotomaServer {
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = ListRelationshipsRequestSchema.parse(args ?? {});
-    const normalizedDirection =
-      parsed.direction === "incoming" || parsed.direction === "inbound"
-        ? "inbound"
-        : parsed.direction === "outgoing" || parsed.direction === "outbound"
-          ? "outbound"
-          : "both";
+    const { entity_id, source_entity_id, target_entity_id, direction, relationship_type } = parsed;
 
-    const relationships: any[] = [];
+    // Flexible single-query approach supporting the new filter params.
+    let query = db.from("relationship_snapshots").select("*");
 
-    // Query relationship_snapshots instead of relationships table
-    if (normalizedDirection === "outbound" || normalizedDirection === "both") {
-      let outboundQuery = db
-        .from("relationship_snapshots")
-        .select("*")
-        .eq("source_entity_id", parsed.entity_id);
-
-      if (parsed.relationship_type) {
-        outboundQuery = outboundQuery.eq("relationship_type", parsed.relationship_type);
-      }
-
-      const { data: outbound, error: outboundError } = await outboundQuery;
-
-      if (!outboundError && outbound) {
-        relationships.push(
-          ...outbound.map(
-            (r: {
-              relationship_key: string;
-              snapshot?: unknown;
-              last_observation_at?: string;
-            }) => ({
-              ...r,
-              id: r.relationship_key, // Add id field for backward compatibility
-              direction: "outbound",
-              // Include snapshot metadata as top-level for backward compatibility
-              metadata: r.snapshot,
-              // Add created_at field per MCP_SPEC.md 3.16 (use last_observation_at as created_at)
-              created_at: r.last_observation_at,
-            })
-          )
-        );
+    if (source_entity_id && target_entity_id) {
+      query = query
+        .eq("source_entity_id", source_entity_id)
+        .eq("target_entity_id", target_entity_id);
+    } else if (source_entity_id) {
+      query = query.eq("source_entity_id", source_entity_id);
+    } else if (target_entity_id) {
+      query = query.eq("target_entity_id", target_entity_id);
+    } else if (entity_id) {
+      const normalizedDirection =
+        direction === "incoming" || direction === "inbound"
+          ? "inbound"
+          : direction === "outgoing" || direction === "outbound"
+            ? "outbound"
+            : "both";
+      if (normalizedDirection === "outbound") {
+        query = query.eq("source_entity_id", entity_id);
+      } else if (normalizedDirection === "inbound") {
+        query = query.eq("target_entity_id", entity_id);
+      } else {
+        query = query.or(`source_entity_id.eq.${entity_id},target_entity_id.eq.${entity_id}`);
       }
     }
 
-    if (normalizedDirection === "inbound" || normalizedDirection === "both") {
-      let inboundQuery = db
-        .from("relationship_snapshots")
-        .select("*")
-        .eq("target_entity_id", parsed.entity_id);
-
-      if (parsed.relationship_type) {
-        inboundQuery = inboundQuery.eq("relationship_type", parsed.relationship_type);
-      }
-
-      const { data: inbound, error: inboundError } = await inboundQuery;
-
-      if (!inboundError && inbound) {
-        relationships.push(
-          ...inbound.map(
-            (r: {
-              relationship_key: string;
-              snapshot?: unknown;
-              last_observation_at?: string;
-            }) => ({
-              ...r,
-              id: r.relationship_key, // Add id field for backward compatibility
-              direction: "inbound",
-              // Include snapshot metadata as top-level for backward compatibility
-              metadata: r.snapshot,
-              // Add created_at field per MCP_SPEC.md 3.16 (use last_observation_at as created_at)
-              created_at: r.last_observation_at,
-            })
-          )
-        );
-      }
+    if (relationship_type) {
+      query = query.eq("relationship_type", relationship_type);
     }
 
-    // Sort by last_observation_at DESC and apply pagination
-    relationships.sort((a, b) => {
-      const aTime = new Date(a.last_observation_at || a.computed_at || 0).getTime();
-      const bTime = new Date(b.last_observation_at || b.computed_at || 0).getTime();
-      return bTime - aTime;
-    });
+    query = query.order("last_observation_at", { ascending: false });
 
-    const paginated = relationships.slice(parsed.offset, parsed.offset + parsed.limit);
+    const { data, error } = await query;
+
+    if (error) {
+      throw new McpError(ErrorCode.InternalError, `Failed to list relationships: ${error.message}`);
+    }
+
+    const all = (data || []).map(
+      (r: { relationship_key: string; snapshot?: unknown; last_observation_at?: string }) => ({
+        ...r,
+        id: r.relationship_key,
+        metadata: r.snapshot,
+        created_at: r.last_observation_at,
+      })
+    );
+
+    const paginated = all.slice(parsed.offset, parsed.offset + parsed.limit);
 
     return this.buildTextResponse({
       relationships: paginated,
-      total: relationships.length,
+      total: all.length,
       limit: parsed.limit,
       offset: parsed.offset,
     });
