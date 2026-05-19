@@ -5517,6 +5517,17 @@ export interface operations {
           include_events?: boolean;
           /** @default false */
           include_observations?: boolean;
+          /**
+           * @description Maximum number of relationships to return. Default 100, max 500.
+           * @default 100
+           */
+          limit?: number;
+          /**
+           * @description Number of relationships to skip before returning results.
+           * @default 0
+           */
+          offset?: number;
+          user_id?: string;
         };
       };
     };
@@ -5549,6 +5560,10 @@ export interface operations {
             sources?: {
               [key: string]: unknown;
             }[];
+            /** @description Total number of relationships for this node (before pagination). */
+            total_count?: number;
+            /** @description True when additional relationships exist beyond the current page. */
+            has_more?: boolean;
           } & {
             [key: string]: unknown;
           };

@@ -7896,6 +7896,8 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
       include_sources = true,
       include_events: _include_events = true,
       include_observations = false,
+      limit = 100,
+      offset = 0,
     } = parsed.data;
 
     const result: any = { node_id, node_type };
@@ -7914,10 +7916,21 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
 
       // Get relationships if requested
       if (include_relationships) {
+        // Count total relationships for pagination metadata
+        const { count: totalCount, error: countError } = await db
+          .from("relationship_snapshots")
+          .select("*", { count: "exact", head: true })
+          .or(`source_entity_id.eq.${node_id},target_entity_id.eq.${node_id}`);
+
+        const total = countError ? 0 : (totalCount ?? 0);
+        result.total_count = total;
+        result.has_more = offset + limit < total;
+
         const { data: relationships, error: relError } = await db
           .from("relationship_snapshots")
           .select("*")
-          .or(`source_entity_id.eq.${node_id},target_entity_id.eq.${node_id}`);
+          .or(`source_entity_id.eq.${node_id},target_entity_id.eq.${node_id}`)
+          .range(offset, offset + limit - 1);
 
         if (!relError) {
           result.relationships = relationships || [];
