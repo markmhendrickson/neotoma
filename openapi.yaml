@@ -1826,6 +1826,19 @@ components:
             Number of entity fields that were dropped because they are not
             declared in the entity's active schema. These fields were stored in
             `raw_fragments` and can be recovered.
+        conversation_message_count:
+          type: integer
+          nullable: true
+          description: |
+            Total number of `conversation_message` entities `PART_OF` the
+            conversation referenced by this store call, computed after commit.
+            Populated only when at least one `conversation_message` entity was
+            created or updated in this request and its `PART_OF` target
+            conversation can be resolved. Omitted (null) for store calls with
+            no conversation context. Reflects the current snapshot at the time
+            of the response. Consumed by `neotoma_turn_summary` to populate
+            the `msg N/M` component of the turn status line without an extra
+            retrieval round-trip.
         hint:
           type: string
           description: |

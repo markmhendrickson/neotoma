@@ -5169,6 +5169,65 @@ export class NeotomaServer {
       }
     }
 
+    // FU-2026-05-001: conversation_message_count.
+    // When a conversation_message entity was created/updated in this request,
+    // resolve its PART_OF target conversation and count sibling
+    // conversation_messages so neotoma_turn_summary (FU-2026-05-002) can
+    // populate `msg N/M` without an extra retrieval round-trip.
+    let conversationMessageCount: number | null = null;
+    try {
+      const conversationMessageEntityIds = createdEntities
+        .filter((e) => e.entityType === "conversation_message")
+        .map((e) => e.entityId);
+      if (conversationMessageEntityIds.length > 0) {
+        const { data: partOfRows } = await db
+          .from("relationship_snapshots")
+          .select("target_entity_id")
+          .eq("user_id", userId)
+          .eq("relationship_type", "PART_OF")
+          .in("source_entity_id", conversationMessageEntityIds);
+        const conversationIds: string[] = [];
+        for (const row of (partOfRows ?? []) as Array<{ target_entity_id?: string | null }>) {
+          if (typeof row.target_entity_id === "string" && row.target_entity_id.length > 0) {
+            conversationIds.push(row.target_entity_id);
+          }
+        }
+        const uniqueConversationIds = Array.from(new Set(conversationIds));
+        if (uniqueConversationIds.length > 0) {
+          const { data: siblingRows } = await db
+            .from("relationship_snapshots")
+            .select("source_entity_id")
+            .eq("user_id", userId)
+            .eq("relationship_type", "PART_OF")
+            .in("target_entity_id", uniqueConversationIds);
+          const siblingIds: string[] = [];
+          for (const row of (siblingRows ?? []) as Array<{
+            source_entity_id?: string | null;
+          }>) {
+            if (typeof row.source_entity_id === "string" && row.source_entity_id.length > 0) {
+              siblingIds.push(row.source_entity_id);
+            }
+          }
+          const uniqueSiblingIds = Array.from(new Set(siblingIds));
+          if (uniqueSiblingIds.length > 0) {
+            const { count } = await db
+              .from("entity_snapshots")
+              .select("entity_id", { count: "exact", head: true })
+              .eq("user_id", userId)
+              .eq("entity_type", "conversation_message")
+              .in("entity_id", uniqueSiblingIds);
+            if (typeof count === "number") conversationMessageCount = count;
+          }
+        }
+      }
+    } catch (err) {
+      logger.warn(
+        `store: conversation_message_count computation failed: ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
+    }
+
     return this.buildTextResponse({
       source_id: storageResult.sourceId,
       entities: createdEntities.map((e, idx) => ({
@@ -5192,6 +5251,9 @@ export class NeotomaServer {
               "Call update_schema_incremental to promote them to schema fields, " +
               "then set migrate_existing: true to backfill existing data.",
           }
+        : {}),
+      ...(conversationMessageCount !== null
+        ? { conversation_message_count: conversationMessageCount }
         : {}),
       related_entities: relatedData.entities,
       related_relationships: relatedData.relationships,
