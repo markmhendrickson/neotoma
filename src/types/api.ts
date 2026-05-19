@@ -740,3 +740,23 @@ export interface HealthCheckResult {
   details?: Record<string, unknown>[];
   auto_fix?: boolean;
 }
+
+export interface UsageStats {
+  /** Count of active (non-merged) entities per entity_type, sorted by count desc. */
+  entities_by_type: Record<string, number>;
+  /** Total active entities. */
+  total_entities: number;
+  /** Count of observations grouped by observation_source. */
+  observations_by_source: Record<string, number>;
+  /** Total observations. */
+  total_observations: number;
+  /** Number of entities created in the last 7 days. */
+  entities_created_last_7_days: number;
+  /** Number of entities created in the last 30 days. */
+  entities_created_last_30_days: number;
+  /** Number of distinct entity_types that have a registered schema. */
+  entity_types_with_schema: number;
+  /** Total distinct entity_types present in the entities table. */
+  entity_types_total: number;
+  last_updated: string;
+}

@@ -45,6 +45,7 @@ const AccessPoliciesPage = lazy(() => import("@/pages/access_policies"));
 const SubscriptionsPage = lazy(() => import("@/pages/subscriptions"));
 const PeersPage = lazy(() => import("@/pages/peers"));
 const PeerDetailPage = lazy(() => import("@/pages/peer_detail"));
+const UsagePage = lazy(() => import("@/pages/usage"));
 
 function InspectorRedirect() {
   const location = useLocation();
@@ -61,6 +62,7 @@ export default function App() {
         <Route path="/faq" element={<FaqPage />} />
         <Route path="/analytics" element={<DashboardPage />} />
         <Route path="/dashboard" element={<Navigate to="/analytics" replace />} />
+        <Route path="/usage" element={<UsagePage />} />
         <Route path="/docs" element={<DocsPage />} />
         <Route path="/docs/*" element={<DocsPage />} />
         <Route path="/search/:query" element={<SearchPage />} />

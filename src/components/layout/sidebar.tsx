@@ -35,6 +35,7 @@ import {
   Layers,
   BookOpen,
   PenLine,
+  TrendingUp,
   type LucideIcon,
 } from "lucide-react";
 import neotomaWordmarkUrl from "@/assets/neotoma_wordmark.svg?url";
@@ -90,7 +91,10 @@ const moreNavItems: NavItem[] = [
 
 const documentationNavItems: NavItem[] = [{ to: "/docs", label: "Documentation", icon: BookOpen }];
 
-const analyticsNavItems: NavItem[] = [{ to: "/analytics", label: "Analytics", icon: BarChart3 }];
+const analyticsNavItems: NavItem[] = [
+  { to: "/analytics", label: "Analytics", icon: BarChart3 },
+  { to: "/usage", label: "Usage", icon: TrendingUp },
+];
 
 const settingsNavItems: NavItem[] = [{ to: "/settings", label: "Settings", icon: Settings }];
 
