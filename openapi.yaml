@@ -4784,6 +4784,61 @@ paths:
                 type: object
                 additionalProperties: true
 
+  /issues/import:
+    post:
+      summary: Import issues from JSONL
+      description: >
+        Bulk-import issues from a JSONL string (one JSON object per line) or a file path.
+        Each line is parsed as an issue object and ingested into the local Neotoma issue
+        entity graph. Intended for observer batch ingestion — importing issues exported
+        from another system without touching GitHub.
+        MCP import_issues_from_jsonl parity.
+      operationId: importIssuesFromJsonl
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                jsonl:
+                  type: string
+                  description: >
+                    Raw JSONL content — one JSON issue object per line.
+                    Mutually exclusive with file_path.
+                file_path:
+                  type: string
+                  description: >
+                    Absolute path to a JSONL file on the server's local filesystem.
+                    Mutually exclusive with jsonl.
+                user_id:
+                  type: string
+      responses:
+        "200":
+          description: Import summary
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                  - imported
+                  - skipped
+                  - errors
+                properties:
+                  imported:
+                    type: integer
+                    description: Number of issue objects successfully ingested.
+                  skipped:
+                    type: integer
+                    description: Number of lines skipped (blank or already-ingested with same idempotency key).
+                  errors:
+                    type: array
+                    items:
+                      type: string
+                    description: Per-line error messages for lines that failed to parse or ingest.
+
   /issues/sync:
     post:
       summary: Sync issues bidirectionally with GitHub

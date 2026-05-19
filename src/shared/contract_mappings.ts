@@ -203,6 +203,14 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     cliCommand: "issues status",
   },
   {
+    operationId: "importIssuesFromJsonl",
+    method: "post",
+    path: "/issues/import",
+    adapter: "both",
+    mcpTool: "import_issues_from_jsonl",
+    cliCommand: "issues import",
+  },
+  {
     operationId: "issuesSync",
     method: "post",
     path: "/issues/sync",
@@ -820,6 +828,7 @@ export const MCP_TOOL_TO_OPERATION_ID: Record<string, string> = {
   submit_issue: "issuesSubmit",
   add_issue_message: "issuesAddMessage",
   get_issue_status: "issuesGetStatus",
+  import_issues_from_jsonl: "importIssuesFromJsonl",
   sync_issues: "issuesSync",
 };
 

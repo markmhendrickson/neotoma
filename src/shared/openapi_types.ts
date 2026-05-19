@@ -1450,6 +1450,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/issues/import": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Import issues from JSONL
+     * @description Bulk-import issues from a JSONL string (one JSON object per line) or a file path. Each line is parsed as an issue object and ingested into the local Neotoma issue entity graph. Intended for observer batch ingestion — importing issues exported from another system without touching GitHub. MCP import_issues_from_jsonl parity.
+     */
+    post: operations["importIssuesFromJsonl"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/issues/sync": {
     parameters: {
       query?: never;
@@ -3172,18 +3192,6 @@ export interface components {
        *     `raw_fragments` and can be recovered.
        */
       unknown_fields_count?: number;
-      /**
-       * @description Total number of `conversation_message` entities `PART_OF` the
-       *     conversation referenced by this store call, computed after commit.
-       *     Populated only when at least one `conversation_message` entity was
-       *     created or updated in this request and its `PART_OF` target
-       *     conversation can be resolved. Omitted (null) for store calls with
-       *     no conversation context. Reflects the current snapshot at the time
-       *     of the response. Consumed by `neotoma_turn_summary` to populate
-       *     the `msg N/M` component of the turn status line without an extra
-       *     retrieval round-trip.
-       */
-      conversation_message_count?: number | null;
       /**
        * @description Actionable guidance when fields were dropped to `raw_fragments`.
        *     Present only when `unknown_fields_count > 0`. Directs the caller
@@ -5774,6 +5782,43 @@ export interface operations {
         content: {
           "application/json": {
             [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  importIssuesFromJsonl: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          /** @description Raw JSONL content — one JSON issue object per line. Mutually exclusive with file_path. */
+          jsonl?: string;
+          /** @description Absolute path to a JSONL file on the server's local filesystem. Mutually exclusive with jsonl. */
+          file_path?: string;
+          user_id?: string;
+        } & (unknown | unknown);
+      };
+    };
+    responses: {
+      /** @description Import summary */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            /** @description Number of issue objects successfully ingested. */
+            imported: number;
+            /** @description Number of lines skipped (blank or already-ingested with same idempotency key). */
+            skipped: number;
+            /** @description Per-line error messages for lines that failed to parse or ingest. */
+            errors: string[];
           };
         };
       };

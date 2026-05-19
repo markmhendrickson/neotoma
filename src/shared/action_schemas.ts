@@ -683,6 +683,17 @@ export const IssuesGetStatusRequestSchema = z
     { message: "Provide entity_id or issue_number" }
   );
 
+/** JSONL batch import (HTTP + CLI parity with MCP import_issues_from_jsonl). */
+export const IssuesImportFromJsonlRequestSchema = z
+  .object({
+    jsonl: z.string().optional(),
+    file_path: z.string().optional(),
+    user_id: z.string().optional(),
+  })
+  .refine((v) => typeof v.jsonl === "string" || typeof v.file_path === "string", {
+    message: "Provide jsonl or file_path",
+  });
+
 /** GitHub mirror ingest (HTTP + CLI parity with MCP sync_issues). */
 export const IssuesSyncRequestSchema = z.object({
   since: z.string().optional(),

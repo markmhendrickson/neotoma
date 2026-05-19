@@ -1133,6 +1133,32 @@ export function buildToolDefinitions(
       annotations: { readOnlyHint: true },
     },
     {
+      name: "import_issues_from_jsonl",
+      description: desc(
+        "import_issues_from_jsonl",
+        "Bulk-import issues from a JSONL string or file path into the local Neotoma issue graph. " +
+          "Each line must be a JSON object representing one issue. " +
+          "Fields map onto the `issue` entity type; unknown fields are ignored. " +
+          "Re-running the same JSONL is idempotent — duplicate lines are counted as skipped. " +
+          "Returns imported, skipped, and per-line error counts."
+      ),
+      inputSchema: {
+        type: "object",
+        properties: {
+          jsonl: {
+            type: "string",
+            description:
+              "Raw JSONL content — one JSON issue object per line. Mutually exclusive with file_path.",
+          },
+          file_path: {
+            type: "string",
+            description:
+              "Absolute path to a JSONL file on the server's local filesystem. Mutually exclusive with jsonl.",
+          },
+        },
+      },
+    },
+    {
       name: "sync_issues",
       description: desc(
         "sync_issues",
@@ -1323,6 +1349,7 @@ export const NEOTOMA_TOOL_NAMES = [
   "submit_issue",
   "add_issue_message",
   "get_issue_status",
+  "import_issues_from_jsonl",
   "sync_issues",
   "submit_entity",
   "add_entity_message",

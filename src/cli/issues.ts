@@ -64,6 +64,11 @@ export interface IssuesListOpts {
   json?: boolean;
 }
 
+export interface IssuesImportOpts {
+  fromJsonl: string;
+  json?: boolean;
+}
+
 export interface IssuesSyncOpts {
   since?: string;
   state?: "open" | "closed" | "all";
@@ -344,6 +349,52 @@ export async function issuesList(opts: IssuesListOpts, api: NeotomaApiClient): P
     body: { entities: [] },
   });
   process.stdout.write(`Use --no-sync to view cached local data only.\n`);
+}
+
+export async function issuesImport(opts: IssuesImportOpts, api: NeotomaApiClient): Promise<void> {
+  const { readFile } = await import("node:fs/promises");
+
+  let jsonl: string;
+  try {
+    jsonl = await readFile(opts.fromJsonl, "utf8");
+  } catch (err) {
+    process.stderr.write(
+      `issues import: failed to read file "${opts.fromJsonl}": ${(err as Error).message}\n`
+    );
+    process.exitCode = 1;
+    return;
+  }
+
+  const { data, error } = await api.POST("/issues/import", {
+    body: { jsonl },
+  });
+
+  if (error) {
+    process.stderr.write(`issues import failed: ${JSON.stringify(error)}\n`);
+    process.exitCode = 1;
+    return;
+  }
+
+  const row = data as
+    | {
+        imported?: number;
+        skipped?: number;
+        errors?: string[];
+      }
+    | undefined;
+
+  const imported = row?.imported ?? 0;
+  const skipped = row?.skipped ?? 0;
+  const errors = row?.errors ?? [];
+
+  if (opts.json) {
+    output({ imported, skipped, errors }, true);
+  } else {
+    process.stdout.write(`Imported ${imported} issues, skipped ${skipped}.\n`);
+    if (errors.length) {
+      process.stderr.write(`Errors:\n${errors.map((e) => `  - ${e}`).join("\n")}\n`);
+    }
+  }
 }
 
 export async function issuesSync(opts: IssuesSyncOpts, api: NeotomaApiClient): Promise<void> {
