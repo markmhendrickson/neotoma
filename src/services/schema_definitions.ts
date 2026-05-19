@@ -1520,46 +1520,88 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
 
   exercise_log: {
     entity_type: "exercise_log",
-    schema_version: "1.0",
+    schema_version: "2.0",
     metadata: {
       label: "Exercise Log",
       description:
-        "A single logged exercise set — one atomic entry in a workout (e.g. Bench Press, Set 1, 60 kg × 10 reps, 2026-05-16).",
+        "A workout session container (e.g. Upper Body — 2026-05-16). Individual sets performed during the session are stored as separate `exercise_set` entities with a PART_OF relationship pointing to this log.",
       category: "health",
-      aliases: ["exercise_set", "workout_set", "exercise_entry"],
+      aliases: ["workout_log", "training_log"],
     },
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
-        exercise: { type: "string", required: true },
+        date: { type: "date", required: true },
+        workout_type: { type: "string", required: false },
+        duration_minutes: { type: "number", required: false },
+        notes: { type: "string", required: false },
+        location: { type: "string", required: false },
+        import_date: { type: "date", required: false },
+        import_source_file: { type: "string", required: false },
+      },
+      // Identity: date + workout_type uniquely identifies a session. Falls back
+      // to date alone for untyped sessions (e.g. "just went to the gym").
+      canonical_name_fields: [{ composite: ["date", "workout_type"] }, { composite: ["date"] }],
+      temporal_fields: [{ field: "date", event_type: "WorkoutLogged" }],
+    },
+    reducer_config: {
+      merge_policies: {
+        date: { strategy: "last_write" },
+        workout_type: { strategy: "last_write" },
+        duration_minutes: { strategy: "last_write" },
+        notes: { strategy: "last_write" },
+        location: { strategy: "last_write" },
+      },
+    },
+  },
+
+  // exercise_set: one atomic set within an exercise_log session.
+  // Relationship: exercise_set PART_OF exercise_log (sets are children of their
+  // parent session log). Store the exercise_log first, then store each
+  // exercise_set with a PART_OF relationship pointing to the log entity_id.
+  exercise_set: {
+    entity_type: "exercise_set",
+    schema_version: "1.0",
+    metadata: {
+      label: "Exercise Set",
+      description:
+        "A single logged exercise set — one atomic entry in a workout (e.g. Bench Press, Set 1, 60 kg × 10 reps, 2026-05-16). Store with a PART_OF relationship to the parent `exercise_log` session entity.",
+      category: "health",
+      aliases: ["workout_set", "exercise_entry"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        exercise_name: { type: "string", required: true },
         date: { type: "date", required: true },
         set_number: { type: "number", required: false },
         set_type: { type: "string", required: false },
         reps: { type: "number", required: false },
-        weight_kg: { type: "number", required: false },
         weight_lbs: { type: "number", required: false },
+        weight_kg: { type: "number", required: false },
         duration_seconds: { type: "number", required: false },
         distance_meters: { type: "number", required: false },
         notes: { type: "string", required: false },
         import_date: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
       },
-      // Composite identity: exercise name + date + set_number uniquely identifies
-      // a single logged set. Falls back to exercise + date when set_number is absent
+      // Identity: exercise_name + set_number uniquely identifies a set within a
+      // session. Falls back to exercise_name + date when set_number is absent
       // (e.g. for cardio or untimed drills with no per-set breakdown).
       canonical_name_fields: [
-        { composite: ["exercise", "date", "set_number"] },
-        { composite: ["exercise", "date"] },
+        { composite: ["exercise_name", "set_number", "date"] },
+        { composite: ["exercise_name", "date"] },
       ],
     },
     reducer_config: {
       merge_policies: {
-        date: { strategy: "last_write" },
         reps: { strategy: "last_write" },
-        weight_kg: { strategy: "last_write" },
         weight_lbs: { strategy: "last_write" },
+        weight_kg: { strategy: "last_write" },
         duration_seconds: { strategy: "last_write" },
         distance_meters: { strategy: "last_write" },
+        set_type: { strategy: "last_write" },
+        notes: { strategy: "last_write" },
       },
     },
   },
