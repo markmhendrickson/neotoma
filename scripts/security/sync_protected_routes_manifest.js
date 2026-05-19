@@ -122,6 +122,13 @@ function generateRoutes(openapi) {
         method: method.toUpperCase(),
         operation_id: op.operationId || null,
         requires_auth: requiresAuth,
+        // Sandbox-mode reachability (plan ent_b4958d038bd41e8694fe0aef Phase 4).
+        // - "none": route requires full auth; sandbox principals rejected
+        // - "local_only": local_sandbox allowed; hosted_sandbox rejected
+        // - "hosted_ok": both sandbox modes allowed
+        // Default conservative: auth-required routes -> "none", open routes
+        // -> "hosted_ok". Operators tighten via overrides.
+        sandbox_allowed: requiresAuth ? "none" : "hosted_ok",
         // Conservative expectations the matrix asserts. Operators can override
         // via the `overrides` array (e.g. routes that legitimately allow guest
         // tokens via `?guest_access_token=` should set
@@ -141,6 +148,9 @@ function generateRoutes(openapi) {
       requires_auth: false,
       runtime_only: true,
       reason: row.reason,
+      // Runtime-unauth allow-list rows are open by definition; mark them
+      // hosted_ok so hosted_sandbox visitors can reach them.
+      sandbox_allowed: "hosted_ok",
       expected_no_auth_status: [200, 204, 400, 404, 405, 429],
       expected_invalid_auth_status: [200, 204, 400, 404, 405, 429],
     });

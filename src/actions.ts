@@ -87,8 +87,11 @@ import {
 } from "./services/local_auth.js";
 import {
   isSandboxMode,
+  resolveRefusePolicy,
+  resolveSandboxMode,
   sandboxDestructiveGuard,
   sandboxHeaderMiddleware,
+  type NeotomaSandboxModeName,
 } from "./services/sandbox_mode.js";
 import {
   createSandboxSession,
@@ -3099,10 +3102,26 @@ app.use(async (req, res, next) => {
       return next();
     }
     logWarn("AuthMissingBearer", req);
+    // Plan ent_b4958d038bd41e8694fe0aef Phase 5: surface sandbox availability
+    // in the 401 envelope so UIs can replace the hard "Missing Bearer token"
+    // error with a sandbox-session onboarding affordance when one is live.
+    const sandboxLive = isSandboxMode();
     return sendError(res, 401, "AUTH_REQUIRED", "Missing Bearer token", {
-      hint:
-        "AAuth-signed agents can authenticate without Bearer once an active agent_grant matches their identity. " +
-        "Create a grant via Inspector → Agents → Grants.",
+      hint: sandboxLive
+        ? "Hosted sandbox is enabled; visit /sandbox/session/new to mint an ephemeral session, " +
+          "or sign in with a bearer token."
+        : "AAuth-signed agents can authenticate without Bearer once an active agent_grant matches their identity. " +
+          "Create a grant via Inspector → Agents → Grants.",
+      sandbox: sandboxLive
+        ? {
+            available: true,
+            mode: "hosted_sandbox",
+            session_endpoints: {
+              create: "/sandbox/session/new",
+              redeem: "/sandbox/session/redeem",
+            },
+          }
+        : { available: false },
     });
   }
 
@@ -9617,6 +9636,46 @@ app.get("/openapi_actions.yaml", (req, res) => {
 
 // SPA fallback - serve index.html for non-API routes (must be after all API routes)
 
+/**
+ * Emit a boot-time banner naming the resolved sandbox mode. Writes directly
+ * to stderr (not via `logger`) so the banner is visible even when log level
+ * is set to silent — operators must see refuse-mode warnings on every start.
+ */
+function emitSandboxBootBanner(
+  mode: NeotomaSandboxModeName,
+  reason: string,
+  shouldRefuseBoot: boolean,
+  refusePolicy: "warn" | "enforce"
+): void {
+  const lines: string[] = [];
+  lines.push("");
+  lines.push("─────────────────────────────────────────────────────────────");
+  lines.push(`[neotoma] Sandbox mode resolved: ${mode}`);
+  lines.push(`[neotoma] Reason: ${reason}`);
+  if (mode === "refuse") {
+    lines.push(
+      `[neotoma] WARNING: this server topology matches the v0.11.1 inspector ` +
+        `auth-bypass advisory class.`
+    );
+    lines.push(
+      `[neotoma] Set NEOTOMA_REQUIRE_AUTH=1 + provision auth, OR bind to ` +
+        `loopback (NEOTOMA_HTTP_HOST=127.0.0.1), OR opt into ` +
+        `NEOTOMA_SANDBOX_MODE=1 for the hosted-sandbox profile.`
+    );
+    if (shouldRefuseBoot) {
+      lines.push(`[neotoma] NEOTOMA_REFUSE_MODE=enforce — refusing to start. ` + `Exit code 1.`);
+    } else {
+      lines.push(
+        `[neotoma] NEOTOMA_REFUSE_MODE=${refusePolicy} — boot continues; set ` +
+          `NEOTOMA_REFUSE_MODE=enforce to make this fatal.`
+      );
+    }
+  }
+  lines.push("─────────────────────────────────────────────────────────────");
+  lines.push("");
+  process.stderr.write(lines.join("\n"));
+}
+
 /** Try to bind on a port; resolves with server and port, or rejects on error (e.g. EADDRINUSE). */
 function tryListen(
   port: number
@@ -9749,6 +9808,54 @@ export async function startHTTPServer() {
         `[Sandbox] failed to seed sandbox_abuse_report schema: ${(err as Error).message}`
       );
     }
+  }
+
+  // ----------------------------------------------------------------------
+  // Sandbox mode banner (plan ent_b4958d038bd41e8694fe0aef Phase 2).
+  //
+  // Resolve the effective sandbox mode at boot and emit a banner. The
+  // resolver is informational in this first cut: when refusePolicy=warn
+  // (default), a `refuse` verdict logs a loud advisory pointer but does
+  // not halt boot. Set NEOTOMA_REFUSE_MODE=enforce to make the refuse
+  // verdict abort startup with a non-zero exit code.
+  //
+  // The `authConfigured` signal is conservative: the in-memory public-key
+  // registry starts empty (keys register on first verified request), so
+  // boot-time we can only observe explicit operator signals
+  // (NEOTOMA_REQUIRE_AUTH=1). Future operator-config integration can
+  // extend this without changing the resolver shape.
+  //
+  // The bind topology is interpreted from the host the listener will use.
+  // express's app.listen(port) with no host binds to 0.0.0.0/::, which is
+  // explicitly non-loopback — that's the v0.11.1 advisory shape when no
+  // auth is configured. Operators on loopback-only deployments should set
+  // NEOTOMA_HTTP_HOST=127.0.0.1.
+  // ----------------------------------------------------------------------
+  try {
+    const hostEnv = (process.env.NEOTOMA_HTTP_HOST || "").trim().toLowerCase();
+    const loopbackBindOnly =
+      hostEnv === "127.0.0.1" || hostEnv === "localhost" || hostEnv === "::1";
+    const productionEnv =
+      (process.env.NEOTOMA_ENV || "development").trim().toLowerCase() === "production" ||
+      (process.env.NEOTOMA_ENV || "").trim().toLowerCase() === "prod";
+    const authConfigured = (process.env.NEOTOMA_REQUIRE_AUTH ?? "").trim() === "1";
+    const refusePolicy = resolveRefusePolicy();
+    const verdict = resolveSandboxMode({
+      authConfigured,
+      loopbackBindOnly,
+      productionEnv,
+      hostedSandboxEnabled: isSandboxMode(),
+      refusePolicy,
+    });
+    emitSandboxBootBanner(verdict.mode, verdict.reason, verdict.shouldRefuseBoot, refusePolicy);
+    if (verdict.shouldRefuseBoot) {
+      // Refuse mode + enforce policy: hard exit. The banner above already
+      // explains the why; do not start the listener.
+      process.exit(1);
+    }
+  } catch (err) {
+    // Banner emission must never block boot in warn mode.
+    logger.warn(`[sandbox_mode] banner emission failed: ${(err as Error).message}`);
   }
 
   const httpPortEnv = process.env.NEOTOMA_HTTP_PORT || process.env.HTTP_PORT;

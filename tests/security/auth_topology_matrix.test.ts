@@ -209,6 +209,8 @@ interface ManifestRoute {
   requires_auth: boolean;
   runtime_only?: boolean;
   reason?: string;
+  /** Sandbox-mode reachability (plan ent_b4958d038bd41e8694fe0aef Phase 4). */
+  sandbox_allowed?: "none" | "local_only" | "hosted_ok";
   expected_no_auth_status: number[];
   expected_invalid_auth_status: number[];
 }
@@ -261,6 +263,33 @@ describe("auth topology matrix — protected_routes_manifest.json sanity", () =>
     for (const row of manifest.routes) {
       if (!row.runtime_only) continue;
       expect(row.reason, `${row.method} ${row.path}`).toBeTruthy();
+    }
+  });
+
+  // Plan ent_b4958d038bd41e8694fe0aef Phase 4: sandbox_allowed column.
+  it("every route declares a valid sandbox_allowed value", () => {
+    const manifest = loadManifest();
+    const allowed = new Set(["none", "local_only", "hosted_ok"]);
+    for (const row of manifest.routes) {
+      expect(
+        row.sandbox_allowed,
+        `${row.method} ${row.path} is missing sandbox_allowed`,
+      ).toBeTruthy();
+      expect(
+        allowed.has(row.sandbox_allowed as string),
+        `${row.method} ${row.path} has invalid sandbox_allowed=${row.sandbox_allowed}`,
+      ).toBe(true);
+    }
+  });
+
+  it("every auth-required route defaults to sandbox_allowed=none (operators tighten via overrides)", () => {
+    const manifest = loadManifest();
+    for (const row of manifest.routes) {
+      if (!row.requires_auth) continue;
+      expect(
+        row.sandbox_allowed,
+        `${row.method} ${row.path}: auth-required route must default to sandbox_allowed=none`,
+      ).toBe("none");
     }
   });
 });
