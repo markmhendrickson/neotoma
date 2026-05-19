@@ -210,6 +210,13 @@ app.use(
         styleSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com"],
         objectSrc: ["'none'"],
         frameSrc: ["'self'"],
+        // The Inspector is served over plain HTTP on loopback (127.0.0.1:3080
+        // / :3180). With `upgrade-insecure-requests` set, browsers rewrite
+        // subresource fetches to https://, which fails with
+        // ERR_SSL_PROTOCOL_ERROR on the loopback dev server. Drop the default
+        // directive — TLS in production is enforced by the reverse proxy and
+        // HSTS, not by this header.
+        upgradeInsecureRequests: null,
       },
     },
   })

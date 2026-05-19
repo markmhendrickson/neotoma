@@ -33,6 +33,12 @@ export interface DocFrontmatter {
   tags: string[];
   /** ISO date (YYYY-MM-DD) of last human review; null when unknown. */
   last_reviewed: string | null;
+  /** Marks the doc as deprecated. Hidden from the index by default; direct slug lookup still resolves. */
+  deprecated: boolean;
+  /** Optional slug of the doc that replaces this one. Surfaced in direct lookups. */
+  superseded_by: string | null;
+  /** Optional free-text reason for deprecation. */
+  deprecation_reason: string | null;
 }
 
 export interface RawDocFrontmatter {
@@ -46,6 +52,9 @@ export interface RawDocFrontmatter {
   audience?: unknown;
   tags?: unknown;
   last_reviewed?: unknown;
+  deprecated?: unknown;
+  superseded_by?: unknown;
+  deprecation_reason?: unknown;
 }
 
 const FRONTMATTER_FENCE = "---";
@@ -439,6 +448,16 @@ export function resolveFrontmatter(
       ? raw.last_reviewed
       : null;
 
+  const deprecated = raw.deprecated === true;
+  const superseded_by =
+    typeof raw.superseded_by === "string" && raw.superseded_by.trim()
+      ? raw.superseded_by.trim()
+      : null;
+  const deprecation_reason =
+    typeof raw.deprecation_reason === "string" && raw.deprecation_reason.trim()
+      ? raw.deprecation_reason.trim()
+      : null;
+
   return {
     title,
     summary,
@@ -450,5 +469,8 @@ export function resolveFrontmatter(
     audience,
     tags,
     last_reviewed,
+    deprecated,
+    superseded_by,
+    deprecation_reason,
   };
 }

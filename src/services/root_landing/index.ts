@@ -35,6 +35,11 @@ import {
 import { ROOT_LANDING_SITE_NAV, resolveNavHref, type RootLandingNavCategory } from "./site_nav.js";
 import { renderLandingHtml } from "./html_template.js";
 import { renderLandingMarkdown } from "./md_template.js";
+import {
+  buildBundledDocsNavCategories,
+  buildBundledDocsFooterColumns,
+} from "../docs/bundled_nav.js";
+import { getBundledDocsIndex } from "../docs/index.js";
 
 const CURRENT_FILE_DIR = path.dirname(fileURLToPath(import.meta.url));
 
@@ -55,6 +60,16 @@ export interface RootLandingContext {
   stdioMcpScriptPath: string | null;
   harnesses: HarnessSnippetResult[];
   index: RootLandingNavCategory[];
+  /**
+   * Footer navigation columns. Populated when bundled-docs nav is active so
+   * the personal/MCP landing surfaces a footer that mirrors the docs site.
+   */
+  footerNav?: RootLandingNavCategory[];
+  /**
+   * True when `index` was derived from the bundled docs tree instead of the
+   * static marketing nav. Disabled by `NEOTOMA_ROOT_LANDING_MARKETING_NAV=1`.
+   */
+  bundledDocsNav: boolean;
   endpoints: Record<string, string>;
   sandboxPacks: SandboxPack[];
   sandboxDefaultPackId: string;
@@ -243,6 +258,26 @@ export function buildLandingContext(
     sessionBearer: activeSessionBearer,
   };
 
+  const marketingNavOverride = env.NEOTOMA_ROOT_LANDING_MARKETING_NAV === "1";
+  const docsRoot = path.join(config.projectRoot, "docs");
+  const docsTreeExists = existsSync(docsRoot);
+  const bundledDocsNav = !marketingNavOverride && docsTreeExists;
+
+  let landingIndex: RootLandingNavCategory[] = ROOT_LANDING_SITE_NAV;
+  let footerNav: RootLandingNavCategory[] | undefined;
+  if (bundledDocsNav) {
+    try {
+      const docsIndex = getBundledDocsIndex({
+        repoRoot: config.projectRoot,
+        envSource: env as Record<string, string | undefined>,
+      });
+      landingIndex = buildBundledDocsNavCategories(docsIndex);
+      footerNav = buildBundledDocsFooterColumns(docsIndex, base);
+    } catch {
+      // Fall back to the static nav if the docs tree can't be loaded.
+    }
+  }
+
   return {
     mode,
     configEnvironment,
@@ -254,7 +289,9 @@ export function buildLandingContext(
     publicDocsUrl,
     stdioMcpScriptPath,
     harnesses: buildAllHarnessSnippets(snippetCtx),
-    index: ROOT_LANDING_SITE_NAV,
+    index: landingIndex,
+    footerNav,
+    bundledDocsNav,
     endpoints: buildEndpointsMap(mode),
     sandboxPacks: [...PACK_REGISTRY],
     sandboxDefaultPackId: DEFAULT_SANDBOX_PACK_ID,

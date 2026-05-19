@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { beforeAll, describe, expect, it } from "vitest";
 import { NeotomaServer } from "../../src/server.js";
 import { getDashboardStats } from "../../src/services/dashboard_stats.js";
@@ -20,7 +21,7 @@ describe("MCP get_entity_type_counts tool", () => {
     (server as any).authenticatedUserId = testUserId;
     await (server as any).store({
       user_id: testUserId,
-      idempotency_key: "mcp-get-entity-type-counts-seed",
+      idempotency_key: `mcp-get-entity-type-counts-seed-${randomUUID()}`,
       entities: [
         { entity_type: "task", title: "MCP counts seed A" },
         { entity_type: "task", title: "MCP counts seed B" },

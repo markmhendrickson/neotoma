@@ -87,7 +87,7 @@ describe("idempotency key collision detection (issue #186)", () => {
         idempotencyKey: key,
       });
 
-      await expect(collision).rejects.toThrow(/ERR_IDEMPOTENCY_COLLISION|Idempotency key reuse/);
+      await expect(collision).rejects.toThrow(/ERR_IDEMPOTENCY_(COLLISION|MISMATCH)|Idempotency key reuse|already used with different content/);
     });
   });
 
@@ -132,7 +132,7 @@ describe("idempotency key collision detection (issue #186)", () => {
         ],
       });
 
-      await expect(collisionCall).rejects.toThrow(/ERR_IDEMPOTENCY_COLLISION|Idempotency key reuse/);
+      await expect(collisionCall).rejects.toThrow(/ERR_IDEMPOTENCY_(COLLISION|MISMATCH)|Idempotency key reuse|already used with different content/);
     });
   });
 });

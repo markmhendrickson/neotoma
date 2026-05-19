@@ -61,18 +61,18 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **387**
-- Backend and repo Vitest files: **354**
+- Total automated test files: **390**
+- Backend and repo Vitest files: **357**
 - Frontend Vitest files: **9**
 - Playwright spec files: **24**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 93 |
+| Vitest unit tests | 95 |
 | Vitest service tests | 33 |
 | Source-adjacent tests | 45 |
-| Vitest integration tests | 105 |
+| Vitest integration tests | 106 |
 | Vitest CLI tests | 59 |
 | Vitest contract tests | 10 |
 | Vitest security tests | 1 |
@@ -107,7 +107,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (93):**
+**Files (95):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -128,6 +128,7 @@ flowchart TD
 - `tests/unit/attribution_diagnostics.test.ts`
 - `tests/unit/attribution_policy.test.ts`
 - `tests/unit/bigint_serialization.test.ts`
+- `tests/unit/bundled_docs_nav.test.ts`
 - `tests/unit/cli_aauth_tbs_attestation.test.ts`
 - `tests/unit/cli_aauth_tpm2_attestation.test.ts`
 - `tests/unit/cli_aauth_yubikey_attestation.test.ts`
@@ -143,6 +144,7 @@ flowchart TD
 - `tests/unit/cursor_hooks_external_data.test.ts`
 - `tests/unit/cursor_hooks_small_model.test.ts`
 - `tests/unit/docs_sidebar_nav.test.ts`
+- `tests/unit/docs/index_builder_deprecation.test.ts`
 - `tests/unit/drift_comparison.test.ts`
 - `tests/unit/duplicate_detection.test.ts`
 - `tests/unit/encrypt_response_middleware.test.ts`
@@ -299,7 +301,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (105):**
+**Files (106):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_resource_metadata.test.ts`
 - `tests/integration/aauth_revocation_e2e.test.ts`
@@ -321,6 +323,7 @@ flowchart TD
 - `tests/integration/cli_to_mcp_store.test.ts`
 - `tests/integration/conversation_turn_accrual.test.ts`
 - `tests/integration/cross_instance_issues.test.ts`
+- `tests/integration/csp_local_http.test.ts`
 - `tests/integration/cursor_hook_stop_backfill.test.ts`
 - `tests/integration/dashboard_stats.test.ts`
 - `tests/integration/docs_route.test.ts`

@@ -101,6 +101,21 @@ function getDocsIndex(opts: {
   return index;
 }
 
+/**
+ * Build (or fetch from cache) the bundled docs index for the given repo.
+ * Exposed for tests and for callers that need the raw `DocsIndex` (e.g. the
+ * root landing page navigation builder) without mounting the HTTP routes.
+ */
+export function getBundledDocsIndex(opts: {
+  repoRoot: string;
+  envSource?: VisibilityEnv;
+}): DocsIndex {
+  const docsRoot = path.join(opts.repoRoot, "docs");
+  const manifestPath = path.join(opts.repoRoot, "docs", "site", "site_doc_manifest.yaml");
+  const env = opts.envSource ?? (process.env as VisibilityEnv);
+  return getDocsIndex({ docsRoot, manifestPath, env });
+}
+
 export function mountDocsRoutes(app: express.Express, opts: DocsRoutesOptions = {}): void {
   const repoRoot = opts.repoRoot ?? resolveRepoRoot();
   const docsRoot = path.join(repoRoot, "docs");

@@ -83,6 +83,12 @@ export interface BuildDocsIndexOptions {
   manifest: DocsManifest;
   env: VisibilityEnv;
   manifestEntries?: Map<string, { status?: string }>;
+  /**
+   * When true, docs with `deprecated: true` in their frontmatter are kept in
+   * the index. Default is false — deprecated docs are filtered out of the
+   * browseable index but still resolve via direct slug lookup.
+   */
+  includeDeprecated?: boolean;
 }
 
 /** Recursive walker for markdown files under `docsRoot`. */
@@ -116,7 +122,7 @@ function compareDocs(a: DocEntry, b: DocEntry): number {
 }
 
 export function buildDocsIndex(opts: BuildDocsIndexOptions): DocsIndex {
-  const { docsRoot, manifest, env, manifestEntries } = opts;
+  const { docsRoot, manifest, env, manifestEntries, includeDeprecated } = opts;
   const files = collectMarkdownFiles(docsRoot);
 
   // Resolve all entries up front (single pass).
@@ -132,6 +138,7 @@ export function buildDocsIndex(opts: BuildDocsIndexOptions): DocsIndex {
     const entry = manifestEntries?.get(`docs/${rel}`);
     const frontmatter = resolveFrontmatter(rel, source, entry);
     if (!isVisible(frontmatter, env)) continue;
+    if (frontmatter.deprecated && !includeDeprecated) continue;
     all.push({
       slug: relToSlug(rel),
       repo_path: `docs/${rel}`,
