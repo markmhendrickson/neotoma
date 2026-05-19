@@ -962,6 +962,34 @@ export class NeotomaServer {
     });
   }
 
+  // FU-2026-05-002: neotoma_turn_summary MCP tool.
+  private async handleTurnSummary(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const schema = z.object({
+      conversation_id: z.string().min(1),
+      turn_key: z.string().min(1),
+    });
+    const parsed = schema.parse(args ?? {});
+    const userId = this.getAuthenticatedUserId();
+    const { computeTurnSummary, TurnSummaryError } = await import("./services/turn_summary.js");
+    try {
+      const result = await computeTurnSummary({
+        userId,
+        conversationId: parsed.conversation_id,
+        turnKey: parsed.turn_key,
+      });
+      return this.buildTextResponse(result);
+    } catch (err) {
+      if (err instanceof TurnSummaryError) {
+        return this.buildTextResponse({
+          error: { code: err.code, message: err.message },
+        });
+      }
+      throw err;
+    }
+  }
+
   private async handleSubmitIssue(
     args: unknown,
     userId: string
@@ -1768,6 +1796,8 @@ export class NeotomaServer {
         return await this.listRecentChanges(args);
       case "npm_check_update":
         return await this.npmCheckUpdate(args);
+      case "neotoma_turn_summary":
+        return await this.handleTurnSummary(args);
       case "submit_issue":
         return await this.handleSubmitIssue(args, this.getAuthenticatedUserId());
       case "add_issue_message":

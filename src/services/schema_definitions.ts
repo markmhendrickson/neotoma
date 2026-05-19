@@ -1021,7 +1021,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
 
   conversation_message: {
     entity_type: "conversation_message",
-    schema_version: "1.3",
+    schema_version: "1.4",
     metadata: {
       label: "Chat Message",
       description:
@@ -1058,6 +1058,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         reporter_git_ref: { type: "string", required: false },
         reporter_channel: { type: "string", required: false },
         reporter_app_version: { type: "string", required: false },
+        // v1.4 (FU-2026-05-002): 1-based ordinal of this message within the
+        // owning conversation. Writers supply this directly; readers use it as
+        // the authoritative turn ordinal so neotoma_turn_summary can render
+        // `msg N/M` without re-counting siblings. Optional for legacy rows
+        // (fall through to host turn_key parsing when absent).
+        turn_number: { type: "number", required: false },
       },
       // v1.2: turn-scoped identity via caller-supplied `turn_key`. Falls
       // through to heuristic when missing; R2 `name_collision_policy: reject`
@@ -1078,6 +1084,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         reporter_git_ref: { strategy: "last_write" },
         reporter_channel: { strategy: "last_write" },
         reporter_app_version: { strategy: "last_write" },
+        turn_number: { strategy: "last_write" },
       },
     },
   },
