@@ -44,6 +44,8 @@ import {
   waitForApiReady,
   waitForHealth,
   writeConfig,
+  writeProjectLocalConfig,
+  projectLocalConfigPath,
   type ApiInstance,
   type Config,
 } from "./config.js";
@@ -4630,6 +4632,14 @@ const initCommand = program
     "Limit transcript import to a specific harness: claude-code, codex, or cursor"
   )
   .option("--transcript-limit <n>", "Maximum number of transcript files to import per harness")
+  .option(
+    "--project-local",
+    "Store init config in .neotoma/config.json in the current directory (project-scoped) instead of ~/.config/neotoma/config.json (user-scoped)"
+  )
+  .option(
+    "--safe",
+    "Dry-run mode: report what init would do (create directories, write config, run migrations) without making any changes. Exit 0 if everything would succeed."
+  )
   .action(
     async (opts: {
       dataDir?: string;
@@ -4654,6 +4664,8 @@ const initCommand = program
       importTranscripts?: boolean;
       transcriptHarness?: string;
       transcriptLimit?: string;
+      projectLocal?: boolean;
+      safe?: boolean;
     }) => {
       try {
         const outputMode = resolveOutputMode();
@@ -4677,6 +4689,80 @@ const initCommand = program
             // Fall through to normal init on any detection error.
           }
         }
+        // --safe: dry-run mode — report planned actions without making any changes.
+        if (opts.safe) {
+          const cwd = process.cwd();
+          const homeDir = process.env.HOME || process.env.USERPROFILE || ".";
+          const dataDirDefault = path.join(homeDir, "neotoma", "data");
+          const resolvedDataDir = opts.dataDir?.trim() || dataDirDefault;
+          const configTarget = opts.projectLocal ? projectLocalConfigPath(cwd) : CONFIG_PATH;
+          const envTarget = path.join(CONFIG_DIR, ".env");
+          const dbPaths = [
+            path.join(resolvedDataDir, "neotoma.db"),
+            path.join(resolvedDataDir, "neotoma.prod.db"),
+          ];
+          const plannedActions: Array<{ label: string; path?: string; blockerReason?: string }> = [
+            {
+              label: "Create data directory",
+              path: resolvedDataDir,
+            },
+            {
+              label: "Create sources directory",
+              path: path.join(resolvedDataDir, "sources"),
+            },
+            {
+              label: "Create logs directory",
+              path: path.join(resolvedDataDir, "logs"),
+            },
+            ...dbPaths.map((p) => ({ label: `Initialize database`, path: p })),
+            {
+              label: `Write config`,
+              path: configTarget,
+            },
+            ...(!opts.skipEnv ? [{ label: "Write environment file", path: envTarget }] : []),
+          ];
+          const outputMode = resolveOutputMode();
+          if (outputMode === "json") {
+            writeOutput(
+              {
+                ok: true,
+                dry_run: true,
+                planned_actions: plannedActions.map((a) => ({
+                  label: a.label,
+                  ...(a.path ? { path: a.path } : {}),
+                  would_succeed: !a.blockerReason,
+                  ...(a.blockerReason ? { blocker: a.blockerReason } : {}),
+                })),
+              },
+              outputMode
+            );
+          } else {
+            process.stdout.write(
+              bold("neotoma init --safe") + " (dry-run — no files will be written)\n\n"
+            );
+            process.stdout.write(
+              dim("Config scope: ") +
+                (opts.projectLocal
+                  ? pathStyle(configTarget) + " (project-local)"
+                  : pathStyle(configTarget) + " (user-level)") +
+                "\n\n"
+            );
+            for (const action of plannedActions) {
+              const ok = !action.blockerReason;
+              const icon = ok ? success("✓") : warn("✗");
+              const pathPart = action.path ? " " + pathStyle(action.path) : "";
+              const blockerPart = action.blockerReason
+                ? "\n    " + dim("blocker: " + action.blockerReason)
+                : "";
+              process.stdout.write(`  ${icon} ${action.label}${pathPart}${blockerPart}\n`);
+            }
+            process.stdout.write(
+              "\n" + dim("All checks passed. Run without --safe to apply.") + "\n"
+            );
+          }
+          return;
+        }
+
         const interactiveRequested = Boolean(opts.interactive || opts.advanced);
         let useAdvancedPrompts = interactiveRequested;
         const applyDefaultsWithoutPrompts = Boolean(opts.yes || !interactiveRequested);
@@ -6397,7 +6483,19 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
             ...(configRepoRoot ? { project_root: configRepoRoot, repo_root: configRepoRoot } : {}),
             ...(initAuthSummary.mode !== "skip" ? { init_auth_mode: initAuthSummary.mode } : {}),
           };
-          await writeConfig(nextConfig);
+          if (opts.projectLocal) {
+            // Write project-local config to .neotoma/config.json in cwd; this takes
+            // precedence over user-level config when running Neotoma from this directory.
+            const localConfigPath = await writeProjectLocalConfig(nextConfig, process.cwd());
+            if (outputMode === "pretty") {
+              process.stdout.write(
+                bullet(success("Project-local config written: ") + pathStyle(localConfigPath)) +
+                  "\n"
+              );
+            }
+          } else {
+            await writeConfig(nextConfig);
+          }
         }
 
         // If repo root was discovered late (after env setup phase), still ensure
