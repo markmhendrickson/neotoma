@@ -737,3 +737,29 @@ export interface HealthCheckResult {
   details?: Record<string, unknown>[];
   auto_fix?: boolean;
 }
+
+// FU-2026-05-003: Conversation turn index — drives per-turn anchor sections
+// (#msg-N, #stored-N, #retrieved-N, #issues-N) and the turn timeline sidebar.
+export interface ConversationTurnEntityRef {
+  entity_id: string;
+  entity_type: string;
+  canonical_name?: string | null;
+}
+
+export interface ConversationTurnIndexTurn {
+  turn_number: number;
+  message_entity_id: string;
+  role: string;
+  turn_key: string;
+  content_preview?: string | null;
+  created_at?: string | null;
+  stored: ConversationTurnEntityRef[];
+  retrieved: ConversationTurnEntityRef[];
+  issues: ConversationTurnEntityRef[];
+}
+
+export interface ConversationTurnIndex {
+  conversation_id: string;
+  conversation_entity_id: string;
+  turns: ConversationTurnIndexTurn[];
+}
