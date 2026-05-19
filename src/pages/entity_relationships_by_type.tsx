@@ -1,5 +1,6 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { Search } from "lucide-react";
 import { useEntityById, useEntityRelationships } from "@/hooks/use_entities";
 import { PageShell } from "@/components/layout/page_shell";
 import {
@@ -9,6 +10,7 @@ import {
 } from "@/components/shared/query_status";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { EntityLink } from "@/components/shared/entity_link";
 import { CopyIdButton } from "@/components/shared/copy_id_button";
 import { RelationshipEntityList } from "@/components/shared/relationship_entity_list";
@@ -17,6 +19,7 @@ import { TypeBadge } from "@/components/shared/type_badge";
 import {
   buildDirectedRelationshipRows,
   filterDirectedRelationshipRows,
+  filterDirectedRelationshipRowsByKeyword,
 } from "@/lib/relationship_panel_groups";
 import { entityRelationshipSubpageHref } from "@/lib/entity_relationship_routes";
 import { entityDisplayHeadline, humanizeEntityType, humanizeRelationshipType } from "@/lib/humanize";
@@ -25,6 +28,7 @@ import { useSchemaByType } from "@/hooks/use_schemas";
 import { showInitialQuerySkeleton } from "@/lib/query_loading";
 
 export default function EntityRelationshipsByTypePage() {
+  const [listFilterQuery, setListFilterQuery] = useState("");
   const { segment: id, relationshipType, relatedEntityType } = useParams<{
     segment: string;
     relationshipType: string;
@@ -38,11 +42,18 @@ export default function EntityRelationshipsByTypePage() {
   const schemaQuery = useSchemaByType(e?.entity_type);
   const schema = schemaQuery.data ?? null;
 
-  const filteredRows = useMemo(() => {
+  const typeFilteredRows = useMemo(() => {
     if (!relationshipType || !relatedEntityType) return [];
     const rows = buildDirectedRelationshipRows(relationships.data);
     return filterDirectedRelationshipRows(rows, relationshipType, relatedEntityType);
   }, [relationships.data, relationshipType, relatedEntityType]);
+
+  const filteredRows = useMemo(
+    () => filterDirectedRelationshipRowsByKeyword(typeFilteredRows, listFilterQuery),
+    [typeFilteredRows, listFilterQuery],
+  );
+
+  const listFilterActive = listFilterQuery.trim().length > 0;
 
   if (showInitialQuerySkeleton(entity)) {
     return (
@@ -107,7 +118,7 @@ export default function EntityRelationshipsByTypePage() {
     <PageShell
       title={pageTitle}
       description={description}
-      meta={`${filteredRows.length.toLocaleString()} related`}
+      meta={`${typeFilteredRows.length.toLocaleString()} related`}
       actions={
         <div className="flex flex-wrap items-center gap-2">
           <SubpagePinButton
@@ -133,12 +144,40 @@ export default function EntityRelationshipsByTypePage() {
           </QueryErrorAlert>
         ) : (
           <Card>
-            <CardContent className="pt-6">
-              <RelationshipEntityList
-                rows={filteredRows}
-                selfId={entityId}
-                developerView={false}
-              />
+            <CardContent className="space-y-4 pt-6">
+              <div className="space-y-1.5">
+                <div className="relative">
+                  <Search
+                    className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                    aria-hidden
+                  />
+                  <Input
+                    type="search"
+                    value={listFilterQuery}
+                    onChange={(event) => setListFilterQuery(event.target.value)}
+                    placeholder="Filter by keyword…"
+                    aria-label="Filter related entities by keyword"
+                    className="pl-8"
+                  />
+                </div>
+                {listFilterActive && typeFilteredRows.length > 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    {filteredRows.length.toLocaleString()} of{" "}
+                    {typeFilteredRows.length.toLocaleString()} shown
+                  </p>
+                ) : null}
+              </div>
+              {listFilterActive && filteredRows.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No matches for &ldquo;{listFilterQuery.trim()}&rdquo;.
+                </p>
+              ) : (
+                <RelationshipEntityList
+                  rows={filteredRows}
+                  selfId={entityId}
+                  developerView={false}
+                />
+              )}
             </CardContent>
           </Card>
         )}

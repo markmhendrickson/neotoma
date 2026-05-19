@@ -92,7 +92,7 @@ See [docs/subsystems/sandbox_deployment.md](../docs/subsystems/sandbox_deploymen
 - **Observations** (`/observations`) — Browse and create observations with JSON field viewer
 - **Sources** (`/sources`) — Browse sources, upload files, structured store; download via signed URLs
 - **Relationships** (`/relationships`) — Browse, create, delete/restore relationships with snapshot provenance
-- **Graph Explorer** (`/graph`) — Interactive force-directed graph visualization with React Flow
+- **Graph Explorer** (`/graph`) — 1-hop neighborhood visualization with React Flow (default tree layout, optional radial)
 - **Schemas** (`/schemas`) — Registry browser, field/reducer detail, register/update forms, candidate analysis
 - **Timeline** (`/timeline`) — Chronological event stream with date/type filters
 - **Interpretations** (`/interpretations`) — AI interpretation run history

@@ -64,7 +64,7 @@ export function RawFragmentsFieldList({
             </div>
           </dt>
           <dd className="min-w-0">
-            <div className={cn("flex items-center justify-between gap-2", FIELD_ROW_BAND)}>
+            <div className={cn("flex items-start justify-between gap-2", FIELD_ROW_BAND)}>
               <div className="min-w-0 flex-1">
                 <FieldValue
                   value={rawFragments[key]}
@@ -184,7 +184,7 @@ function FieldRow({
         ) : null}
       </dt>
       <dd className="min-w-0 space-y-1">
-        <div className={cn("flex items-center justify-between gap-2", FIELD_ROW_BAND)}>
+        <div className={cn("flex items-start justify-between gap-2", FIELD_ROW_BAND)}>
           <div className="min-w-0 flex-1">
             <FieldValue value={value} typeHint={typeHint} className={FIELD_ROW_VALUE_CLASS} />
           </div>

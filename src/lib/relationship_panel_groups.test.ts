@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildDirectedRelationshipRowsFromSourceList,
   filterDirectedRelationshipRows,
+  filterDirectedRelationshipRowsByKeyword,
   groupRelationshipRowsByType,
   inferHubEntityIdByRelationshipType,
   type DirectedRelationshipRow,
@@ -59,6 +60,19 @@ describe("groupRelationshipRowsByType", () => {
     const groups = groupRelationshipRowsByType([older, newer]);
     const names = groups[0]!.entityTypeGroups[0]!.rows.map((r) => r.otherName);
     expect(names).toEqual(["zebra", "alpha"]);
+  });
+
+  it("filters rows by keyword across name, id, and formatted date", () => {
+    const older = row("PART_OF", "plan", "Parquet to Neotoma migration", "ent_parquet");
+    older.otherLastObservedAt = "2026-05-14T12:00:00.000Z";
+    const newer = row("PART_OF", "plan", "Agent Swarm Testing Plan", "ent_swarm");
+    newer.otherLastObservedAt = "2026-05-18T12:00:00.000Z";
+    const rows = [older, newer];
+
+    expect(filterDirectedRelationshipRowsByKeyword(rows, "parquet")).toHaveLength(1);
+    expect(filterDirectedRelationshipRowsByKeyword(rows, "2026-05-18")).toHaveLength(1);
+    expect(filterDirectedRelationshipRowsByKeyword(rows, "ent_swarm")).toHaveLength(1);
+    expect(filterDirectedRelationshipRowsByKeyword(rows, "")).toEqual(rows);
   });
 
   it("filters rows by relationship and related entity type", () => {

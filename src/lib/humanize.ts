@@ -197,6 +197,36 @@ export function truncate(s: string, max: number): string {
   return s.slice(0, max - 1) + "…";
 }
 
+/** Keep at most `maxLines` newline-separated lines; append ellipsis when truncated. */
+export function truncateLines(s: string, maxLines: number): string {
+  if (maxLines < 1) return "…";
+  const normalized = s.replace(/\r\n/g, "\n");
+  const lines = normalized.split("\n");
+  if (lines.length <= maxLines) return s;
+  return `${lines.slice(0, maxLines).join("\n")}…`;
+}
+
+/**
+ * Compact snapshot field previews: cap explicit line count, then character count.
+ * Does not affect expanded / full-text views.
+ */
+export function compactFieldPreview(
+  s: string,
+  maxLines = 6,
+  maxChars = 400
+): string {
+  return truncate(truncateLines(s, maxLines), maxChars);
+}
+
+/** True when {@link compactFieldPreview} would shorten the string. */
+export function isFieldPreviewTruncated(
+  s: string,
+  maxLines = 6,
+  maxChars = 400
+): boolean {
+  return compactFieldPreview(s, maxLines, maxChars) !== s;
+}
+
 /** Short ID hint for copy affordances: `ent_197f7a…`. */
 export function shortId(id: string | null | undefined, len = 6): string {
   if (!id) return "";

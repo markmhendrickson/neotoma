@@ -10,6 +10,7 @@ import { TypeBadge } from "@/components/shared/type_badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { sourceDisplayTitle, sourceKindLabel } from "@/lib/source_display";
+import { isNeotomaEntityId } from "@/lib/neotoma_entity_id";
 import { buildSearchLocation, isSearchPath, resolveSearchQuery } from "@/lib/search_route";
 import { truncateId } from "@/lib/utils";
 import type { EntitySnapshot } from "@/types/api";
@@ -203,12 +204,18 @@ export function HeaderSearch({ pageSearch }: { pageSearch: HeaderSearchContextVa
   }
 
   function submitSearch(query: string) {
+    const trimmed = query.trim();
     if (pageSearch?.onSubmit) {
-      pageSearch.onSubmit(query);
+      pageSearch.onSubmit(trimmed);
       setIsFocused(false);
       return;
     }
-    navigateToGlobalSearchResults(query);
+    if (isNeotomaEntityId(trimmed)) {
+      navigate(`/entities/${encodeURIComponent(trimmed)}`);
+      setIsFocused(false);
+      return;
+    }
+    navigateToGlobalSearchResults(trimmed);
   }
 
   function handleSearchContainerBlur(event: React.FocusEvent<HTMLDivElement>) {

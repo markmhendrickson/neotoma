@@ -3,7 +3,22 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { JsonViewer } from "@/components/shared/json_viewer";
 import { formatDate } from "@/lib/utils";
-import { absoluteDateTime, humanizeKey, inferValueKind, truncate, type ValueKind } from "@/lib/humanize";
+import {
+  absoluteDateTime,
+  compactFieldPreview,
+  humanizeKey,
+  inferValueKind,
+  isFieldPreviewTruncated,
+  truncate,
+  type ValueKind,
+} from "@/lib/humanize";
+
+/** Max visual lines in compact snapshot field values (CSS line-clamp + explicit newlines). */
+const PREVIEW_MAX_LINES = 6;
+/** Character cap after line cap (whichever bites first). */
+const PREVIEW_MAX_CHARS = 400;
+/** Long single-line strings use show more/less below this length. */
+const PREVIEW_TOGGLE_MIN_CHARS = 200;
 
 interface FieldValueProps {
   value: unknown;
@@ -73,14 +88,17 @@ function renderKind(kind: ValueKind, value: unknown, expanded?: boolean) {
     }
     case "text": {
       const s = String(value);
-      if (!expanded && s.length > 200) {
-        return <TextWithToggle text={s} />;
+      if (expanded) {
+        return <span className="break-words whitespace-pre-wrap">{s}</span>;
       }
-      return <span className="break-words whitespace-pre-wrap">{s}</span>;
+      return <CompactTextPreview text={s} />;
     }
     case "multiline": {
       const s = String(value);
-      return <span className="break-words whitespace-pre-wrap">{expanded ? s : truncate(s, 400)}</span>;
+      if (expanded) {
+        return <span className="break-words whitespace-pre-wrap">{s}</span>;
+      }
+      return <CompactTextPreview text={s} />;
     }
     case "array":
       return <ArrayValue items={value as unknown[]} />;
@@ -91,18 +109,38 @@ function renderKind(kind: ValueKind, value: unknown, expanded?: boolean) {
   }
 }
 
-function TextWithToggle({ text }: { text: string }) {
+function CompactTextPreview({ text }: { text: string }) {
   const [open, setOpen] = useState(false);
+  const needsToggle =
+    text.length > PREVIEW_TOGGLE_MIN_CHARS ||
+    isFieldPreviewTruncated(text, PREVIEW_MAX_LINES, PREVIEW_MAX_CHARS);
+  const showFull = open;
+  const display = showFull
+    ? text
+    : compactFieldPreview(text, PREVIEW_MAX_LINES, PREVIEW_MAX_CHARS);
+
   return (
-    <span className="break-words whitespace-pre-wrap">
-      {open ? text : truncate(text, 200)}{" "}
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="text-xs text-primary hover:underline"
-        type="button"
+    <span className="inline">
+      <span
+        className={cn(
+          "break-words whitespace-pre-wrap",
+          !showFull && needsToggle && "line-clamp-6",
+        )}
       >
-        {open ? "Show less" : "Show more"}
-      </button>
+        {display}
+      </span>
+      {needsToggle ? (
+        <>
+          {" "}
+          <button
+            onClick={() => setOpen((v) => !v)}
+            className="text-xs text-primary hover:underline"
+            type="button"
+          >
+            {showFull ? "Show less" : "Show more"}
+          </button>
+        </>
+      ) : null}
     </span>
   );
 }

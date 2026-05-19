@@ -1,3 +1,4 @@
+import { formatDate } from "./utils";
 import { pluralizeEntityTypeLabel } from "./entity_type_labels";
 import type {
   EntityRelationshipsResponse,
@@ -223,6 +224,34 @@ export function filterDirectedRelationshipRows(
       (row.rel.relationship_type || "UNKNOWN") === relKey &&
       (row.otherType?.trim() || "unknown") === typeKey,
   );
+}
+
+/** Client-side keyword filter for relationship list UIs (name, id, type, last observed). */
+export function filterDirectedRelationshipRowsByKeyword(
+  rows: DirectedRelationshipRow[],
+  keyword: string,
+): DirectedRelationshipRow[] {
+  const q = keyword.trim().toLowerCase();
+  if (!q) return rows;
+  return rows.filter((row) => relationshipRowSearchHaystack(row).includes(q));
+}
+
+function relationshipRowSearchHaystack(row: DirectedRelationshipRow): string {
+  const lastObserved = lastObservedAt(row);
+  const parts = [
+    row.otherName,
+    row.otherId,
+    row.otherType,
+    row.otherTypeLabel,
+    lastObserved,
+    lastObserved ? formatDate(lastObserved) : null,
+    row.rel.relationship_type,
+    row.rel.relationship_key,
+  ];
+  return parts
+    .filter((part): part is string => typeof part === "string" && part.trim().length > 0)
+    .join(" ")
+    .toLowerCase();
 }
 
 /** Groups directed relationship rows by relationship type, then by related entity type. */

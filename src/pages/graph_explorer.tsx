@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { ReactFlow, Background, Controls, MiniMap, useNodesState, useEdgesState, MarkerType, type Node, type Edge } from "@xyflow/react";
+import { ReactFlow, Background, Controls, MiniMap, useNodesState, useEdgesState, type Node } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useGraphNeighborhood } from "@/hooks/use_graph";
 import { PageShell } from "@/components/layout/page_shell";
@@ -9,10 +9,28 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { JsonViewer } from "@/components/shared/json_viewer";
 import { Search } from "lucide-react";
 import { showBackgroundQueryRefresh, showInitialQuerySkeleton } from "@/lib/query_loading";
 import { QueryRefreshIndicator } from "@/components/shared/query_refresh_indicator";
+import {
+  buildGraphFromNeighborhood,
+  graphSpecToFlow,
+  type GraphLayoutMode,
+} from "@/lib/graph_layout";
+
+const LAYOUT_STORAGE_KEY = "inspector_graph_layout_mode";
+
+function readStoredLayoutMode(): GraphLayoutMode {
+  try {
+    const stored = localStorage.getItem(LAYOUT_STORAGE_KEY);
+    if (stored === "radial" || stored === "tree") return stored;
+  } catch {
+    /* ignore */
+  }
+  return "tree";
+}
 
 export default function GraphExplorerPage() {
   const [searchParams] = useSearchParams();
@@ -23,95 +41,18 @@ export default function GraphExplorerPage() {
   const [includeSources, setIncludeSources] = useState(true);
   const [includeEvents, setIncludeEvents] = useState(true);
   const [selectedNode, setSelectedNode] = useState<Record<string, unknown> | null>(null);
+  const [layoutMode, setLayoutMode] = useState<GraphLayoutMode>(readStoredLayoutMode);
+  const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
 
   const graph = useGraphNeighborhood(
     activeNodeId ? { node_id: activeNodeId, include_relationships: includeRelationships, include_sources: includeSources, include_events: includeEvents } : null
   );
 
   const { flowNodes, flowEdges } = useMemo(() => {
-    if (!graph.data) return { flowNodes: [], flowEdges: [] };
-    const data = graph.data as Record<string, unknown>;
-
-    const nodes: Node[] = [];
-    const edges: Edge[] = [];
-    const seen = new Set<string>();
-
-    const centerEntity = data.entity as Record<string, unknown> | undefined;
-    if (centerEntity) {
-      const eid = String(centerEntity.entity_id || centerEntity.id || activeNodeId);
-      nodes.push({
-        id: eid,
-        position: { x: 300, y: 300 },
-        data: { label: String(centerEntity.canonical_name || centerEntity.entity_type || eid), raw: centerEntity },
-        style: { background: "#e0e7ff", border: "2px solid #6366f1", borderRadius: 8, padding: 8, fontSize: 12 },
-      });
-      seen.add(eid);
-    }
-
-    const relEntities = (data.related_entities || data.entities || []) as Record<string, unknown>[];
-    relEntities.forEach((ent, i) => {
-      const eid = String(ent.entity_id || ent.id || `ent-${i}`);
-      if (seen.has(eid)) return;
-      seen.add(eid);
-      const angle = (2 * Math.PI * i) / Math.max(relEntities.length, 1);
-      nodes.push({
-        id: eid,
-        position: { x: 300 + Math.cos(angle) * 200, y: 300 + Math.sin(angle) * 200 },
-        data: { label: String(ent.canonical_name || ent.entity_type || eid), raw: ent },
-        style: { background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 8, padding: 8, fontSize: 11 },
-      });
-    });
-
-    const rels = (data.relationships || []) as Record<string, unknown>[];
-    rels.forEach((rel) => {
-      const sourceId = String(rel.source_entity_id || "");
-      const targetId = String(rel.target_entity_id || "");
-      [sourceId, targetId].forEach((entityId) => {
-        if (!entityId || entityId === activeNodeId || seen.has(entityId)) return;
-        const idx = nodes.length;
-        const angle = (2 * Math.PI * idx) / Math.max(idx + 1, 1);
-        nodes.push({
-          id: entityId,
-          position: { x: 300 + Math.cos(angle) * 220, y: 300 + Math.sin(angle) * 220 },
-          data: { label: entityId, raw: { entity_id: entityId } },
-          style: { background: "#f8fafc", border: "1px dashed #94a3b8", borderRadius: 8, padding: 8, fontSize: 11 },
-        });
-        seen.add(entityId);
-      });
-    });
-
-    rels.forEach((rel, i) => {
-      const src = String(rel.source_entity_id || "");
-      const tgt = String(rel.target_entity_id || "");
-      if (src && tgt) {
-        edges.push({
-          id: `edge-${i}`,
-          source: src,
-          target: tgt,
-          label: String(rel.relationship_type || ""),
-          type: "default",
-          markerEnd: { type: MarkerType.ArrowClosed },
-          style: { strokeWidth: 1.5 },
-          labelStyle: { fontSize: 10 },
-        });
-      }
-    });
-
-    const sources = (data.sources || []) as Record<string, unknown>[];
-    sources.forEach((src, i) => {
-      const sid = String(src.id || `src-${i}`);
-      if (seen.has(sid)) return;
-      seen.add(sid);
-      nodes.push({
-        id: sid,
-        position: { x: 300 + Math.cos((2 * Math.PI * (i + relEntities.length)) / Math.max(sources.length + relEntities.length, 1)) * 280, y: 300 + Math.sin((2 * Math.PI * (i + relEntities.length)) / Math.max(sources.length + relEntities.length, 1)) * 280 },
-        data: { label: String(src.original_filename || sid), raw: src },
-        style: { background: "#fef3c7", border: "1px solid #fbbf24", borderRadius: 8, padding: 8, fontSize: 11 },
-      });
-    });
-
-    return { flowNodes: nodes, flowEdges: edges };
-  }, [graph.data, activeNodeId]);
+    if (!graph.data || !activeNodeId) return { flowNodes: [], flowEdges: [] };
+    const spec = buildGraphFromNeighborhood(graph.data as Record<string, unknown>, activeNodeId);
+    return graphSpecToFlow(spec, layoutMode, hoveredEdgeId);
+  }, [graph.data, activeNodeId, layoutMode, hoveredEdgeId]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(flowNodes);
   const [edgesState, setEdges, onEdgesChange] = useEdgesState(flowEdges);
@@ -120,6 +61,16 @@ export default function GraphExplorerPage() {
     setNodes(flowNodes);
     setEdges(flowEdges);
   }, [flowNodes, flowEdges, setNodes, setEdges]);
+
+  const onLayoutModeChange = useCallback((value: string) => {
+    if (value !== "tree" && value !== "radial") return;
+    setLayoutMode(value);
+    try {
+      localStorage.setItem(LAYOUT_STORAGE_KEY, value);
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     setSelectedNode(node.data?.raw as Record<string, unknown> ?? null);
@@ -152,6 +103,21 @@ export default function GraphExplorerPage() {
           />
         </div>
         <Button onClick={() => setActiveNodeId(nodeId)} disabled={!nodeId}>Explore</Button>
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          size="sm"
+          value={layoutMode}
+          onValueChange={onLayoutModeChange}
+          aria-label="Graph layout"
+        >
+          <ToggleGroupItem value="tree" aria-label="Tree layout">
+            Tree
+          </ToggleGroupItem>
+          <ToggleGroupItem value="radial" aria-label="Radial layout">
+            Radial
+          </ToggleGroupItem>
+        </ToggleGroup>
         <div className="flex items-center gap-4 text-sm">
           <label className="flex items-center gap-2"><Switch checked={includeRelationships} onCheckedChange={setIncludeRelationships} /> Relationships</label>
           <label className="flex items-center gap-2"><Switch checked={includeSources} onCheckedChange={setIncludeSources} /> Sources</label>
@@ -179,7 +145,10 @@ export default function GraphExplorerPage() {
               onEdgesChange={onEdgesChange}
               onNodeClick={onNodeClick}
               onNodeDoubleClick={onNodeDoubleClick}
+              onEdgeMouseEnter={(_, edge) => setHoveredEdgeId(edge.id)}
+              onEdgeMouseLeave={() => setHoveredEdgeId(null)}
               fitView
+              fitViewOptions={{ padding: 0.2 }}
               proOptions={{ hideAttribution: true }}
             >
               <Background />
