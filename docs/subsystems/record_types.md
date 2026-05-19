@@ -58,6 +58,7 @@ Application types for notes, documents, messages, tasks, projects, and events.
 | `task`           | Action items with status                               | Founders & Small Teams                           |
 | `project`        | Multi-step initiatives                                 | Founders & Small Teams                           |
 | `event`          | Meetings, appointments, calendar events                | All Tier 1 ICPs                                  |
+| `pull_request`   | GitHub pull requests extracted from email or chat      | Founders & Small Teams                           |
 **Rationale:** These types support core Tier 1 workflows:
 - **AI-Native Operators:** Research synthesis (document, note), communication tracking (message)
 - **Knowledge Workers:** Due diligence (document), legal research (document, note), client work (message)
@@ -302,6 +303,39 @@ const EVENT_PATTERNS = {
   location: /(?:location|where)[\s:]*([A-Za-z0-9\s,.-]+)/i,
 };
 ```
+#### Pull Request
+A GitHub pull request extracted from email, chat messages, or other external records. Identity is `repo + number` (e.g. `markmhendrickson/neotoma#42`). See [`github_entities.md`](./github_entities.md) for extraction rules.
+
+**Required Fields:**
+- `number`: number — PR number (e.g. `42`)
+- `repo`: string — `owner/name` (e.g. `markmhendrickson/neotoma`)
+
+**Optional Fields:**
+- `url`: string — Full PR URL (e.g. `https://github.com/owner/repo/pull/42`)
+- `title`: string — PR title when parseable
+- `body`: string — PR description when available
+- `status`: string — `open`, `merged`, or `closed`
+- `author`: string — GitHub login of PR author (auto-links to `contact` via reference_fields)
+- `base_branch`: string — Target branch
+- `head_branch`: string — Source branch
+- `linked_issues`: string — Issue reference(s) linked to this PR (auto-links to `issue` via reference_fields)
+- `created_at`: ISO 8601 date — PR creation timestamp (emits `pull_request_created` event)
+- `merged_at`: ISO 8601 date — Merge timestamp (emits `pull_request_merged` event)
+- `closed_at`: ISO 8601 date — Close timestamp (emits `pull_request_closed` event)
+- `data_source`: string — Provenance string (e.g. `email message_id=<id> <ISO-date>`)
+- `source_quote`: string — Verbatim snippet from the originating record
+
+**Identity rule:** `[{ composite: ["number", "repo"] }]` with `url` as fallback.
+
+**Aliases accepted by resolver:** `pr`, `github_pr`, `merge_request`.
+
+**Reference fields (auto-linked at store time):**
+- `author` → `contact` (REFERS_TO)
+- `repo` → `github_repo` (REFERS_TO)
+- `linked_issues` → `issue` (REFERS_TO)
+
+**Schema registration:** `src/services/schema_definitions.ts` (`ENTITY_SCHEMAS["pull_request"]`).
+
 ### 4.3 Knowledge Types
 #### Contact
 **Required Fields:**

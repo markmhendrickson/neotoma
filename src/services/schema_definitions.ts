@@ -3108,7 +3108,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
 
   pull_request: {
     entity_type: "pull_request",
-    schema_version: "1.0",
+    schema_version: "1.1",
     metadata: {
       label: "Pull Request",
       description:
@@ -3130,6 +3130,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         author: { type: "string", required: false },
         base_branch: { type: "string", required: false },
         head_branch: { type: "string", required: false },
+        linked_issues: { type: "string", required: false },
         created_at: { type: "date", required: false },
         merged_at: { type: "date", required: false },
         closed_at: { type: "date", required: false },
@@ -3143,6 +3144,25 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         { field: "merged_at", event_type: "pull_request_merged" },
         { field: "closed_at", event_type: "pull_request_closed" },
       ],
+      // R3: Schema-driven reference linking — auto-create typed edges at store time
+      // rather than per-type code branches. See docs/foundation/schema_agnostic_design_rules.md.
+      reference_fields: [
+        {
+          field: "author",
+          target_entity_type: "contact",
+          relationship_type: "REFERS_TO",
+        },
+        {
+          field: "repo",
+          target_entity_type: "github_repo",
+          relationship_type: "REFERS_TO",
+        },
+        {
+          field: "linked_issues",
+          target_entity_type: "issue",
+          relationship_type: "REFERS_TO",
+        },
+      ],
     },
     reducer_config: {
       merge_policies: {
@@ -3153,6 +3173,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         author: { strategy: "last_write" },
         base_branch: { strategy: "last_write" },
         head_branch: { strategy: "last_write" },
+        linked_issues: { strategy: "last_write" },
         merged_at: { strategy: "last_write" },
         closed_at: { strategy: "last_write" },
       },
