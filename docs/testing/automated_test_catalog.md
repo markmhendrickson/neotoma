@@ -61,20 +61,20 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **466**
-- Backend and repo Vitest files: **433**
+- Total automated test files: **462**
+- Backend and repo Vitest files: **429**
 - Frontend Vitest files: **9**
 - Playwright spec files: **24**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 120 |
+| Vitest unit tests | 119 |
 | Vitest service tests | 34 |
 | Source-adjacent tests | 53 |
-| Vitest integration tests | 134 |
-| Vitest CLI tests | 64 |
-| Vitest contract tests | 14 |
+| Vitest integration tests | 133 |
+| Vitest CLI tests | 63 |
+| Vitest contract tests | 13 |
 | Vitest security tests | 3 |
 | Vitest subscription tests | 5 |
 | Vitest agent tests | 1 |
@@ -109,7 +109,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (120):**
+**Files (119):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -156,7 +156,6 @@ flowchart TD
 - `tests/unit/duplicate_detection.test.ts`
 - `tests/unit/encrypt_response_middleware.test.ts`
 - `tests/unit/entity_queries_status_projection.test.ts`
-- `tests/unit/env_contamination_audit.test.ts`
 - `tests/unit/ext_apps_widget_host.test.ts`
 - `tests/unit/external_actor_badge.test.ts`
 - `tests/unit/external_actor_builder.test.ts`
@@ -337,7 +336,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (134):**
+**Files (133):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_resource_metadata.test.ts`
 - `tests/integration/aauth_revocation_e2e.test.ts`
@@ -369,7 +368,6 @@ flowchart TD
 - `tests/integration/describe_entity_type.test.ts`
 - `tests/integration/docs_route.test.ts`
 - `tests/integration/entity_identifier_handler.test.ts`
-- `tests/integration/entity_queries_status_column.test.ts`
 - `tests/integration/entity_queries.test.ts`
 - `tests/integration/entity_search_mode.test.ts`
 - `tests/integration/events_stream.test.ts`
@@ -478,7 +476,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/cli`
 **Requirements:** Basic `.env`; some tests provision temp config homes automatically.
-**Files (64):**
+**Files (63):**
 - `tests/cli/api_client_offline_fallback.test.ts`
 - `tests/cli/backup_verify.test.ts`
 - `tests/cli/cli_access_commands.test.ts`
@@ -499,7 +497,6 @@ flowchart TD
 - `tests/cli/cli_ingest_remote_upload.test.ts`
 - `tests/cli/cli_init_commands.test.ts`
 - `tests/cli/cli_init_env_targeting.test.ts`
-- `tests/cli/cli_init_flags.test.ts`
 - `tests/cli/cli_init_interactive.test.ts`
 - `tests/cli/cli_issues_commands.test.ts`
 - `tests/cli/cli_mcp_commands.test.ts`
@@ -549,11 +546,10 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/contract`
 **Requirements:** Generated contract artifacts present when the suite expects them.
-**Files (14):**
+**Files (13):**
 - `tests/contract/cli_handler_dist_smoke.test.ts`
 - `tests/contract/contract_mapping.test.ts`
 - `tests/contract/contract_mcp_cli_parity.test.ts`
-- `tests/contract/get_entities_alias.test.ts`
 - `tests/contract/ironclaw_integration.test.ts`
 - `tests/contract/legacy_payloads/replay.test.ts`
 - `tests/contract/mcp_stdio_output_safety.test.ts`
