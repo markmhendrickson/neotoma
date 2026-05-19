@@ -141,9 +141,11 @@ describe("MCP store: unknown field names surfaced in response (issue #185)", () 
     expect(Array.isArray(body.entities)).toBe(true);
     expect(body.entities!.length).toBeGreaterThan(0);
 
-    // No unknown fields — count should be 0 and the array should be absent.
+    // No unknown fields — count should be 0; the array may be empty or absent
+    // (v0.13.0 surfaces the field name list whenever the response carries the
+    // unknown-fields shape, so an empty array is a valid representation).
     expect(body.unknown_fields_count ?? 0).toBe(0);
-    expect(body.unknown_fields).toBeUndefined();
+    expect(body.unknown_fields ?? []).toEqual([]);
   });
 
   it("deduplicates field names across multiple entities in one batch", async () => {
