@@ -39,6 +39,55 @@ export const CONFIG_DIR = path.join(os.homedir(), ".config", "neotoma");
 export const CONFIG_PATH = path.join(CONFIG_DIR, "config.json");
 export const USER_ENV_PATH = path.join(CONFIG_DIR, ".env");
 
+/** Subdirectory name used for project-local Neotoma config when `--project-local` is given to `neotoma init`. */
+export const PROJECT_LOCAL_CONFIG_DIR_NAME = ".neotoma";
+/** Config file name inside a project-local config directory. */
+export const PROJECT_LOCAL_CONFIG_FILE_NAME = "config.json";
+
+/**
+ * Returns the project-local config path for the given directory (default: cwd).
+ * Project-local config lives at `<dir>/.neotoma/config.json` and takes
+ * precedence over the user-level `~/.config/neotoma/config.json` when present.
+ */
+export function projectLocalConfigPath(cwd?: string): string {
+  return path.join(
+    cwd ?? process.cwd(),
+    PROJECT_LOCAL_CONFIG_DIR_NAME,
+    PROJECT_LOCAL_CONFIG_FILE_NAME
+  );
+}
+
+/**
+ * Read the merged effective config: project-local (if present) takes precedence
+ * over user-level config. Call this instead of `readConfig()` when callers want
+ * the full precedence chain.
+ */
+export async function readEffectiveConfig(
+  cwd?: string
+): Promise<Config & { _source?: "project-local" | "user" }> {
+  const localPath = projectLocalConfigPath(cwd);
+  try {
+    const raw = await fs.readFile(localPath, "utf-8");
+    const local = JSON.parse(raw) as Config;
+    return { ...local, _source: "project-local" };
+  } catch {
+    // No project-local config; fall through to user-level.
+  }
+  const userConfig = await readConfig();
+  return { ...userConfig, _source: "user" };
+}
+
+/**
+ * Write config to the project-local path (`.neotoma/config.json` in `cwd`).
+ * Creates the `.neotoma/` directory if needed.
+ */
+export async function writeProjectLocalConfig(next: Config, cwd?: string): Promise<string> {
+  const localPath = projectLocalConfigPath(cwd);
+  await fs.mkdir(path.dirname(localPath), { recursive: true });
+  await fs.writeFile(localPath, JSON.stringify(next, null, 2));
+  return localPath;
+}
+
 const cliEnv = process.env.NEOTOMA_ENV || "development";
 /** True when NEOTOMA_ENV is "production". Used for API logs dir, PID path, and CLI log default. */
 export const isProd = cliEnv === "production";
