@@ -73,6 +73,7 @@ import {
 } from "./services/entity_snapshot_embedding.js";
 import { getLatestFromRegistry, isUpdateAvailable, formatUpgradeCommand } from "./version_check.js";
 import { buildSessionInfo } from "./services/session_info.js";
+import { getActiveStandingRules, type StandingRule } from "./services/standing_rules.js";
 import { AttributionPolicyError } from "./services/attribution_policy.js";
 import {
   getCurrentAAuthAdmission,
@@ -360,7 +361,7 @@ export class NeotomaServer {
           logger.info(
             `[MCP Server] Using test authentication bypass (user: ${this.authenticatedUserId})`
           );
-          return this.buildAuthenticatedInitializeResponse(updateNotice);
+          return await this.buildAuthenticatedInitializeResponse(updateNotice);
         }
 
         // HTTP (insecure) no-auth: default to anonymous 000... user so unencrypted access is restricted.
@@ -373,7 +374,7 @@ export class NeotomaServer {
           logger.info(
             `[MCP Server] Using HTTP no-auth (anonymous user: ${this.authenticatedUserId})`
           );
-          return this.buildAuthenticatedInitializeResponse(updateNotice);
+          return await this.buildAuthenticatedInitializeResponse(updateNotice);
         }
 
         // Dev-local (HTTPS or secure): no-auth default with full dev user. Allowed when no creds over secure transport.
@@ -385,7 +386,7 @@ export class NeotomaServer {
             token: "dev-local",
           });
           logger.info(`[MCP Server] Using dev-local auth (user: ${this.authenticatedUserId})`);
-          return this.buildAuthenticatedInitializeResponse(updateNotice);
+          return await this.buildAuthenticatedInitializeResponse(updateNotice);
         }
 
         // OAuth flow - check if connection ID is valid
@@ -401,7 +402,7 @@ export class NeotomaServer {
           logger.info(
             `[MCP Server] Initialized with OAuth connection: ${connectionId} (user: ${userId})`
           );
-          return this.buildAuthenticatedInitializeResponse(updateNotice);
+          return await this.buildAuthenticatedInitializeResponse(updateNotice);
         } catch (error: any) {
           const isConnectionNotFound =
             error.message?.includes("Connection not found") ||
@@ -428,7 +429,7 @@ export class NeotomaServer {
               userId: this.authenticatedUserId,
               token: "dev-local",
             });
-            return this.buildAuthenticatedInitializeResponse(updateNotice);
+            return await this.buildAuthenticatedInitializeResponse(updateNotice);
           }
 
           if (isConnectionNotFound) {
@@ -556,10 +557,17 @@ export class NeotomaServer {
     };
   }
 
-  private buildAuthenticatedInitializeResponse(updateNotice: string | null) {
+  private async buildAuthenticatedInitializeResponse(updateNotice: string | null) {
     const instructions = updateNotice
       ? `${updateNotice}\n\n${this.getMcpInteractionInstructions()}`
       : this.getMcpInteractionInstructions();
+
+    // Load standing rules for the authenticated user and inject them so agents
+    // apply them from the first turn of the session (issue #184).
+    let standingRules: StandingRule[] = [];
+    if (this.authenticatedUserId) {
+      standingRules = await getActiveStandingRules(this.authenticatedUserId);
+    }
 
     return {
       protocolVersion: "2025-11-25",
@@ -575,6 +583,9 @@ export class NeotomaServer {
               description: updateNotice,
             }
           : {}),
+        _neotoma: {
+          standing_rules: standingRules,
+        },
       },
       instructions,
     };

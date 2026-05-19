@@ -3337,6 +3337,39 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       },
     },
   },
+
+  standing_rule: {
+    entity_type: "standing_rule",
+    schema_version: "1.0.0",
+    metadata: {
+      label: "Standing Rule",
+      description:
+        "A persistent agent instruction stored in Neotoma and injected into the MCP initialize response so agents apply it from the first turn of every session. Use scope to restrict a rule to a specific project, repository, or context; omit scope (or set to 'global') for rules that apply everywhere. Priority controls injection order: higher values appear first.",
+      category: "agent_runtime",
+      aliases: ["agent_rule", "persistent_rule", "session_rule"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: false },
+        title: { type: "string", required: true, preserveCase: true },
+        rule_text: { type: "string", required: true, preserveCase: true },
+        scope: { type: "string", required: false },
+        priority: { type: "number", required: false },
+        enabled: { type: "boolean", required: false },
+      },
+      canonical_name_fields: ["title"],
+      name_collision_policy: "merge",
+    },
+    reducer_config: {
+      merge_policies: {
+        title: { strategy: "last_write" },
+        rule_text: { strategy: "last_write" },
+        scope: { strategy: "last_write" },
+        priority: { strategy: "last_write" },
+        enabled: { strategy: "last_write" },
+      },
+    },
+  },
 };
 
 /**
