@@ -5120,7 +5120,10 @@ export class NeotomaServer {
     if (commit) {
       try {
         const { getMirrorConfig, mirrorEntity } = await import("./services/canonical_mirror.js");
-        const mirrorCfg = getMirrorConfig();
+        // Force enabled:true so profile writes (e.g. plan → docs/plans/) fire regardless
+        // of whether the user has the full mirror turned on.  Profile outputs are
+        // independent of the main mirror directory and have their own allow_git_commit flag.
+        const mirrorCfg = { ...getMirrorConfig(), enabled: true };
         const profileTypes = new Set(
           (mirrorCfg.profiles ?? []).map((p) => p.entity_type).filter(Boolean)
         );
