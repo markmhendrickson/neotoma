@@ -4424,6 +4424,39 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+                properties:
+                  node_id:
+                    type: string
+                  node_type:
+                    type: string
+                  entity:
+                    type: object
+                    additionalProperties: true
+                  relationships:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+                  related_entities:
+                    type: array
+                    description: Entities connected to the node via relationships. Each item uses `entity_id` (not `id`).
+                    items:
+                      type: object
+                      additionalProperties: true
+                      properties:
+                        entity_id:
+                          type: string
+                          description: The entity identifier. Always present as `entity_id`; the raw database `id` column is not exposed.
+                  observations:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+                  sources:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
 
   /issues/bulk_close:
     post:
