@@ -14,6 +14,10 @@ import {
 } from "@/components/shared/conversation_common";
 import { LiveRelativeTime } from "@/components/shared/live_relative_time";
 import { useRecentConversation } from "@/hooks/use_recent_conversation";
+import { useConversationTurnIndex } from "@/hooks/use_conversation_turn_index";
+import { TurnAnchorSections } from "@/components/conversation/turn_anchor_sections";
+import { TurnTimelineSidebar } from "@/components/conversation/turn_timeline_sidebar";
+import { WidgetHostDiscoveryPrompt } from "@/components/conversation/widget_host_discovery_prompt";
 import { showBackgroundQueryRefresh, showInitialQuerySkeleton } from "@/lib/query_loading";
 import { absoluteDateTime, shortId } from "@/lib/humanize";
 import { QueryRefreshIndicator } from "@/components/shared/query_refresh_indicator";
@@ -182,6 +186,9 @@ function TurnMessageGroupCard({
 export default function ConversationDetailPage() {
   const { conversationId } = useParams<{ conversationId: string }>();
   const q = useRecentConversation(conversationId);
+  // FU-2026-05-003: per-turn anchor index. Used for the timeline sidebar
+  // and the `#msg-N`/`#stored-N`/`#retrieved-N`/`#issues-N` anchor sections.
+  const turnIndexQuery = useConversationTurnIndex(conversationId);
 
   const c = q.data;
   const showInitialSkeleton = showInitialQuerySkeleton(q);
@@ -249,18 +256,68 @@ export default function ConversationDetailPage() {
 
           <Separator />
 
-          <div className="space-y-4">
-            <h2 className="text-lg font-semibold">Messages</h2>
-            {c.messages.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No messages linked to this conversation.</p>
-            ) : (
-              <div className="space-y-4">
-                {turnGroups.map((group) => (
-                  <TurnMessageGroupCard key={group.groupKey} group={group} />
-                ))}
+          {turnIndexQuery.data ? (
+            <div className="grid gap-6 lg:grid-cols-[16rem_1fr]">
+              <TurnTimelineSidebar
+                index={turnIndexQuery.data}
+                className="lg:sticky lg:top-4 lg:self-start"
+              />
+              <div className="space-y-6">
+                <WidgetHostDiscoveryPrompt />
+
+                <section className="space-y-3">
+                  <h2 className="text-lg font-semibold">Turn anchors</h2>
+                  <p className="text-xs text-muted-foreground">
+                    Per-turn anchor sections with deterministic IDs (
+                    <code className="font-mono">#msg-N</code>,{" "}
+                    <code className="font-mono">#stored-N</code>,{" "}
+                    <code className="font-mono">#retrieved-N</code>,{" "}
+                    <code className="font-mono">#issues-N</code>). Click a turn in the timeline to
+                    jump.
+                  </p>
+                  <TurnAnchorSections index={turnIndexQuery.data} />
+                </section>
+
+                <Separator />
+
+                <section className="space-y-4">
+                  <h2 className="text-lg font-semibold">Messages</h2>
+                  {c.messages.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      No messages linked to this conversation.
+                    </p>
+                  ) : (
+                    <div className="space-y-4">
+                      {turnGroups.map((group) => (
+                        <TurnMessageGroupCard key={group.groupKey} group={group} />
+                      ))}
+                    </div>
+                  )}
+                </section>
               </div>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <h2 className="text-lg font-semibold">Messages</h2>
+              {c.messages.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No messages linked to this conversation.</p>
+              ) : (
+                <div className="space-y-4">
+                  {turnGroups.map((group) => (
+                    <TurnMessageGroupCard key={group.groupKey} group={group} />
+                  ))}
+                </div>
+              )}
+              {turnIndexQuery.error ? (
+                <p className="text-xs text-muted-foreground">
+                  Turn index unavailable:{" "}
+                  {turnIndexQuery.error instanceof Error
+                    ? turnIndexQuery.error.message
+                    : String(turnIndexQuery.error)}
+                </p>
+              ) : null}
+            </div>
+          )}
         </div>
       )}
     </PageShell>
