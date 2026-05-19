@@ -7046,6 +7046,40 @@ program
 
 const authCommand = program.command("auth").description("Authentication commands");
 
+/**
+ * Parse `--capability <op:types>` flags into the `AgentCapabilityEntry[]`
+ * shape the server expects. Inputs look like `store:issue,observation` or
+ * `retrieve:*`. Whitespace around the op and each type is tolerated; an
+ * empty types list is rejected. Used by `neotoma auth keygen --register`.
+ *
+ * @throws Error when a flag is malformed (no colon, empty op, empty types).
+ */
+export function parseCapabilityFlags(
+  flags: string[]
+): Array<{ op: string; entity_types: string[] }> {
+  return flags.map((raw) => {
+    const idx = raw.indexOf(":");
+    if (idx < 0) {
+      throw new Error(
+        `Invalid --capability "${raw}": expected "<op>:<entity_types_csv>" (e.g. "store:issue,observation").`
+      );
+    }
+    const op = raw.slice(0, idx).trim();
+    const typesPart = raw.slice(idx + 1).trim();
+    if (!op) {
+      throw new Error(`Invalid --capability "${raw}": op is empty.`);
+    }
+    const entity_types = typesPart
+      .split(",")
+      .map((t) => t.trim())
+      .filter((t) => t.length > 0);
+    if (entity_types.length === 0) {
+      throw new Error(`Invalid --capability "${raw}": entity_types list is empty.`);
+    }
+    return { op, entity_types };
+  });
+}
+
 const DEFAULT_TUNNEL_URL_FILE = "/tmp/ngrok-mcp-url.txt";
 
 const authLoginCommand = authCommand
@@ -7281,50 +7315,148 @@ authCommand
   .option("--sub <sub>", "AAuth subject (self-reported identity)")
   .option("--iss <iss>", "AAuth issuer (defaults to https://neotoma.cursor.local)")
   .option("--force", "Overwrite an existing keypair", false)
-  .action(async (opts: { alg?: string; sub?: string; iss?: string; force?: boolean }) => {
-    const outputMode = resolveOutputMode();
-    try {
-      const alg = opts.alg === "EdDSA" || opts.alg === "ES256" ? opts.alg : "ES256";
-      const { generateAndStoreKeypair } = await import("./aauth_signer.js");
-      const result = await generateAndStoreKeypair({
-        alg,
-        sub: opts.sub,
-        iss: opts.iss,
-        force: opts.force ?? false,
-      });
-      if (outputMode === "json") {
-        writeOutput(
-          {
-            message: "AAuth keypair generated",
-            alg: result.alg,
-            thumbprint: result.thumbprint,
-            private_jwk_path: result.privateJwkPath,
-            public_jwk_path: result.publicJwkPath,
-            config_path: result.configPath,
-            public_jwk: result.publicJwk,
-            config: result.config,
-          },
-          outputMode
-        );
-      } else {
-        process.stdout.write(success(`Generated AAuth ${result.alg} keypair`) + "\n");
-        process.stdout.write(keyValue("private", pathStyle(result.privateJwkPath)) + "\n");
-        process.stdout.write(keyValue("public", pathStyle(result.publicJwkPath)) + "\n");
-        process.stdout.write(keyValue("thumbprint", result.thumbprint) + "\n");
-        process.stdout.write(keyValue("sub", result.config.sub) + "\n");
-        process.stdout.write(keyValue("iss", result.config.iss) + "\n");
-        process.stdout.write(
-          dim(
-            "Signed CLI and MCP-proxy requests will now land as hardware/software tier in attribution. " +
-              "Run `neotoma auth session` to confirm."
-          ) + "\n"
-        );
+  .option(
+    "--register",
+    "After generating the keypair, also create an agent_grant on the server bound to this key's thumbprint so signed requests from this key are admitted (closes #265).",
+    false
+  )
+  .option(
+    "--label <label>",
+    'Human-readable label for the registered grant (e.g. "lemonbrand-observer"). Required when --register is set unless --sub is supplied as a fallback.'
+  )
+  .option(
+    "--capability <op:types>",
+    "Capability to grant, in the form `<op>:<entity_types_csv>` (e.g. `store:issue,observation` or `retrieve:*`). Repeatable. Defaults to `store:*,retrieve:*` when --register is set without explicit capabilities.",
+    (value: string, previous: string[] | undefined) => [...(previous ?? []), value],
+    [] as string[]
+  )
+  .option("--notes <notes>", "Optional notes attached to the registered grant.")
+  .action(
+    async (opts: {
+      alg?: string;
+      sub?: string;
+      iss?: string;
+      force?: boolean;
+      register?: boolean;
+      label?: string;
+      capability?: string[];
+      notes?: string;
+    }) => {
+      const outputMode = resolveOutputMode();
+      try {
+        const alg = opts.alg === "EdDSA" || opts.alg === "ES256" ? opts.alg : "ES256";
+        const { generateAndStoreKeypair } = await import("./aauth_signer.js");
+        const result = await generateAndStoreKeypair({
+          alg,
+          sub: opts.sub,
+          iss: opts.iss,
+          force: opts.force ?? false,
+        });
+
+        // Optional second step: register an agent_grant on the server so the
+        // freshly minted key is admitted by AAuth (issue #265). The keypair
+        // generation step is intentionally independent — if registration
+        // fails (server unreachable, auth missing, label invalid) the local
+        // key still lands on disk and the user can retry with
+        // `curl /agents/grants` or rerun keygen with --force.
+        let grantResult: Record<string, unknown> | null = null;
+        let grantError: string | null = null;
+        if (opts.register) {
+          try {
+            const capabilities = parseCapabilityFlags(
+              opts.capability && opts.capability.length > 0
+                ? opts.capability
+                : ["store:*", "retrieve:*"]
+            );
+            const label =
+              opts.label && opts.label.trim().length > 0 ? opts.label.trim() : result.config.sub;
+            const cfg = await readConfig();
+            const baseUrl = await resolveBaseUrl(program.opts().baseUrl, cfg);
+            const token = await getCliToken();
+            const api = createApiClient({ baseUrl, token });
+            const { data, error } = await (
+              api as unknown as {
+                POST: (
+                  path: "/agents/grants",
+                  args: { body: Record<string, unknown> }
+                ) => Promise<{
+                  data?: { grant?: Record<string, unknown> };
+                  error?: unknown;
+                }>;
+              }
+            ).POST("/agents/grants", {
+              body: {
+                label,
+                capabilities,
+                match_thumbprint: result.thumbprint,
+                match_sub: result.config.sub,
+                match_iss: result.config.iss,
+                notes: opts.notes ?? null,
+              },
+            });
+            if (error) {
+              grantError =
+                typeof error === "object" && error ? JSON.stringify(error) : String(error);
+            } else {
+              grantResult = (data?.grant as Record<string, unknown>) ?? null;
+            }
+          } catch (registerErr) {
+            grantError = (registerErr as Error).message;
+          }
+        }
+
+        if (outputMode === "json") {
+          writeOutput(
+            {
+              message: "AAuth keypair generated",
+              alg: result.alg,
+              thumbprint: result.thumbprint,
+              private_jwk_path: result.privateJwkPath,
+              public_jwk_path: result.publicJwkPath,
+              config_path: result.configPath,
+              public_jwk: result.publicJwk,
+              config: result.config,
+              ...(opts.register ? { grant: grantResult, grant_error: grantError } : {}),
+            },
+            outputMode
+          );
+        } else {
+          process.stdout.write(success(`Generated AAuth ${result.alg} keypair`) + "\n");
+          process.stdout.write(keyValue("private", pathStyle(result.privateJwkPath)) + "\n");
+          process.stdout.write(keyValue("public", pathStyle(result.publicJwkPath)) + "\n");
+          process.stdout.write(keyValue("thumbprint", result.thumbprint) + "\n");
+          process.stdout.write(keyValue("sub", result.config.sub) + "\n");
+          process.stdout.write(keyValue("iss", result.config.iss) + "\n");
+          if (opts.register) {
+            if (grantResult) {
+              const grantId = typeof grantResult.grant_id === "string" ? grantResult.grant_id : "?";
+              const label = typeof grantResult.label === "string" ? grantResult.label : "?";
+              process.stdout.write(
+                success(`Registered agent_grant ${grantId} ("${label}")`) + "\n"
+              );
+            } else if (grantError) {
+              process.stdout.write(
+                dim(
+                  `Keypair written but grant registration failed: ${grantError}. ` +
+                    `Re-run with --register or POST /agents/grants manually.`
+                ) + "\n"
+              );
+              process.exitCode = 1;
+            }
+          }
+          process.stdout.write(
+            dim(
+              "Signed CLI and MCP-proxy requests will now land as hardware/software tier in attribution. " +
+                "Run `neotoma auth session` to confirm."
+            ) + "\n"
+          );
+        }
+      } catch (err) {
+        writeMessage(formatCliError(err), outputMode);
+        process.exitCode = 1;
       }
-    } catch (err) {
-      writeMessage(formatCliError(err), outputMode);
-      process.exitCode = 1;
     }
-  });
+  );
 
 authCommand
   .command("sign-example")

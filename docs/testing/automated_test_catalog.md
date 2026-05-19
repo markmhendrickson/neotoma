@@ -61,18 +61,18 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **390**
-- Backend and repo Vitest files: **357**
+- Total automated test files: **399**
+- Backend and repo Vitest files: **365**
 - Frontend Vitest files: **9**
-- Playwright spec files: **24**
+- Playwright spec files: **25**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 95 |
+| Vitest unit tests | 102 |
 | Vitest service tests | 33 |
 | Source-adjacent tests | 45 |
-| Vitest integration tests | 106 |
+| Vitest integration tests | 107 |
 | Vitest CLI tests | 59 |
 | Vitest contract tests | 10 |
 | Vitest security tests | 1 |
@@ -83,7 +83,7 @@ flowchart TD
 | Vitest shared-environment tests | 1 |
 | Frontend Vitest tests | 9 |
 | Playwright E2E tests | 22 |
-| Playwright Inspector E2E tests | 2 |
+| Playwright Inspector E2E tests | 3 |
 | Tests Scripts | 1 |
 
 ## Primary validation commands
@@ -107,7 +107,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (95):**
+**Files (102):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -117,6 +117,7 @@ flowchart TD
 - `tests/unit/aauth_attestation_webauthn_packed.test.ts`
 - `tests/unit/aauth_authority_normalization.test.ts`
 - `tests/unit/aauth_operator_allowlist.test.ts`
+- `tests/unit/aauth_sdk_and_capability_flags.test.ts`
 - `tests/unit/aauth_tpm_structures.test.ts`
 - `tests/unit/aauth_verify_middleware.test.ts`
 - `tests/unit/action_schemas_observation_source.test.ts`
@@ -145,6 +146,8 @@ flowchart TD
 - `tests/unit/cursor_hooks_small_model.test.ts`
 - `tests/unit/docs_sidebar_nav.test.ts`
 - `tests/unit/docs/index_builder_deprecation.test.ts`
+- `tests/unit/docs/normalize_titles.test.ts`
+- `tests/unit/docs/taxonomy_audit.test.ts`
 - `tests/unit/drift_comparison.test.ts`
 - `tests/unit/duplicate_detection.test.ts`
 - `tests/unit/encrypt_response_middleware.test.ts`
@@ -152,6 +155,7 @@ flowchart TD
 - `tests/unit/external_actor_builder.test.ts`
 - `tests/unit/external_actor_promoter.test.ts`
 - `tests/unit/external_actor_provenance.test.ts`
+- `tests/unit/faq_canonical_markdown.test.ts`
 - `tests/unit/features/FU-2026-Q3-aauth-inspector-attestation-viz/agent_badge_tier_icon.test.ts`
 - `tests/unit/github_issue_thread.test.ts`
 - `tests/unit/github_mirror_guidance.test.ts`
@@ -194,7 +198,10 @@ flowchart TD
 - `tests/unit/security_hardening.test.ts`
 - `tests/unit/seo_metadata.test.ts`
 - `tests/unit/session_info.test.ts`
+- `tests/unit/site_page_frontmatter.test.ts`
+- `tests/unit/site_page_index_builder.test.ts`
 - `tests/unit/site_page_markdown.test.ts`
+- `tests/unit/site_page_route_parity.test.ts`
 - `tests/unit/spa_path.test.ts`
 - `tests/unit/store_alias_dispatch.test.ts`
 - `tests/unit/submit_issue_dx.test.ts`
@@ -301,7 +308,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (106):**
+**Files (107):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_resource_metadata.test.ts`
 - `tests/integration/aauth_revocation_e2e.test.ts`
@@ -393,6 +400,7 @@ flowchart TD
 - `tests/integration/sandbox_report.test.ts`
 - `tests/integration/schema_recommendation_integration.test.ts`
 - `tests/integration/session_introspection.test.ts`
+- `tests/integration/site_pages_route.test.ts`
 - `tests/integration/store_builtin_identity_opt_out_schemas.test.ts`
 - `tests/integration/store_conversation_message_role_conflict.test.ts`
 - `tests/integration/store_exercise_log_device_schema.test.ts`
@@ -592,7 +600,8 @@ flowchart TD
 **Runner:** `playwright`
 **Command:** `npm run test:e2e:inspector`
 **Requirements:** Inspector bundle built before execution.
-**Files (2):**
+**Files (3):**
+- `playwright/tests/inspector/docs_hierarchy.spec.ts`
 - `playwright/tests/inspector/inspector-entity-detail.spec.ts`
 - `playwright/tests/inspector/inspector-issues.spec.ts`
 

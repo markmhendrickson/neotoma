@@ -9,7 +9,8 @@
     ".": "./dist/index.js",
     "./core": "./dist/core/operations.js",
     "./core/operations": "./dist/core/operations.js",
-    "./server": "./dist/server.js"
+    "./server": "./dist/server.js",
+    "./aauth": "./dist/sdk/aauth.js"
   },
   "bin": {
     "neotoma": "dist/cli/bootstrap.js"
