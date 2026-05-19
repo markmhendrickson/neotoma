@@ -418,6 +418,14 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
       "FU-2026-05-002: per-turn status line plus optional ui:// widget URI. Agents call at end of every turn after the closing assistant store.",
   },
   {
+    operationId: "getConversationTurnIndex",
+    method: "get",
+    path: "/conversations/{conversation_id}/turn-index",
+    adapter: "infra",
+    notes:
+      "FU-2026-05-003: per-turn index used by Inspector to render anchor sections (#msg-N, #stored-N, #retrieved-N, #issues-N) and the turn timeline sidebar. Inspector HTTP-only.",
+  },
+  {
     operationId: "getRecordById",
     method: "get",
     path: "/records/{id}",
