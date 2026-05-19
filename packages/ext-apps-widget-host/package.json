@@ -1,0 +1,26 @@
+{
+  "name": "@neotoma/ext-apps-widget-host",
+  "version": "0.1.0",
+  "description": "MCP ext-apps widget host. Resolves ui://neotoma/turn-summary?... resource URIs emitted by neotoma_turn_summary (FU-2026-05-002) and renders inline widgets (turn status, issue consent card) in supporting MCP clients.",
+  "type": "module",
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/node": "^20.11.0"
+  }
+}

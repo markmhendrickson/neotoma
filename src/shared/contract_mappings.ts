@@ -417,6 +417,15 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     cliCommand: "store",
   },
   {
+    operationId: "turnSummary",
+    method: "post",
+    path: "/turn_summary",
+    adapter: "mcp",
+    mcpTool: "neotoma_turn_summary",
+    notes:
+      "FU-2026-05-002: per-turn status line plus optional ui:// widget URI. Agents call at end of every turn after the closing assistant store.",
+  },
+  {
     operationId: "getRecordById",
     method: "get",
     path: "/records/{id}",
@@ -826,6 +835,7 @@ export const MCP_TOOL_TO_OPERATION_ID: Record<string, string> = {
   get_peer_status: "getPeerStatus",
   sync_peer: "syncPeer",
   resolve_sync_conflict: "resolveSyncConflict",
+  neotoma_turn_summary: "turnSummary",
   submit_issue: "issuesSubmit",
   add_issue_message: "issuesAddMessage",
   get_issue_status: "issuesGetStatus",

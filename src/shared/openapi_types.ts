@@ -1715,6 +1715,32 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/turn_summary": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Compute per-turn Neotoma activity summary
+     * @description FU-2026-05-002. Computes the single-line per-turn status (`msg N/M,
+     *     stored K, retrieved L`) and an optional `ui://` widget URI for the
+     *     ext-apps widget host. Inputs identify the conversation and the turn;
+     *     the server resolves all other state (turn number, total message count,
+     *     stored entities REFERS_TO from the assistant message, retrieved
+     *     entities, pending issues). Agents call this at end of every turn after
+     *     the closing assistant store completes.
+     */
+    post: operations["turnSummary"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/get_authenticated_user": {
     parameters: {
       query?: never;
@@ -3452,6 +3478,86 @@ export interface components {
         [key: string]: unknown;
       };
       entity_ids?: string[];
+    };
+    /**
+     * @description FU-2026-05-002. Identifies the conversation and the assistant message
+     *     whose turn just completed. The server resolves stored/retrieved/issue
+     *     entity IDs from the REFERS_TO edges of the assistant `conversation_message`
+     *     and computes total message count for the conversation.
+     */
+    TurnSummaryRequest: {
+      /**
+       * @description Stable conversation identifier (the `conversation_id` field on the
+       *     `conversation` entity, host-provided or agent-derived per the turn
+       *     identity rules). Used to disambiguate when the same `turn_key`
+       *     string could in principle belong to multiple conversations.
+       */
+      conversation_id: string;
+      /**
+       * @description `turn_key` of the assistant `conversation_message` whose turn just
+       *     completed. Format `{conversation_id}:{turn_id}:assistant` per the
+       *     closing-store recipe. The server resolves the entity via
+       *     `canonical_name_fields: ["turn_key"]`.
+       */
+      turn_key: string;
+      /** Format: uuid */
+      user_id?: string;
+    };
+    /**
+     * @description FU-2026-05-002. Plain-text status line (always present) plus an
+     *     optional `ui://` widget URI for ext-apps clients. Agents emit
+     *     `status_line` in the user-visible reply; ext-apps clients additionally
+     *     render the widget inline when `widget_uri` is present.
+     */
+    TurnSummaryResponse: {
+      /**
+       * @description Single-line plain-text status of the form
+       *     `msg N/M, stored K, retrieved L` (with optional `, issues J`
+       *     suffix when J > 0). Always present, including bookkeeping-only
+       *     turns where K, L, and J are zero.
+       */
+      status_line: string;
+      /**
+       * @description MCP resource URI (`ui://neotoma/turn-summary?...`) resolvable by
+       *     the ext-apps widget host. Omitted when no host context is
+       *     available. Clients without ext-apps support fall back to
+       *     `status_line` plain text.
+       */
+      widget_uri?: string | null;
+      /**
+       * @description 1-based ordinal of this turn within the conversation. Read from
+       *     the resolved assistant message's `turn_number` field; falls back
+       *     to total message count when the field is absent on legacy rows.
+       */
+      turn_number: number;
+      /**
+       * @description Total `conversation_message` entities `PART_OF` the conversation
+       *     at the time of the call. Matches the `conversation_message_count`
+       *     field returned by the closing assistant store (FU-2026-05-001).
+       */
+      conversation_message_count: number;
+      /**
+       * @description Non-bookkeeping entities the assistant message REFERS_TO that were
+       *     created or updated this turn. `conversation` and
+       *     `conversation_message` are excluded.
+       */
+      stored: components["schemas"]["TurnSummaryEntityRef"][];
+      /**
+       * @description Entities cited in the reply that already existed before this turn
+       *     (no new observation was written by this turn). Excludes chat
+       *     bookkeeping.
+       */
+      retrieved: components["schemas"]["TurnSummaryEntityRef"][];
+      /**
+       * @description Issue entities surfaced this turn that need user consent to file
+       *     externally. Empty unless the auto-file flow flagged something.
+       */
+      issues: components["schemas"]["TurnSummaryEntityRef"][];
+    };
+    TurnSummaryEntityRef: {
+      entity_id: string;
+      entity_type: string;
+      canonical_name?: string | null;
     };
     GetRelationshipSnapshotRequest: {
       /** @enum {string} */
@@ -6707,6 +6813,30 @@ export interface operations {
               field?: string;
             };
           };
+        };
+      };
+    };
+  };
+  turnSummary: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["TurnSummaryRequest"];
+      };
+    };
+    responses: {
+      /** @description Turn summary computed */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TurnSummaryResponse"];
         };
       };
     };
