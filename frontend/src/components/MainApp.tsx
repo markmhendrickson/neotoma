@@ -30,6 +30,7 @@ import { InspectorTimelinePage } from "@/components/subpages/InspectorTimelinePa
 import { InspectorConversationsPage } from "@/components/subpages/InspectorConversationsPage";
 import { InspectorAgentsPage } from "@/components/subpages/InspectorAgentsPage";
 import { InspectorPeersPage } from "@/components/subpages/InspectorPeersPage";
+import { InspectorUsagePage } from "@/components/subpages/InspectorUsagePage";
 import { InspectorSearchPage } from "@/components/subpages/InspectorSearchPage";
 import { InspectorSettingsPage } from "@/components/subpages/InspectorSettingsPage";
 import { InspectorSettingsConnectionPage } from "@/components/subpages/InspectorSettingsConnectionPage";
@@ -196,6 +197,7 @@ const APP_ROUTES: readonly AppRoute[] = [
   { path: "/inspector/conversations", element: <InspectorConversationsPage /> },
   { path: "/inspector/agents", element: <InspectorAgentsPage /> },
   { path: "/inspector/peers", element: <InspectorPeersPage /> },
+  { path: "/inspector/usage", element: <InspectorUsagePage /> },
   { path: "/inspector/search", element: <InspectorSearchPage /> },
   {
     path: "/inspector/search-and-settings",

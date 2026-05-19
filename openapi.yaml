@@ -1234,6 +1234,52 @@ components:
           items:
             type: object
             additionalProperties: true
+    UsageStats:
+      type: object
+      properties:
+        entities_by_type:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Count of active entities per entity_type, sorted descending by count
+        total_entities:
+          type: integer
+          description: Total count of active (non-merged) entities
+        observations_by_source:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Count of observations per source type; null observation_source mapped to "unclassified"
+        total_observations:
+          type: integer
+          description: Total count of observations
+        entities_created_last_7_days:
+          type: integer
+          description: Count of entities created in the last 7 days
+        entities_created_last_30_days:
+          type: integer
+          description: Count of entities created in the last 30 days
+        entity_types_with_schema:
+          type: integer
+          description: Number of entity types that have a registered schema
+        entity_types_total:
+          type: integer
+          description: Total number of distinct entity types in use
+        last_updated:
+          type: string
+          format: date-time
+          description: ISO timestamp of when these stats were computed
+      required:
+        - entities_by_type
+        - total_entities
+        - observations_by_source
+        - total_observations
+        - entities_created_last_7_days
+        - entities_created_last_30_days
+        - entity_types_with_schema
+        - entity_types_total
+        - last_updated
+
     Stats:
       type: object
       properties:
@@ -3894,6 +3940,22 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Stats" }
+
+  /usage:
+    get:
+      summary: Get local aggregate usage statistics for Inspector Usage view
+      operationId: getUsage
+      parameters:
+        - in: query
+          name: user_id
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: Aggregate usage statistics computed from local data only
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UsageStats" }
 
   /access_policies:
     get:

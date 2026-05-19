@@ -365,6 +365,14 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     cliCommand: "stats",
   },
   {
+    operationId: "getUsage",
+    method: "get",
+    path: "/usage",
+    adapter: "cli",
+    cliCommand: "request --operation getUsage",
+    notes: "Inspector Usage view; callable via neotoma request for automation.",
+  },
+  {
     operationId: "getAccessPolicies",
     method: "get",
     path: "/access_policies",

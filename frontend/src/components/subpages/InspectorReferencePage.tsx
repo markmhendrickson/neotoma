@@ -284,6 +284,18 @@ open http://localhost:3080/inspector`}</pre>
         </li>
         <li className="text-[15px] leading-7 text-muted-foreground">
           <Link
+            to="/inspector/usage"
+            className="text-foreground underline underline-offset-2 hover:no-underline"
+            {...detailPageCtaLinkProps}
+          >
+            Usage
+          </Link>{" "}
+         , aggregate statistics for your own activity: entities by type,
+          observations by source, recent ingestion counts, and schema coverage.
+          All computed from local data only.
+        </li>
+        <li className="text-[15px] leading-7 text-muted-foreground">
+          <Link
             to="/inspector/search"
             className="text-foreground underline underline-offset-2 hover:no-underline"
             {...detailPageCtaLinkProps}

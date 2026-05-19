@@ -1204,6 +1204,18 @@
       ]
     },
     {
+      "path": "/usage",
+      "method": "GET",
+      "operation_id": "getUsage",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
       "path": "/",
       "method": "GET",
       "operation_id": null,

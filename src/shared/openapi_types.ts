@@ -1132,6 +1132,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/usage": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get local aggregate usage statistics for Inspector Usage view */
+    get: operations["getUsage"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/access_policies": {
     parameters: {
       query?: never;
@@ -2704,6 +2721,33 @@ export interface components {
       relationships_created?: {
         [key: string]: unknown;
       }[];
+    };
+    UsageStats: {
+      /** @description Count of active entities per entity_type, sorted descending by count */
+      entities_by_type: {
+        [key: string]: number;
+      };
+      /** @description Total count of active (non-merged) entities */
+      total_entities: number;
+      /** @description Count of observations per source type; null observation_source mapped to "unclassified" */
+      observations_by_source: {
+        [key: string]: number;
+      };
+      /** @description Total count of observations */
+      total_observations: number;
+      /** @description Count of entities created in the last 7 days */
+      entities_created_last_7_days: number;
+      /** @description Count of entities created in the last 30 days */
+      entities_created_last_30_days: number;
+      /** @description Number of entity types that have a registered schema */
+      entity_types_with_schema: number;
+      /** @description Total number of distinct entity types in use */
+      entity_types_total: number;
+      /**
+       * Format: date-time
+       * @description ISO timestamp of when these stats were computed
+       */
+      last_updated: string;
     };
     Stats: {
       entities?: number;
@@ -5003,6 +5047,28 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["Stats"];
+        };
+      };
+    };
+  };
+  getUsage: {
+    parameters: {
+      query?: {
+        user_id?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Aggregate usage statistics computed from local data only */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["UsageStats"];
         };
       };
     };

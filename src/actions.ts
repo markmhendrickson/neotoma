@@ -5568,6 +5568,26 @@ app.get("/stats", async (req, res) => {
   }
 });
 
+// GET /usage - Get local aggregate usage statistics for Inspector Usage view
+// REQUIRES AUTHENTICATION - all stats filtered by authenticated user_id
+app.get("/usage", async (req, res) => {
+  try {
+    const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+    const { getUsageStats } = await import("./services/usage_stats.js");
+    const stats = await getUsageStats(userId);
+    return res.json(stats);
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to get usage stats",
+      "DB_QUERY_FAILED",
+      "APIError:usage_stats"
+    );
+  }
+});
+
 // GET /access_policies - List effective guest access policies
 // REQUIRES AUTHENTICATION
 app.get("/access_policies", async (req, res) => {
