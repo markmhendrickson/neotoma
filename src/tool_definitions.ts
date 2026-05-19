@@ -1167,6 +1167,20 @@ export function buildToolDefinitions(
       },
     },
     {
+      name: "check_blocked_plans",
+      description: desc(
+        "check_blocked_plans",
+        "Check all plans with status 'awaiting_input' or 'blocked' for linked GitHub issues that are now closed. " +
+          "Returns a list of plans that can now be unblocked, each with the plan entity_id, title, and the linked issue number and title. " +
+          "Call at session start (after get_session_identity) to surface blocked work that became actionable since the last session."
+      ),
+      inputSchema: {
+        type: "object",
+        properties: {},
+      },
+      annotations: { readOnlyHint: true },
+    },
+    {
       name: "subscribe",
       description: desc(
         "subscribe",
@@ -1324,6 +1338,7 @@ export const NEOTOMA_TOOL_NAMES = [
   "add_issue_message",
   "get_issue_status",
   "sync_issues",
+  "check_blocked_plans",
   "submit_entity",
   "add_entity_message",
   "get_entity_submission_status",

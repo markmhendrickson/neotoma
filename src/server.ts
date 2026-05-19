@@ -1283,6 +1283,25 @@ export class NeotomaServer {
     }
   }
 
+  private async handleCheckBlockedPlans(
+    userId: string
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const { createOperations } = await import("./core/operations.js");
+    const { checkBlockedPlans } = await import("./services/plans/check_blocked_plans.js");
+    const ops = createOperations({ server: this, userId });
+    try {
+      const result = await checkBlockedPlans(ops);
+      return this.buildTextResponse(result);
+    } catch (err: any) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `check_blocked_plans failed: ${err?.message ?? err}`
+      );
+    } finally {
+      await ops.dispose();
+    }
+  }
+
   private async handleSubscribe(
     args: unknown,
     userId: string
@@ -1776,6 +1795,8 @@ export class NeotomaServer {
         return await this.handleGetIssueStatus(args, this.getAuthenticatedUserId());
       case "sync_issues":
         return await this.handleSyncIssues(args, this.getAuthenticatedUserId());
+      case "check_blocked_plans":
+        return await this.handleCheckBlockedPlans(this.getAuthenticatedUserId());
       case "submit_entity":
         return await this.handleSubmitEntity(args, this.getAuthenticatedUserId());
       case "add_entity_message":

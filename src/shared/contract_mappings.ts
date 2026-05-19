@@ -203,6 +203,14 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     cliCommand: "issues status",
   },
   {
+    operationId: "checkBlockedPlans",
+    method: "post",
+    path: "/plans/check-blocked",
+    adapter: "mcp",
+    mcpTool: "check_blocked_plans",
+    notes: "Check blocked plans against closed GitHub issues; MCP check_blocked_plans parity.",
+  },
+  {
     operationId: "issuesSync",
     method: "post",
     path: "/issues/sync",
@@ -821,6 +829,7 @@ export const MCP_TOOL_TO_OPERATION_ID: Record<string, string> = {
   add_issue_message: "issuesAddMessage",
   get_issue_status: "issuesGetStatus",
   sync_issues: "issuesSync",
+  check_blocked_plans: "checkBlockedPlans",
 };
 
 export const MCP_ONLY_TOOLS: string[] = [];

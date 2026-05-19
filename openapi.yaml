@@ -4784,6 +4784,59 @@ paths:
                 type: object
                 additionalProperties: true
 
+  /plans/check-blocked:
+    post:
+      summary: Check blocked plans for unblockable status
+      description: >
+        Queries all plan entities with status "awaiting_input" or "blocked", finds linked
+        issues via REFERS_TO relationships, checks whether those issues are now closed,
+        and returns a list of plans that can be unblocked. MCP check_blocked_plans parity.
+      operationId: checkBlockedPlans
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                user_id:
+                  type: string
+      responses:
+        "200":
+          description: List of plans that are now unblockable
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                  - unblockable_plans
+                properties:
+                  unblockable_plans:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required:
+                        - entity_id
+                        - title
+                        - linked_issue_number
+                        - linked_issue_title
+                      properties:
+                        entity_id:
+                          type: string
+                          description: Neotoma entity_id of the blocked plan
+                        title:
+                          type: string
+                          description: Title of the blocked plan
+                        linked_issue_number:
+                          type: integer
+                          description: GitHub issue number of the now-closed linked issue
+                        linked_issue_title:
+                          type: string
+                          description: Title of the linked issue
+
   /issues/sync:
     post:
       summary: Sync issues bidirectionally with GitHub

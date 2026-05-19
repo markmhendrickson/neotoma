@@ -134,6 +134,7 @@ import {
   IssuesGetStatusRequestSchema,
   IssuesSubmitRequestSchema,
   IssuesSyncRequestSchema,
+  CheckBlockedPlansRequestSchema,
   EntitiesQueryRequestSchema,
   EntitySnapshotRequestSchema,
   FieldProvenanceRequestSchema,
@@ -8335,6 +8336,43 @@ const handleIssuesSyncHttp: express.RequestHandler = async (req, res) => {
 };
 app.post("/issues/sync", handleIssuesSyncHttp);
 app.post("/api/issues/sync", handleIssuesSyncHttp);
+
+// POST /plans/check-blocked — Detect plans blocked on closed issues (MCP check_blocked_plans parity)
+const handleCheckBlockedPlansHttp: express.RequestHandler = async (req, res) => {
+  const parsed = CheckBlockedPlansRequestSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    logWarn("ValidationError:check_blocked_plans", req, { issues: parsed.error.issues });
+    return sendValidationError(res, parsed.error.issues);
+  }
+  try {
+    const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+    const { createOperations } = await import("./core/operations.js");
+    const { NeotomaServer } = await import("./server.js");
+    const { checkBlockedPlans } = await import("./services/plans/check_blocked_plans.js");
+    const server = new NeotomaServer();
+    const ops = createOperations({ server, userId });
+    try {
+      const result = await checkBlockedPlans(ops);
+      logDebug("Success:check_blocked_plans", req, {
+        unblockable_count: result.unblockable_plans.length,
+      });
+      return res.json(result);
+    } finally {
+      await ops.dispose();
+    }
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to check blocked plans",
+      "CHECK_BLOCKED_PLANS_FAILED",
+      "APIError:check_blocked_plans"
+    );
+  }
+};
+app.post("/plans/check-blocked", handleCheckBlockedPlansHttp);
+app.post("/api/plans/check-blocked", handleCheckBlockedPlansHttp);
 
 // POST /restore_entity - Restore soft-deleted entity
 app.post("/restore_entity", async (req, res) => {

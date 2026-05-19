@@ -1450,6 +1450,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/plans/check-blocked": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Check blocked plans for unblockable status
+     * @description Queries all plan entities with status "awaiting_input" or "blocked", finds linked issues via REFERS_TO relationships, checks whether those issues are now closed, and returns a list of plans that can be unblocked. MCP check_blocked_plans parity.
+     */
+    post: operations["checkBlockedPlans"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/issues/sync": {
     parameters: {
       query?: never;
@@ -3172,18 +3192,6 @@ export interface components {
        *     `raw_fragments` and can be recovered.
        */
       unknown_fields_count?: number;
-      /**
-       * @description Total number of `conversation_message` entities `PART_OF` the
-       *     conversation referenced by this store call, computed after commit.
-       *     Populated only when at least one `conversation_message` entity was
-       *     created or updated in this request and its `PART_OF` target
-       *     conversation can be resolved. Omitted (null) for store calls with
-       *     no conversation context. Reflects the current snapshot at the time
-       *     of the response. Consumed by `neotoma_turn_summary` to populate
-       *     the `msg N/M` component of the turn status line without an extra
-       *     retrieval round-trip.
-       */
-      conversation_message_count?: number | null;
       /**
        * @description Actionable guidance when fields were dropped to `raw_fragments`.
        *     Present only when `unknown_fields_count > 0`. Directs the caller
@@ -5774,6 +5782,43 @@ export interface operations {
         content: {
           "application/json": {
             [key: string]: unknown;
+          };
+        };
+      };
+    };
+  };
+  checkBlockedPlans: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": {
+          user_id?: string;
+        };
+      };
+    };
+    responses: {
+      /** @description List of plans that are now unblockable */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            unblockable_plans: {
+              /** @description Neotoma entity_id of the blocked plan */
+              entity_id: string;
+              /** @description Title of the blocked plan */
+              title: string;
+              /** @description GitHub issue number of the now-closed linked issue */
+              linked_issue_number: number;
+              /** @description Title of the linked issue */
+              linked_issue_title: string;
+            }[];
           };
         };
       };

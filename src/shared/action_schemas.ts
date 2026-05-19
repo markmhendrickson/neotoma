@@ -683,6 +683,11 @@ export const IssuesGetStatusRequestSchema = z
     { message: "Provide entity_id or issue_number" }
   );
 
+/** Check blocked plans for unblockable status (HTTP + MCP check_blocked_plans parity). */
+export const CheckBlockedPlansRequestSchema = z.object({
+  user_id: z.string().optional(),
+});
+
 /** GitHub mirror ingest (HTTP + CLI parity with MCP sync_issues). */
 export const IssuesSyncRequestSchema = z.object({
   since: z.string().optional(),
