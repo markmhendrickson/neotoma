@@ -2,7 +2,20 @@
 
 ## Summary
 
-v0.13.0 is a substantial feature release covering everything since v0.12.1. The headline additions are **schema-level and per-entity agent instructions** (an entity type can carry behavioral guidance that agents must apply when the entity is retrieved), a **multi-harness preflight CLI** that replaces the multi-prompt onboarding flow, **bulk harness-transcript import** from `~/.claude/`, `~/.codex/`, and `~/.cursor/`, **MCP integration guides for Continue, Windsurf, VS Code, and Letta**, a **bidirectional column-encryption migration command** for self-hosted deployments, a **plan-entity refactor** that replaces feature units with first-class `plan` entities and a `neotoma-plans` mirror profile, a **server-rendered `/docs` index** over repo docs, **Prettier baseline + CI format gate**, **selective Claude PR review on substantial PRs**, and a series of corrective fixes to schema discovery, idempotency, intra-batch relationships, raw_fragments routing, and timeline determinism. Sandbox releases now stage as draft GitHub Releases and publish only after the sandbox deployment is verified, and the release flow now opens an RC branch + PR for public review before execute.
+v0.13.0 is a substantial feature release covering everything since v0.12.1. Headline additions:
+
+- **Schema-level and per-entity agent instructions** — entity types and individual entities can carry behavioral guidance that agents must apply when the entity is retrieved.
+- **Multi-harness preflight CLI** — replaces the multi-prompt onboarding flow.
+- **Bulk harness-transcript import** from `~/.claude/`, `~/.codex/`, and `~/.cursor/`.
+- **MCP integration guides** for Continue, Windsurf, VS Code, and Letta.
+- **Bidirectional column-encryption migration command** for self-hosted deployments.
+- **Plan-entity refactor** — replaces feature units with first-class `plan` entities and a `neotoma-plans` mirror profile.
+- **Server-rendered `/docs` index** over repo docs, with fail-closed visibility.
+- **Prettier baseline + CI format gate**.
+- **Selective Claude PR review on substantial PRs**.
+- Corrective fixes to schema discovery, idempotency, intra-batch relationships, raw_fragments routing, and timeline determinism.
+
+GitHub Releases now stage as draft and publish only after the sandbox deployment is verified. The release flow opens an RC branch + PR for public review before execute.
 
 ## What changed for npm package users
 
@@ -60,7 +73,7 @@ Plans are now first-class Neotoma entities, not filesystem documents. Highlights
 
 - Plans live as `plan` entities with structured fields, retrieval routing, and graph edges to objectives, gates, and feedback.
 - The new **`neotoma-plans` mirror profile** snapshots `plan` entities into the repo with canonical-name filenames and YAML frontmatter for harness compatibility.
-- Plan content moved out of `.cursor/plans/` and `plans/` flat files into Neotoma; the mirror writes them back to `plans/` (the previous `docs/plans/` location was relocated for harness visibility — `b1d163696`).
+- Plan content moved out of `.cursor/plans/` and `docs/plans/` flat files into Neotoma; the mirror writes them back to `plans/` for harness visibility (`b1d163696`).
 - Selective mirror profiles support snapshot field tokens, slug truncation, and a remote API client for profile-based hydration (`8d39d1000`, `7a441614f`).
 - Plan-entity retrieval routing fixed so `plan` queries return plan entities and not the conversation that referenced them (#228, #233).
 - A new `renderProfileEntity` helper emits harness-compatible YAML frontmatter for profile rendering (#241).
@@ -85,12 +98,8 @@ Plans are now first-class Neotoma entities, not filesystem documents. Highlights
 - **Schema-level agent instructions.** `SchemaDefinition.agent_instructions` is now a validated optional field. When set, it is returned alongside every entity of that type so agents in the loop see the relevant behavioral context.
 - **Per-entity agent instructions.** An entity's snapshot may carry its own `agent_instructions` field which extends or overrides the schema-level instructions for that specific entity.
 - **Schema auto-enhancement gates relaxed for trusted sources.** Thresholds drop to `ceil(base * 0.5)` for user-scoped schemas when the observation source is `llm_summary`, `import`, or `sync`. Does not apply to global schemas (#98, #102).
-- **No-schema entity-type promotion path corrected.** When the target type has no registered schema, store no longer silently routes everything to `raw_fragments`; the response surfaces the no-schema state so callers can register a schema and retry. Once a schema exists, prior raw_fragments rows are eligible for promotion (#164).
 - **Interpretation orders fragment writes after entity resolution.** Buffer raw_fragment writes until after entity resolution completes so they land against the correct resolved entity ID (#163).
-- **Idempotency-key collision detection.** A reused `idempotency_key` with a different payload now returns `ERR_IDEMPOTENCY_MISMATCH` instead of silently overwriting; content-hash comparison is the primary discriminator (#186).
-- **Intra-batch relationship resolution.** Relationships referencing entities created earlier in the same `store` request now resolve correctly (#203, #221).
 - **SQLite lock retry.** Read and write operations now retry with exponential backoff on `SQLITE_BUSY` / `SQLITE_LOCKED` instead of failing immediately, which removes a class of flaky errors under concurrent agent load (#173).
-- **`store` partial-batch atomicity.** A pre-resolution pass validates every entity before any writes occur. If any entity in the batch fails to resolve, none are written (#203).
 - **Recurring event field projection.** Recurring-event fields now project correctly into snapshots (#37, #115).
 - **Null correction clears date fields from snapshot.** A correction that writes `null` to a date field now removes it from the snapshot instead of leaving the previous value (#41, #104).
 - **Source existence validated before creating an interpretation.** `interpret` now returns a clear `Source not found: <id>` error instead of orphan rows.
@@ -169,17 +178,9 @@ Plans are now first-class Neotoma entities, not filesystem documents. Highlights
 - **Schema-projection lag for recurring events** (#37, #115) — fields now project into the snapshot.
 - **Multiple-active-schema rows causing raw_fragments misrouting** (#142) — when `registerSchema` was called with `activate: true`, prior active rows for the same `entity_type` + scope were not deactivated. `loadGlobalSchema` / `loadUserSpecificSchema` use `.single()`, so a second active row caused the call to error; new observations were silently routed to `raw_fragments`. Fixed in `src/services/schema_registry.ts`. Regression test: `tests/unit/schema_projection_lag.test.ts`. Deployments that ingested data while the bug was active can recover misrouted rows using `neotoma db repair-schema-lag`.
 - **`db migrate-encryption` rowid-aliasing latent bug** — SQLite rewrites `rowid` to the declared primary-key column name when a table has `INTEGER PRIMARY KEY`. Fixed by aliasing `rowid AS _migration_rowid`. Regression test in `tests/cli/db_migrate_encryption.test.ts`.
-- **`store` unknown-field surfacing** — response now includes a concrete list of field names, not just a count (#185).
-- **`store` raw_fragments recovery hint** — surfaces a structured hint pointing the caller at the right corrective action when fields are dropped (#187).
-- **`store` no-schema interpretation** — surfaces no-schema entity types in the response so callers can register and retry (#164).
-- **`store` schema canonical_name_fields, unknown_fields list, idempotency mismatch detection** — combined fix (`c8f497198`).
-- **`store` pre-resolution pass prevents partial batch writes** (#203).
-- **`store` intra-batch relationship resolution** (#203, #221).
-- **`store` idempotency content-hash mismatch detection on key reuse** (#186).
+- **`store` schema canonical_name_fields and combined unknown-fields / idempotency-mismatch fix** (`c8f497198`) — see *Behavior changes in existing commands* for caller-facing detail (#164, #185, #186, #187, #203, #221).
 - **`store_structured` / `store_unstructured` alias dispatch** in the MCP executeTool path.
 - **`store` ranking and AUTH_REQUIRED hint** plus auto-populated `reporter_app_version` (#181, #182, #183, #191, #206).
-- **`interpretation` buffer raw_fragment writes until after entity resolution** (#163).
-- **`list_timeline_events` empty result for unknown event_type** (#207).
 - **`conversation` schema and session UUID bridge** (#138, #145, #256).
 - **`product_feedback` `feedback_source` discriminator and identity validation** (#136, #137).
 - **`workout_session` schema with merge_array exercises** (#209).
