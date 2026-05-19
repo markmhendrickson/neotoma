@@ -80,6 +80,7 @@ describe("seedPlanSchema", () => {
     expect(registry.updateSchemaIncremental).toHaveBeenCalledTimes(1);
     const update = registry.updateSchemaIncremental.mock.calls[0]?.[0] as {
       fields_to_add: Array<{ field_name: string }>;
+      migrate_existing?: boolean;
     };
     const fieldNames = update.fields_to_add.map((f) => f.field_name);
     expect(fieldNames).toContain("plan_kind");
@@ -87,6 +88,26 @@ describe("seedPlanSchema", () => {
     expect(fieldNames).toContain("public_overview");
     expect(fieldNames).toContain("worktree_path");
     expect(fieldNames).not.toContain("title"); // already present
+    // Must backfill raw_fragments so historical body values surface in snapshots.
+    expect(update.migrate_existing).toBe(true);
+  });
+
+  it("passes migrate_existing: true when body is among the missing fields", async () => {
+    // Simulates a DB that had plan schema registered before `body` was added.
+    const registry = makeRegistry({
+      exists: true,
+      existingFields: ["title", "slug", "harness", "harness_plan_id"],
+    });
+    await seedPlanSchema({
+      registry: registry as unknown as Parameters<typeof seedPlanSchema>[0]["registry"],
+    });
+    expect(registry.updateSchemaIncremental).toHaveBeenCalledTimes(1);
+    const update = registry.updateSchemaIncremental.mock.calls[0]?.[0] as {
+      fields_to_add: Array<{ field_name: string }>;
+      migrate_existing?: boolean;
+    };
+    expect(update.fields_to_add.map((f) => f.field_name)).toContain("body");
+    expect(update.migrate_existing).toBe(true);
   });
 
   it("skips updates when every field is already present", async () => {

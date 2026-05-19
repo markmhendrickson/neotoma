@@ -61,18 +61,18 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **386**
-- Backend and repo Vitest files: **353**
+- Total automated test files: **398**
+- Backend and repo Vitest files: **364**
 - Frontend Vitest files: **9**
-- Playwright spec files: **24**
+- Playwright spec files: **25**
 
 ### Suite counts
 | Suite | Files |
 |---|---:|
-| Vitest unit tests | 93 |
+| Vitest unit tests | 101 |
 | Vitest service tests | 33 |
 | Source-adjacent tests | 45 |
-| Vitest integration tests | 104 |
+| Vitest integration tests | 107 |
 | Vitest CLI tests | 59 |
 | Vitest contract tests | 10 |
 | Vitest security tests | 1 |
@@ -83,7 +83,7 @@ flowchart TD
 | Vitest shared-environment tests | 1 |
 | Frontend Vitest tests | 9 |
 | Playwright E2E tests | 22 |
-| Playwright Inspector E2E tests | 2 |
+| Playwright Inspector E2E tests | 3 |
 | Tests Scripts | 1 |
 
 ## Primary validation commands
@@ -107,7 +107,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/unit`
 **Requirements:** Basic `.env` if required by the module under test.
-**Files (93):**
+**Files (101):**
 - `tests/unit/aauth_admission.test.ts`
 - `tests/unit/aauth_attestation_apple_se.test.ts`
 - `tests/unit/aauth_attestation_revocation.test.ts`
@@ -128,6 +128,7 @@ flowchart TD
 - `tests/unit/attribution_diagnostics.test.ts`
 - `tests/unit/attribution_policy.test.ts`
 - `tests/unit/bigint_serialization.test.ts`
+- `tests/unit/bundled_docs_nav.test.ts`
 - `tests/unit/cli_aauth_tbs_attestation.test.ts`
 - `tests/unit/cli_aauth_tpm2_attestation.test.ts`
 - `tests/unit/cli_aauth_yubikey_attestation.test.ts`
@@ -143,6 +144,9 @@ flowchart TD
 - `tests/unit/cursor_hooks_external_data.test.ts`
 - `tests/unit/cursor_hooks_small_model.test.ts`
 - `tests/unit/docs_sidebar_nav.test.ts`
+- `tests/unit/docs/index_builder_deprecation.test.ts`
+- `tests/unit/docs/normalize_titles.test.ts`
+- `tests/unit/docs/taxonomy_audit.test.ts`
 - `tests/unit/drift_comparison.test.ts`
 - `tests/unit/duplicate_detection.test.ts`
 - `tests/unit/encrypt_response_middleware.test.ts`
@@ -150,6 +154,7 @@ flowchart TD
 - `tests/unit/external_actor_builder.test.ts`
 - `tests/unit/external_actor_promoter.test.ts`
 - `tests/unit/external_actor_provenance.test.ts`
+- `tests/unit/faq_canonical_markdown.test.ts`
 - `tests/unit/features/FU-2026-Q3-aauth-inspector-attestation-viz/agent_badge_tier_icon.test.ts`
 - `tests/unit/github_issue_thread.test.ts`
 - `tests/unit/github_mirror_guidance.test.ts`
@@ -192,7 +197,10 @@ flowchart TD
 - `tests/unit/security_hardening.test.ts`
 - `tests/unit/seo_metadata.test.ts`
 - `tests/unit/session_info.test.ts`
+- `tests/unit/site_page_frontmatter.test.ts`
+- `tests/unit/site_page_index_builder.test.ts`
 - `tests/unit/site_page_markdown.test.ts`
+- `tests/unit/site_page_route_parity.test.ts`
 - `tests/unit/spa_path.test.ts`
 - `tests/unit/store_alias_dispatch.test.ts`
 - `tests/unit/submit_issue_dx.test.ts`
@@ -299,7 +307,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (104):**
+**Files (107):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_resource_metadata.test.ts`
 - `tests/integration/aauth_revocation_e2e.test.ts`
@@ -321,6 +329,7 @@ flowchart TD
 - `tests/integration/cli_to_mcp_store.test.ts`
 - `tests/integration/conversation_turn_accrual.test.ts`
 - `tests/integration/cross_instance_issues.test.ts`
+- `tests/integration/csp_local_http.test.ts`
 - `tests/integration/cursor_hook_stop_backfill.test.ts`
 - `tests/integration/dashboard_stats.test.ts`
 - `tests/integration/docs_route.test.ts`
@@ -378,6 +387,7 @@ flowchart TD
 - `tests/integration/payload_compiler.test.ts`
 - `tests/integration/payload/payload_submission.test.ts`
 - `tests/integration/peer_sync.test.ts`
+- `tests/integration/plan_body_raw_fragment_backfill.test.ts`
 - `tests/integration/process_issues_skill.test.ts`
 - `tests/integration/public_key_registry.test.ts`
 - `tests/integration/record_activity_attribution.test.ts`
@@ -389,6 +399,7 @@ flowchart TD
 - `tests/integration/sandbox_report.test.ts`
 - `tests/integration/schema_recommendation_integration.test.ts`
 - `tests/integration/session_introspection.test.ts`
+- `tests/integration/site_pages_route.test.ts`
 - `tests/integration/store_builtin_identity_opt_out_schemas.test.ts`
 - `tests/integration/store_conversation_message_role_conflict.test.ts`
 - `tests/integration/store_exercise_log_device_schema.test.ts`
@@ -588,7 +599,8 @@ flowchart TD
 **Runner:** `playwright`
 **Command:** `npm run test:e2e:inspector`
 **Requirements:** Inspector bundle built before execution.
-**Files (2):**
+**Files (3):**
+- `playwright/tests/inspector/docs_hierarchy.spec.ts`
 - `playwright/tests/inspector/inspector-entity-detail.spec.ts`
 - `playwright/tests/inspector/inspector-issues.spec.ts`
 

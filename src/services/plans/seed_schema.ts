@@ -293,6 +293,12 @@ export async function seedPlanSchema(options?: {
     })),
     user_specific: false,
     activate: true,
+    // Promote any values for the newly-added fields that were previously
+    // routed to raw_fragments (because the field was absent from the active
+    // schema at store time). This is a one-time backfill per field per
+    // instance and is safe to run on every boot — the migration logic is
+    // idempotent for rows that were already promoted.
+    migrate_existing: true,
   });
 }
 
