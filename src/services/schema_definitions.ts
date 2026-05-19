@@ -99,6 +99,8 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         schema_version: { type: "string", required: true },
         income_date: { type: "date", required: true },
         income_type: { type: "string", required: false },
+        // Originating system slug (e.g. "csv_import", "manual", "quickbooks").
+        // See docs/subsystems/entity_field_semantics.md for canonical values.
         source: { type: "string", required: true },
         amount_usd: { type: "number", required: true },
         amount_original: { type: "number", required: false },
@@ -1365,6 +1367,9 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         title: { type: "string", required: false, preserveCase: true },
         content: { type: "string", required: true, preserveCase: true },
         tags: { type: "string", required: false },
+        // Originating system slug (e.g. "notion", "manual", "csv_import").
+        // See docs/subsystems/entity_field_semantics.md for canonical values.
+        // Also used as part of the composite canonical name when title is absent.
         source: { type: "string", required: false },
         created_date: { type: "date", required: false },
         updated_date: { type: "date", required: false },
@@ -2376,6 +2381,9 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         description: { type: "string", required: false, preserveCase: true },
         started_at: { type: "date", required: false },
         completed_at: { type: "date", required: false },
+        // Originating system or runtime that dispatched this task
+        // (e.g. "langgraph", "claude_code", "manual").
+        // See docs/subsystems/entity_field_semantics.md for canonical values.
         source: { type: "string", required: false },
         priority: { type: "string", required: false },
         input_summary: { type: "string", required: false, preserveCase: true },
