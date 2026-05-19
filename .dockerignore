@@ -1,9 +1,36 @@
-# flyctl launch added from .gitignore
-**/node_modules
-**/dist
+# Exclude everything, then allow only what the Dockerfile needs.
+# Build stage needs: package*.json, src/, inspector/, scripts/, openapi.yaml
+# Runtime stage copies from build output only; tests/fixtures/ for sandbox seed.
+
+# Exclude all by default via large known-noise dirs
+backups/
+data_backups/
+tmp/
+site_pages/
+writ/
+packages/
+mcp/
+public/
+frontend/
+.claude/
+.vitest/
+.venv-commit-scan/
+docs/
+tests/integration/
+tests/unit/
+tests/cli/
+tests/contract/
+tests/services/
+tests/e2e/
+tests/helpers/
+
+# Dev/local artifacts
 **/.env
 **/*.log
 **/.DS_Store
-
-
+**/node_modules
+**/dist
 fly.toml
+fly.sandbox.toml
+*.md
+!README.md
