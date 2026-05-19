@@ -8,7 +8,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd /Users/markmhendrickson/repos/neotoma && npm run mirror:plans 2>&1 | tail -5"
+            "command": "cd \"${CLAUDE_PROJECT_DIR}\" && npm run mirror:plans 2>&1 | tail -5"
           }
         ]
       }
