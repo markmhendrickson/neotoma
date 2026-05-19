@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **445**
-- Backend and repo Vitest files: **412**
+- Total automated test files: **446**
+- Backend and repo Vitest files: **413**
 - Frontend Vitest files: **9**
 - Playwright spec files: **24**
 
@@ -72,7 +72,7 @@ flowchart TD
 | Vitest unit tests | 114 |
 | Vitest service tests | 34 |
 | Source-adjacent tests | 50 |
-| Vitest integration tests | 125 |
+| Vitest integration tests | 126 |
 | Vitest CLI tests | 62 |
 | Vitest contract tests | 13 |
 | Vitest security tests | 3 |
@@ -327,7 +327,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (125):**
+**Files (126):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_resource_metadata.test.ts`
 - `tests/integration/aauth_revocation_e2e.test.ts`
@@ -435,6 +435,7 @@ flowchart TD
 - `tests/integration/schema_recommendation_integration.test.ts`
 - `tests/integration/session_introspection.test.ts`
 - `tests/integration/store_builtin_identity_opt_out_schemas.test.ts`
+- `tests/integration/store_conversation_message_count.test.ts`
 - `tests/integration/store_conversation_message_role_conflict.test.ts`
 - `tests/integration/store_exercise_log_device_schema.test.ts`
 - `tests/integration/store_explicit_canonical_name.test.ts`
