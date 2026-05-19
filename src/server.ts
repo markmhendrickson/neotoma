@@ -14,7 +14,7 @@ import { db } from "./db.js";
 import { logger } from "./utils/logger.js";
 import { z } from "zod";
 import { createHash, randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import * as yaml from "js-yaml";
 import { config } from "./config.js";
@@ -280,6 +280,41 @@ export class NeotomaServer {
       // File missing or invalid; use empty Map so tools keep inline descriptions
     }
     return new Map();
+  }
+
+  /**
+   * Return the list of skill names available in the installed Neotoma package.
+   *
+   * Skills live under `<package_root>/skills/<skill-name>/SKILL.md`. This
+   * method enumerates the top-level subdirectories of `skills/` and returns
+   * their names so harnesses receive the list at `initialize` time without a
+   * separate discovery round-trip.
+   *
+   * Returns an empty array when the `skills/` directory is absent (e.g. in
+   * development checkouts that have not yet staged skill assets, or in test
+   * environments with stripped package layouts).
+   */
+  private getAvailableSkills(): string[] {
+    const roots = [config.projectRoot, resolveNeotomaPackageRoot()];
+    const seen = new Set<string>();
+    for (const root of roots) {
+      const key = resolve(root);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const skillsDir = join(root, "skills");
+      if (!existsSync(skillsDir)) continue;
+      try {
+        const entries = readdirSync(skillsDir, { withFileTypes: true });
+        const names = entries
+          .filter((d) => d.isDirectory())
+          .map((d) => d.name)
+          .sort();
+        if (names.length > 0) return names;
+      } catch {
+        // Unreadable; try next root
+      }
+    }
+    return [];
   }
 
   /**
@@ -558,6 +593,8 @@ export class NeotomaServer {
       ? `${updateNotice}\n\n${this.getMcpInteractionInstructions()}`
       : this.getMcpInteractionInstructions();
 
+    const availableSkills = this.getAvailableSkills();
+
     return {
       protocolVersion: "2025-11-25",
       capabilities: {
@@ -572,6 +609,9 @@ export class NeotomaServer {
               description: updateNotice,
             }
           : {}),
+        _neotoma: {
+          available_skills: availableSkills,
+        },
       },
       instructions,
     };
