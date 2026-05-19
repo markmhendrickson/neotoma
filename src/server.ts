@@ -3631,7 +3631,11 @@ export class NeotomaServer {
     const userId = this.getAuthenticatedUserId(parsed.user_id);
 
     const { SchemaRegistryService } = await import("./services/schema_registry.js");
+    const { lintEntityTypeName } = await import("./services/entity_type_guard.js");
     const schemaRegistry = new SchemaRegistryService();
+
+    // Collect naming lint warnings (non-blocking — registration proceeds regardless)
+    const nameLintWarnings = lintEntityTypeName(parsed.entity_type);
 
     try {
       const registeredSchema = await schemaRegistry.register({
@@ -3651,6 +3655,7 @@ export class NeotomaServer {
         activated: parsed.activate,
         scope: parsed.user_specific ? "user" : "global",
         schema_id: registeredSchema.id,
+        name_lint_warnings: nameLintWarnings,
       });
     } catch (error: any) {
       throw new McpError(ErrorCode.InternalError, `Failed to register schema: ${error.message}`);
