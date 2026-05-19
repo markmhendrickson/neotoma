@@ -61,8 +61,8 @@ flowchart TD
 - Do not hand-edit suite inventory entries in this file. Update the generator or the repository tree, then regenerate.
 
 ## Repo-wide summary
-- Total automated test files: **392**
-- Backend and repo Vitest files: **359**
+- Total automated test files: **393**
+- Backend and repo Vitest files: **360**
 - Frontend Vitest files: **9**
 - Playwright spec files: **24**
 
@@ -72,7 +72,7 @@ flowchart TD
 | Vitest unit tests | 96 |
 | Vitest service tests | 33 |
 | Source-adjacent tests | 45 |
-| Vitest integration tests | 107 |
+| Vitest integration tests | 108 |
 | Vitest CLI tests | 59 |
 | Vitest contract tests | 10 |
 | Vitest security tests | 1 |
@@ -302,7 +302,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (107):**
+**Files (108):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_resource_metadata.test.ts`
 - `tests/integration/aauth_revocation_e2e.test.ts`
@@ -409,6 +409,7 @@ flowchart TD
 - `tests/integration/sync_webhook_inbound.test.ts`
 - `tests/integration/tunnel_auth.test.ts`
 - `tests/integration/tunnel_discovery.test.ts`
+- `tests/integration/update_schema_incremental_cold_start.test.ts`
 - `tests/integration/v0.2.0_ingestion.test.ts`
 
 ### Vitest CLI tests
