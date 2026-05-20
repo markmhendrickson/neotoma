@@ -6278,6 +6278,9 @@ export async function storeStructuredForApi(params: {
     entity_snapshot_after: Record<string, unknown> | null;
   }> = [];
 
+  let unknownFieldsCount = 0;
+  const unknownFieldNamesSet = new Set<string>();
+
   for (const r of resolved) {
     let observation_id: string | null = null;
     let snapshotAfter: Record<string, unknown> | null = null;
@@ -6378,6 +6381,42 @@ export async function storeStructuredForApi(params: {
         logger.warn(
           `Auto-link reference fields failed for ${r.entity_type}/${r.entity_id}: ${
             linkErr instanceof Error ? linkErr.message : String(linkErr)
+          }`
+        );
+      }
+
+      // Track unknown fields (fields not declared in the active schema) so the
+      // API response mirrors the MCP store_structured response shape.
+      try {
+        const { schemaRegistry } = await import("./services/schema_registry.js");
+        const schemaEntry = await schemaRegistry.loadActiveSchema(r.entity_type, userId);
+        if (schemaEntry?.schema_definition?.fields) {
+          const { validateFieldsWithConverters } = await import(
+            "./services/field_validation.js"
+          );
+          const { storeUnknownFields } = await import("./services/raw_fragments.js");
+          const validation = validateFieldsWithConverters(
+            r.fields,
+            schemaEntry.schema_definition.fields
+          );
+          if (Object.keys(validation.unknownFields).length > 0) {
+            const schemaVer = schemaEntry.schema_version || "1.0";
+            const ufResult = await storeUnknownFields({
+              sourceId: observationSourceId,
+              userId,
+              entityId: r.entity_id,
+              entityType: r.entity_type,
+              schemaVersion: schemaVer,
+              unknownFields: validation.unknownFields,
+            });
+            unknownFieldsCount += ufResult.count;
+            for (const f of ufResult.fields) unknownFieldNamesSet.add(f);
+          }
+        }
+      } catch (ufErr) {
+        logger.warn(
+          `Unknown-fields tracking failed for ${r.entity_type}/${r.entity_id}: ${
+            ufErr instanceof Error ? ufErr.message : String(ufErr)
           }`
         );
       }
@@ -6537,9 +6576,11 @@ export async function storeStructuredForApi(params: {
     await completeInterpretationRun({
       interpretationId,
       observationsCreated: createdEntities.filter((e) => e.observation_id).length,
-      unknownFieldsCount: 0,
+      unknownFieldsCount,
     });
   }
+
+  const unknownFieldNames = Array.from(unknownFieldNamesSet).sort();
 
   return {
     success: true,
@@ -6555,6 +6596,13 @@ export async function storeStructuredForApi(params: {
     observations_created: commit ? createdEntities.length : 0,
     entities: createdEntities,
     relationships_created: relationshipsCreated,
+    unknown_fields_count: unknownFieldsCount,
+    unknown_fields: unknownFieldNames,
+    ...(unknownFieldsCount > 0
+      ? {
+          hint: "Unknown fields were stored in raw_fragments. Call update_schema_incremental to promote them to schema fields, then set migrate_existing: true to backfill existing data.",
+        }
+      : {}),
     ...(aggregatedWarnings.length > 0 ? { warnings: aggregatedWarnings } : {}),
     ...(schemaStoreWarnings.length > 0 ? { store_warnings: schemaStoreWarnings } : {}),
   };

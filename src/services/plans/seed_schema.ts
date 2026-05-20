@@ -83,7 +83,10 @@ const PLAN_FIELDS: FieldSpec = [
   {
     name: "body",
     type: "string",
-    description: "Full markdown body of the plan; preserves harness-authored content verbatim",
+    description:
+      "Primary long-form content field. Store the full plan markdown, spec, or prose here. " +
+      "Do not split content across `overview` or `goals` — those are for short summaries and " +
+      "structured sub-items only. This field is rendered as the document body in the markdown mirror.",
   },
   {
     name: "public_overview",
