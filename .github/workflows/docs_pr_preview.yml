@@ -58,9 +58,23 @@ jobs:
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          # Prerender and validation require root-absolute /assets/ paths.
-          # Rewrite them here so assets resolve under /pr-N/ on the dev site.
-          find site_pages -name "*.html" -print0 | xargs -0 sed -i "s|/assets/|/pr-${PR_NUMBER}/assets/|g"
+          # Prerender and validation require root-absolute paths.
+          # Rewrite all root-absolute static asset references so they resolve
+          # under /pr-N/ when deployed to that subdirectory on dev.neotoma.io.
+          find site_pages -name "*.html" -print0 | xargs -0 sed -i \
+            -e "s|/assets/|/pr-${PR_NUMBER}/assets/|g" \
+            -e "s|/neotoma-wordmark\.svg|/pr-${PR_NUMBER}/neotoma-wordmark.svg|g" \
+            -e "s|/neotoma-hero\.png|/pr-${PR_NUMBER}/neotoma-hero.png|g" \
+            -e "s|/neotoma-og-1200x630\.png|/pr-${PR_NUMBER}/neotoma-og-1200x630.png|g" \
+            -e "s|/favicon\.ico|/pr-${PR_NUMBER}/favicon.ico|g" \
+            -e "s|/favicon\.svg|/pr-${PR_NUMBER}/favicon.svg|g" \
+            -e "s|/favicon-16x16\.png|/pr-${PR_NUMBER}/favicon-16x16.png|g" \
+            -e "s|/favicon-32x32\.png|/pr-${PR_NUMBER}/favicon-32x32.png|g" \
+            -e "s|/favicon-48x48\.png|/pr-${PR_NUMBER}/favicon-48x48.png|g" \
+            -e "s|/apple-touch-icon\.png|/pr-${PR_NUMBER}/apple-touch-icon.png|g" \
+            -e "s|/android-chrome-192x192\.png|/pr-${PR_NUMBER}/android-chrome-192x192.png|g" \
+            -e "s|/android-chrome-512x512\.png|/pr-${PR_NUMBER}/android-chrome-512x512.png|g" \
+            -e "s|/site\.webmanifest|/pr-${PR_NUMBER}/site.webmanifest|g"
 
       - name: Deploy PR preview
         uses: peaceiris/actions-gh-pages@v4
