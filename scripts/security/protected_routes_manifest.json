@@ -1180,6 +1180,18 @@
       ]
     },
     {
+      "path": "/turn_summary",
+      "method": "POST",
+      "operation_id": "turnSummary",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
       "path": "/unsubscribe",
       "method": "POST",
       "operation_id": "unsubscribe",
