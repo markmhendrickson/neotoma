@@ -1,5 +1,12 @@
 ---
 name: analyze
+description: Analyze Project
+---
+
+<!-- Source: foundation/.cursor/skills/analyze/SKILL.md -->
+
+---
+name: analyze
 description: Analyze codebase or context per foundation analyze command.
 triggers:
   - analyze
@@ -400,7 +407,6 @@ This command performs systematic analysis following the framework defined in `fo
 **If no foundational docs exist:**
 
 ```
-⚠️ Warning: No foundational documents found in `docs/foundation/`.
 Analysis will proceed without repo-specific context.
 
 Recommendation: Create foundational documents for better analysis:
@@ -431,7 +437,6 @@ Enter choice (1/2/3):
 **If `docs/private/` doesn't exist:**
 
 ```
-⚠️ Warning: Private docs directory not found at `docs/private/`.
 
 Output will be saved to:
 - docs/competitive/[target_name]_competitive_analysis.md
@@ -448,7 +453,6 @@ Proceed? (yes/no)
 **If web scraper URL is provided but MCP server is not configured:**
 
 ```
-⚠️ Notice: Web scraper MCP server not configured for URL "[url]".
 
 Falling back to browser tools for research.
 
@@ -462,7 +466,6 @@ Proceeding with browser tools...
 **If web scraper MCP tool fails:**
 
 ```
-⚠️ Warning: Web scraper failed for URL "[url]".
 
 Error: [error message]
 

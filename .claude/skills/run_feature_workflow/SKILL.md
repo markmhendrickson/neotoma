@@ -1,11 +1,10 @@
 ---
-name: run-feature-workflow
-description: Run feature workflow per foundation command.
-triggers:
-  - run feature workflow
-  - /run_feature_workflow
-  - run-feature-workflow
+name: run_feature_workflow
+description: Run Feature Workflow
 ---
+
+<!-- Source: .cursor/skills/run-feature-workflow/SKILL.md -->
+
 
 # Run Feature Workflow
 

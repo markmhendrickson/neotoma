@@ -134,6 +134,27 @@ export function buildEntityTypeFilterTokens(
   return filters;
 }
 
+/**
+ * Multi-word queries often include registered entity type names in titles
+ * (e.g. "Schema Packs Strategy" should match a plan, not filter to strategy rows).
+ * Drop type-filter tokens when removing them still leaves two or more text tokens.
+ */
+export function refineTypeFilterTokens(
+  searchTokens: string[],
+  typeFilterTokens: Set<string>
+): Set<string> {
+  if (typeFilterTokens.size === 0 || searchTokens.length <= 1) {
+    return typeFilterTokens;
+  }
+  const textTokens = searchTokens.filter(
+    (token) => !tokenIsEntityTypeFilter(token, typeFilterTokens)
+  );
+  if (textTokens.length >= 2) {
+    return new Set();
+  }
+  return typeFilterTokens;
+}
+
 /** When the query names an entity type, that token filters by type instead of snapshot text. */
 export function textTokensForEntityMatch(
   searchTokens: string[],
@@ -301,7 +322,10 @@ async function lexicalSearchEntityIds(params: LexicalSearchEntityIdsParams): Pro
   }
 
   const registryTypes = await loadKnownEntityTypes(userId, []);
-  const typeFilterTokens = buildEntityTypeFilterTokens(searchTokens, registryTypes);
+  const typeFilterTokens = refineTypeFilterTokens(
+    searchTokens,
+    buildEntityTypeFilterTokens(searchTokens, registryTypes)
+  );
 
   let entityQuery = db
     .from("entities")
@@ -621,7 +645,10 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
     const trimmedSearch = search.trim();
     const searchTokens = normalizeSearchText(trimmedSearch).split(" ").filter(Boolean);
     const registryTypes = await loadKnownEntityTypes(userId, []);
-    const typeFilterTokens = buildEntityTypeFilterTokens(searchTokens, registryTypes);
+    const typeFilterTokens = refineTypeFilterTokens(
+      searchTokens,
+      buildEntityTypeFilterTokens(searchTokens, registryTypes)
+    );
     const excludeBookkeeping = shouldExcludeBookkeepingFromSearch(entityType);
 
     const lexicalParams = {

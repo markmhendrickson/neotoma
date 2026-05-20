@@ -1,11 +1,10 @@
 ---
-name: final-review
-description: Final review workflow per foundation command.
-triggers:
-  - final review
-  - /final_review
-  - final-review
+name: final_review
+description: Final Review
 ---
+
+<!-- Source: .cursor/skills/final-review/SKILL.md -->
+
 
 # Final Review
 

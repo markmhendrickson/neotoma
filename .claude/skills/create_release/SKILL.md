@@ -1,13 +1,10 @@
 ---
-name: create-release
-description: Create a new software release with planning, manifest, and execution schedule.
-triggers:
-  - new release
-  - create release
-  - plan release
-  - create-release
-  - /create-release
+name: create_release
+description: Create New Release
 ---
+
+<!-- Source: .cursor/skills/create-release/SKILL.md -->
+
 
 # Create New Release
 
@@ -17,9 +14,9 @@ Orchestrates multiple Feature Units into a cohesive release. Implements the Rele
 
 **Explicit Command:** Use when you know exactly what you want: start a new release, plan multi-FU work with dependency resolution, generate execution schedules with parallelization, orchestrate FU creation/execution in dependency order, run cross-FU integration tests.
 
-**Automatic Detection:** This workflow can also be triggered automatically via `.cursor/rules/release_detection.md` when you mention release-related patterns in natural language (e.g., "new release", "release v1.1.0"). Both paths execute the same workflow.
+**Automatic Detection:** This workflow can also be triggered automatically via `.claude/rules/release_detection.md` when you mention release-related patterns in natural language (e.g., "new release", "release v1.1.0"). Both paths execute the same workflow.
 
-This is a foundation command. If installed, it will be available in `.cursor/commands/` via symlink.
+This is a foundation command. If installed, it will be available in `.claude/skills/` via symlink.
 
 ## Prerequisites
 
