@@ -37,8 +37,6 @@ jobs:
         run: npm run validate:routes
 
       - name: Build UI (for compiled Tailwind CSS)
-        env:
-          VITE_BASE_PATH: /pr-${{ github.event.pull_request.number }}/
         run: npm run build:ui
 
       - name: Install Playwright browser (Chromium)
@@ -48,7 +46,6 @@ jobs:
         env:
           SITE_PREVIEW: "1"
           NEOTOMA_DOCS_SHOW_INTERNAL: "false"
-          VITE_BASE_PATH: /pr-${{ github.event.pull_request.number }}/
         run: npm run build:site:pages
 
       - name: Validate locale parity
@@ -56,6 +53,14 @@ jobs:
 
       - name: Validate site export
         run: npm run validate:site-export
+
+      - name: Rewrite asset paths for subdirectory deploy
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          # Prerender and validation require root-absolute /assets/ paths.
+          # Rewrite them here so assets resolve under /pr-N/ on the dev site.
+          find site_pages -name "*.html" -print0 | xargs -0 sed -i "s|/assets/|/pr-${PR_NUMBER}/assets/|g"
 
       - name: Deploy PR preview
         uses: peaceiris/actions-gh-pages@v4

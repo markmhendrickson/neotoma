@@ -101,15 +101,9 @@ function readPublicHtml(): string {
   return out;
 }
 
-/**
- * Collapse `../../../assets/` to `{basePath}/assets/` (Playwright serializes
- * root `/assets/` as `../assets/` on nested URLs). When VITE_BASE_PATH is set
- * (e.g. `/pr-314/` for PR previews) the assets live under that subpath, so we
- * must use it here instead of hardcoding `/`.
- */
+/** Collapse `../../../assets/` to `/assets/` (Playwright serializes root `/assets/` as `../assets/` on nested URLs). */
 function normalizeBundledAssetPaths(html: string): string {
-  const basePath = (process.env.VITE_BASE_PATH || "/").replace(/\/?$/, "/");
-  return html.replace(/(\.\.\/)+assets\//g, `${basePath}assets/`);
+  return html.replace(/(\.\.\/)+assets\//g, "/assets/");
 }
 
 /** Final pass: normalize every emitted HTML file (prerender + any stale copies). */
