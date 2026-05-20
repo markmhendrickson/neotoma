@@ -92,10 +92,10 @@ export default function UsagePage() {
   return (
     <PageShell
       title="Usage"
-      headerRight={
+      meta={
         u ? (
           <div className="flex items-center gap-2">
-            <QueryRefreshIndicator query={usage} />
+            <QueryRefreshIndicator />
             <span className="text-xs text-muted-foreground">
               Updated {formatDate(u.last_updated)}
             </span>
