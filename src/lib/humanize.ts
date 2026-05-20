@@ -120,7 +120,10 @@ export function absoluteDateTime(ts: string | undefined | null): string {
   try {
     const d = new Date(ts);
     if (isNaN(d.getTime())) return "";
-    return d.toISOString().slice(0, 10);
+    return d.toLocaleString(undefined, {
+      dateStyle: "medium",
+      timeStyle: "medium",
+    });
   } catch {
     return "";
   }

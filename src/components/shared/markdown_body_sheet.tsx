@@ -156,7 +156,7 @@ export function MarkdownBodySheet({
         >
           <span className="my-auto h-10 w-1 shrink-0 rounded-full bg-border/90 shadow-sm" />
         </div>
-        <div className="flex shrink-0 flex-col gap-3 border-b border-border/80 bg-muted/20 px-6 py-4 pl-8 pr-14 backdrop-blur-[2px]">
+        <div className="flex shrink-0 flex-col gap-3 border-b border-border/80 bg-muted/20 px-8 py-5 pl-10 pr-16 backdrop-blur-[2px]">
           <SheetHeader className="space-y-1.5 text-left">
             <SheetTitle className="text-xl font-semibold leading-snug tracking-tight">{title}</SheetTitle>
             {description ? (
@@ -212,7 +212,7 @@ export function MarkdownBodySheet({
             </Button>
           </div>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto scroll-smooth bg-gradient-to-b from-background to-muted/15 px-6 py-6 pl-8 sm:px-8 sm:pb-10 sm:pt-5">
+        <div className="min-h-0 flex-1 overflow-y-auto scroll-smooth bg-gradient-to-b from-background to-muted/15 px-8 py-8 pl-10 sm:px-10 sm:pb-12 sm:pt-7">
           <EntityMarkdownPreview content={content} viewMode={viewMode} layout="panel" />
         </div>
       </SheetContent>

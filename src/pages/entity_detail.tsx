@@ -7,7 +7,6 @@ import {
   useEntityRelationships,
 } from "@/hooks/use_entities";
 import { useSchemaByType } from "@/hooks/use_schemas";
-import { useGraphNeighborhood } from "@/hooks/use_graph";
 import { useAgentGrants } from "@/hooks/use_agents";
 import {
   useDeleteEntity,
@@ -18,7 +17,6 @@ import { getSourceById } from "@/api/endpoints/sources";
 import { PageShell } from "@/components/layout/page_shell";
 import {
   DetailPageSkeleton,
-  GraphAreaSkeleton,
   ListSkeleton,
   QueryErrorAlert,
 } from "@/components/shared/query_status";
@@ -44,13 +42,17 @@ import {
   RawFragmentsFieldList,
   SnapshotFieldList,
 } from "@/components/shared/snapshot_field_list";
-import { ObservationTimeline } from "@/components/shared/observation_timeline";
+import {
+  ObservationHistorySection,
+  WorldTimeEventsSection,
+} from "@/components/shared/entity_history_sections";
+import { useEntityWorldTimeEvents } from "@/hooks/use_timeline";
 import { RelationshipPanel } from "@/components/shared/relationship_panel";
 import { CopyIdButton } from "@/components/shared/copy_id_button";
 import { entityDisplayHeadline, humanizeEntityType } from "@/lib/humanize";
 import { showBackgroundQueryRefresh, showInitialQuerySkeleton } from "@/lib/query_loading";
 import { EntityDetailActionsMenu } from "@/components/shared/entity_detail_actions_menu";
-import { ChevronDown, FileText } from "lucide-react";
+import { ChevronDown, FileText, Network } from "lucide-react";
 import { SourceInlinePreview } from "@/components/shared/source_inline_preview";
 import {
   sourceDisplaySummary,
@@ -63,8 +65,9 @@ export default function EntityDetailPage() {
   const { segment: id } = useParams<{ segment: string }>();
 
   const entity = useEntityById(id);
-  const TIMELINE_PREVIEW_LIMIT = 3;
-  const observations = useEntityObservations(id, { limit: TIMELINE_PREVIEW_LIMIT });
+  const HISTORY_PREVIEW_LIMIT = 3;
+  const observations = useEntityObservations(id, { limit: HISTORY_PREVIEW_LIMIT });
+  const worldTimeEvents = useEntityWorldTimeEvents(id, { limit: HISTORY_PREVIEW_LIMIT });
   const observationsForSources = useEntityObservations(id, { limit: 100 });
   const relationships = useEntityRelationships(id, { expand_entities: true });
   const grantsQ = useAgentGrants({ status: "all" });
@@ -72,17 +75,6 @@ export default function EntityDetailPage() {
   const e = entity.data;
   const schemaQuery = useSchemaByType(e?.entity_type);
   const schema = schemaQuery.data ?? null;
-
-  const graph = useGraphNeighborhood(
-    id
-      ? {
-          node_id: id,
-          include_relationships: true,
-          include_sources: true,
-          include_events: true,
-        }
-      : null,
-  );
 
   const deleteMut = useDeleteEntity();
   const restoreMut = useRestoreEntity();
@@ -175,15 +167,14 @@ export default function EntityDetailPage() {
 
   const observationCount =
     observations.data?.total ?? e.observation_count ?? observations.data?.observations?.length ?? 0;
-  const timelinePreview = observations.data?.observations ?? [];
-  const hasMoreTimeline = observationCount > timelinePreview.length;
+  const worldTimeTotal = worldTimeEvents.data?.total ?? worldTimeEvents.data?.events?.length ?? 0;
   const relationshipCount = relationships.data?.relationships?.length ?? 0;
 
   const entityPageRefreshing =
     showBackgroundQueryRefresh(entity) ||
     showBackgroundQueryRefresh(observations) ||
+    showBackgroundQueryRefresh(worldTimeEvents) ||
     showBackgroundQueryRefresh(relationships) ||
-    showBackgroundQueryRefresh(graph) ||
     showBackgroundQueryRefresh(schemaQuery) ||
     showBackgroundQueryRefresh(grantsQ);
 
@@ -217,6 +208,13 @@ export default function EntityDetailPage() {
         lastUpdated={e.last_observation_at}
         createdAt={createdAt}
       />
+      <Link
+        to={`/graph?node=${encodeURIComponent(entityId)}`}
+        className="inline-flex items-center gap-1.5 font-medium text-primary hover:underline"
+      >
+        <Network className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+        Open in graph explorer
+      </Link>
     </div>
   );
 
@@ -280,49 +278,26 @@ export default function EntityDetailPage() {
                 data={relationships.data}
                 developerView={false}
               />
-              <div className="mt-4">
-                <Link to={`/graph?node=${encodeURIComponent(entityId)}`}>
-                  <Button variant="outline" size="sm">
-                    Open in graph explorer
-                  </Button>
-                </Link>
-              </div>
             </CardContent>
           </Card>
         )}
       </section>
 
-      <section className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-lg font-semibold">Timeline</h2>
-          {hasMoreTimeline ? (
-            <Link
-              to={`/entities/${encodeURIComponent(entityId)}/timeline`}
-              className="text-sm font-medium text-primary hover:underline"
-            >
-              View full timeline ({observationCount.toLocaleString()})
-            </Link>
-          ) : null}
-        </div>
-        {showInitialQuerySkeleton(observations) ? (
-          <ListSkeleton rows={3} />
-        ) : (
-          <Card>
-            <CardContent className="pt-6">
-              <ObservationTimeline observations={timelinePreview} developerView={false} />
-              {hasMoreTimeline ? (
-                <div className="mt-4 border-t pt-4">
-                  <Button variant="outline" size="sm" asChild>
-                    <Link to={`/entities/${encodeURIComponent(entityId)}/timeline`}>
-                      Open full timeline
-                    </Link>
-                  </Button>
-                </div>
-              ) : null}
-            </CardContent>
-          </Card>
-        )}
-      </section>
+      <ObservationHistorySection
+        entityId={entityId}
+        observations={observations.data?.observations ?? []}
+        total={observationCount}
+        loading={showInitialQuerySkeleton(observations)}
+        error={observations.error as Error | null}
+      />
+
+      <WorldTimeEventsSection
+        entityId={entityId}
+        events={worldTimeEvents.data?.events ?? []}
+        total={worldTimeTotal}
+        loading={showInitialQuerySkeleton(worldTimeEvents)}
+        error={worldTimeEvents.error as Error | null}
+      />
 
       <div className="space-y-8">
         <section className="space-y-4">
@@ -433,29 +408,6 @@ export default function EntityDetailPage() {
                 </CardContent>
               </Card>
             ) : null}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Graph neighborhood</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {showInitialQuerySkeleton(graph) ? (
-                  <GraphAreaSkeleton />
-                ) : graph.data ? (
-                  <JsonViewer data={graph.data} defaultExpanded />
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    No graph data available.
-                  </p>
-                )}
-                <div className="mt-3">
-                  <Link to={`/graph?node=${encodeURIComponent(entityId)}`}>
-                    <Button variant="outline" size="sm">
-                      Open in graph explorer
-                    </Button>
-                  </Link>
-                </div>
-              </CardContent>
-            </Card>
           </div>
         </details>
       </div>

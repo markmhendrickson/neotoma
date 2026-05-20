@@ -8,6 +8,7 @@ import { GraphAreaSkeleton, QueryErrorAlert } from "@/components/shared/query_st
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { JsonViewer } from "@/components/shared/json_viewer";
@@ -19,8 +20,11 @@ import {
   graphSpecToFlow,
   type GraphLayoutMode,
 } from "@/lib/graph_layout";
-
 const LAYOUT_STORAGE_KEY = "inspector_graph_layout_mode";
+
+/** Segmented layout control: outline toggle group with shared outer radius. */
+const LAYOUT_TOGGLE_GROUP_CLASS =
+  "gap-0 [&>button]:rounded-none [&>button:first-child]:rounded-l-md [&>button:last-child]:rounded-r-md [&>button+button]:border-l-0";
 
 function readStoredLayoutMode(): GraphLayoutMode {
   try {
@@ -91,7 +95,7 @@ export default function GraphExplorerPage() {
       description="Interactive neighborhood visualization"
       actions={showBackgroundQueryRefresh(graph) ? <QueryRefreshIndicator /> : undefined}
     >
-      <div className="flex flex-wrap items-end gap-3 mb-4">
+      <div className="flex flex-wrap items-center gap-3 mb-4">
         <div className="relative min-w-[250px]">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -102,14 +106,17 @@ export default function GraphExplorerPage() {
             onKeyDown={(e) => { if (e.key === "Enter") setActiveNodeId(nodeId); }}
           />
         </div>
-        <Button onClick={() => setActiveNodeId(nodeId)} disabled={!nodeId}>Explore</Button>
+        <Button onClick={() => setActiveNodeId(nodeId)} disabled={!nodeId}>
+          Explore
+        </Button>
         <ToggleGroup
           type="single"
           variant="outline"
-          size="sm"
+          size="default"
           value={layoutMode}
           onValueChange={onLayoutModeChange}
           aria-label="Graph layout"
+          className={LAYOUT_TOGGLE_GROUP_CLASS}
         >
           <ToggleGroupItem value="tree" aria-label="Tree layout">
             Tree
@@ -118,10 +125,31 @@ export default function GraphExplorerPage() {
             Radial
           </ToggleGroupItem>
         </ToggleGroup>
-        <div className="flex items-center gap-4 text-sm">
-          <label className="flex items-center gap-2"><Switch checked={includeRelationships} onCheckedChange={setIncludeRelationships} /> Relationships</label>
-          <label className="flex items-center gap-2"><Switch checked={includeSources} onCheckedChange={setIncludeSources} /> Sources</label>
-          <label className="flex items-center gap-2"><Switch checked={includeEvents} onCheckedChange={setIncludeEvents} /> Events</label>
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Switch
+              id="graph-include-relationships"
+              checked={includeRelationships}
+              onCheckedChange={setIncludeRelationships}
+            />
+            <Label htmlFor="graph-include-relationships">Relationships</Label>
+          </div>
+          <div className="flex items-center gap-2">
+            <Switch
+              id="graph-include-sources"
+              checked={includeSources}
+              onCheckedChange={setIncludeSources}
+            />
+            <Label htmlFor="graph-include-sources">Sources</Label>
+          </div>
+          <div className="flex items-center gap-2">
+            <Switch
+              id="graph-include-events"
+              checked={includeEvents}
+              onCheckedChange={setIncludeEvents}
+            />
+            <Label htmlFor="graph-include-events">Events</Label>
+          </div>
         </div>
       </div>
 
@@ -177,6 +205,34 @@ export default function GraphExplorerPage() {
           </Card>
         )}
       </div>
+
+      {activeNodeId ? (
+        <Card className="mt-4">
+          <CardHeader className="space-y-1">
+            <CardTitle className="text-base">Graph neighborhood</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Raw API response for{" "}
+              <span className="font-mono text-xs">{activeNodeId}</span> (relationships, related
+              entities, counts).
+            </p>
+          </CardHeader>
+          <CardContent>
+            {showInitialQuerySkeleton(graph) ? (
+              <div className="max-h-48">
+                <GraphAreaSkeleton />
+              </div>
+            ) : graph.error ? (
+              <QueryErrorAlert title="Could not load neighborhood">
+                {graph.error.message}
+              </QueryErrorAlert>
+            ) : graph.data ? (
+              <JsonViewer data={graph.data} defaultExpanded />
+            ) : (
+              <p className="text-sm text-muted-foreground">No graph data available.</p>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
     </PageShell>
   );
 }

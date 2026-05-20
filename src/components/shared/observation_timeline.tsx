@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
-import { formatDate } from "@/lib/utils";
+import { formatDateTime } from "@/lib/utils";
 import { absoluteDateTime, dayBucketLabel, humanizeKey, shortId, truncate } from "@/lib/humanize";
 import { AgentBadge } from "./agent_badge";
 import type { Observation } from "@/types/api";
@@ -46,7 +46,7 @@ export function ObservationTimeline({ observations, developerView }: Observation
               {bucket.items.length} observation{bucket.items.length === 1 ? "" : "s"}
             </span>
           </div>
-          <ol className="relative border-l pl-4">
+          <ol className="relative border-l border-border pl-4">
             {bucket.items.map((obs) => (
               <TimelineRow key={obs.id} observation={obs} developerView={developerView} />
             ))}
@@ -77,10 +77,13 @@ function TimelineRow({
 
   return (
     <li className="relative ml-1 pb-4 last:pb-0">
-      <span className="absolute -left-[21px] top-1.5 h-2 w-2 rounded-full bg-primary" aria-hidden="true" />
+      <span
+        className="absolute -left-[21px] top-1.5 h-2 w-2 rounded-full bg-muted-foreground"
+        aria-hidden="true"
+      />
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <span className="text-sm font-medium" title={absoluteDateTime(when) || undefined}>
-          {formatDate(when)}
+          {formatDateTime(when)}
         </span>
         {sourceLabel ? (
           <SourceChip

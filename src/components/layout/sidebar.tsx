@@ -35,6 +35,7 @@ import {
   Layers,
   BookOpen,
   PenLine,
+  Palette,
   TrendingUp,
   type LucideIcon,
 } from "lucide-react";
@@ -72,7 +73,7 @@ const navGroups: Array<{ items: NavItem[] }> = [
       { to: "/sources", label: "Sources", icon: FileText },
       { to: "/relationships", label: "Relationships", icon: GitBranch },
       { to: "/graph", label: "Graph Explorer", icon: Network },
-      { to: "/timeline", label: "Timeline", icon: Clock },
+      { to: "/timeline", label: "World-time events", icon: Clock },
     ],
   },
 ];
@@ -96,7 +97,10 @@ const analyticsNavItems: NavItem[] = [
   { to: "/usage", label: "Usage", icon: TrendingUp },
 ];
 
-const settingsNavItems: NavItem[] = [{ to: "/settings", label: "Settings", icon: Settings }];
+const settingsNavItems: NavItem[] = [
+  { to: "/design", label: "Design", icon: Palette },
+  { to: "/settings", label: "Settings", icon: Settings },
+];
 
 function entityIdFromInspectorPath(pathname: string): string | null {
   const match = pathname.match(/^\/entities\/([^/]+)(?:\/|$)/);

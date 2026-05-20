@@ -13,6 +13,7 @@ const EntityDetailPage = lazy(() => import("@/pages/entity_detail"));
 const EntitySegmentPage = lazy(() => import("@/pages/entity_segment_page"));
 const EntityCorrectPage = lazy(() => import("@/pages/entity_correct"));
 const EntityTimelinePage = lazy(() => import("@/pages/entity_timeline"));
+const EntityHistoryPage = lazy(() => import("@/pages/entity_history"));
 const EntityRelationshipsByTypePage = lazy(
   () => import("@/pages/entity_relationships_by_type"),
 );
@@ -46,6 +47,7 @@ const SubscriptionsPage = lazy(() => import("@/pages/subscriptions"));
 const PeersPage = lazy(() => import("@/pages/peers"));
 const PeerDetailPage = lazy(() => import("@/pages/peer_detail"));
 const UsagePage = lazy(() => import("@/pages/usage"));
+const DesignPage = lazy(() => import("@/pages/design"));
 
 function InspectorRedirect() {
   const location = useLocation();
@@ -70,6 +72,7 @@ export default function App() {
         <Route path="/entity-types" element={<EntityTypesPage />} />
         <Route path="/entities" element={<EntitiesPage />} />
         <Route path="/entities/:segment/correct" element={<EntityCorrectPage />} />
+        <Route path="/entities/:segment/history" element={<EntityHistoryPage />} />
         <Route path="/entities/:segment/timeline" element={<EntityTimelinePage />} />
         <Route
           path="/entities/:segment/relationships/:relationshipType/:relatedEntityType"
@@ -100,6 +103,7 @@ export default function App() {
         <Route path="/agents/grants" element={<AgentGrantsPage />} />
         <Route path="/agents/grants/:id" element={<AgentGrantDetailPage />} />
         <Route path="/agents/:key" element={<AgentDetailPage />} />
+        <Route path="/design" element={<DesignPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/sandbox" element={<SandboxPage />} />
         <Route path="/access-policies" element={<AccessPoliciesPage />} />

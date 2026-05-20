@@ -30,8 +30,8 @@
     --popover: 38 8% 100%;               /* Floating overlays (menus, tooltips) */
     --popover-foreground: 28 22% 18%;
 
-    /* Action — brick / terracotta */
-    --primary: 12 48% 38%;
+    /* Action — primary red */
+    --primary: 0 85% 51%;
     --primary-foreground: 0 0% 100%;
 
     /* Secondary / muted / accent — warm tan */
@@ -51,7 +51,7 @@
     /* Borders / inputs / focus ring */
     --border: 32 10% 93%;
     --input: 32 10% 93%;
-    --ring: 12 48% 38%;
+    --ring: 0 85% 51%;
 
     --radius: 0.5rem;
 

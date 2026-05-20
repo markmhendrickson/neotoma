@@ -79,13 +79,14 @@ export default function TimelinePage() {
   ];
 
   const events = timeline.data?.events ?? [];
+  const timelineTotal = timeline.data?.total;
   const { filterRows, AgentFilterControl } = useAgentAttributionFilter(events);
   const displayed = filterRows(events);
 
   return (
     <PageShell
-      title="Timeline"
-      description="Chronological event stream"
+      title="World-time events"
+      description="Dates from source documents and temporal fields (event_timestamp), not when data was recorded in Neotoma"
       actions={showBackgroundQueryRefresh(timeline) ? <QueryRefreshIndicator /> : undefined}
     >
       <div className="flex flex-wrap items-end gap-3">
@@ -104,13 +105,18 @@ export default function TimelinePage() {
       {showInitialQuerySkeleton(timeline) ? (
         <DataTableSkeleton rows={12} cols={5} />
       ) : timeline.error ? (
-        <QueryErrorAlert title="Could not load timeline">{timeline.error.message}</QueryErrorAlert>
+        <QueryErrorAlert title="Could not load world-time events">{timeline.error.message}</QueryErrorAlert>
       ) : (
         <>
           <DataTable columns={columns} data={displayed} />
-          {timeline.data && timeline.data.events.length >= PAGE_SIZE && (
-            <Pagination offset={offset} limit={PAGE_SIZE} total={timeline.data.events.length + offset + 1} onPageChange={setOffset} />
-          )}
+          {(timelineTotal ?? 0) > PAGE_SIZE || events.length >= PAGE_SIZE ? (
+            <Pagination
+              offset={offset}
+              limit={PAGE_SIZE}
+              total={timelineTotal ?? offset + events.length + (events.length >= PAGE_SIZE ? 1 : 0)}
+              onPageChange={setOffset}
+            />
+          ) : null}
         </>
       )}
     </PageShell>
