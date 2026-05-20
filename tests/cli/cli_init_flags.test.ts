@@ -323,4 +323,151 @@ describe("neotoma init --project-local: config module", () => {
       await fs.rm(homeDir, { recursive: true, force: true });
     }
   });
+
+  it("writeProjectLocalConfig writes the file with mode 0600", async () => {
+    const { writeProjectLocalConfig } = await import("../../src/cli/config.ts");
+    const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-wplc-mode-"));
+    try {
+      const writtenPath = await writeProjectLocalConfig(
+        { init_auth_mode: "dev_local" as const },
+        cwd
+      );
+      const stat = await fs.stat(writtenPath);
+      // mode & 0o777 gives the permission bits; 0o600 = owner r/w only
+      expect(stat.mode & 0o777).toBe(0o600);
+    } finally {
+      await fs.rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("neotoma init --safe: blocker detection", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.resetModules();
+  });
+
+  it("reports a blocker when config target already exists (without --force)", async () => {
+    await withTempHome(async (homeDir) => {
+      const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-safe-blocker-"));
+      const previousCwd = process.cwd();
+      process.chdir(cwd);
+      try {
+        mockReadlineForInit();
+        // Pre-create the config file so init would encounter an existing config
+        const configDir = path.join(homeDir, ".config", "neotoma");
+        await fs.mkdir(configDir, { recursive: true });
+        await fs.writeFile(path.join(configDir, "config.json"), JSON.stringify({}));
+
+        const { runCli } = await loadCli();
+        const out = captureStdout();
+        const previousExitCode = process.exitCode;
+        try {
+          await runCli([
+            "node",
+            "cli",
+            "init",
+            "--safe",
+            "--skip-db",
+            "--skip-env",
+            "--auth-mode",
+            "dev_local",
+          ]);
+        } finally {
+          out.restore();
+        }
+        const text = out.lines();
+        // Should report a blocker for the existing config
+        expect(text).toMatch(/already exists|blocker/i);
+        // exit code should be non-zero when there's a blocker
+        expect(process.exitCode).toBe(1);
+        process.exitCode = previousExitCode;
+      } finally {
+        process.chdir(previousCwd);
+        await fs.rm(cwd, { recursive: true, force: true });
+      }
+    });
+  }, 15000);
+
+  it("does not report a blocker when --force is given and config already exists", async () => {
+    await withTempHome(async (homeDir) => {
+      const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-safe-force-"));
+      const previousCwd = process.cwd();
+      process.chdir(cwd);
+      try {
+        mockReadlineForInit();
+        // Pre-create the config file
+        const configDir = path.join(homeDir, ".config", "neotoma");
+        await fs.mkdir(configDir, { recursive: true });
+        await fs.writeFile(path.join(configDir, "config.json"), JSON.stringify({}));
+
+        const { runCli } = await loadCli();
+        const out = captureStdout();
+        const previousExitCode = process.exitCode;
+        try {
+          await runCli([
+            "node",
+            "cli",
+            "init",
+            "--safe",
+            "--force",
+            "--skip-db",
+            "--skip-env",
+            "--auth-mode",
+            "dev_local",
+          ]);
+        } finally {
+          out.restore();
+        }
+        const text = out.lines();
+        // With --force the config-exists blocker should not appear
+        expect(text).not.toMatch(/already exists.*blocker/i);
+        // No blocker → "All checks passed"
+        expect(text).toMatch(/all checks passed/i);
+        process.exitCode = previousExitCode;
+      } finally {
+        process.chdir(previousCwd);
+        await fs.rm(cwd, { recursive: true, force: true });
+      }
+    });
+  }, 15000);
+
+  it("omits database entries from planned actions when --skip-db is given", async () => {
+    await withTempHome(async (_homeDir) => {
+      const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-safe-skipdb-"));
+      const previousCwd = process.cwd();
+      process.chdir(cwd);
+      try {
+        mockReadlineForInit();
+        const { runCli } = await loadCli();
+        const chunks: string[] = [];
+        const spy = vi.spyOn(process.stdout, "write").mockImplementation((chunk) => {
+          if (typeof chunk === "string") chunks.push(chunk);
+          return true;
+        });
+        try {
+          await runCli([
+            "node",
+            "cli",
+            "--json",
+            "init",
+            "--safe",
+            "--skip-db",
+            "--skip-env",
+            "--auth-mode",
+            "dev_local",
+          ]);
+        } finally {
+          spy.mockRestore();
+        }
+        const parsed = JSON.parse(chunks.join("")) as { planned_actions: Array<{ label: string }> };
+        const labels = parsed.planned_actions.map((a) => a.label);
+        // When --skip-db is set, no "Initialize database" entries should appear
+        expect(labels.every((l) => !l.toLowerCase().includes("database"))).toBe(true);
+      } finally {
+        process.chdir(previousCwd);
+        await fs.rm(cwd, { recursive: true, force: true });
+      }
+    });
+  }, 15000);
 });

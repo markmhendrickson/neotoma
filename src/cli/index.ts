@@ -9,6 +9,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
+  constants as fsConstants,
   createWriteStream,
   readdirSync,
   readFileSync,
@@ -39,6 +40,7 @@ import {
   isTokenExpired,
   isProd,
   readConfig,
+  readEffectiveConfig,
   rememberKnownApiPort,
   resolveBaseUrl as resolveBaseUrlInner,
   waitForApiReady,
@@ -682,7 +684,7 @@ async function resolveRepoRootWithPrecedence(params?: {
   repoRoot: string | null;
   source: RepoRootSource;
 }> {
-  const config = params?.config ?? (await readConfig());
+  const config = params?.config ?? (await readEffectiveConfig());
   const cwd = params?.cwd ?? process.cwd();
 
   const explicitRepoRoot = params?.explicitRepoRoot?.trim();
@@ -4702,17 +4704,45 @@ const initCommand = program
           const cwd = process.cwd();
           const homeDir = process.env.HOME || process.env.USERPROFILE || ".";
           const dataDirDefault = path.join(homeDir, "neotoma", "data");
-          const resolvedDataDir = opts.dataDir?.trim() || dataDirDefault;
+          const resolvedDataDir =
+            opts.dataDir?.trim() || process.env.NEOTOMA_DATA_DIR?.trim() || dataDirDefault;
           const configTarget = opts.projectLocal ? projectLocalConfigPath(cwd) : CONFIG_PATH;
-          const envTarget = path.join(CONFIG_DIR, ".env");
-          const dbPaths = [
-            path.join(resolvedDataDir, "neotoma.db"),
-            path.join(resolvedDataDir, "neotoma.prod.db"),
-          ];
+          // Env file lands next to the config dir for user-level init, or in the
+          // detected checkout root when a checkout is present. --safe reports the
+          // user-level path; the real init may differ when a checkout is detected.
+          const envTarget = USER_ENV_PATH;
+
+          // Compute blocker reasons for each planned action.
+          const configExists = await fs
+            .stat(configTarget)
+            .then(() => true)
+            .catch(() => false);
+          // Walk up to the nearest existing ancestor of resolvedDataDir to check writability.
+          // The data dir itself may not exist yet; we check whether we can create it.
+          const nearestWritableAncestor = async (dir: string): Promise<boolean> => {
+            let current = dir;
+            for (;;) {
+              try {
+                await fs.access(current, fsConstants.W_OK);
+                return true;
+              } catch {
+                const parent = path.dirname(current);
+                if (parent === current) return false; // reached filesystem root
+                current = parent;
+              }
+            }
+          };
+          const dataDirParentWritable = await nearestWritableAncestor(
+            path.dirname(resolvedDataDir)
+          );
+
           const plannedActions: Array<{ label: string; path?: string; blockerReason?: string }> = [
             {
               label: "Create data directory",
               path: resolvedDataDir,
+              blockerReason: !dataDirParentWritable
+                ? `data directory cannot be created: no writable ancestor found for ${resolvedDataDir}`
+                : undefined,
             },
             {
               label: "Create sources directory",
@@ -4722,18 +4752,27 @@ const initCommand = program
               label: "Create logs directory",
               path: path.join(resolvedDataDir, "logs"),
             },
-            ...dbPaths.map((p) => ({ label: `Initialize database`, path: p })),
+            ...(!opts.skipDb
+              ? [path.join(resolvedDataDir, isProd ? "neotoma.prod.db" : "neotoma.db")].map(
+                  (p) => ({ label: `Initialize database`, path: p })
+                )
+              : []),
             {
               label: `Write config`,
               path: configTarget,
+              blockerReason:
+                configExists && !opts.force
+                  ? `already exists (pass --force to overwrite)`
+                  : undefined,
             },
             ...(!opts.skipEnv ? [{ label: "Write environment file", path: envTarget }] : []),
           ];
+          const hasBlocker = plannedActions.some((a) => a.blockerReason);
           const outputMode = resolveOutputMode();
           if (outputMode === "json") {
             writeOutput(
               {
-                ok: true,
+                ok: !hasBlocker,
                 dry_run: true,
                 planned_actions: plannedActions.map((a) => ({
                   label: a.label,
@@ -4764,10 +4803,21 @@ const initCommand = program
                 : "";
               process.stdout.write(`  ${icon} ${action.label}${pathPart}${blockerPart}\n`);
             }
-            process.stdout.write(
-              "\n" + dim("All checks passed. Run without --safe to apply.") + "\n"
-            );
+            if (hasBlocker) {
+              process.stdout.write(
+                "\n" +
+                  warn(
+                    "One or more planned actions have blockers. Resolve them before running without --safe."
+                  ) +
+                  "\n"
+              );
+            } else {
+              process.stdout.write(
+                "\n" + dim("All checks passed. Run without --safe to apply.") + "\n"
+              );
+            }
           }
+          if (hasBlocker) process.exitCode = 1;
           return;
         }
 

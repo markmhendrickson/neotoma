@@ -72,9 +72,9 @@ flowchart TD
 | Vitest unit tests | 119 |
 | Vitest service tests | 34 |
 | Source-adjacent tests | 53 |
-| Vitest integration tests | 134 |
-| Vitest CLI tests | 63 |
-| Vitest contract tests | 14 |
+| Vitest integration tests | 133 |
+| Vitest CLI tests | 64 |
+| Vitest contract tests | 13 |
 | Vitest security tests | 3 |
 | Vitest subscription tests | 5 |
 | Vitest agent tests | 1 |
@@ -336,7 +336,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm run test:integration` or `npx vitest run tests/integration`
 **Requirements:** Database configured; remote-dependent subsets additionally need `RUN_REMOTE_TESTS=1`.
-**Files (134):**
+**Files (133):**
 - `tests/integration/aauth_attribution_stamping.test.ts`
 - `tests/integration/aauth_resource_metadata.test.ts`
 - `tests/integration/aauth_revocation_e2e.test.ts`
@@ -368,7 +368,6 @@ flowchart TD
 - `tests/integration/describe_entity_type.test.ts`
 - `tests/integration/docs_route.test.ts`
 - `tests/integration/entity_identifier_handler.test.ts`
-- `tests/integration/entity_queries_status_column.test.ts`
 - `tests/integration/entity_queries.test.ts`
 - `tests/integration/entity_search_mode.test.ts`
 - `tests/integration/events_stream.test.ts`
@@ -477,7 +476,7 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/cli`
 **Requirements:** Basic `.env`; some tests provision temp config homes automatically.
-**Files (63):**
+**Files (64):**
 - `tests/cli/api_client_offline_fallback.test.ts`
 - `tests/cli/backup_verify.test.ts`
 - `tests/cli/cli_access_commands.test.ts`
@@ -498,6 +497,7 @@ flowchart TD
 - `tests/cli/cli_ingest_remote_upload.test.ts`
 - `tests/cli/cli_init_commands.test.ts`
 - `tests/cli/cli_init_env_targeting.test.ts`
+- `tests/cli/cli_init_flags.test.ts`
 - `tests/cli/cli_init_interactive.test.ts`
 - `tests/cli/cli_issues_commands.test.ts`
 - `tests/cli/cli_mcp_commands.test.ts`
@@ -547,11 +547,10 @@ flowchart TD
 **Runner:** `vitest`
 **Command:** `npm test -- tests/contract`
 **Requirements:** Generated contract artifacts present when the suite expects them.
-**Files (14):**
+**Files (13):**
 - `tests/contract/cli_handler_dist_smoke.test.ts`
 - `tests/contract/contract_mapping.test.ts`
 - `tests/contract/contract_mcp_cli_parity.test.ts`
-- `tests/contract/get_entities_alias.test.ts`
 - `tests/contract/ironclaw_integration.test.ts`
 - `tests/contract/legacy_payloads/replay.test.ts`
 - `tests/contract/mcp_stdio_output_safety.test.ts`
