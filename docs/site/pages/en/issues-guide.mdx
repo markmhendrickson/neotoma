@@ -1,0 +1,85 @@
+import { MdxI18nLink } from "@/components/mdx/mdx_i18n_link";
+
+Neotoma includes a built-in issue tracker backed by `issue` entities. Issues are stored as immutable observations with full provenance, and can optionally mirror to a GitHub Issues repo for public collaboration.
+
+## Creating issues
+
+### From the CLI
+
+```bash
+# Public issue (mirrors to GitHub if configured)
+neotoma issues create --title "Bug: snapshot missing field" --body "Steps to reproduce..."
+
+# Private issue (Neotoma only, no GitHub mirror)
+neotoma issues create --title "Internal: schema audit" --body "..." --visibility private
+```
+
+### From MCP
+
+Agents use `submit_issue` to create issues. The MCP instructions require agents to include reporter environment fields (`reporter_git_sha` or `reporter_app_version`) so each issue records the build it was filed against.
+
+### From the Inspector
+
+The Inspector UI at `/inspector/issues` provides a web interface for browsing and creating issues.
+
+## Adding comments
+
+Issues use conversation threads. Each issue has a paired `conversation` entity, and comments are `conversation_message` rows in that thread.
+
+```bash
+# Add a comment by issue number
+neotoma issues message 42 --body "Confirmed on v0.12.1"
+
+# Add a comment by entity ID
+neotoma issues message --entity-id <id> --body "Fixed in commit abc123"
+```
+
+Via MCP: use `add_issue_message`.
+
+## Checking issue status
+
+```bash
+# By issue number
+neotoma issues status --issue-number 42
+
+# By entity ID
+neotoma issues status --entity-id <id>
+```
+
+Via MCP: use `get_issue_status`.
+
+## GitHub mirror
+
+When configured, public issues are created on GitHub first, then stored locally with the `github_number` and `github_url` written back. Neotoma is the canonical store; GitHub is the mirror.
+
+Credentials resolve in this order: `NEOTOMA_GH_TOKEN` env var, `gh auth token` shell-out, configured bot identity. No PATs are stored in config files.
+
+To pull GitHub state into Neotoma:
+
+```bash
+neotoma issues sync
+```
+
+This is mirror ingest, not peer sync. It pulls issues and comments from the configured GitHub repo into local entities.
+
+## Private issues
+
+Issues with `visibility: "private"` skip GitHub entirely. They exist only in Neotoma and use a deterministic `local_issue_id` for identity. Private issues still have conversation threads, attribution, and full provenance.
+
+## Guest access
+
+External reporters (users without a Neotoma account) can submit issues and check status using a `guest_access_token` returned at submission time. This token scopes access to the specific issue thread.
+
+```bash
+# Check status with guest token
+neotoma issues status --issue-number 42 --guest-access-token <token>
+
+# Add a follow-up message with guest token
+neotoma issues message 42 --body "Still happening on v0.13.0" --guest-access-token <token>
+```
+
+## Related
+
+- <MdxI18nLink to="/issue-reporting">Issue reporting reference</MdxI18nLink> for subsystem internals and reporter-provenance contract.
+- <MdxI18nLink to="/plans-guide">Plans</MdxI18nLink> for plans that resolve issues.
+- <MdxI18nLink to="/cli">CLI reference</MdxI18nLink> for the `neotoma issues` commands.
