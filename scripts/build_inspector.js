@@ -63,12 +63,21 @@ if (needsInstall) {
 }
 
 log("Building Inspector SPA…");
+// With content-negotiation unification (plan ent_1f176dbbe9a39e6bbad27f1f)
+// the Inspector serves at server root (/). Browsers requesting any
+// non-API path with Accept: text/html receive the SPA shell. Asset URLs
+// resolve under /assets/*. The legacy /inspector/* mount continues to
+// serve assets for old links and is preserved by a 308 redirect (see
+// src/services/inspector_mount.ts).
+//
+// Override VITE_PUBLIC_BASE_PATH to restore the sub-path build for
+// special cases (e.g. testing the legacy mount).
 execSync("npm run build", {
   cwd: INSPECTOR_DIR,
   stdio: "inherit",
   env: {
     ...process.env,
-    VITE_PUBLIC_BASE_PATH: "/inspector/",
+    VITE_PUBLIC_BASE_PATH: process.env.VITE_PUBLIC_BASE_PATH || "/",
   },
 });
 

@@ -233,6 +233,13 @@ export function installInspectorMount(
   const { basePath } = cfg;
   let { staticDir } = cfg;
   if (!staticDir) return;
+
+  // NOTE: We intentionally do NOT mount Inspector assets at `/` here. The API
+  // route namespace (e.g. `/entities/:id`, `/relationships`, `/schemas`,
+  // `/sources`) overlaps with Inspector client routes by design — the
+  // `/inspector/*` prefix is load-bearing to keep them separated. A future
+  // feature unit will migrate the API to `/api/*` and unify the Inspector at
+  // `/`; see plan ent_c1d65039242aa2a920d805c7.
   if (inspectorLiveBuild) {
     staticDir = resolveLiveInspectorStaticDir(staticDir);
   }
@@ -384,6 +391,216 @@ export function installInspectorMount(
   } catch (err) {
     logger.warn(`[Inspector] Failed to mount SPA: ${(err as Error).message}`);
   }
+}
+
+/**
+ * Install Inspector static assets at the SERVER ROOT so the unified `/`
+ * surface can resolve asset URLs (e.g. `/assets/index-abc.js`) and the
+ * favicon. Registered BEFORE API routes so static-asset paths take
+ * precedence; `express.static` with `index: false` + `fallthrough: true`
+ * means non-matching paths fall through to the API.
+ *
+ * This is additive: the legacy `/inspector/*` mount (installInspectorMount)
+ * continues to work. Together with the SPA fallback (installInspectorSpaFallback)
+ * and a 308 redirect from `/inspector` → `/`, this delivers content-
+ * negotiation unification (plan ent_1f176dbbe9a39e6bbad27f1f).
+ */
+export function installInspectorRootStaticAssets(
+  app: express.Application,
+  env: NodeJS.ProcessEnv = process.env,
+  logger: { info: (msg: string) => void; warn: (msg: string) => void }
+): void {
+  const bundledDir = resolveBundledInspectorDir();
+  if (!bundledDir) {
+    logger.info("[Inspector] No bundled SPA found; root-level static asset mount skipped.");
+    return;
+  }
+  const inspectorLiveBuild = isInspectorLiveBuildEnabled(env);
+  try {
+    app.use(
+      expressStatic.static(bundledDir, {
+        index: false,
+        fallthrough: true,
+        maxAge: inspectorLiveBuild ? 0 : "1h",
+        setHeaders: inspectorLiveBuild
+          ? (res: Response) => {
+              res.setHeader("Cache-Control", "no-store");
+            }
+          : undefined,
+      })
+    );
+    logger.info(
+      `[Inspector] Static assets mounted at / (from ${bundledDir}, falls through on miss).`
+    );
+  } catch (err) {
+    logger.warn(`[Inspector] Failed to mount root-level static assets: ${(err as Error).message}`);
+  }
+}
+
+/**
+ * Install a 308 (permanent) redirect from `/inspector` and `/inspector/`
+ * to `/` so legacy links continue to work. Deep paths like
+ * `/inspector/entities/foo` are also redirected, preserving query and hash.
+ *
+ * Not currently invoked from `src/actions.ts` — the legacy `/inspector/*`
+ * mount is intentionally kept active for back-compat with stale links
+ * (MCP instructions, conversation summary URLs, third-party docs). Call
+ * this helper instead of `installInspectorMount` once all known link
+ * sources have migrated to the unprefixed form.
+ */
+export function installInspectorLegacyRedirect(
+  app: express.Application,
+  logger: { info: (msg: string) => void; warn: (msg: string) => void }
+): void {
+  app.use((req, res, next) => {
+    if (req.method !== "GET" && req.method !== "HEAD") return next();
+    const p = req.path;
+    if (p !== "/inspector" && !p.startsWith("/inspector/")) return next();
+    // Preserve query string and hash; trim the /inspector prefix.
+    const stripped = p === "/inspector" ? "/" : p.slice("/inspector".length);
+    const qsIdx = req.originalUrl.indexOf("?");
+    const qs = qsIdx >= 0 ? req.originalUrl.slice(qsIdx) : "";
+    res.redirect(308, `${stripped}${qs}`);
+  });
+  logger.info("[Inspector] Legacy /inspector → / redirect installed (308).");
+}
+
+/**
+ * API-only prefixes: paths under these MUST NOT serve the Inspector SPA shell
+ * via the content-negotiation fallback. These are JSON-only (or have their
+ * own HTML surfaces, e.g. OAuth flows).
+ *
+ * Add to this list ONLY when a route is genuinely API-only and has no
+ * corresponding Inspector page.
+ */
+const API_ONLY_PREFIXES: readonly string[] = [
+  "/.well-known/",
+  "/api/",
+  "/openapi",
+  "/robots.txt",
+  "/favicon.ico",
+  "/server-info",
+  "/me",
+  "/health",
+  "/version",
+  "/mcp/", // OAuth + MCP HTTP endpoints serve their own HTML or JSON
+  "/oauth/",
+  "/auth/",
+  "/sandbox/session", // Session lifecycle endpoints, not browseable
+  "/sync/",
+  "/admin/",
+];
+
+/**
+ * Returns true when the path is reserved for API-only handlers (no Inspector
+ * SPA fallback). Trailing-slash safe.
+ */
+export function isApiOnlyPath(pathname: string): boolean {
+  const normalized = normalizeInspectorUrlPathname(pathname);
+  for (const prefix of API_ONLY_PREFIXES) {
+    if (prefix.endsWith("/")) {
+      if (normalized === prefix.slice(0, -1) || normalized.startsWith(prefix)) return true;
+    } else {
+      if (normalized === prefix || normalized.startsWith(`${prefix}/`)) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Parse an Accept header to decide whether the client prefers HTML.
+ *
+ * Returns true when:
+ *   - The header contains a text/html media type with quality >= the highest
+ *     other quality (default 1.0 when q is absent).
+ *
+ * Returns false when:
+ *   - No Accept header (treated as JSON for back-compat with curl, agent
+ *     fetches, and existing API clients that omit Accept).
+ *   - Accept is wildcard-only (treated as JSON: agents and curl default).
+ *   - Accept prefers application/json or text/markdown.
+ *
+ * The asymmetric default (wildcard → JSON, not HTML) preserves the agent
+ * contract. Browsers explicitly send `text/html` in their Accept list (e.g.
+ * Chrome's default starts with `text/html,application/xhtml+xml,...`), so
+ * they get HTML; fetch/curl/agents get JSON.
+ */
+export function acceptPrefersHtml(accept: string | undefined): boolean {
+  if (!accept || !accept.trim()) return false;
+  const types = accept
+    .split(",")
+    .map((part) => {
+      const [mediaTypeRaw, ...params] = part.split(";").map((s) => s.trim());
+      const mediaType = (mediaTypeRaw ?? "").toLowerCase();
+      let q = 1.0;
+      for (const p of params) {
+        const m = /^q=([0-9.]+)$/.exec(p);
+        if (m) q = parseFloat(m[1] ?? "1");
+      }
+      return { mediaType, q };
+    })
+    .filter((t) => t.mediaType.length > 0);
+  if (!types.length) return false;
+  let htmlQ = -1;
+  let bestNonHtmlQ = -1;
+  for (const t of types) {
+    if (t.mediaType === "text/html" || t.mediaType === "application/xhtml+xml") {
+      if (t.q > htmlQ) htmlQ = t.q;
+    } else if (t.mediaType === "*/*") {
+      // */* alone does NOT prefer HTML; agent contract.
+      continue;
+    } else if (t.mediaType.startsWith("text/")) {
+      // Other text/* types (markdown, plain, csv) are not HTML.
+      if (t.q > bestNonHtmlQ) bestNonHtmlQ = t.q;
+    } else {
+      if (t.q > bestNonHtmlQ) bestNonHtmlQ = t.q;
+    }
+  }
+  if (htmlQ < 0) return false;
+  return htmlQ >= bestNonHtmlQ;
+}
+
+/**
+ * Install the SPA fallback for content-negotiation unification.
+ *
+ * Registered LAST (after all API routes). For an unmatched GET request:
+ *   - If Accept indicates HTML AND the path is not API-only, serve the
+ *     Inspector shell. The SPA's client router resolves the path (real
+ *     route → page; unknown → in-app 404).
+ *   - Otherwise fall through to Express's default 404 handler.
+ *
+ * Mutations (POST/PATCH/DELETE) are never dispatched to HTML.
+ *
+ * The `Vary: Accept` header is set on every HTML response so caches do not
+ * cross-contaminate JSON and HTML clients.
+ */
+export function installInspectorSpaFallback(
+  app: express.Application,
+  _env: NodeJS.ProcessEnv = process.env,
+  logger: { info: (msg: string) => void; warn: (msg: string) => void }
+): void {
+  const bundledDir = resolveBundledInspectorDir();
+  if (!bundledDir) {
+    logger.info(
+      "[Inspector] No bundled SPA found; SPA fallback NOT installed. Browser requests to API routes fall through to default Express handlers."
+    );
+    return;
+  }
+  app.use((req, res, next) => {
+    if (req.method !== "GET" && req.method !== "HEAD") return next();
+    if (!acceptPrefersHtml(req.headers.accept)) return next();
+    if (isApiOnlyPath(req.path)) return next();
+    const shell = readInspectorIndexHtml(bundledDir);
+    if (!shell) return next();
+    const proto = req.protocol;
+    const host = req.get("host") || "localhost";
+    const origin = `${proto}://${host}`;
+    const html = injectInspectorApiBaseMeta(shell, origin);
+    res.setHeader("Vary", "Accept");
+    res.setHeader("Cache-Control", "no-store");
+    res.type("text/html; charset=utf-8").send(html);
+  });
+  logger.info(`[Inspector] SPA fallback installed (HTML requests to non-API paths serve shell).`);
 }
 
 /**

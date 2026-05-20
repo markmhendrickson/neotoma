@@ -6,8 +6,8 @@
  *
  * What this proves:
  *
- *   1. Each of the 4 modes (authenticated / local_sandbox / hosted_sandbox /
- *      refuse) is reachable from a specific input shape.
+ *   1. Each of the 5 modes (local / production / local_sandbox /
+ *      hosted_sandbox / refuse) is reachable from a specific input shape.
  *   2. The v0.11.1 advisory regression class — no-auth + non-loopback bind —
  *      always lands in `refuse` mode, regardless of production-env flag.
  *   3. `refusePolicy` controls boot-exit vs warn-only behavior. The first cut
@@ -30,6 +30,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import {
   resolveSandboxMode,
   resolveRefusePolicy,
+  resolveForceMode,
   getOrCreateInstallFingerprint,
   sandboxPrincipalIdFromFingerprint,
   type ResolveSandboxModeInputs,
@@ -47,20 +48,30 @@ function makeInputs(overrides: Partial<ResolveSandboxModeInputs> = {}): ResolveS
 }
 
 describe("resolveSandboxMode — mode selection", () => {
-  it("returns authenticated when auth is configured (highest precedence)", () => {
+  it("returns local when auth is configured and env is non-production (installed end-user app)", () => {
     // Auth wins even when hosted_sandbox would otherwise apply.
     const result = resolveSandboxMode(
       makeInputs({ authConfigured: true, hostedSandboxEnabled: true })
     );
-    expect(result.mode).toBe("authenticated");
+    expect(result.mode).toBe("local");
     expect(result.shouldRefuseBoot).toBe(false);
+    expect(result.reason).toContain("non-production");
   });
 
-  it("returns authenticated even when bind is non-loopback in production", () => {
+  it("returns production when auth is configured AND NEOTOMA_ENV=production (hosted multi-tenant)", () => {
     const result = resolveSandboxMode(
       makeInputs({ authConfigured: true, loopbackBindOnly: false, productionEnv: true })
     );
-    expect(result.mode).toBe("authenticated");
+    expect(result.mode).toBe("production");
+    expect(result.shouldRefuseBoot).toBe(false);
+    expect(result.reason).toContain("multi-tenant");
+  });
+
+  it("returns local on loopback + auth + non-production (typical installed app)", () => {
+    const result = resolveSandboxMode(
+      makeInputs({ authConfigured: true, loopbackBindOnly: true, productionEnv: false })
+    );
+    expect(result.mode).toBe("local");
   });
 
   it("returns hosted_sandbox when NEOTOMA_SANDBOX_MODE is enabled and no auth", () => {
@@ -117,18 +128,87 @@ describe("resolveSandboxMode — refuse policy gating", () => {
 
   it("never requests boot refusal for non-refuse modes, regardless of policy", () => {
     for (const policy of ["warn", "enforce"] as const) {
+      // local (auth + non-prod)
       expect(
         resolveSandboxMode(makeInputs({ authConfigured: true, refusePolicy: policy }))
           .shouldRefuseBoot
       ).toBe(false);
+      // production (auth + prod)
+      expect(
+        resolveSandboxMode(
+          makeInputs({ authConfigured: true, productionEnv: true, refusePolicy: policy })
+        ).shouldRefuseBoot
+      ).toBe(false);
+      // hosted_sandbox
       expect(
         resolveSandboxMode(makeInputs({ hostedSandboxEnabled: true, refusePolicy: policy }))
           .shouldRefuseBoot
       ).toBe(false);
+      // local_sandbox (default makeInputs)
       expect(resolveSandboxMode(makeInputs({ refusePolicy: policy })).shouldRefuseBoot).toBe(
         false
       );
     }
+  });
+});
+
+describe("resolveSandboxMode — forceMode dev override", () => {
+  it("honors forceMode when productionEnv is false (returns the forced verdict)", () => {
+    const result = resolveSandboxMode(
+      makeInputs({ forceMode: "hosted_sandbox", loopbackBindOnly: true, productionEnv: false })
+    );
+    expect(result.mode).toBe("hosted_sandbox");
+    expect(result.reason).toContain("forceMode override active");
+    expect(result.shouldRefuseBoot).toBe(false);
+  });
+
+  it("ignores forceMode when productionEnv is true (production env never honors override)", () => {
+    // Production env + auth configured => production verdict, NOT the forced one.
+    const result = resolveSandboxMode(
+      makeInputs({ forceMode: "hosted_sandbox", authConfigured: true, productionEnv: true })
+    );
+    expect(result.mode).toBe("production");
+  });
+
+  it("forceMode can route into refuse mode for testing the advisory banner", () => {
+    const result = resolveSandboxMode(
+      makeInputs({ forceMode: "refuse", productionEnv: false })
+    );
+    expect(result.mode).toBe("refuse");
+    // The forced refuse verdict carries the override reason, not the advisory text.
+    // shouldRefuseBoot stays false because the override returns the verdict
+    // without consulting refusePolicy (a dev exercise, not a real refuse).
+    expect(result.shouldRefuseBoot).toBe(false);
+  });
+
+  it("ignores null/undefined forceMode (acts as if override absent)", () => {
+    const result = resolveSandboxMode(makeInputs({ forceMode: null }));
+    expect(result.mode).toBe("local_sandbox");
+  });
+});
+
+describe("resolveForceMode — env parsing", () => {
+  it("returns null when NEOTOMA_FORCE_MODE is unset", () => {
+    expect(resolveForceMode({})).toBeNull();
+  });
+
+  it("returns null on empty value", () => {
+    expect(resolveForceMode({ NEOTOMA_FORCE_MODE: "" })).toBeNull();
+  });
+
+  it("recognises every valid mode name (case-insensitive)", () => {
+    expect(resolveForceMode({ NEOTOMA_FORCE_MODE: "local" })).toBe("local");
+    expect(resolveForceMode({ NEOTOMA_FORCE_MODE: "PRODUCTION" })).toBe("production");
+    expect(resolveForceMode({ NEOTOMA_FORCE_MODE: "Local_Sandbox" })).toBe("local_sandbox");
+    expect(resolveForceMode({ NEOTOMA_FORCE_MODE: "hosted_sandbox" })).toBe("hosted_sandbox");
+    expect(resolveForceMode({ NEOTOMA_FORCE_MODE: "refuse" })).toBe("refuse");
+  });
+
+  it("returns null on unrecognised values (silent fail — a typo cannot accidentally activate)", () => {
+    expect(resolveForceMode({ NEOTOMA_FORCE_MODE: "authenticated" })).toBeNull();
+    expect(resolveForceMode({ NEOTOMA_FORCE_MODE: "prod" })).toBeNull();
+    expect(resolveForceMode({ NEOTOMA_FORCE_MODE: "sandbox" })).toBeNull();
+    expect(resolveForceMode({ NEOTOMA_FORCE_MODE: "1" })).toBeNull();
   });
 });
 

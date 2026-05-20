@@ -88,6 +88,7 @@ import {
 } from "./services/local_auth.js";
 import {
   isSandboxMode,
+  resolveForceMode,
   resolveRefusePolicy,
   resolveSandboxMode,
   sandboxDestructiveGuard,
@@ -114,7 +115,12 @@ import {
   wantsMarkdown as acceptWantsMarkdown,
 } from "./services/root_landing/index.js";
 import { mountDocsRoutes } from "./services/docs/index.js";
-import { installInspectorMount } from "./services/inspector_mount.js";
+import {
+  installInspectorMount,
+  installInspectorRootStaticAssets,
+  installInspectorSpaFallback,
+  resolveBundledInspectorDir,
+} from "./services/inspector_mount.js";
 import { getSandboxTermsResponse } from "./services/sandbox/terms.js";
 import { resolveSandboxReportTransport } from "./services/sandbox/transport.js";
 import type { SandboxReportReason } from "./services/sandbox/types.js";
@@ -196,6 +202,16 @@ type ErrorEnvelope = {
 // per-install fingerprinted sandbox principal for the shared nil UUID fallback.
 let _localSandboxActive = false;
 
+// Resolved server mode (set during startHTTPServer()). Read by /me and any
+// other route that needs to surface the active mode to clients. Defaults to
+// null until the resolver runs at boot.
+let _resolvedServerMode: NeotomaSandboxModeName | null = null;
+
+/** Exposed for the /me route and any other surface that needs the boot-time mode verdict. */
+export function getResolvedServerMode(): NeotomaSandboxModeName | null {
+  return _resolvedServerMode;
+}
+
 export const app = express();
 // Trust proxy headers (required for express-rate-limit when X-Forwarded-For is present)
 app.set("trust proxy", true);
@@ -275,6 +291,19 @@ if (isSandboxMode()) {
 // Inspector SPA mount. Deliberately registered before all auth / rate-limit
 // middleware so the SPA shell + assets are reachable without a bearer — the
 // API calls the Inspector makes still flow through the normal auth stack below.
+//
+// Two parallel mounts run today (content-negotiation unification, plan
+// ent_1f176dbbe9a39e6bbad27f1f):
+//   - installInspectorRootStaticAssets: serves /assets/*, /favicon.svg from
+//     dist/inspector at the server root. Inspector built with
+//     VITE_PUBLIC_BASE_PATH=/ resolves its asset URLs here.
+//   - installInspectorMount: legacy /inspector/* mount for back-compat with
+//     any existing links (MCP instructions, conversation summary, etc.).
+//     Will be removed once all links migrate to the unprefixed form.
+//
+// The SPA shell itself is served by installInspectorSpaFallback (registered
+// at the END of route registration) for any HTML request to a non-API path.
+installInspectorRootStaticAssets(app, process.env, logger);
 installInspectorMount(app, process.env, logger);
 
 // ── Sandbox session endpoints ───────────────────────────────────────────
@@ -531,9 +560,24 @@ app.get("/favicon.ico", (_req, res) => res.status(204).end());
 // ============================================================================
 // Root landing page + robots.txt (no-auth, content-negotiated)
 // ============================================================================
-// HTML for browsers (identity, harness connect snippets, Learn index).
-// JSON for agents/curl (same content, structured). See
-// src/services/root_landing/index.ts.
+// HTML for browsers (identity, harness connect snippets, Learn index, plus a
+// prominent "Open Inspector" CTA pointing at /inspector when the bundled SPA
+// is available). JSON/markdown for agents/curl (same content, structured).
+//
+// NOTE: The Inspector itself lives at `/inspector` because the API route
+// namespace (`/entities`, `/relationships`, `/schemas`, etc.) overlaps with
+// Inspector client routes. A future feature unit migrates the API to `/api/*`
+// and the Inspector to `/`. See plan ent_c1d65039242aa2a920d805c7.
+//
+// See src/services/root_landing/index.ts for the agent-facing payload.
+{
+  const bundled = resolveBundledInspectorDir();
+  if (bundled) {
+    logger.info(
+      `[Inspector] Bundled SPA detected at ${bundled}; landing page surfaces "Open Inspector" CTA.`
+    );
+  }
+}
 app.get("/", (req, res) => {
   try {
     const ctx = buildLandingContext(req);
@@ -3242,7 +3286,19 @@ app.get("/me", async (req, res) => {
             }
           : { storage_backend: "local" as const }
         : undefined;
-    return res.json({ user_id: userId, email: email ?? undefined, storage });
+    // Surface the boot-resolved server mode so clients (Inspector, CLI) can
+    // dispatch UI/behavior without inferring from indirect signals. Falls back
+    // to the legacy `_localSandboxActive` reading when the resolver has not
+    // run yet (e.g. in test harnesses that drive the app without
+    // startHTTPServer()).
+    const sandboxMode: NeotomaSandboxModeName | null =
+      _resolvedServerMode ?? (_localSandboxActive ? "local_sandbox" : null);
+    return res.json({
+      user_id: userId,
+      email: email ?? undefined,
+      storage,
+      ...(sandboxMode ? { sandbox_mode: sandboxMode } : {}),
+    });
   } catch (error: any) {
     logError("GetMe", req, error);
     return sendError(res, 401, "AUTH_REQUIRED", error.message ?? "Not authenticated");
@@ -9667,6 +9723,18 @@ app.get("/openapi_actions.yaml", (req, res) => {
 // Documentation routes (FU-301) - must be before SPA fallback
 // setupDocumentationRoutes(app); // TODO: Re-enable after implementing routes/documentation.ts
 
+// Content-negotiation SPA fallback (plan ent_1f176dbbe9a39e6bbad27f1f).
+//
+// Registered LAST so it only matches paths no API route handled. For an
+// unmatched GET with Accept: text/html, serves the Inspector shell so the
+// SPA's client router can resolve the path. JSON / curl / agent requests
+// fall through to the default 404. API-only prefixes (/me, /server-info,
+// /sandbox/session, /.well-known/*, /mcp/*, /oauth/*, etc.) are explicitly
+// excluded so they never serve HTML even with Accept: text/html.
+//
+// Mutations (POST/PATCH/DELETE) are not dispatched — only GET / HEAD.
+installInspectorSpaFallback(app, process.env, logger);
+
 // SPA fallback - serve index.html for non-API routes (must be after all API routes)
 
 /**
@@ -9873,13 +9941,34 @@ export async function startHTTPServer() {
       (process.env.NEOTOMA_ENV || "").trim().toLowerCase() === "prod";
     const authConfigured = (process.env.NEOTOMA_REQUIRE_AUTH ?? "").trim() === "1";
     const refusePolicy = resolveRefusePolicy();
+    const forceMode = resolveForceMode();
+    // Hard-reject FORCE_MODE in production envs. The resolver itself ignores
+    // the override under productionEnv, but a misconfigured deploy that sets
+    // both NEOTOMA_ENV=production AND NEOTOMA_FORCE_MODE is almost certainly
+    // a mistake — refuse boot rather than silently dropping the override.
+    if (forceMode && productionEnv) {
+      process.stderr.write(
+        `\n[neotoma] FATAL: NEOTOMA_FORCE_MODE=${forceMode} is set but NEOTOMA_ENV=production. ` +
+          `The force-mode override is a dev-only affordance and is not honored in production. ` +
+          `Unset NEOTOMA_FORCE_MODE or change NEOTOMA_ENV. Exit code 1.\n\n`
+      );
+      process.exit(1);
+    }
+    if (forceMode) {
+      process.stderr.write(
+        `\n[neotoma] WARNING: NEOTOMA_FORCE_MODE=${forceMode} is active. ` +
+          `This is a dev-only override; it bypasses the normal mode resolution.\n\n`
+      );
+    }
     const verdict = resolveSandboxMode({
       authConfigured,
       loopbackBindOnly,
       productionEnv,
       hostedSandboxEnabled: isSandboxMode(),
       refusePolicy,
+      forceMode,
     });
+    _resolvedServerMode = verdict.mode;
     emitSandboxBootBanner(verdict.mode, verdict.reason, verdict.shouldRefuseBoot, refusePolicy);
     if (verdict.shouldRefuseBoot) {
       // Refuse mode + enforce policy: hard exit. The banner above already
