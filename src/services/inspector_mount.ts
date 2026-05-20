@@ -42,18 +42,50 @@ function resolvePackageRoot(): string {
 }
 
 /**
+ * True when index.html references Vite chunks at `/assets/...` (root base) rather
+ * than under the configured mount prefix (e.g. `/inspector/assets/...`).
+ */
+export function inspectorIndexHtmlHasRootAssetRefs(html: string): boolean {
+  return /(?:src|href)=["']\/assets\//.test(html);
+}
+
+/**
+ * Reject dist trees built with `base: /` when the API serves the SPA under a
+ * sub-path (default `/inspector`). Those shells request `/assets/*`, which hit
+ * the authenticated API surface and return 401 JSON — blank Inspector + MIME errors.
+ */
+export function inspectorIndexHtmlMatchesMountBase(html: string, basePath: string): boolean {
+  const normalized = (basePath.trim() || DEFAULT_BASE_PATH).replace(/\/$/, "") || "";
+  if (!normalized || normalized === "/") {
+    return true;
+  }
+  if (inspectorIndexHtmlHasRootAssetRefs(html)) {
+    return false;
+  }
+  const expectedPrefix = `${normalized}/assets/`;
+  return html.includes(expectedPrefix);
+}
+
+function resolveInspectorBasePathFromEnv(env: NodeJS.ProcessEnv): string {
+  const basePath =
+    (env.NEOTOMA_INSPECTOR_BASE_PATH || DEFAULT_BASE_PATH).trim() || DEFAULT_BASE_PATH;
+  return basePath.startsWith("/") ? basePath.replace(/\/$/, "") : `/${basePath}`.replace(/\/$/, "");
+}
+
+/**
  * Resolve the bundled Inspector dist directory. Returns null when the
  * bundled dist is not present (e.g. submodule not built, or SKIP_INSPECTOR_BUILD).
  */
-export function resolveBundledInspectorDir(): string | null {
+export function resolveBundledInspectorDir(env: NodeJS.ProcessEnv = process.env): string | null {
   const root = resolvePackageRoot();
-  const distDir = path.join(root, "dist", "inspector");
-  if (fs.existsSync(path.join(distDir, "index.html"))) return distDir;
-
-  // Source-checkout fallback: inspector/dist when the submodule is built.
-  const submoduleDistDir = path.join(root, "inspector", "dist");
-  if (fs.existsSync(path.join(submoduleDistDir, "index.html"))) return submoduleDistDir;
-
+  const basePath = resolveInspectorBasePathFromEnv(env);
+  const candidates = [path.join(root, "dist", "inspector"), path.join(root, "inspector", "dist")];
+  for (const dir of candidates) {
+    const html = readInspectorIndexHtml(dir);
+    if (!html) continue;
+    if (!inspectorIndexHtmlMatchesMountBase(html, basePath)) continue;
+    return dir;
+  }
   return null;
 }
 
@@ -94,15 +126,28 @@ export function resolveInspectorMount(env: NodeJS.ProcessEnv = process.env): Ins
   return { kind: "disabled", basePath: normalizedBase };
 }
 
+export type InjectInspectorApiBaseMetaOptions = {
+  /** When true, expose dev-only Inspector nav (e.g. /design) via client meta probe. */
+  source_build?: boolean;
+};
+
 /**
- * Inject `<meta name="neotoma-api-base" content="<origin>">` into the
- * Inspector's index.html so the SPA discovers the API origin at runtime.
+ * Inject runtime `<meta>` tags into the Inspector shell:
+ * - `neotoma-api-base` — API origin for same-origin bundled mounts
+ * - `neotoma-inspector-source-build` — optional; monorepo live/source builds only
  */
-export function injectInspectorApiBaseMeta(html: string, origin: string): string {
-  const metaTag = `<meta name="neotoma-api-base" content="${origin}">`;
+export function injectInspectorApiBaseMeta(
+  html: string,
+  origin: string,
+  options: InjectInspectorApiBaseMetaOptions = {}
+): string {
+  const tags = [`<meta name="neotoma-api-base" content="${origin}">`];
+  if (options.source_build) {
+    tags.push('<meta name="neotoma-inspector-source-build" content="1">');
+  }
   const headIdx = html.indexOf("</head>");
   if (headIdx === -1) return html;
-  return html.slice(0, headIdx) + metaTag + "\n" + html.slice(headIdx);
+  return html.slice(0, headIdx) + tags.join("\n") + "\n" + html.slice(headIdx);
 }
 
 /** `stampPath` must be the absolute path (e.g. `/inspector/__live/build_stamp`). */
@@ -237,10 +282,22 @@ export function installInspectorMount(
     staticDir = resolveLiveInspectorStaticDir(staticDir);
   }
 
+  /** Submodule `inspector/dist` fallback is source-checkout only; npm packs use `dist/inspector`. */
+  const injectSourceBuildMeta =
+    inspectorLiveBuild ||
+    staticDir.replace(/\\/g, "/").replace(/\/+$/, "").endsWith("/inspector/dist");
+
   try {
     const rawHtml = readInspectorIndexHtml(staticDir);
     if (!rawHtml) {
       logger.warn(`[Inspector] index.html not found in ${staticDir}; skipping mount.`);
+      return;
+    }
+    if (!inspectorIndexHtmlMatchesMountBase(rawHtml, basePath)) {
+      logger.warn(
+        `[Inspector] index.html in ${staticDir} was built with root asset paths (/assets/*) but mount base is ${basePath}. ` +
+          `Rebuild with VITE_PUBLIC_BASE_PATH=${basePath}/ (e.g. npm run build:inspector:prod-target). Skipping mount.`
+      );
       return;
     }
 
@@ -355,7 +412,7 @@ export function installInspectorMount(
           const latest = readInspectorIndexHtml(activeStaticDir);
           if (!latest) return next();
           const html = appendInspectorLiveReloadScript(
-            injectInspectorApiBaseMeta(latest, origin),
+            injectInspectorApiBaseMeta(latest, origin, { source_build: injectSourceBuildMeta }),
             buildStampPath
           );
           res.set("Content-Type", "text/html; charset=utf-8");
@@ -366,7 +423,9 @@ export function installInspectorMount(
 
         const latestShell = readInspectorIndexHtml(staticDir);
         if (!latestShell) return next();
-        const html = injectInspectorApiBaseMeta(latestShell, origin);
+        const html = injectInspectorApiBaseMeta(latestShell, origin, {
+          source_build: injectSourceBuildMeta,
+        });
 
         res.set("Content-Type", "text/html; charset=utf-8");
         res.set("Cache-Control", "no-store");
