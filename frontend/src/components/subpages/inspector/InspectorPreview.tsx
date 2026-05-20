@@ -250,3 +250,30 @@ export function MockPill({
     </span>
   );
 }
+
+/**
+ * Schema-mode badge for the Inspector header.
+ *
+ * Reflects the `schema_mode` value returned by `GET /server-info` (one of
+ * `evolving`, `guided`, `locked`). Visual treatment is deliberately neutral
+ * for the historical default (`evolving`) and grows in emphasis as the
+ * posture tightens, so an operator can tell at a glance whether the server
+ * is in its permissive default or under a stricter authoring contract.
+ *
+ * Used in the marketing-site Inspector previews; the live Inspector SPA
+ * (in the `inspector/` submodule) consumes the same `/server-info`
+ * response.
+ */
+export function SchemaModeBadge({
+  mode,
+}: {
+  mode: "evolving" | "guided" | "locked";
+}) {
+  const tone: React.ComponentProps<typeof MockPill>["tone"] =
+    mode === "locked" ? "warning" : mode === "guided" ? "info" : "muted";
+  return (
+    <MockPill tone={tone}>
+      <span aria-label="Schema authoring mode">schema: {mode}</span>
+    </MockPill>
+  );
+}

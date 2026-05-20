@@ -29,11 +29,7 @@ export type SchemaMode = "evolving" | "guided" | "locked";
 
 export const DEFAULT_SCHEMA_MODE: SchemaMode = "evolving";
 
-const VALID_MODES: ReadonlySet<SchemaMode> = new Set<SchemaMode>([
-  "evolving",
-  "guided",
-  "locked",
-]);
+const VALID_MODES: ReadonlySet<SchemaMode> = new Set<SchemaMode>(["evolving", "guided", "locked"]);
 
 let cached: SchemaMode | undefined;
 
