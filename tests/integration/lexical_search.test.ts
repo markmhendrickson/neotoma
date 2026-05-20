@@ -222,4 +222,39 @@ describe("Lexical retrieval fallback", () => {
     expect(ids).toContain(snapshotFirstId);
     expect(ids.indexOf(canonicalFirstId)).toBeLessThan(ids.indexOf(snapshotFirstId));
   });
+
+  it("resolves a full entity id search string to that entity", async () => {
+    const entityId = `ent_${Date.now().toString(16).padStart(24, "0").slice(-24)}`;
+    await createEntityWithSnapshot({
+      id: entityId,
+      entityType: "note",
+      canonicalName: "id lookup fixture",
+      snapshot: { title: "Unrelated title for lexical mismatch" },
+    });
+
+    const result = await queryEntitiesWithCount({
+      userId: testUserId,
+      search: entityId,
+      limit: 25,
+      offset: 0,
+    });
+
+    expect(result.total).toBe(1);
+    expect(result.entities).toHaveLength(1);
+    expect(result.entities[0]?.entity_id).toBe(entityId);
+  });
+
+  it("returns no rows when a full entity id does not exist for the user", async () => {
+    const missingId = "ent_000000000000000000000000";
+
+    const result = await queryEntitiesWithCount({
+      userId: testUserId,
+      search: missingId,
+      limit: 25,
+      offset: 0,
+    });
+
+    expect(result.total).toBe(0);
+    expect(result.entities).toHaveLength(0);
+  });
 });

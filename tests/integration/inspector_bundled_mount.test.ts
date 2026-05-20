@@ -21,11 +21,18 @@ import {
   computeInspectorBuildOutputStamp,
   isInspectorViteAssetUrlPath,
   normalizeInspectorUrlPathname,
+  inspectorIndexHtmlHasRootAssetRefs,
+  inspectorIndexHtmlMatchesMountBase,
 } from "../../src/services/inspector_mount.js";
 
 type Server = ReturnType<express.Application["listen"]>;
 
-const FIXTURE_HTML = `<!DOCTYPE html><html><head><title>Inspector</title></head><body>OK</body></html>`;
+function fixtureInspectorHtml(basePath = "/inspector"): string {
+  const base = (basePath.trim() || "/inspector").replace(/\/$/, "");
+  return `<!DOCTYPE html><html><head><title>Inspector</title><script src="${base}/assets/index.js"></script><link href="${base}/assets/index.css" rel="stylesheet"></head><body>OK</body></html>`;
+}
+
+const FIXTURE_HTML = fixtureInspectorHtml("/inspector");
 
 function noopLogger() {
   return { info: () => {}, warn: () => {} };
@@ -72,6 +79,25 @@ describe("isInspectorViteAssetUrlPath", () => {
   it("treats duplicate slashes like a single slash", () => {
     expect(normalizeInspectorUrlPathname("/inspector//assets/x.js")).toBe("/inspector/assets/x.js");
     expect(isInspectorViteAssetUrlPath("/inspector", "/inspector//assets/x.js")).toBe(true);
+  });
+});
+
+describe("inspectorIndexHtmlMatchesMountBase", () => {
+  const rootBaseHtml = `<script src="/assets/index.js"></script><link href="/assets/index.css">`;
+  const inspectorBaseHtml = `<script src="/inspector/assets/index.js"></script>`;
+
+  it("detects root /assets/ references", () => {
+    expect(inspectorIndexHtmlHasRootAssetRefs(rootBaseHtml)).toBe(true);
+    expect(inspectorIndexHtmlHasRootAssetRefs(inspectorBaseHtml)).toBe(false);
+  });
+
+  it("rejects root-base HTML when mount is /inspector", () => {
+    expect(inspectorIndexHtmlMatchesMountBase(rootBaseHtml, "/inspector")).toBe(false);
+    expect(inspectorIndexHtmlMatchesMountBase(inspectorBaseHtml, "/inspector")).toBe(true);
+  });
+
+  it("accepts root-base HTML when mount is /", () => {
+    expect(inspectorIndexHtmlMatchesMountBase(rootBaseHtml, "/")).toBe(true);
   });
 });
 
@@ -168,6 +194,13 @@ describe("injectInspectorApiBaseMeta", () => {
     const result = injectInspectorApiBaseMeta(FIXTURE_HTML, "http://localhost:3180");
     expect(result).toContain('<meta name="neotoma-api-base" content="http://localhost:3180">');
     expect(result.indexOf("neotoma-api-base")).toBeLessThan(result.indexOf("</head>"));
+  });
+
+  it("injects source-build meta when requested", () => {
+    const result = injectInspectorApiBaseMeta(FIXTURE_HTML, "http://localhost:3080", {
+      source_build: true,
+    });
+    expect(result).toContain('<meta name="neotoma-inspector-source-build" content="1">');
   });
 
   it("returns unchanged HTML when </head> is missing", () => {
@@ -388,7 +421,7 @@ describe("installInspectorMount — integration", () => {
   it("respects custom base path", async () => {
     tmpDir = path.join(process.cwd(), "tmp", "inspector-test-path-" + Date.now());
     mkdirSync(tmpDir, { recursive: true });
-    writeFileSync(path.join(tmpDir, "index.html"), FIXTURE_HTML);
+    writeFileSync(path.join(tmpDir, "index.html"), fixtureInspectorHtml("/ui"));
 
     const app = express();
     installInspectorMount(

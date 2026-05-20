@@ -4,6 +4,7 @@ import { BOOKKEEPING_ENTITY_TYPES } from "../../services/memory_export.js";
 import { suggestSingular } from "../../services/entity_type_guard.js";
 import { logger } from "../../utils/logger.js";
 import { semanticSearchEntities } from "../../services/entity_semantic_search.js";
+import { isNeotomaEntityId } from "../neotoma_entity_id.js";
 import type { EntityWithProvenance } from "../../services/entity_queries.js";
 
 interface QueryEntitiesParams {
@@ -614,6 +615,80 @@ async function queryEntitiesFromLexicalSearch(params: {
   return { entities, total: lexicalTotal };
 }
 
+type ExactEntityIdQueryParams = Pick<
+  QueryEntitiesParams,
+  | "userId"
+  | "entityType"
+  | "includeMerged"
+  | "includeSnapshots"
+  | "sortBy"
+  | "sortOrder"
+  | "published"
+  | "publishedAfter"
+  | "publishedBefore"
+  | "updatedSince"
+  | "createdSince"
+  | "identityBasis"
+  | "limit"
+  | "offset"
+> & {
+  entityId: string;
+  excludeBookkeeping?: boolean;
+};
+
+/** Direct lookup when the search string is a full Neotoma entity id (`ent_` + 24 hex). */
+export async function queryEntitiesByExactEntityId(
+  params: ExactEntityIdQueryParams
+): Promise<{ entities: EntityWithProvenance[]; total: number }> {
+  const entityId = params.entityId.trim();
+  const limit = params.limit ?? 100;
+  const offset = params.offset ?? 0;
+
+  let rowQuery = db
+    .from("entities")
+    .select("id, entity_type")
+    .eq("user_id", params.userId)
+    .eq("id", entityId);
+
+  if (params.entityType) {
+    rowQuery = rowQuery.eq("entity_type", params.entityType);
+  }
+  if (!params.includeMerged) {
+    rowQuery = rowQuery.is("merged_to_entity_id", null);
+  }
+
+  const { data: row, error: rowError } = await rowQuery.maybeSingle();
+  if (rowError) {
+    throw new Error(`Failed exact entity id lookup: ${rowError.message}`);
+  }
+  if (!row) {
+    return { entities: [], total: 0 };
+  }
+  if (params.excludeBookkeeping && BOOKKEEPING_ENTITY_TYPES.has(row.entity_type)) {
+    return { entities: [], total: 0 };
+  }
+
+  const entities = await queryEntities({
+    userId: params.userId,
+    entityType: params.entityType,
+    includeMerged: params.includeMerged,
+    includeSnapshots: params.includeSnapshots,
+    sortBy: params.sortBy,
+    sortOrder: params.sortOrder,
+    published: params.published,
+    publishedAfter: params.publishedAfter,
+    publishedBefore: params.publishedBefore,
+    limit,
+    offset,
+    entityIds: [entityId],
+    updatedSince: params.updatedSince,
+    createdSince: params.createdSince,
+    identityBasis: params.identityBasis,
+  });
+
+  return { entities, total: entities.length > 0 ? 1 : 0 };
+}
+
 export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promise<{
   entities: EntityWithProvenance[];
   total: number;
@@ -643,14 +718,40 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
 
   if (search && search.trim()) {
     const trimmedSearch = search.trim();
+    const excludeBookkeeping = shouldExcludeBookkeepingFromSearch(entityType);
+
+    if (isNeotomaEntityId(trimmedSearch)) {
+      const exactResult = await queryEntitiesByExactEntityId({
+        userId,
+        entityId: trimmedSearch,
+        entityType,
+        includeMerged,
+        includeSnapshots,
+        sortBy,
+        sortOrder,
+        published,
+        publishedAfter,
+        publishedBefore,
+        updatedSince,
+        createdSince,
+        identityBasis,
+        limit,
+        offset,
+        excludeBookkeeping,
+      });
+      return {
+        entities: exactResult.entities,
+        total: exactResult.total,
+        excluded_merged: !includeMerged,
+      };
+    }
+
     const searchTokens = normalizeSearchText(trimmedSearch).split(" ").filter(Boolean);
     const registryTypes = await loadKnownEntityTypes(userId, []);
     const typeFilterTokens = refineTypeFilterTokens(
       searchTokens,
       buildEntityTypeFilterTokens(searchTokens, registryTypes)
     );
-    const excludeBookkeeping = shouldExcludeBookkeepingFromSearch(entityType);
-
     const lexicalParams = {
       userId,
       entityType,
