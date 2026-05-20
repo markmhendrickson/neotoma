@@ -10,6 +10,9 @@ export default defineConfig({
   // Keep scrollback when running under concurrently (e.g. npm run dev) so
   // pick-port --print-resources and earlier terminal output are not cleared on HMR/restart.
   clearScreen: false,
+  // Allow subdirectory deploys (e.g. /pr-314/ for PR previews). Defaults to
+  // "/" so production and dev builds are unaffected.
+  base: process.env.VITE_BASE_PATH || "/",
   plugins: [
     { ...mdx({ providerImportSource: "@mdx-js/react" }), enforce: "pre" },
     react(),

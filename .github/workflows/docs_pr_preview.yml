@@ -37,6 +37,8 @@ jobs:
         run: npm run validate:routes
 
       - name: Build UI (for compiled Tailwind CSS)
+        env:
+          VITE_BASE_PATH: /pr-${{ github.event.pull_request.number }}/
         run: npm run build:ui
 
       - name: Install Playwright browser (Chromium)
@@ -46,6 +48,7 @@ jobs:
         env:
           SITE_PREVIEW: "1"
           NEOTOMA_DOCS_SHOW_INTERNAL: "false"
+          VITE_BASE_PATH: /pr-${{ github.event.pull_request.number }}/
         run: npm run build:site:pages
 
       - name: Validate locale parity
