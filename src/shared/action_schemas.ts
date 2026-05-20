@@ -131,16 +131,30 @@ export const StoreRelationshipInputSchema = z
     }
   });
 
-export const ListRelationshipsRequestSchema = z.object({
-  entity_id: z.string(),
-  direction: z
-    .enum(["inbound", "outbound", "incoming", "outgoing", "both"])
-    .optional()
-    .default("both"),
-  relationship_type: RelationshipTypeSchema.optional(),
-  limit: z.number().int().positive().optional().default(100),
-  offset: z.number().int().nonnegative().optional().default(0),
-});
+export const ListRelationshipsRequestSchema = z
+  .object({
+    entity_id: z.string().optional(),
+    source_entity_id: z.string().optional(),
+    target_entity_id: z.string().optional(),
+    direction: z
+      .enum(["inbound", "outbound", "incoming", "outgoing", "both"])
+      .optional()
+      .default("both"),
+    relationship_type: RelationshipTypeSchema.optional(),
+    limit: z.number().int().positive().optional().default(100),
+    offset: z.number().int().nonnegative().optional().default(0),
+    user_id: z.string().optional(),
+  })
+  .refine(
+    (data) =>
+      Boolean(
+        data.entity_id || data.source_entity_id || data.target_entity_id || data.relationship_type
+      ),
+    {
+      message:
+        "At least one of entity_id, source_entity_id, target_entity_id, or relationship_type must be provided.",
+    }
+  );
 
 export const TimelineEventsRequestSchema = z.object({
   event_type: z.string().optional(),
@@ -550,6 +564,9 @@ export const RetrieveGraphNeighborhoodSchema = z.object({
   include_sources: z.boolean().optional().default(true),
   include_events: z.boolean().optional().default(true),
   include_observations: z.boolean().optional().default(false),
+  limit: z.number().int().min(1).max(500).optional().default(100),
+  offset: z.number().int().min(0).optional().default(0),
+  user_id: z.string().optional(),
 });
 
 export const RelationshipSnapshotRequestSchema = z.object({

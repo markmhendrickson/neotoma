@@ -324,7 +324,7 @@ const CONTACT_PATTERNS = {
 #### Dataset
 **Required Fields:**
 - `title`: string
-- `source`: string (triggers entity extraction → company)
+- `source`: string — originating system slug (e.g. `"csv_import"`, `"airtable"`, `"manual"`); see `docs/subsystems/entity_field_semantics.md`. Also triggers entity extraction → company when the value names an organization.
 **Optional Fields:**
 - `date_collected`: ISO 8601 date
 - `row_count`: number

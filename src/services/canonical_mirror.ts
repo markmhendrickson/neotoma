@@ -634,13 +634,35 @@ export async function mirrorEntity(entity: MirrorEntityRow, cfg?: MirrorConfig):
         process.stderr.write(`[mirror profile warning] ${warn}\n`);
       }
       const filteredSnapshot = applyProfileFieldFilter(profile, entity.snapshot ?? {});
-      const profileInput: RenderEntityInput = {
-        ...input,
-        snapshot: filteredSnapshot,
-      };
-      const profileRendered = renderEntityMarkdown(profileInput, schemaFieldOrder, {
-        includeProvenance: false,
-      });
+      const renderMode = profile.render_mode ?? "entity";
+      let profileRendered: string;
+      if (renderMode === "frontmatter_content" || renderMode === "content_only") {
+        const { renderProfileEntity } = await import("./canonical_markdown.js");
+        profileRendered = renderProfileEntity(
+          filteredSnapshot,
+          {
+            entity_id: entity.entity_id,
+            entity_type: entity.entity_type,
+            schema_version: entity.schema_version,
+            computed_at: entity.computed_at ?? null,
+            last_observation_at: entity.last_observation_at ?? null,
+            observation_count: entity.observation_count ?? null,
+          },
+          {
+            render_mode: renderMode,
+            frontmatter_fields: profile.frontmatter_fields,
+            content_field: profile.content_field,
+          }
+        );
+      } else {
+        const profileInput: RenderEntityInput = {
+          ...input,
+          snapshot: filteredSnapshot,
+        };
+        profileRendered = renderEntityMarkdown(profileInput, schemaFieldOrder, {
+          includeProvenance: false,
+        });
+      }
       const profilePath = profileEntityFilePath(
         profile,
         entity.entity_id,
