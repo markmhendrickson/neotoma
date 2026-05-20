@@ -170,6 +170,8 @@ const APP_ROUTES: readonly AppRoute[] = [
   { path: "/api", element: <MdxSitePage canonicalPath="/api" /> },
   { path: "/mcp", element: <MdxSitePage canonicalPath="/mcp" /> },
   { path: "/cli", element: <MdxSitePage canonicalPath="/cli" /> },
+  { path: "/sdk/agent", element: <MdxSitePage canonicalPath="/sdk/agent" /> },
+  { path: "/sdk/python", element: <MdxSitePage canonicalPath="/sdk/python" /> },
   { path: "/aauth", element: <AauthReferencePage /> },
   { path: "/aauth/spec", element: <AauthSpecPage /> },
   { path: "/aauth/attestation", element: <AauthAttestationPage /> },

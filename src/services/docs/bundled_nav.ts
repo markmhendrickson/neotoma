@@ -39,6 +39,8 @@ export const BUNDLED_DOCS_FOOTER_COLUMNS: readonly BundledDocsFooterColumn[] = [
       { label: "API", slug: "site/pages/en/api" },
       { label: "MCP", slug: "site/pages/en/mcp" },
       { label: "CLI", slug: "site/pages/en/cli" },
+      { label: "TypeScript SDK", slug: "site/pages/en/sdk-agent" },
+      { label: "Python SDK", slug: "site/pages/en/sdk-python" },
     ],
   },
   {
