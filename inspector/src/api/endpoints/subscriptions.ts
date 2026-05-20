@@ -1,4 +1,4 @@
-import { post } from "../client";
+import { post, type FetchOptions } from "../client";
 
 export interface SubscribeRequest {
   entity_types?: string[];
@@ -17,12 +17,12 @@ export interface SubscribeResponse {
   webhook_secret?: string;
 }
 
-export function subscribe(body: SubscribeRequest) {
-  return post<SubscribeResponse>("/subscribe", body);
+export function subscribe(body: SubscribeRequest, fetch?: FetchOptions) {
+  return post<SubscribeResponse>("/subscribe", body, fetch);
 }
 
-export function unsubscribe(subscription_id: string) {
-  return post<{ success: boolean }>("/unsubscribe", { subscription_id });
+export function unsubscribe(subscription_id: string, fetch?: FetchOptions) {
+  return post<{ success: boolean }>("/unsubscribe", { subscription_id }, fetch);
 }
 
 export interface SubscriptionStatusRow {
@@ -42,13 +42,14 @@ export interface SubscriptionStatusRow {
   [key: string]: unknown;
 }
 
-export function getSubscriptionStatus(subscription_id: string) {
+export function getSubscriptionStatus(subscription_id: string, fetch?: FetchOptions) {
   return post<{ subscription?: SubscriptionStatusRow } & Record<string, unknown>>(
     "/get_subscription_status",
     { subscription_id },
+    fetch,
   );
 }
 
-export function listSubscriptions() {
-  return post<{ subscriptions: SubscriptionStatusRow[] }>("/list_subscriptions", {});
+export function listSubscriptions(fetch?: FetchOptions) {
+  return post<{ subscriptions: SubscriptionStatusRow[] }>("/list_subscriptions", {}, fetch);
 }

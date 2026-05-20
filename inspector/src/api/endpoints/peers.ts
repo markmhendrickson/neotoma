@@ -1,4 +1,4 @@
-import { del, get, post } from "../client";
+import { del, get, post, type FetchOptions } from "../client";
 
 export interface PeerConfigRow {
   entity_id: string;
@@ -16,12 +16,12 @@ export interface PeerConfigRow {
   [key: string]: unknown;
 }
 
-export function listPeers() {
-  return get<{ peers: PeerConfigRow[] }>("/peers");
+export function listPeers(fetch?: FetchOptions) {
+  return get<{ peers: PeerConfigRow[] }>("/peers", undefined, fetch);
 }
 
-export function getPeer(peerId: string) {
-  return get<{ peer: PeerConfigRow }>(`/peers/${encodeURIComponent(peerId)}`);
+export function getPeer(peerId: string, fetch?: FetchOptions) {
+  return get<{ peer: PeerConfigRow }>(`/peers/${encodeURIComponent(peerId)}`, undefined, fetch);
 }
 
 export interface AddPeerRequest {
@@ -36,14 +36,14 @@ export interface AddPeerRequest {
   shared_secret?: string;
 }
 
-export function addPeer(body: AddPeerRequest) {
-  return post<Record<string, unknown>>("/peers", body);
+export function addPeer(body: AddPeerRequest, fetch?: FetchOptions) {
+  return post<Record<string, unknown>>("/peers", body, fetch);
 }
 
-export function removePeer(peerId: string) {
-  return del<{ success: boolean }>(`/peers/${encodeURIComponent(peerId)}`);
+export function removePeer(peerId: string, fetch?: FetchOptions) {
+  return del<{ success: boolean }>(`/peers/${encodeURIComponent(peerId)}`, fetch);
 }
 
-export function syncPeer(peerId: string) {
-  return post<Record<string, unknown>>(`/peers/${encodeURIComponent(peerId)}/sync`, {});
+export function syncPeer(peerId: string, fetch?: FetchOptions) {
+  return post<Record<string, unknown>>(`/peers/${encodeURIComponent(peerId)}/sync`, {}, fetch);
 }

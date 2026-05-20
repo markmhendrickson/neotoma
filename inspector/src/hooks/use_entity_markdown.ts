@@ -19,7 +19,7 @@ import {
 export function useEntityMarkdown(entityId: string | undefined, enabled = true) {
   return useQuery({
     queryKey: ["entity-markdown", entityId],
-    queryFn: () => getEntityMarkdown(entityId!),
+    queryFn: ({ signal }) => getEntityMarkdown(entityId!, { signal }),
     enabled: isApiUrlConfigured() && !!entityId && enabled,
   });
 }

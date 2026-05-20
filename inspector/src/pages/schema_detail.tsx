@@ -5,7 +5,12 @@ import { useAgentGrants } from "@/hooks/use_agents";
 import { useUpdateSchema } from "@/hooks/use_mutations";
 import { PageShell } from "@/components/layout/page_shell";
 import { DetailPageSkeleton, InlineSkeleton, QueryErrorAlert } from "@/components/shared/query_status";
-import { showBackgroundQueryRefresh, showInitialQuerySkeleton } from "@/lib/query_loading";
+import {
+  querySettledWithoutData,
+  showBackgroundQueryRefresh,
+  showInitialQuerySkeleton,
+  showRouteDetailSkeleton,
+} from "@/lib/query_loading";
 import { QueryRefreshIndicator } from "@/components/shared/query_refresh_indicator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -62,7 +67,7 @@ export default function SchemaDetailPage() {
 
   const s = schema.data;
 
-  if (showInitialQuerySkeleton(schema))
+  if (showRouteDetailSkeleton(schema, (row) => row.entity_type === entityType))
     return (
       <PageShell title="Loading…">
         <DetailPageSkeleton />
@@ -74,7 +79,14 @@ export default function SchemaDetailPage() {
         <QueryErrorAlert title="Could not load schema">{schema.error.message}</QueryErrorAlert>
       </PageShell>
     );
-  if (!s) return <PageShell title="Not Found"><div className="text-muted-foreground">Schema not found.</div></PageShell>;
+  if (!s && querySettledWithoutData(schema))
+    return <PageShell title="Not Found"><div className="text-muted-foreground">Schema not found.</div></PageShell>;
+  if (!s)
+    return (
+      <PageShell title="Loading…">
+        <DetailPageSkeleton />
+      </PageShell>
+    );
 
   const fields = s.schema_definition?.fields ?? s.field_summary ?? {};
 

@@ -131,8 +131,9 @@ export function usePrimitiveSearch(
       usesOffsetInFetch ? offset : "scan",
     ],
     enabled,
-    queryFn: async (): Promise<PrimitiveSearchRawResult> => {
+    queryFn: async ({ signal }): Promise<PrimitiveSearchRawResult> => {
       const limit = SEARCH_RESULT_PAGE_SIZE;
+      const fetch = { signal };
 
       if (kind === "entities" || kind === "entity_snapshots") {
         const result = await queryEntities({
@@ -141,7 +142,7 @@ export function usePrimitiveSearch(
           limit,
           offset,
           include_snapshots: true,
-        });
+        }, fetch);
         return {
           kind,
           entities: result.entities,
@@ -156,7 +157,7 @@ export function usePrimitiveSearch(
           search: trimmed,
           limit,
           offset,
-        });
+        }, fetch);
         return {
           kind: "sources",
           sources: result.sources,
@@ -181,7 +182,7 @@ export function usePrimitiveSearch(
         record_types: recordType,
         limit: RECORD_ACTIVITY_SCAN_LIMIT,
         offset: 0,
-      });
+      }, fetch);
 
       const allItems = activity.items.filter((item) =>
         matchesSearchQuery(recordActivitySearchText(item), trimmed),

@@ -54,13 +54,17 @@ function parsePinnedPrimitivesState(row: EntitySnapshot): PinnedPrimitivesRemote
   }
 }
 
-export async function loadPinnedPrimitivesFromNeotoma(): Promise<PinnedPrimitivesRemoteState | null> {
+export async function loadPinnedPrimitivesFromNeotoma({
+  signal,
+}: {
+  signal?: AbortSignal;
+} = {}): Promise<PinnedPrimitivesRemoteState | null> {
   const res = await queryEntities({
     entity_type: PINNED_PRIMITIVES_STATE_ENTITY_TYPE,
     limit: 100,
     sort_by: "last_observation_at",
     sort_order: "desc",
-  });
+  }, { signal });
 
   for (const row of res.entities) {
     const parsed = parsePinnedPrimitivesState(row);

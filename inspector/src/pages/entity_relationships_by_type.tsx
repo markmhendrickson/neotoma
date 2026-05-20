@@ -25,7 +25,11 @@ import { entityRelationshipSubpageHref } from "@/lib/entity_relationship_routes"
 import { entityDisplayHeadline, humanizeEntityType, humanizeRelationshipType } from "@/lib/humanize";
 import { pluralizeEntityTypeLabel } from "@/lib/entity_type_labels";
 import { useSchemaByType } from "@/hooks/use_schemas";
-import { showInitialQuerySkeleton } from "@/lib/query_loading";
+import {
+  querySettledWithoutData,
+  showInitialQuerySkeleton,
+  showRouteDetailSkeleton,
+} from "@/lib/query_loading";
 
 export default function EntityRelationshipsByTypePage() {
   const [listFilterQuery, setListFilterQuery] = useState("");
@@ -55,7 +59,7 @@ export default function EntityRelationshipsByTypePage() {
 
   const listFilterActive = listFilterQuery.trim().length > 0;
 
-  if (showInitialQuerySkeleton(entity)) {
+  if (showRouteDetailSkeleton(entity, (row) => (row?.entity_id ?? row?.id) === id)) {
     return (
       <PageShell title="Related entities">
         <DetailPageSkeleton />
@@ -71,10 +75,17 @@ export default function EntityRelationshipsByTypePage() {
     );
   }
 
-  if (!e || !id || !relationshipType || !relatedEntityType) {
+  if ((!e && querySettledWithoutData(entity)) || !id || !relationshipType || !relatedEntityType) {
     return (
       <PageShell title="Related entities">
         <p className="text-sm text-muted-foreground">Entity or relationship group not found.</p>
+      </PageShell>
+    );
+  }
+  if (!e) {
+    return (
+      <PageShell title="Related entities">
+        <DetailPageSkeleton />
       </PageShell>
     );
   }

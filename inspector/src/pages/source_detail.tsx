@@ -23,7 +23,12 @@ import {
 } from "@/lib/relationship_panel_groups";
 import { entityRelationshipSubpageHref } from "@/lib/entity_relationship_routes";
 import { formatDate } from "@/lib/utils";
-import { showBackgroundQueryRefresh, showInitialQuerySkeleton } from "@/lib/query_loading";
+import {
+  querySettledWithoutData,
+  showBackgroundQueryRefresh,
+  showInitialQuerySkeleton,
+  showRouteDetailSkeleton,
+} from "@/lib/query_loading";
 import { SourceDetailActionsMenu } from "@/components/shared/source_detail_actions_menu";
 import { getFileUrl, getSourceContentBlob, getSourceContentText, getSourceContentUrl } from "@/api/endpoints/sources";
 import { PdfJsInlinePreview } from "@/components/shared/pdf_js_inline_preview";
@@ -371,7 +376,7 @@ export default function SourceDetailPage() {
 
   const rawText = useQuery({
     queryKey: ["source-content-text", id],
-    queryFn: () => getSourceContentText(id!),
+    queryFn: ({ signal }) => getSourceContentText(id!, { signal }),
     enabled: isApiUrlConfigured() && !!id && isTextPreview && !isLargeFile,
   });
 
@@ -383,13 +388,13 @@ export default function SourceDetailPage() {
 
   const signedFileUrl = useQuery({
     queryKey: ["source-signed-file-url", s?.storage_url, previewKind],
-    queryFn: () => getFileUrl(s!.storage_url!),
+    queryFn: ({ signal }) => getFileUrl(s!.storage_url!, undefined, { signal }),
     enabled: isApiUrlConfigured() && !!id && useSignedStorageUrl,
   });
 
   const rawBlob = useQuery({
     queryKey: ["source-content-blob", id, previewKind],
-    queryFn: () => getSourceContentBlob(id!),
+    queryFn: ({ signal }) => getSourceContentBlob(id!, { signal }),
     enabled:
       isApiUrlConfigured() &&
       !!id &&
@@ -446,7 +451,7 @@ export default function SourceDetailPage() {
     }
   }
 
-  if (showInitialQuerySkeleton(source))
+  if (showRouteDetailSkeleton(source, (row) => row.id === id))
     return (
       <PageShell title="Loading…">
         <DetailPageSkeleton />
@@ -458,7 +463,14 @@ export default function SourceDetailPage() {
         <QueryErrorAlert title="Could not load source">{source.error.message}</QueryErrorAlert>
       </PageShell>
     );
-  if (!s) return <PageShell title="Not Found"><div className="text-muted-foreground">Source not found.</div></PageShell>;
+  if (!s && querySettledWithoutData(source))
+    return <PageShell title="Not Found"><div className="text-muted-foreground">Source not found.</div></PageShell>;
+  if (!s)
+    return (
+      <PageShell title="Loading…">
+        <DetailPageSkeleton />
+      </PageShell>
+    );
 
   const sourceDetailRefreshing =
     showBackgroundQueryRefresh(source) ||

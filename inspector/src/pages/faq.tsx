@@ -7,11 +7,12 @@ import { PageShell } from "@/components/layout/page_shell";
 import { Button } from "@/components/ui/button";
 import { ListSkeleton, QueryErrorAlert } from "@/components/shared/query_status";
 import { fetchSitePage } from "@/lib/site_page";
+import { showInitialQuerySkeleton } from "@/lib/query_loading";
 
 export default function FaqPage() {
   const page = useQuery({
     queryKey: ["site-page", "faq", "en"],
-    queryFn: () => fetchSitePage("faq"),
+    queryFn: ({ signal }) => fetchSitePage("faq", { signal }),
     staleTime: 60_000,
   });
 
@@ -24,7 +25,7 @@ export default function FaqPage() {
     </Link>
   );
 
-  if (page.isLoading) {
+  if (showInitialQuerySkeleton(page)) {
     return (
       <PageShell title="FAQ" actions={backAction}>
         <DocsPageContentPanel>

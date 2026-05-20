@@ -3,6 +3,7 @@ import { Filter, ListFilter, MoreHorizontal } from "lucide-react";
 import { PageShell } from "@/components/layout/page_shell";
 import { ListSkeleton, QueryErrorAlert } from "@/components/shared/query_status";
 import { RecentRecordsFeed } from "@/components/shared/recent_records_feed";
+import { showInitialQuerySkeleton } from "@/lib/query_loading";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -93,7 +94,7 @@ export default function RecentActivityPage() {
 
   const items = activity.data?.items ?? [];
   const hasMore = activity.data?.has_more ?? false;
-  const showSkeleton = activity.isPending && activity.data === undefined;
+  const showSkeleton = showInitialQuerySkeleton(activity);
 
   function setTypesFromToggleValues(vals: string[]) {
     const next = vals as RecordActivityType[];

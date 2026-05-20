@@ -6,7 +6,7 @@ import type { ObservationsQueryParams } from "@/types/api";
 export function useObservationsQuery(params: ObservationsQueryParams) {
   return useQuery({
     queryKey: ["observations", params],
-    queryFn: () => queryObservations(params),
+    queryFn: ({ signal }) => queryObservations(params, { signal }),
     placeholderData: keepPreviousData,
     enabled: isApiUrlConfigured(),
   });

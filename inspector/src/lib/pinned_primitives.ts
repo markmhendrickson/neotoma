@@ -207,6 +207,42 @@ export function parseEntityIdFromPinHref(href: string): string | null {
 }
 
 /** Fill missing `entity_type` on entity pins when hydration map has a value. */
+/**
+ * When Neotoma ui_state pins load after localStorage, preserve icon/label fields that
+ * remote rows may omit (older saves) so sidebar icons do not flash then revert to Box.
+ */
+export function mergePinnedPrimitivesOnRemoteHydration(
+  local: PinnedPrimitive[],
+  remote: PinnedPrimitive[],
+): PinnedPrimitive[] {
+  if (local.length === 0) return remote;
+  const localByHref = new Map(local.map((pin) => [pin.href, pin]));
+  return remote.map((remotePin) => {
+    const localPin = localByHref.get(remotePin.href);
+    if (!localPin) return remotePin;
+    const entityType = remotePin.entity_type?.trim() || localPin.entity_type?.trim();
+    const relatedEntityType =
+      remotePin.related_entity_type?.trim() || localPin.related_entity_type?.trim();
+    const subtitle = remotePin.subtitle?.trim() || localPin.subtitle?.trim();
+    const label = remotePin.label.trim() || localPin.label.trim();
+    if (
+      entityType === remotePin.entity_type &&
+      relatedEntityType === remotePin.related_entity_type &&
+      subtitle === remotePin.subtitle &&
+      label === remotePin.label
+    ) {
+      return remotePin;
+    }
+    return {
+      ...remotePin,
+      label: label || remotePin.href,
+      entity_type: entityType || undefined,
+      related_entity_type: relatedEntityType || undefined,
+      subtitle: subtitle || undefined,
+    };
+  });
+}
+
 export function enrichPinnedPrimitivesWithEntityTypes(
   pins: PinnedPrimitive[],
   entityTypeByHref: ReadonlyMap<string, string>,

@@ -11,7 +11,7 @@ export function useRecentConversations(params?: {
 }) {
   return useQuery({
     queryKey: ["recent_conversations", params],
-    queryFn: () => listRecentConversations(params),
+    queryFn: ({ signal }) => listRecentConversations(params, { signal }),
     placeholderData: keepPreviousData,
     enabled: isApiUrlConfigured(),
   });

@@ -43,7 +43,7 @@ export function useHydratePinnedEntityTypes(
   const queries = useQueries({
     queries: entityIdsByHref.map(({ entityId }) => ({
       queryKey: ["entity", entityId],
-      queryFn: () => getEntityById(entityId),
+      queryFn: ({ signal }: { signal: AbortSignal }) => getEntityById(entityId, { signal }),
       enabled: isApiUrlConfigured(),
       staleTime: 60_000,
     })),

@@ -27,7 +27,7 @@ export function useNeotomaFeedback(
     offset: number;
   }>({
     queryKey: ["neotoma-feedback", merged],
-    queryFn: () => queryEntities(merged),
+    queryFn: ({ signal }) => queryEntities(merged, { signal }),
     placeholderData: keepPreviousData,
     enabled: isApiUrlConfigured(),
   });

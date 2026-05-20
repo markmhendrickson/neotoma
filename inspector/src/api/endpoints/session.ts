@@ -1,4 +1,4 @@
-import { get } from "../client";
+import { get, type FetchOptions } from "../client";
 
 /**
  * Diagnostic block returned by `GET /session`. Mirrors the server-side
@@ -75,6 +75,6 @@ export interface SessionResponse {
   policy?: Record<string, unknown>;
 }
 
-export function getSession() {
-  return get<SessionResponse>("/session");
+export function getSession(fetch?: FetchOptions) {
+  return get<SessionResponse>("/session", undefined, fetch);
 }

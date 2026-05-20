@@ -5,7 +5,7 @@ import { listRelationships, getRelationshipSnapshot } from "@/api/endpoints/rela
 export function useRelationships() {
   return useQuery({
     queryKey: ["relationships"],
-    queryFn: listRelationships,
+    queryFn: ({ signal }) => listRelationships({ signal }),
     placeholderData: keepPreviousData,
     enabled: isApiUrlConfigured(),
   });
@@ -14,7 +14,7 @@ export function useRelationships() {
 export function useRelationshipSnapshot(type: string | undefined, sourceId: string | undefined, targetId: string | undefined) {
   return useQuery({
     queryKey: ["relationship-snapshot", type, sourceId, targetId],
-    queryFn: () => getRelationshipSnapshot(type!, sourceId!, targetId!),
+    queryFn: ({ signal }) => getRelationshipSnapshot(type!, sourceId!, targetId!, { signal }),
     enabled: isApiUrlConfigured() && !!type && !!sourceId && !!targetId,
   });
 }

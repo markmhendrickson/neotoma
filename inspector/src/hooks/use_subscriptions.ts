@@ -11,7 +11,7 @@ import {
 export function useSubscriptionsList() {
   return useQuery({
     queryKey: ["subscriptions", "list"],
-    queryFn: listSubscriptions,
+    queryFn: ({ signal }) => listSubscriptions({ signal }),
     enabled: isApiUrlConfigured(),
   });
 }
@@ -19,7 +19,7 @@ export function useSubscriptionsList() {
 export function useSubscriptionStatus(subscriptionId: string | undefined) {
   return useQuery({
     queryKey: ["subscriptions", "status", subscriptionId],
-    queryFn: () => getSubscriptionStatus(subscriptionId!),
+    queryFn: ({ signal }) => getSubscriptionStatus(subscriptionId!, { signal }),
     enabled: isApiUrlConfigured() && Boolean(subscriptionId?.trim()),
   });
 }

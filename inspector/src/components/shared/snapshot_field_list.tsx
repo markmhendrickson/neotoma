@@ -8,6 +8,10 @@ import { MarkdownBodySheet } from "@/components/shared/markdown_body_sheet";
 import { Button } from "@/components/ui/button";
 import { useFieldProvenance } from "@/hooks/use_entities";
 import { humanizeKey, shortId } from "@/lib/humanize";
+import {
+  filterSnapshotKeysForDisplay,
+  snapshotFieldDisplayLabel,
+} from "@/lib/snapshot_display";
 import { isLikelyMarkdownFieldValue } from "@/lib/markdown_body";
 import { orderedSnapshotKeys } from "@/lib/snapshot_ordering";
 import type { EntitySchema, Observation, Source } from "@/types/api";
@@ -20,6 +24,8 @@ interface SnapshotFieldListProps {
   entityId: string;
   snapshot: Record<string, unknown>;
   schema?: EntitySchema | null;
+  /** Entity type for friendly labels and field filtering (e.g. hide redundant canonical_name on conversations). */
+  entityType?: string | null;
   /**
    * When true, show developer details (raw keys, provenance panel by default,
    * schema/content hashes). In friendly mode a provenance icon reveals sources inline.
@@ -29,6 +35,7 @@ interface SnapshotFieldListProps {
 
 interface RawFragmentsFieldListProps {
   rawFragments: Record<string, unknown>;
+  entityType?: string | null;
   developerView?: boolean;
 }
 
@@ -42,6 +49,7 @@ const FIELD_ROW_VALUE_CLASS = "leading-7";
 /** Declared-schema overflow fields; rendered below the snapshot field list. */
 export function RawFragmentsFieldList({
   rawFragments,
+  entityType,
   developerView,
 }: RawFragmentsFieldListProps) {
   const keys = Object.keys(rawFragments).sort();
@@ -60,7 +68,9 @@ export function RawFragmentsFieldList({
         >
           <dt className={cn("min-w-0", FIELD_ROW_BAND, "flex items-center")}>
             <div className={cn("break-words", FIELD_ROW_VALUE_CLASS, labelClassName)}>
-              {developerView ? key : humanizeKey(key)}
+              {developerView
+                ? key
+                : snapshotFieldDisplayLabel(key, entityType, developerView)}
             </div>
           </dt>
           <dd className="min-w-0">
@@ -99,12 +109,18 @@ export function SnapshotFieldList({
   entityId,
   snapshot,
   schema,
+  entityType,
   developerView,
 }: SnapshotFieldListProps) {
   const schemaFieldOrder: string[] = schema?.schema_definition?.fields
     ? Object.keys(schema.schema_definition.fields)
     : schema?.field_names ?? [];
-  const keys = orderedSnapshotKeys(snapshot, schemaFieldOrder);
+  const keys = filterSnapshotKeysForDisplay(
+    orderedSnapshotKeys(snapshot, schemaFieldOrder),
+    snapshot,
+    entityType,
+    developerView,
+  );
 
   if (keys.length === 0) {
     return (
@@ -124,6 +140,7 @@ export function SnapshotFieldList({
           fieldKey={key}
           value={snapshot[key]}
           schema={schema}
+          entityType={entityType}
           developerView={developerView}
         />
       ))}
@@ -136,12 +153,14 @@ function FieldRow({
   fieldKey,
   value,
   schema,
+  entityType,
   developerView,
 }: {
   entityId: string;
   fieldKey: string;
   value: unknown;
   schema?: EntitySchema | null;
+  entityType?: string | null;
   developerView?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -154,7 +173,7 @@ function FieldRow({
   const fieldSummary = schema?.field_summary?.[fieldKey] as { type?: string } | undefined;
   const typeHint = fieldDef?.type ?? fieldSummary?.type;
 
-  const label = developerView ? fieldKey : humanizeKey(fieldKey);
+  const label = snapshotFieldDisplayLabel(fieldKey, entityType, developerView);
   const labelClassName = developerView
     ? "font-mono text-xs text-purple-700"
     : "text-xs uppercase tracking-wide text-muted-foreground";

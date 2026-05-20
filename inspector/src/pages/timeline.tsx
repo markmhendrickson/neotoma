@@ -85,7 +85,7 @@ export default function TimelinePage() {
 
   return (
     <PageShell
-      title="World-time events"
+      title="Timeline"
       description="Dates from source documents and temporal fields (event_timestamp), not when data was recorded in Neotoma"
       actions={showBackgroundQueryRefresh(timeline) ? <QueryRefreshIndicator /> : undefined}
     >

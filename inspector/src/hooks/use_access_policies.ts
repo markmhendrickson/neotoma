@@ -5,7 +5,7 @@ import { getAccessPolicies } from "@/api/endpoints/access_policies";
 export function useAccessPolicies() {
   return useQuery({
     queryKey: ["access_policies"],
-    queryFn: getAccessPolicies,
+    queryFn: ({ signal }) => getAccessPolicies({ signal }),
     placeholderData: keepPreviousData,
     enabled: isApiUrlConfigured(),
   });

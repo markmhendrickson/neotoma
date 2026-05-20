@@ -19,7 +19,7 @@ import type {
 export function useAgents() {
   return useQuery({
     queryKey: ["agents"],
-    queryFn: () => listAgents(),
+    queryFn: ({ signal }) => listAgents({ signal }),
     placeholderData: keepPreviousData,
     enabled: isApiUrlConfigured(),
   });
@@ -28,7 +28,7 @@ export function useAgents() {
 export function useAgent(agentKey: string | undefined) {
   return useQuery({
     queryKey: ["agents", agentKey],
-    queryFn: () => getAgent(agentKey as string),
+    queryFn: ({ signal }) => getAgent(agentKey as string, { signal }),
     enabled: isApiUrlConfigured() && Boolean(agentKey),
   });
 }
@@ -39,7 +39,7 @@ export function useAgentRecords(
 ) {
   return useQuery({
     queryKey: ["agents", agentKey, "records", params],
-    queryFn: () => listAgentRecords(agentKey as string, params),
+    queryFn: ({ signal }) => listAgentRecords(agentKey as string, params, { signal }),
     enabled: isApiUrlConfigured() && Boolean(agentKey),
   });
 }
@@ -54,7 +54,7 @@ export function useAgentGrants(params?: {
 }) {
   return useQuery({
     queryKey: ["agents", "grants", params ?? null],
-    queryFn: () => listAgentGrants(params),
+    queryFn: ({ signal }) => listAgentGrants(params, { signal }),
     enabled: isApiUrlConfigured(),
     placeholderData: keepPreviousData,
   });
@@ -63,7 +63,7 @@ export function useAgentGrants(params?: {
 export function useAgentGrant(grantId: string | undefined) {
   return useQuery({
     queryKey: ["agents", "grants", "detail", grantId],
-    queryFn: () => getAgentGrant(grantId as string),
+    queryFn: ({ signal }) => getAgentGrant(grantId as string, { signal }),
     enabled: isApiUrlConfigured() && Boolean(grantId),
   });
 }

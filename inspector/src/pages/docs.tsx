@@ -62,8 +62,8 @@ interface ResolvedDoc extends DocEntry {
   body: string;
 }
 
-async function fetchJson<T>(path: string): Promise<T> {
-  const res = await fetch(path, { headers: { Accept: "application/json" } });
+async function fetchJson<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const res = await fetch(path, { headers: { Accept: "application/json" }, signal });
   if (!res.ok) {
     throw new Error(`Request failed with ${res.status}`);
   }
@@ -73,7 +73,7 @@ async function fetchJson<T>(path: string): Promise<T> {
 function useDocsIndex() {
   return useQuery({
     queryKey: ["docs-index"],
-    queryFn: () => fetchJson<DocsIndex>("/docs?format=json"),
+    queryFn: ({ signal }) => fetchJson<DocsIndex>("/docs?format=json", signal),
     staleTime: 60_000,
   });
 }
@@ -317,8 +317,8 @@ function DeprecatedBanner({ frontmatter }: { frontmatter: DocFrontmatter }) {
 function DetailPage({ slug }: { slug: string }) {
   const doc = useQuery({
     queryKey: ["docs-detail", slug],
-    queryFn: () =>
-      fetchJson<ResolvedDoc>(`/docs/${slug}?format=json&include_deprecated=true`),
+    queryFn: ({ signal }) =>
+      fetchJson<ResolvedDoc>(`/docs/${slug}?format=json&include_deprecated=true`, signal),
     staleTime: 60_000,
   });
 

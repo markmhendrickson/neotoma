@@ -5,7 +5,7 @@ import { listSchemas, getSchemaByEntityType, analyzeSchemaCandidates, getSchemaR
 export function useSchemas() {
   return useQuery({
     queryKey: ["schemas"],
-    queryFn: () => listSchemas(),
+    queryFn: ({ signal }) => listSchemas(undefined, { signal }),
     placeholderData: keepPreviousData,
     enabled: isApiUrlConfigured(),
   });
@@ -14,7 +14,7 @@ export function useSchemas() {
 export function useSchemaByType(entityType: string | undefined) {
   return useQuery({
     queryKey: ["schema", entityType],
-    queryFn: () => getSchemaByEntityType(entityType!),
+    queryFn: ({ signal }) => getSchemaByEntityType(entityType!, { signal }),
     enabled: isApiUrlConfigured() && !!entityType,
   });
 }
@@ -22,7 +22,7 @@ export function useSchemaByType(entityType: string | undefined) {
 export function useSchemaCandidates(entityType?: string) {
   return useQuery({
     queryKey: ["schema-candidates", entityType],
-    queryFn: () => analyzeSchemaCandidates(entityType ? { entity_type: entityType } : undefined),
+    queryFn: ({ signal }) => analyzeSchemaCandidates(entityType ? { entity_type: entityType } : undefined, { signal }),
     placeholderData: keepPreviousData,
     enabled: false,
   });
@@ -31,7 +31,7 @@ export function useSchemaCandidates(entityType?: string) {
 export function useSchemaRecommendations(entityType: string | undefined) {
   return useQuery({
     queryKey: ["schema-recommendations", entityType],
-    queryFn: () => getSchemaRecommendations(entityType!),
+    queryFn: ({ signal }) => getSchemaRecommendations(entityType!, undefined, undefined, { signal }),
     placeholderData: keepPreviousData,
     enabled: isApiUrlConfigured() && !!entityType,
   });

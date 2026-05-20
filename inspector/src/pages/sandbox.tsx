@@ -21,6 +21,7 @@ import {
   submitSandboxReport,
   getSandboxReportStatus,
   type SandboxReportInput,
+  type SandboxReportResponse,
 } from "@/api/endpoints/sandbox";
 import { isSandboxUiEnabled } from "@/lib/sandbox";
 import { toast } from "sonner";
@@ -48,8 +49,8 @@ function ReportForm() {
     access_token: string;
   } | null>(null);
 
-  const mutation = useMutation({
-    mutationFn: submitSandboxReport,
+  const mutation = useMutation<SandboxReportResponse, Error, SandboxReportInput>({
+    mutationFn: (input) => submitSandboxReport(input),
     onSuccess: (res) => {
       setSubmission({ report_id: res.report_id, access_token: res.access_token });
       toast.success("Report submitted. Save your access token below to check status.");
@@ -190,7 +191,7 @@ function ReportStatusLookup() {
 
   const statusQuery = useQuery({
     queryKey: ["sandbox-report-status", submittedToken],
-    queryFn: () => getSandboxReportStatus(submittedToken!),
+    queryFn: ({ signal }) => getSandboxReportStatus(submittedToken!, { signal }),
     enabled: isApiUrlConfigured() && !!submittedToken,
     retry: false,
   });
@@ -250,7 +251,7 @@ function ReportStatusLookup() {
 function TermsCard() {
   const termsQuery = useQuery({
     queryKey: ["sandbox-terms"],
-    queryFn: getSandboxTerms,
+    queryFn: ({ signal }) => getSandboxTerms({ signal }),
     retry: false,
     enabled: isApiUrlConfigured(),
   });

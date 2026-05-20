@@ -6,7 +6,7 @@ export function useRecentConversation(conversationId: string | undefined) {
   const id = conversationId?.trim();
   return useQuery({
     queryKey: ["recent_conversation", id],
-    queryFn: () => getRecentConversation(id!),
+    queryFn: ({ signal }) => getRecentConversation(id!, { signal }),
     enabled: Boolean(id) && isApiUrlConfigured(),
   });
 }

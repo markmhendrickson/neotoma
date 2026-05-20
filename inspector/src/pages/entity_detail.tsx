@@ -50,7 +50,12 @@ import { useEntityWorldTimeEvents } from "@/hooks/use_timeline";
 import { RelationshipPanel } from "@/components/shared/relationship_panel";
 import { CopyIdButton } from "@/components/shared/copy_id_button";
 import { entityDisplayHeadline, humanizeEntityType } from "@/lib/humanize";
-import { showBackgroundQueryRefresh, showInitialQuerySkeleton } from "@/lib/query_loading";
+import {
+  querySettledWithoutData,
+  showBackgroundQueryRefresh,
+  showInitialQuerySkeleton,
+  showRouteDetailSkeleton,
+} from "@/lib/query_loading";
 import { EntityDetailActionsMenu } from "@/components/shared/entity_detail_actions_menu";
 import { ChevronDown, FileText, Network } from "lucide-react";
 import { SourceInlinePreview } from "@/components/shared/source_inline_preview";
@@ -108,7 +113,7 @@ export default function EntityDetailPage() {
   const relatedSourceQueries = useQueries({
     queries: relatedSourceIds.map((sourceId) => ({
       queryKey: ["source", sourceId],
-      queryFn: () => getSourceById(sourceId),
+      queryFn: ({ signal }: { signal: AbortSignal }) => getSourceById(sourceId, { signal }),
       enabled: isApiUrlConfigured(),
     })),
   });
@@ -121,7 +126,9 @@ export default function EntityDetailPage() {
     relatedSources.length === 0 &&
     relatedSourceQueries.some((query) => showInitialQuerySkeleton(query));
 
-  if (showInitialQuerySkeleton(entity)) {
+  if (
+    showRouteDetailSkeleton(entity, (row) => (row?.entity_id ?? row?.id) === id)
+  ) {
     return (
       <PageShell title="Loading…">
         <DetailPageSkeleton />
@@ -137,10 +144,17 @@ export default function EntityDetailPage() {
       </PageShell>
     );
   }
-  if (!e) {
+  if (!e && querySettledWithoutData(entity)) {
     return (
       <PageShell title="Not Found">
         <div className="text-muted-foreground p-6">Entity not found.</div>
+      </PageShell>
+    );
+  }
+  if (!e) {
+    return (
+      <PageShell title="Loading…">
+        <DetailPageSkeleton />
       </PageShell>
     );
   }
@@ -258,10 +272,14 @@ export default function EntityDetailPage() {
             entityId={entityId}
             snapshot={snapshot}
             schema={schema}
+            entityType={e.entity_type}
             developerView={false}
           />
           {e.raw_fragments && Object.keys(e.raw_fragments).length > 0 ? (
-            <RawFragmentsFieldList rawFragments={e.raw_fragments} />
+            <RawFragmentsFieldList
+              rawFragments={e.raw_fragments}
+              entityType={e.entity_type}
+            />
           ) : null}
         </div>
       </EntityOverviewCard>

@@ -8,7 +8,7 @@ export function useRecordActivity(
 ) {
   return useQuery({
     queryKey: ["record_activity", params],
-    queryFn: () => listRecordActivity(params),
+    queryFn: ({ signal }) => listRecordActivity(params, { signal }),
     enabled: isApiUrlConfigured() && (options?.enabled ?? true),
     placeholderData: (prev) => prev,
   });

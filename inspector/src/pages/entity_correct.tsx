@@ -10,7 +10,7 @@ import { EntityLink } from "@/components/shared/entity_link";
 import { CopyIdButton } from "@/components/shared/copy_id_button";
 import { entityDisplayHeadline, humanizeEntityType } from "@/lib/humanize";
 import { useSchemaByType } from "@/hooks/use_schemas";
-import { showInitialQuerySkeleton } from "@/lib/query_loading";
+import { querySettledWithoutData, showRouteDetailSkeleton } from "@/lib/query_loading";
 import { Button } from "@/components/ui/button";
 
 export default function EntityCorrectPage() {
@@ -20,7 +20,7 @@ export default function EntityCorrectPage() {
   const schemaQuery = useSchemaByType(e?.entity_type);
   const schema = schemaQuery.data ?? null;
 
-  if (showInitialQuerySkeleton(entity)) {
+  if (showRouteDetailSkeleton(entity, (row) => (row?.entity_id ?? row?.id) === id)) {
     return (
       <PageShell title="Correct">
         <DetailPageSkeleton />
@@ -36,10 +36,17 @@ export default function EntityCorrectPage() {
     );
   }
 
-  if (!e) {
+  if (!e && querySettledWithoutData(entity)) {
     return (
       <PageShell title="Correct">
         <p className="text-sm text-muted-foreground">Entity not found.</p>
+      </PageShell>
+    );
+  }
+  if (!e) {
+    return (
+      <PageShell title="Correct">
+        <DetailPageSkeleton />
       </PageShell>
     );
   }

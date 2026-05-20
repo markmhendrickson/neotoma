@@ -34,7 +34,7 @@ export default function TimelineEventDetailPage() {
   return (
     <PageShell
       title={ev.event_type || "Event"}
-      description={`World-time event · ${formatDate(ev.event_timestamp)}`}
+      description={`Timeline event · ${formatDate(ev.event_timestamp)}`}
       actions={
         <div className="flex flex-wrap items-center gap-2">
           {showBackgroundQueryRefresh(event) ? <QueryRefreshIndicator /> : null}

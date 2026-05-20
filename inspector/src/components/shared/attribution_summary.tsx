@@ -92,31 +92,31 @@ function accumulate(stats: TierStats, rows: RowWithProvenance[]): TierStats {
 export function AttributionSummary() {
   const obs = useQuery({
     queryKey: ["attribution-summary", "observations"],
-    queryFn: () => queryObservations({ limit: SAMPLE_LIMIT }),
+    queryFn: ({ signal }) => queryObservations({ limit: SAMPLE_LIMIT }, { signal }),
     staleTime: 60_000,
     enabled: isApiUrlConfigured(),
   });
   const rels = useQuery({
     queryKey: ["attribution-summary", "relationships"],
-    queryFn: () => listRelationships(),
+    queryFn: ({ signal }) => listRelationships({ signal }),
     staleTime: 60_000,
     enabled: isApiUrlConfigured(),
   });
   const srcs = useQuery({
     queryKey: ["attribution-summary", "sources"],
-    queryFn: () => listSources({ limit: SAMPLE_LIMIT }),
+    queryFn: ({ signal }) => listSources({ limit: SAMPLE_LIMIT }, { signal }),
     staleTime: 60_000,
     enabled: isApiUrlConfigured(),
   });
   const tl = useQuery({
     queryKey: ["attribution-summary", "timeline"],
-    queryFn: () => listTimeline({ limit: SAMPLE_LIMIT }),
+    queryFn: ({ signal }) => listTimeline({ limit: SAMPLE_LIMIT }, { signal }),
     staleTime: 60_000,
     enabled: isApiUrlConfigured(),
   });
   const interps = useQuery({
     queryKey: ["attribution-summary", "interpretations"],
-    queryFn: () => listInterpretations({ limit: SAMPLE_LIMIT }),
+    queryFn: ({ signal }) => listInterpretations({ limit: SAMPLE_LIMIT }, { signal }),
     staleTime: 60_000,
     enabled: isApiUrlConfigured(),
   });

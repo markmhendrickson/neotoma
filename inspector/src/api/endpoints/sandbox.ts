@@ -1,4 +1,4 @@
-import { get, post } from "../client";
+import { get, post, type FetchOptions } from "../client";
 
 export interface SandboxTerms {
   version: string;
@@ -30,16 +30,18 @@ export interface SandboxReportResponse {
   next_check_suggested_at?: string;
 }
 
-export function getSandboxTerms() {
-  return get<SandboxTerms>("/sandbox/terms");
+export function getSandboxTerms(fetch?: FetchOptions) {
+  return get<SandboxTerms>("/sandbox/terms", undefined, fetch);
 }
 
-export function submitSandboxReport(input: SandboxReportInput) {
-  return post<SandboxReportResponse>("/sandbox/report", input);
+export function submitSandboxReport(input: SandboxReportInput, fetch?: FetchOptions) {
+  return post<SandboxReportResponse>("/sandbox/report", input, fetch);
 }
 
-export function getSandboxReportStatus(accessToken: string) {
+export function getSandboxReportStatus(accessToken: string, fetch?: FetchOptions) {
   return get<SandboxReportResponse>(
     `/sandbox/report/status?access_token=${encodeURIComponent(accessToken)}`,
+    undefined,
+    fetch,
   );
 }

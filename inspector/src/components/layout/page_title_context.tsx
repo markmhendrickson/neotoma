@@ -1,4 +1,5 @@
 import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 
 export type HeaderSearchSuggestion = {
   id: string;
@@ -32,10 +33,21 @@ type PageTitleContextValue = {
 const PageTitleContext = createContext<PageTitleContextValue | null>(null);
 
 export function PageTitleProvider({ children }: { children: ReactNode }) {
+  const location = useLocation();
   const [pageTitle, setPageTitle] = useState<string | null>(null);
   const [headerMeta, setHeaderMeta] = useState<ReactNode | null>(null);
   const [headerActions, setHeaderActions] = useState<ReactNode | null>(null);
   const [headerSearch, setHeaderSearch] = useState<HeaderSearchContextValue | null>(null);
+
+  // Drop the previous page's header chrome as soon as the URL changes so navigation
+  // feels immediate while the next route's queries and lazy chunk load.
+  useEffect(() => {
+    setPageTitle(null);
+    setHeaderMeta(null);
+    setHeaderActions(null);
+    setHeaderSearch(null);
+  }, [location.pathname, location.search, location.hash]);
+
   const value = useMemo(
     () => ({
       pageTitle,

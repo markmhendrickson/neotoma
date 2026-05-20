@@ -13,7 +13,7 @@ export function useComplianceScorecard(params?: {
 }) {
   return useQuery({
     queryKey: ["compliance_scorecard", params],
-    queryFn: () => getComplianceScorecard(params),
+    queryFn: ({ signal }) => getComplianceScorecard(params, { signal }),
     placeholderData: keepPreviousData,
     enabled: isApiUrlConfigured(),
   });

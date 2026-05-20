@@ -1,6 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import * as LucideIcons from "lucide-react";
-import { Box } from "lucide-react";
+import { Box, File } from "lucide-react";
 
 /** High-confidence entity_type → Lucide icon name (aligned with src/utils/lucide_icons.ts). */
 const ENTITY_TYPE_ICON_MAP: Record<string, string> = {
@@ -59,10 +59,22 @@ type SchemaIconMeta = {
   icon_name?: string;
 };
 
+/** Align with frontend/src/utils/schema_icons.ts for custom SVG schema icons. */
+const SAFE_SVG_ICON_NAME_ALLOWLIST: Record<string, LucideIcon> = {
+  custom: File,
+  file: File,
+};
+
 function iconFromSchemaMetadata(metadata?: Record<string, unknown>): LucideIcon | null {
   const icon = metadata?.icon as SchemaIconMeta | undefined;
-  if (!icon || icon.icon_type !== "lucide" || !icon.icon_name) return null;
-  return lucideIconByName(icon.icon_name);
+  if (!icon?.icon_name?.trim()) return null;
+  if (icon.icon_type === "lucide") {
+    return lucideIconByName(icon.icon_name);
+  }
+  if (icon.icon_type === "svg") {
+    return SAFE_SVG_ICON_NAME_ALLOWLIST[icon.icon_name.toLowerCase()] ?? File;
+  }
+  return null;
 }
 
 /** Resolve a Lucide icon for an entity type (schema metadata wins, then heuristics). */

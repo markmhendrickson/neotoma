@@ -6,7 +6,7 @@ import { getSession } from "@/api/endpoints/session";
 export function useHealthCheck() {
   return useQuery({
     queryKey: ["health"],
-    queryFn: healthCheck,
+    queryFn: ({ signal }) => healthCheck({ signal }),
     refetchInterval: 60_000,
     enabled: isApiUrlConfigured(),
   });
@@ -15,7 +15,7 @@ export function useHealthCheck() {
 export function useServerInfo() {
   return useQuery({
     queryKey: ["server-info"],
-    queryFn: getServerInfo,
+    queryFn: ({ signal }) => getServerInfo({ signal }),
     placeholderData: keepPreviousData,
     enabled: isApiUrlConfigured(),
   });
@@ -24,7 +24,7 @@ export function useServerInfo() {
 export function useMe() {
   return useQuery({
     queryKey: ["me"],
-    queryFn: getMe,
+    queryFn: ({ signal }) => getMe({ signal }),
     retry: false,
     placeholderData: keepPreviousData,
     enabled: isApiUrlConfigured(),
@@ -34,7 +34,7 @@ export function useMe() {
 export function useSession() {
   return useQuery({
     queryKey: ["session"],
-    queryFn: getSession,
+    queryFn: ({ signal }) => getSession({ signal }),
     retry: false,
     staleTime: 30_000,
     placeholderData: keepPreviousData,

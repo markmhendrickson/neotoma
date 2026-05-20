@@ -196,6 +196,10 @@ function formatHttpErrorMessage(status: number, body: string, requestPath?: stri
   }
 }
 
+export type FetchOptions = {
+  signal?: AbortSignal;
+};
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const base = requireApiBase();
   const url = `${base}${path}`;
@@ -215,7 +219,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers["Authorization"] = `Bearer ${token}`;
   }
 
-  const res = await fetch(url, { ...init, headers, credentials: "include" });
+  const res = await fetch(url, { ...init, headers, credentials: "include", signal: init?.signal });
   if (!res.ok) {
     const body = await res.text();
     throw new Error(formatHttpErrorMessage(res.status, body, path));
@@ -223,7 +227,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export function get<T>(path: string, params?: Record<string, string | number | boolean | undefined>): Promise<T> {
+export function get<T>(
+  path: string,
+  params?: Record<string, string | number | boolean | undefined>,
+  fetch?: FetchOptions,
+): Promise<T> {
   let queryString = "";
   if (params) {
     const entries = Object.entries(params).filter(([, v]) => v !== undefined && v !== "");
@@ -231,7 +239,7 @@ export function get<T>(path: string, params?: Record<string, string | number | b
       queryString = "?" + entries.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`).join("&");
     }
   }
-  return request<T>(path + queryString);
+  return request<T>(path + queryString, { signal: fetch?.signal });
 }
 
 function buildQueryString(params?: Record<string, string | number | boolean | undefined>): string {
@@ -252,7 +260,8 @@ export function buildApiUrl(path: string, params?: Record<string, string | numbe
  */
 export async function getText(
   path: string,
-  params?: Record<string, string | number | boolean | undefined>
+  params?: Record<string, string | number | boolean | undefined>,
+  fetchOpts?: FetchOptions,
 ): Promise<string> {
   const url = buildApiUrl(path, params);
   const token = getAuthToken();
@@ -261,7 +270,7 @@ export async function getText(
   // for these calls.
   const headers: Record<string, string> = { Accept: "text/markdown, text/plain, */*" };
   if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(url, { headers, credentials: "include" });
+  const res = await fetch(url, { headers, credentials: "include", signal: fetchOpts?.signal });
   if (!res.ok) {
     const body = await res.text();
     throw new Error(body || `HTTP ${res.status}`);
@@ -271,7 +280,8 @@ export async function getText(
 
 export async function getBlob(
   path: string,
-  params?: Record<string, string | number | boolean | undefined>
+  params?: Record<string, string | number | boolean | undefined>,
+  fetchOpts?: FetchOptions,
 ): Promise<Blob> {
   const url = buildApiUrl(path, params);
   const token = getAuthToken();
@@ -280,7 +290,7 @@ export async function getBlob(
   // is active on overlapping routes.
   const headers: Record<string, string> = { Accept: "application/octet-stream, */*" };
   if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(url, { headers, credentials: "include" });
+  const res = await fetch(url, { headers, credentials: "include", signal: fetchOpts?.signal });
   if (!res.ok) {
     const body = await res.text();
     throw new Error(body || `HTTP ${res.status}`);
@@ -288,20 +298,22 @@ export async function getBlob(
   return res.blob();
 }
 
-export function post<T>(path: string, body?: unknown): Promise<T> {
+export function post<T>(path: string, body?: unknown, fetch?: FetchOptions): Promise<T> {
   return request<T>(path, {
     method: "POST",
     body: body !== undefined ? JSON.stringify(body) : undefined,
+    signal: fetch?.signal,
   });
 }
 
-export function patch<T>(path: string, body?: unknown): Promise<T> {
+export function patch<T>(path: string, body?: unknown, fetch?: FetchOptions): Promise<T> {
   return request<T>(path, {
     method: "PATCH",
     body: body !== undefined ? JSON.stringify(body) : undefined,
+    signal: fetch?.signal,
   });
 }
 
-export function del<T>(path: string): Promise<T> {
-  return request<T>(path, { method: "DELETE" });
+export function del<T>(path: string, fetch?: FetchOptions): Promise<T> {
+  return request<T>(path, { method: "DELETE", signal: fetch?.signal });
 }

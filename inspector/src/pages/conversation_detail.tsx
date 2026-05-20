@@ -18,7 +18,11 @@ import { useConversationTurnIndex } from "@/hooks/use_conversation_turn_index";
 import { TurnAnchorSections } from "@/components/conversation/turn_anchor_sections";
 import { TurnTimelineSidebar } from "@/components/conversation/turn_timeline_sidebar";
 import { WidgetHostDiscoveryPrompt } from "@/components/conversation/widget_host_discovery_prompt";
-import { showBackgroundQueryRefresh, showInitialQuerySkeleton } from "@/lib/query_loading";
+import {
+  querySettledWithoutData,
+  showBackgroundQueryRefresh,
+  showRouteDetailSkeleton,
+} from "@/lib/query_loading";
 import { absoluteDateTime, shortId } from "@/lib/humanize";
 import { QueryRefreshIndicator } from "@/components/shared/query_refresh_indicator";
 import { Button } from "@/components/ui/button";
@@ -191,11 +195,16 @@ export default function ConversationDetailPage() {
   const turnIndexQuery = useConversationTurnIndex(conversationId);
 
   const c = q.data;
-  const showInitialSkeleton = showInitialQuerySkeleton(q);
+  const showInitialSkeleton = showRouteDetailSkeleton(
+    q,
+    (row) => row.conversation_id === conversationId,
+  );
   const title =
-    c?.title?.trim() ||
-    c?.canonical_name?.trim() ||
-    (conversationId ? `Conversation ${shortId(conversationId, 8)}` : "Conversation");
+    showInitialSkeleton
+      ? "Loading…"
+      : c?.title?.trim() ||
+        c?.canonical_name?.trim() ||
+        (conversationId ? `Conversation ${shortId(conversationId, 8)}` : "Conversation");
 
   const nestedEntityCount = c ? totalNestedRelatedEntitiesInConversation(c) : 0;
   const nestedSourceCount = c ? totalNestedSourcesInConversation(c) : 0;
@@ -203,16 +212,46 @@ export default function ConversationDetailPage() {
   const sourceLabel = nestedSourceCount === 1 ? "1 source" : `${nestedSourceCount} sources`;
   const turnGroups = c ? groupMessagesByTurn(c.messages) : [];
 
+  if (showInitialSkeleton) {
+    return (
+      <PageShell title={title} description="Loading…">
+        <ListSkeleton rows={6} />
+      </PageShell>
+    );
+  }
+
+  if (q.error) {
+    return (
+      <PageShell title={title}>
+        <QueryErrorAlert title="Could not load conversation">
+          {q.error instanceof Error ? q.error.message : String(q.error)}
+        </QueryErrorAlert>
+      </PageShell>
+    );
+  }
+
+  if (!c && querySettledWithoutData(q)) {
+    return (
+      <PageShell title={title}>
+        <QueryErrorAlert title="Conversation not found">
+          This id is not available for the current user.
+        </QueryErrorAlert>
+      </PageShell>
+    );
+  }
+
+  if (!c) {
+    return (
+      <PageShell title={title} description="Loading…">
+        <ListSkeleton rows={6} />
+      </PageShell>
+    );
+  }
+
   return (
     <PageShell
       title={title}
-      description={
-        showInitialSkeleton
-          ? "Loading…"
-          : c
-            ? `${c.message_count} messages · ${entityLabel} · ${sourceLabel} · last activity ${absoluteDateTime(c.activity_at)}`
-            : undefined
-      }
+      description={`${c.message_count} messages · ${entityLabel} · ${sourceLabel} · last activity ${absoluteDateTime(c.activity_at)}`}
       actions={
         <div className="flex flex-wrap items-center gap-3">
           {showBackgroundQueryRefresh(q) ? <QueryRefreshIndicator /> : null}
@@ -224,16 +263,7 @@ export default function ConversationDetailPage() {
         </div>
       }
     >
-      {showInitialSkeleton ? (
-        <ListSkeleton rows={6} />
-      ) : q.error ? (
-        <QueryErrorAlert title="Could not load conversation">
-          {q.error instanceof Error ? q.error.message : String(q.error)}
-        </QueryErrorAlert>
-      ) : !c ? (
-        <QueryErrorAlert title="Conversation not found">This id is not available for the current user.</QueryErrorAlert>
-      ) : (
-        <div className="space-y-6">
+      <div className="space-y-6">
           <Card>
             <CardContent className="flex flex-col gap-3 pt-6 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
               <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
@@ -319,7 +349,6 @@ export default function ConversationDetailPage() {
             </div>
           )}
         </div>
-      )}
     </PageShell>
   );
 }

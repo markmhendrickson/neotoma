@@ -5,7 +5,7 @@ import { listInterpretations } from "@/api/endpoints/interpretations";
 export function useInterpretations(params?: { source_id?: string; limit?: number; offset?: number }) {
   return useQuery({
     queryKey: ["interpretations", params],
-    queryFn: () => listInterpretations(params),
+    queryFn: ({ signal }) => listInterpretations(params, { signal }),
     placeholderData: keepPreviousData,
     enabled: isApiUrlConfigured(),
   });

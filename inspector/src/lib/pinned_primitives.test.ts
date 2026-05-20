@@ -6,6 +6,7 @@ import {
   entityRelationshipPinTypeLabel,
   entityTypeFilterPinHref,
   isPinnedLocationActive,
+  mergePinnedPrimitivesOnRemoteHydration,
   normalizePinHref,
   parseEntityIdFromPinHref,
   reorderPinnedPrimitives,
@@ -71,6 +72,31 @@ describe("pinned_primitives", () => {
     expect(parseEntityIdFromPinHref("/entities/ent_abc")).toBe("ent_abc");
     expect(parseEntityIdFromPinHref("/entities/correct")).toBeNull();
     expect(parseEntityIdFromPinHref("/entities?type=task")).toBeNull();
+  });
+
+  it("merges local icon fields into remote pins on hydration", () => {
+    const local: PinnedPrimitive[] = [
+      {
+        href: "/entities/ent_doc",
+        kind: "entity",
+        label: "Q1 report",
+        entity_type: "document",
+        pinned_at: "2026-05-18T00:00:00.000Z",
+      },
+    ];
+    const remote: PinnedPrimitive[] = [
+      {
+        href: "/entities/ent_doc",
+        kind: "entity",
+        label: "ent_doc",
+        pinned_at: "2026-05-19T00:00:00.000Z",
+      },
+    ];
+    const merged = mergePinnedPrimitivesOnRemoteHydration(local, remote);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]?.entity_type).toBe("document");
+    expect(merged[0]?.label).toBe("ent_doc");
+    expect(merged[0]?.pinned_at).toBe("2026-05-19T00:00:00.000Z");
   });
 
   it("enriches entity pins missing entity_type", () => {

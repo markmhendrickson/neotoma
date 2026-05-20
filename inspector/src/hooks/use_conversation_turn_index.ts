@@ -8,7 +8,7 @@ export function useConversationTurnIndex(conversationId: string | undefined) {
   const id = conversationId?.trim();
   return useQuery({
     queryKey: ["conversation_turn_index", id],
-    queryFn: () => getConversationTurnIndex(id!),
+    queryFn: ({ signal }) => getConversationTurnIndex(id!, { signal }),
     enabled: Boolean(id) && isApiUrlConfigured(),
   });
 }

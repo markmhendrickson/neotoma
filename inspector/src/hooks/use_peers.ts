@@ -5,7 +5,7 @@ import { getPeer, listPeers, removePeer, syncPeer, type AddPeerRequest, addPeer 
 export function usePeersList() {
   return useQuery({
     queryKey: ["peers", "list"],
-    queryFn: listPeers,
+    queryFn: ({ signal }) => listPeers({ signal }),
     enabled: isApiUrlConfigured(),
   });
 }
@@ -13,7 +13,7 @@ export function usePeersList() {
 export function usePeerDetail(peerId: string | undefined) {
   return useQuery({
     queryKey: ["peers", "detail", peerId],
-    queryFn: () => getPeer(peerId!),
+    queryFn: ({ signal }) => getPeer(peerId!, { signal }),
     enabled: isApiUrlConfigured() && Boolean(peerId?.trim()),
   });
 }

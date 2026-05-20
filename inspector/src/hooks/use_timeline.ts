@@ -16,7 +16,7 @@ export function useTimeline(
 ) {
   return useQuery({
     queryKey: ["timeline", params],
-    queryFn: () => listTimeline(params),
+    queryFn: ({ signal }) => listTimeline(params, { signal }),
     placeholderData: keepPreviousData,
     enabled: isApiUrlConfigured() && (options?.enabled ?? true),
   });
@@ -40,7 +40,7 @@ export function useEntityWorldTimeEvents(
 export function useTimelineEvent(id: string | undefined) {
   return useQuery({
     queryKey: ["timeline-event", id],
-    queryFn: () => getTimelineById(id!),
+    queryFn: ({ signal }) => getTimelineById(id!, { signal }),
     enabled: isApiUrlConfigured() && !!id,
   });
 }

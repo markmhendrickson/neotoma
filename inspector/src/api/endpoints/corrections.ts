@@ -1,13 +1,16 @@
-import { getText, post } from "../client";
+import { getText, post, type FetchOptions } from "../client";
 
-export function correct(data: {
-  entity_id: string;
-  entity_type: string;
-  field: string;
-  value: unknown;
-  idempotency_key: string;
-}) {
-  return post<Record<string, unknown>>("/correct", data);
+export function correct(
+  data: {
+    entity_id: string;
+    entity_type: string;
+    field: string;
+    value: unknown;
+    idempotency_key: string;
+  },
+  fetch?: FetchOptions,
+) {
+  return post<Record<string, unknown>>("/correct", data, fetch);
 }
 
 export interface BatchCorrectionChange {
@@ -38,11 +41,13 @@ export function batchCorrect(
     expected_last_observation_at?: string | null;
     overwrite?: boolean;
     idempotency_prefix?: string;
-  }
+  },
+  fetch?: FetchOptions,
 ): Promise<BatchCorrectionResponse> {
   return post<BatchCorrectionResponse>(
     `/entities/${encodeURIComponent(entityId)}/batch_correct`,
-    body
+    body,
+    fetch,
   );
 }
 
@@ -50,6 +55,6 @@ export function batchCorrect(
  * Canonical markdown rendering of an entity snapshot. Deterministic and
  * matches the filesystem mirror byte-for-byte.
  */
-export function getEntityMarkdown(entityId: string): Promise<string> {
-  return getText(`/entities/${encodeURIComponent(entityId)}/markdown`);
+export function getEntityMarkdown(entityId: string, fetch?: FetchOptions): Promise<string> {
+  return getText(`/entities/${encodeURIComponent(entityId)}/markdown`, undefined, fetch);
 }

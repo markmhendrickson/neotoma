@@ -152,8 +152,11 @@ export function HeaderSearch({ pageSearch }: { pageSearch: HeaderSearchContextVa
 
   const docsIndexQuery = useQuery({
     queryKey: ["docs-index"],
-    queryFn: async () => {
-      const res = await fetch("/docs?format=json", { headers: { Accept: "application/json" } });
+    queryFn: async ({ signal }) => {
+      const res = await fetch("/docs?format=json", {
+        headers: { Accept: "application/json" },
+        signal,
+      });
       if (!res.ok) return null;
       return res.json() as Promise<DocsIndex>;
     },
@@ -162,17 +165,18 @@ export function HeaderSearch({ pageSearch }: { pageSearch: HeaderSearchContextVa
 
   const suggestionsQuery = useQuery({
     queryKey: ["header-search", debouncedSearch],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
+      const fetch = { signal };
       const [entities, sources] = await Promise.all([
         queryEntities({
           search: debouncedSearch,
           limit: ENTITY_SUGGESTION_LIMIT,
           include_snapshots: true,
-        }),
+        }, fetch),
         listSources({
           search: debouncedSearch,
           limit: SOURCE_SUGGESTION_LIMIT,
-        }),
+        }, fetch),
       ]);
       return {
         entities: entities.entities,

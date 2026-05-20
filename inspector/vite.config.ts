@@ -41,7 +41,7 @@ function basePathTrailingSlashRedirectPlugin(base: string): Plugin | null {
   };
 }
 
-export default defineConfig(() => {
+export default defineConfig(({ mode }) => {
   const apiUrl = getDefaultApiUrl();
   // Default `/` serves the SPA at the server root. Override with
   // `VITE_PUBLIC_BASE_PATH=/inspector/` to restore the legacy sub-path mount.
@@ -67,6 +67,13 @@ export default defineConfig(() => {
     outDirOutsideRoot &&
     process.env.NEOTOMA_INSPECTOR_BUILD_WATCH_POLL !== "0";
 
+  const inspectorSourceBuild =
+    mode === "development" ||
+    outDirOutsideRoot ||
+    ["1", "true", "yes"].includes(
+      (process.env.VITE_INSPECTOR_SOURCE_BUILD ?? "").trim().toLowerCase(),
+    );
+
   const devPortRaw =
     process.env.VITE_INSPECTOR_DEV_PORT?.trim() ||
     process.env.INSPECTOR_DEV_PORT?.trim() ||
@@ -78,6 +85,11 @@ export default defineConfig(() => {
   return {
     base,
     clearScreen: false,
+    define: {
+      "import.meta.env.VITE_INSPECTOR_SOURCE_BUILD": JSON.stringify(
+        inspectorSourceBuild ? "1" : "",
+      ),
+    },
     plugins: [...(slashRedirect ? [slashRedirect] : []), react()],
     resolve: {
       alias: {

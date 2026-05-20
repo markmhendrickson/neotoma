@@ -52,7 +52,7 @@ export function SourceInlinePreview({ source }: SourceInlinePreviewProps) {
 
   const rawText = useQuery({
     queryKey: ["source-inline-text", source.id],
-    queryFn: () => getSourceContentText(source.id),
+    queryFn: ({ signal }) => getSourceContentText(source.id, { signal }),
     enabled: isApiUrlConfigured() && open && canInline,
   });
 

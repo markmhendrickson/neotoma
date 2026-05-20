@@ -45,6 +45,7 @@ import { SidebarUserFooter } from "@/components/layout/sidebar_user_footer";
 import { PinnedPrimitivesSidebar } from "@/components/layout/pinned_primitives_sidebar";
 import { useResizableWidth } from "@/hooks/use_resizable_width";
 import { buildSearchLocation, isSearchPath } from "@/lib/search_route";
+import { isInspectorSourceBuild } from "@/lib/inspector_source_build";
 
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "inspector_sidebar_collapsed";
 const SIDEBAR_MORE_EXPANDED_STORAGE_KEY = "inspector_sidebar_more_expanded";
@@ -73,7 +74,7 @@ const navGroups: Array<{ items: NavItem[] }> = [
       { to: "/sources", label: "Sources", icon: FileText },
       { to: "/relationships", label: "Relationships", icon: GitBranch },
       { to: "/graph", label: "Graph Explorer", icon: Network },
-      { to: "/timeline", label: "World-time events", icon: Clock },
+      { to: "/timeline", label: "Timeline", icon: Clock },
     ],
   },
 ];
@@ -97,10 +98,9 @@ const analyticsNavItems: NavItem[] = [
   { to: "/usage", label: "Usage", icon: TrendingUp },
 ];
 
-const settingsNavItems: NavItem[] = [
-  { to: "/design", label: "Design", icon: Palette },
-  { to: "/settings", label: "Settings", icon: Settings },
-];
+const settingsNavItems: NavItem[] = [{ to: "/settings", label: "Settings", icon: Settings }];
+
+const designSystemNavItem: NavItem = { to: "/design", label: "Design system", icon: Palette };
 
 function entityIdFromInspectorPath(pathname: string): string | null {
   const match = pathname.match(/^\/entities\/([^/]+)(?:\/|$)/);
@@ -136,6 +136,7 @@ export function Sidebar({ routeLoading = false }: { routeLoading?: boolean }) {
   const location = useLocation();
   const navigate = useNavigate();
   const activeFetchCount = useIsFetching();
+  const show_design_system_nav = isInspectorSourceBuild();
   const [sidebar_collapsed, set_sidebar_collapsed] = useState(() => {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === "true";
@@ -182,6 +183,7 @@ export function Sidebar({ routeLoading = false }: { routeLoading?: boolean }) {
     ...documentationNavItems.map((i) => i.to),
     ...analyticsNavItems.map((i) => i.to),
     ...settingsNavItems.map((i) => i.to),
+    ...(show_design_system_nav ? [designSystemNavItem.to] : []),
   ];
 
   const correctEntityId = entityIdFromInspectorPath(location.pathname);
@@ -372,6 +374,7 @@ export function Sidebar({ routeLoading = false }: { routeLoading?: boolean }) {
             {show_more_nav_items ? (
               <>
                 {renderNavItem(correctNavItem, correctNavActive)}
+                {show_design_system_nav ? renderNavItem(designSystemNavItem) : null}
                 {moreNavItems.map((item) => renderNavItem(item))}
               </>
             ) : null}

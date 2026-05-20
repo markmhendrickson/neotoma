@@ -1,4 +1,4 @@
-import { get } from "../client";
+import { get, type FetchOptions } from "../client";
 
 export interface ComplianceCell {
   model: string;
@@ -30,17 +30,21 @@ export interface ComplianceScorecard {
   estimated: boolean;
 }
 
-export function getComplianceScorecard(params?: {
-  since?: string;
-  until?: string;
-  group_by?: string;
-  min_turns?: number;
-  min_backfill_rate?: number;
-  top_missed_steps?: number;
-  include_synthetic?: boolean;
-}) {
+export function getComplianceScorecard(
+  params?: {
+    since?: string;
+    until?: string;
+    group_by?: string;
+    min_turns?: number;
+    min_backfill_rate?: number;
+    top_missed_steps?: number;
+    include_synthetic?: boolean;
+  },
+  fetch?: FetchOptions,
+) {
   return get<ComplianceScorecard>(
     "/admin/compliance/scorecard",
     params as Record<string, string | number | undefined>,
+    fetch,
   );
 }

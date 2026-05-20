@@ -13,7 +13,7 @@ export function useTurns(params?: {
 }) {
   return useQuery({
     queryKey: ["conversation_turns", params],
-    queryFn: () => listTurns(params),
+    queryFn: ({ signal }) => listTurns(params, { signal }),
     placeholderData: keepPreviousData,
     enabled: isApiUrlConfigured(),
   });
@@ -22,7 +22,7 @@ export function useTurns(params?: {
 export function useTurn(turnKey: string | null | undefined) {
   return useQuery({
     queryKey: ["conversation_turn", turnKey ?? null],
-    queryFn: () => getTurn(turnKey as string),
+    queryFn: ({ signal }) => getTurn(turnKey as string, { signal }),
     enabled: Boolean(turnKey) && isApiUrlConfigured(),
   });
 }

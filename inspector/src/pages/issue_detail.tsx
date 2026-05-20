@@ -11,6 +11,7 @@ import type { EntitySnapshot, RelatedEntityExpansion } from "@/types/api";
 import { bulkCloseIssues, bulkRemoveIssues, issuesAddMessage } from "@/api/endpoints/issues";
 import { IssueAuthorLine } from "@/components/shared/issue_author_attribution";
 import { formatDate } from "@/lib/utils";
+import { querySettledWithoutData, showInitialQuerySkeleton } from "@/lib/query_loading";
 
 type RelRow = {
   relationship_type: string;
@@ -427,7 +428,8 @@ export default function IssueDetailPage() {
   };
   const issueGithubUrl = githubIssueUrl(issueForUrl);
   const loading =
-    issuesQuery.isLoading || (loadByEntityId && (entityByIdQuery.isLoading || entityByIdQuery.isPending));
+    showInitialQuerySkeleton(issuesQuery) ||
+    (loadByEntityId && showInitialQuerySkeleton(entityByIdQuery));
 
   if (loading) {
     return (
@@ -440,7 +442,10 @@ export default function IssueDetailPage() {
   const notFoundAfterLoad =
     !loading &&
     !issueEntity &&
-    (!loadByEntityId || entityByIdQuery.isError || entityByIdQuery.data?.entity_type !== "issue") &&
+    (!loadByEntityId ||
+      querySettledWithoutData(entityByIdQuery) ||
+      entityByIdQuery.isError ||
+      entityByIdQuery.data?.entity_type !== "issue") &&
     !issueEntityFromList;
 
   if (notFoundAfterLoad) {

@@ -18,7 +18,11 @@ import {
 } from "@/components/shared/entity_history_sections";
 import { entityDisplayHeadline, humanizeEntityType } from "@/lib/humanize";
 import { useSchemaByType } from "@/hooks/use_schemas";
-import { showInitialQuerySkeleton } from "@/lib/query_loading";
+import {
+  querySettledWithoutData,
+  showInitialQuerySkeleton,
+  showRouteDetailSkeleton,
+} from "@/lib/query_loading";
 
 const PAGE_SIZE = 25;
 
@@ -54,7 +58,7 @@ export default function EntityHistoryPage() {
   const schemaQuery = useSchemaByType(e?.entity_type);
   const schema = schemaQuery.data ?? null;
 
-  if (showInitialQuerySkeleton(entity)) {
+  if (showRouteDetailSkeleton(entity, (row) => (row?.entity_id ?? row?.id) === id)) {
     return (
       <PageShell title="Entity history">
         <DetailPageSkeleton />
@@ -70,10 +74,17 @@ export default function EntityHistoryPage() {
     );
   }
 
-  if (!e) {
+  if (!e && querySettledWithoutData(entity)) {
     return (
       <PageShell title="Entity history">
         <p className="text-sm text-muted-foreground">Entity not found.</p>
+      </PageShell>
+    );
+  }
+  if (!e) {
+    return (
+      <PageShell title="Entity history">
+        <DetailPageSkeleton />
       </PageShell>
     );
   }

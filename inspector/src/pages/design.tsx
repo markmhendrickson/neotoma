@@ -2,12 +2,17 @@ import { useSearchParams } from "react-router-dom";
 import { PageShell } from "@/components/layout/page_shell";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  DesignChromeReferencePanel,
+  DesignCodeReferencePanel,
   DesignDataPanel,
   DesignFormsPanel,
+  DesignNoticesReferencePanel,
   DesignOverviewPanel,
   DesignOverlaysPanel,
   DesignPatternsPanel,
   DesignPrimitivesPanel,
+  DesignProseReferencePanel,
+  DesignTablesReferencePanel,
   DesignTokensPanel,
   DesignTypographyPanel,
 } from "@/components/design/design_showcase";
@@ -21,6 +26,11 @@ const DESIGN_TABS = [
   { value: "overlays", label: "Overlays" },
   { value: "data", label: "Data" },
   { value: "patterns", label: "Patterns" },
+  { value: "code", label: "Code" },
+  { value: "prose", label: "Prose" },
+  { value: "tables", label: "Tables" },
+  { value: "notices", label: "Notices" },
+  { value: "chrome", label: "Chrome" },
 ] as const;
 
 type DesignTab = (typeof DESIGN_TABS)[number]["value"];
@@ -38,8 +48,8 @@ export default function DesignPage() {
 
   return (
     <PageShell
-      title="Design"
-      description="Inspector shadcn/ui primitives, CSS tokens, and inspection patterns"
+      title="Design system"
+      description="Inspector shadcn/ui primitives, semantic tokens, and neotoma.io doc/marketing patterns (source builds)"
     >
       <Tabs
         value={tab}
@@ -77,6 +87,21 @@ export default function DesignPage() {
         </TabsContent>
         <TabsContent value="patterns" className="mt-0">
           <DesignPatternsPanel />
+        </TabsContent>
+        <TabsContent value="code" className="mt-0">
+          <DesignCodeReferencePanel />
+        </TabsContent>
+        <TabsContent value="prose" className="mt-0">
+          <DesignProseReferencePanel />
+        </TabsContent>
+        <TabsContent value="tables" className="mt-0">
+          <DesignTablesReferencePanel />
+        </TabsContent>
+        <TabsContent value="notices" className="mt-0">
+          <DesignNoticesReferencePanel />
+        </TabsContent>
+        <TabsContent value="chrome" className="mt-0">
+          <DesignChromeReferencePanel />
         </TabsContent>
       </Tabs>
     </PageShell>

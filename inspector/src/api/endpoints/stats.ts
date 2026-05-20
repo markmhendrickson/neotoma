@@ -1,6 +1,6 @@
-import { get } from "../client";
+import { get, type FetchOptions } from "../client";
 import type { DashboardStats } from "@/types/api";
 
-export function getStats() {
-  return get<DashboardStats>("/stats");
+export function getStats(fetch?: FetchOptions) {
+  return get<DashboardStats>("/stats", undefined, fetch);
 }

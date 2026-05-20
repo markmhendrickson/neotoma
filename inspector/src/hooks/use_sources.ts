@@ -5,7 +5,7 @@ import { listSources, getSourceById, getSourceRelationships } from "@/api/endpoi
 export function useSources(params?: { search?: string; mime_type?: string; source_type?: string; limit?: number; offset?: number }) {
   return useQuery({
     queryKey: ["sources", params],
-    queryFn: () => listSources(params),
+    queryFn: ({ signal }) => listSources(params, { signal }),
     placeholderData: keepPreviousData,
     enabled: isApiUrlConfigured(),
   });
@@ -14,7 +14,7 @@ export function useSources(params?: { search?: string; mime_type?: string; sourc
 export function useSourceById(id: string | undefined) {
   return useQuery({
     queryKey: ["source", id],
-    queryFn: () => getSourceById(id!),
+    queryFn: ({ signal }) => getSourceById(id!, { signal }),
     enabled: isApiUrlConfigured() && !!id,
   });
 }
@@ -22,7 +22,7 @@ export function useSourceById(id: string | undefined) {
 export function useSourceRelationships(id: string | undefined) {
   return useQuery({
     queryKey: ["source-relationships", id],
-    queryFn: () => getSourceRelationships(id!, { expand_entities: true }),
+    queryFn: ({ signal }) => getSourceRelationships(id!, { expand_entities: true, signal }),
     enabled: isApiUrlConfigured() && !!id,
   });
 }

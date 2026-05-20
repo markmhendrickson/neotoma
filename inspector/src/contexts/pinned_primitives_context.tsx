@@ -16,6 +16,7 @@ import {
 } from "@/api/endpoints/pinned_primitives";
 import {
   loadPinnedPrimitives,
+  mergePinnedPrimitivesOnRemoteHydration,
   normalizePinHref,
   PINNED_PRIMITIVES_STORAGE_KEY,
   removePinnedPrimitive,
@@ -64,8 +65,11 @@ function usePinnedPrimitivesState(): PinnedPrimitivesContextValue {
       remoteEntityIdRef.current = remoteState.entityId;
     }
     if (remoteState && !changedBeforeRemoteHydrationRef.current) {
-      setPins(remoteState.pins);
-      savePinnedPrimitives(remoteState.pins);
+      setPins((prev) => {
+        const merged = mergePinnedPrimitivesOnRemoteHydration(prev, remoteState.pins);
+        savePinnedPrimitives(merged);
+        return merged;
+      });
     }
     remoteHydrationResolvedRef.current = true;
   }, [remotePins.data, remotePins.isSuccess]);

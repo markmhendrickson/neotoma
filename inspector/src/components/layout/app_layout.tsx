@@ -1,5 +1,5 @@
 import { Suspense, useCallback, useEffect, useState } from "react";
-import { Outlet } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Sidebar } from "./sidebar";
 import { Header } from "./header";
@@ -22,10 +22,12 @@ function PageRouteFallback({
 }
 
 export function AppLayout() {
+  const location = useLocation();
   const [routeLoading, setRouteLoading] = useState(false);
   const handleRouteLoadingChange = useCallback((loading: boolean) => {
     setRouteLoading(loading);
   }, []);
+  const outletKey = `${location.pathname}${location.search}`;
 
   return (
     <PinnedPrimitivesProvider>
@@ -41,7 +43,7 @@ export function AppLayout() {
                   <Suspense
                     fallback={<PageRouteFallback onLoadingChange={handleRouteLoadingChange} />}
                   >
-                    <Outlet />
+                    <Outlet key={outletKey} />
                   </Suspense>
                 </main>
               </div>

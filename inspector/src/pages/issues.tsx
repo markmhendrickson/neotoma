@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEntitiesQuery } from "@/hooks/use_entities";
+import { showInitialQuerySkeleton } from "@/lib/query_loading";
 import { PageShell } from "@/components/layout/page_shell";
 import { ListSkeleton, QueryErrorAlert } from "@/components/shared/query_status";
 import {
@@ -232,19 +233,19 @@ export default function IssuesPage() {
         </p>
       )}
 
-      {query.isLoading && <ListSkeleton />}
+      {showInitialQuerySkeleton(query) && <ListSkeleton />}
       {query.error && (
         <QueryErrorAlert title="Failed to load issues">{query.error.message}</QueryErrorAlert>
       )}
 
-      {!query.isLoading && !query.error && issues.length === 0 && (
+      {!showInitialQuerySkeleton(query) && !query.error && issues.length === 0 && (
         <p className="text-muted-foreground">
           No {filter === "all" ? "" : filter} issues found. Use{" "}
           <code className="text-sm">neotoma issues sync</code> to pull from GitHub.
         </p>
       )}
 
-      {!query.isLoading && issues.length > 0 && (
+      {!showInitialQuerySkeleton(query) && issues.length > 0 && (
         <div className="space-y-2">
           {issues.map((issue) => {
             const id = rowEntityId(issue);

@@ -301,6 +301,8 @@ export function isLikelyMachineCanonicalName(name: string | null | undefined): b
   if (/^id:turn_key:/i.test(s)) return true;
   if (/^turn_key:/i.test(s)) return true;
   if (/^ent_[a-z0-9]{20,}$/i.test(s)) return true;
+  if (/^conversation:[0-9a-f-]{36}$/i.test(s)) return true;
+  if (/^conversation_message:/i.test(s)) return true;
   const colons = s.match(/:/g);
   if (colons && colons.length >= 5 && s.length >= 48) return true;
   return false;
@@ -350,4 +352,40 @@ export function entityDisplayHeadline(input: {
   const typeBit = humanizeEntityType(input.entity_type ?? undefined, input.entity_type_label ?? undefined);
   if (eid) return `${typeBit || "Entity"} · ${shortId(eid, 8)}`;
   return typeBit || "Entity";
+}
+
+/**
+ * Optional secondary identity line (e.g. `conversation:<uuid>`) when it adds
+ * information beyond the page headline and snapshot id fields.
+ */
+export function entityIdentityKeyForDisplay(input: {
+  canonical_name?: string | null;
+  entity_type?: string | null;
+  page_heading?: string | null;
+  snapshot?: Record<string, unknown> | null;
+}): string | null {
+  const cn = typeof input.canonical_name === "string" ? input.canonical_name.trim() : "";
+  if (!cn || !isLikelyMachineCanonicalName(cn)) return cn || null;
+
+  const snap =
+    input.snapshot && typeof input.snapshot === "object" && !Array.isArray(input.snapshot)
+      ? (input.snapshot as Record<string, unknown>)
+      : {};
+
+  if (input.entity_type === "conversation") {
+    const conversationId = snap.conversation_id;
+    if (typeof conversationId === "string" && conversationId.trim()) {
+      const id = conversationId.trim();
+      if (cn === `conversation:${id}` || cn.endsWith(id)) {
+        return null;
+      }
+    }
+  }
+
+  const heading = typeof input.page_heading === "string" ? input.page_heading.trim() : "";
+  if (heading && canonicalNameMatchesFriendlyTitle(cn, heading)) {
+    return null;
+  }
+
+  return cn;
 }

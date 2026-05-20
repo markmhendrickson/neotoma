@@ -21,12 +21,13 @@ export const FAQ_SITE_PATH = "/faq";
 
 export async function fetchSitePage(
   routeSlug: string,
-  options?: { locale?: string },
+  options?: { locale?: string; signal?: AbortSignal },
 ): Promise<SitePagePayload> {
   const slug = routeSlug.replace(/^\//, "");
   const locale = options?.locale ?? "en";
   const res = await fetch(`/site-pages/${slug}?format=json&locale=${locale}`, {
     headers: { Accept: "application/json" },
+    signal: options?.signal,
   });
   if (!res.ok) {
     throw new Error(`Request failed with ${res.status}`);

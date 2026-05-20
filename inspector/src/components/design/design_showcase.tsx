@@ -121,6 +121,14 @@ const DEMO_ROWS: DemoRow[] = [
   { id: "ent_002", name: "Design review", status: "open" },
 ];
 
+export {
+  DesignChromeReferencePanel,
+  DesignCodeReferencePanel,
+  DesignNoticesReferencePanel,
+  DesignProseReferencePanel,
+  DesignTablesReferencePanel,
+} from "@/components/design/design_site_reference";
+
 export function DesignOverviewPanel() {
   return (
     <div className="space-y-4">
@@ -143,9 +151,41 @@ export function DesignOverviewPanel() {
           </li>
           <li>
             <code className="rounded bg-muted px-1 py-0.5 text-xs">inspector/src/index.css</code> — deployed CSS
-            variables
+            variables and doc pattern utilities
           </li>
         </ul>
+      </DesignSection>
+
+      <DesignSection
+        title="Implementation stack"
+        description="Tokens → shadcn primitives → composites → route patterns. Doc/marketing specimens (Code–Chrome tabs) share the same semantic tokens as product UI — not a separate palette."
+      >
+        <div className="grid gap-3 text-sm text-muted-foreground md:grid-cols-2">
+          <div>
+            <p className="mb-1 font-medium text-foreground">Layers</p>
+            <ol className="list-decimal space-y-1 pl-5">
+              <li>CSS variables (`--primary`, `--doc-*`, surfaces)</li>
+              <li>shadcn/ui in <code className="text-xs">components/ui/</code></li>
+              <li>Composites (DataTable, ConfirmDialog, …)</li>
+              <li>Pages and marketing pattern classes</li>
+            </ol>
+          </div>
+          <div>
+            <p className="mb-1 font-medium text-foreground">Site pattern sources</p>
+            <ul className="list-disc space-y-1 pl-5">
+              <li>
+                <code className="text-xs">marketing_pattern_classes.ts</code> — snippet card shells
+              </li>
+              <li>
+                <code className="text-xs">frontend/.../code_block_copy_button_classes.ts</code> — product parity
+              </li>
+              <li>
+                Global utilities: <code className="text-xs">code-block-palette</code>,{" "}
+                <code className="text-xs">toc-panel</code>, <code className="text-xs">doc-tip-panel</code>
+              </li>
+            </ul>
+          </div>
+        </div>
       </DesignSection>
 
       <DesignSection title="Standards (summary)" description="Prefer these patterns in Inspector feature work.">

@@ -10,7 +10,11 @@ import { EntityLink } from "@/components/shared/entity_link";
 import { JsonViewer } from "@/components/shared/json_viewer";
 import { AttributionCard } from "@/components/shared/attribution_card";
 import { AgentBadge } from "@/components/shared/agent_badge";
-import { showBackgroundQueryRefresh, showInitialQuerySkeleton } from "@/lib/query_loading";
+import {
+  querySettledWithoutData,
+  showBackgroundQueryRefresh,
+  showRouteDetailSkeleton,
+} from "@/lib/query_loading";
 import { formatDate } from "@/lib/utils";
 import { QueryRefreshIndicator } from "@/components/shared/query_refresh_indicator";
 import { toast } from "sonner";
@@ -28,7 +32,19 @@ export default function RelationshipDetailPage() {
 
   const s = snapshot.data?.snapshot;
 
-  if (showInitialQuerySkeleton(snapshot))
+  if (
+    showRouteDetailSkeleton(
+      snapshot,
+      (row) => {
+        const snap = row.snapshot;
+        return (
+          snap.relationship_type === relType &&
+          snap.source_entity_id === sourceId &&
+          snap.target_entity_id === targetId
+        );
+      },
+    )
+  )
     return (
       <PageShell title="Loading…">
         <DetailPageSkeleton />
@@ -40,10 +56,16 @@ export default function RelationshipDetailPage() {
         <QueryErrorAlert title="Could not load relationship">{snapshot.error.message}</QueryErrorAlert>
       </PageShell>
     );
-  if (!s)
+  if (!s && querySettledWithoutData(snapshot))
     return (
       <PageShell title="Not Found">
         <div className="text-muted-foreground">Relationship not found.</div>
+      </PageShell>
+    );
+  if (!s)
+    return (
+      <PageShell title="Loading…">
+        <DetailPageSkeleton />
       </PageShell>
     );
 
