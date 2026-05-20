@@ -13196,7 +13196,7 @@ schemasCommand
     const outputMode = resolveOutputMode();
     const dryRun = !opts.apply;
 
-    const { repairAllPluralTypes } = await import("../../services/plural_type_repair.js" as string);
+    const { repairAllPluralTypes } = await import("../services/plural_type_repair.js" as string);
 
     if (dryRun) {
       process.stdout.write(
