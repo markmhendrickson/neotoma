@@ -70,7 +70,7 @@ jobs:
         with:
           script: |
             const pr = context.payload.pull_request.number;
-            const previewUrl = `https://markmhendrickson.github.io/neotoma-dev-site/pr-${pr}/`;
+            const previewUrl = `https://dev.neotoma.io/pr-${pr}/`;
             const body = [
               `### Docs preview`,
               ``,

@@ -65,5 +65,5 @@ jobs:
           external_repository: markmhendrickson/neotoma-dev-site
           publish_branch: gh-pages
           publish_dir: ./site_pages
-          force_orphan: true
+          keep_files: true
           commit_message: "Deploy dev site from ${GITHUB_REPOSITORY}@${GITHUB_SHA}"
