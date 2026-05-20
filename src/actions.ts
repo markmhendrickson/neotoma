@@ -7635,36 +7635,68 @@ app.post("/list_relationships", async (req, res) => {
     return sendValidationError(res, parsed.error.issues);
   }
 
-  const { entity_id, direction = "both", relationship_type } = parsed.data;
-  const normalizedDirection =
-    direction === "incoming" || direction === "inbound"
-      ? "incoming"
-      : direction === "outgoing" || direction === "outbound"
-        ? "outgoing"
-        : "both";
-
-  const { relationshipsService } = await import("./services/relationships.js");
+  const {
+    entity_id,
+    source_entity_id,
+    target_entity_id,
+    direction = "both",
+    relationship_type,
+    limit = 100,
+    offset = 0,
+  } = parsed.data;
 
   try {
-    let relationships;
-    if (relationship_type) {
-      relationships = await relationshipsService.getRelationshipsByType(relationship_type as any);
-      // Filter by entity_id
-      relationships = relationships.filter(
-        (rel) => rel.source_entity_id === entity_id || rel.target_entity_id === entity_id
-      );
-    } else {
-      relationships = await relationshipsService.getRelationshipsForEntity(
-        entity_id,
-        normalizedDirection
-      );
+    // Flexible query supporting source_entity_id / target_entity_id in addition
+    // to the legacy entity_id + direction pattern.
+    let query = db.from("relationship_snapshots").select("*");
+
+    if (source_entity_id && target_entity_id) {
+      query = query
+        .eq("source_entity_id", source_entity_id)
+        .eq("target_entity_id", target_entity_id);
+    } else if (source_entity_id) {
+      query = query.eq("source_entity_id", source_entity_id);
+    } else if (target_entity_id) {
+      query = query.eq("target_entity_id", target_entity_id);
+    } else if (entity_id) {
+      const normalizedDirection =
+        direction === "incoming" || direction === "inbound"
+          ? "incoming"
+          : direction === "outgoing" || direction === "outbound"
+            ? "outgoing"
+            : "both";
+      if (normalizedDirection === "outgoing") {
+        query = query.eq("source_entity_id", entity_id);
+      } else if (normalizedDirection === "incoming") {
+        query = query.eq("target_entity_id", entity_id);
+      } else {
+        query = query.or(`source_entity_id.eq.${entity_id},target_entity_id.eq.${entity_id}`);
+      }
     }
+
+    if (relationship_type) {
+      query = query.eq("relationship_type", relationship_type);
+    }
+
+    query = query.order("last_observation_at", { ascending: false });
+
+    const { data, error } = await query;
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    const all = data || [];
+    const paginated = all.slice(offset, offset + limit);
 
     logDebug("Success:list_relationships", req, {
       entity_id,
-      count: relationships.length,
+      source_entity_id,
+      target_entity_id,
+      relationship_type,
+      count: paginated.length,
+      total: all.length,
     });
-    return res.json({ relationships });
+    return res.json({ relationships: paginated, total: all.length, limit, offset });
   } catch (error) {
     logError("RelationshipQueryError:list_relationships", req, error);
     return sendError(
@@ -7864,6 +7896,8 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
       include_sources = true,
       include_events: _include_events = true,
       include_observations = false,
+      limit = 100,
+      offset = 0,
     } = parsed.data;
 
     const result: any = { node_id, node_type };
@@ -7882,10 +7916,21 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
 
       // Get relationships if requested
       if (include_relationships) {
+        // Count total relationships for pagination metadata
+        const { count: totalCount, error: countError } = await db
+          .from("relationship_snapshots")
+          .select("*", { count: "exact", head: true })
+          .or(`source_entity_id.eq.${node_id},target_entity_id.eq.${node_id}`);
+
+        const total = countError ? 0 : (totalCount ?? 0);
+        result.total_count = total;
+        result.has_more = offset + limit < total;
+
         const { data: relationships, error: relError } = await db
           .from("relationship_snapshots")
           .select("*")
-          .or(`source_entity_id.eq.${node_id},target_entity_id.eq.${node_id}`);
+          .or(`source_entity_id.eq.${node_id},target_entity_id.eq.${node_id}`)
+          .range(offset, offset + limit - 1);
 
         if (!relError) {
           result.relationships = relationships || [];
@@ -7909,7 +7954,10 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
               .in("id", relatedEntityIds);
 
             if (!relatedEntitiesError) {
-              result.related_entities = relatedEntities || [];
+              result.related_entities = (relatedEntities || []).map(({ id, ...rest }: any) => ({
+                entity_id: id,
+                ...rest,
+              }));
             }
           }
         }

@@ -3173,18 +3173,6 @@ export interface components {
        */
       unknown_fields_count?: number;
       /**
-       * @description Total number of `conversation_message` entities `PART_OF` the
-       *     conversation referenced by this store call, computed after commit.
-       *     Populated only when at least one `conversation_message` entity was
-       *     created or updated in this request and its `PART_OF` target
-       *     conversation can be resolved. Omitted (null) for store calls with
-       *     no conversation context. Reflects the current snapshot at the time
-       *     of the response. Consumed by `neotoma_turn_summary` to populate
-       *     the `msg N/M` component of the turn status line without an extra
-       *     retrieval round-trip.
-       */
-      conversation_message_count?: number | null;
-      /**
        * @description Actionable guidance when fields were dropped to `raw_fragments`.
        *     Present only when `unknown_fields_count > 0`. Directs the caller
        *     to use `update_schema_incremental` with `migrate_existing: true`
@@ -5529,6 +5517,17 @@ export interface operations {
           include_events?: boolean;
           /** @default false */
           include_observations?: boolean;
+          /**
+           * @description Maximum number of relationships to return. Default 100, max 500.
+           * @default 100
+           */
+          limit?: number;
+          /**
+           * @description Number of relationships to skip before returning results.
+           * @default 0
+           */
+          offset?: number;
+          user_id?: string;
         };
       };
     };
@@ -5540,6 +5539,32 @@ export interface operations {
         };
         content: {
           "application/json": {
+            node_id?: string;
+            node_type?: string;
+            entity?: {
+              [key: string]: unknown;
+            };
+            relationships?: {
+              [key: string]: unknown;
+            }[];
+            /** @description Entities connected to the node via relationships. Each item uses `entity_id` (not `id`). */
+            related_entities?: ({
+              /** @description The entity identifier. Always present as `entity_id`; the raw database `id` column is not exposed. */
+              entity_id?: string;
+            } & {
+              [key: string]: unknown;
+            })[];
+            observations?: {
+              [key: string]: unknown;
+            }[];
+            sources?: {
+              [key: string]: unknown;
+            }[];
+            /** @description Total number of relationships for this node (before pagination). */
+            total_count?: number;
+            /** @description True when additional relationships exist beyond the current page. */
+            has_more?: boolean;
+          } & {
             [key: string]: unknown;
           };
         };

@@ -3534,6 +3534,35 @@ export class NeotomaServer {
     const { SchemaRegistryService } = await import("./services/schema_registry.js");
     const schemaRegistry = new SchemaRegistryService();
 
+    // Guard: check whether a schema exists before attempting incremental update.
+    // When no registered schema and no code-defined schema exists for the entity_type,
+    // updateSchemaIncremental cannot proceed (it has no baseline to extend).
+    // Return a structured non-throwing response with a hint instead of propagating
+    // an opaque internal error. Callers should use register_schema first.
+    const { loadCodeDefinedSchemaEntry } = await import("./services/schema_registry.js");
+    const registeredSchema = await schemaRegistry.loadActiveSchema(
+      parsed.entity_type,
+      parsed.user_specific ? userId : undefined
+    );
+    if (!registeredSchema) {
+      const codeDefinedSchema = await loadCodeDefinedSchemaEntry(parsed.entity_type);
+      if (!codeDefinedSchema) {
+        return this.buildTextResponse({
+          success: false,
+          entity_type: parsed.entity_type,
+          error_code: "ERR_NO_SCHEMA_FOR_ENTITY_TYPE",
+          no_schema_for_entity_type: true,
+          hint:
+            `No schema is registered for entity_type "${parsed.entity_type}". ` +
+            "update_schema_incremental requires an existing schema to extend. " +
+            "Call register_schema first with a full schema_definition that includes " +
+            "canonical_name_fields (or identity_opt_out), then optionally call " +
+            "update_schema_incremental to add more fields. " +
+            "Use analyze_schema_candidates to get field suggestions before registering.",
+        });
+      }
+    }
+
     try {
       const updatedSchema = await schemaRegistry.updateSchemaIncremental({
         entity_type: parsed.entity_type,
@@ -3562,6 +3591,27 @@ export class NeotomaServer {
         scope: parsed.user_specific ? "user" : "global",
       });
     } catch (error: any) {
+      // Detect R2 identity-configuration error from the base schema.
+      // When the existing schema lacks canonical_name_fields and identity_opt_out,
+      // the incremental update's register() call raises the R2 error. Surface a
+      // structured hint directing callers to fix the base schema first.
+      const isR2Error =
+        typeof error?.message === "string" &&
+        error.message.includes("canonical_name_fields") &&
+        error.message.includes("identity_opt_out");
+      if (isR2Error) {
+        return this.buildTextResponse({
+          success: false,
+          entity_type: parsed.entity_type,
+          error_code: "ERR_SCHEMA_MISSING_IDENTITY_CONFIG",
+          hint:
+            `The existing schema for entity_type "${parsed.entity_type}" does not declare ` +
+            "canonical_name_fields or identity_opt_out, which are required before fields can " +
+            "be added incrementally. Call register_schema with a full schema_definition that " +
+            'includes canonical_name_fields (or identity_opt_out: "heuristic_canonical_name") ' +
+            "to establish a baseline, then retry update_schema_incremental.",
+        });
+      }
       throw new McpError(
         ErrorCode.InternalError,
         `Failed to update schema incrementally: ${error.message}`
