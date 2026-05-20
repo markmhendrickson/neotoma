@@ -83,11 +83,17 @@ export function getIconForEntityType(
   schemaMetadata?: Record<string, unknown>,
 ): LucideIcon {
   const fromSchema = iconFromSchemaMetadata(schemaMetadata);
-  if (fromSchema) return fromSchema;
   const suggested = suggestedIconName(entityType);
-  if (suggested) {
-    const Icon = lucideIconByName(suggested);
-    if (Icon) return Icon;
+  const suggestedIcon = suggested ? lucideIconByName(suggested) : null;
+
+  if (fromSchema) {
+    // Custom SVG schema icons map to File in Inspector (no inline SVG renderer yet).
+    // Do not let that generic fallback override sharper entity-type heuristics on load.
+    if (fromSchema === File && suggestedIcon) {
+      return suggestedIcon;
+    }
+    return fromSchema;
   }
+  if (suggestedIcon) return suggestedIcon;
   return Box;
 }
