@@ -80,6 +80,7 @@ import {
 import { OAuthError } from "./services/mcp_oauth_errors.js";
 import {
   ensureLocalDevUser,
+  ensureLocalSandboxUser,
   ensureSandboxAauthUser,
   ensureSandboxPublicUser,
   LOCAL_DEV_USER_ID,
@@ -189,6 +190,11 @@ type ErrorEnvelope = {
   trace_id?: string;
   timestamp: string;
 };
+
+// Set to true during startHTTPServer() when resolveSandboxMode() returns
+// "local_sandbox". Read by getAuthenticatedUserId() to substitute the
+// per-install fingerprinted sandbox principal for the shared nil UUID fallback.
+let _localSandboxActive = false;
 
 export const app = express();
 // Trust proxy headers (required for express-rate-limit when X-Forwarded-For is present)
@@ -2832,6 +2838,14 @@ export async function resolveGuestUserId(
 
   const headerAuth = (req.headers.authorization || "") as string;
   if (isLocalRequest(req) && !headerAuth.startsWith("Bearer ")) {
+    // In local_sandbox mode return the per-install fingerprinted principal so
+    // that different installs (e.g. two different browsers on the same machine
+    // pointing at distinct data dirs) resolve to distinct users rather than the
+    // shared nil-UUID LOCAL_DEV_USER_ID. Outside local_sandbox mode (e.g. pure
+    // dev with explicit auth configured) continue to use the nil-UUID fallback.
+    if (_localSandboxActive) {
+      return ensureLocalSandboxUser().id;
+    }
     return ensureLocalDevUser().id;
   }
 
@@ -2965,7 +2979,10 @@ app.use(async (req, res, next) => {
 
   const headerAuth = (req.headers.authorization || req.headers.Authorization || "") as string;
 
-  // Local mode: when storage is local and request is from localhost, no Bearer → default user (00..) by default
+  // Local mode: when storage is local and request is from localhost, no Bearer → default user.
+  // In local_sandbox mode (_localSandboxActive) use the per-install fingerprinted principal
+  // instead of the shared nil-UUID LOCAL_DEV_USER_ID so different installs resolve to
+  // distinct users (closes the v0.11.1 advisory fallback path for local deployments).
   if (
     config.storageBackend === "local" &&
     isLocalRequest(req) &&
@@ -2973,6 +2990,14 @@ app.use(async (req, res, next) => {
   ) {
     if (await maybeStampGuestPrincipal(req)) {
       logger.info(`[Auth] ${req.method} ${req.path} auth_method=guest_capability`);
+      return next();
+    }
+    if (_localSandboxActive) {
+      const sandboxUser = ensureLocalSandboxUser();
+      stampUserPrincipal(req, sandboxUser.id);
+      logger.info(
+        `[Auth] ${req.method} ${req.path} auth_method=local_sandbox user_id=${sandboxUser.id}`
+      );
       return next();
     }
     const devUser = ensureLocalDevUser();
@@ -3054,6 +3079,14 @@ app.use(async (req, res, next) => {
         return next();
       }
       if (isLocalRequest(req)) {
+        if (_localSandboxActive) {
+          const sandboxUser = ensureLocalSandboxUser();
+          stampUserPrincipal(req, sandboxUser.id);
+          logger.info(
+            `[Auth] ${req.method} ${req.path} auth_method=local_sandbox user_id=${sandboxUser.id}`
+          );
+          return next();
+        }
         const devUser = ensureLocalDevUser();
         stampUserPrincipal(req, devUser.id);
         logger.info(
@@ -9852,6 +9885,22 @@ export async function startHTTPServer() {
       // Refuse mode + enforce policy: hard exit. The banner above already
       // explains the why; do not start the listener.
       process.exit(1);
+    }
+    if (verdict.mode === "local_sandbox") {
+      // Activate per-install sandbox principal. From this point forward,
+      // unauthenticated local requests resolve to the fingerprinted sandbox
+      // user rather than the shared nil-UUID LOCAL_DEV_USER_ID fallback.
+      _localSandboxActive = true;
+      try {
+        const sandboxUser = ensureLocalSandboxUser();
+        logger.info(`[sandbox_mode] local_sandbox principal provisioned: ${sandboxUser.id}`);
+      } catch (err) {
+        // DB may not be initialised yet on very first boot; the principal will
+        // be provisioned lazily on the first request. Do not block startup.
+        logger.warn(
+          `[sandbox_mode] eager sandbox principal provisioning failed (will retry on first request): ${(err as Error).message}`
+        );
+      }
     }
   } catch (err) {
     // Banner emission must never block boot in warn mode.
