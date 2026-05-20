@@ -196,6 +196,18 @@
       ]
     },
     {
+      "path": "/conversations/{conversation_id}/turn-index",
+      "method": "GET",
+      "operation_id": "getConversationTurnIndex",
+      "requires_auth": true,
+      "expected_no_auth_status": [
+        401
+      ],
+      "expected_invalid_auth_status": [
+        401
+      ]
+    },
+    {
       "path": "/correct",
       "method": "POST",
       "operation_id": "correct",
