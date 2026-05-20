@@ -31,9 +31,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Init inspector submodule (Vitest imports inspector sources)
-        run: git submodule update --init --depth 1 inspector
-
       - name: Build @neotoma/client and cursor-hooks (Vitest hook tests)
         run: |
           npm ci --prefix packages/client
