@@ -50,14 +50,14 @@ Use `entity_type: "pull_request"` for GitHub pull requests referenced in email o
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `number` | number | PR number (e.g. `57`) |
+| `github_number` | number | PR number (e.g. `57`) |
 | `repo` | string | `owner/name` (e.g. `markmhendrickson/neotoma`) |
 
 **Optional fields:**
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `url` | string | Full PR URL |
+| `github_url` | string | Full PR URL |
 | `title` | string | PR title when parseable |
 | `status` | string | `open`, `merged`, or `closed` when known |
 | `author` | string | GitHub login of PR author |
@@ -69,9 +69,11 @@ Use `entity_type: "pull_request"` for GitHub pull requests referenced in email o
 | `data_source` | string | Provenance string |
 | `source_quote` | string | Verbatim snippet from the email body |
 
-**Identity rule:** `[{ composite: ["number", "repo"] }]` with `url` as fallback.
+**Identity rule:** `[{ composite: ["github_number", "repo"] }]` with `github_url` as fallback.
 
-**URL pattern for recognition:** `github.com/<owner>/<repo>/pull/<number>`.
+**URL pattern for recognition:** `github.com/<owner>/<repo>/pull/<github_number>`.
+
+**FORBIDDEN:** using ad hoc fields (`number`, `url`) instead of `github_number` + `github_url` when the canonical fields are recoverable.
 
 **Aliases accepted by resolver:** `pr`, `github_pr`, `merge_request`.
 
@@ -141,9 +143,9 @@ source_quote: "<verbatim URL or surrounding sentence>"
 
 ```
 entity_type: "pull_request"
-number: <number from URL>
+github_number: <number from URL>
 repo: "<owner>/<name>"
-url: "<full URL>"
+github_url: "<full URL>"
 title: "<title if parseable>"
 data_source: "email message_id=<id> <ISO-date>"
 source_quote: "<verbatim URL or surrounding sentence>"

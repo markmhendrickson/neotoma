@@ -3122,16 +3122,16 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       description:
         "A GitHub pull request referenced in email, chat, or other external records. " +
         "Use for PRs extracted from email notifications, code-review emails, or other " +
-        "external sources. Identity is repo + number (e.g. 'markmhendrickson/neotoma#42').",
+        "external sources. Identity is repo + github_number (e.g. 'markmhendrickson/neotoma#42').",
       category: "productivity",
       aliases: ["pr", "github_pr", "merge_request"],
     },
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: false },
-        number: { type: "number", required: true },
+        github_number: { type: "number", required: true },
         repo: { type: "string", required: true },
-        url: { type: "string", required: false },
+        github_url: { type: "string", required: false },
         title: { type: "string", required: false, preserveCase: true },
         body: { type: "string", required: false, preserveCase: true },
         status: { type: "string", required: false },
@@ -3144,8 +3144,8 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         data_source: { type: "string", required: false },
         source_quote: { type: "string", required: false, preserveCase: true },
       },
-      // R2: PRs are uniquely identified by repo + number (same pattern as issues).
-      canonical_name_fields: [{ composite: ["number", "repo"] }, "url"],
+      // R2: PRs are uniquely identified by repo + github_number (same pattern as issues).
+      canonical_name_fields: [{ composite: ["github_number", "repo"] }, "github_url"],
       temporal_fields: [
         { field: "created_at", event_type: "pull_request_created" },
         { field: "merged_at", event_type: "pull_request_merged" },
@@ -3157,7 +3157,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         title: { strategy: "last_write" },
         body: { strategy: "last_write" },
         status: { strategy: "last_write" },
-        url: { strategy: "last_write" },
+        github_url: { strategy: "last_write" },
         author: { strategy: "last_write" },
         base_branch: { strategy: "last_write" },
         head_branch: { strategy: "last_write" },
