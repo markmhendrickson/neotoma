@@ -16,16 +16,11 @@ This writes mirror files to `<NEOTOMA_DATA_DIR>/mirror/` and regenerates them on
 
 Optional flags:
 
-```bash
-# Enable with git tracking (commits mirror changes automatically)
-neotoma mirror enable --git
-
-# Enable only specific kinds (entities, relationships, timeline, schemas, sources)
-neotoma mirror enable --kinds entities,timeline
-
-# Add mirror path to your repo's .gitignore
-neotoma mirror enable --gitignore
-```
+<ul className="list-none pl-0 space-y-2 mb-6">
+  <li className="text-[15px] leading-7 text-muted-foreground"><code>--git</code>: enable with git tracking (commits mirror changes automatically)</li>
+  <li className="text-[15px] leading-7 text-muted-foreground"><code>--kinds entities,timeline</code>: enable only specific kinds (entities, relationships, timeline, schemas, sources)</li>
+  <li className="text-[15px] leading-7 text-muted-foreground"><code>--gitignore</code>: add mirror path to your repo's <code>.gitignore</code></li>
+</ul>
 
 ## Mirror layout
 
@@ -92,13 +87,17 @@ The general mirror writes to `data/mirror/`. Separate mirror profiles (like `neo
 
 To change data that appears in the mirror, use one of:
 
-- `neotoma edit <entity-id>` (CLI)
-- The Inspector Edit tab
-- The MCP `correct` action
+<ul className="list-none pl-0 space-y-2 mb-6">
+  <li className="text-[15px] leading-7 text-muted-foreground"><code>neotoma edit &lt;entity-id&gt;</code> (CLI)</li>
+  <li className="text-[15px] leading-7 text-muted-foreground">The Inspector Edit tab</li>
+  <li className="text-[15px] leading-7 text-muted-foreground">The MCP <code>correct</code> action</li>
+</ul>
 
 All three share the same batch-correction backend. The mirror file regenerates after the correction is applied.
 
 ## Related
 
-- <MdxI18nLink to="/plans-guide">Plans</MdxI18nLink> for the `neotoma-plans` mirror profile.
-- <MdxI18nLink to="/cli">CLI reference</MdxI18nLink> for the `neotoma mirror` commands.
+<ul className="list-none pl-0 space-y-2 mb-6">
+  <li className="text-[15px] leading-7 text-muted-foreground"><MdxI18nLink to="/plans-guide">Plans</MdxI18nLink> for the <code>neotoma-plans</code> mirror profile.</li>
+  <li className="text-[15px] leading-7 text-muted-foreground"><MdxI18nLink to="/cli">CLI reference</MdxI18nLink> for the <code>neotoma mirror</code> commands.</li>
+</ul>

@@ -6,10 +6,12 @@ Plans let you store engineering and design plans as Neotoma entities. This is op
 
 When plans are entities, you can:
 
-- Link them to issues, tasks, conversations, and other entities in the graph.
-- Query them across harnesses and repos (`retrieve_entities { entity_type: "plan" }`).
-- Read them from any MCP client, the CLI, or the Inspector.
-- Get a markdown mirror back to disk via the `neotoma-plans` mirror profile, so file-based workflows still work.
+<ul className="list-none pl-0 space-y-2 mb-6">
+  <li className="text-[15px] leading-7 text-muted-foreground">Link them to issues, tasks, conversations, and other entities in the graph.</li>
+  <li className="text-[15px] leading-7 text-muted-foreground">Query them across harnesses and repos (<code>retrieve_entities {"{ entity_type: \"plan\" }"}</code>).</li>
+  <li className="text-[15px] leading-7 text-muted-foreground">Read them from any MCP client, the CLI, or the Inspector.</li>
+  <li className="text-[15px] leading-7 text-muted-foreground">Get a markdown mirror back to disk via the <code>neotoma-plans</code> mirror profile, so file-based workflows still work.</li>
+</ul>
 
 If you do not need any of that, skip this guide. Regular plan files work as they always have.
 
@@ -68,8 +70,11 @@ neotoma plans list --status draft --harness cursor
 ```
 
 Via MCP:
-- `retrieve_entities { entity_type: "plan", limit: 10 }` for list queries.
-- `retrieve_entity_snapshot { entity_id: "<id>" }` for the full plan body.
+
+<ul className="list-none pl-0 space-y-2 mb-6">
+  <li className="text-[15px] leading-7 text-muted-foreground"><code>retrieve_entities {"{ entity_type: \"plan\", limit: 10 }"}</code> for list queries.</li>
+  <li className="text-[15px] leading-7 text-muted-foreground"><code>retrieve_entity_snapshot {"{ entity_id: \"<id>\" }"}</code> for the full plan body.</li>
+</ul>
 
 ## Mirror to disk
 
@@ -83,18 +88,49 @@ The mirror is write-through: changes to plan entities regenerate the correspondi
 
 Key fields on a plan entity:
 
-| Field | Description |
-|-------|-------------|
-| `title` | Plan title |
-| `body` | Full markdown content |
-| `status` | `draft`, `awaiting_input`, `approved`, `executing`, `executed`, `abandoned`, `superseded` |
-| `plan_kind` | `harness_plan`, `issue_resolution`, `feature_implementation`, `refactor`, `research`, `other` |
-| `harness` | `cursor`, `claude_code`, `codex`, `openclaw`, `cli`, `agent`, `human`, `other` |
-| `source_entity_id` | Links the plan to the entity it addresses (e.g. an issue) |
-| `todos` | Structured todo items extracted from the plan body |
+<table className="w-full text-[14px] leading-6 border-collapse mb-6 md:rounded-lg md:overflow-hidden md:border md:border-border">
+  <thead>
+    <tr className="border-b border-border">
+      <th className="px-4 py-3 text-left font-semibold text-foreground bg-muted w-[18ch]">Field</th>
+      <th className="px-4 py-3 text-left font-semibold text-foreground bg-muted">Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr className="border-b border-border hover:bg-muted/50 transition-colors">
+      <td className="px-4 py-3 align-top font-medium text-foreground"><code>title</code></td>
+      <td className="px-4 py-3 align-top text-muted-foreground">Plan title</td>
+    </tr>
+    <tr className="border-b border-border hover:bg-muted/50 transition-colors">
+      <td className="px-4 py-3 align-top font-medium text-foreground"><code>body</code></td>
+      <td className="px-4 py-3 align-top text-muted-foreground">Full markdown content</td>
+    </tr>
+    <tr className="border-b border-border hover:bg-muted/50 transition-colors">
+      <td className="px-4 py-3 align-top font-medium text-foreground"><code>status</code></td>
+      <td className="px-4 py-3 align-top text-muted-foreground"><code>draft</code>, <code>awaiting_input</code>, <code>approved</code>, <code>executing</code>, <code>executed</code>, <code>abandoned</code>, <code>superseded</code></td>
+    </tr>
+    <tr className="border-b border-border hover:bg-muted/50 transition-colors">
+      <td className="px-4 py-3 align-top font-medium text-foreground"><code>plan_kind</code></td>
+      <td className="px-4 py-3 align-top text-muted-foreground"><code>harness_plan</code>, <code>issue_resolution</code>, <code>feature_implementation</code>, <code>refactor</code>, <code>research</code>, <code>other</code></td>
+    </tr>
+    <tr className="border-b border-border hover:bg-muted/50 transition-colors">
+      <td className="px-4 py-3 align-top font-medium text-foreground"><code>harness</code></td>
+      <td className="px-4 py-3 align-top text-muted-foreground"><code>cursor</code>, <code>claude_code</code>, <code>codex</code>, <code>openclaw</code>, <code>cli</code>, <code>agent</code>, <code>human</code>, <code>other</code></td>
+    </tr>
+    <tr className="border-b border-border hover:bg-muted/50 transition-colors">
+      <td className="px-4 py-3 align-top font-medium text-foreground"><code>source_entity_id</code></td>
+      <td className="px-4 py-3 align-top text-muted-foreground">Links the plan to the entity it addresses (e.g. an issue)</td>
+    </tr>
+    <tr className="hover:bg-muted/50 transition-colors">
+      <td className="px-4 py-3 align-top font-medium text-foreground"><code>todos</code></td>
+      <td className="px-4 py-3 align-top text-muted-foreground">Structured todo items extracted from the plan body</td>
+    </tr>
+  </tbody>
+</table>
 
 ## Related
 
-- <MdxI18nLink to="/issues-guide">Issues</MdxI18nLink> for filing issues that plans address.
-- <MdxI18nLink to="/mirror-guide">Markdown mirror</MdxI18nLink> for writing entities back to disk.
-- <MdxI18nLink to="/cli">CLI reference</MdxI18nLink> for the `neotoma plans` commands.
+<ul className="list-none pl-0 space-y-2 mb-6">
+  <li className="text-[15px] leading-7 text-muted-foreground"><MdxI18nLink to="/issues-guide">Issues</MdxI18nLink> for filing issues that plans address.</li>
+  <li className="text-[15px] leading-7 text-muted-foreground"><MdxI18nLink to="/mirror-guide">Markdown mirror</MdxI18nLink> for writing entities back to disk.</li>
+  <li className="text-[15px] leading-7 text-muted-foreground"><MdxI18nLink to="/cli">CLI reference</MdxI18nLink> for the <code>neotoma plans</code> commands.</li>
+</ul>

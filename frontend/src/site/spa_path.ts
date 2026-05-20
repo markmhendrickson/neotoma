@@ -40,6 +40,15 @@ export function getSpaBasename(): string {
 }
 
 /**
+ * Prefix a root-relative static asset path with the SPA basename so assets load
+ * correctly when the app is mounted at a sub-path (e.g. /pr-314/).
+ */
+export function staticAssetPath(path: string): string {
+  const basename = getSpaBasename();
+  return basename ? `${basename}${path}` : path;
+}
+
+/**
  * Default-locale route path for SEO/markdown (strips SPA basename, locale prefix, trailing slashes).
  */
 export function appPathFromBrowserPathname(browserPathname: string): string {

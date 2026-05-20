@@ -52,7 +52,15 @@ Via MCP: use `get_issue_status`.
 
 When configured, public issues are created on GitHub first, then stored locally with the `github_number` and `github_url` written back. Neotoma is the canonical store; GitHub is the mirror.
 
-Credentials resolve in this order: `NEOTOMA_GH_TOKEN` env var, `gh auth token` shell-out, configured bot identity. No PATs are stored in config files.
+Credentials resolve in this order:
+
+<ul className="list-none pl-0 space-y-2 mb-6">
+  <li className="text-[15px] leading-7 text-muted-foreground"><code>NEOTOMA_GH_TOKEN</code> env var</li>
+  <li className="text-[15px] leading-7 text-muted-foreground"><code>gh auth token</code> shell-out</li>
+  <li className="text-[15px] leading-7 text-muted-foreground">Configured bot identity</li>
+</ul>
+
+No PATs are stored in config files.
 
 To pull GitHub state into Neotoma:
 
@@ -80,6 +88,8 @@ neotoma issues message 42 --body "Still happening on v0.13.0" --guest-access-tok
 
 ## Related
 
-- <MdxI18nLink to="/issue-reporting">Issue reporting reference</MdxI18nLink> for subsystem internals and reporter-provenance contract.
-- <MdxI18nLink to="/plans-guide">Plans</MdxI18nLink> for plans that resolve issues.
-- <MdxI18nLink to="/cli">CLI reference</MdxI18nLink> for the `neotoma issues` commands.
+<ul className="list-none pl-0 space-y-2 mb-6">
+  <li className="text-[15px] leading-7 text-muted-foreground"><MdxI18nLink to="/issue-reporting">Issue reporting reference</MdxI18nLink> for subsystem internals and reporter-provenance contract.</li>
+  <li className="text-[15px] leading-7 text-muted-foreground"><MdxI18nLink to="/plans-guide">Plans</MdxI18nLink> for plans that resolve issues.</li>
+  <li className="text-[15px] leading-7 text-muted-foreground"><MdxI18nLink to="/cli">CLI reference</MdxI18nLink> for the <code>neotoma issues</code> commands.</li>
+</ul>

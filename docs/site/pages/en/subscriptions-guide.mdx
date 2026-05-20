@@ -24,18 +24,22 @@ Subscriptions are managed through the MCP `subscribe` action or the HTTP API. Th
 
 Every subscription must specify at least one filter. There is no firehose mode.
 
-- `entity_types` (array of strings): receive events for these entity types.
-- `entity_ids` (array of strings): receive events for these specific entities.
-- `event_types` (array of strings): receive only these event types.
+<ul className="list-none pl-0 space-y-2 mb-6">
+  <li className="text-[15px] leading-7 text-muted-foreground"><code>entity_types</code> (array of strings): receive events for these entity types.</li>
+  <li className="text-[15px] leading-7 text-muted-foreground"><code>entity_ids</code> (array of strings): receive events for these specific entities.</li>
+  <li className="text-[15px] leading-7 text-muted-foreground"><code>event_types</code> (array of strings): receive only these event types.</li>
+</ul>
 
 ## Webhook delivery
 
 Webhook subscriptions receive an HTTP POST for each matching event:
 
-- **Signing**: every request includes `X-Neotoma-Signature-256: sha256=<hex>` computed over the JSON body with the subscription's `webhook_secret`. Verify this to confirm authenticity.
-- **Retries**: failed deliveries retry with exponential backoff (`1s, 5s, 30s, 5m`).
-- **Circuit breaker**: after 10 consecutive failures (configurable via `max_failures`), the subscription is deactivated. Reactivate by updating the subscription.
-- **HTTPS required**: webhook URLs must use HTTPS in production. `http://localhost` and `http://127.0.0.1` are allowed in development.
+<ul className="list-none pl-0 space-y-2 mb-6">
+  <li className="text-[15px] leading-7 text-muted-foreground"><strong>Signing</strong>: every request includes <code>X-Neotoma-Signature-256: sha256=&lt;hex&gt;</code> computed over the JSON body with the subscription's <code>webhook_secret</code>. Verify this to confirm authenticity.</li>
+  <li className="text-[15px] leading-7 text-muted-foreground"><strong>Retries</strong>: failed deliveries retry with exponential backoff (<code>1s, 5s, 30s, 5m</code>).</li>
+  <li className="text-[15px] leading-7 text-muted-foreground"><strong>Circuit breaker</strong>: after 10 consecutive failures (configurable via <code>max_failures</code>), the subscription is deactivated. Reactivate by updating the subscription.</li>
+  <li className="text-[15px] leading-7 text-muted-foreground"><strong>HTTPS required</strong>: webhook URLs must use HTTPS in production. <code>http://localhost</code> and <code>http://127.0.0.1</code> are allowed in development.</li>
+</ul>
 
 ## SSE delivery
 
@@ -63,9 +67,11 @@ Via MCP: `unsubscribe({ subscription_id: "<id>" })`
 
 ## Limits
 
-- Maximum 50 active subscriptions per user (configurable via `NEOTOMA_MAX_SUBSCRIPTIONS_PER_USER`).
-- SSE buffer holds 1000 events by default (range: 100 to 10000).
-- Webhook timeout is 10 seconds per delivery attempt.
+<ul className="list-none pl-0 space-y-2 mb-6">
+  <li className="text-[15px] leading-7 text-muted-foreground">Maximum 50 active subscriptions per user (configurable via <code>NEOTOMA_MAX_SUBSCRIPTIONS_PER_USER</code>).</li>
+  <li className="text-[15px] leading-7 text-muted-foreground">SSE buffer holds 1000 events by default (range: 100 to 10000).</li>
+  <li className="text-[15px] leading-7 text-muted-foreground">Webhook timeout is 10 seconds per delivery attempt.</li>
+</ul>
 
 ## Peer sync
 
@@ -73,5 +79,7 @@ Subscriptions power cross-instance replication. When a subscription is configure
 
 ## Related
 
-- <MdxI18nLink to="/subscriptions">Substrate subscriptions reference</MdxI18nLink> for internals and full API coverage.
-- <MdxI18nLink to="/peer-sync">Peer sync</MdxI18nLink> for cross-instance replication built on subscriptions.
+<ul className="list-none pl-0 space-y-2 mb-6">
+  <li className="text-[15px] leading-7 text-muted-foreground"><MdxI18nLink to="/subscriptions">Substrate subscriptions reference</MdxI18nLink> for internals and full API coverage.</li>
+  <li className="text-[15px] leading-7 text-muted-foreground"><MdxI18nLink to="/peer-sync">Peer sync</MdxI18nLink> for cross-instance replication built on subscriptions.</li>
+</ul>
