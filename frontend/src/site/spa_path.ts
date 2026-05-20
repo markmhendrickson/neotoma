@@ -22,6 +22,9 @@ const PRODUCT_MARKETING_FIRST_SEGMENTS = new Set(
  * Path prefix where the SPA is mounted. Matches {@link getRouterBasename} in `src/main.tsx`.
  * Only known deploy / product-at-root segments count—not every path under /neotoma-* (e.g.
  * /neotoma-with-claude-agent-sdk is a normal in-app route and must not become the router basename).
+ *
+ * PR preview deploys live at /pr-{N}/ on dev.neotoma.io. Recognise that pattern so the
+ * router mounts with the correct basename and internal navigation works in previews.
  */
 export function getSpaBasename(): string {
   if (typeof window === "undefined") return "";
@@ -32,6 +35,7 @@ export function getSpaBasename(): string {
   const lower = firstSegment.toLowerCase();
   if (lower === "neotoma") return "/neotoma";
   if (PRODUCT_MARKETING_FIRST_SEGMENTS.has(lower)) return `/${firstSegment}`;
+  if (/^pr-\d+$/i.test(firstSegment)) return `/${firstSegment}`;
   return "";
 }
 
